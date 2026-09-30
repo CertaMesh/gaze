@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Dashboard purge acknowledgements.** `DashboardControl::wait_for_epoch` waits for
+  completed browser purges without polling. Inspection control threads can use
+  `begin_logical_blocking` to acquire the registration lock after a purge acknowledgement;
+  the existing producer API stays nonblocking. Lifecycle tests now synchronize browser
+  workers and await every accepted purge, including disable and child-reap checks.
+
 - **Address-block growth.** When a postcode, a NER street
   or city, or a house number is already protected, the unit designator, box,
   state code or military post office written right beside it now joins the

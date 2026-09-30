@@ -6,9 +6,9 @@ use std::net::{SocketAddrV4, TcpStream};
 use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
@@ -16,9 +16,9 @@ use gaze_inspection::{
     install_inspection_v1, InspectionBeginLogicalErrorV1, PendingInspectionProducerV1,
 };
 use gaze_proxy_dashboard::{
-    ChildConfig, ChildInheritedHandles, ClientLimits, DashboardChildEntrypoint, DashboardLifecycle,
-    DashboardPayloadAcceptance, DashboardStartupConfig, DashboardSupervisor, IpcLimits,
-    LoopbackBind, PairedDashboard, RetentionLimits, SpawnedDashboardChild,
+    ChildConfig, ChildInheritedHandles, ClientLimits, DashboardChildEntrypoint, DashboardControl,
+    DashboardLifecycle, DashboardPayloadAcceptance, DashboardStartupConfig, DashboardSupervisor,
+    IpcLimits, LoopbackBind, PairedDashboard, RetentionLimits, SpawnedDashboardChild,
 };
 
 // Subprocess-spawning tests share Unix-domain and TCP sockets and multiple
@@ -85,18 +85,27 @@ fn spawn_paired_dashboard(pid_file: &Path) -> (PairedDashboard, u32, Vec<u8>) {
 
 #[cfg(not(target_os = "macos"))]
 fn assert_process_reaped(pid: u32) {
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
-        let alive = Command::new("/bin/kill")
-            .args(["-0", &pid.to_string()])
-            .status()
-            .is_ok_and(|status| status.success());
-        if !alive {
-            return;
-        }
-        assert!(Instant::now() < deadline, "dashboard child was not reaped");
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    let child = Command::new("/bin/kill")
+        .args(["-0", &pid.to_string()])
+        .output()
+        .expect("child liveness check");
+    assert!(
+        !child.status.success(),
+        "acknowledged shutdown did not reap child {pid}"
+    );
+}
+
+#[cfg(not(target_os = "macos"))]
+fn runtime_diagnostic(control: &DashboardControl, pid: u32) -> String {
+    let child = Command::new("/bin/kill")
+        .args(["-0", &pid.to_string()])
+        .output()
+        .map(|output| output.status.success());
+    format!(
+        "lifecycle={:?}, status={:?}, child_alive={child:?}",
+        control.lifecycle(),
+        control.status()
+    )
 }
 
 #[test]
@@ -113,11 +122,17 @@ fn matched_activation_owns_serialized_purge_shutdown_and_child_reap() {
 
     control.purge().unwrap();
     assert_eq!(control.lifecycle(), DashboardLifecycle::Running(1));
-    assert!(producer.begin_logical().is_ok());
+    let logical = producer.begin_logical_blocking();
+    assert!(
+        logical.is_ok(),
+        "begin_logical={:?}; {}",
+        logical.as_ref().err(),
+        runtime_diagnostic(&control, pid)
+    );
     control.shutdown().unwrap();
     assert_eq!(control.lifecycle(), DashboardLifecycle::Stopped);
     assert!(matches!(
-        producer.begin_logical(),
+        producer.begin_logical_blocking(),
         Err(InspectionBeginLogicalErrorV1::Disabled)
     ));
     drop(launch);
@@ -255,11 +270,11 @@ fn descriptor_equal_double_swap_fails_closed_disables_producers_and_reaps_childr
         gaze_proxy_dashboard::DashboardErrorCode::ActivationFailed
     );
     assert!(matches!(
-        producer_a.begin_logical(),
+        producer_a.begin_logical_blocking(),
         Err(InspectionBeginLogicalErrorV1::Disabled)
     ));
     assert!(matches!(
-        producer_b.begin_logical(),
+        producer_b.begin_logical_blocking(),
         Err(InspectionBeginLogicalErrorV1::Disabled)
     ));
     assert_process_reaped(pid_a);
@@ -368,6 +383,68 @@ fn try_browser_purge(authority: SocketAddrV4, page_b64: &str, csrf_b64: &str) ->
     }
 }
 
+#[cfg(not(target_os = "macos"))]
+struct BrowserPurgeWorkers {
+    stop: Arc<AtomicBool>,
+    handles: Vec<thread::JoinHandle<usize>>,
+}
+
+#[cfg(not(target_os = "macos"))]
+impl BrowserPurgeWorkers {
+    fn start(authority: SocketAddrV4, page: &str, csrf: &str, attempts: usize) -> Self {
+        let stop = Arc::new(AtomicBool::new(false));
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let mut handles = Vec::new();
+        let mut starts = Vec::new();
+        for _ in 0..3 {
+            let stop = stop.clone();
+            let (start_tx, start_rx) = mpsc::channel();
+            starts.push(start_tx);
+            let ready_tx = ready_tx.clone();
+            let page = page.to_owned();
+            let csrf = csrf.to_owned();
+            handles.push(thread::spawn(move || {
+                let mut accepted = usize::from(try_browser_purge(authority, &page, &csrf));
+                ready_tx.send(()).unwrap();
+                if start_rx.recv().is_err() {
+                    return accepted;
+                }
+                for _ in 1..attempts {
+                    if stop.load(Ordering::Acquire) {
+                        break;
+                    }
+                    accepted += usize::from(try_browser_purge(authority, &page, &csrf));
+                }
+                accepted
+            }));
+        }
+        for _ in 0..3 {
+            ready_rx
+                .recv_timeout(Duration::from_secs(60))
+                .expect("browser worker acknowledged its first request");
+        }
+        for start in starts {
+            start.send(()).unwrap();
+        }
+        Self { stop, handles }
+    }
+
+    fn finish(&mut self) -> usize {
+        self.stop.store(true, Ordering::Release);
+        self.handles
+            .drain(..)
+            .map(|handle| handle.join().expect("browser worker must not panic"))
+            .sum()
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+impl Drop for BrowserPurgeWorkers {
+    fn drop(&mut self) {
+        self.finish();
+    }
+}
+
 /// A single browser-initiated `/purge` must arrive on the dedicated `0x20` channel,
 /// drive exactly one serialized purge (advancing the epoch), and leave the control
 /// protocol intact for a subsequent operator purge and shutdown.
@@ -390,20 +467,13 @@ fn browser_purge_request_advances_epoch_without_corrupting_control_protocol() {
         "browser purge request rejected"
     );
 
-    let deadline = Instant::now() + Duration::from_secs(60);
-    let mut epoch = None;
-    while Instant::now() < deadline {
-        match control.lifecycle() {
-            DashboardLifecycle::Running(value) if value > 0 => {
-                epoch = Some(value);
-                break;
-            }
-            DashboardLifecycle::Running(_) | DashboardLifecycle::Purging { .. } => {}
-            other => panic!("dashboard spuriously disabled after browser purge: {other:?}"),
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    assert_eq!(epoch.expect("browser purge did not advance the epoch"), 1);
+    let epoch = control.wait_for_epoch(1).unwrap_or_else(|error| {
+        panic!(
+            "browser purge acknowledgement failed: {error:?}; {}",
+            runtime_diagnostic(&control, pid)
+        )
+    });
+    assert_eq!(epoch, 1);
 
     control
         .purge()
@@ -434,45 +504,40 @@ fn concurrent_browser_and_operator_purges_do_not_disable_dashboard() {
     let authority = launch.authority();
     let (page_b64, csrf_b64) = authenticated_session(authority, &token);
 
-    let stop = Arc::new(AtomicBool::new(false));
-    let mut handles = Vec::new();
-    for _ in 0..3 {
-        let stop = stop.clone();
-        let page_b64 = page_b64.clone();
-        let csrf_b64 = csrf_b64.clone();
-        handles.push(thread::spawn(move || {
-            let mut accepted = 0;
-            while !stop.load(Ordering::Acquire) && accepted < 25 {
-                if try_browser_purge(authority, &page_b64, &csrf_b64) {
-                    accepted += 1;
-                }
-            }
-            accepted
-        }));
+    let mut browser = BrowserPurgeWorkers::start(authority, &page_b64, &csrf_b64, 25);
+
+    for minimum in 1..=10 {
+        control.purge().unwrap_or_else(|error| {
+            panic!(
+                "operator purge failed: {error:?}; {}",
+                runtime_diagnostic(&control, pid)
+            )
+        });
+        control.wait_for_epoch(minimum).unwrap_or_else(|error| {
+            panic!(
+                "concurrent purge acknowledgement failed: {error:?}; {}",
+                runtime_diagnostic(&control, pid)
+            )
+        });
     }
 
-    // Let the browser-purge traffic overlap the structured operator-purge ack reads.
-    std::thread::sleep(Duration::from_millis(40));
-
-    for _ in 0..10 {
-        control
-            .purge()
-            .expect("operator purge must not be corrupted by concurrent browser purges");
-        assert!(
-            matches!(control.lifecycle(), DashboardLifecycle::Running(_)),
-            "dashboard spuriously disabled during concurrent purges"
-        );
-    }
-
-    stop.store(true, Ordering::Release);
-    let mut total_browser_purges = 0;
-    for handle in handles {
-        total_browser_purges += handle.join().expect("hammering thread must not panic");
-    }
+    let total_browser_purges = browser.finish();
     assert!(
         total_browser_purges > 0,
         "concurrent test exercised no browser purges"
     );
+    let minimum = total_browser_purges as u64 + 10;
+    let acknowledged = control.wait_for_epoch(minimum).unwrap_or_else(|error| {
+        panic!(
+            "final purge acknowledgement failed: {error:?}; {}",
+            runtime_diagnostic(&control, pid)
+        )
+    });
+    assert_eq!(
+        acknowledged, minimum,
+        "all accepted purges advance exactly one epoch"
+    );
+    assert_eq!(control.lifecycle(), DashboardLifecycle::Running(minimum));
 
     control.shutdown().unwrap();
     assert_eq!(control.lifecycle(), DashboardLifecycle::Stopped);
@@ -481,7 +546,7 @@ fn concurrent_browser_and_operator_purges_do_not_disable_dashboard() {
     drop(producer);
 }
 
-/// `rotate_pairing_secret` exchanges a 59-byte `PairingEnvelopeV1` (preceded by a
+/// `rotate_pairing_secret` exchanges a 60-byte `PairingEnvelopeV2` (preceded by a
 /// full purge) on the control socket while browser-initiated `0x20` notifications
 /// are in flight. Before the fix the notifications shared the control FD and
 /// shifted the envelope magic, producing a spurious `PairingFailed` disable.
@@ -498,41 +563,36 @@ fn concurrent_browser_purges_do_not_corrupt_rotate_pairing() {
     let authority = launch.authority();
     let (page_b64, csrf_b64) = authenticated_session(authority, &token);
 
-    let stop = Arc::new(AtomicBool::new(false));
-    let mut handles = Vec::new();
-    for _ in 0..3 {
-        let stop = stop.clone();
-        let page_b64 = page_b64.clone();
-        let csrf_b64 = csrf_b64.clone();
-        handles.push(thread::spawn(move || {
-            let mut accepted = 0;
-            while !stop.load(Ordering::Acquire) && accepted < 20 {
-                if try_browser_purge(authority, &page_b64, &csrf_b64) {
-                    accepted += 1;
-                }
-            }
-            accepted
-        }));
-    }
-
-    // Let browser-purge traffic overlap the rotate pairing's purge ack and
-    // 59-byte envelope reads on the control socket.
-    std::thread::sleep(Duration::from_millis(40));
+    let mut browser = BrowserPurgeWorkers::start(authority, &page_b64, &csrf_b64, 20);
 
     control
         .rotate_pairing_secret(Box::new(
             |_authority, _token: &[u8]| Ok::<(), io::Error>(()),
         ))
-        .expect("rotate pairing must not be corrupted by concurrent browser purges");
-    assert!(
-        matches!(control.lifecycle(), DashboardLifecycle::Running(_)),
-        "dashboard spuriously disabled during rotate pairing"
-    );
+        .unwrap_or_else(|error| {
+            panic!(
+                "rotate pairing failed: {error:?}; {}",
+                runtime_diagnostic(&control, pid)
+            )
+        });
 
-    stop.store(true, Ordering::Release);
-    for handle in handles {
-        let _ = handle.join().expect("hammering thread must not panic");
-    }
+    let total_browser_purges = browser.finish();
+    assert!(
+        total_browser_purges > 0,
+        "concurrent test exercised no browser purges"
+    );
+    let minimum = total_browser_purges as u64 + 1;
+    let acknowledged = control.wait_for_epoch(minimum).unwrap_or_else(|error| {
+        panic!(
+            "final purge acknowledgement failed: {error:?}; {}",
+            runtime_diagnostic(&control, pid)
+        )
+    });
+    assert_eq!(
+        acknowledged, minimum,
+        "all accepted purges advance exactly one epoch"
+    );
+    assert_eq!(control.lifecycle(), DashboardLifecycle::Running(minimum));
 
     control.shutdown().unwrap();
     assert_eq!(control.lifecycle(), DashboardLifecycle::Stopped);
@@ -557,7 +617,13 @@ fn rotate_immediately_followed_by_purge_and_shutdown_keeps_control_frames_intact
     assert_eq!(control.lifecycle(), DashboardLifecycle::Running(1));
     control.purge().unwrap();
     assert_eq!(control.lifecycle(), DashboardLifecycle::Running(2));
-    assert!(producer.begin_logical().is_ok());
+    let logical = producer.begin_logical_blocking();
+    assert!(
+        logical.is_ok(),
+        "begin_logical={:?}; {}",
+        logical.as_ref().err(),
+        runtime_diagnostic(&control, pid)
+    );
     control.shutdown().unwrap();
     assert_eq!(control.lifecycle(), DashboardLifecycle::Stopped);
     drop(launch);
@@ -587,7 +653,7 @@ fn failed_rotation_delivery_disables_registration_and_reaps_child() {
     drop(launch);
     assert_eq!(control.lifecycle(), DashboardLifecycle::Stopped);
     assert!(matches!(
-        producer.begin_logical(),
+        producer.begin_logical_blocking(),
         Err(InspectionBeginLogicalErrorV1::Disabled)
     ));
     assert_process_reaped(pid);
