@@ -1159,8 +1159,17 @@ model:
   state between city and ZIP, in prose, blocks, log fields, CSV columns and
   tool JSON. Every part is gold. Layer D adds the same designator words with
   no address anywhere. See [Address blocks](#address-blocks) below. The v5
-  documents remain byte identical within each partition; the generator and
-  both partition hashes are pinned at v6.
+  documents remain byte identical within each partition.
+- **Phone shapes (generator v7):** layer A adds whole phone numbers in shapes
+  the `+CC` and US/German national rules miss: French dotted groups
+  (`04.65.71.xx.xx`), national digit groups with no `+` behind a phone label
+  (`Phone: 0NN NNN NNN`, `Mobile: 0N NN NN NN`), a parenthesised trunk zero
+  (`+44 (0)20 7946 0xxx`) and the `00` / `001` international prefixes, in
+  prose, log fields, CSV columns and tool JSON. The whole number is gold,
+  prefix included. Layer D adds each shape's benign neighbours with no phone
+  label anywhere. See [Phone shapes](#phone-shapes) below. The v6 documents
+  remain byte identical within each partition; the generator and both
+  partition hashes are pinned at v7.
 - **Checksum code:** written from the published standards, not from Gaze's
   validators. Standard test vectors pin it, and the validator probe
   cross-checks it on every run.
@@ -1323,6 +1332,72 @@ tags every designator and number with no address anchor. Appended to the
 policy, it must lower layer A's leak on the address cells and raise layer D's
 false-positive bytes on the `designator_*` twins. A rule for one spelling
 alone (`\bSte\.? #?\d+[A-C]?\b`) must raise them too.
+
+#### Phone shapes
+
+A phone number written in a shape no rule knows leaks whole, and one whose
+tail another rule claims leaks in part: in `02.61.91.xx.xx` the IPv4 rule
+tokenizes `61.91.xx.xx` as an address and `02.` stays raw. Layer A
+(`PhoneCell` in `agentic_layers.py`) writes each number whole and scores it
+as `TELEPHONENUM`, including the `00` or `001` prefix and the `(0)` trunk.
+
+| Layer A cells (gold, gated) | Layer D twins (no phone label anywhere) |
+| --- | --- |
+| French dotted groups whose last four groups parse as IPv4, after a label, in a log field, a CSV column and a bare signature line | firmware and part numbers written exactly as `0X.XX.XX.XX.XX`, five-group dotted versions whose first four groups parse as IPv4, dotted dates, OIDs |
+| National groups `0NN NNN NNN` and `0N NN NN NN` behind `Phone:`, `Mobile:`, a log key, a CSV header or a JSON key | the same digit groups behind an order, invoice or ticket label, spaced amounts, rows of two-digit scores |
+| `+CC (0)` trunk zero in prose and JSON | a signed score with a parenthesised zero (`+12 (0)`) |
+| `00CC` prefix in prose and CSV | tickets written exactly as `00CC N NNNN NNNN` behind a spare country code, `00CC-NNNN-NNNN` part and SKU codes |
+| `001` prefix before a NANPA number in prose and a log field | item codes written exactly as `001 NNN NNN NNNN` or `001-NNN-NNN-NNNN` whose exchange starts with 0 or 1, `001-123-456-789` document numbers |
+
+National digit groups are gold only behind a phone label: the same digits
+alone are an order or ticket number, and layer D writes them so. The
+generator fails closed unless every A value fully matches its shape, every
+national value follows a phone label, every shape A scores has a layer D
+twin, every twin is used, no twin carries a phone label, and no twin value
+has a phone reading. A twin may share a phone's exact written shape (the
+narrow rule below must pay for it), but not its meaning: dotted pairs need a
+firmware, build, part or model context, a `00` code a spare E.164 country
+code (28 or 89), a `001` code an area or exchange starting with 0 or 1, which
+NANP never assigns, and no twin writes `+CC (0)`, which has no benign use.
+
+Values come from documented fictional ranges: ARCEP's numbers reserved for
+fiction (`02 61 91`, `04 65 71`, `01 99 00`), the Bundesnetzagentur
+media-production numbers (Berlin `030 23125`, Frankfurt `069 90009`, München
+`089 99998`), Ofcom's drama range `020 7946 0xxx` and NANPA `555-01xx`. The
+national groups have no documented range, so they are synthesized
+non-reachable: the Spanish nine-digit and Danish eight-digit plans never
+start with 0, and every generated value does. Benign dotted twins also draw
+from the ARCEP fiction blocks, because any `0X.XX.XX.XX.XX` could be a real
+French number. Each A cell has 6 documents per partition and each twin 4: 15
+A cells (+90 documents, +3.5 %) and 17 D twins (+68 documents, +7.1 %).
+
+Each shape has an over-broad rule with no label, country code or
+numbering-plan check (`PHONE_BROAD_PATTERNS`). Every A value of the shape
+matches it, and so does every twin of the shape, so shipping it costs layer D
+false-positive bytes; a test checks this shape by shape. Each shape except
+`(0)` also has a narrow rule (`PHONE_NARROW_PATTERNS`): its exact group widths
+and separators with no label, plan or context check, the rule a detector would
+actually write. Every A value of the shape matches it and so does at least one
+same-shape twin; a test pins how many layer D documents each one reaches.
+The patterns are committed as
+[`mutant-broad-phone-shapes.toml`](../../../scripts/bench/fixtures/agentic/mutant-broad-phone-shapes.toml)
+and
+[`mutant-narrow-phone-shapes.toml`](../../../scripts/bench/fixtures/agentic/mutant-narrow-phone-shapes.toml).
+Appended to the setup policy without its NER and Nym sections, on generator
+v7 at `767de0a7`, the broad mutant lowered the phone cells' layer A leak from
+704 to 168 bytes and raised the phone twins' layer D false positives from 241
+to 874 bytes, every twin paying. The narrow mutant lowered the leak to 198
+bytes and raised the twins' false positives to 578 bytes, every same-shape
+twin paying (firmware 44 to 56, part numbers 33 to 56, `00` tickets 9 to 67,
+`001` item codes 16 to 64 hyphenated and 0 to 64 spaced). Rules only (`rule-floor-extended`), main leaked 874
+of 1,290 phone gold bytes and already put 188 false-positive bytes on the
+twins, mostly through the IPv4 rule on dotted runs. Under the full
+`gaze setup` policy (NER and Nym), main leaked 671 of those 1,290 bytes and
+put 274 false-positive bytes on the twins.
+
+The past-release rows in [Measured adjacency layer history](#measured-adjacency-layer-history)
+do not include these cells yet; the note under that table says, row by row,
+where each one's v7 re-measure stands.
 
 **Held-out protocol.** Templates, machine keys, name pools, email domains,
 phone prefixes, the layer R name-word and decoy pools, and seeds are split
@@ -1529,6 +1604,21 @@ committed ledger. Do not edit the rows by hand.
 These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v4-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v4, test corpus `387a35ac1551…`, setup policy `f909a23aecac…`.
 
 <!-- END GENERATED: agentic-adjacency-v4 -->
+
+**Re-measure status on generator v7.** Every row above was measured on
+generator v4 and stays bound to that corpus by hash; none has been re-measured
+on the v5 to v7 cells yet (labelled lookalikes, address blocks, phone shapes).
+Nothing blocks any of them: each tag builds its own `clean_for_bench` and ships
+a layer-A-capable arm. The re-measure runs as one queued bench job after the
+v7 harness merges, `agentic_layers.py measure` with each release's own binary
+and arm, then `render_agentic_adjacency_doc.py --record`:
+
+- `v0.15.1` `policy-file`: not yet re-measured on v7; queued.
+- `v0.15.0` `policy-file`: not yet re-measured on v7; queued.
+- `v0.14.0` `full-stack-kiji-resolve`: not yet re-measured on v7; queued, with
+  `--manifest-actions tokenize --split-composite-source-ids`.
+- `v0.14.0` `pass2-ner`: not yet re-measured on v7; queued, with the same
+  v0.14.0 flags.
 
 ### Hardware spec template
 
