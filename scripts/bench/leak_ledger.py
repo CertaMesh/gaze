@@ -601,9 +601,14 @@ def _contracts() -> dict[int, score.ScoredLabelContract]:
     return {version: arms._contract(version) for version in arms.required_contracts()}
 
 
-def _layer_contract() -> score.ScoredLabelContract:
+def _layer_contract(record_path: Path | None = None) -> score.ScoredLabelContract:
+    """The agentic contract of the generator version the record measured."""
     import agentic_layers as agentic
-    return agentic.load_contract(ROOT)
+    if record_path is None:
+        record_path = load()[1]
+    with gzip.open(record_path, "rt", encoding="utf-8") as handle:
+        header = json.loads(handle.readline())
+    return agentic.load_contract(ROOT, version=header["layer_identity"]["generator_version"])
 
 
 def _scored(label: str, contract: score.ScoredLabelContract) -> bool:
@@ -829,7 +834,7 @@ def derive(root: Path = ROOT) -> tuple[dict[str, Any], str]:
     _, expected = leaked_spans(record_path)
     validate_rows(rows, expected)
     contracts = _contracts()
-    layer_contract = _layer_contract()
+    layer_contract = _layer_contract(record_path)
     totals = reconcile(rows, record_path, contracts, layer_contract)
     body = render(rows, index, totals, contracts[HEADLINE_CONTRACT], layer_contract)
     return totals, body

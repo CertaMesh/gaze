@@ -21,6 +21,13 @@ pub fn apply(
     let mut vetoed = Vec::new();
 
     for mut candidate in candidates {
+        if candidate.regex_guard_rejected {
+            vetoed.push(VetoedCandidate {
+                candidate,
+                reason: ValidatorFailReason::RegexGuardRejected,
+            });
+            continue;
+        }
         let Some(recognizer) = registry.recognizer(&candidate.recognizer_id) else {
             kept.push(candidate);
             continue;
@@ -45,7 +52,7 @@ pub fn apply(
         // 19-digit card or a card and its CVV, and the digits cannot tell which, so both stay in
         // one token (the CVV is sensitive too). Its longer span then wins the same-class
         // containment over `card.structural`'s card; without a cue `card.structural` still
-        // scopes a card exactly (todo 3843). Solo todo 3906, review of #694 round 3.
+        // scopes a card exactly. Review of #694 round 3.
         let outcome = match kind.validate(raw) {
             ValidatorOutcome::Fail { .. }
                 if kind == ValidatorKind::Luhn

@@ -2,8 +2,8 @@ use std::path::Path;
 
 use gaze_audit::{AuditFilter, SqliteLogger};
 use gaze_types::{
-    Action, AmbiguityReason, AmbiguityRecord, ConflictTier, DocumentKind, LosingCandidate,
-    PiiClass, RedactionEntry, ValidatorFailReason,
+    Action, AmbiguityReason, AmbiguityRecord, ConflictTier, DocumentKind, LabelledValueScanReason,
+    LosingCandidate, PiiClass, RedactionEntry, ValidatorFailReason,
 };
 use rusqlite::Connection;
 
@@ -20,6 +20,7 @@ fn spike4_migration_adds_audit_metadata_columns_and_is_idempotent() {
     assert_eq!(rows[0].recognizer_id.as_deref(), Some("legacy_unversioned"));
     assert_eq!(rows[0].recognizer_version_id, None);
     assert_eq!(rows[0].validator_fail_reason, None);
+    assert_eq!(rows[0].labelled_value_scan_reason, None);
     assert_eq!(rows[0].ambiguity_record, None);
 
     drop(logger);
@@ -47,6 +48,8 @@ fn spike4_migration_adds_audit_metadata_columns_and_is_idempotent() {
     )
     .with_validator_fail_reason(ValidatorFailReason::EmailRfcRejected)
     .with_ambiguity_record(record.clone());
+    let mut entry = entry;
+    entry.labelled_value_scan_reason = Some(LabelledValueScanReason::DateBoundary);
     logger.log(&entry).expect("log new row");
 
     let entries = logger.entries().expect("entries");
@@ -56,6 +59,15 @@ fn spike4_migration_adds_audit_metadata_columns_and_is_idempotent() {
         Some(ValidatorFailReason::EmailRfcRejected)
     );
     assert_eq!(entries[1].ambiguity_record, Some(record));
+    assert_eq!(
+        entries[1].labelled_value_scan_reason,
+        Some(LabelledValueScanReason::DateBoundary)
+    );
+    let query = SqliteLogger::query(temp.path(), &AuditFilter::default()).expect("query");
+    assert_eq!(
+        query[1].labelled_value_scan_reason.as_deref(),
+        Some("\"date_boundary\"")
+    );
 }
 
 #[test]

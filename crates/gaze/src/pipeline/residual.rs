@@ -5,7 +5,7 @@
 //! protective selection covers becomes a residual cell of the highest-ranked
 //! such claimant, per byte, even inside a `preserve` selection. Admission is
 //! per original, never per overlap component, so a preserved or redacted
-//! neighbour cannot switch a claimant's coverage off (todo #3740). A cell
+//! neighbour cannot switch a claimant's coverage off. A cell
 //! emits under its claimant's own action: `tokenize` and `format_preserve`
 //! mint a class token (a fragment has no format to preserve), `redact` writes
 //! the one-way `[REDACTED:<class>]` marker, `generalize` the class placeholder.

@@ -110,7 +110,7 @@ pub enum FailureReason {
 ///
 /// Inline blobs would defeat the threat models of adopters whose underlying
 /// store sits on encrypted disk volumes (lens-eye round 1 TOP_RISK in
-/// scratchpad 1453). Adopters write the response bytes to their own snapshot
+/// (internal design note). Adopters write the response bytes to their own snapshot
 /// store and pass back this reference — the manifest row records the path +
 /// integrity hash but not the bytes.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -28,6 +28,7 @@ fn regex_from_spec(spec: &RecognizerSpec) -> RegexDetector {
         pattern,
         pattern_template,
         capture_groups,
+        ..
     } = &spec.matcher
     else {
         panic!("expected regex recognizer {}", spec.id);
@@ -258,7 +259,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "vat.es",
         ])
     );
-    assert_eq!(core.recognizers.len(), 47);
+    assert_eq!(core.recognizers.len(), 50);
     for id in [
         "name.forward_marker",
         "name.agent_recipient",
@@ -274,6 +275,9 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
         "tax_number.cue_anchored",
         "driver_license.cue_anchored",
         "national_id.cue_anchored",
+        "tax_number.labelled",
+        "driver_license.labelled",
+        "id_card.labelled",
         // Slice A (#3025): passport is bilingual cue-anchored with no single-nation shape, so it
         // is document basis (`global`) like the other cue-anchored government-ID recognizers.
         "passport.cue_anchored",
@@ -1479,7 +1483,7 @@ fn phase2_formatted_card_with_hyphens_tokenizes_and_round_trips() {
     assert_eq!(restore_tokens(&session, &clean), input);
 }
 
-/// A Luhn-failing card still tokenizes after a card cue (solo todo 3906): `card.structural`
+/// A Luhn-failing card still tokenizes after a card cue: `card.structural`
 /// vetoes it, `card.cued` keeps it. Without a cue it stays raw.
 #[test]
 fn phase2_formatted_card_failing_luhn_tokenizes_only_after_a_card_cue() {
@@ -1532,7 +1536,7 @@ fn phase2_iban_and_cards_are_universal_classes_with_cued_siblings() {
             .map(|collision| collision.family.as_str()),
         Some("payment-card-or-iban")
     );
-    // The structural rule plus its cue-anchored checksum-failure sibling (solo todo 3906).
+    // The structural rule plus its cue-anchored checksum-failure sibling.
     assert_eq!(
         rulepack
             .recognizers
@@ -1542,7 +1546,7 @@ fn phase2_iban_and_cards_are_universal_classes_with_cued_siblings() {
             .collect::<std::collections::BTreeSet<_>>(),
         std::collections::BTreeSet::from(["iban.cued", "iban.structural"])
     );
-    // The structural rule plus its cue-anchored checksum-failure sibling (solo todo 3906).
+    // The structural rule plus its cue-anchored checksum-failure sibling.
     assert_eq!(
         rulepack
             .recognizers

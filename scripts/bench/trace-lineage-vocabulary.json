@@ -53,6 +53,7 @@
     "manifest_sweep"
   ],
   "validator_fail_reasons": [
+    "regex_guard_rejected",
     "luhn_failed",
     "iban_mod97_failed",
     "email_rfc_rejected",

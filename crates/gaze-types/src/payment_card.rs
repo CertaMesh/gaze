@@ -2,7 +2,7 @@
 //!
 //! One implementation for both directions: the forward `card.structural` recognizer
 //! (`gaze-recognizers`, the text sent to the model) and the restore-boundary DLP scan (`gaze`,
-//! the text coming back). Solo todo 3843.
+//! the text coming back).
 //!
 //! A card is rarely alone in its digit run. A CVV or an expiry follows it (`4111 1111 1111 1111
 //! 123`), a number precedes it (`Nr 7 4111 …`, `Order 5678 4111 …`), or normalization glued
@@ -334,7 +334,7 @@ mod tests {
 
     #[test]
     fn overlapping_luhn_valid_windows_become_one_card() {
-        // Solo todo 3843 round 2: `0 4111 1111 1111 1111` passes Luhn as the pattern window
+        // Round 2: `0 4111 1111 1111 1111` passes Luhn as the pattern window
         // (a leading zero keeps the checksum), so does the 16-digit card and so does the 19-digit
         // card after it. None may win alone: the union leaves no digit of any of them out.
         assert_eq!(

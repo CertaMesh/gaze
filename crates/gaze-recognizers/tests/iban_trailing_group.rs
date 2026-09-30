@@ -1,4 +1,4 @@
-//! Regression fixtures for the `iban.structural` candidate span (solo todo #3708).
+//! Regression fixtures for the `iban.structural` candidate span.
 //!
 //! Before this change the pattern was:
 //!
@@ -373,7 +373,7 @@ fn both_shipped_outcome_classes_are_fixed_for_every_affected_country() {
     }
 }
 
-/// The exact shipped repro from todo #3708, as an AT IBAN is written on an invoice.
+/// The exact shipped repro, as an AT IBAN is written on an invoice.
 #[test]
 fn published_at_iban_before_a_bic_label_tokenizes_whole() {
     assert_iban_tokenized("IBAN ", "AT61 1904 3002 3457 3201", " BIC: BKAUATWW");
@@ -474,7 +474,7 @@ fn every_registry_country_tokenizes_whole_with_and_without_a_trailing_label() {
 
 /// A country code outside the registry is never an `iban.structural` candidate: with no cue it
 /// is no IBAN. After the word `IBAN` a real ISO 3166-1 country without IBANs is `iban.cued`'s: an
-/// account number the writer calls an IBAN is still an account (solo todo 3906). A two-letter
+/// account number the writer calls an IBAN is still an account. A two-letter
 /// pair that is no country is no IBAN even after the cue (review of #694).
 #[test]
 fn non_registry_country_codes_tokenize_only_after_an_iban_cue() {
@@ -602,7 +602,7 @@ fn iban_pattern_has_no_open_ended_quantifier() {
 
 /// A label glued directly to a compact IBAN stays outside the token; the IBAN tokenizes whole.
 ///
-/// Solo todo #3756. The pattern used to end in `\b`, so a candidate immediately followed by a
+/// The pattern used to end in `\b`, so a candidate immediately followed by a
 /// letter or digit was never a candidate at all, and `IBAN AT611904300234573201BIC` shipped raw
 /// with `detections: 0`, an empty leak report and a success exit, in every release since
 /// v0.4.3-rc.1. The shape is ordinary machine output and dense footers
@@ -651,13 +651,13 @@ fn label_glued_to_a_compact_iban_stays_outside_the_token() {
 ///
 /// `phone.national.de` opens with a no-capture branch that consumes a 22-character IBAN grouping
 /// so its phone branches never see `0532 0130` inside a German IBAN. That branch keeps its
-/// trailing `\b` (dropping it uncovered 7,212 bytes on digit-glued documents, solo todo #3764),
+/// trailing `\b` (dropping it uncovered 7,212 bytes on digit-glued documents),
 /// so a glued label stops the consumption and the phone rule (priority 85) still claims
-/// `0532 0130`. Containment precedence (todo #3740) then folds that claim into the validated
+/// `0532 0130`. Containment precedence then folds that claim into the validated
 /// IBAN that wholly contains it: one IBAN token, the phone a loser row. Before the rung the
 /// phone won the sub-run on rule priority and the IBAN was split around it; main before that
 /// left `DE89 3704 0044 … 00BIC` raw beside one phone token. The compact German form tokenizes
-/// whole (previous fixture); todo #3764 stays a rule-level note.
+/// whole (previous fixture); the digit-glued case stays a rule-level note.
 #[test]
 fn label_glued_to_a_spaced_german_iban_is_one_iban_token() {
     let pipeline = pipeline_tokenizing_phone();
@@ -718,7 +718,7 @@ fn non_ascii_letters_glued_to_an_iban_are_a_word_not_more_identifier() {
 /// and `iban_mod97` accepts it. A digit, an underscore or a non-ASCII digit anywhere in the word
 /// run after the candidate means the run could be more identifier, so the candidate is dropped
 /// before validation: no `custom:iban` token, no partial token. The no-cue `ref … end` shapes are
-/// the ones todo #3756 measured; the `IBAN …` shapes show the cue does not override the boundary.
+/// the ones the trailing-word enumeration measured; the `IBAN …` shapes show the cue does not override the boundary.
 /// This is the fixture that reddens when the code boundary is dropped.
 #[test]
 fn iban_shaped_prefix_of_a_longer_identifier_is_not_tokenized() {

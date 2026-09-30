@@ -21,9 +21,9 @@ use gaze_recognizers::{
 use gaze_types::redaction_marker::redaction_marker;
 use gaze_types::{
     AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, FallbackReason,
-    LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
-    RedactionLogger, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet, SafetyNetContext,
-    SafetyNetError, ValidatorFailReason,
+    LabelledValueScanReason, LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest,
+    RedactionLogError, RedactionLogger, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet,
+    SafetyNetContext, SafetyNetError, ValidatorFailReason,
 };
 use thiserror::Error;
 
@@ -1467,7 +1467,7 @@ impl Pipeline {
         })
     }
 
-    /// Repeat-value sweep (todo 3849). Copies of this document's rule-found
+    /// Repeat-value sweep. Copies of this document's rule-found
     /// winners and of the session's rule-found values that no winner covers
     /// join the pool as candidates, and the pool is resolved again, so the
     /// resolver's own rungs settle overlaps (a copy that encloses an NER
@@ -1658,7 +1658,7 @@ impl Pipeline {
             )
             .with_dictionaries(dictionaries);
             let (mut reported, mut net_telemetry) =
-                net.check_with_telemetry(scan.text(), context)?;
+                net.check_with_neutral_and_telemetry(scan.text(), scan.neutral_text(), context)?;
             for event in &mut net_telemetry {
                 if let LeakReportTelemetry::ModelSpanRefused {
                     span,
@@ -1990,7 +1990,7 @@ impl Pipeline {
                         // keeps the document restorable. A cascade of plannable suspects (each
                         // re-scan flagging the value next to the last token) outran the one
                         // follow-up round and ended here deleting a value that was never at
-                        // risk (todo 3879). Anything the planner refuses is deleted as before.
+                        // risk. Anything the planner refuses is deleted as before.
                         // Only a residual the post-resolution re-run found: a first-pass refusal
                         // is the resolver declining those suspects, and the fallback does not
                         // overrule it.
@@ -2933,6 +2933,7 @@ impl Pipeline {
         if let Some(reason) = detection.validator_fail_reason {
             entry = entry.with_validator_fail_reason(reason);
         }
+        entry.labelled_value_scan_reason = detection.labelled_value_scan_reason;
         if detection.collision_family.is_some() || detection.collision_variant.is_some() {
             entry = entry.with_collision_metadata(
                 detection.collision_family.clone(),
@@ -3081,6 +3082,7 @@ struct IndexedDetection {
     sweep_link: Option<SweepLink>,
     /// Set when the value was kept although its checksum failed (`ValidatorOnFail::Record`).
     validator_fail_reason: Option<ValidatorFailReason>,
+    labelled_value_scan_reason: Option<LabelledValueScanReason>,
 }
 
 struct CleanText {
@@ -5149,7 +5151,7 @@ impl LeafOp {
     /// `Pipeline::scan_safety_nets_structured` and `Pipeline::clean_with_safety_net*`, surfaced
     /// by folding the three walkers into one. It is preserved rather than silently unified
     /// because `field_path` is adopter-visible telemetry that lands in the audit log; changing it
-    /// is a separate, announced change (solo todo #2958).
+    /// is a separate, announced change.
     fn root_path(self, key: &str) -> String {
         match self {
             LeafOp::ScanOnly => key.to_string(),
@@ -5353,7 +5355,7 @@ fn translate_vetoed_candidate(
     })
 }
 
-/// House-number candidates licensed by winning NER location spans (todo 3670).
+/// House-number candidates licensed by winning NER location spans.
 ///
 /// Reads the settled selections in normalized coordinates. A selection licenses
 /// a number only when a NER `Location` candidate is one of its members. Members
@@ -5420,7 +5422,7 @@ fn street_corroborated_house_numbers(
                 .source_recognizer_ids
                 .push(crate::NER_RECOGNIZER_ID.to_string());
             // Licensed by a NER street span, so it carries no more certainty than NER: a house
-            // number must never be swept to every other copy of `17` (todo 3670).
+            // number must never be swept to every other copy of `17`.
             found.push(candidate.with_evidence(crate::EvidenceKind::Learned));
         }
     }
@@ -5455,6 +5457,7 @@ fn merged_losers(resolved: &[Candidate], registry: &RecognizerRegistry) -> Vec<I
                     evidence: ManifestEvidence::Learned,
                     sweep_link: None,
                     validator_fail_reason: None,
+                    labelled_value_scan_reason: None,
                 }
             })
         })
@@ -5504,6 +5507,7 @@ fn indexed_detection_from_candidate(
         evidence,
         sweep_link: None,
         validator_fail_reason: candidate.validator_fail_reason,
+        labelled_value_scan_reason: candidate.labelled_value_scan_reason,
     }
 }
 
@@ -6339,6 +6343,103 @@ mod tests {
             .register_safety_net(safety_net)
             .build()
             .expect("pipeline")
+    }
+
+    struct NeutralOnlySafetyNet {
+        calls: Arc<AtomicUsize>,
+        neutral_calls: Arc<AtomicUsize>,
+    }
+
+    impl SafetyNet for NeutralOnlySafetyNet {
+        fn id(&self) -> &str {
+            "neutral-only.fixture"
+        }
+
+        fn supported_locales(&self) -> &[crate::LocaleTag] {
+            &[crate::LocaleTag::Global]
+        }
+
+        fn check(
+            &self,
+            _clean_text: &str,
+            _context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            Ok(Vec::new())
+        }
+
+        fn check_with_neutral(
+            &self,
+            stable_text: &str,
+            neutral_text: Option<&str>,
+            context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            let neutral = neutral_text.expect("the email token has a neutral view");
+            self.neutral_calls.fetch_add(1, Ordering::Relaxed);
+            assert_eq!(stable_text.len(), neutral.len());
+            assert!(neutral.contains("[PII]"));
+            let Some(start) = stable_text.find("Dr. Schmidt") else {
+                return Ok(Vec::new());
+            };
+            let span = start..start + "Dr. Schmidt".len();
+            let kind = context
+                .manifest
+                .diff_against(&span, &PiiClass::Name)
+                .expect("name is outside the email token");
+            Ok(vec![LeakSuspect::new(
+                span,
+                PiiClass::Name,
+                self.id(),
+                Some(1.0),
+                kind,
+                "NAME>=1;view=neutral",
+                None,
+            )])
+        }
+
+        fn check_with_neutral_and_telemetry(
+            &self,
+            stable_text: &str,
+            neutral_text: Option<&str>,
+            context: SafetyNetContext<'_>,
+        ) -> std::result::Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError>
+        {
+            self.check_with_neutral(stable_text, neutral_text, context)
+                .map(|suspects| (suspects, Vec::new()))
+        }
+    }
+
+    #[test]
+    fn neutral_view_runs_on_initial_and_follow_up_safety_scans() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let neutral_calls = Arc::new(AtomicUsize::new(0));
+        let pipeline = traced_email_pipeline(NeutralOnlySafetyNet {
+            calls: Arc::clone(&calls),
+            neutral_calls: Arc::clone(&neutral_calls),
+        });
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let raw = "alice@example.invalid met Dr. Schmidt";
+        let (clean, manifest, _, trace) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                raw,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .expect("neutral finding resolves");
+        let CleanDocument::Text(clean) = clean else {
+            panic!("text document expected");
+        };
+        assert_eq!(manifest.len(), 2);
+        assert_eq!(trace.len(), 2);
+        assert_eq!(trace[1].stage(), "safety_net");
+        assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+        assert!(calls.load(Ordering::Relaxed) >= 2);
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            neutral_calls.load(Ordering::Relaxed)
+        );
     }
 
     #[test]
@@ -7921,8 +8022,8 @@ mod tests {
     /// Driven directly because no integration test can tell the difference by outcome: every
     /// terminal suspect that reaches the marker is either dropped as protected or denied as
     /// unjudgeable before the survivor clause matters. The one place it would decide alone -- the
-    /// byte check after a terminal redaction -- is unreachable now that markers leave no seam
-    /// (solo todo 3739). Unfalsifiable-by-outcome is exactly when a guard needs a direct test.
+    /// byte check after a terminal redaction -- is unreachable now that markers leave no seam.
+    /// Unfalsifiable-by-outcome is exactly when a guard needs a direct test.
     ///
     /// Mutation: drop the marker skip in `survivors` and this fails with the marker span reported.
     #[test]
@@ -8470,7 +8571,7 @@ mod tests {
         assert_eq!(loser.decided_by, ConflictTier::SameClassContainment);
     }
 
-    /// Deterministic probe for the container-eviction defect (todo #3025 slice U):
+    /// Deterministic probe for the container-eviction defect:
     /// an NER organisation sub-token inside a rule-recognised credential must not
     /// split the credential. Before the containment rungs the
     /// builtin sub-span won on class priority, `remove_overlaps` dropped the whole

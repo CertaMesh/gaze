@@ -381,6 +381,15 @@ emitted. This guard sees text outside `capture_groups`; an invalid guard
 regex fails pipeline assembly. It is unavailable in
 `[[policy.custom_recognizers]]`.
 
+Regex rulepacks may also set `complete_labelled_value = true` under
+`[recognizers.match]` when a labelled identifier's captured value can continue
+through adjacent groups. The scanner protects the complete value run and
+records a typed `labelled_value_scan_reason` for a date boundary, field
+boundary, other-class boundary, or a value over four groups or 40 bytes.
+Those limits are audit signals, not reasons to leave a suffix raw. The setting
+is rulepack-only; `[[policy.custom_recognizers]]` has no equivalent field. See
+[labelled identifiers](../explanation/detection/labelled-identifiers.md).
+
 When same-class spans strictly contain one another, the resolver prefers the
 longer span regardless of evidence tier, score, or rule priority. If that
 choice would expose bytes covered by the prior arbitration of the entire
@@ -869,7 +878,7 @@ The local GLiNER judge considers date-shaped spans that the rule floor has not
 already claimed as `birth_date`. It can emit a restorable `birth_date` token
 with the distinct `dob.gliner` source. It is disabled unless `enabled = true`;
 `gaze setup --dob-judge` installs the SHA-pinned int8 bundle and writes this
-block; plain `gaze setup` leaves it out until the bundle is shrunk (todo 3905). An enabled block requires `model_dir`. Missing or corrupt bundle files,
+block; plain `gaze setup` leaves it out until the bundle is shrunk. An enabled block requires `model_dir`. Missing or corrupt bundle files,
 an invalid threshold, and inference errors fail closed. `threshold` defaults
 to `0.5` and must be greater than `0.0` and less than `1.0`. The model scores
 `date of birth`, `date`, and `event date` together. The birth-date score must
@@ -1295,7 +1304,7 @@ before broadening a bucket.
 ### Street lexicons and house numbers
 
 Two more locale buckets let a street the NER model found license the house
-number beside it (solo todo #3670). They are word lists, not recognizers: a
+number beside it. They are word lists, not recognizers: a
 number is tokenized only when a winning NER `location` span ends in one of
 these words.
 

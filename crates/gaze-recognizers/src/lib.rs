@@ -55,6 +55,8 @@ pub use regex::{NormalizerKind, RegexDetector};
 // drift-ack: core snapshot version0.5.3 matches the field rulepack; all detection fields are unchanged.
 // drift-ack: core 0.6.0 moves security_token.anchored and password.field into the opt-in
 // `secrets` bundle and drops username.field; the new secrets snapshot pins the moved rules.
+// drift-ack: the drift corpus lost a private tracker id from one comment line, so `core` and `secrets`
+// snapshots record a new corpus hash; every detection entry is unchanged.
 const EMBEDDED_RULEPACKS: &[(&str, &str)] = &[
     ("core", include_str!("../embedded/core.toml")),
     ("locale-de", include_str!("../embedded/locale-de.toml")),
@@ -92,7 +94,7 @@ mod tests {
         let core = embedded("core").expect("core rulepack");
         let rulepack = Rulepack::load(RulepackSource::Embedded(core)).expect("valid core");
 
-        assert_eq!(rulepack.recognizers.len(), 47);
+        assert_eq!(rulepack.recognizers.len(), 50);
         assert_eq!(rulepack.recognizers[0].id, "email.global");
         assert_eq!(rulepack.recognizers[1].id, "email.header.name");
         assert_eq!(rulepack.recognizers[2].id, "email.header.name.paren");
@@ -127,7 +129,7 @@ mod tests {
         let rulepack =
             Rulepack::load(RulepackSource::Embedded(core_extended)).expect("valid core-extended");
 
-        assert_eq!(rulepack.recognizers.len(), 47);
+        assert_eq!(rulepack.recognizers.len(), 50);
         assert!(rulepack
             .recognizers
             .iter()

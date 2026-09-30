@@ -92,7 +92,10 @@ use std::sync::Arc;
 use crate::anchor_resolver::AnchorResolver;
 use crate::house_number::{StreetLexicon, StreetNumberOrder};
 pub use gaze_types::{Candidate, DetectContext, DetectError, EvidenceKind, Recognizer};
-use gaze_types::{CollisionMembership, LocaleBasis, LocaleChain, LocaleTag, PiiClass};
+use gaze_types::{
+    CollisionMembership, LabelledValueScanReason, LocaleBasis, LocaleChain, LocaleTag, PiiClass,
+    LABELLED_FIELD_CONNECTORS,
+};
 
 pub trait Validator: Send + Sync {
     fn id(&self) -> &str;
@@ -268,11 +271,111 @@ impl Default for FamilyPolicyTable {
     }
 }
 
+fn labelled_cross_class_boundary_floor(
+    recognizer_id: &str,
+    capture_end: usize,
+    first_group_end: usize,
+    validated: bool,
+) -> usize {
+    // These three rules existed before complete-value scanning. Their original capture must
+    // survive even if another class validates a substring inside it.
+    if matches!(
+        recognizer_id,
+        "tax_number.cue_anchored" | "driver_license.cue_anchored" | "national_id.cue_anchored"
+    ) || !validated
+    {
+        capture_end
+    } else {
+        first_group_end
+    }
+}
+
+fn uppercase_field_label_before(
+    input: &str,
+    value_start: usize,
+    span_start: usize,
+) -> Option<usize> {
+    debug_assert!(value_start > span_start);
+    if value_start <= span_start || value_start > input.len() {
+        return None;
+    }
+    let bytes = input.as_bytes();
+    let mut at = value_start;
+    while at > span_start && bytes[at - 1] == b' ' {
+        at -= 1;
+    }
+    if at == span_start || !LABELLED_FIELD_CONNECTORS.contains(&(bytes[at - 1] as char)) {
+        return None;
+    }
+    at -= 1;
+    while at > span_start && bytes[at - 1] == b' ' {
+        at -= 1;
+    }
+    let last_end = at;
+    while at > span_start && bytes[at - 1].is_ascii_uppercase() {
+        at -= 1;
+    }
+    if last_end - at < 2 {
+        return None;
+    }
+    let last_start = at;
+    let last = &input[last_start..last_end];
+    while at > span_start && bytes[at - 1] == b' ' {
+        at -= 1;
+    }
+    let previous_end = at;
+    while at > span_start && bytes[at - 1].is_ascii_uppercase() {
+        at -= 1;
+    }
+    let previous = &input[at..previous_end];
+    let pair = matches!(
+        (previous, last),
+        ("DRIVER" | "DRIVING", "LICENSE" | "LICENCE")
+            | ("NATIONAL", "ID" | "INSURANCE")
+            | ("ID" | "IDENTITY", "CARD")
+            | ("TAX" | "LICENSE" | "LICENCE" | "PASSPORT", "NUMBER")
+            | ("PASSPORT", "ID")
+    );
+    let start = if pair { at } else { last_start };
+    (start == span_start || !bytes[start - 1].is_ascii_alphanumeric()).then_some(start)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{ConflictTier, DictionaryBundle, LocaleTag, PiiClass};
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
+    #[test]
+    fn cross_class_boundary_never_cuts_an_original_cue_capture() {
+        for rule in [
+            "tax_number.cue_anchored",
+            "driver_license.cue_anchored",
+            "national_id.cue_anchored",
+        ] {
+            for validated in [false, true] {
+                assert_eq!(
+                    labelled_cross_class_boundary_floor(rule, 20, 5, validated),
+                    20,
+                    "{rule} validated={validated}"
+                );
+            }
+        }
+        assert_eq!(
+            labelled_cross_class_boundary_floor("tax_number.labelled", 20, 5, true),
+            5
+        );
+    }
+
+    #[test]
+    fn uppercase_field_label_rejects_an_out_of_range_boundary() {
+        assert_eq!(uppercase_field_label_before("ABC: 123", 9, 0), None);
+    }
+
+    #[test]
+    fn labelled_field_connectors_stay_ascii() {
+        assert!(LABELLED_FIELD_CONNECTORS.iter().all(char::is_ascii));
+    }
 
     struct StubRecognizer {
         class: PiiClass,
@@ -652,7 +755,7 @@ mod tests {
         );
     }
 
-    /// `ClaimedSpans` reads only the start window that can overlap (todo 3895).
+    /// `ClaimedSpans` reads only the start window that can overlap.
     /// Pin it against the full scan it replaced, on random span sets that
     /// include empty, equal, nested and very long spans.
     #[test]
@@ -997,7 +1100,7 @@ fn detect_declared(
 ) -> Result<Vec<Candidate>, DetectError> {
     let evidence = recognizer.evidence();
     Ok(recognizer
-        .detect(input, ctx)?
+        .detect_for_registry(input, ctx)?
         .into_iter()
         .map(|candidate| candidate.with_evidence(evidence))
         .collect())
@@ -1008,7 +1111,7 @@ fn detect_declared(
 /// A later locale's candidate is blocked by a claimed span it partially
 /// overlaps or equals; strict same-class containment in either direction
 /// passes, so the resolver can pick the enclosing span. Checking every
-/// claimed span made each locale step O(N^2) (todo 3895). A span overlapping
+/// claimed span made each locale step O(N^2). A span overlapping
 /// `start..end` starts after `start - longest`, so only that window is read.
 #[derive(Default)]
 struct ClaimedSpans {
@@ -1175,6 +1278,7 @@ impl RecognizerRegistry {
             // This cannot reduce covered bytes for the pair. Spans are claimed before validator
             // veto, so partial overlaps retain the existing locale fallback behavior.
             let mut claimed = ClaimedSpans::default();
+            let mut guard_audit_seen = BTreeSet::new();
             // Locale-invariant recognizers detect at their first eligible step; later steps
             // reuse that output, so NER infers once per document instead of once per step.
             let mut reused: HashMap<usize, Vec<Candidate>> = HashMap::new();
@@ -1210,24 +1314,130 @@ impl RecognizerRegistry {
                         detected
                             .iter()
                             .filter(|candidate| candidate.score >= min_score(&class))
-                            .filter(|candidate| !claimed.blocks(&candidate.span))
+                            .filter(|candidate| {
+                                if candidate.regex_guard_rejected {
+                                    guard_audit_seen.insert((
+                                        candidate.recognizer_id.clone(),
+                                        candidate.span.start,
+                                        candidate.span.end,
+                                    ))
+                                } else {
+                                    !claimed.blocks(&candidate.span)
+                                }
+                            })
                             .cloned(),
                     );
                 }
-                claimed.extend(class_candidates.iter().map(|candidate| &candidate.span));
+                claimed.extend(
+                    class_candidates
+                        .iter()
+                        .filter(|candidate| !candidate.regex_guard_rejected)
+                        .map(|candidate| &candidate.span),
+                );
                 candidates.extend(class_candidates);
             }
         }
 
-        let post_candidates = self.detect_post_candidates(input, ctx, &candidates)?;
+        let active_candidates = candidates
+            .iter()
+            .filter(|candidate| !candidate.regex_guard_rejected)
+            .cloned()
+            .collect::<Vec<_>>();
+        let post_candidates = self.detect_post_candidates(input, ctx, &active_candidates)?;
         candidates.extend(
             post_candidates
                 .into_iter()
                 .filter(|candidate| candidate.score >= min_score(&candidate.class)),
         );
 
-        let (candidates, vetoed) =
+        let (mut candidates, vetoed) =
             crate::validator_veto::apply(candidates, self, input, ctx.source_spans);
+
+        // A labelled capture may extend through grouped value bytes, but an independently
+        // validated value of another class starts a new field. A vetoed lookalike must never
+        // shorten the value and leave its suffix raw.
+        let boundaries = candidates
+            .iter()
+            .filter(|candidate| !candidate.regex_guard_rejected)
+            .map(|candidate| {
+                (
+                    candidate.span.start,
+                    candidate.class.clone(),
+                    candidate.checksum_validated(),
+                )
+            })
+            .collect::<Vec<_>>();
+        for candidate in &mut candidates {
+            let Some(capture_end) = candidate.labelled_value_capture_end else {
+                continue;
+            };
+            let prefix_start = candidate.span.start
+                + input[candidate.span.start..]
+                    .bytes()
+                    .take_while(|byte| *byte == b'<')
+                    .count();
+            let first_group_end = prefix_start
+                + input[prefix_start..]
+                    .bytes()
+                    .take_while(u8::is_ascii_alphanumeric)
+                    .count();
+            let first_group_end = if first_group_end == prefix_start {
+                capture_end
+            } else {
+                first_group_end
+            };
+            let first_group = &input[prefix_start..first_group_end];
+            // A long all-digit ID can contain card-like windows. They are not evidence that a
+            // new field starts inside that ID; trimming there would expose its tail.
+            if !first_group.bytes().any(|byte| byte.is_ascii_alphabetic())
+                || !first_group.bytes().any(|byte| byte.is_ascii_digit())
+            {
+                continue;
+            }
+            let next = boundaries
+                .iter()
+                .filter_map(|(start, class, validated)| {
+                    if *start <= candidate.span.start
+                        || *start >= candidate.span.end
+                        || class == &candidate.class
+                    {
+                        return None;
+                    }
+                    let floor = labelled_cross_class_boundary_floor(
+                        &candidate.recognizer_id,
+                        capture_end,
+                        first_group_end,
+                        *validated,
+                    );
+                    let label = uppercase_field_label_before(input, *start, candidate.span.start)
+                        .filter(|label_start| {
+                            *label_start >= first_group_end
+                                && (!matches!(
+                                    candidate.recognizer_id.as_str(),
+                                    "tax_number.cue_anchored"
+                                        | "driver_license.cue_anchored"
+                                        | "national_id.cue_anchored"
+                                ) || *label_start >= capture_end)
+                        });
+                    if *start < floor && label.is_none() {
+                        return None;
+                    }
+                    Some(label.unwrap_or(*start))
+                })
+                .min();
+            if let Some(boundary) = next {
+                let end = input[..boundary]
+                    .trim_end_matches(|ch: char| {
+                        ch.is_whitespace() || matches!(ch, '-' | '/' | '.' | ':')
+                    })
+                    .len()
+                    .max(first_group_end);
+                candidate.span.end = end;
+                candidate.labelled_value_scan_reason =
+                    Some(LabelledValueScanReason::OtherClassBoundary);
+            }
+        }
+
         Ok((crate::resolver::CandidatePool::new(candidates), vetoed))
     }
 
@@ -1318,7 +1528,7 @@ impl RecognizerRegistryBuilder {
     }
 
     /// Registers street words whose NER location span licenses an adjacent
-    /// house number in `locale` (todo 3670).
+    /// house number in `locale`.
     pub fn register_street_lexicon(
         mut self,
         locale: LocaleTag,
