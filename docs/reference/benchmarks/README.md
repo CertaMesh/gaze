@@ -1616,11 +1616,11 @@ by both broad and narrow shape rules. Generation fails if these guards drift.
 
 A model-free preview on the existing main binary (`9ccc898c`, binary SHA-256
 `d2297df2f9ea6df68bafcc03d8f642ccb90857a4a5da207045a7b5e7f14cfc99`),
-with the setup policy minus NER and Nym, leaks 726 of 864 new gold bytes.
+with the setup policy minus NER and Nym, with address blocks enabled, leaks 684 of 864 new gold bytes.
 Both deliberately bad fixtures under `scripts/bench/fixtures/agentic/`
 raise layer D twin false positives from 92 to 306 bytes. The broad mutant
-leaks 369 bytes with 12 layer A false-positive bytes; the narrow mutant leaks
-399 with zero layer A false-positive bytes. All 64 documents restore exactly
+leaks 357 bytes with 12 layer A false-positive bytes; the narrow mutant leaks
+357 with zero layer A false-positive bytes. All 64 documents restore exactly
 and none is refused. This preview verifies corpus sensitivity; the detection
 change still requires the full v2 and v1 gain gate.
 
