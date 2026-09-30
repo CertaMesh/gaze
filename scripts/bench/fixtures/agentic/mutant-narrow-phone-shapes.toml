@@ -1,0 +1,33 @@
+# Deliberately narrow phone rules for the phone-shape counterweight check.
+# Each is the rule a detector would write for one shape: its exact group
+# widths and separators, with no phone label, numbering-plan or context check.
+# Appended to a policy, they must lower layer A's leak on the `phone_*` cells
+# AND raise layer D's false-positive bytes on the same-shape `phone_twin_*`
+# cells (firmware and part numbers, spare-code tickets, unassignable `001`
+# item codes). The patterns equal PHONE_NARROW_PATTERNS in agentic_layers.py
+# (a test pins them). Never ship these rules.
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_phone_dotted"
+pattern = '\b0\d(?:\.\d{2}){4}\b'
+class = "custom:mutant_phone"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_phone_national_3x3"
+pattern = '\b\d{3} \d{3} \d{3}\b'
+class = "custom:mutant_phone"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_phone_national_2x4"
+pattern = '\b\d{2}(?: \d{2}){3}\b'
+class = "custom:mutant_phone"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_phone_prefix_00"
+pattern = '\b00\d{2} \d{1,2}(?: \d{2,8}){1,4}\b'
+class = "custom:mutant_phone"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_phone_prefix_001"
+pattern = '\b001[- ]\d{3}[- ]\d{3}[- ]\d{4}\b'
+class = "custom:mutant_phone"

@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "c8bf7f20299847d8ab37d2e0fe16990a0c320d6cc9171ac9225b63ec316ffc70",
-    "test": "9a1ad4c8f8962325ed060e812286f25353327d8ed79779e34adb1d95485d2c0a",
+    "dev": "bee5a2876b3a232ad4812529ca20dc6b7fa834617a6ac87f4d2a453625c6f94e",
+    "test": "fcb8f3f95b301259f6fe0a5a3d8804e5a277ce74ccf9c6f0ca286cd09f0a554f",
 }
 # v6: everything before the phone-shape cells.
 V6_CORPUS_SHA256 = {
@@ -878,10 +878,66 @@ class PhoneShapeCellTests(unittest.TestCase):
                 self.assertEqual(len(catches), agentic.DOCS_PER_PHONE_CELL["A"] * len(families), shape)
                 self.assertEqual(len(costs), agentic.DOCS_PER_PHONE_CELL["D"] * len(twins), shape)
 
-    def test_mutant_policy_carries_the_broad_patterns(self) -> None:
-        text = (REPO_ROOT / "scripts/bench/fixtures/agentic/mutant-broad-phone-shapes.toml").read_text()
-        patterns = re.findall(r"^pattern = '(.*)'$", text, flags=re.MULTILINE)
-        self.assertEqual(sorted(patterns), sorted(agentic.PHONE_BROAD_PATTERNS.values()))
+    def test_mutant_policies_carry_the_broad_and_narrow_patterns(self) -> None:
+        for name, table in (("broad", agentic.PHONE_BROAD_PATTERNS), ("narrow", agentic.PHONE_NARROW_PATTERNS)):
+            path = REPO_ROOT / f"scripts/bench/fixtures/agentic/mutant-{name}-phone-shapes.toml"
+            patterns = re.findall(r"^pattern = '(.*)'$", path.read_text(), flags=re.MULTILINE)
+            self.assertEqual(sorted(patterns), sorted(table.values()), name)
+
+    # Layer D documents (all of layer D, not only the phone twins) that each
+    # narrow rule matches, per partition. A narrow rule with no D cost here
+    # would ship its false positives unmeasured.
+    NARROW_D_COST = {
+        "dev": {"dotted": 8, "national_3x3": 17, "national_2x4": 8, "prefix_00": 4, "prefix_001": 4},
+        "test": {"dotted": 8, "national_3x3": 21, "national_2x4": 8, "prefix_00": 4, "prefix_001": 4},
+    }
+
+    def test_each_narrow_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
+        for partition in agentic.PARTITIONS:
+            layer_d = [r for r in agentic.generate(partition) if r.layer == "D"]
+            records = self.cells[partition]
+            costs = {}
+            for shape, pattern in agentic.PHONE_NARROW_PATTERNS.items():
+                rule = re.compile(pattern)
+                families = {c.family for c in agentic.PHONE_CELLS if c.shape is shape}
+                catches = [r for r in records if r.family in families and rule.search(r.text)]
+                self.assertEqual(len(catches), agentic.DOCS_PER_PHONE_CELL["A"] * len(families), shape)
+                costs[shape.value] = sum(1 for r in layer_d if rule.search(r.text))
+            self.assertEqual(costs, self.NARROW_D_COST[partition], partition)
+
+    def test_review_shape_rules_pay_in_layer_d(self) -> None:
+        # Shape-specific rules that once matched every A positive and no D
+        # document: each must now cost D false positives.
+        rules = {
+            "dotted": r"\b0\d(?:\.\d{2}){4}\b",
+            "prefix_00": r"\b00\d{2} \d{1,2}(?: \d{2,8}){1,4}\b",
+            "prefix_001": r"\b001 \d{3} \d{3} \d{4}\b",
+        }
+        layer_d = [r for r in agentic.generate("test") if r.layer == "D"]
+        for shape, pattern in rules.items():
+            with self.subTest(shape=shape):
+                self.assertTrue(any(re.search(pattern, r.text) for r in layer_d))
+
+    def test_same_shape_twins_have_no_phone_reading(self) -> None:
+        self.assertEqual(agentic.phone_reading("02.61.91.23.45", "Firmware "), None)
+        self.assertEqual(agentic.phone_reading("02.61.91.23.45", "Call "), agentic.PhoneShape.DOTTED)
+        self.assertEqual(agentic.phone_reading("0089 12 3456 7890", ""), None)
+        self.assertEqual(agentic.phone_reading("0049 12 3456 7890", ""), agentic.PhoneShape.PREFIX_00)
+        self.assertEqual(agentic.phone_reading("001 212 055 0142", ""), None)
+        self.assertEqual(agentic.phone_reading("001 212 555 0142", ""), agentic.PhoneShape.PREFIX_001)
+        self.assertEqual(agentic.phone_reading("+28 (0)14 5521 773", "Build "), agentic.PhoneShape.TRUNK_PARENS)
+
+    def test_a_shape_whose_narrow_rule_pays_nothing_fails_generation(self) -> None:
+        twins = tuple(t for t in agentic.PHONE_TWINS if t.family != "phone_twin_ticket_00")
+        with self.assertRaisesRegex(agentic.LayerError, r"narrow rule pays nothing in layer D: \['prefix_00'\]"):
+            self.generate_with(PHONE_TWINS=twins)
+
+    def test_a_dotted_twin_without_a_benign_context_fails_generation(self) -> None:
+        twins = list(agentic.PHONE_TWINS)
+        index = next(i for i, t in enumerate(twins) if t.family == "phone_twin_dotted_firmware")
+        twins[index] = dataclasses.replace(twins[index], templates={**twins[index].templates, "test": "Noted {X}."})
+        with self.assertRaisesRegex(agentic.LayerError, "reads as a dotted phone"):
+            self.generate_with(PHONE_TWINS=tuple(twins))
 
     def generate_with(self, **patches) -> None:
         with contextlib.ExitStack() as stack:
@@ -916,7 +972,7 @@ class PhoneShapeCellTests(unittest.TestCase):
         twins = list(agentic.PHONE_TWINS)
         index = next(i for i, t in enumerate(twins) if t.shape is agentic.PhoneShape.PREFIX_001)
         twins[index] = dataclasses.replace(twins[index], make=lambda rng, partition: "001-212-555-0142")
-        with self.assertRaisesRegex(agentic.LayerError, "itself a phone shape"):
+        with self.assertRaisesRegex(agentic.LayerError, "reads as a prefix_001 phone"):
             self.generate_with(PHONE_TWINS=tuple(twins))
 
     def test_a_value_outside_its_shape_fails_generation(self) -> None:

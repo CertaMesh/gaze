@@ -2307,6 +2307,24 @@ PHONE_BROAD_PATTERNS: dict[PhoneShape, str] = {
     PhoneShape.PREFIX_00: r"\b00\d{2}[ -]\d{1,4}[ -]\d{2,5}",
     PhoneShape.PREFIX_001: r"\b001[- ]\d{3}[- ]\d{3}[- ]\d{3,4}\b",
 }
+# The ordinary rule a detector would write for each shape: its exact group
+# widths and separators, with no label, numbering-plan or context check. Every
+# A value of the shape matches it, and so does at least one layer D twin
+# written in the same shape, so it pays false-positive bytes as well. The
+# `(0)` trunk after `+CC` has no benign writing; its counterweight is the
+# broad pattern and the phone parser. The committed narrow mutant policy
+# carries the same patterns.
+PHONE_NARROW_PATTERNS: dict[PhoneShape, str] = {
+    PhoneShape.DOTTED: r"\b0\d(?:\.\d{2}){4}\b",
+    PhoneShape.NATIONAL_3X3: r"\b\d{3} \d{3} \d{3}\b",
+    PhoneShape.NATIONAL_2X4: r"\b\d{2}(?: \d{2}){3}\b",
+    PhoneShape.PREFIX_00: r"\b00\d{2} \d{1,2}(?: \d{2,8}){1,4}\b",
+    PhoneShape.PREFIX_001: r"\b001[- ]\d{3}[- ]\d{3}[- ]\d{4}\b",
+}
+# E.164 spare country codes: a `00` code behind one reaches no phone.
+UNASSIGNED_COUNTRY_CODES = {"dev": "28", "test": "89"}
+# A benign context that makes dotted pairs a version or a part number.
+DOTTED_BENIGN_CONTEXT = r"(?i)(?:\b|_)(?:firmware|build|version|release|revision|part|catalog|model)(?:\b|_)"
 # A phone label, in any cell language. National cells carry one before the
 # value; no layer D twin carries one anywhere.
 PHONE_CUE = (
@@ -2391,6 +2409,45 @@ def _product_00(rng: Rng, partition: str) -> str:
 
 def _document_001(rng: Rng, partition: str) -> str:
     return f"001-{rng.digits(3)}-{rng.digits(3)}-{rng.digits(3)}"
+
+
+def _dotted_part(rng: Rng, partition: str) -> str:
+    """Dotted pairs in the phone's exact shape, a firmware or part number.
+
+    Every `0X.XX.XX.XX.XX` is a possible French number, so even a benign value
+    comes from an ARCEP fiction block and can reach no one."""
+    block = {"dev": "01.99.00", "test": "02.61.91"}[partition]
+    return f"{block}.{rng.digits(2)}.{rng.digits(2)}"
+
+
+def _ticket_00(rng: Rng, partition: str) -> str:
+    """Space-grouped like a `00` phone, behind a spare country code."""
+    return f"00{UNASSIGNED_COUNTRY_CODES[partition]} {rng.between(1, 99)} {rng.digits(4)} {rng.digits(4)}"
+
+
+def _item_001(rng: Rng, partition: str) -> str:
+    """Grouped like a `001` NANP phone; an exchange starting 0 or 1 is never assigned."""
+    separator = {"dev": "-", "test": " "}[partition]
+    groups = (str(rng.between(200, 999)), f"{rng.between(0, 1)}{rng.digits(2)}", rng.digits(4))
+    return separator.join(("001", *groups))
+
+
+def phone_reading(value: str, before: str) -> PhoneShape | None:
+    """The phone shape `value` reads as, or None when it cannot be a phone:
+    a lexical match alone is not a phone reading."""
+    import re
+
+    if re.fullmatch(PHONE_SHAPE_PATTERNS[PhoneShape.TRUNK_PARENS], value):
+        return PhoneShape.TRUNK_PARENS
+    prefixed = re.fullmatch(r"00(\d{2}) \d{1,2}(?: \d{2,8}){1,4}", value)
+    if prefixed and prefixed.group(1) not in UNASSIGNED_COUNTRY_CODES.values():
+        return PhoneShape.PREFIX_00
+    nanp = re.fullmatch(r"001[- ](\d)\d\d[- ](\d)\d\d[- ]\d{4}", value)
+    if nanp and nanp.group(1) not in "01" and nanp.group(2) not in "01":
+        return PhoneShape.PREFIX_001
+    if re.fullmatch(PHONE_SHAPE_PATTERNS[PhoneShape.DOTTED], value) and not re.search(DOTTED_BENIGN_CONTEXT, before):
+        return PhoneShape.DOTTED
+    return None
 
 
 P_ = PhoneShape
@@ -2480,6 +2537,18 @@ PHONE_TWINS = (
     _phone_twin("phone_twin_document_001", P_.PREFIX_001, "tool_json", "en", "US",
                 '{"document":{"number":"{X}","type":"invoice"}}', '{"filing":{"ref":"{X}","status":"draft"}}',
                 _document_001),
+    _phone_twin("phone_twin_dotted_firmware", P_.DOTTED, "prose", "en", "US",
+                "Firmware {X} fixes the fan curve.", "Flash build {X} before the release.",
+                _dotted_part),
+    _phone_twin("phone_twin_dotted_part_csv", P_.DOTTED, "csv", "en", "US",
+                "part,qty\n{X},3\n", "model,stock\n{X},9\n",
+                _dotted_part),
+    _phone_twin("phone_twin_ticket_00", P_.PREFIX_00, "prose", "en", "GB",
+                "Ticket {X} is closed.", "Reorder kit {X} today.",
+                _ticket_00),
+    _phone_twin("phone_twin_item_001", P_.PREFIX_001, "log_kv", "en", "US",
+                'svc=warehouse op=pick item="{X}" result=ok', 'level=info event=rma.open case="{X}" status=new',
+                _item_001),
 )
 del P_
 
@@ -2514,7 +2583,7 @@ def check_phone_cells(records: Sequence[Record]) -> None:
     """Fail closed unless every A phone is whole and in its shape, every
     national one follows a phone label, and every shape A scores has a layer D
     twin its broad pattern pays for, with no phone label in any twin and no
-    twin value in a self-identifying phone shape."""
+    twin value with a phone reading; every narrow rule must pay in layer D too."""
     import re
 
     cells = {cell.family: cell for cell in PHONE_CELLS}
@@ -2524,6 +2593,7 @@ def check_phone_cells(records: Sequence[Record]) -> None:
         raise LayerError(f"layer D phone twins no layer A cell uses: {unused}")
     scored: dict[PhoneShape, str] = {}
     paid: set[PhoneShape] = set()
+    narrow_paid: set[PhoneShape] = set()
     for record in records:
         if not record.surface.startswith("tel_"):
             continue
@@ -2534,8 +2604,9 @@ def check_phone_cells(records: Sequence[Record]) -> None:
             value = record.gold[0].value
             if not re.fullmatch(PHONE_SHAPE_PATTERNS[cell.shape], value):
                 raise LayerError(f"{record.uid}: {value!r} is not a {cell.shape.value} phone")
-            if not re.search(PHONE_BROAD_PATTERNS[cell.shape], value):
-                raise LayerError(f"{record.uid}: the {cell.shape.value} broad pattern misses {value!r}")
+            for kind, patterns in (("broad", PHONE_BROAD_PATTERNS), ("narrow", PHONE_NARROW_PATTERNS)):
+                if cell.shape in patterns and not re.search(patterns[cell.shape], value):
+                    raise LayerError(f"{record.uid}: the {cell.shape.value} {kind} pattern misses {value!r}")
             before = record.text.encode("utf-8")[: record.gold[0].start].decode("utf-8")
             if cell.shape in NATIONAL_PHONE_SHAPES and not re.search(PHONE_CUE, before):
                 raise LayerError(f"{record.uid}: a national {cell.shape.value} phone has no phone label before it")
@@ -2548,15 +2619,23 @@ def check_phone_cells(records: Sequence[Record]) -> None:
                 raise LayerError(f"{record.uid}: expected one benign decoy")
             if re.search(PHONE_CUE, record.text):
                 raise LayerError(f"{record.uid}: a layer D phone twin carries a phone label")
-            if any(re.fullmatch(PHONE_SHAPE_PATTERNS[shape], record.decoys[0].value)
-                   for shape in PhoneShape if shape not in NATIONAL_PHONE_SHAPES):
-                raise LayerError(f"{record.uid}: a layer D decoy is itself a phone shape")
-            if not re.search(PHONE_BROAD_PATTERNS[twin.shape], record.decoys[0].value):
+            decoy = record.decoys[0]
+            before = record.text.encode("utf-8")[: decoy.start].decode("utf-8")
+            reading = phone_reading(decoy.value, before)
+            if reading is not None:
+                raise LayerError(f"{record.uid}: a layer D decoy reads as a {reading.value} phone")
+            if not re.search(PHONE_BROAD_PATTERNS[twin.shape], decoy.value):
                 raise LayerError(f"{record.uid}: the {twin.shape.value} broad pattern misses the decoy")
             paid.add(twin.shape)
+            narrow = PHONE_NARROW_PATTERNS.get(twin.shape)
+            if narrow and re.search(narrow, decoy.value):
+                narrow_paid.add(twin.shape)
     uncovered = sorted(shape.value for shape in set(scored) - paid)
     if uncovered:
         raise LayerError(f"phone shapes with no layer D counterweight: {uncovered}")
+    free = sorted(shape.value for shape in set(scored) & set(PHONE_NARROW_PATTERNS) - narrow_paid)
+    if free:
+        raise LayerError(f"phone shapes whose narrow rule pays nothing in layer D: {free}")
 
 
 # The surface prefix each generator version added. Every earlier document stays
