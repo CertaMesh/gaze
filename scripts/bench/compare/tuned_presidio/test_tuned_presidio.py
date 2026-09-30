@@ -214,6 +214,18 @@ class DeclarationTest(unittest.TestCase):
         self.assertEqual(recognizer.analyze("she lives at 42 elmwood crescent", ["STREET_ADDRESS"]), [])
 
 
+class LiveVerdictTest(unittest.TestCase):
+    def test_only_label_differences_pass_and_byte_differences_fail(self) -> None:
+        import verdict
+
+        label = {"live_only": [[261, 272, "PHONE_NUMBER"]], "replay_only": [[261, 272, "ID_NUMBER"]]}
+        byte = {"live_only": [[261, 270, "PHONE_NUMBER"]], "replay_only": [[261, 272, "ID_NUMBER"]]}
+        self.assertTrue(verdict.byte_identical({"persistent": ["a"], "differences": {"a": label}}))
+        self.assertFalse(verdict.byte_identical({"persistent": ["a"], "differences": {"a": byte}}))
+        self.assertTrue(verdict.byte_identical({"persistent": [], "differences": {"a": byte}}))
+        self.assertFalse(verdict.byte_identical(None))
+
+
 class ReportTest(unittest.TestCase):
     @staticmethod
     def rows(f2s: dict[str, float]) -> dict:

@@ -18,6 +18,7 @@ from tagged_gaze import check_public  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).with_name("tuned_presidio")))
 from space import CUSTOM_RECOGNIZERS as TUNED_CUSTOM  # noqa: E402
+import verdict as tuned_verdict  # noqa: E402
 
 #: Gaze is not listed: the comparison run measured an unreleased build, and public
 #: pages show tagged releases only (tagged_gaze.py).
@@ -370,9 +371,8 @@ def validate_tuned(tuned: dict[str, object], report_path: Path) -> None:
     if tuned.get("harness_dirty") is not False or not tuned["anchor"]["equal"]:
         raise ValueError("tuned Presidio needs a clean harness and the reproduced presidio-all anchor")
     for name, provenance in tuned["provenance"].items():
-        live = provenance.get("live_verification", {"identical": True})
-        if not (live or {}).get("identical"):
-            raise ValueError(f"{name} was not verified live against its replay")
+        if "live_verification" in provenance and not tuned_verdict.byte_identical(provenance["live_verification"]):
+            raise ValueError(f"{name}: its live run covered different bytes than its replay")
 
 
 def _gaze_release_c(history_path: Path) -> tuple[str, dict[str, dict[str, float]]]:
@@ -437,8 +437,9 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
         f"- **Budget:** Gaze's rules received {budget['gaze_rulepack_commits']} rulepack commits "
         f"({budget['first']} to {budget['last']}), made with the whole corpus visible, test half included. "
         "The tuned Presidio search is at least as generous in iterations: "
-        f"{budget['candidates_evaluated']:,} measured candidates against {budget['gaze_rulepack_commits']} "
-        "measured rule changes, over a hand-written recognizer for every class Gaze commits to. It saw the "
+        f"{budget['candidates_evaluated']:,} measured candidate configurations against "
+        f"{budget['gaze_rulepack_commits']} rulepack commits, on top of a hand-written recognizer for the "
+        "classes Gaze commits to. It saw the "
         "validation half only, so its test-half numbers are held out while Gaze's are not.",
         "",
         "Validation choice (v3, C/A/D/R summed):", "",
@@ -506,6 +507,9 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
                   + "; ".join(
                       f"{TUNED_LABELS[name]}: {live['documents']:,} documents, {live['differing_documents']} differed "
                       f"on the first run, {live['persistent_differing_documents']} on every rerun"
+                      + (f" ({tuned_verdict.label_only_count(live)} with identical bytes and a different entity "
+                         "label, from Presidio's tie-break between equal-score results on one span)"
+                         if tuned_verdict.label_only_count(live) else "")
                       for name, provenance in tuned["provenance"].items()
                       if (live := provenance.get("live_verification")))
                   + ".", "",

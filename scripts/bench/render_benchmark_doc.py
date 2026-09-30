@@ -1590,7 +1590,7 @@ def attach_presidio_tuned(comparison: Mapping[str, Any], comparison_path: Path) 
 
     The tuned report must name these exact comparison bytes, reproduce the
     comparison's presidio-all row from its own records, and have run each chosen
-    configuration live on its fixed sample with output identical to the replay.
+    configuration live on its fixed sample covering the same bytes as the replay.
     """
     path = comparison_path.parent / TUNED_PRESIDIO_NAME
     if not path.exists():
@@ -1600,9 +1600,12 @@ def attach_presidio_tuned(comparison: Mapping[str, Any], comparison_path: Path) 
         raise RenderError(f"{TUNED_PRESIDIO_NAME} was measured beside a different comparison.json")
     if tuned.get("harness_dirty") is not False or not tuned["anchor"]["equal"]:
         raise RenderError(f"{TUNED_PRESIDIO_NAME} needs a clean harness and a reproduced presidio-all anchor")
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "compare" / "tuned_presidio"))
+    import verdict
+
     for name, provenance in tuned["provenance"].items():
-        if "live_verification" in provenance and not (provenance["live_verification"] or {}).get("identical"):
-            raise RenderError(f"{TUNED_PRESIDIO_NAME}: {name} was not verified live")
+        if "live_verification" in provenance and not verdict.byte_identical(provenance["live_verification"]):
+            raise RenderError(f"{TUNED_PRESIDIO_NAME}: {name}'s live run covered different bytes than its replay")
     if tuned["chart"]["row"] not in tuned["rows"] or tuned["chart"]["row"] not in charts.TUNED_CAPTIONS:
         raise RenderError(f"{TUNED_PRESIDIO_NAME}: unknown chart row {tuned['chart']['row']}")
     return {**comparison, "presidio_tuned": tuned}

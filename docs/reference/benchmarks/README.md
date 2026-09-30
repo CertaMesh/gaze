@@ -407,7 +407,7 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 0.665 | **0.868** | 0.765 | 0.194 | 0.565 | 0.360 | 0.794 | 0.797 |
+| Own corpus | 0.665 | 0.868 | **0.926 (tuned)** | 0.194 | 0.565 | 0.360 | 0.794 | 0.797 |
 | Presidio Research | not run | 0.785 | **0.918 (tuned)** | 0.147 | 0.639 | 0.538 | 0.692 | 0.663 |
 | PIIBench-commercial | not run | 0.618 | **0.665** | 0.183 | 0.522 | 0.441 | 0.532 | 0.400 |
 
@@ -415,7 +415,7 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 22,144 | **13,319** | 25,314 | 103,617 | 29,142 | 84,397 | 20,152 | 24,080 |
+| Own corpus | 22,144 | 13,319 | **2,283 (tuned)** | 103,617 | 29,142 | 84,397 | 20,152 | 24,080 |
 | Presidio Research | not run | 9,769 | **2,857 (tuned)** | 34,810 | 15,769 | 20,226 | 13,326 | 15,305 |
 | PIIBench-commercial | not run | 107,701 | **87,853** | 222,697 | 114,880 | 145,119 | 127,361 | 170,336 |
 
@@ -423,19 +423,20 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 164.9 | 19.4 | 42.9 | **6.1** | 255.6 | 12.5 | 54.0 | 28.9 |
+| Own corpus | 164.9 | 19.4 | 30.6 (tuned) | **6.1** | 255.6 | 12.5 | 54.0 | 28.9 |
 | Presidio Research | not run | 10.6 | 38.6 (tuned) | **0.0** | 31.5 | 14.6 | 38.3 | 5.2 |
 | PIIBench-commercial | not run | 20.4 | 38.0 | **1.9** | 94.1 | 71.2 | 36.6 | 5.2 |
 
 A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.14 0, Gaze 0.15 0.
 
+Own corpus: Presidio tuned for this corpus on its validation half (highest F2), the best of three tuned Presidio rows by test-half F2; like every bar it shows all of layer C, validation half included; Presidio's defaults are in competitors.md.
 Presidio Research: Presidio tuned for this dataset by its authors (their published custom setup).
 PIIBench-commercial: PIIBench publishes no vendor-tuned Presidio, so Presidio is the declared best configuration.
 
 - **Own corpus:** Kiji EN/DE holdout and A4 negatives, 2,910 documents, scored labels v3 (the labels Gaze commits to detect, protected repeats credited). Gaze from [`release-history.json`](release-history.json) (the shipped default of each tagged release); competitors from [`comparison.json`](comparison.json).
 - **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
 - **PIIBench-commercial:** pritesh-2711/pii-bench (5,000 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
-- **Configurations:** competitors use the rows declared in [`chart-configs.json`](../../../scripts/bench/compare/chart-configs.json), chosen before results were reviewed; full versions and settings are in [`competitors.md`](competitors.md).
+- **Configurations:** competitors use the rows declared in [`chart-configs.json`](../../../scripts/bench/compare/chart-configs.json), chosen before results were reviewed; full versions and settings are in [`competitors.md`](competitors.md). On the own corpus the Presidio bar is instead the best tuned Presidio row from [`presidio-tuned.json`](presidio-tuned.json) (selection and every tuned number in [`competitors.md`](competitors.md#tuned-presidio)).
 - **Metric:** F2 counts Unicode code points (not grapheme clusters) inside the merged byte spans of each document, ignores labels, pools every document (micro), weights recall four times precision, scores 0 when precision and recall are both 0 (0/0 = 0), and counts all of a skipped document's gold characters as missed.
 - **False positives:** F2 counts every false-positive character for every tool; the false-positive row (bytes redacted that are not PII, per 1,000 bytes of the scored documents) also credits a protected repeat of a labelled value on the own corpus (contract v3). Every tool is treated identically within each row, and the third-party sets have no such credit.
 - **Gaze release scores:** each tagged release is scored by replaying its committed observation record over the corpus (`compare/release_char_level.py record`). The offline `check` that CI runs proves the stored numbers are consistent with the committed record, its evidence file and the UTF-8 structure of that evidence; only `record` (the corpus replay) proves the character counts, so a pull request that changes `release-char-level.json` or its evidence file must include the replay command's output in its description.

@@ -38,7 +38,10 @@ layer C character F2; the defaults stay in the detail tables.
   `AnalyzerEngine.analyze`. `tune.py measure` also replays the comparison's
   `presidio-all` configuration and requires every committed byte count, and runs
   each chosen configuration live on a fixed sample of about one document in eight
-  (every layer, both halves), requiring output identical to the replay.
+  (every layer, both halves). A document whose live output differs is rerun
+  twice; the page publishes both counts and refuses any persistent difference in
+  covered bytes (a label-only difference, from Presidio's tie-break between
+  equal-score results on one span, is published, not hidden).
 - **Objectives.** `leak-first` is `compare.py`'s own threshold rule (fewest
   validation v3 leaked bytes, then fewest false-positive bytes, over C/A/D/R).
   Because a free search can satisfy that rule by redacting nearly everything,
