@@ -175,6 +175,10 @@ impl DashboardControl {
 
     /// Waits for an acknowledged running epoch, failing on disable, stop, or timeout.
     ///
+    /// Returns `FatalDisabled` on disable, stop, or expiry of the five-second wait.
+    /// A timeout does not disable the dashboard: `status()` may still be `Active`.
+    /// Check `lifecycle()` to distinguish terminal states from an unacknowledged epoch.
+    ///
     /// A returned epoch is a snapshot: subsequent browser requests may start another purge.
     /// Use after completing HTTP requests to await their purge notifications without polling.
     pub fn wait_for_epoch(&self, minimum: u64) -> Result<u64, DashboardError> {

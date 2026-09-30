@@ -270,11 +270,11 @@ fn descriptor_equal_double_swap_fails_closed_disables_producers_and_reaps_childr
         gaze_proxy_dashboard::DashboardErrorCode::ActivationFailed
     );
     assert!(matches!(
-        producer_a.begin_logical(),
+        producer_a.begin_logical_blocking(),
         Err(InspectionBeginLogicalErrorV1::Disabled)
     ));
     assert!(matches!(
-        producer_b.begin_logical(),
+        producer_b.begin_logical_blocking(),
         Err(InspectionBeginLogicalErrorV1::Disabled)
     ));
     assert_process_reaped(pid_a);

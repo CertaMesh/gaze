@@ -1529,44 +1529,16 @@ mod tests {
     fn begin_logical_for_test(
         producer: &InstalledInspectionProducerV1,
     ) -> InspectionLogicalEmitterV1 {
-        const DEADLINE: Duration = Duration::from_secs(60);
-        let started = Instant::now();
-        loop {
-            match producer.begin_logical() {
-                Ok(logical) => return logical,
-                Err(InspectionBeginLogicalErrorV1::Contended) if started.elapsed() < DEADLINE => {
-                    std::thread::yield_now();
-                }
-                Err(InspectionBeginLogicalErrorV1::Contended) => {
-                    panic!(
-                        "begin_logical remained contended beyond the {DEADLINE:?} test setup deadline"
-                    )
-                }
-                Err(error) => panic!("begin_logical failed during test setup: {error:?}"),
-            }
-        }
+        producer
+            .begin_logical_blocking()
+            .expect("logical test setup")
     }
 
     fn expect_begin_logical_err_for_test(
         producer: &InstalledInspectionProducerV1,
         expected: InspectionBeginLogicalErrorV1,
     ) {
-        const DEADLINE: Duration = Duration::from_secs(60);
-        let started = Instant::now();
-        loop {
-            match producer.begin_logical() {
-                Ok(_) => {
-                    panic!("begin_logical unexpectedly returned Ok while expecting {expected:?}")
-                }
-                Err(error) if error == expected => return,
-                Err(InspectionBeginLogicalErrorV1::Contended) if started.elapsed() < DEADLINE => {
-                    std::thread::yield_now();
-                }
-                Err(error) => panic!(
-                    "begin_logical settled to {error:?} while expecting {expected:?} within the {DEADLINE:?} test deadline"
-                ),
-            }
-        }
+        assert_eq!(producer.begin_logical_blocking().err(), Some(expected));
     }
 
     fn admit_for_test<F>(mut attempt: F) -> InspectionAdmissionOutcomeV1
