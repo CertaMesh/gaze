@@ -140,7 +140,7 @@
       "scored": true,
       "category": "direct_identifier",
       "ruling": "settled",
-      "reason": "Synthetic German registration plate directly after a plate label or key. The whole district, letter series and serial number are gold. Identically shaped build and batch references without an immediate plate label are benign."
+      "reason": "Synthetic German registration plate, unassignable (leading-zero serial), directly after a plate label or key. The whole district, letter series and serial number are gold. Identically shaped build and batch references without an immediate plate label are benign."
     }
   ]
 }

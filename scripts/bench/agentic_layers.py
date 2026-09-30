@@ -3335,13 +3335,12 @@ BLOCK_TWINS = (
     }, benign=True),
 )
 
-BLOCK_BROAD_PATTERNS = {
+# Exact shape without its context. These narrow mutants must also pay in D.
+BLOCK_NARROW_PATTERNS = {
     BlockShape.UNIT: r"\b(?:Suite|Ste\.?|STE|Wohnung) \d+[A-C]?\b",
     BlockShape.MILITARY: r"\b(?:PSC|Unit|CMR|Box) \d+\b",
     BlockShape.PLATE: r"\b[A-Z]{1,3}[- ][A-Z]{1,2} \d{1,4}[EH]?\b",
 }
-# Exact shape without its context. These narrow mutants must also pay in D.
-BLOCK_NARROW_PATTERNS = dict(BLOCK_BROAD_PATTERNS)
 BLOCK_BROAD_PATTERNS = {
     BlockShape.UNIT: r"\b(?:Suite|Ste\.?|STE|Wohnung|Unit|Apt\.?) \d+[A-C]?\b",
     BlockShape.MILITARY: r"\b(?:PSC|Unit|CMR|Box|APO|FPO|DPO)(?: \d+)?\b",
@@ -3361,8 +3360,8 @@ def _block_records(cells: Sequence[BlockCell], partition: str) -> list[Record]:
                 language, region = ADDRESS_LANGUAGE[cell.address.region], cell.address.region
             else:
                 if cell.shape is BlockShape.PLATE:
-                    number = rng.between(*( (1000, 3999) if partition == "dev" else (6000, 8999)))
-                    value = f"{rng.choice(PLATE_PREFIXES[partition])} {number}"
+                    number = rng.between(*( (100, 399) if partition == "dev" else (600, 899)))
+                    value = f"{rng.choice(PLATE_PREFIXES[partition])} {number:04d}"
                     language, region = "de", "DE"
                 elif cell.shape is BlockShape.UNIT:
                     forms = ("Suite {n}", "Ste. {n}", "STE {n}", "Wohnung {n}")

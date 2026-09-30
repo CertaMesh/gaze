@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "cc3b150776e9eec8ff5934d80e47fd77d73141ac80cc689823c16dd1e27b5b77",
-    "test": "83f8f0a89dc255431cdfb93a845e395883ecd4b35d968cd9fcb03bd392920522",
+    "dev": "6e1b24bf66f672e45d69b6f38f56db3da0d085ea0cd4241f5d7310bfddcdf0d1",
+    "test": "b2e363763fd7d3bf1b2678af5c5f45af92e6ebc20a38f78072be0f0ee541f7c6",
 }
 # v8: everything before the CRLF and plate cells.
 V8_CORPUS_SHA256 = {
@@ -1328,6 +1328,17 @@ class BlockCellTests(unittest.TestCase):
             for r in records:
                 if r.family == "block_plate_json":
                     json.loads(r.text)
+
+    def test_plate_gold_and_twins_have_unassignable_partition_serials(self) -> None:
+        for partition, bounds in (("dev", (100, 399)), ("test", (600, 899))):
+            plates = [r for r in agentic.generate(partition) if r.surface == "block_plate"]
+            self.assertEqual(len(plates), 30)
+            for record in plates:
+                for value in (*record.gold, *record.decoys):
+                    serial = value.value.rsplit(" ", 1)[1]
+                    self.assertRegex(serial, r"^0[0-9]{3}$")
+                    self.assertLessEqual(bounds[0], int(serial))
+                    self.assertLessEqual(int(serial), bounds[1])
 
     def generate_with(self, name, value) -> None:
         with mock.patch.object(agentic, name, value):
