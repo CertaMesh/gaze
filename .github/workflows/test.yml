@@ -62,7 +62,8 @@ jobs:
         # All-features MSRV is intentionally not gated.
         run: cargo check --workspace --all-targets --locked
 
-  test:
+  test-support:
+    name: test support and doctests
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
@@ -106,23 +107,35 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
             ~/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671
-          key: ${{ runner.os }}-cargo-test-native-v2-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-dependencies-v1-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-native-v2-
+            ${{ runner.os }}-cargo-test-dependencies-v1-
+      - name: Test shard ownership and evidence contracts
+        run: python3 -m unittest discover -s scripts/ci
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
       - name: README version check
         run: cargo run -p xtask -- readme-version-check
+      # Linux-only: the canonical harness uses a POSIX producer transport.
+      # Call its build function so flags/features cannot diverge from bench runs.
+      - name: Cache detached validator probe target
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: target/validator-recall-probe
+          key: ${{ runner.os }}-validator-probe-1.96-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-validator-probe-1.96-
+      - name: Build canonical validator probe --locked
+        run: python3 scripts/ci/validator_probe_gate.py
       - name: cargo clippy
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
       - name: cargo test gaze-document mcp feature
         run: cargo test -p gaze-document --features mcp --no-fail-fast
       - name: cargo test gaze-cli mcp feature
         run: cargo test -p gaze-cli --features mcp --no-fail-fast
-      - name: cargo test
-        run: cargo test --workspace --all-features --no-fail-fast
+      - name: Workspace all-feature doctests
+        run: cargo test --workspace --all-features --doc --no-fail-fast
       - name: Cache pinned Nym bundle
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -225,6 +238,137 @@ jobs:
             --repo "$GITHUB_WORKSPACE" --source-revision "$binding_revision" \
             --registry "$HOME/.cargo/registry" --native "$binding_native" \
             --toolchain "$binding_toolchain" --scratch-parent "$RUNNER_TEMP"
+
+  workspace-shards:
+    name: workspace tests (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [cli, runtime, gates]
+    steps:
+      - name: Free disk space (ubuntu-latest preinstalled bloat removal)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
+        with:
+          toolchain: 1.96.0
+      - name: Install Tesseract + English language pack (gaze-document)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+      - name: Install pdfium dynamic library (gaze-document PDF input)
+        run: |
+          set -eu
+          # Pinned release: https://github.com/bblanchon/pdfium-binaries/releases/tag/chromium%2F7920
+          # Update by resolving the latest tag, downloading pdfium-linux-x64.tgz, and refreshing PDFIUM_SHA256.
+          PDFIUM_RELEASE="chromium/7920"
+          PDFIUM_SHA256="49ab3afbd4e6c1e284b5f2898129c8bb8a10fd785c1c5392c8c1fc70242f9ced"
+          curl -sSL -o /tmp/pdfium.tgz \
+            "https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_RELEASE}/pdfium-linux-x64.tgz"
+          echo "${PDFIUM_SHA256}  /tmp/pdfium.tgz" | sha256sum -c -
+          mkdir -p /tmp/pdfium-extract
+          tar -xzf /tmp/pdfium.tgz -C /tmp/pdfium-extract
+          sudo install -m 0755 /tmp/pdfium-extract/lib/libpdfium.so /usr/local/lib/libpdfium.so
+          sudo ldconfig
+      - name: Cache cargo registry + target
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671
+          key: ${{ runner.os }}-cargo-test-dependencies-v1-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-test-dependencies-v1-
+      - name: Install pinned nextest
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/nextest.tar.gz" \
+            https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.146/cargo-nextest-0.9.146-x86_64-unknown-linux-gnu.tar.gz
+          echo "682c21b777c333e96fd532e114d3a5a894e0729ab88d94c0a9f20f8419695428  $RUNNER_TEMP/nextest.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/nextest.tar.gz" -C "$HOME/.cargo/bin" cargo-nextest
+          cargo nextest --version
+      - name: Verify binary ownership and Cargo test-name equivalence
+        run: python3 scripts/ci/test_shards.py collect --output target/shard-evidence/${{ matrix.shard }}
+      - name: Run workspace shard with per-test timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          selection="$(python3 scripts/ci/test_shards.py filter '${{ matrix.shard }}')"
+          cargo nextest run --workspace --all-features --profile ci --no-fail-fast -E "$selection"
+      - name: Save test evidence
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          mkdir -p target/shard-evidence/${{ matrix.shard }}
+          if [ -f target/nextest/ci/junit.xml ]; then
+            cp target/nextest/ci/junit.xml target/shard-evidence/${{ matrix.shard }}/junit.xml
+          fi
+      - name: Upload shard coverage and timing
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: workspace-tests-${{ matrix.shard }}
+          path: target/shard-evidence/${{ matrix.shard }}/
+          if-no-files-found: error
+          retention-days: 14
+
+  test-coverage:
+    name: workspace test coverage proof
+    runs-on: ubuntu-latest
+    needs: [workspace-shards]
+    if: ${{ always() }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: workspace-tests-cli
+          path: evidence/cli
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: workspace-tests-runtime
+          path: evidence/runtime
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: workspace-tests-gates
+          path: evidence/gates
+      - name: Require exact once-only execution and publish top 20
+        run: python3 scripts/ci/test_shards.py prove --evidence evidence --output evidence/report
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: workspace-test-coverage
+          path: evidence/report/
+          if-no-files-found: error
+          retention-days: 14
+
+  test:
+    runs-on: ubuntu-latest
+    needs: [test-support, workspace-shards, test-coverage]
+    if: ${{ always() }}
+    steps:
+      - name: Require every test owner and the coverage proof to succeed
+        env:
+          SUPPORT_RESULT: ${{ needs.test-support.result }}
+          SHARDS_RESULT: ${{ needs.workspace-shards.result }}
+          COVERAGE_RESULT: ${{ needs.test-coverage.result }}
+        run: |
+          for result in "$SUPPORT_RESULT" "$SHARDS_RESULT" "$COVERAGE_RESULT"; do
+            if [ "$result" != success ]; then
+              printf 'Required test coverage did not succeed: %s\n' "$result"
+              exit 1
+            fi
+          done
 
   benchmark-model-free:
     name: benchmark model-free Python tests
