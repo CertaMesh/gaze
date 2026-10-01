@@ -119,6 +119,10 @@ def rows_from_scorecard(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> 
 
 def load_history(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> dict:
     value = json.loads(path.read_text(encoding="utf-8"))
+    return validate_history(value, inputs)
+
+
+def validate_history(value: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> dict:
     if value.get("schema_version") != 1 or value.get("generator_version") != inputs.version:
         raise HistoryError("adjacency history schema or generator version differs")
     if value.get("corpus_sha256") != inputs.corpus_sha256 or value.get("policy_sha256") != POLICY_SHA256:
@@ -192,7 +196,10 @@ def main() -> int:
             }
             for path in args.record:
                 history["rows"].extend(rows_from_scorecard(path, inputs))
-            inputs.path.write_text(json.dumps(history, indent=2) + "\n", encoding="utf-8")
+            validate_history(history, inputs)
+            temporary = inputs.path.with_suffix('.json.tmp')
+            temporary.write_text(json.dumps(history, indent=2) + "\n", encoding="utf-8")
+            temporary.replace(inputs.path)
         history = load_history(inputs.path, inputs)
         original = DOC.read_text(encoding="utf-8")
         rendered = apply(original, history, inputs)

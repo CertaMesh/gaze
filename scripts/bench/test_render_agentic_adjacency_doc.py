@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import render_agentic_adjacency_doc as render
 
@@ -34,6 +35,24 @@ def scorecard(corpus_sha256: str = render.CORPUS_SHA256) -> dict:
 
 
 class AdjacencyHistoryTests(unittest.TestCase):
+    def test_incomplete_recording_preserves_the_existing_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bench = root / 'docs/reference/benchmarks'
+            bench.mkdir(parents=True)
+            frozen = render.ROOT / render.agentic_layers.HISTORICAL_CONTRACTS[9]
+            (bench / frozen.name).write_bytes(frozen.read_bytes())
+            history = bench / render.HISTORY.name
+            original = render.HISTORY.read_bytes()
+            history.write_bytes(original)
+            path = root / 'scorecard.json'
+            path.write_text(json.dumps(scorecard()), encoding='utf-8')
+            with mock.patch.object(render, 'ROOT', root), mock.patch('sys.argv', [render.__file__, '--record', str(path)]):
+                with self.assertRaises(SystemExit) as caught:
+                    render.main()
+            self.assertEqual(caught.exception.code, 2)
+            self.assertEqual(history.read_bytes(), original)
+
     def test_current_inputs_cannot_relabel_the_frozen_ledger(self) -> None:
         current = render.HistoryInputs.for_version(10)
         with self.assertRaisesRegex(render.HistoryError, 'generator version differs'):
