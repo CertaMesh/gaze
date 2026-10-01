@@ -233,20 +233,31 @@ def records(api: ModuleType, partition: str) -> list["Record"]:
 
 def check(api: ModuleType, records: list["Record"]) -> None:
     cells = {c.family: c for c in (*CELLS, *TWINS)}
+    population = {}
     paid = {kind: set() for kind in ("broad", "narrow")}
     scored = set()
     for record in records:
         if not record.surface.startswith("gov_"):
             continue
-        cell = cells[record.family]
+        cell = cells.get(record.family)
+        if cell is None:
+            raise api.LayerError(f"{record.uid}: unknown government family")
+        if record.partition not in api.PARTITIONS:
+            raise api.LayerError(f"{record.uid}: unknown government partition")
+        population[record.uid] = population.get(record.uid, 0) + 1
         spans = record.gold if cell.gold else record.decoys
         if len(spans) != 1 or (cell.gold and record.decoys) or (not cell.gold and record.gold):
             raise api.LayerError(f"{record.uid}: expected one whole {'gold' if cell.gold else 'decoy'}")
         span = spans[0]
+        encoded = record.text.encode('utf-8')
+        if (type(span.start) is not int or type(span.end) is not int
+                or not 0 <= span.start < span.end <= len(encoded)
+                or encoded[span.start:span.end] != span.value.encode('utf-8')):
+            raise api.LayerError(f"{record.uid}: government offsets do not select the inserted value")
         start, end = api._char_span(record.text, span)
         if not re.fullmatch(PATTERNS[cell.shape], span.value):
             raise api.LayerError(f"{record.uid}: value violates government shape")
-        if cell.gold and span.label != cell.shape.label:
+        if span.label != (cell.shape.label if cell.gold else api.DECOY_PREFIX + 'benign'):
             raise api.LayerError(f"{record.uid}: wrong government label")
         if re.search(r"[A-Za-z0-9]$", record.text[:start]) or re.match(r"[A-Za-z0-9]", record.text[end:]):
             raise api.LayerError(f"{record.uid}: incomplete government value")
@@ -256,6 +267,20 @@ def check(api: ModuleType, records: list["Record"]) -> None:
             raise api.LayerError(f"{record.uid}: synthetic Steuer-ID must fail checksum")
         if not cell.gold and bool(re.search(CUES[cell.shape.label], record.text, re.I)) != cell.near_cue:
             raise api.LayerError(f"{record.uid}: wrong near-cue counterweight")
+        layer = 'A' if cell.gold else 'D'
+        validity = api.INVALID if cell.gold and cell.shape in INVALID_TAX_SHAPES else api.UNCHECKED if cell.gold else api.BENIGN
+        if (record.layer != layer or record.surface != cell.surface
+                or record.validity != validity
+                or record.template != f'government/{cell.family}/{record.partition}'
+                or record.language != ('de' if record.partition == 'dev' else 'en')
+                or record.region != ('DE' if record.partition == 'dev' else 'US')
+                or record.text != cell.templates[record.partition].replace('{V}', span.value)
+                or record.uid not in {
+                    f'agentic-{record.partition}-{layer}-{cell.family}-{i:03d}-{cell.surface}'
+                    for i in range(DOCS[layer])
+                }
+                or record.group != record.uid.removeprefix('agentic-').removesuffix('-' + cell.surface)):
+            raise api.LayerError(f"{record.uid}: government lineage or schema differs")
         if cell.gold:
             scored.add(cell.shape)
         for kind, table in (("broad", BROAD), ("narrow", NARROW)):
@@ -269,3 +294,13 @@ def check(api: ModuleType, records: list["Record"]) -> None:
         missing = scored - shapes
         if missing:
             raise api.LayerError(f"government shapes with no {kind} D cost: {sorted(s.value for s in missing)}")
+    partitions = {r.partition for r in records if r.surface.startswith("gov_")}
+    if len(partitions) != 1:
+        raise api.LayerError('government population must contain one complete partition')
+    expected = {
+        f"agentic-{partition}-{'A' if cell.gold else 'D'}-{cell.family}-{index:03d}-{cell.surface}": 1
+        for partition in partitions for cell in cells.values()
+        for index in range(DOCS['A' if cell.gold else 'D'])
+    }
+    if population != expected:
+        raise api.LayerError('government population has missing, duplicate or unexpected records')

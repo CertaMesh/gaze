@@ -28,6 +28,40 @@ class GovernmentCellsTests(unittest.TestCase):
                 if r.surface == 'gov_tool_json':
                     json.loads(r.text)
 
+    def test_population_rejects_a_missing_or_duplicate_record(self):
+        records = g.records(a, 'dev')
+        for changed in (records[1:], [*records, records[0]]):
+            with self.subTest(documents=len(changed)):
+                with self.assertRaisesRegex(a.LayerError, 'government population'):
+                    g.check(a, changed)
+
+    def test_schema_partition_and_lineage_tampering_fail_closed(self):
+        records = g.records(a, 'dev')
+        row = records[0]
+        changes = {
+            'partition': 'test', 'layer': 'D', 'family': 'gov_unknown',
+            'surface': 'gov_tool_json', 'group': 'foreign-group',
+            'template': 'government/tax_nine/test', 'language': 'en',
+            'region': 'US', 'validity': a.BENIGN,
+        }
+        for field, value in changes.items():
+            with self.subTest(field=field):
+                changed = [dataclasses.replace(row, **{field: value}), *records[1:]]
+                with self.assertRaises(a.LayerError):
+                    g.check(a, changed)
+
+    def test_gold_and_decoy_offsets_and_labels_cannot_be_forged(self):
+        records = g.records(a, 'test')
+        for index in (0, 80):
+            row = records[index]
+            span = (row.gold or row.decoys)[0]
+            for forged in (dataclasses.replace(span, start=span.start + 1),
+                           dataclasses.replace(span, label='EMAIL')):
+                with self.subTest(layer=row.layer, span=forged):
+                    changed = dataclasses.replace(row, **{'gold' if row.gold else 'decoys': [forged]})
+                    with self.assertRaises(a.LayerError):
+                        g.check(a, [*records[:index], changed, *records[index + 1:]])
+
     def test_partition_templates_and_all_values_are_disjoint(self):
         for cell in (*g.CELLS, *g.TWINS):
             self.assertNotEqual(cell.templates['dev'], cell.templates['test'])
