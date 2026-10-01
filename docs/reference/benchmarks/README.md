@@ -1205,8 +1205,9 @@ model:
   personal site on their surname) where a structural delimiter ends it: a
   compact JSON value with sibling keys after it, JSON with `\/`-escaped
   slashes, a JSON-escaped quote, a double- or single-quoted HTML attribute
-  with link text after it and HTML element text, plus a Markdown link and a
-  path with an apostrophe as controls. The whole URL is gold. Layer D adds the
+  with link text after it, a single-quoted attribute of a self-closing tag and
+  HTML element text, plus a Markdown link and a path with an apostrophe as
+  controls. The whole URL is gold. Layer D adds the
   same structures with no scheme and no `www` prefix anywhere. See [URLs in
   structured text](#urls-in-structured-text) below. The v8 documents remain
   byte identical within each partition; the generator and both partition
@@ -1533,14 +1534,17 @@ on their surname, on a reserved `.invalid` host.
 | Surface | Layer A cells (gold, gated) | Layer D twins (no URL anchor anywhere) |
 | --- | --- | --- |
 | Tool JSON | a compact value with sibling keys after it, with an `https` scheme or a `www` prefix; the same with `\/`-escaped slashes, with and without the `www` prefix; a URL between JSON-escaped quotes inside a string (`\"URL\"`) | escaped routes (`\/internal\/jobs\/7417`), MIME types (`application\/json`) and service hosts with a path, escaped and plain |
-| HTML | a double- or single-quoted `href` with link text after it; element text before a closing tag | a relative `href` (`manual/setup.html`) |
+| HTML | a double- or single-quoted `href` with link text after it; a single-quoted `href` of a self-closing tag (`href='URL'/>`); element text before a closing tag | a relative `href` (`manual/setup.html`) |
 | Markdown | a link `[text](url)` (control) | a relative link |
 | Prose | a path with an apostrophe, `/wiki/Name_O'Surname` (control) | a service host with a path |
 
 The two controls are shapes the shipped rule already covers exactly: a fix
-that stopped the match at `'` would leak the rest of the apostrophe path, and
-one that kept a Markdown link's closing `)` would run over it. The generator fails
-closed unless every layer A value fully matches its shape
+that stopped the match at `'` would leak the rest of the apostrophe path (a
+mid-path `'` followed by a letter), and one that kept a Markdown link's
+closing `)` would run over it. The self-closing cell catches the opposite
+mistake: its closing `'` is followed by `/`, a character a URL may contain,
+so a rule that ends at a quote only before a non-URL character still runs
+over. The generator fails closed unless every layer A value fully matches its shape
 (`URL_SHAPE_PATTERNS`: a scheme or `www` prefix, a `.invalid` host and a path,
 plain or with every slash escaped), is the only URL anchor in its document and
 reads as a whole URL in place under `url_reading` (a delimiter directly before
@@ -1557,8 +1561,8 @@ committed as
 [`mutant-broad-url-shapes.toml`](../../../scripts/bench/fixtures/agentic/mutant-broad-url-shapes.toml)
 and
 [`mutant-narrow-url-shapes.toml`](../../../scripts/bench/fixtures/agentic/mutant-narrow-url-shapes.toml).
-Each A cell has 6 documents per partition and each twin 4: 10 A cells (+60
-documents, +2.1 %) and 7 D twins (+28 documents, +2.5 %).
+Each A cell has 6 documents per partition and each twin 4: 11 A cells (+66
+documents, +2.3 %) and 7 D twins (+28 documents, +2.5 %).
 
 Appended to the setup policy without its NER and Nym sections (`ceef71ef`),
 on generator v9 at `a3be0628`, the broad mutant lowered the new cells' layer A
@@ -1566,13 +1570,13 @@ leak from 384 to 72 bytes and raised their twins' layer D false positives from
 0 to 636 bytes; the narrow mutant lowered the leak to 90 and raised the
 twins' false positives to 362 bytes, all on the service hosts. Rules only
 (`rule-floor-extended`) and with the setup policy's rules alike, main leaked
-384 of the 3,200 new gold bytes, all in the escaped cells: every byte of the
+384 of the 3,527 new gold bytes, all in the escaped cells: every byte of the
 escaped URLs without the `www` prefix (354) and the escaped scheme in front
-of it (30). It also put 516 false-positive bytes on the new layer A documents
-themselves (the closing quotes, keys, values and link text the match ran
-over) and none on the twins. Under the full `gaze setup` policy (NER and Nym,
-`fa3adffe`), main leaked 348 of those 3,200 bytes (NER and Nym cover 36
-bytes of the escaped URLs), put the same 516 false-positive bytes on the new
+of it (30). It also put 570 false-positive bytes on the new layer A documents
+themselves (the closing quotes, keys, values, link text and closing tags the
+match ran over) and none on the twins. Under the full `gaze setup` policy
+(NER and Nym, `fa3adffe`), main leaked 348 of those 3,527 bytes (NER and Nym cover 36
+bytes of the escaped URLs), put the same 570 false-positive bytes on the new
 A documents and none on the twins.
 
 **Held-out protocol.** Templates, machine keys, name pools, email domains,
@@ -1778,12 +1782,12 @@ they are re-measured.
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.15.1` `policy-file` | 20,770 / 59,710 | 2,017 | 4,660 | 379 / 5,142 | 402 |
-| `v0.15.0` `policy-file` | 20,943 / 59,710 | 2,017 | 4,660 | 379 / 5,142 | 402 |
-| `v0.14.0` `full-stack-kiji-resolve` | 30,089 / 59,710 | 5,758 | 3,888 | 530 / 5,142 | 189 |
-| `v0.14.0` `pass2-ner` | 30,711 / 59,710 | 1,479 | 3,227 | 555 / 5,142 | 139 |
+| `v0.15.1` `policy-file` | 20,770 / 60,037 | 2,071 | 4,660 | 379 / 5,142 | 402 |
+| `v0.15.0` `policy-file` | 20,943 / 60,037 | 2,071 | 4,660 | 379 / 5,142 | 402 |
+| `v0.14.0` `full-stack-kiji-resolve` | 30,089 / 60,037 | 5,812 | 3,888 | 530 / 5,142 | 189 |
+| `v0.14.0` `pass2-ner` | 30,711 / 60,037 | 1,533 | 3,227 | 555 / 5,142 | 139 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v9-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v9, test corpus `a73c992ec232…`, setup policy `6525f0002a6d…`.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v9-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v9, test corpus `8fc8021fb70e…`, setup policy `6525f0002a6d…`.
 
 <!-- END GENERATED: agentic-adjacency -->
 
@@ -1806,8 +1810,8 @@ more and has 25 fewer false-positive bytes (66 fewer in the
 and layer R leaks 5 bytes more with 1 fewer false-positive byte. Two runs of
 the v0.15.1 row on the measuring machine are byte-identical, so the offset
 comes with the machine (most likely the NER and Nym runtimes), not from
-run-to-run noise. The URL cells add 3,200 gold bytes to layer A: the v0.15.x
-rows leak 348 of them and the v0.14.0 rows 371, and every row puts 516
+run-to-run noise. The URL cells add 3,527 gold bytes to layer A: the v0.15.x
+rows leak 348 of them and the v0.14.0 rows 371, and every row puts 570
 false-positive bytes on them.
 
 ### Hardware spec template
