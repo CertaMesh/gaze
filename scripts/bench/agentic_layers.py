@@ -40,7 +40,7 @@ import gaze_bench_score as score
 import government_id_cells as government_ids
 
 
-GENERATOR_VERSION = 9
+GENERATOR_VERSION = 10
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -3139,7 +3139,7 @@ CREDIT_GUARD_SINCE: dict[str, int] = {
 
 
 CREDIT_GUARD_FAMILIES["TAXNUM"] += government_ids.TAX_GUARD_FAMILIES
-CREDIT_GUARD_SINCE.update({family: 9 for family in government_ids.TAX_GUARD_FAMILIES})
+CREDIT_GUARD_SINCE.update({family: 10 for family in government_ids.TAX_GUARD_FAMILIES})
 
 
 def guard_families(generator_version: int) -> list[str]:
@@ -3253,9 +3253,198 @@ def check_cue_cells(records: Sequence[Record]) -> None:
         raise LayerError(f"cue shapes whose narrow rule pays nothing in layer D: {free}")
 
 
+# --------------------------------------------------------------------------
+# CRLF address growth and cued German plates. A new surface prefix keeps all
+# earlier corpora byte identical when rebuilding historical release records.
+
+class BlockShape(str, Enum):
+    UNIT = "unit"
+    MILITARY = "military"
+    PLATE = "plate"
+
+
+@dataclass(frozen=True)
+class BlockCell:
+    family: str
+    shape: BlockShape
+    templates: Mapping[str, str]
+    # Address cells share the established part-by-part gold writer.
+    address: AddressCell | None = None
+    benign: bool = False
+    ambiguous_plate_cue: bool = False
+    language: str | None = None
+
+
+BLOCK_CELLS = (
+    BlockCell("block_us_crlf", BlockShape.UNIT, {
+        "dev": "Return address:\r\n{HN} {ST}\r\n{CI}\r\n{UN}\r\n{SA} {ZP}",
+        "test": "Delivery address:\r\n{HN} {ST}\r\n{CI}\r\n{UN}\r\n{SA} {ZP}\r\nThanks.",
+    }, _address("block_us_crlf", Designator.SUITE, "US", "block", "", "")),
+    BlockCell("block_de_crlf", BlockShape.UNIT, {
+        "dev": "Anschrift:\r\n{ST} {HN}\r\n{UN}\r\n{ZP} {CI}",
+        "test": "Lieferadresse:\r\n{ST} {HN}\r\n{UN}\r\n{ZP} {CI}\r\nDanke.",
+    }, _address("block_de_crlf", Designator.WOHNUNG, "DE", "block", "", "")),
+    BlockCell("block_military_crlf", BlockShape.MILITARY, {
+        "dev": "Postal address:\r\n{UN}\r\n{BX}\r\n{MC} {MS} {ZP}",
+        "test": "Mailing label:\r\n{UN}, {BX}\r\n{MC} {MS} {ZP}\r\n",
+    }, _address("block_military_crlf", Designator.MILITARY, "US", "block", "", "")),
+    BlockCell("block_plate_prose", BlockShape.PLATE, {
+        "dev": "Kennzeichen {V} wurde gemeldet.", "test": "Das Kennzeichen {V} Bitte prüfen.",
+    }),
+    BlockCell("block_plate_log", BlockShape.PLATE, {
+        "dev": 'event=vehicle plate="{V}" result=pending',
+        "test": 'svc=parking kennzeichen="{V}" status=queued',
+    }),
+    BlockCell("block_plate_json", BlockShape.PLATE, {
+        "dev": '{"vehicle":{"kennzeichen":"{V}"}}',
+        "test": '{"parking":{"plate":"{V}"}}',
+    }),
+)
+
+BLOCK_TWINS = (
+    BlockCell("block_twin_unit", BlockShape.UNIT, {
+        "dev": "Run test {V}\r\nResult pending.",
+        "test": "Regression {V}\r\nStatus green.",
+    }, benign=True),
+    BlockCell("block_twin_unit_crlf", BlockShape.UNIT, {
+        "dev": "Test {V}\r\n00018",
+        "test": "Regression {V}\r\n00078",
+    }, benign=True),
+    BlockCell("block_twin_unit_blank", BlockShape.UNIT, {
+        "dev": "Test {V}\r\n\r\n00018",
+        "test": "Regression {V}\r\n\r\n00078",
+    }, benign=True),
+    BlockCell("block_twin_unit_cr", BlockShape.UNIT, {
+        "dev": "Test {V}\r00018", "test": "Regression {V}\r00078",
+    }, benign=True),
+    BlockCell("block_twin_military", BlockShape.MILITARY, {
+        "dev": "Storage inventory:\r\n{V}\r\nCables only.",
+        "test": "Packing list:\r\n{V}\r\nAdapters only.",
+    }, benign=True),
+    BlockCell("block_twin_military_crlf", BlockShape.MILITARY, {
+        "dev": "Storage Unit 4\r\n{V}\r\n00018",
+        "test": "Inventory Unit 6\r\n{V}\r\n00078",
+    }, benign=True),
+    BlockCell("block_twin_military_blank", BlockShape.MILITARY, {
+        "dev": "Inventory {V}\r\n\r\n00018",
+        "test": "Packing {V}\r\n\r\n00078",
+    }, benign=True),
+    BlockCell("block_twin_plate", BlockShape.PLATE, {
+        "dev": "Build {V} completed.", "test": "Batch {V} Released.",
+    }, benign=True),
+    BlockCell("block_twin_plate_manufacturing", BlockShape.PLATE, {
+        "dev": "Workshop mounting plate {V} needs replacement.",
+        "test": "Factory mounting plate {V} requires inspection.",
+    }, benign=True, ambiguous_plate_cue=True, language="en"),
+    BlockCell("block_twin_plate_near_cue", BlockShape.PLATE, {
+        "dev": "Kennzeichen lookup failed for build {V}.",
+        "test": "Kennzeichen query returned batch {V} Ready.",
+    }, benign=True),
+)
+
+# Exact shape without its context. These narrow mutants must also pay in D.
+BLOCK_NARROW_PATTERNS = {
+    BlockShape.UNIT: r"\b(?:Suite|Ste\.?|STE|Wohnung) \d+[A-C]?\b",
+    BlockShape.MILITARY: r"\b(?:PSC|Unit|CMR|Box) \d+\b",
+    BlockShape.PLATE: r"\b[A-Z]{1,3}[- ][A-Z]{1,2} \d{1,4}[EH]?\b",
+}
+BLOCK_BROAD_PATTERNS = {
+    BlockShape.UNIT: r"\b(?:Suite|Ste\.?|STE|Wohnung|Unit|Apt\.?) \d+[A-C]?\b",
+    BlockShape.MILITARY: r"\b(?:PSC|Unit|CMR|Box|APO|FPO|DPO)(?: \d+)?\b",
+    BlockShape.PLATE: r"\b[A-ZÄÖÜ]{1,3}[- ][A-ZÄÖÜ]{1,2}[ -]\d{1,5}[EH]?\b",
+}
+PLATE_PREFIXES = {"dev": ("M-AB", "B-CD", "K-EF"), "test": ("HH-XY", "F-ZZ", "BN-PQ")}
+
+
+def _block_records(cells: Sequence[BlockCell], partition: str) -> list[Record]:
+    records: list[Record] = []
+    for cell in cells:
+        layer = LAYER_LOOKALIKES if cell.benign else LAYER_IDENTIFIERS
+        rng = Rng(PARTITION_SEEDS[partition], f"{layer}/block/{cell.family}")
+        for index in range(4 if cell.benign else 6):
+            if cell.address is not None:
+                fields = _address_fields(cell.address, rng, partition, index)
+                language, region = ADDRESS_LANGUAGE[cell.address.region], cell.address.region
+            else:
+                if cell.shape is BlockShape.PLATE:
+                    number = rng.between(*( (100, 399) if partition == "dev" else (600, 899)))
+                    value = f"{rng.choice(PLATE_PREFIXES[partition])} {number:04d}"
+                    language, region = "de", "DE"
+                elif cell.shape is BlockShape.UNIT:
+                    forms = ("Suite {n}", "Ste. {n}", "STE {n}", "Wohnung {n}")
+                    value = forms[index % len(forms)].format(n=rng.between(*DESIGNATOR_NUMBERS[None][partition]))
+                    language, region = "en", "US"
+                else:
+                    value = f"Box {rng.between(*MILITARY_BOX_NUMBERS[partition])}"
+                    language, region = "en", "US"
+                fields = {"V": (value, DECOY_PREFIX + "benign" if cell.benign else "LICENSEPLATE")}
+            language = cell.language or language
+            text, gold, decoys = _fill_with_decoys(cell.templates[partition], fields)
+            records.append(Record(
+                uid=f"agentic-{partition}-{layer}-{cell.family}-{index:03d}",
+                partition=partition, layer=layer, family=cell.family,
+                surface=f"block_{cell.shape.value}", validity=BENIGN if cell.benign else UNCHECKED,
+                group=f"{partition}-{layer}-{cell.family}-{index:03d}",
+                template=f"block/{cell.family}/{partition}", language=language, region=region,
+                text=text, gold=gold, decoys=decoys,
+            ))
+    return records
+
+
+def check_block_cells(records: Sequence[Record]) -> None:
+    import re
+
+    cells = {cell.family: cell for cell in (*BLOCK_CELLS, *BLOCK_TWINS)}
+    scored = {cell.shape for cell in BLOCK_CELLS}
+    used = {cell.shape for cell in BLOCK_TWINS}
+    if used - scored:
+        raise LayerError("block twin has no layer A shape")
+    paid: set[BlockShape] = set()
+    broad_paid: set[BlockShape] = set()
+    for record in records:
+        if not record.surface.startswith("block_"):
+            continue
+        cell = cells[record.family]
+        if cell.benign:
+            if record.gold or len(record.decoys) != 1:
+                raise LayerError(f"{record.uid}: block twin needs one decoy and no gold")
+            plate_cue = cell.shape is BlockShape.PLATE and bool(re.search(
+                r'(?i)(?:Kennzeichen|plate)["\s:=]*$', record.text.encode()[:record.decoys[0].start].decode()
+            ))
+            if cell.ambiguous_plate_cue and not plate_cue:
+                raise LayerError(f"{record.uid}: ambiguous plate twin must retain its immediate cue")
+            if plate_cue and not cell.ambiguous_plate_cue:
+                raise LayerError(f"{record.uid}: plate twin carries an immediate plate cue")
+            if re.fullmatch(BLOCK_BROAD_PATTERNS[cell.shape], record.decoys[0].value):
+                broad_paid.add(cell.shape)
+            if re.fullmatch(BLOCK_NARROW_PATTERNS[cell.shape], record.decoys[0].value):
+                paid.add(cell.shape)
+        elif cell.address is not None:
+            address = AddressCell(**{**cell.address.__dict__, "templates": cell.templates})
+            values = address_part_values(record, address)
+            if {part for part, _ in values} != required_address_parts(address):
+                raise LayerError(f"{record.uid}: missing address part")
+            separators = [record.text.encode()[a.end:b.start] for (_, a), (_, b) in zip(values, values[1:])]
+            if b"\r\n" not in separators or any(b"\r" in sep.replace(b"\r\n", b"") for sep in separators):
+                raise LayerError(f"{record.uid}: address must exercise complete CRLF between gold parts")
+        else:
+            if record.gold and not re.search(
+                r'(?i)(?:Kennzeichen|plate)["\s:=]*$', record.text.encode()[:record.gold[0].start].decode()
+            ):
+                raise LayerError(f"{record.uid}: plate gold needs an immediate plate cue")
+            if len(record.gold) != 1 or record.gold[0].label != "LICENSEPLATE" or not re.fullmatch(
+                BLOCK_NARROW_PATTERNS[cell.shape], record.gold[0].value
+            ):
+                raise LayerError(f"{record.uid}: plate gold must cover the whole plate")
+    if scored - broad_paid:
+        raise LayerError("block shapes with no broad layer D counterweight")
+    if scored - paid:
+        raise LayerError(f"block shapes with no narrow layer D counterweight: {sorted(s.value for s in scored - paid)}")
+
+
 # The surface prefix each generator version added. Every earlier document stays
 # byte identical, so an older corpus is a filter of the current one.
-GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "cue_", 9: "gov_"}
+GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "cue_", 9: "block_", 10: "gov_"}
 
 
 def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
@@ -3268,6 +3457,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    9: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v9.json"),
     4: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v4.json"),
     5: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v5.json"),
     6: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v6.json"),
@@ -3513,12 +3703,15 @@ def generate(partition: str) -> list[Record]:
         + _phone_records(PHONE_TWINS, partition, LAYER_LOOKALIKES)
         + _cue_records(CUE_CELLS, partition, LAYER_IDENTIFIERS)
         + _cue_records(CUE_TWINS, partition, LAYER_LOOKALIKES)
+        + _block_records(BLOCK_CELLS, partition)
+        + _block_records(BLOCK_TWINS, partition)
         + government_ids.records(sys.modules[__name__], partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)
     check_phone_cells(records)
     check_cue_cells(records)
+    check_block_cells(records)
     for record in records:
         encoded = record.text.encode("utf-8")
         for gold in record.gold:

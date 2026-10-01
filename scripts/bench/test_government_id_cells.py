@@ -18,6 +18,9 @@ class GovernmentCellsTests(unittest.TestCase):
             records = g.records(a, partition)
             self.assertEqual({r.family for r in records}, {c.family for c in (*g.CELLS, *g.TWINS)})
             self.assertEqual({c.shape for c in g.CELLS}, set(g.Shape))
+            self.assertEqual(len(g.Shape), 20)
+            self.assertEqual(sum(r.layer == 'A' for r in records), 80)
+            self.assertEqual(sum(r.layer == 'D' for r in records), 84)
             self.assertEqual({c.surface for c in g.CELLS}, {'gov_prose', 'gov_log_kv', 'gov_tool_json', 'gov_tool_result'})
             for r in records:
                 (span,) = r.gold or r.decoys
@@ -100,7 +103,7 @@ class GovernmentCellsTests(unittest.TestCase):
         for surface in ('gov_prose', 'gov_log_kv', 'gov_tool_json', 'gov_tool_result'):
             self.assertTrue(a.invalid_twin_credited('TAXNUM', surface))
         self.assertFalse(a.invalid_twin_credited('TAXNUM', 'prose_nocue'))
-        added = set(a.guard_families(9)) - set(a.guard_families(8))
+        added = set(a.guard_families(10)) - set(a.guard_families(9))
         self.assertEqual(added, {'gov_twin_tax_eleven', 'gov_near_tax_eleven',
                                  'gov_twin_tax_grouped', 'gov_near_tax_grouped'})
 
