@@ -1,0 +1,16 @@
+# Deliberately overmatching block and plate rules. Never ship these.
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_block_unit"
+pattern = '\b(?:Suite|Ste\.?|STE|Wohnung|Unit|Apt\.?) \d+[A-C]?\b'
+class = "custom:mutant_block"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_block_military"
+pattern = '\b(?:PSC|Unit|CMR|Box|APO|FPO|DPO)(?: \d+)?\b'
+class = "custom:mutant_block"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_block_plate"
+pattern = '\b[A-ZÄÖÜ]{1,3}[- ][A-ZÄÖÜ]{1,2}[ -]\d{1,5}[EH]?\b'
+class = "custom:mutant_block"
