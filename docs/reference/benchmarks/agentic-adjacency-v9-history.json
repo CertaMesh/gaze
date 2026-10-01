@@ -1,16 +1,16 @@
 {
   "schema_version": 1,
   "generator_version": 9,
-  "corpus_sha256": "8fc8021fb70e28cdaa2c581c0ca9f6701f95c85519231709052233afa8bc0054",
-  "contract_sha256": "f4980e6b33f00b6d39591fdcf44b4a2d919647e700299966d8547047a5b5402c",
-  "policy_sha256": "6525f0002a6d5bf5f6d9fde6ca35f439f88cf9e6ec90af6d7f0380f805d2fec7",
+  "corpus_sha256": "b2e363763fd7d3bf1b2678af5c5f45af92e6ebc20a38f78072be0f0ee541f7c6",
+  "contract_sha256": "f9d0cfff6ebc2feac3bd73567b5800af2f38ef1df9e7e10e5e7e64ebd2e93543",
+  "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
   "rows": [
     {
       "version": "v0.15.1",
       "arm": "policy-file",
       "binary_revision": "4927f7c0a862ece2cdcd8c00df34538a510d008e",
-      "binary_sha256": "133559e2553846ce4ba1a30cda88705d22f9296cc06954848f91ef1d811a0458",
-      "scorecard_sha256": "ccef66e9b6a93892615a4201bfa98dcd3e7bf958ff7f57f2cf25215534faf311",
+      "binary_sha256": "26bde8c65cc02f40db96543c789566605cfb248f6a209d28395eb50acb109916",
+      "scorecard_sha256": "31863c26512cace004ba29aaf1261522aecf3cf234e6129b616613013e91d1cb",
       "manifest_actions": [
         "redact",
         "tokenize"
@@ -18,19 +18,19 @@
       "split_composite_source_ids": false,
       "layers": {
         "A": {
-          "gold": 60037,
-          "leaked": 20770,
-          "false_positive": 2071
+          "gold": 57374,
+          "leaked": 20641,
+          "false_positive": 1532
         },
         "D": {
           "gold": 0,
           "leaked": 0,
-          "false_positive": 4660
+          "false_positive": 4882
         },
         "R": {
           "gold": 5142,
-          "leaked": 379,
-          "false_positive": 402
+          "leaked": 374,
+          "false_positive": 403
         }
       }
     },
@@ -38,8 +38,8 @@
       "version": "v0.15.0",
       "arm": "policy-file",
       "binary_revision": "5127788b089f0f6f4e3b8bcf176503953744be01",
-      "binary_sha256": "a1d17f762471f53a72f33399bd68c7d0ce28b1c97ab01957e36c6175108d9421",
-      "scorecard_sha256": "c5cae15c3ca7946c153aae4fb21a2eb9e78fe7be730d9b956a1b844ac987caa9",
+      "binary_sha256": "2b4f5df0ba3b7abfc3cfb1b245d4a3b64d3b36b2dfaab34e4c23e99bfb4c9ae0",
+      "scorecard_sha256": "e707b37082c8b403aa9f3553b056e0176d5eeca9bf5d46f8117e30dec92dd549",
       "manifest_actions": [
         "redact",
         "tokenize"
@@ -47,19 +47,19 @@
       "split_composite_source_ids": false,
       "layers": {
         "A": {
-          "gold": 60037,
-          "leaked": 20943,
-          "false_positive": 2071
+          "gold": 57374,
+          "leaked": 20814,
+          "false_positive": 1532
         },
         "D": {
           "gold": 0,
           "leaked": 0,
-          "false_positive": 4660
+          "false_positive": 4882
         },
         "R": {
           "gold": 5142,
-          "leaked": 379,
-          "false_positive": 402
+          "leaked": 374,
+          "false_positive": 403
         }
       }
     },
@@ -67,27 +67,27 @@
       "version": "v0.14.0",
       "arm": "full-stack-kiji-resolve",
       "binary_revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
-      "binary_sha256": "34b8be5219f83400003676f538b052799504e47909a37e2acf297c27946fec10",
-      "scorecard_sha256": "97d8ae9fc3883c3cb704a19d2be6aef0aac2f6b2b0cd3e9bad1ef727d18c9584",
+      "binary_sha256": "63bcbc8b2a4436d806aec8f7612388ba58a58fd1c572709e18176a42cd35507f",
+      "scorecard_sha256": "dd2843e6a8eacaf24cb189e2e7fbe9b40d9c69311e030c1cd235557a6f767076",
       "manifest_actions": [
         "tokenize"
       ],
       "split_composite_source_ids": true,
       "layers": {
         "A": {
-          "gold": 60037,
-          "leaked": 30089,
-          "false_positive": 5812
+          "gold": 57374,
+          "leaked": 30130,
+          "false_positive": 5479
         },
         "D": {
           "gold": 0,
           "leaked": 0,
-          "false_positive": 3888
+          "false_positive": 4108
         },
         "R": {
           "gold": 5142,
-          "leaked": 530,
-          "false_positive": 189
+          "leaked": 525,
+          "false_positive": 190
         }
       }
     },
@@ -95,27 +95,27 @@
       "version": "v0.14.0",
       "arm": "pass2-ner",
       "binary_revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
-      "binary_sha256": "34b8be5219f83400003676f538b052799504e47909a37e2acf297c27946fec10",
-      "scorecard_sha256": "97d8ae9fc3883c3cb704a19d2be6aef0aac2f6b2b0cd3e9bad1ef727d18c9584",
+      "binary_sha256": "63bcbc8b2a4436d806aec8f7612388ba58a58fd1c572709e18176a42cd35507f",
+      "scorecard_sha256": "dd2843e6a8eacaf24cb189e2e7fbe9b40d9c69311e030c1cd235557a6f767076",
       "manifest_actions": [
         "tokenize"
       ],
       "split_composite_source_ids": true,
       "layers": {
         "A": {
-          "gold": 60037,
-          "leaked": 30711,
-          "false_positive": 1533
+          "gold": 57374,
+          "leaked": 30781,
+          "false_positive": 994
         },
         "D": {
           "gold": 0,
           "leaked": 0,
-          "false_positive": 3227
+          "false_positive": 3353
         },
         "R": {
           "gold": 5142,
-          "leaked": 555,
-          "false_positive": 139
+          "leaked": 550,
+          "false_positive": 140
         }
       }
     }

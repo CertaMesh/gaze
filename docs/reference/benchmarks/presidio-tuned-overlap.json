@@ -1,0 +1,142 @@
+{
+  "code_sha256": {
+    "overlap.py": "662da5d44a51bb59917292e2b3586c4c4115c94b3a374d19a617e7bae3be30e7",
+    "space.py": "2864e0b270b903aa8a83a49d18fc98e13399c1247c5ed97ca83db1693ecc5280"
+  },
+  "comparison_sha256": "1c1060cec407ea2564824e91b2031febf72a7714d61389d33de3ce764708364f",
+  "description": "What the test half shares with the validation half; the split holds out document ids only",
+  "gold": "gold values are the gold spans' text; layer C before any contract, layers A/D/R under the measured agentic contract",
+  "layer_a_pattern_coverage": {
+    "configuration": "tuned F2 choice with NLP-engine NER and extra NER off and only its custom pattern units on",
+    "covered_by_custom_patterns_only": {
+      "count": 19284,
+      "of": 23210,
+      "percent": 83.1
+    },
+    "leaked_by_full_choice": 2,
+    "scored_gold_bytes": 23210,
+    "test_documents": 1119,
+    "units": [
+      "CustomDateOfBirthRecognizer",
+      "CustomIbanRecognizer",
+      "CustomPhoneRecognizer",
+      "CustomSsnRecognizer",
+      "CustomUnitRecognizer",
+      "CustomZipRecognizer"
+    ]
+  },
+  "layers": {
+    "A": {
+      "gold_spans_repeating_a_validation_value": {
+        "count": 1166,
+        "of": 1372,
+        "percent": 85.0
+      },
+      "identical_to_a_validation_document": {
+        "count": 0,
+        "of": 1119,
+        "percent": 0.0
+      },
+      "reuse_a_validation_gold_value": {
+        "count": 922,
+        "of": 1119,
+        "percent": 82.4
+      },
+      "share_a_validation_group": {
+        "count": 1119,
+        "of": 1119,
+        "percent": 100.0
+      },
+      "share_a_validation_template": {
+        "count": 1119,
+        "of": 1119,
+        "percent": 100.0
+      },
+      "test_documents": 1119
+    },
+    "C": {
+      "gold_spans_repeating_a_validation_value": {
+        "count": 5181,
+        "of": 7731,
+        "percent": 67.0
+      },
+      "identical_to_a_validation_document": {
+        "count": 0,
+        "of": 1480,
+        "percent": 0.0
+      },
+      "reuse_a_validation_gold_value": {
+        "count": 988,
+        "of": 1480,
+        "percent": 66.8
+      },
+      "test_documents": 1480
+    },
+    "D": {
+      "gold_spans_repeating_a_validation_value": {
+        "count": 0,
+        "of": 0,
+        "percent": null
+      },
+      "identical_to_a_validation_document": {
+        "count": 0,
+        "of": 415,
+        "percent": 0.0
+      },
+      "reuse_a_validation_gold_value": {
+        "count": 0,
+        "of": 415,
+        "percent": 0.0
+      },
+      "share_a_validation_group": {
+        "count": 337,
+        "of": 415,
+        "percent": 81.2
+      },
+      "share_a_validation_template": {
+        "count": 415,
+        "of": 415,
+        "percent": 100.0
+      },
+      "test_documents": 415
+    },
+    "R": {
+      "gold_spans_repeating_a_validation_value": {
+        "count": 108,
+        "of": 239,
+        "percent": 45.2
+      },
+      "identical_to_a_validation_document": {
+        "count": 0,
+        "of": 53,
+        "percent": 0.0
+      },
+      "reuse_a_validation_gold_value": {
+        "count": 39,
+        "of": 53,
+        "percent": 73.6
+      },
+      "share_a_validation_group": {
+        "count": 0,
+        "of": 53,
+        "percent": 0.0
+      },
+      "share_a_validation_template": {
+        "count": 47,
+        "of": 53,
+        "percent": 88.7
+      },
+      "test_documents": 53
+    }
+  },
+  "pool_test_sha256": {
+    "base": "8d7e719ebaa74a1b48f01f4d4ec35e09f6eed2735689d3257a79d7c59fd2d563",
+    "davlan": "cb173254ade26e9185697cbefcfa352775bbb4761d64f2dfa4626ec64f6a8ec5",
+    "dslim": "43488e5c338db8348d8ae3b1696000ae984e9761fc8c397bfd6b17e7320735ab",
+    "gliner": "8d31a68f38ffd2d62663c59bc7e13beddd6142e28b85435debffea2b9f51f917",
+    "openmed": "3e0480cc7c85ab28ae3630bf42cff0fe89fa3743e2e1e1785525e69f69b6ad0e"
+  },
+  "schema_version": 1,
+  "selection_sha256": "8cb727bd82e441bd8683bb4ea55f923eefba4c37cfeaab0518429590970fb522",
+  "split": "SHA-256 first byte of the document id < 128 is validation (comparison_metrics.split_for_id)"
+}

@@ -1,6 +1,6 @@
 # Competitor comparison
 
-Same corpus and scorer; tools run with documented configurations. UTF-8 byte counts use the Gaze scorer. For v3, FP is the scorer's false-positive count after its audited gold-gap credit. Presidio all runs English, German, Dutch, French, and Portuguese spaCy models with the documented German recognizers. Presidio English default is a secondary row. Latency was not measured under a quiet machine; timing comparisons are withheld. This measures detection; competitor restore and manifest behavior is not scored. The agentic-layer rows were measured on generator v4 (test corpus `387a35ac1551…`, 3,250 documents). The current generator is v9; its added documents are not measured here.
+Same corpus and scorer; tools run with documented configurations. UTF-8 byte counts use the Gaze scorer. For v3, FP is the scorer's false-positive count after its audited gold-gap credit. Presidio all runs English, German, Dutch, French, and Portuguese spaCy models with the documented German recognizers. Presidio English default is a secondary row. Latency was not measured under a quiet machine; timing comparisons are withheld. This measures detection; competitor restore and manifest behavior is not scored. The agentic-layer rows were measured on generator v4 (test corpus `387a35ac1551…`, 3,250 documents). The current generator is v10; its added documents are not measured here.
 
 Leaked and false-positive byte counts are class-agnostic. A skipped document's scored gold counts in full as leaked. Subtract Skipped gold B from Leaked B to get leakage on processed documents. For example, Presidio English-only v3 Synthetic identifiers in agentic formats leaks 34,733 B, including 28,151 B of scored gold from 1,320 skipped non-English documents. The reviewed label map controls v3's repeated-gold credit and the exact typed-span metrics below.
 
@@ -527,3 +527,138 @@ Common classes: CREDITCARDNUMBER, DATEOFBIRTH, EMAIL, PHONENUMBER, ZIP.
 | v1 | Repeated PII values with decoys | common_intersection | opf | 40 | 0 | 329 | 0 | 0.0 | 0 | 0.0 | 20.6 | 40 | 27 | 0 | 0.597 | 1.000 | 0.748 | 0.881 |
 
 Threshold choice uses validation only: gliner → gliner-high-recall; presidio-strong → presidio-strong-high-recall.
+
+## Tuned Presidio
+
+Three more Presidio rows on the same documents, contracts and scorer as above. Every number in this section names its split; test-half numbers are the comparison.
+
+- **Tuned by its authors:** Presidio Research's own tuned setup for its corpus (notebook 5, custom analyzer: OpenMed NER recognizer, title/year/age pattern recognizers, lemma context enhancement, 14 predefined recognizers removed, score threshold 0.3; `notebooks/5_Evaluate_Custom_Presidio_Analyzer.ipynb` at presidio-research `6db3769a`), applied unchanged. It supports English only, so every document is analyzed as English. Its entities without a label in this corpus: BIOMETRIC_IDENTIFIER, BLOOD_TYPE, COORDINATE, CVV, EDUCATION_LEVEL, EMPLOYMENT_STATUS, ETHNICITY, GENDER, ID, IP_ADDRESS, LANGUAGE, MAC_ADDRESS, MEDICAL_LICENSE, OCCUPATION, POLITICAL_VIEW, PROFESSIONAL_LICENSE, RELIGIOUS_BELIEF, SEXUALITY, SWIFT_CODE, USER_NAME, US_BANK_NUMBER, http_cookie. Scored labels here that none of its entities maps to: BSN, CPF, GIVENNAME, IDCARDNUM, IPADDRESS, NATIONALID, NHSNUMBER, ORGANIZATION, TELEPHONENUM, USERNAME, ZIPCODE. Labels affect only the typed metrics; leaked and false-positive bytes ignore them.
+- **Tuned for this corpus:** a search over a space declared in code before any run ([`space.py`](../../../scripts/bench/compare/tuned_presidio/space.py)): the NLP-engine NER (spaCy large, `dslim/bert-base-NER` or none), extra NER recognizers Presidio ships (the multilingual Davlan model Gaze itself installs, the OpenMed PII model Presidio Research chose, GLiNER), every predefined recognizer, 21 custom pattern and deny-list recognizers for this corpus's classes, per recognizer and entity thresholds, the context enhancer and an allow list learned from validation false positives. The search scored only the validation half (3,093 documents) and evaluated 19,480 candidate configurations by coordinate descent. Two objectives: the comparison's own rule (fewest validation v3 leaked bytes, then fewest false-positive bytes) and the panels' headline (highest validation v3 character F2). The custom recognizers were written after reading validation-half gold examples; the search never received test-half text, gold or output. The committed choice was made by an earlier loader that built the whole corpus in memory and dropped the test half before the search; rerunning selection through per-half files, with the test-half file never opened, reproduces every choice and validation score. A guard test runs the current real loader with every test-half file unreadable. The NER models' training data is not fully published, so overlap with this synthetic corpus's style cannot be ruled out for them (nor for the NER model in Gaze's own setup). Both halves are synthetic and share their generators, and the split holds out document ids only, not templates or values: 922 of 1,119 (82.4 %) of the Synthetic identifiers in agentic formats test documents reuse a validation gold value (every layer is counted beside the test-half table below). Tuning on validation therefore learns those templates and values, and the test half measures fit to this corpus, not robustness to unseen phrasing or values. Gaze's rules were developed against the same corpus.
+- **Budget:** Gaze's rules received 58 rulepack commits (2026-04-24 to 2026-09-30) at the original measurement lineage `ef369b33`, made with the whole corpus visible, test half included. This budget is pinned to that lineage, not the current branch's rulepack history. The tuned Presidio search is at least as generous in iterations: 19,480 measured candidate configurations against 58 rulepack commits, on top of a hand-written recognizer for the classes Gaze commits to. It saw the validation half only during scoring, so its test-half documents are held out, by id, while Gaze's are not.
+
+Validation choice (v3, C/A/D/R summed):
+
+| Objective | Start | Leaked B | FP B | Char F2 | Chosen |
+| --- | --- | ---: | ---: | ---: | --- |
+| f2 | everything | 1,865 | 18,763 | 0.942 |  |
+| f2 | presidio-default | 1,173 | 19,761 | 0.945 | yes |
+| leak-first | everything | 3 | 44,182 | 0.906 | yes |
+| leak-first | presidio-default | 3 | 46,520 | 0.902 |  |
+
+Chosen configurations:
+
+- **f2:** NLP-engine NER dslim; extra NER davlan all, gliner off, openmed all; context default; 39 pattern recognizers on; 52 raised thresholds; allow list of 182 texts. Full configuration in [`presidio-tuned-selection.json`](presidio-tuned-selection.json).
+- **leak-first:** NLP-engine NER none; extra NER davlan off, gliner all, openmed all; context default; 75 pattern recognizers on; 141 raised thresholds; allow list of 510 texts. Full configuration in [`presidio-tuned-selection.json`](presidio-tuned-selection.json).
+
+**The split holds out document ids, not values.** The tuned-here rows were fitted on the validation half, and the test half repeats much of it. No test document is identical to a validation document, but most share a template, a generator group or exact gold values with one:
+
+| Layer | Test docs | Share a template | Share a generator group | Reuse a gold value | Gold spans repeating a value |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Kiji EN/DE holdout and A4 negatives | 1,480 | n/a | n/a | 988 of 1,480 (66.8 %) | 5,181 of 7,731 (67.0 %) |
+| Synthetic identifiers in agentic formats | 1,119 | 1,119 of 1,119 (100.0 %) | 1,119 of 1,119 (100.0 %) | 922 of 1,119 (82.4 %) | 1,166 of 1,372 (85.0 %) |
+| Synthetic benign lookalikes | 415 | 415 of 415 (100.0 %) | 337 of 415 (81.2 %) | 0 of 415 (0.0 %) | no gold |
+| Repeated PII values with decoys | 53 | 47 of 53 (88.7 %) | 0 of 53 (0.0 %) | 39 of 53 (73.6 %) | 108 of 239 (45.2 %) |
+
+The tuned F2 choice's custom pattern recognizers alone, with every NER model off, cover 19,284 of 23,210 (83.1 %) of Synthetic identifiers in agentic formats test gold bytes; the full choice leaks 2 bytes there. These counts measure how far the test half depends on the validation half, not how much of any result is memorization. They weigh most on the generated layers; Kiji EN/DE holdout and A4 negatives has no templates of that kind, and its comparison with Gaze below stands as measured. Templates and groups exist only in the generated layers (n/a above). Computed by [`overlap.py`](../../../scripts/bench/compare/tuned_presidio/overlap.py) into [`presidio-tuned-overlap.json`](presidio-tuned-overlap.json).
+
+Test half (product coverage):
+
+| Contract | Layer | Configuration | Leaked B | FP B | Char F2 | Entity F2 |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| v3 | Synthetic identifiers in agentic formats | Presidio (tuned by its authors) | 2,887 | 5,291 | 0.855 | 0.113 |
+| v3 | Synthetic identifiers in agentic formats | Presidio (tuned here, leak-first) | 4 | 1,190 | 0.990 | 0.414 |
+| v3 | Synthetic identifiers in agentic formats | Presidio (tuned here, F2) | 2 | 453 | 0.996 | 0.388 |
+| v3 | Synthetic identifiers in agentic formats | presidio-all | 10,209 | 5,468 | 0.600 | 0.196 |
+| v3 | Synthetic identifiers in agentic formats | presidio-strong | 10,654 | 4,864 | 0.585 | 0.205 |
+| v3 | Synthetic identifiers in agentic formats | presidio-strong-high-recall | 10,510 | 4,864 | 0.591 | 0.204 |
+| v3 | Kiji EN/DE holdout and A4 negatives | Presidio (tuned by its authors) | 2,426 | 41,396 | 0.859 | 0.016 |
+| v3 | Kiji EN/DE holdout and A4 negatives | Presidio (tuned here, leak-first) | 190 | 45,546 | 0.874 | 0.088 |
+| v3 | Kiji EN/DE holdout and A4 negatives | Presidio (tuned here, F2) | 1,222 | 20,727 | 0.925 | 0.397 |
+| v3 | Kiji EN/DE holdout and A4 negatives | presidio-all | 15,775 | 29,918 | 0.724 | 0.384 |
+| v3 | Kiji EN/DE holdout and A4 negatives | presidio-strong | 13,143 | 25,514 | 0.767 | 0.433 |
+| v3 | Kiji EN/DE holdout and A4 negatives | presidio-strong-high-recall | 12,931 | 26,356 | 0.768 | 0.432 |
+| v3 | Synthetic benign lookalikes | Presidio (tuned by its authors) | 0 | 3,761 | 0.000 | 0.000 |
+| v3 | Synthetic benign lookalikes | Presidio (tuned here, leak-first) | 0 | 2,874 | 0.000 | 0.000 |
+| v3 | Synthetic benign lookalikes | Presidio (tuned here, F2) | 0 | 1,596 | 0.000 | 0.000 |
+| v3 | Synthetic benign lookalikes | presidio-all | 0 | 3,724 | 0.000 | 0.000 |
+| v3 | Synthetic benign lookalikes | presidio-strong | 0 | 2,859 | 0.000 | 0.000 |
+| v3 | Synthetic benign lookalikes | presidio-strong-high-recall | 0 | 2,871 | 0.000 | 0.000 |
+| v3 | Repeated PII values with decoys | Presidio (tuned by its authors) | 115 | 497 | 0.934 | 0.215 |
+| v3 | Repeated PII values with decoys | Presidio (tuned here, leak-first) | 15 | 438 | 0.966 | 0.203 |
+| v3 | Repeated PII values with decoys | Presidio (tuned here, F2) | 82 | 108 | 0.969 | 0.322 |
+| v3 | Repeated PII values with decoys | presidio-all | 177 | 645 | 0.907 | 0.258 |
+| v3 | Repeated PII values with decoys | presidio-strong | 264 | 587 | 0.886 | 0.285 |
+| v3 | Repeated PII values with decoys | presidio-strong-high-recall | 264 | 587 | 0.886 | 0.285 |
+| v2 | Synthetic identifiers in agentic formats | Presidio (tuned by its authors) | 2,887 | 5,291 | 0.855 | 0.113 |
+| v2 | Synthetic identifiers in agentic formats | Presidio (tuned here, leak-first) | 4 | 1,190 | 0.990 | 0.414 |
+| v2 | Synthetic identifiers in agentic formats | Presidio (tuned here, F2) | 2 | 453 | 0.996 | 0.388 |
+| v2 | Synthetic identifiers in agentic formats | presidio-all | 10,209 | 5,468 | 0.600 | 0.196 |
+| v2 | Synthetic identifiers in agentic formats | presidio-strong | 10,654 | 4,864 | 0.585 | 0.205 |
+| v2 | Synthetic identifiers in agentic formats | presidio-strong-high-recall | 10,510 | 4,864 | 0.591 | 0.204 |
+| v2 | Kiji EN/DE holdout and A4 negatives | Presidio (tuned by its authors) | 2,426 | 41,396 | 0.859 | 0.016 |
+| v2 | Kiji EN/DE holdout and A4 negatives | Presidio (tuned here, leak-first) | 190 | 45,546 | 0.874 | 0.088 |
+| v2 | Kiji EN/DE holdout and A4 negatives | Presidio (tuned here, F2) | 1,222 | 20,727 | 0.925 | 0.397 |
+| v2 | Kiji EN/DE holdout and A4 negatives | presidio-all | 15,775 | 29,918 | 0.724 | 0.384 |
+| v2 | Kiji EN/DE holdout and A4 negatives | presidio-strong | 13,143 | 25,514 | 0.767 | 0.433 |
+| v2 | Kiji EN/DE holdout and A4 negatives | presidio-strong-high-recall | 12,931 | 26,356 | 0.768 | 0.432 |
+| v2 | Synthetic benign lookalikes | Presidio (tuned by its authors) | 0 | 3,761 | 0.000 | 0.000 |
+| v2 | Synthetic benign lookalikes | Presidio (tuned here, leak-first) | 0 | 2,874 | 0.000 | 0.000 |
+| v2 | Synthetic benign lookalikes | Presidio (tuned here, F2) | 0 | 1,596 | 0.000 | 0.000 |
+| v2 | Synthetic benign lookalikes | presidio-all | 0 | 3,724 | 0.000 | 0.000 |
+| v2 | Synthetic benign lookalikes | presidio-strong | 0 | 2,859 | 0.000 | 0.000 |
+| v2 | Synthetic benign lookalikes | presidio-strong-high-recall | 0 | 2,871 | 0.000 | 0.000 |
+| v2 | Repeated PII values with decoys | Presidio (tuned by its authors) | 115 | 497 | 0.934 | 0.215 |
+| v2 | Repeated PII values with decoys | Presidio (tuned here, leak-first) | 15 | 438 | 0.966 | 0.203 |
+| v2 | Repeated PII values with decoys | Presidio (tuned here, F2) | 82 | 108 | 0.969 | 0.322 |
+| v2 | Repeated PII values with decoys | presidio-all | 177 | 645 | 0.907 | 0.258 |
+| v2 | Repeated PII values with decoys | presidio-strong | 264 | 587 | 0.886 | 0.285 |
+| v2 | Repeated PII values with decoys | presidio-strong-high-recall | 264 | 587 | 0.886 | 0.285 |
+| v1 | Synthetic identifiers in agentic formats | Presidio (tuned by its authors) | 2,887 | 5,291 | 0.855 | 0.113 |
+| v1 | Synthetic identifiers in agentic formats | Presidio (tuned here, leak-first) | 4 | 1,190 | 0.990 | 0.414 |
+| v1 | Synthetic identifiers in agentic formats | Presidio (tuned here, F2) | 2 | 453 | 0.996 | 0.388 |
+| v1 | Synthetic identifiers in agentic formats | presidio-all | 10,209 | 5,468 | 0.600 | 0.196 |
+| v1 | Synthetic identifiers in agentic formats | presidio-strong | 10,654 | 4,864 | 0.585 | 0.205 |
+| v1 | Synthetic identifiers in agentic formats | presidio-strong-high-recall | 10,510 | 4,864 | 0.591 | 0.204 |
+| v1 | Kiji EN/DE holdout and A4 negatives | Presidio (tuned by its authors) | 3,443 | 41,396 | 0.854 | 0.015 |
+| v1 | Kiji EN/DE holdout and A4 negatives | Presidio (tuned here, leak-first) | 2,127 | 45,546 | 0.859 | 0.086 |
+| v1 | Kiji EN/DE holdout and A4 negatives | Presidio (tuned here, F2) | 4,254 | 20,727 | 0.894 | 0.388 |
+| v1 | Kiji EN/DE holdout and A4 negatives | presidio-all | 18,047 | 29,918 | 0.710 | 0.374 |
+| v1 | Kiji EN/DE holdout and A4 negatives | presidio-strong | 16,067 | 25,514 | 0.743 | 0.422 |
+| v1 | Kiji EN/DE holdout and A4 negatives | presidio-strong-high-recall | 15,855 | 26,356 | 0.744 | 0.421 |
+| v1 | Synthetic benign lookalikes | Presidio (tuned by its authors) | 0 | 3,761 | 0.000 | 0.000 |
+| v1 | Synthetic benign lookalikes | Presidio (tuned here, leak-first) | 0 | 2,874 | 0.000 | 0.000 |
+| v1 | Synthetic benign lookalikes | Presidio (tuned here, F2) | 0 | 1,596 | 0.000 | 0.000 |
+| v1 | Synthetic benign lookalikes | presidio-all | 0 | 3,724 | 0.000 | 0.000 |
+| v1 | Synthetic benign lookalikes | presidio-strong | 0 | 2,859 | 0.000 | 0.000 |
+| v1 | Synthetic benign lookalikes | presidio-strong-high-recall | 0 | 2,871 | 0.000 | 0.000 |
+| v1 | Repeated PII values with decoys | Presidio (tuned by its authors) | 115 | 497 | 0.934 | 0.215 |
+| v1 | Repeated PII values with decoys | Presidio (tuned here, leak-first) | 15 | 438 | 0.966 | 0.203 |
+| v1 | Repeated PII values with decoys | Presidio (tuned here, F2) | 82 | 108 | 0.969 | 0.322 |
+| v1 | Repeated PII values with decoys | presidio-all | 177 | 645 | 0.907 | 0.258 |
+| v1 | Repeated PII values with decoys | presidio-strong | 264 | 587 | 0.886 | 0.285 |
+| v1 | Repeated PII values with decoys | presidio-strong-high-recall | 264 | 587 | 0.886 | 0.285 |
+
+Against the latest Gaze release (v0.15.1) on all of Kiji EN/DE holdout and A4 negatives, the only layer that release was measured on in this corpus's form. The tuned-here rows include the validation half they were selected on, which can only flatter them. False positives are after v3's gold-gap credit.
+
+| Contract | Configuration | Leaked B | FP B | Char F2 |
+| --- | --- | ---: | ---: | ---: |
+| v3 | Gaze v0.15.1 | 13,319 | 18,488 | 0.868 |
+| v3 | Presidio (tuned by its authors) | 4,752 | 74,113 | 0.856 |
+| v3 | Presidio (tuned here, leak-first) | 193 | 81,701 | 0.876 |
+| v3 | Presidio (tuned here, F2) | 2,283 | 29,158 | 0.926 |
+| v2 | Gaze v0.15.1 | 13,319 | 30,073 | n/a |
+| v2 | Presidio (tuned by its authors) | 4,752 | 80,797 | n/a |
+| v2 | Presidio (tuned here, leak-first) | 193 | 86,590 | n/a |
+| v2 | Presidio (tuned here, F2) | 2,283 | 39,329 | n/a |
+| v1 | Gaze v0.15.1 | 19,556 | 30,073 | n/a |
+| v1 | Presidio (tuned by its authors) | 6,748 | 80,797 | n/a |
+| v1 | Presidio (tuned here, leak-first) | 4,066 | 86,590 | n/a |
+| v1 | Presidio (tuned here, F2) | 8,261 | 39,329 | n/a |
+
+Where tuned Presidio beats Gaze v0.15.1 here: Presidio (tuned by its authors) leaks fewer v3 bytes; Presidio (tuned here, leak-first) leaks fewer v3 bytes; Presidio (tuned here, leak-first) has the higher v3 character F2; Presidio (tuned here, F2) leaks fewer v3 bytes; Presidio (tuned here, F2) has the higher v3 character F2; Presidio (tuned by its authors) leaks fewer v2 bytes; Presidio (tuned here, leak-first) leaks fewer v2 bytes; Presidio (tuned here, F2) leaks fewer v2 bytes; Presidio (tuned by its authors) leaks fewer v1 bytes; Presidio (tuned here, leak-first) leaks fewer v1 bytes; Presidio (tuned here, F2) leaks fewer v1 bytes.
+
+Live check: each chosen configuration also ran live on a fixed sample (about one document in eight, every layer, both halves); Presidio (tuned here, F2): 762 documents, 0 differed on the first run, 0 on every rerun; Presidio (tuned here, leak-first): 762 documents, 1 differed on the first run, 1 on every rerun (1 with identical bytes and a different entity label, from Presidio's tie-break between equal-score results on one span).
+
+The panels' Presidio bar is **Presidio (tuned here, F2)**, the highest test-half v3 layer C character F2 of the three: Presidio (tuned here, F2) 0.925, Presidio (tuned here, leak-first) 0.874, Presidio (tuned by its authors) 0.859. The default rows above stay unchanged.
+
+Aggregate source: [`presidio-tuned.json`](presidio-tuned.json); reproduce with [`tuned_presidio/README.md`](../../../scripts/bench/compare/tuned_presidio/README.md).
