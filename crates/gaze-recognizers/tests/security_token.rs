@@ -240,6 +240,101 @@ fn supported_real_delimiter_forms_are_tokenized() {
     }
 }
 
+// ------------------------------------------------------------------ JWT after a cue word
+//
+// `Authorization: Bearer <jwt>` is how a JWT usually reaches logs, HTTP traces and tool output.
+// The cue arm starts at the cue, before the structural arm's `eyJ`, so it wins the leftmost
+// match. Its generic value has no `.`, so it used to stop after the JOSE header, and the payload
+// and signature reached the model raw (#745). The payload is the part that carries claims about a
+// person (`sub`, `email`, `name`), so this is a PII leak even though credentials themselves are
+// out of the PII contract. The cue arm now tries a full three-segment JWT before its generic
+// value.
+
+/// Asserts the clean text is `text` with exactly `credential` replaced by one credential token.
+fn assert_credential_is_one_token(text: &str, credential: &str) {
+    let start = text
+        .find(credential)
+        .expect("fixture contains the credential");
+    let (prefix, suffix) = (&text[..start], &text[start + credential.len()..]);
+    let cleaned = clean(text);
+    let token = cleaned
+        .strip_prefix(prefix)
+        .and_then(|rest| rest.strip_suffix(suffix))
+        .unwrap_or_else(|| {
+            panic!("expected {prefix:?} + <credential token> + {suffix:?}, got {cleaned:?}")
+        });
+    assert!(
+        token.starts_with('<')
+            && token.ends_with('>')
+            && token.contains(":Custom:security_token_")
+            && token[1..].find(['<', '>']) == Some(token.len() - 2),
+        "{credential:?} must be replaced by exactly one credential token, got {token:?} in {cleaned:?}"
+    );
+}
+
+const JWT: &str = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJleGFtcGxlIn0.c2lnbmF0dXJlLXNhbXBsZQ";
+
+#[test]
+fn jwt_after_bearer_is_tokenized_whole() {
+    assert_credential_is_one_token(&format!("Authorization: Bearer {JWT}"), JWT);
+}
+
+#[test]
+fn jwt_after_every_cue_form_is_tokenized_whole() {
+    for text in [
+        format!("token: {JWT}"),
+        format!("api_key={JWT}"),
+        format!("access token is {JWT}"),
+        format!("Das Sicherheitstoken lautet {JWT} und ist gültig."),
+        format!("Send Bearer {JWT} with every call."),
+    ] {
+        assert_credential_is_one_token(&text, JWT);
+    }
+}
+
+#[test]
+fn jwt_after_a_cue_leaves_sentence_punctuation_outside_the_token() {
+    assert_credential_is_one_token(&format!("Use token: {JWT}. Then retry."), JWT);
+    assert_credential_is_one_token(&format!("Bearer {JWT}, then the body."), JWT);
+}
+
+#[test]
+fn cue_anchored_generic_value_still_stops_before_a_full_stop() {
+    // The generic value admits no `.`, so a sentence that ends right after a credential keeps its
+    // period. Only a complete three-segment JWT crosses dots.
+    assert_credential_is_one_token(
+        "Use token: Rk9PQkFSLXNhbXBsZQ. Then retry.",
+        "Rk9PQkFSLXNhbXBsZQ",
+    );
+}
+
+#[test]
+fn jwt_after_bearer_restores_exactly() {
+    let pipeline = pipeline_for(&[LocaleTag::Global]);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let original = format!("Authorization: Bearer {JWT}");
+    let (clean, _manifest, _) = pipeline
+        .clean_with_safety_net_detect_context(
+            &session,
+            RawDocument::Text(original.clone()),
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+        )
+        .expect("clean");
+    let clean_text = match clean {
+        CleanDocument::Text(text) => text,
+        _ => panic!("expected text"),
+    };
+    assert!(
+        !clean_text.contains("eyJzdWIiOiJleGFtcGxlIn0"),
+        "payload leaked: {clean_text:?}"
+    );
+    let restored = pipeline
+        .restore_strict_text(&session, &clean_text)
+        .expect("restore");
+    assert_eq!(restored, original, "manifest-first restore must round-trip");
+}
+
 // ---------------------------------------------------------- identifier-splitting hard negatives
 
 #[test]
