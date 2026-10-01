@@ -68,6 +68,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **A JWT after a credential cue is tokenized whole in the opt-in `secrets`
+  pack (#745).** With `secrets` loaded, every release up to and including
+  v0.15.1 tokenized only the JOSE header of a JWT that follows a cue such as
+  `Bearer`, `token:` or `api_key=`, and sent its payload and signature to the
+  model raw. The payload carries claims about a person (`sub`, `email`,
+  `name`). The cue arm of `security_token.anchored` now takes a complete
+  three-segment JWT before its generic value, which still stops before a full
+  stop. The gate policy does not load `secrets` and `SECURITYTOKEN` is outside
+  the PII contract, so the gate scorecards are identical under v2 and v1; with
+  `secrets` added to the setup policy, layers C, A, D and R are unchanged too,
+  with no new false-positive byte.
+
 - **Labelled tax, driver-licence, and identity-card values now close whole-field
   leaks.** Three safe-default `core` recognizers cover class-specific fields
   across English, German, French, Dutch, and Portuguese. A shared scanner
