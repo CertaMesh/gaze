@@ -1199,8 +1199,18 @@ model:
   alone is gold. Layer D adds the same wording and digit shapes where the text
   says they are not personal. See [Cued ages, birth dates, short cards and
   postcodes](#cued-ages-birth-dates-short-cards-and-postcodes) below. The v7
-  documents remain byte identical within each partition; the generator and
-  both partition hashes are pinned at v8.
+  documents remain byte identical within each partition.
+- **URLs in structured text (generator v9):** layer A adds a URL that points
+  at a person (a profile page with the person's name in its path, or a
+  personal site on their surname) where a structural delimiter ends it: a
+  compact JSON value with sibling keys after it, JSON with `\/`-escaped
+  slashes, a JSON-escaped quote, a double- or single-quoted HTML attribute
+  with link text after it and HTML element text, plus a Markdown link and a
+  path with an apostrophe as controls. The whole URL is gold. Layer D adds the
+  same structures with no scheme and no `www` prefix anywhere. See [URLs in
+  structured text](#urls-in-structured-text) below. The v8 documents remain
+  byte identical within each partition; the generator and both partition
+  hashes are pinned at v9.
 - **Checksum code:** written from the published standards, not from Gaze's
   validators. Standard test vectors pin it, and the validator probe
   cross-checks it on every run.
@@ -1427,7 +1437,7 @@ twins, mostly through the IPv4 rule on dotted runs. Under the full
 put 274 false-positive bytes on the twins.
 
 The past-release rows in [Measured adjacency layer history](#measured-adjacency-layer-history)
-are measured on generator v8, so they include these cells.
+are measured on generator v9, so they include these cells.
 
 #### Cued ages, birth dates, short cards and postcodes
 
@@ -1502,7 +1512,68 @@ or 12-digit compact card and short postcode leaked; the Luhn-valid 13- to
 15-digit cards were already protected by `card.structural`.
 
 The past-release rows in [Measured adjacency layer history](#measured-adjacency-layer-history)
-are measured on generator v8, so they include these cells.
+are measured on generator v9, so they include these cells.
+
+#### URLs in structured text
+
+`url.anchored` matches from an `http` or `https` scheme or a `www` host
+prefix to the next whitespace and then gives back trailing punctuation. In
+prose that ends a URL where it should. In the text agents send, a URL usually
+ends at a quote or a bracket instead: `{"website":"URL","status":"open"}`,
+`<a href="URL">Profile</a>`, `<p>URL</p>`. The match then runs past the
+closing quote and covers the keys, values or link text after it (#743). JSON
+may also write every `/` as `\/`, and PHP's `json_encode()` does by default.
+The scheme anchor does not accept the escaped separator (`:\/\/`), so such a
+URL without a `www` prefix is not detected at all, and with one the escaped
+scheme stays outside the token (#744). Layer A (`UrlCell` in `agentic_layers.py`)
+scores the whole URL, scheme included, under `URL`. Every value points at a
+person: a profile page with the person's name in its path, or a personal site
+on their surname, on a reserved `.invalid` host.
+
+| Surface | Layer A cells (gold, gated) | Layer D twins (no URL anchor anywhere) |
+| --- | --- | --- |
+| Tool JSON | a compact value with sibling keys after it, with an `https` scheme or a `www` prefix; the same with `\/`-escaped slashes, with and without the `www` prefix; a URL between JSON-escaped quotes inside a string (`\"URL\"`) | escaped routes (`\/internal\/jobs\/7417`), MIME types (`application\/json`) and service hosts with a path, escaped and plain |
+| HTML | a double- or single-quoted `href` with link text after it; element text before a closing tag | a relative `href` (`manual/setup.html`) |
+| Markdown | a link `[text](url)` (control) | a relative link |
+| Prose | a path with an apostrophe, `/wiki/Name_O'Surname` (control) | a service host with a path |
+
+The two controls are shapes the shipped rule already covers exactly: a fix
+that stopped the match at `'` would leak the rest of the apostrophe path, and
+one that kept a Markdown link's closing `)` would run over it. The generator fails
+closed unless every layer A value fully matches its shape
+(`URL_SHAPE_PATTERNS`: a scheme or `www` prefix, a `.invalid` host and a path,
+plain or with every slash escaped), is the only URL anchor in its document and
+reads as a whole URL in place under `url_reading` (a delimiter directly before
+and directly after it), and unless no layer D document carries a scheme or a
+`www` prefix anywhere. Each of the two shapes has an over-broad rule
+(`URL_BROAD_PATTERNS`: any slash-joined or escaped path with no anchor) and a
+narrow one (`URL_NARROW_PATTERNS`: a dotted host with a letter top-level label
+followed by a path, plain or escaped). Every A value of a shape matches both,
+every twin matches its broad rule, and each narrow rule reaches the
+service-host twins; tests check this. A bare dotted name cannot serve as the
+broad rule: Gaze refuses a custom pattern that matches one of its own token
+shapes, such as `email1.deadbeef@gaze-fake.invalid`. The patterns are
+committed as
+[`mutant-broad-url-shapes.toml`](../../../scripts/bench/fixtures/agentic/mutant-broad-url-shapes.toml)
+and
+[`mutant-narrow-url-shapes.toml`](../../../scripts/bench/fixtures/agentic/mutant-narrow-url-shapes.toml).
+Each A cell has 6 documents per partition and each twin 4: 10 A cells (+60
+documents, +2.1 %) and 7 D twins (+28 documents, +2.5 %).
+
+Appended to the setup policy without its NER and Nym sections (`ceef71ef`),
+on generator v9 at `a3be0628`, the broad mutant lowered the new cells' layer A
+leak from 384 to 72 bytes and raised their twins' layer D false positives from
+0 to 636 bytes; the narrow mutant lowered the leak to 90 and raised the
+twins' false positives to 362 bytes, all on the service hosts. Rules only
+(`rule-floor-extended`) and with the setup policy's rules alike, main leaked
+384 of the 3,200 new gold bytes, all in the escaped cells: every byte of the
+escaped URLs without the `www` prefix (354) and the escaped scheme in front
+of it (30). It also put 516 false-positive bytes on the new layer A documents
+themselves (the closing quotes, keys, values and link text the match ran
+over) and none on the twins. Under the full `gaze setup` policy (NER and Nym,
+`fa3adffe`), main leaked 348 of those 3,200 bytes (NER and Nym cover 36
+bytes of the escaped URLs), put the same 516 false-positive bytes on the new
+A documents and none on the twins.
 
 **Held-out protocol.** Templates, machine keys, name pools, email domains,
 phone prefixes, the layer R name-word and decoy pools, and seeds are split
@@ -1686,10 +1757,12 @@ Both options are off by default.
 
 ### Measured adjacency layer history
 
-The release rows below use generator v8's test partition and the setup policy,
-so they include the v5 to v8 cells (labelled lookalikes, address blocks, phone
-shapes, cued ages, birth dates, short cards and postcodes). The table is
-rendered from the [v8 ledger](agentic-adjacency-v8-history.json). The earlier
+The release rows below use generator v9's test partition and the setup policy,
+so they include the v5 to v9 cells (labelled lookalikes, address blocks, phone
+shapes, cued ages, birth dates, short cards and postcodes, URLs in structured
+text). The table is rendered from the
+[v9 ledger](agentic-adjacency-v9-history.json). The earlier
+[v8 ledger](agentic-adjacency-v8-history.json) on corpus `ddd234551bca…`, the
 [v4 ledger](agentic-adjacency-v4-history.json) on corpus `387a35ac…` and the
 older `agentic_layers` aggregates embedded in
 [`release-history.json`](release-history.json) (corpus `c751da0b…`) are
@@ -1698,32 +1771,44 @@ retained as historical data and do not feed this table.
 Record the past-release `agentic_layers.py measure` outputs with
 `render_agentic_adjacency_doc.py --record`, then render this table from its
 committed ledger. Do not edit the rows by hand. The renderer pins the
-generator version, so a later generator leaves these rows bound to v8 until
+generator version, so a later generator leaves these rows bound to v9 until
 they are re-measured.
 
 <!-- BEGIN GENERATED: agentic-adjacency -->
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.15.1` `policy-file` | 20,400 / 56,510 | 1,526 | 4,662 | 374 / 5,142 | 403 |
-| `v0.15.0` `policy-file` | 20,573 / 56,510 | 1,526 | 4,662 | 374 / 5,142 | 403 |
-| `v0.14.0` `full-stack-kiji-resolve` | 29,695 / 56,510 | 5,308 | 3,893 | 525 / 5,142 | 190 |
-| `v0.14.0` `pass2-ner` | 30,320 / 56,510 | 988 | 3,229 | 550 / 5,142 | 140 |
+| `v0.15.1` `policy-file` | 20,770 / 59,710 | 2,017 | 4,660 | 379 / 5,142 | 402 |
+| `v0.15.0` `policy-file` | 20,943 / 59,710 | 2,017 | 4,660 | 379 / 5,142 | 402 |
+| `v0.14.0` `full-stack-kiji-resolve` | 30,089 / 59,710 | 5,758 | 3,888 | 530 / 5,142 | 189 |
+| `v0.14.0` `pass2-ner` | 30,711 / 59,710 | 1,479 | 3,227 | 555 / 5,142 | 139 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v8-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v8, test corpus `ddd234551bca…`, setup policy `f909a23aecac…`.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v9-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v9, test corpus `a73c992ec232…`, setup policy `6525f0002a6d…`.
 
 <!-- END GENERATED: agentic-adjacency -->
 
 **How these rows were measured.** Each release's `clean_for_bench` was
 rebuilt at its tag with Rust 1.96.0 (`--release -p gaze-recognizers --example
 clean_for_bench`, feature `safety-net-nym` for v0.15.x and `safety-net-kiji`
-for v0.14.0). The v0.15.0 binary is byte-identical to the one in the v4 ledger;
-the v0.15.1 and v0.14.0 rebuilds come from the same source revisions but differ
-in binary SHA-256, and the v8 ledger records the new digests. The v0.14.0
+for v0.14.0) on an Apple M1 Max (10 cores, 32 GB, macOS 26.5), a different
+machine from the v8 ledger's, so every binary SHA-256 differs from it; the v9
+ledger records the new digests. The policy is the one v0.15.1's
+`gaze setup --non-interactive` writes on that machine (`6525f000…`). It
+differs from the release policy `f909a23a…` only in the home directory of its
+two model paths, which is why the policy digest above changed. The v0.14.0
 `full-stack-kiji-resolve` arm also needs `GAZE_KIJI_DISTILBERT_MODEL_DIR`
 exported (v0.14.0's own harness set it; today's harness does not, and the arm
-fails closed without it). Layer R did not change between v4 and v8, and every
-row reproduces its v4 layer R numbers exactly.
+fails closed without it); v0.14.0's own `gaze setup` installed that bundle.
+Without the URL cells, every row reproduces its v8 ledger numbers to within a
+few bytes, and all four rows move the same way: layer A leaks 20 to 23 bytes
+more and has 25 fewer false-positive bytes (66 fewer in the
+`full-stack-kiji-resolve` arm), layer D has 2 to 5 fewer false-positive bytes,
+and layer R leaks 5 bytes more with 1 fewer false-positive byte. Two runs of
+the v0.15.1 row on the measuring machine are byte-identical, so the offset
+comes with the machine (most likely the NER and Nym runtimes), not from
+run-to-run noise. The URL cells add 3,200 gold bytes to layer A: the v0.15.x
+rows leak 348 of them and the v0.14.0 rows 371, and every row puts 516
+false-positive bytes on them.
 
 ### Hardware spec template
 

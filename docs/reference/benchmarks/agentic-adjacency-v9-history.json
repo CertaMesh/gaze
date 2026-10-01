@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "generator_version": 9,
+  "corpus_sha256": "a73c992ec2327d17abe42c56b728a12425fc6679219b35b65355eb690ed89759",
+  "contract_sha256": "f4980e6b33f00b6d39591fdcf44b4a2d919647e700299966d8547047a5b5402c",
+  "policy_sha256": "6525f0002a6d5bf5f6d9fde6ca35f439f88cf9e6ec90af6d7f0380f805d2fec7",
+  "rows": [
+    {
+      "version": "v0.15.1",
+      "arm": "policy-file",
+      "binary_revision": "4927f7c0a862ece2cdcd8c00df34538a510d008e",
+      "binary_sha256": "133559e2553846ce4ba1a30cda88705d22f9296cc06954848f91ef1d811a0458",
+      "scorecard_sha256": "0b66a613401792465da0ae341dd02aa1969c33249951011738d61791aad7f500",
+      "manifest_actions": [
+        "redact",
+        "tokenize"
+      ],
+      "split_composite_source_ids": false,
+      "layers": {
+        "A": {
+          "gold": 59710,
+          "leaked": 20770,
+          "false_positive": 2017
+        },
+        "D": {
+          "gold": 0,
+          "leaked": 0,
+          "false_positive": 4660
+        },
+        "R": {
+          "gold": 5142,
+          "leaked": 379,
+          "false_positive": 402
+        }
+      }
+    },
+    {
+      "version": "v0.15.0",
+      "arm": "policy-file",
+      "binary_revision": "5127788b089f0f6f4e3b8bcf176503953744be01",
+      "binary_sha256": "a1d17f762471f53a72f33399bd68c7d0ce28b1c97ab01957e36c6175108d9421",
+      "scorecard_sha256": "245377d76d86c5f844c1700aaafabfebe7ee710bb72044f3881250e06fdf3400",
+      "manifest_actions": [
+        "redact",
+        "tokenize"
+      ],
+      "split_composite_source_ids": false,
+      "layers": {
+        "A": {
+          "gold": 59710,
+          "leaked": 20943,
+          "false_positive": 2017
+        },
+        "D": {
+          "gold": 0,
+          "leaked": 0,
+          "false_positive": 4660
+        },
+        "R": {
+          "gold": 5142,
+          "leaked": 379,
+          "false_positive": 402
+        }
+      }
+    },
+    {
+      "version": "v0.14.0",
+      "arm": "full-stack-kiji-resolve",
+      "binary_revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
+      "binary_sha256": "34b8be5219f83400003676f538b052799504e47909a37e2acf297c27946fec10",
+      "scorecard_sha256": "68a1fa0d65d97b5fa933c9982a74245e8d2ecc9bf4be271e3e773fe6c4c1800e",
+      "manifest_actions": [
+        "tokenize"
+      ],
+      "split_composite_source_ids": true,
+      "layers": {
+        "A": {
+          "gold": 59710,
+          "leaked": 30089,
+          "false_positive": 5758
+        },
+        "D": {
+          "gold": 0,
+          "leaked": 0,
+          "false_positive": 3888
+        },
+        "R": {
+          "gold": 5142,
+          "leaked": 530,
+          "false_positive": 189
+        }
+      }
+    },
+    {
+      "version": "v0.14.0",
+      "arm": "pass2-ner",
+      "binary_revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
+      "binary_sha256": "34b8be5219f83400003676f538b052799504e47909a37e2acf297c27946fec10",
+      "scorecard_sha256": "68a1fa0d65d97b5fa933c9982a74245e8d2ecc9bf4be271e3e773fe6c4c1800e",
+      "manifest_actions": [
+        "tokenize"
+      ],
+      "split_composite_source_ids": true,
+      "layers": {
+        "A": {
+          "gold": 59710,
+          "leaked": 30711,
+          "false_positive": 1479
+        },
+        "D": {
+          "gold": 0,
+          "leaked": 0,
+          "false_positive": 3227
+        },
+        "R": {
+          "gold": 5142,
+          "leaked": 555,
+          "false_positive": 139
+        }
+      }
+    }
+  ]
+}
