@@ -10,6 +10,7 @@
     "gaze_rulepack_commits": 58,
     "last": "2026-09-30",
     "path": "crates/gaze-recognizers/embedded",
+    "source_revision": "ef369b33525abaeb1c0d487edda43ebf4c9761af",
     "validation_documents": {
       "A": 1191,
       "C": 1430,
@@ -27,12 +28,12 @@
     }
   },
   "code_sha256": {
-    "corpus.py": "7ed8a43f751253be6d779dd13caa3f42a97f6aaaf42ad5e414d195df57d295f9",
+    "corpus.py": "7bc7940ac49ac0527ef61c4cc2d4095e001d5a6c24af561d8483d079ef4eb410",
     "pool.py": "36dac0fbf65aceb875e5c726c4a7516657e9d135733023162beb81dd7acdc3ea",
     "produce.py": "1c022f82f0e025c68df6c5e9c6949facaf3a49e817a082491b2d9784d097ed30",
     "search.py": "1ea29bfc74cb7afd723321ecbbe2563b085cdb3fcc2d4a50413bade8190fc10f",
     "space.py": "2864e0b270b903aa8a83a49d18fc98e13399c1247c5ed97ca83db1693ecc5280",
-    "tune.py": "b101d2006d2d6242e07eba7a29efa63c6d52b6d638774464eb4bac1e2b0adb1c"
+    "tune.py": "cb793ab0e4381b98ce4b79629361f75b4c913ad01031fa92ecf7e6517806d8a7"
   },
   "common_intersection_labels": [
     "CREDITCARDNUMBER",
@@ -112,9 +113,9 @@
     "packs": []
   },
   "description": "Presidio tuned by its authors for their corpus, and Presidio tuned for this corpus on its validation half",
-  "generated_at": "2026-09-30T16:55:24.572278+00:00",
+  "generated_at": "2026-10-01T08:31:09.791268+00:00",
   "harness_dirty": false,
-  "harness_revision": "ef369b33525abaeb1c0d487edda43ebf4c9761af",
+  "harness_revision": "a7dd31a9651c1982cecaecfd68bda34d835b9b25",
   "mapping": {
     "ABA_ROUTING_NUMBER": [],
     "ACCOUNT_NUMBER": [
@@ -832,7 +833,7 @@
         "persistent": [],
         "persistent_differing_documents": 0,
         "sample": "second SHA-256 byte of the document id < 32",
-        "seconds": 446.2
+        "seconds": 170.1
       },
       "objective": "f2",
       "objective_rule": "highest validation v3 character-level F2 (micro over C/A/D/R), then fewest leaked bytes"
@@ -1635,7 +1636,7 @@
         ],
         "persistent_differing_documents": 1,
         "sample": "second SHA-256 byte of the document id < 32",
-        "seconds": 1902.2
+        "seconds": 876.2
       },
       "objective": "leak-first",
       "objective_rule": "fewest validation v3 leaked bytes, then fewest validation false-positive bytes"
