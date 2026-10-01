@@ -538,6 +538,28 @@ fn single_quoted_html_attribute_url_keeps_the_link_text() {
 }
 
 #[test]
+fn single_quoted_self_closing_tag_url_keeps_the_tag_close() {
+    // `'` is legal inside a path, so only the character after it tells a path apostrophe from
+    // a closing attribute quote. `'/>` and `'>` close the attribute.
+    assert_url_is_one_token(
+        "<link rel='canonical' href='https://portal.example.invalid/a'/>",
+        "https://portal.example.invalid/a",
+    );
+    assert_url_is_one_token(
+        "<link href='https://portal.example.invalid/'/>",
+        "https://portal.example.invalid/",
+    );
+}
+
+#[test]
+fn apostrophe_before_a_path_segment_is_part_of_the_url() {
+    assert_url_is_one_token(
+        "Path https://portal.example.invalid/it's/fine ok",
+        "https://portal.example.invalid/it's/fine",
+    );
+}
+
+#[test]
 fn url_as_html_element_text_keeps_the_closing_tag() {
     assert_url_is_one_token(
         "<p>https://portal.example.invalid/a</p>",
