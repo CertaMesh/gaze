@@ -3254,9 +3254,10 @@ def check_cue_cells(records: Sequence[Record]) -> None:
 # compact JSON value with sibling keys after it, JSON whose slashes are
 # escaped as `\/` (PHP's `json_encode()` default), a JSON-escaped quote
 # (`\"`), a double- or single-quoted HTML attribute with link text after it,
-# and element text before a closing tag. A Markdown link and a path with an
-# apostrophe (`/wiki/Name_O'Brien`) are controls the shipped rule already
-# covers exactly. The whole URL is gold, scheme included. Layer D writes the
+# a single-quoted attribute of a self-closing tag (`href='...'/>`), and element
+# text before a closing tag. A Markdown link and a path with a mid-path
+# apostrophe followed by a letter (`/wiki/Name_O'Brien`) are controls the
+# shipped rule already covers exactly. The whole URL is gold, scheme included. Layer D writes the
 # same structures with no URL anchor in them: escaped routes and MIME types,
 # service hosts with a path, and relative links. A rule that drops the scheme
 # or `www.` anchor pays there.
@@ -3451,6 +3452,10 @@ URL_CELLS = (
               "<a href='{V}'>Website</a> is new",
               "<p>Visit <a class='ext' href='{V}'>her site</a></p>",
               lambda rng, partition, index: _site_url(rng, partition, index, False)),
+    _url_cell("url_html_self_closing", U_.PLAIN, "html", "en", "US",
+              "<link rel='me' href='{V}'/>",
+              "<head><link rel='author' href='{V}'/></head>",
+              lambda rng, partition, index: _profile_url(rng, partition, False)),
     _url_cell("url_html_text", U_.PLAIN, "html", "en", "US",
               "<p>{V}</p>",
               "<li>Profile: {V}</li>",

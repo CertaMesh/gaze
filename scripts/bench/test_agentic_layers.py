@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "1ead981af1eae6cd382de5621ba25565418a9f67ed1d67f99cd17f4d599b6697",
-    "test": "a73c992ec2327d17abe42c56b728a12425fc6679219b35b65355eb690ed89759",
+    "dev": "6d1d150332a5a36e0b1225fc5af95746eddae46377ca0b1aad80eb44ea8d21d8",
+    "test": "8fc8021fb70e28cdaa2c581c0ca9f6701f95c85519231709052233afa8bc0054",
 }
 # v8: everything before the URL cells.
 V8_CORPUS_SHA256 = {
@@ -1382,6 +1382,23 @@ class UrlCellTests(unittest.TestCase):
                     # The plain-anchor rule reaches every cell but the escaped
                     # scheme without `www.`.
                     self.assertIsNotNone(rule.search(record.text), record.uid)
+
+    def test_self_closing_cell_ends_right_before_the_closing_quote(self) -> None:
+        # `href='URL'/>`: the `'` is followed by `/`, which a URL may contain,
+        # so only the quote itself can end the match.
+        for records in self.cells.values():
+            cells = [r for r in records if r.family == "url_html_self_closing"]
+            self.assertEqual(len(cells), agentic.DOCS_PER_URL_CELL["A"])
+            for record in cells:
+                end = agentic._char_span(record.text, record.gold[0])[1]
+                self.assertTrue(record.text[end:].startswith("'/>"), record.uid)
+
+    def test_apostrophe_control_has_a_letter_after_a_mid_path_apostrophe(self) -> None:
+        for records in self.cells.values():
+            values = [r.gold[0].value for r in records if r.family == "url_prose_apostrophe"]
+            self.assertEqual(len(values), agentic.DOCS_PER_URL_CELL["A"])
+            for value in values:
+                self.assertRegex(value, r"/[^/]*'[A-Za-z][^/]*$")
 
     def test_url_reading_examples(self) -> None:
         def reads(text, value):
