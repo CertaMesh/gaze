@@ -484,7 +484,10 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
         "learns those templates and values, and the test half measures fit to this corpus, not robustness "
         "to unseen phrasing or values. Gaze's rules were developed against the same corpus.",
         f"- **Budget:** Gaze's rules received {budget['gaze_rulepack_commits']} rulepack commits "
-        f"({budget['first']} to {budget['last']}), made with the whole corpus visible, test half included. "
+        f"({budget['first']} to {budget['last']}) at the original measurement lineage "
+        f"`{budget.get('source_revision', tuned['harness_revision'])[:8]}`, made with the whole corpus "
+        "visible, test half included. This budget is pinned to that lineage, not the current branch's "
+        "rulepack history. "
         "The tuned Presidio search is at least as generous in iterations: "
         f"{budget['candidates_evaluated']:,} measured candidate configurations against "
         f"{budget['gaze_rulepack_commits']} rulepack commits, on top of a hand-written recognizer for the "

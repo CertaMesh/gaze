@@ -11,6 +11,7 @@ export PYTHONHASHSEED=0 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARAL
 : "${TUNED_VENDOR_PYTHON:?set TUNED_VENDOR_PYTHON to the ../theirbench/requirements-theirbench.lock Python}"
 : "${TUNED_OUT:?set TUNED_OUT to a directory outside the repository}"
 : "${TUNED_PRESIDIO_RESEARCH:?set TUNED_PRESIDIO_RESEARCH to the presidio-research checkout}"
+: "${TUNED_BUDGET_SOURCE_REVISION:?set TUNED_BUDGET_SOURCE_REVISION to the full measurement-budget commit SHA}"
 : "${GAZE_COMPARE_EN_MODEL:?}" "${GAZE_COMPARE_DE_MODEL:?}" "${GAZE_COMPARE_NL_MODEL:?}"
 : "${GAZE_COMPARE_FR_MODEL:?}" "${GAZE_COMPARE_PT_MODEL:?}"
 : "${GAZE_COMPARE_TRANSFORMER_MODEL:?}" "${GAZE_COMPARE_GLINER_MODEL:?}" "${GAZE_COMPARE_GLINER_TOKENIZER:?}"
@@ -30,7 +31,8 @@ done
 "$TUNED_COMPARE_PYTHON" "$here/tune.py" split --dataset "$dataset" --halves "$TUNED_OUT/halves"
 "$TUNED_COMPARE_PYTHON" "$here/tune.py" select --halves "$TUNED_OUT/halves" --pool "$TUNED_OUT/pool"
 "$TUNED_COMPARE_PYTHON" "$here/tune.py" measure --dataset "$dataset" --pool "$TUNED_OUT/pool" \
-    --authors "$TUNED_OUT/authors" "${spacy[@]}" "${models[@]}"
+    --authors "$TUNED_OUT/authors" --budget-source-revision "$TUNED_BUDGET_SOURCE_REVISION" \
+    "${spacy[@]}" "${models[@]}"
 python3 scripts/bench/compare/render.py docs/reference/benchmarks/comparison.json \
     --page docs/reference/benchmarks/competitors.md
 python3 scripts/bench/render_benchmark_doc.py

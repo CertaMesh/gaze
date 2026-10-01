@@ -275,6 +275,7 @@ def produce_splits() -> tuple[str, str]:
 
 def measure(args: argparse.Namespace) -> None:
     require_hash_seed()
+    measured_budget = budget(args.budget_source_revision)
     state = git_state()  # before this command writes anything into the tree
     comparison = corpus.read_comparison()
     selection = json.loads(SELECTION.read_text(encoding="utf-8"))
@@ -351,7 +352,7 @@ def measure(args: argparse.Namespace) -> None:
         "rows": report_rows,
         "provenance": provenance,
         "chart": chart_choice(report_rows),
-        "budget": {**budget(), "candidates_evaluated": selection["candidates_evaluated"],
+        "budget": {**measured_budget, "candidates_evaluated": selection["candidates_evaluated"],
                    "validation_documents": selection["validation_documents"]},
         "code_sha256": code_digests(),
         "compare_sha256": sha256(Path(compare.__file__)),
@@ -384,14 +385,26 @@ def authors_coverage(mapping: dict[str, tuple[str, ...]], gold_labels: set[str])
     }
 
 
-def budget() -> dict[str, object]:
-    """Effort Gaze's rules received, in the terms the repository can count."""
-    log = subprocess.check_output(
-        ["git", "log", "--no-merges", "--format=%h %ad", "--date=short", "--",
-         "crates/gaze-recognizers/embedded"], cwd=REPO, text=True).split("\n")
+def budget(source_revision: str) -> dict[str, object]:
+    """Count rulepack effort at an explicit commit, independent of later history."""
+    if not isinstance(source_revision, str) or len(source_revision) != 40 or any(
+            char not in "0123456789abcdef" for char in source_revision):
+        raise ValueError("budget source revision must be a full lowercase commit SHA")
+    try:
+        resolved = subprocess.check_output(
+            ["git", "rev-parse", "--verify", "--end-of-options", f"{source_revision}^{{commit}}"],
+            cwd=REPO, text=True, stderr=subprocess.PIPE).strip()
+        log = subprocess.check_output(
+            ["git", "log", resolved, "--no-merges", "--format=%h %ad", "--date=short", "--",
+             "crates/gaze-recognizers/embedded"], cwd=REPO, text=True).splitlines()
+    except subprocess.CalledProcessError as exc:
+        raise ValueError("budget source revision must resolve to a committed lineage") from exc
     commits = [line for line in log if line.strip()]
+    if not commits:
+        raise ValueError("budget source revision has no rulepack history")
     return {"gaze_rulepack_commits": len(commits), "first": commits[-1].split()[1],
-            "last": commits[0].split()[1], "path": "crates/gaze-recognizers/embedded"}
+            "last": commits[0].split()[1], "path": "crates/gaze-recognizers/embedded",
+            "source_revision": resolved}
 
 
 def chart_choice(rows: dict) -> dict[str, object]:
@@ -420,6 +433,8 @@ def main() -> int:
     for command in (select_cmd, measure_cmd):
         command.add_argument("--pool", type=Path, required=True, help="produce.py pool output directory")
     measure_cmd.add_argument("--authors", type=Path, required=True, help="produce.py authors output directory")
+    measure_cmd.add_argument("--budget-source-revision", required=True,
+                             help="full commit SHA for the measurement's rulepack budget history")
     for language in space.LANGUAGES:
         measure_cmd.add_argument(f"--{language}-model", type=Path, required=True)
     for name in ("dslim", "davlan", "openmed", "gliner"):

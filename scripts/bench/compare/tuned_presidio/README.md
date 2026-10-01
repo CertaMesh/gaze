@@ -58,6 +58,13 @@ layer C character F2; the defaults stay in the detail tables.
   Because a free search can satisfy that rule by redacting nearly everything,
   `f2` (highest validation v3 character F2, the panels' headline metric) is
   searched too. Both choices are published.
+- **Measurement budget lineage.** `tune.py measure --budget-source-revision`
+  requires a full committed SHA and counts rulepack commits, dates and path at
+  that revision, recording `budget.source_revision`. This is the original
+  measurement's effort budget, not the current branch's rulepack history.
+  Later rulepack commits cannot alter a refresh of that budget; an explicitly
+  chosen new lineage counts them. Missing, invalid or empty rulepack lineage
+  fails before corpus loading or model execution.
 
 ## The search
 
@@ -84,6 +91,9 @@ the Davlan and OpenMed snapshots are downloaded with `huggingface_hub.snapshot_d
 at those revisions, then their `.cache` directories removed.
 
 ```sh
+export TUNED_BUDGET_SOURCE_REVISION="$(git show \
+  e2f6a68474fbfe7cbe97f2f9844ef50e99e69c12:docs/reference/benchmarks/presidio-tuned.json \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["harness_revision"])')"
 export TUNED_COMPARE_PYTHON=... TUNED_VENDOR_PYTHON=... TUNED_OUT=/outside/the/repo \
   TUNED_PRESIDIO_RESEARCH=... TUNED_DAVLAN=... TUNED_OPENMED=... \
   GAZE_COMPARE_EN_MODEL=... GAZE_COMPARE_DE_MODEL=... GAZE_COMPARE_NL_MODEL=... \
@@ -91,6 +101,12 @@ export TUNED_COMPARE_PYTHON=... TUNED_VENDOR_PYTHON=... TUNED_OUT=/outside/the/r
   GAZE_COMPARE_GLINER_MODEL=... GAZE_COMPARE_GLINER_TOKENIZER=...
 scripts/bench/compare/tuned_presidio/run-tuned.sh
 ```
+
+The immutable committed report above resolves the original budget lineage to
+`ef369b33525abaeb1c0d487edda43ebf4c9761af`. Do not derive it from a working report
+that a refresh has overwritten. The budget is recomputed from this revision,
+not copied as a fixed count. Source digests and `harness_revision` still record
+the code that actually executes each fresh measurement.
 
 The recordings and live runs take a few CPU hours (GLiNER dominates: Presidio
 hands it every other entity name in the registry as an extra label). Raw

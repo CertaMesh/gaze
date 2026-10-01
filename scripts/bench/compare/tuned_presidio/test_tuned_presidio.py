@@ -6,6 +6,8 @@ import argparse
 import contextlib
 import hashlib
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -270,6 +272,63 @@ class ReportTest(unittest.TestCase):
         measured["v2"]["A"]["leaked_bytes"] = 6
         result = tune.anchor({"contracts": measured}, {"tools": {"presidio-all": {"contracts": committed}}})
         self.assertEqual(result["mismatches"], ["v2/A/leaked_bytes: 6 != 5"])
+
+
+class BudgetLineageTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.repo = Path(self.tmp.name)
+        self.git("init", "-q")
+        self.patch = mock.patch.object(tune, "REPO", self.repo)
+        self.patch.start()
+        self.addCleanup(self.patch.stop)
+
+    def git(self, *args: str, date: str | None = None) -> str:
+        env = {**os.environ, "GIT_AUTHOR_NAME": "Fixture", "GIT_COMMITTER_NAME": "Fixture",
+               "GIT_AUTHOR_EMAIL": "fixture@example.invalid", "GIT_COMMITTER_EMAIL": "fixture@example.invalid"}
+        if date:
+            env.update(GIT_AUTHOR_DATE=date, GIT_COMMITTER_DATE=date)
+        return subprocess.check_output(
+            ["git", "-c", "commit.gpgsign=false", *args], cwd=self.repo, env=env, text=True).strip()
+
+    def commit(self, date: str, rule: str | None = None) -> str:
+        if rule is not None:
+            target = self.repo / "crates/gaze-recognizers/embedded/locale-en.toml"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(rule, encoding="utf-8")
+            self.git("add", "crates/gaze-recognizers/embedded/locale-en.toml")
+        self.git("commit", "-q", "--allow-empty", "-m", "Fixture history", date=date)
+        return self.git("rev-parse", "HEAD")
+
+    def test_pinned_budget_survives_later_rulepack_history_and_new_lineage_counts_it(self) -> None:
+        original = self.commit("2020-01-01T12:00:00Z", "first")
+        pinned = tune.budget(original)
+        later = self.commit("2020-02-01T12:00:00Z", "later unrelated rule")
+        self.assertEqual(tune.budget(original), pinned)
+        self.assertEqual(pinned, {"gaze_rulepack_commits": 1, "first": "2020-01-01", "last": "2020-01-01",
+                                  "path": "crates/gaze-recognizers/embedded", "source_revision": original})
+        self.assertEqual(tune.budget(later), {**pinned, "gaze_rulepack_commits": 2,
+                                            "last": "2020-02-01", "source_revision": later})
+
+    def test_missing_invalid_and_non_commit_lineages_fail(self) -> None:
+        original = self.commit("2020-01-01T12:00:00Z", "first")
+        blob = self.git("rev-parse", "HEAD:crates/gaze-recognizers/embedded/locale-en.toml")
+        for revision in (None, "", "HEAD", original[:8], "0" * 40, blob):
+            with self.subTest(revision=revision), self.assertRaises(ValueError):
+                tune.budget(revision)
+
+    def test_committed_lineage_without_rulepack_history_fails(self) -> None:
+        empty = self.commit("2020-01-01T12:00:00Z")
+        with self.assertRaisesRegex(ValueError, "no rulepack history"):
+            tune.budget(empty)
+
+    def test_measure_rejects_invalid_lineage_before_reading_corpus_or_models(self) -> None:
+        with mock.patch.dict(os.environ, {"PYTHONHASHSEED": "0"}), \
+                mock.patch.object(corpus, "read_comparison") as read, \
+                self.assertRaises(ValueError):
+            tune.measure(argparse.Namespace(budget_source_revision="HEAD"))
+        read.assert_not_called()
 
 
 class ChartBarTest(unittest.TestCase):
