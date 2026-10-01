@@ -29,6 +29,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
+    "dev": "1ead981af1eae6cd382de5621ba25565418a9f67ed1d67f99cd17f4d599b6697",
+    "test": "a73c992ec2327d17abe42c56b728a12425fc6679219b35b65355eb690ed89759",
+}
+# v8: everything before the URL cells.
+V8_CORPUS_SHA256 = {
     "dev": "60c3fe121db4ce07b0dfbc2397c1a48a0c1773a5c94eff324fdde597a6aa8ae6",
     "test": "ddd234551bcae00ab0f97026fd4b5b6d3d4b4b23cf08b8fa15926e87f598bd5c",
 }
@@ -137,6 +142,10 @@ class GeneratorTests(unittest.TestCase):
 
     def test_previous_partition_documents_are_byte_identical(self) -> None:
         for partition, records in self.corpora.items():
+            v8 = agentic.records_as_of(8, records)
+            self.assertEqual(
+                hashlib.sha256(agentic.corpus_bytes(v8)).hexdigest(), V8_CORPUS_SHA256[partition]
+            )
             v7 = agentic.records_as_of(7, records)
             self.assertEqual(
                 hashlib.sha256(agentic.corpus_bytes(v7)).hexdigest(), V7_CORPUS_SHA256[partition]
@@ -453,7 +462,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "url_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -1251,6 +1260,188 @@ class CueCellTests(unittest.TestCase):
             self.generate_with(CUE_TWINS=twins)
 
 
+class UrlCellTests(unittest.TestCase):
+    """Whole URLs that a structural delimiter ends in compact JSON, escaped
+    JSON, HTML and Markdown; each shape's broad and narrow rules pay in its
+    layer D twins, which carry no URL anchor."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.full = {partition: agentic.generate(partition) for partition in agentic.PARTITIONS}
+        cls.cells = {
+            partition: [r for r in records if r.surface.startswith("url_")]
+            for partition, records in cls.full.items()
+        }
+
+    def generate_with(self, **patches) -> None:
+        with contextlib.ExitStack() as stack:
+            for name, value in patches.items():
+                stack.enter_context(mock.patch.object(agentic, name, value))
+            agentic.generate("test")
+
+    @staticmethod
+    def replaced(cells: tuple, family: str, **changes) -> tuple:
+        return tuple(dataclasses.replace(c, **changes) if c.family == family else c for c in cells)
+
+    def test_every_cell_and_twin_is_generated_in_both_partitions(self) -> None:
+        for partition, records in self.cells.items():
+            for layer, cells in (("A", agentic.URL_CELLS), ("D", agentic.URL_TWINS)):
+                for cell in cells:
+                    matching = [r for r in records if r.layer == layer and r.family == cell.family]
+                    self.assertEqual(len(matching), agentic.DOCS_PER_URL_CELL[layer], (partition, cell.family))
+            for layer in ("A", "D"):
+                self.assertEqual({r.surface for r in records if r.layer == layer}, set(agentic.URL_SURFACES))
+        self.assertEqual({c.shape for c in agentic.URL_CELLS}, set(agentic.UrlShape))
+        self.assertEqual({t.shape for t in agentic.URL_TWINS}, set(agentic.UrlShape))
+
+    def test_growth_stays_within_ten_percent_per_layer(self) -> None:
+        for layer in ("A", "D"):
+            new = sum(1 for r in self.cells["test"] if r.layer == layer)
+            old = sum(1 for r in self.full["test"] if r.layer == layer) - new
+            self.assertLessEqual(new * 10, old, layer)
+
+    def test_the_whole_url_is_gold(self) -> None:
+        for records in self.cells.values():
+            for record in (r for r in records if r.layer == "A"):
+                (gold,) = record.gold
+                self.assertEqual(gold.label, "URL")
+                encoded = record.text.encode("utf-8")
+                self.assertEqual(encoded[gold.start : gold.end].decode("utf-8"), gold.value)
+                self.assertRegex(gold.value, r"^(?:https://|https:\\/\\/|www\.)")
+
+    def test_structured_cells_parse(self) -> None:
+        for records in self.cells.values():
+            for record in records:
+                if record.surface == "url_tool_json":
+                    json.loads(record.text)
+
+    def test_escaped_cells_decode_to_a_plain_url(self) -> None:
+        # The escaped JSON value is a URL like the plain cells write; only the
+        # slashes are escaped, as `json_encode()` writes them.
+        families = {c.family for c in agentic.URL_CELLS if c.shape is agentic.UrlShape.ESCAPED}
+        values = [r.gold[0].value for records in self.cells.values() for r in records
+                  if r.layer == "A" and r.family in families]
+        self.assertTrue(values)
+        for value in values:
+            decoded = json.loads(f'"{value}"')
+            self.assertEqual(decoded, value.replace("\\/", "/"))
+            self.assertRegex(decoded, f"^{agentic.URL_SHAPE_PATTERNS[agentic.UrlShape.PLAIN]}$")
+
+    def test_templates_and_values_split_by_partition(self) -> None:
+        for cell in (*agentic.URL_CELLS, *agentic.URL_TWINS):
+            self.assertNotEqual(cell.templates["dev"], cell.templates["test"], cell.family)
+        values = {p: {g.value for r in rs for g in r.gold} for p, rs in self.cells.items()}
+        self.assertFalse(values["dev"] & values["test"])
+        decoys = {p: {d.value for r in rs for d in r.decoys} for p, rs in self.cells.items()}
+        self.assertFalse(decoys["dev"] & decoys["test"])
+
+    def test_www_cells_write_the_scheme_and_bare_www_in_turn(self) -> None:
+        for records in self.cells.values():
+            for family in ("url_json_www_sibling", "url_json_escaped_www", "url_html_single_quoted"):
+                values = [r.gold[0].value for r in records if r.family == family]
+                self.assertEqual({v.startswith("https:") for v in values}, {True, False}, family)
+
+    def test_each_broad_and_narrow_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
+        for shape in agentic.UrlShape:
+            families = {c.family for c in agentic.URL_CELLS if c.shape is shape}
+            twins = {t.family for t in agentic.URL_TWINS if t.shape is shape}
+            broad = re.compile(agentic.URL_BROAD_PATTERNS[shape])
+            narrow = re.compile(agentic.URL_NARROW_PATTERNS[shape])
+            for records in self.cells.values():
+                for rule in (broad, narrow):
+                    catches = [r for r in records if r.family in families and rule.search(r.text)]
+                    self.assertEqual(len(catches), agentic.DOCS_PER_URL_CELL["A"] * len(families), (shape, rule))
+                costs = [r for r in records if r.family in twins and broad.search(r.text)]
+                self.assertEqual(len(costs), agentic.DOCS_PER_URL_CELL["D"] * len(twins), shape)
+                self.assertTrue(any(r.family in twins and narrow.search(r.text) for r in records), shape)
+
+    def test_no_layer_d_twin_carries_a_url_anchor(self) -> None:
+        anchor = re.compile(agentic.URL_ANCHOR)
+        for records in self.cells.values():
+            for record in (r for r in records if r.layer == "D"):
+                self.assertIsNone(anchor.search(record.text), record.uid)
+
+    def test_mutant_policies_carry_the_broad_and_narrow_patterns(self) -> None:
+        for name, table in (("broad", agentic.URL_BROAD_PATTERNS), ("narrow", agentic.URL_NARROW_PATTERNS)):
+            path = REPO_ROOT / f"scripts/bench/fixtures/agentic/mutant-{name}-url-shapes.toml"
+            patterns = re.findall(r"^pattern = '(.*)'$", path.read_text(encoding="utf-8"), flags=re.MULTILINE)
+            self.assertEqual(sorted(patterns), sorted(table.values()), name)
+
+    def test_the_shipped_url_rule_reaches_every_cell_and_no_twin(self) -> None:
+        # Python spelling of `url.anchored` (`(?-u:\b)` is Rust syntax). Whatever
+        # its body, its scheme or `www.` anchor never reaches a twin.
+        core = (REPO_ROOT / "crates/gaze-recognizers/embedded/core.toml").read_text(encoding="utf-8")
+        block = core[core.index('id = "url.anchored"'):]
+        pattern = re.search(r"^pattern = '{3}(.*)'{3}$", block, flags=re.MULTILINE).group(1)
+        rule = re.compile(pattern.replace("(?-u:\\b)", "\\b"))
+        for records in self.cells.values():
+            for record in records:
+                if record.layer == "D":
+                    self.assertIsNone(rule.search(record.text), record.uid)
+                elif record.family not in {"url_json_escaped"}:
+                    # The plain-anchor rule reaches every cell but the escaped
+                    # scheme without `www.`.
+                    self.assertIsNotNone(rule.search(record.text), record.uid)
+
+    def test_url_reading_examples(self) -> None:
+        def reads(text, value):
+            start = text.index(value)
+            return agentic.url_reading(text, start, start + len(value))
+
+        url = "https://members.example.invalid/u/anna_schmidt"
+        self.assertTrue(reads(f'{{"w":"{url}","x":"1"}}', url))
+        self.assertTrue(reads(f"<p>{url}</p>", url))
+        self.assertTrue(reads(f"see [p]({url}).", url))
+        self.assertFalse(reads(f'{{"w":"{url}x","x":"1"}}', url))
+        self.assertFalse(reads(f'{{"w":"x{url}","x":"1"}}', url))
+        self.assertFalse(reads('{"host":"cdn.example.invalid\\/v2"}', "cdn.example.invalid\\/v2"))
+
+    def test_a_shape_without_a_twin_fails_generation(self) -> None:
+        twins = tuple(t for t in agentic.URL_TWINS if t.shape is not agentic.UrlShape.ESCAPED)
+        with self.assertRaisesRegex(agentic.LayerError, r"no layer D counterweight: \['escaped'\]"):
+            self.generate_with(URL_TWINS=twins)
+
+    def test_a_twin_no_cell_uses_fails_generation(self) -> None:
+        cells = tuple(c for c in agentic.URL_CELLS if c.shape is not agentic.UrlShape.ESCAPED)
+        with self.assertRaisesRegex(agentic.LayerError, "no layer A cell uses"):
+            self.generate_with(URL_CELLS=cells)
+
+    def test_a_shape_whose_narrow_rule_pays_nothing_fails_generation(self) -> None:
+        twins = tuple(t for t in agentic.URL_TWINS if t.family != "url_twin_json_escaped_host")
+        with self.assertRaisesRegex(agentic.LayerError, r"narrow rule pays nothing in layer D: \['escaped'\]"):
+            self.generate_with(URL_TWINS=twins)
+
+    def test_a_cut_url_in_layer_a_fails_generation(self) -> None:
+        cells = self.replaced(agentic.URL_CELLS, "url_json_sibling",
+                              templates={"dev": "x", "test": '{"w":"{V}/extra","x":"1"}'})
+        with self.assertRaisesRegex(agentic.LayerError, "is not a whole URL in place"):
+            self.generate_with(URL_CELLS=cells)
+
+    def test_a_second_url_in_layer_a_fails_generation(self) -> None:
+        cells = self.replaced(agentic.URL_CELLS, "url_html_text",
+                              templates={"dev": "x", "test": "<p>{V}</p><p>www.example.invalid/a</p>"})
+        with self.assertRaisesRegex(agentic.LayerError, "a URL anchor outside the gold value"):
+            self.generate_with(URL_CELLS=cells)
+
+    def test_a_value_outside_its_shape_fails_generation(self) -> None:
+        cells = self.replaced(agentic.URL_CELLS, "url_json_escaped",
+                              make=lambda rng, partition, index: "https://members.example.invalid/u/x")
+        with self.assertRaisesRegex(agentic.LayerError, "is not a escaped URL"):
+            self.generate_with(URL_CELLS=cells)
+
+    def test_a_twin_with_a_url_anchor_fails_generation(self) -> None:
+        twins = self.replaced(agentic.URL_TWINS, "url_twin_json_service_host",
+                              make=lambda rng, partition, index: "https://svc.example.invalid/v2/health")
+        with self.assertRaisesRegex(agentic.LayerError, "carries a URL anchor"):
+            self.generate_with(URL_TWINS=twins)
+
+    def test_a_twin_the_broad_rule_misses_fails_generation(self) -> None:
+        twins = self.replaced(agentic.URL_TWINS, "url_twin_json_mime",
+                              make=lambda rng, partition, index: "plain")
+        with self.assertRaisesRegex(agentic.LayerError, "broad pattern misses the decoy"):
+            self.generate_with(URL_TWINS=twins)
+
+
 class PartitionTests(unittest.TestCase):
     def test_vocabularies_are_split_before_generation(self) -> None:
         pools = [
@@ -1350,11 +1541,14 @@ class ContractTests(unittest.TestCase):
         for version in (6, 7):
             self.assertNotIn("AGE", agentic.load_contract(REPO_ROOT, version=version).scored_labels)
         self.assertIn("AGE", agentic.load_contract(REPO_ROOT).scored_labels)
+        for version in (7, 8):
+            self.assertNotIn("URL", agentic.load_contract(REPO_ROOT, version=version).scored_labels)
+        self.assertIn("URL", agentic.load_contract(REPO_ROOT).scored_labels)
         self.assertIn("STREET", agentic.load_contract(REPO_ROOT).scored_labels)
         with self.assertRaisesRegex(agentic.LayerError, "no committed scored-label contract"):
             agentic.load_contract(REPO_ROOT, version=3)
-        with self.assertRaisesRegex(agentic.LayerError, "generator_version 8"):
-            agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=7)
+        with self.assertRaisesRegex(agentic.LayerError, "generator_version 9"):
+            agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=8)
 
     def test_generator_version_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

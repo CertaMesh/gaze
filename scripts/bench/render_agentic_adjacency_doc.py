@@ -14,15 +14,18 @@ import agentic_layers
 
 ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs/reference/benchmarks/README.md"
-# The ledger is the generator v8 measurement. The version is pinned rather than
-# read from the generator: a later generator keeps every v8 document byte
-# identical, so the identity is rebuilt from it and the committed v8 contract,
+# The ledger is the generator v9 measurement. The version is pinned rather than
+# read from the generator: a later generator keeps every v9 document byte
+# identical, so the identity is rebuilt from it and the committed v9 contract,
 # and the table keeps saying which corpus it measured until it is re-measured.
-# The generator v4 ledger stays committed as the earlier measurement.
-GENERATOR_VERSION = 8
+# The generator v4 and v8 ledgers stay committed as earlier measurements.
+GENERATOR_VERSION = 9
 HISTORY = ROOT / f"docs/reference/benchmarks/agentic-adjacency-v{GENERATOR_VERSION}-history.json"
 CORPUS_SHA256, CONTRACT_SHA256 = agentic_layers.corpus_identity(ROOT, GENERATOR_VERSION)
-POLICY_SHA256 = "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"
+# The policy v0.15.1's `gaze setup --non-interactive` writes on the measuring
+# machine. It differs from the release policy `f909a23a…` (v4 and v8 ledgers)
+# only in the home directory of its two absolute model paths.
+POLICY_SHA256 = "6525f0002a6d5bf5f6d9fde6ca35f439f88cf9e6ec90af6d7f0380f805d2fec7"
 EXPECTED_ROWS = (
     ("v0.15.1", "policy-file"),
     ("v0.15.0", "policy-file"),
