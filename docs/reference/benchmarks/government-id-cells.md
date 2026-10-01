@@ -6,9 +6,10 @@ line breaks. It includes prose, log fields, tool-call JSON and tool-result
 text. Four-digit SSN tails require an explicit ending relation. Gold spans
 come from independently inserted synthetic values, never detector output.
 
-Twenty typed shapes add 80 A documents and 84 D documents per partition:
-2.83% and 7.42% growth over generator v8. Previous documents and the frozen v8
-scoring contract remain byte-identical. Templates and values are disjoint
+Generator v10 adds twenty typed shapes, 80 A documents and 84 D documents per
+partition: 2.80% and 7.17% growth over frozen generator v9. Previous v9 and v8
+documents, scoring contracts and measurement ledgers remain byte-identical.
+The original government-ID slice is unchanged. Templates and values are disjoint
 between dev and test; each value includes a partition marker. Zero-led US SSN
 areas and Swiss AHV prefixes are unassignable. Steuer-ID forms deliberately
 fail validation and are reported as invalid, cued gold. Other forms use
@@ -19,7 +20,7 @@ technical licences. Near-cue twins put an ID label before a second field that
 owns the value. Tax rates and invoice amounts are benign. Both shape-only and
 narrow near-cue mutants must overlap benign bytes for every shape. Generation
 fails closed on wrong gold ownership, incomplete spans, missing counterweights,
-wrong shape or accidentally valid Steuer-ID values. The committed mutant
+wrong shape, population or lineage tampering, or accidentally valid Steuer-ID values. The committed mutant
 policies are probes, never shipping recognizers.
 
 The fixed C comparison informed the shape hypotheses and is no longer an
@@ -35,3 +36,9 @@ using this committed harness is required before merge and is scheduled by the
 maintainer on the shared benchmark machine. No rows or gains are claimed here
 until that evidence is available. The existing benchmark headline remains the
 latest measured corpus; this pending slice does not replace it.
+
+The adjacency renderer defaults to the measured v9 ledger. New v10 receipts
+must select `--generator-version 10`; a v9 corpus or contract is rejected.
+The required rows are v0.15.1 and v0.15.0 on their own setup policies, and
+v0.14.0 on its full-stack Kiji and pass-2 NER arms. Legacy manifest and model
+environment semantics must stay attached to those old binaries.

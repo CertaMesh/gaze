@@ -21,6 +21,9 @@ class GovernmentCellsTests(unittest.TestCase):
             self.assertEqual(len(g.Shape), 20)
             self.assertEqual(sum(r.layer == 'A' for r in records), 80)
             self.assertEqual(sum(r.layer == 'D' for r in records), 84)
+            expected = {'dev': '5f3dd32dd69ddeac6041ac18fe79c81bc7d04c7da1cb6029bb5425f3f5d2fe77',
+                        'test': '996e4b1d22e044b31e9c3446f3cfb9982491c83e698928f26b2625f1e83c0049'}
+            self.assertEqual(hashlib.sha256(a.corpus_bytes(records)).hexdigest(), expected[partition])
             self.assertEqual({c.surface for c in g.CELLS}, {'gov_prose', 'gov_log_kv', 'gov_tool_json', 'gov_tool_result'})
             for r in records:
                 (span,) = r.gold or r.decoys

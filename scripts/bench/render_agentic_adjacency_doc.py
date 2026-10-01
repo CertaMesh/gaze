@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import agentic_layers
@@ -19,6 +20,23 @@ DOC = ROOT / "docs/reference/benchmarks/README.md"
 GENERATOR_VERSION = 9
 HISTORY = ROOT / f"docs/reference/benchmarks/agentic-adjacency-v{GENERATOR_VERSION}-history.json"
 CORPUS_SHA256, CONTRACT_SHA256 = agentic_layers.corpus_identity(ROOT, GENERATOR_VERSION)
+
+
+@dataclass(frozen=True)
+class HistoryInputs:
+    version: int
+    corpus_sha256: str
+    contract_sha256: str
+    path: Path
+
+    @classmethod
+    def for_version(cls, version: int) -> HistoryInputs:
+        corpus, contract = agentic_layers.corpus_identity(ROOT, version)
+        return cls(version, corpus, contract,
+                   ROOT / f'docs/reference/benchmarks/agentic-adjacency-v{version}-history.json')
+
+
+MEASURED_INPUTS = HistoryInputs(GENERATOR_VERSION, CORPUS_SHA256, CONTRACT_SHA256, HISTORY)
 POLICY_SHA256 = "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"
 EXPECTED_ROWS = (
     ("v0.15.1", "policy-file"),
@@ -51,16 +69,16 @@ def _metric(run: dict, field: str) -> int:
     return value
 
 
-def rows_from_scorecard(path: Path) -> list[dict]:
+def rows_from_scorecard(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> list[dict]:
     scorecard = json.loads(path.read_text(encoding="utf-8"))
     version = scorecard.get("measured")
     if version not in {release for release, _ in EXPECTED_ROWS}:
         raise HistoryError(f"unsupported measured release {version!r}")
     generator = scorecard.get("layers", {}).get("generator", {})
-    if generator.get("generator_version") != GENERATOR_VERSION or generator.get("corpus_sha256") != CORPUS_SHA256:
-        raise HistoryError(f"scorecard did not measure the pinned v{GENERATOR_VERSION} test corpus")
+    if generator.get("generator_version") != inputs.version or generator.get("corpus_sha256") != inputs.corpus_sha256:
+        raise HistoryError(f"scorecard did not measure the pinned v{inputs.version} test corpus")
     contract = scorecard["layers"].get("scored_label_contract", {})
-    if contract.get("file_sha256") != CONTRACT_SHA256:
+    if contract.get("file_sha256") != inputs.contract_sha256:
         raise HistoryError("scorecard agentic contract differs from the committed contract")
     parameters = scorecard.get("parameters", {})
     if parameters.get("policy_sha256") != POLICY_SHA256:
@@ -99,13 +117,13 @@ def rows_from_scorecard(path: Path) -> list[dict]:
     return rows
 
 
-def load_history(path: Path) -> dict:
+def load_history(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> dict:
     value = json.loads(path.read_text(encoding="utf-8"))
-    if value.get("schema_version") != 1 or value.get("generator_version") != GENERATOR_VERSION:
+    if value.get("schema_version") != 1 or value.get("generator_version") != inputs.version:
         raise HistoryError("adjacency history schema or generator version differs")
-    if value.get("corpus_sha256") != CORPUS_SHA256 or value.get("policy_sha256") != POLICY_SHA256:
+    if value.get("corpus_sha256") != inputs.corpus_sha256 or value.get("policy_sha256") != POLICY_SHA256:
         raise HistoryError("adjacency history corpus or policy differs")
-    if value.get("contract_sha256") != CONTRACT_SHA256:
+    if value.get("contract_sha256") != inputs.contract_sha256:
         raise HistoryError("adjacency history contract differs")
     rows = value.get("rows")
     if not isinstance(rows, list) or len(rows) != len(EXPECTED_ROWS) or {(row.get("version"), row.get("arm")) for row in rows} != set(EXPECTED_ROWS):
@@ -121,7 +139,7 @@ def load_history(path: Path) -> dict:
     return value
 
 
-def render(history: dict) -> str:
+def render(history: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> str:
     by_key = {(row["version"], row["arm"]): row for row in history["rows"]}
     lines = [
         "| Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |",
@@ -139,41 +157,45 @@ def render(history: dict) -> str:
         "",
         "These are layers A, D and R only, measured by the current harness against each "
         "release's own binary. Layer C release headlines above are unchanged. The "
-        f"[committed measurement ledger]({HISTORY.name}) records "
+        f"[committed measurement ledger]({inputs.path.name}) records "
         "binary and scorecard SHA-256 digests, arm and manifest semantics. "
-        f"Generator v{GENERATOR_VERSION}, test corpus `{CORPUS_SHA256[:12]}…`, "
+        f"Generator v{inputs.version}, test corpus `{inputs.corpus_sha256[:12]}…`, "
         f"setup policy `{POLICY_SHA256[:12]}…`.",
     ]
     return "\n".join(lines)
 
 
-def apply(doc: str, history: dict) -> str:
+def apply(doc: str, history: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> str:
     start, stop = doc.find(BEGIN), doc.find(END)
     if start < 0 or stop < start:
         raise HistoryError("benchmark document lacks the agentic adjacency markers")
-    return doc[: start + len(BEGIN)] + "\n\n" + render(history) + "\n\n" + doc[stop:]
+    return doc[: start + len(BEGIN)] + "\n\n" + render(history, inputs) + "\n\n" + doc[stop:]
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--record", type=Path, action="append", default=[])
+    parser.add_argument('--generator-version', type=int, default=GENERATOR_VERSION,
+                        choices=(GENERATOR_VERSION, agentic_layers.GENERATOR_VERSION),
+                        help='keep measured history frozen by default; select the current corpus for new measurements')
     args = parser.parse_args()
     try:
+        inputs = HistoryInputs.for_version(args.generator_version)
         if args.record:
             if args.check:
                 raise HistoryError("--record and --check are mutually exclusive")
             history = {
-                "schema_version": 1, "generator_version": GENERATOR_VERSION,
-                "corpus_sha256": CORPUS_SHA256, "contract_sha256": CONTRACT_SHA256,
+                "schema_version": 1, "generator_version": inputs.version,
+                "corpus_sha256": inputs.corpus_sha256, "contract_sha256": inputs.contract_sha256,
                 "policy_sha256": POLICY_SHA256, "rows": [],
             }
             for path in args.record:
-                history["rows"].extend(rows_from_scorecard(path))
-            HISTORY.write_text(json.dumps(history, indent=2) + "\n", encoding="utf-8")
-        history = load_history(HISTORY)
+                history["rows"].extend(rows_from_scorecard(path, inputs))
+            inputs.path.write_text(json.dumps(history, indent=2) + "\n", encoding="utf-8")
+        history = load_history(inputs.path, inputs)
         original = DOC.read_text(encoding="utf-8")
-        rendered = apply(original, history)
+        rendered = apply(original, history, inputs)
         if args.check:
             if original != rendered:
                 raise HistoryError("agentic adjacency table differs from the committed ledger")

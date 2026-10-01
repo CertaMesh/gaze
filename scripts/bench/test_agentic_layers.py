@@ -1443,6 +1443,12 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn("LICENSEPLATE", agentic.load_contract(REPO_ROOT, version=8).scored_labels)
         self.assertIn("LICENSEPLATE", agentic.load_contract(REPO_ROOT).scored_labels)
 
+    def test_v9_contract_is_frozen_byte_for_byte(self) -> None:
+        frozen = REPO_ROOT / agentic.HISTORICAL_CONTRACTS[9]
+        self.assertEqual(hashlib.sha256(frozen.read_bytes()).hexdigest(),
+                         "f9d0cfff6ebc2feac3bd73567b5800af2f38ef1df9e7e10e5e7e64ebd2e93543")
+        self.assertIn("LICENSEPLATE", agentic.load_contract(REPO_ROOT, version=9).scored_labels)
+
     def test_an_older_generator_loads_its_own_committed_contract(self) -> None:
         # A record measured on v4, v5 or v6 is rescored under the contract that
         # ruled on exactly the labels that generator emitted.
