@@ -257,7 +257,7 @@ def check(api: ModuleType, records: list["Record"]) -> None:
         start, end = api._char_span(record.text, span)
         if not re.fullmatch(PATTERNS[cell.shape], span.value):
             raise api.LayerError(f"{record.uid}: value violates government shape")
-        if span.label != (cell.shape.label if cell.gold else api.DECOY_PREFIX + 'benign'):
+        if span.label != (cell.shape.label if cell.gold else 'benign'):
             raise api.LayerError(f"{record.uid}: wrong government label")
         if re.search(r"[A-Za-z0-9]$", record.text[:start]) or re.match(r"[A-Za-z0-9]", record.text[end:]):
             raise api.LayerError(f"{record.uid}: incomplete government value")
