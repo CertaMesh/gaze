@@ -1721,16 +1721,17 @@ for every shape under both mutants. The leading-zero serial correction
 changes the corpus, so the earlier binary preview is superseded. Fresh binary
 measurement and the full v2 and v1 gain gate remain required.
 
-The published release table remains generator v8 evidence, byte-identical to
-its committed ledger. Re-measuring all four displayed release arms on v9 is queued;
-these new cells have no published past-release measurements yet.
+All four displayed release arms below have been re-measured on the frozen v9
+test corpus. Their own release binaries provide detection; the current harness
+provides the corpus and scoring. The earlier v8 ledger remains byte-identical.
 
 ### Measured adjacency layer history
 
-The release rows below use generator v8's test partition and the setup policy,
-so they include the v5 to v8 cells (labelled lookalikes, address blocks, phone
-shapes, cued ages, birth dates, short cards and postcodes). The table is
-rendered from the [v8 ledger](agentic-adjacency-v8-history.json). The earlier
+The release rows below use generator v9's test partition and the setup policy,
+so they include the v5 to v9 cells (labelled lookalikes, address blocks, phone
+shapes, cued ages, birth dates, short cards, postcodes, CRLF blocks and German
+plates). The table is rendered from the [v9 ledger](agentic-adjacency-v9-history.json).
+The earlier [v8 ledger](agentic-adjacency-v8-history.json) on corpus `ddd23455…`,
 [v4 ledger](agentic-adjacency-v4-history.json) on corpus `387a35ac…` and the
 older `agentic_layers` aggregates embedded in
 [`release-history.json`](release-history.json) (corpus `c751da0b…`) are
@@ -1739,31 +1740,33 @@ retained as historical data and do not feed this table.
 Record the past-release `agentic_layers.py measure` outputs with
 `render_agentic_adjacency_doc.py --record`, then render this table from its
 committed ledger. Do not edit the rows by hand. The renderer pins the
-generator version, so a later generator leaves these rows bound to v8 until
+generator version, so a later generator leaves these rows bound to v9 until
 they are re-measured.
 
 <!-- BEGIN GENERATED: agentic-adjacency -->
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.15.1` `policy-file` | 20,400 / 56,510 | 1,526 | 4,662 | 374 / 5,142 | 403 |
-| `v0.15.0` `policy-file` | 20,573 / 56,510 | 1,526 | 4,662 | 374 / 5,142 | 403 |
-| `v0.14.0` `full-stack-kiji-resolve` | 29,695 / 56,510 | 5,308 | 3,893 | 525 / 5,142 | 190 |
-| `v0.14.0` `pass2-ner` | 30,320 / 56,510 | 988 | 3,229 | 550 / 5,142 | 140 |
+| `v0.15.1` `policy-file` | 20,641 / 57,374 | 1,532 | 4,882 | 374 / 5,142 | 403 |
+| `v0.15.0` `policy-file` | 20,814 / 57,374 | 1,532 | 4,882 | 374 / 5,142 | 403 |
+| `v0.14.0` `full-stack-kiji-resolve` | 30,130 / 57,374 | 5,479 | 4,108 | 525 / 5,142 | 190 |
+| `v0.14.0` `pass2-ner` | 30,781 / 57,374 | 994 | 3,353 | 550 / 5,142 | 140 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v8-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v8, test corpus `ddd234551bca…`, setup policy `f909a23aecac…`.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v9-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v9, test corpus `b2e363763fd7…`, setup policy `f909a23aecac…`.
 
 <!-- END GENERATED: agentic-adjacency -->
 
-**How these rows were measured.** Each release's `clean_for_bench` was
-rebuilt at its tag with Rust 1.96.0 (`--release -p gaze-recognizers --example
+**How these rows were measured.** Each release's `clean_for_bench` was built
+at its tag with Rust 1.96.0 (`--release -p gaze-recognizers --example
 clean_for_bench`, feature `safety-net-nym` for v0.15.x and `safety-net-kiji`
-for v0.14.0). The v0.15.0 binary is byte-identical to the one in the v4 ledger;
-the v0.15.1 and v0.14.0 rebuilds come from the same source revisions but differ
-in binary SHA-256, and the v8 ledger records the new digests. The v0.14.0
+for v0.14.0). The v9 measurement reuses those verified binaries: their hashes
+and clean source revisions match the v8 ledger. The v0.15.0 binary is also
+byte-identical to the one in the v4 ledger; the v0.15.1 and v0.14.0 binaries
+come from the same source revisions as v4 but differ in binary SHA-256.
+The v9 ledger records binary and fresh scorecard digests. The v0.14.0
 `full-stack-kiji-resolve` arm also needs `GAZE_KIJI_DISTILBERT_MODEL_DIR`
 exported (v0.14.0's own harness set it; today's harness does not, and the arm
-fails closed without it). Layer R did not change between v4 and v8, and every
+fails closed without it). Layer R did not change between v4 and v9, and every
 row reproduces its v4 layer R numbers exactly.
 
 ### Hardware spec template
