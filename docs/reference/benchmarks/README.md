@@ -1727,6 +1727,10 @@ provides the corpus and scoring. The earlier v8 ledger remains byte-identical.
 
 ### Measured adjacency layer history
 
+The preserved phone and cued-cell prose above describes the historical
+[v8 measurements](agentic-adjacency-v8-history.json). Its links lead to this
+current comparison, which has since been re-measured on v9 below.
+
 The release rows below use generator v9's test partition and the setup policy,
 so they include the v5 to v9 cells (labelled lookalikes, address blocks, phone
 shapes, cued ages, birth dates, short cards, postcodes, CRLF blocks and German
