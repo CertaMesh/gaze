@@ -1335,6 +1335,19 @@ license = "Apache-2.0"
 # back covers exactly the same 232 spans and 6,385 bytes but produces non-gold matched bytes in
 # 107 holdout documents instead of 12 — sentence-final punctuation is the dominant
 # false-positive driver for an anchored URL rule.
+#
+# Delimiter rule: the body also stops at `"`, `<`, `>`, `{`, `}` and `\`, which RFC 3986 does not
+# allow unescaped in a URI and which delimit JSON, HTML and Markdown. Without it, a URL in compact
+# JSON or an HTML attribute ran past its closing quote to the next whitespace and swallowed the
+# keys, values or link text after it (#743). The final character excludes the same set, so
+# `<p>url</p>` does not end on `<`. `'` stays in the body when a URL character other than `/`
+# follows it: it is a legal sub-delimiter and real paths carry it (`/wiki/O'Brien`, `/it's/`),
+# while `'>` and `'/>` close a single-quoted attribute.
+#
+# JSON-escaped slashes: JSON may write `/` as `\/`, and PHP's `json_encode()` does by default. The
+# anchor accepts `https:\/\/` and the body and final character accept `\/` as one unit, so an
+# escaped URL is one token. Before, it was not detected at all without `www.` (#744). A lone `\`
+# still ends the body, which keeps a JSON-escaped quote (`\"`) after a URL outside the token.
 [[recognizers]]
 id = "url.anchored"
 safety_tier = "safe_default"
@@ -1348,7 +1361,7 @@ kind = "regex"
 # Adding this recognizer changes the committed core-no-policy bundle tokenization snapshot
 # (11 -> 12 detections). The `// drift-ack:` acknowledgement the gate requires lives in
 # crates/gaze-recognizers/tests/url_anchored.rs; the rationale lives in CHANGELOG.md.
-pattern = '''(?i)(?-u:\b)(?:https?://|www\.)[^\s]*[^\s.,;:!?)\]}>"']'''
+pattern = '''(?i)(?-u:\b)(?:https?:(?://|\\/\\/)|www\.)(?:[^\s"'<>{}\\]|\\/|'[^\s"<>{}\\/])*(?:[^\s.,;:!?)\]}>"'<{\\]|\\/)'''
 
 [recognizers.scoring]
 # Above the 0.70 heuristic floor: an explicit scheme or `www.` prefix is structural evidence,

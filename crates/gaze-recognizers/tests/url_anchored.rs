@@ -465,3 +465,196 @@ fn an_email_address_outside_a_url_still_wins_its_own_class() {
     assert!(manifest.iter().any(|span| span.class == PiiClass::Email));
     assert!(manifest.iter().any(|span| span.class == url_class()));
 }
+
+// ---------------------------------------------------------------- structured-text delimiters
+//
+// Agents send compact JSON and HTML, not only prose. `"`, `<`, `>`, `{`, `}` and `\` cannot
+// appear unescaped in a URL (RFC 3986), so a URL inside such text ends at the first of them,
+// not at the next whitespace. Running to whitespace swallowed the closing quote and every key
+// and value up to the next space into the URL token (#743). That leaked nothing, but the model
+// lost the fields after the URL.
+//
+// These fixtures pin both edges: the clean text is the input with exactly the URL replaced by one
+// URL token, so a match that stops early (an under-span leak) fails as loudly as one that runs on.
+
+/// Asserts the clean text is `text` with exactly `url` replaced by a single URL token.
+fn assert_url_is_one_token(text: &str, url: &str) {
+    let start = text.find(url).expect("fixture contains the url");
+    let (prefix, suffix) = (&text[..start], &text[start + url.len()..]);
+    let cleaned = clean(text);
+    let token = cleaned
+        .strip_prefix(prefix)
+        .and_then(|rest| rest.strip_suffix(suffix))
+        .unwrap_or_else(|| {
+            panic!("expected {prefix:?} + <url token> + {suffix:?}, got {cleaned:?}")
+        });
+    assert!(
+        token.starts_with('<')
+            && token.ends_with('>')
+            && token.contains(":Custom:url_")
+            && token[1..].find(['<', '>']) == Some(token.len() - 2),
+        "{url:?} must be replaced by exactly one URL token, got {token:?} in {cleaned:?}"
+    );
+}
+
+#[test]
+fn compact_json_url_stops_at_its_closing_quote() {
+    assert_url_is_one_token(
+        r#"{"customer":{"website":"https://www.example.invalid/kontakt"},"amount":"1.500,00 EUR","status":"open"}"#,
+        "https://www.example.invalid/kontakt",
+    );
+}
+
+#[test]
+fn compact_json_url_with_a_path_keeps_the_sibling_keys() {
+    assert_url_is_one_token(
+        r#"{"w":"https://portal.example.invalid/users/alice","x":"1"}"#,
+        "https://portal.example.invalid/users/alice",
+    );
+}
+
+#[test]
+fn json_escaped_quote_after_a_url_stays_outside_the_token() {
+    assert_url_is_one_token(
+        r#"{"note":"see \"https://portal.example.invalid/a\" now"}"#,
+        "https://portal.example.invalid/a",
+    );
+}
+
+#[test]
+fn double_quoted_html_attribute_url_keeps_the_link_text() {
+    assert_url_is_one_token(
+        r#"<a href="https://www.example.invalid/a">Link</a> und <b>mehr</b> Text"#,
+        "https://www.example.invalid/a",
+    );
+}
+
+#[test]
+fn single_quoted_html_attribute_url_keeps_the_link_text() {
+    assert_url_is_one_token(
+        "<a href='https://portal.example.invalid/a'>Link</a>",
+        "https://portal.example.invalid/a",
+    );
+}
+
+#[test]
+fn single_quoted_self_closing_tag_url_keeps_the_tag_close() {
+    // `'` is legal inside a path, so only the character after it tells a path apostrophe from
+    // a closing attribute quote. `'/>` and `'>` close the attribute.
+    assert_url_is_one_token(
+        "<link rel='canonical' href='https://portal.example.invalid/a'/>",
+        "https://portal.example.invalid/a",
+    );
+    assert_url_is_one_token(
+        "<link href='https://portal.example.invalid/'/>",
+        "https://portal.example.invalid/",
+    );
+}
+
+#[test]
+fn apostrophe_before_a_path_segment_is_part_of_the_url() {
+    assert_url_is_one_token(
+        "Path https://portal.example.invalid/it's/fine ok",
+        "https://portal.example.invalid/it's/fine",
+    );
+}
+
+#[test]
+fn url_as_html_element_text_keeps_the_closing_tag() {
+    assert_url_is_one_token(
+        "<p>https://portal.example.invalid/a</p>",
+        "https://portal.example.invalid/a",
+    );
+}
+
+#[test]
+fn apostrophe_inside_a_path_is_part_of_the_url() {
+    // `'` is an RFC 3986 sub-delimiter and a real path character (`/wiki/O'Brien`). Stopping at
+    // it would leave the rest of the path raw under a tokenize policy.
+    assert_url_is_one_token(
+        "Profile https://wiki.example.invalid/wiki/Conan_O'Brien was edited.",
+        "https://wiki.example.invalid/wiki/Conan_O'Brien",
+    );
+}
+
+#[test]
+fn compact_json_url_round_trips_through_restore() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let text = r#"{"w":"https://portal.example.invalid/users/alice","x":"1"}"#;
+    let cleaned = clean_with(&pipeline(), &session, text);
+    assert_ne!(cleaned, text, "the URL must have been tokenized");
+    assert_eq!(
+        session
+            .restore_strict_text(&cleaned)
+            .expect("compact JSON restores"),
+        text
+    );
+}
+
+// ---------------------------------------------------------------- JSON-escaped scheme
+//
+// JSON may escape `/` as `\/`, and PHP's `json_encode()` does by default. The scheme anchor
+// accepts `https:\/\/` and the body accepts `\/` as one unit. Without it, a URL with no `www.`
+// was not detected at all and reached the model raw (#744); with `www.`, the token started after
+// the escaped scheme.
+
+#[test]
+fn json_escaped_scheme_url_is_tokenized_whole() {
+    assert_url_is_one_token(
+        r#"{"w":"https:\/\/portal.example.invalid\/users\/alice","x":"1"}"#,
+        r#"https:\/\/portal.example.invalid\/users\/alice"#,
+    );
+}
+
+#[test]
+fn json_escaped_scheme_with_www_keeps_the_scheme_inside_the_token() {
+    assert_url_is_one_token(
+        r#"{"w":"https:\/\/www.example.invalid\/a","x":"1"}"#,
+        r#"https:\/\/www.example.invalid\/a"#,
+    );
+}
+
+#[test]
+fn json_escaped_www_url_keeps_its_path_inside_the_token() {
+    // Stopping at `\` instead of admitting `\/` would cut this URL after the host and leave
+    // `\/users\/alice` raw.
+    assert_url_is_one_token(
+        r#"{"w":"www.example.invalid\/users\/alice","x":"1"}"#,
+        r#"www.example.invalid\/users\/alice"#,
+    );
+}
+
+#[test]
+fn json_escaped_trailing_slash_is_part_of_the_url() {
+    // Mirrors `trailing_slash_is_part_of_the_url` for the escaped form.
+    assert_url_is_one_token(
+        r#"{"w":"https:\/\/portal.example.invalid\/orders\/","x":"1"}"#,
+        r#"https:\/\/portal.example.invalid\/orders\/"#,
+    );
+}
+
+#[test]
+fn json_escaped_scheme_url_round_trips_through_restore() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let text = r#"{"w":"https:\/\/portal.example.invalid\/users\/alice","x":"1"}"#;
+    let cleaned = clean_with(&pipeline(), &session, text);
+    assert_ne!(cleaned, text, "the escaped URL must have been tokenized");
+    assert_eq!(
+        session
+            .restore_strict_text(&cleaned)
+            .expect("escaped URL restores"),
+        text
+    );
+}
+
+#[test]
+fn json_escaped_scheme_prefix_alone_is_not_matched() {
+    assert_unchanged(r#"The scheme https:\/\/ is not a URL on its own."#);
+}
+
+#[test]
+fn json_escaped_bare_host_is_not_matched() {
+    // The escaped separator does not open a bare-host path: without a scheme or `www.` the A4
+    // negative-corpus boundary above still holds.
+    assert_unchanged(r#"{"path":"portal.example.invalid\/orders\/2026"}"#);
+}
