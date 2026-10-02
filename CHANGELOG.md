@@ -75,7 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the escaped scheme, which stayed raw. `url.anchored` now accepts the escaped
   scheme separator and escaped slashes inside the URL. A scheme or a `www`
   prefix is still required, so escaped routes, MIME types and bare hosts stay
-  untouched. Benchmark gain gate on generator v9 (#746), setup policy, seed
+  untouched. Benchmark gain gate on generator v10 (#746), setup policy, seed
   20260710, together with the delimiter fix below: layer A leaked bytes −348
   under v2 and v1, false-positive bytes −546; layers C, D and R unchanged,
   with zero refusals and every document restored exactly.
