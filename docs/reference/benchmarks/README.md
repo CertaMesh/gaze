@@ -1832,12 +1832,12 @@ they are re-measured.
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.15.1` `policy-file` | 20,641 / 57,374 | 1,532 | 4,882 | 374 / 5,142 | 403 |
-| `v0.15.0` `policy-file` | 20,814 / 57,374 | 1,532 | 4,882 | 374 / 5,142 | 403 |
-| `v0.14.0` `full-stack-kiji-resolve` | 30,130 / 57,374 | 5,479 | 4,108 | 525 / 5,142 | 190 |
-| `v0.14.0` `pass2-ner` | 30,781 / 57,374 | 994 | 3,353 | 550 / 5,142 | 140 |
+| `v0.15.1` `policy-file` | 21,026 / 60,901 | 2,073 | 4,877 | 379 / 5,142 | 402 |
+| `v0.15.0` `policy-file` | 21,199 / 60,901 | 2,073 | 4,877 | 379 / 5,142 | 402 |
+| `v0.14.0` `full-stack-kiji-resolve` | 30,530 / 60,901 | 5,994 | 4,108 | 530 / 5,142 | 189 |
+| `v0.14.0` `pass2-ner` | 31,187 / 60,901 | 1,535 | 3,356 | 555 / 5,142 | 139 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v9-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v9, test corpus `b2e363763fd7…`, setup policy `f909a23aecac…`.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v10-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v10, test corpus `dfd4cba85433…`, setup policy `6525f0002a6d…`.
 
 <!-- END GENERATED: agentic-adjacency -->
 
@@ -1853,7 +1853,15 @@ home directory of its two model paths, which is why the policy digest above
 changed. The v0.14.0 `full-stack-kiji-resolve` arm also needs
 `GAZE_KIJI_DISTILBERT_MODEL_DIR` exported (v0.14.0's own harness set it;
 today's harness does not, and the arm fails closed without it); v0.14.0's own
-`gaze setup` installed that bundle.
+`gaze setup` installed that bundle. Without the URL cells, every row
+reproduces its v9 ledger numbers to within a few bytes: layer A leaks 29 to 37
+bytes more and has 29 fewer false-positive bytes (55 fewer in the
+`full-stack-kiji-resolve` arm), layer D moves by 5 bytes or fewer, and layer R
+leaks 5 bytes more with 1 fewer false-positive byte. Repeat runs on the
+measuring machine are byte-identical, so the offset comes with the machine
+(most likely the NER and Nym runtimes), not from run-to-run noise. The URL
+cells add 3,527 gold bytes to layer A: the v0.15.x rows leak 348 of them and
+the v0.14.0 rows 371, and every row puts 570 false-positive bytes on them.
 
 ### Hardware spec template
 
