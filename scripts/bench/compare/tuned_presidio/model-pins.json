@@ -1,0 +1,8 @@
+{
+  "_comment": "compare.digest_tree of each pinned snapshot (revisions in space.py). dslim, gliner and gliner_tokenizer equal the comparison report pins; openmed is the snapshot vendor-tuned.json pins.",
+  "davlan": "413a77a0d8880eb9581185cd120a7654c2eae8c8093f4042a6ef380787c9ef63",
+  "dslim": "bfb43714eb6baf81806221e2fbad2d6b187b0b12c27091000f864dbe610015c8",
+  "gliner": "4104bc2fd88a6d1fd3c768009b8e0475f974b1fca8dedea184b3274b4b3fb19c",
+  "gliner_tokenizer": "5b9bf2fa56a1f63f17871b5ca96a229c120d0019bcec7b1b5893ff38c7ceeefe",
+  "openmed": "e5acf6e6526f79a3d7a93d1150677f5cd0af012d4f59ee69a18507ca40a42837"
+}

@@ -29,14 +29,20 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "6d1d150332a5a36e0b1225fc5af95746eddae46377ca0b1aad80eb44ea8d21d8",
-    "test": "8fc8021fb70e28cdaa2c581c0ca9f6701f95c85519231709052233afa8bc0054",
+    "dev": "2d35385772fd4966d7728fd42f5a42d683fa98b2c6b8dec11dafce116a63aebe",
+    "test": "dfd4cba854335581b85365612e6825408e9e8575b1099fbb167a527b7f6a04df",
 }
-# v8: everything before the URL cells.
+# v9: everything before the URL cells.
+V9_CORPUS_SHA256 = {
+    "dev": "6e1b24bf66f672e45d69b6f38f56db3da0d085ea0cd4241f5d7310bfddcdf0d1",
+    "test": "b2e363763fd7d3bf1b2678af5c5f45af92e6ebc20a38f78072be0f0ee541f7c6",
+}
+# v8: everything before the CRLF and plate cells.
 V8_CORPUS_SHA256 = {
     "dev": "60c3fe121db4ce07b0dfbc2397c1a48a0c1773a5c94eff324fdde597a6aa8ae6",
     "test": "ddd234551bcae00ab0f97026fd4b5b6d3d4b4b23cf08b8fa15926e87f598bd5c",
 }
+
 # v7: everything before the cued grammar and short-identifier cells.
 V7_CORPUS_SHA256 = {
     "dev": "f7d45efdb7ac5bafeaa432ec1cb413e1137a1b78454fb3422a3bdcf1887c5168",
@@ -142,10 +148,10 @@ class GeneratorTests(unittest.TestCase):
 
     def test_previous_partition_documents_are_byte_identical(self) -> None:
         for partition, records in self.corpora.items():
+            v9 = agentic.records_as_of(9, records)
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(v9)).hexdigest(), V9_CORPUS_SHA256[partition])
             v8 = agentic.records_as_of(8, records)
-            self.assertEqual(
-                hashlib.sha256(agentic.corpus_bytes(v8)).hexdigest(), V8_CORPUS_SHA256[partition]
-            )
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(v8)).hexdigest(), V8_CORPUS_SHA256[partition])
             v7 = agentic.records_as_of(7, records)
             self.assertEqual(
                 hashlib.sha256(agentic.corpus_bytes(v7)).hexdigest(), V7_CORPUS_SHA256[partition]
@@ -462,7 +468,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "url_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -1511,6 +1517,88 @@ class PartitionTests(unittest.TestCase):
             self.assertTrue(all(value == {partition} for value in groups.values()))
 
 
+class BlockCellTests(unittest.TestCase):
+    def test_whole_gold_and_counterweights_in_both_partitions(self) -> None:
+        for partition in agentic.PARTITIONS:
+            records = [r for r in agentic.generate(partition) if r.surface.startswith("block_")]
+            self.assertEqual(sum(r.layer == "A" for r in records), 36)
+            self.assertEqual(sum(r.layer == "D" for r in records), 40)
+            for cell in (*agentic.BLOCK_CELLS, *agentic.BLOCK_TWINS):
+                matching = [r for r in records if r.family == cell.family]
+                self.assertEqual(len(matching), 4 if cell.benign else 6)
+                self.assertNotEqual(cell.templates["dev"], cell.templates["test"])
+            for shape in agentic.BlockShape:
+                twins = [r for r in records if r.layer == "D" and r.surface == f"block_{shape.value}"]
+                for patterns in (agentic.BLOCK_BROAD_PATTERNS, agentic.BLOCK_NARROW_PATTERNS):
+                    self.assertTrue(any(re.fullmatch(patterns[shape], d.value) for r in twins for d in r.decoys))
+            for r in records:
+                if r.family == "block_plate_json":
+                    json.loads(r.text)
+
+    def test_plate_gold_and_twins_have_unassignable_partition_serials(self) -> None:
+        for partition, bounds in (("dev", (100, 399)), ("test", (600, 899))):
+            plates = [r for r in agentic.generate(partition) if r.surface == "block_plate"]
+            self.assertEqual(len(plates), 30)
+            for record in plates:
+                for value in (*record.gold, *record.decoys):
+                    serial = value.value.rsplit(" ", 1)[1]
+                    self.assertRegex(serial, r"^0[0-9]{3}$")
+                    self.assertLessEqual(bounds[0], int(serial))
+                    self.assertLessEqual(int(serial), bounds[1])
+
+    def generate_with(self, name, value) -> None:
+        with mock.patch.object(agentic, name, value):
+            agentic.generate("test")
+
+    def test_missing_counterweight_fails_closed(self) -> None:
+        for shape in agentic.BlockShape:
+            with self.assertRaisesRegex(agentic.LayerError, "no (?:broad|narrow) layer D counterweight"):
+                self.generate_with("BLOCK_TWINS", tuple(t for t in agentic.BLOCK_TWINS if t.shape is not shape))
+
+    def test_missing_address_part_fails_closed(self) -> None:
+        cells = list(agentic.BLOCK_CELLS)
+        cells[0] = dataclasses.replace(cells[0], templates={**cells[0].templates, "test": cells[0].templates["test"].replace("{HN} ", "")})
+        with self.assertRaisesRegex(agentic.LayerError, "missing address part"):
+            self.generate_with("BLOCK_CELLS", tuple(cells))
+
+    def test_missing_crlf_and_bare_cr_fail_closed(self) -> None:
+        for replacement in ("\n", "\r"):
+            cells = list(agentic.BLOCK_CELLS)
+            cells[0] = dataclasses.replace(cells[0], templates={**cells[0].templates, "test": cells[0].templates["test"].replace("\r\n", replacement)})
+            with self.assertRaisesRegex(agentic.LayerError, "complete CRLF"):
+                self.generate_with("BLOCK_CELLS", tuple(cells))
+
+    def test_twin_with_immediate_plate_cue_fails_closed(self) -> None:
+        twins = list(agentic.BLOCK_TWINS)
+        index = next(i for i, t in enumerate(twins) if t.shape is agentic.BlockShape.PLATE)
+        twins[index] = dataclasses.replace(twins[index], templates={**twins[index].templates, "test": "Kennzeichen {V}"})
+        with self.assertRaisesRegex(agentic.LayerError, "immediate plate cue"):
+            self.generate_with("BLOCK_TWINS", tuple(twins))
+
+    def test_ambiguous_manufacturing_twin_keeps_its_cue_and_english_language(self) -> None:
+        for partition in agentic.PARTITIONS:
+            records = [r for r in agentic.generate(partition) if r.family == "block_twin_plate_manufacturing"]
+            self.assertEqual(len(records), 4)
+            self.assertTrue(all(r.language == "en" for r in records))
+        twins = list(agentic.BLOCK_TWINS)
+        index = next(i for i, t in enumerate(twins) if t.ambiguous_plate_cue)
+        twins[index] = dataclasses.replace(twins[index], templates={**twins[index].templates, "test": "Factory mounting part {V}"})
+        with self.assertRaisesRegex(agentic.LayerError, "retain its immediate cue"):
+            self.generate_with("BLOCK_TWINS", tuple(twins))
+
+    def test_gold_plate_cannot_lose_its_prefix(self) -> None:
+        with mock.patch.object(agentic, "PLATE_PREFIXES", {"dev": ("M-AB",), "test": ("",)}):
+            with self.assertRaisesRegex(agentic.LayerError, "whole plate"):
+                agentic.generate("test")
+
+    def test_mutant_files_pin_the_patterns(self) -> None:
+        import tomllib
+        for kind, patterns in (("broad", agentic.BLOCK_BROAD_PATTERNS), ("narrow", agentic.BLOCK_NARROW_PATTERNS)):
+            path = REPO_ROOT / f"scripts/bench/fixtures/agentic/mutant-{kind}-block-shapes.toml"
+            rules = tomllib.loads(path.read_text())["policy"]["custom_recognizers"]
+            self.assertEqual({r["pattern"] for r in rules}, set(patterns.values()))
+
+
 class ContractTests(unittest.TestCase):
     def documents(self) -> list[score.Document]:
         return [record.to_document() for record in agentic.generate("test")]
@@ -1548,6 +1636,18 @@ class ContractTests(unittest.TestCase):
             with self.assertRaisesRegex(agentic.LayerError, "PASSPORTNUM"):
                 agentic.apply_contract(self.documents(), contract)
 
+    def test_v8_contract_is_frozen_byte_for_byte(self) -> None:
+        frozen = REPO_ROOT / agentic.HISTORICAL_CONTRACTS[8]
+        self.assertEqual(hashlib.sha256(frozen.read_bytes()).hexdigest(), "282be3441ecc94eff59c555777a300873af3a8c8f26e40fae334c2d36c4e5f7e")
+        self.assertNotIn("LICENSEPLATE", agentic.load_contract(REPO_ROOT, version=8).scored_labels)
+        self.assertIn("LICENSEPLATE", agentic.load_contract(REPO_ROOT).scored_labels)
+
+    def test_v9_contract_is_frozen_byte_for_byte(self) -> None:
+        frozen = REPO_ROOT / agentic.HISTORICAL_CONTRACTS[9]
+        self.assertEqual(hashlib.sha256(frozen.read_bytes()).hexdigest(), "f9d0cfff6ebc2feac3bd73567b5800af2f38ef1df9e7e10e5e7e64ebd2e93543")
+        self.assertIn("LICENSEPLATE", agentic.load_contract(REPO_ROOT, version=9).scored_labels)
+        self.assertNotIn("URL", agentic.load_contract(REPO_ROOT, version=9).scored_labels)
+
     def test_an_older_generator_loads_its_own_committed_contract(self) -> None:
         # A record measured on v4, v5 or v6 is rescored under the contract that
         # ruled on exactly the labels that generator emitted.
@@ -1558,14 +1658,14 @@ class ContractTests(unittest.TestCase):
         for version in (6, 7):
             self.assertNotIn("AGE", agentic.load_contract(REPO_ROOT, version=version).scored_labels)
         self.assertIn("AGE", agentic.load_contract(REPO_ROOT).scored_labels)
-        for version in (7, 8):
-            self.assertNotIn("URL", agentic.load_contract(REPO_ROOT, version=version).scored_labels)
-        self.assertIn("URL", agentic.load_contract(REPO_ROOT).scored_labels)
         self.assertIn("STREET", agentic.load_contract(REPO_ROOT).scored_labels)
         with self.assertRaisesRegex(agentic.LayerError, "no committed scored-label contract"):
             agentic.load_contract(REPO_ROOT, version=3)
-        with self.assertRaisesRegex(agentic.LayerError, "generator_version 9"):
-            agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=8)
+        for version in (8, 9):
+            self.assertNotIn("URL", agentic.load_contract(REPO_ROOT, version=version).scored_labels)
+        self.assertIn("URL", agentic.load_contract(REPO_ROOT).scored_labels)
+        with self.assertRaisesRegex(agentic.LayerError, "generator_version 10"):
+            agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=9)
 
     def test_generator_version_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
