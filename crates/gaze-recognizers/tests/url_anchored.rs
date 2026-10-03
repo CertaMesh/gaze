@@ -1,6 +1,6 @@
 //! Regression fixtures for the `url.anchored` core recognizer.
 //!
-//! EVERY positive fixture here encodes a structural shape that was MEASURED in the Dataiku EN/DE
+//! The original holdout fixtures encode structural shapes MEASURED in the Dataiku EN/DE
 //! holdout, not a phrasing invented alongside the implementation. The previous attempt at this
 //! bucket shipped 962 green tests for cue phrasings — "my profile is <url>" — that
 //! occur in 5 of 276 gold spans, and produced a zero real-corpus delta. The measured distribution
@@ -56,6 +56,10 @@ fn url_class() -> PiiClass {
 /// cells) while a default adopter got no URL protection at all. Building the pipeline this way is
 /// what makes that distinction fail loudly rather than silently.
 fn pipeline() -> Pipeline {
+    pipeline_with_actions(Action::Tokenize, Action::Preserve)
+}
+
+fn pipeline_with_actions(url_action: Action, email_action: Action) -> Pipeline {
     let rulepack = Rulepack::load(RulepackSource::Embedded(
         embedded("core").expect("core rulepack"),
     ))
@@ -64,7 +68,11 @@ fn pipeline() -> Pipeline {
     policy.rules = vec![
         RuleSpec::Class {
             class: url_class(),
-            action: Action::Tokenize,
+            action: url_action,
+        },
+        RuleSpec::Class {
+            class: PiiClass::Email,
+            action: email_action,
         },
         RuleSpec::Default {
             action: Action::Preserve,
@@ -466,195 +474,681 @@ fn an_email_address_outside_a_url_still_wins_its_own_class() {
     assert!(manifest.iter().any(|span| span.class == url_class()));
 }
 
-// ---------------------------------------------------------------- structured-text delimiters
-//
-// Agents send compact JSON and HTML, not only prose. `"`, `<`, `>`, `{`, `}` and `\` cannot
-// appear unescaped in a URL (RFC 3986), so a URL inside such text ends at the first of them,
-// not at the next whitespace. Running to whitespace swallowed the closing quote and every key
-// and value up to the next space into the URL token (#743). That leaked nothing, but the model
-// lost the fields after the URL.
-//
-// These fixtures pin both edges: the clean text is the input with exactly the URL replaced by one
-// URL token, so a match that stops early (an under-span leak) fails as loudly as one that runs on.
-
-/// Asserts the clean text is `text` with exactly `url` replaced by a single URL token.
-fn assert_url_is_one_token(text: &str, url: &str) {
-    let start = text.find(url).expect("fixture contains the url");
-    let (prefix, suffix) = (&text[..start], &text[start + url.len()..]);
-    let cleaned = clean(text);
-    let token = cleaned
-        .strip_prefix(prefix)
-        .and_then(|rest| rest.strip_suffix(suffix))
-        .unwrap_or_else(|| {
-            panic!("expected {prefix:?} + <url token> + {suffix:?}, got {cleaned:?}")
-        });
+// Compact serialized text is a RawDocument::Text surface, not a parsed JSON document.
+fn assert_exact_url_token(text: &str, url: &str) {
+    let session = Session::new(Scope::Conversation("url-round-trip".to_string())).expect("session");
+    let (clean, manifest, _) = pipeline()
+        .clean_with_safety_net_detect_context(
+            &session,
+            RawDocument::Text(text.to_string()),
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+        )
+        .expect("clean");
+    let CleanDocument::Text(cleaned) = clean else {
+        panic!("expected text");
+    };
+    assert_eq!(manifest.len(), 1, "one whole URL token for {text:?}");
+    let span = manifest.iter().next().expect("URL span");
+    assert_eq!(span.class, url_class());
     assert!(
-        token.starts_with('<')
-            && token.ends_with('>')
-            && token.contains(":Custom:url_")
-            && token[1..].find(['<', '>']) == Some(token.len() - 2),
-        "{url:?} must be replaced by exactly one URL token, got {token:?} in {cleaned:?}"
+        span.origin.is_whole(),
+        "URL must not be a residual fragment"
+    );
+    let start = text.find(url).expect("fixture contains URL");
+    assert_eq!(
+        span.raw_span,
+        start..start + url.len(),
+        "exact raw URL span"
+    );
+    let token = &cleaned[span.clean_span.clone()];
+    assert_eq!(
+        cleaned,
+        text.replacen(url, token, 1),
+        "only URL is replaced"
+    );
+    let entries = session.snapshot_entries();
+    assert_eq!(entries.len(), 1, "one manifest-owned URL value");
+    assert_eq!(entries[0].class, url_class());
+    assert_eq!(
+        entries[0].raw, url,
+        "original serialized bytes are retained"
+    );
+    assert_eq!(entries[0].token, token);
+    assert_eq!(
+        session.restore_strict_text(&cleaned).expect("restore"),
+        text
+    );
+    let imported = Session::import(session.export().expect("export")).expect("import");
+    assert_eq!(
+        imported
+            .restore_strict_text(&cleaned)
+            .expect("imported restore"),
+        text
     );
 }
 
 #[test]
-fn compact_json_url_stops_at_its_closing_quote() {
-    assert_url_is_one_token(
-        r#"{"customer":{"website":"https://www.example.invalid/kontakt"},"amount":"1.500,00 EUR","status":"open"}"#,
-        "https://www.example.invalid/kontakt",
-    );
-}
-
-#[test]
-fn compact_json_url_with_a_path_keeps_the_sibling_keys() {
-    assert_url_is_one_token(
-        r#"{"w":"https://portal.example.invalid/users/alice","x":"1"}"#,
+fn compact_json_keeps_fields_after_plain_url_and_restores_exactly() {
+    assert_exact_url_token(
+        r#"{"w":"https://portal.example.invalid/users/alice","amount":"1.500,00 EUR","status":"open"}"#,
         "https://portal.example.invalid/users/alice",
     );
 }
 
 #[test]
-fn json_escaped_quote_after_a_url_stays_outside_the_token() {
-    assert_url_is_one_token(
-        r#"{"note":"see \"https://portal.example.invalid/a\" now"}"#,
-        "https://portal.example.invalid/a",
-    );
-}
-
-#[test]
-fn double_quoted_html_attribute_url_keeps_the_link_text() {
-    assert_url_is_one_token(
-        r#"<a href="https://www.example.invalid/a">Link</a> und <b>mehr</b> Text"#,
-        "https://www.example.invalid/a",
-    );
-}
-
-#[test]
-fn single_quoted_html_attribute_url_keeps_the_link_text() {
-    assert_url_is_one_token(
-        "<a href='https://portal.example.invalid/a'>Link</a>",
-        "https://portal.example.invalid/a",
-    );
-}
-
-#[test]
-fn single_quoted_self_closing_tag_url_keeps_the_tag_close() {
-    // `'` is legal inside a path, so only the character after it tells a path apostrophe from
-    // a closing attribute quote. `'/>` and `'>` close the attribute.
-    assert_url_is_one_token(
-        "<link rel='canonical' href='https://portal.example.invalid/a'/>",
-        "https://portal.example.invalid/a",
-    );
-    assert_url_is_one_token(
-        "<link href='https://portal.example.invalid/'/>",
-        "https://portal.example.invalid/",
-    );
-}
-
-#[test]
-fn apostrophe_before_a_path_segment_is_part_of_the_url() {
-    assert_url_is_one_token(
-        "Path https://portal.example.invalid/it's/fine ok",
-        "https://portal.example.invalid/it's/fine",
-    );
-}
-
-#[test]
-fn url_as_html_element_text_keeps_the_closing_tag() {
-    assert_url_is_one_token(
-        "<p>https://portal.example.invalid/a</p>",
-        "https://portal.example.invalid/a",
-    );
-}
-
-#[test]
-fn apostrophe_inside_a_path_is_part_of_the_url() {
-    // `'` is an RFC 3986 sub-delimiter and a real path character (`/wiki/O'Brien`). Stopping at
-    // it would leave the rest of the path raw under a tokenize policy.
-    assert_url_is_one_token(
-        "Profile https://wiki.example.invalid/wiki/Conan_O'Brien was edited.",
-        "https://wiki.example.invalid/wiki/Conan_O'Brien",
-    );
-}
-
-#[test]
-fn compact_json_url_round_trips_through_restore() {
-    let session = Session::new(Scope::Ephemeral).expect("session");
-    let text = r#"{"w":"https://portal.example.invalid/users/alice","x":"1"}"#;
-    let cleaned = clean_with(&pipeline(), &session, text);
-    assert_ne!(cleaned, text, "the URL must have been tokenized");
-    assert_eq!(
-        session
-            .restore_strict_text(&cleaned)
-            .expect("compact JSON restores"),
-        text
-    );
-}
-
-// ---------------------------------------------------------------- JSON-escaped scheme
-//
-// JSON may escape `/` as `\/`, and PHP's `json_encode()` does by default. The scheme anchor
-// accepts `https:\/\/` and the body accepts `\/` as one unit. Without it, a URL with no `www.`
-// was not detected at all and reached the model raw (#744); with `www.`, the token started after
-// the escaped scheme.
-
-#[test]
-fn json_escaped_scheme_url_is_tokenized_whole() {
-    assert_url_is_one_token(
+fn compact_json_escaped_scheme_and_path_are_one_restorable_url() {
+    assert_exact_url_token(
         r#"{"w":"https:\/\/portal.example.invalid\/users\/alice","x":"1"}"#,
-        r#"https:\/\/portal.example.invalid\/users\/alice"#,
+        r"https:\/\/portal.example.invalid\/users\/alice",
     );
 }
 
 #[test]
-fn json_escaped_scheme_with_www_keeps_the_scheme_inside_the_token() {
-    assert_url_is_one_token(
-        r#"{"w":"https:\/\/www.example.invalid\/a","x":"1"}"#,
-        r#"https:\/\/www.example.invalid\/a"#,
-    );
+fn serialized_url_boundaries_keep_markup_punctuation_and_numeric_neighbors() {
+    for (text, url) in [
+        (
+            r#"{"customer":{"website":"https://www.example.invalid/kontakt"},"amount":"1.500,00 EUR","status":"open"}"#,
+            "https://www.example.invalid/kontakt",
+        ),
+        (
+            r#"<a href="https://www.example.invalid/a">Link</a>"#,
+            "https://www.example.invalid/a",
+        ),
+        (
+            "<a href='https://portal.example.invalid/a'>Link</a>",
+            "https://portal.example.invalid/a",
+        ),
+        (
+            "<a href='https://portal.example.invalid/a' rel='next'>Link</a>",
+            "https://portal.example.invalid/a",
+        ),
+        (
+            "<p>https://portal.example.invalid/a</p>",
+            "https://portal.example.invalid/a",
+        ),
+        (
+            "[profile](https://portal.example.invalid/users/alice)",
+            "https://portal.example.invalid/users/alice",
+        ),
+        (
+            "<https://portal.example.invalid/a>",
+            "https://portal.example.invalid/a",
+        ),
+        (
+            "https://portal.example.invalid/a.,;:!?)]",
+            "https://portal.example.invalid/a",
+        ),
+        (
+            "https://portal.example.invalid/a}42",
+            "https://portal.example.invalid/a",
+        ),
+        (
+            "https://portal.example.invalid/a{42",
+            "https://portal.example.invalid/a",
+        ),
+        (
+            r#"{"w":"https://portal.example.invalid/ids/a,b,c:v2/list","n":81.9}"#,
+            "https://portal.example.invalid/ids/a,b,c:v2/list",
+        ),
+        (
+            r#"{"w":"https://portal.example.invalid/wiki/Conan_O'Brien?q=O'Brien","n":400.13}"#,
+            "https://portal.example.invalid/wiki/Conan_O'Brien?q=O'Brien",
+        ),
+    ] {
+        assert_exact_url_token(text, url);
+    }
 }
 
 #[test]
-fn json_escaped_www_url_keeps_its_path_inside_the_token() {
-    // Stopping at `\` instead of admitting `\/` would cut this URL after the host and leave
-    // `\/users\/alice` raw.
-    assert_url_is_one_token(
-        r#"{"w":"www.example.invalid\/users\/alice","x":"1"}"#,
-        r#"www.example.invalid\/users\/alice"#,
-    );
+fn escaped_url_units_cover_scheme_path_query_and_terminal_slash() {
+    for url in [
+        r"https:\/\/portal.example.invalid\/users\/alice",
+        r"HTTP:\/\/PORTAL.EXAMPLE.INVALID\/users\/alice",
+        r"https:\/\/www.example.invalid\/a",
+        r"https:\//portal.example.invalid\/users/alice",
+        r"https:/\/portal.example.invalid/users\/alice",
+        r"https://portal.example.invalid\/users\/alice",
+        r"https:\/\/portal.example.invalid/users/alice",
+        r"www.example.invalid\/users\/alice",
+        r"https:\/\/portal.example.invalid\/",
+        r"https:\/\/portal.example.invalid\/wiki\/Conan_O'Brien?q=O'Brien&next=\/orders",
+    ] {
+        let text = format!(r#"{{"w":"{url}","n":42,"status":"open"}}"#);
+        assert_exact_url_token(&text, url);
+    }
 }
 
 #[test]
-fn json_escaped_trailing_slash_is_part_of_the_url() {
-    // Mirrors `trailing_slash_is_part_of_the_url` for the escaped form.
-    assert_url_is_one_token(
-        r#"{"w":"https:\/\/portal.example.invalid\/orders\/","x":"1"}"#,
-        r#"https:\/\/portal.example.invalid\/orders\/"#,
-    );
+fn unsupported_json_escapes_are_boundaries_not_url_units() {
+    for (text, url) in [
+        (
+            r"https://portal.example.invalid/a\qtail",
+            "https://portal.example.invalid/a",
+        ),
+        (
+            r"https://portal.example.invalid/a\",
+            "https://portal.example.invalid/a",
+        ),
+        (
+            r"https://portal.example.invalid/a\\/tail",
+            "https://portal.example.invalid/a",
+        ),
+        (
+            r#"{"w":"https://portal.example.invalid/a\"tail","n":42}"#,
+            "https://portal.example.invalid/a",
+        ),
+    ] {
+        assert_exact_url_token(text, url);
+    }
+    for text in [
+        r"https:\/ is not a URL",
+        r"https:\q\/portal.example.invalid",
+        r"https:\\/\\/portal.example.invalid",
+        r#"{"w":"portal.example.invalid\/users\/alice","n":42}"#,
+    ] {
+        assert_unchanged(text);
+    }
 }
 
 #[test]
-fn json_escaped_scheme_url_round_trips_through_restore() {
-    let session = Session::new(Scope::Ephemeral).expect("session");
-    let text = r#"{"w":"https:\/\/portal.example.invalid\/users\/alice","x":"1"}"#;
-    let cleaned = clean_with(&pipeline(), &session, text);
-    assert_ne!(cleaned, text, "the escaped URL must have been tokenized");
+fn preserved_urls_leave_email_evidence_protected_inside_and_after_the_url() {
+    for url in [
+        "https://portal.example.invalid/users/alice@example.invalid",
+        r"https:\/\/portal.example.invalid\/users\/alice@example.invalid",
+    ] {
+        let text = format!(r#"{{"w":"{url}","email":"bob@example.invalid","n":42}}"#);
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, manifest, _) = pipeline_with_actions(Action::Preserve, Action::Tokenize)
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(text.clone()),
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text");
+        };
+        let mut expected = text.clone();
+        assert_eq!(manifest.len(), 2, "two protected emails, preserved URL");
+        for span in manifest.iter() {
+            assert_eq!(span.class, PiiClass::Email);
+            let raw = &text[span.raw_span.clone()];
+            assert!(matches!(
+                raw,
+                "alice@example.invalid" | "bob@example.invalid"
+            ));
+            let token = &cleaned[span.clean_span.clone()];
+            expected = expected.replacen(raw, token, 1);
+        }
+        assert_eq!(cleaned, expected, "only emails change under URL preserve");
+        assert!(!cleaned.contains("alice@example.invalid"));
+        assert!(!cleaned.contains("bob@example.invalid"));
+        assert_eq!(
+            session.restore_strict_text(&cleaned).expect("restore"),
+            text
+        );
+    }
+}
+
+#[test]
+fn escaped_url_regex_preserves_raw_evidence_without_canonical_rewriting() {
+    let detector = configured_url_detector();
+    let dictionaries = DictionaryBundle::default();
+    let context = gaze_types::DetectContext::new(&[LocaleTag::Global], &dictionaries);
+    let url = r"HTTPS:\/\/portal.example.invalid\/users\/alice\/";
+    let text = format!(r#"{{"w":"{url}","n":42}}"#);
+    let candidates = gaze_types::Recognizer::detect(&detector, &text, &context).expect("detect");
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(&text[candidates[0].span.clone()], url);
+    assert_eq!(
+        candidates[0].canonical_form, None,
+        "URL has no normalizer or validator"
+    );
+    assert_exact_url_token(&text, url);
+}
+
+#[test]
+fn encoded_delimiters_and_unicode_context_keep_original_byte_coordinates() {
+    let url = r"https:\/\/portal.example.invalid\/users\/alice%22%3C%3E%7B%7D%5C?q=O%27Brien";
+    let text = format!(r#"é:{{"w":"{url}","status":"offen"}}"#);
+    assert_exact_url_token(&text, url);
+}
+
+// JSON validation describes the fixture; detection still sees only the original source bytes.
+fn assert_serialized_url(url: &str, decoded: &str) {
+    let text = format!(r#"{{"context":"é","w":"{url}","n":42,"status":"open"}}"#);
+    let parsed: serde_json::Value = serde_json::from_str(&text).expect("valid JSON fixture");
+    assert_eq!(parsed["w"].as_str(), Some(decoded));
+    assert_exact_url_token(&text, url);
+}
+
+#[test]
+fn json_unicode_account_units_keep_complete_raw_manifest_ownership() {
+    for (raw, decoded) in [
+        (
+            r"https://portal.example.invalid/users/\u0061lice",
+            "https://portal.example.invalid/users/alice",
+        ),
+        (
+            r"https://portal.example.invalid/users/a\u006cice",
+            "https://portal.example.invalid/users/alice",
+        ),
+        (
+            r"https://portal.example.invalid/users/alice\u0031",
+            "https://portal.example.invalid/users/alice1",
+        ),
+        (
+            r"https://docs.example.invalid/guide/\u0067etting-started",
+            "https://docs.example.invalid/guide/getting-started",
+        ),
+    ] {
+        assert_serialized_url(raw, decoded);
+    }
+}
+
+#[test]
+fn json_unicode_non_ascii_and_surrogate_units_restore_original_spelling() {
+    for (raw, decoded) in [
+        (
+            r"https://portal.example.invalid/users/stra\u00dfe",
+            "https://portal.example.invalid/users/straße",
+        ),
+        (
+            r"https://portal.example.invalid/users/\u00DF",
+            "https://portal.example.invalid/users/ß",
+        ),
+        (
+            r"https://portal.example.invalid/users/\u6771\u4eac",
+            "https://portal.example.invalid/users/東京",
+        ),
+        (
+            r"https://portal.example.invalid/users/\uD83D\ude80",
+            "https://portal.example.invalid/users/🚀",
+        ),
+        (
+            r"https://portal.example.invalid/users/é\u00df",
+            "https://portal.example.invalid/users/éß",
+        ),
+    ] {
+        assert_serialized_url(raw, decoded);
+    }
+}
+
+#[test]
+fn json_unicode_path_query_and_structural_data_units_are_owned_raw() {
+    for (raw, decoded) in [
+        (
+            r"https://portal.example.invalid/users\u002falice",
+            "https://portal.example.invalid/users/alice",
+        ),
+        (
+            r"https://portal.example.invalid/users/alice\u003fowner\u003d\u0061lice\u0026next\u003d\u002Forders\u0023settings",
+            "https://portal.example.invalid/users/alice?owner=alice&next=/orders#settings",
+        ),
+        (
+            r"https://portal.example.invalid/?owner=\u0061lice",
+            "https://portal.example.invalid/?owner=alice",
+        ),
+        (
+            r"https:\/\/portal.example.invalid\/users\/alice\u002F",
+            "https://portal.example.invalid/users/alice/",
+        ),
+        (
+            r"https://portal.example.invalid/users/\u0022\u003C\u003e\u007B\u007d\u005c",
+            "https://portal.example.invalid/users/\"<>{}\\",
+        ),
+    ] {
+        assert_serialized_url(raw, decoded);
+    }
+}
+
+#[test]
+fn json_unicode_scheme_slashes_mix_with_literal_and_escaped_slashes() {
+    for scheme in [
+        r"https://",
+        r"https:/\/",
+        r"https:/\u002f",
+        r"https:/\u002F",
+        r"https:\//",
+        r"https:\/\/",
+        r"https:\/\u002f",
+        r"https:\/\u002F",
+        r"https:\u002f/",
+        r"https:\u002f\/",
+        r"https:\u002f\u002f",
+        r"https:\u002f\u002F",
+        r"https:\u002F/",
+        r"https:\u002F\/",
+        r"https:\u002F\u002f",
+        r"https:\u002F\u002F",
+        r"HTTP:\u002f\u002F",
+    ] {
+        let raw = format!("{scheme}portal.example.invalid/users/\\u0061lice");
+        let decoded = if scheme.starts_with("HTTP:") {
+            "HTTP://portal.example.invalid/users/alice"
+        } else {
+            "https://portal.example.invalid/users/alice"
+        };
+        assert_serialized_url(&raw, decoded);
+    }
+}
+
+#[test]
+fn malformed_unicode_and_unsupported_escapes_remain_raw_boundaries() {
+    for tail in [
+        r"\u", r"\u0", r"\u00", r"\u006", r"\u00xz", r"\U0061", r"\qtail", r"\", r"\\u0061",
+    ] {
+        let url = "https://portal.example.invalid/users/alice";
+        let text = format!(r#"{{"w":"{url}{tail}","n":42}}"#);
+        assert_exact_url_token(&text, url);
+    }
+    for text in [
+        r"https:\u002 is incomplete",
+        r"https:\u002x\u002fportal.example.invalid",
+        r"https:\U002f\u002fportal.example.invalid",
+        r"https:\\u002f\\u002fportal.example.invalid",
+        r#"{"w":"portal.example.invalid/users/\u0061lice","n":42}"#,
+    ] {
+        assert_unchanged(text);
+    }
+}
+
+#[test]
+fn unicode_serialized_regex_evidence_has_original_coordinates_and_no_canonical_form() {
+    let detector = configured_url_detector();
+    let dictionaries = DictionaryBundle::default();
+    let context = gaze_types::DetectContext::new(&[LocaleTag::Global], &dictionaries);
+    let url = r"https:\u002F\/portal.example.invalid/users/\uD83D\uDE80\u002f";
+    let text = format!(r#"é:{{"w":"{url}","n":81.9}}"#);
+    let candidates = gaze_types::Recognizer::detect(&detector, &text, &context).expect("detect");
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(
+        candidates[0].span,
+        9..9 + url.len(),
+        "UTF-8 source coordinates"
+    );
+    assert_eq!(&text[candidates[0].span.clone()], url);
+    assert_eq!(candidates[0].canonical_form, None);
+    assert_eq!(candidates[0].class, url_class());
+    assert_eq!(candidates[0].source, "url.anchored");
+    assert_eq!(candidates[0].recognizer_id, "url.anchored");
+    assert_exact_url_token(&text, url);
+}
+
+// Mirror the rulepack construction used by assembly, including capture ownership.
+fn configured_url_detector() -> gaze_recognizers::RegexDetector {
+    let rulepack = Rulepack::load(RulepackSource::Embedded(embedded("core").expect("core")))
+        .expect("core loads");
+    let spec = rulepack
+        .recognizers
+        .iter()
+        .find(|r| r.id == "url.anchored")
+        .expect("URL rule");
+    let gaze::RawMatch::Regex {
+        pattern: Some(pattern),
+        capture_groups,
+        complete_labelled_value,
+        ..
+    } = &spec.matcher
+    else {
+        panic!("URL regex");
+    };
+    assert!(spec.validator.is_none());
+    assert!(spec.normalizer.is_none());
+    gaze_recognizers::RegexDetector::with_rulepack_fields(
+        pattern,
+        spec.class.clone(),
+        &spec.id,
+        spec.locales.clone(),
+        spec.scoring.base,
+        spec.scoring.priority,
+        spec.token.family.as_deref().unwrap_or("counter"),
+        capture_groups.clone(),
+        spec.context
+            .as_ref()
+            .map(|c| c.exclusions.clone())
+            .unwrap_or_default(),
+        None,
+        None,
+    )
+    .expect("actual configured Rust regex compiles")
+    .with_rejection_pattern(
+        spec.context
+            .as_ref()
+            .and_then(|c| c.reject_match_regex.as_deref()),
+    )
+    .expect("rejection pattern")
+    .with_complete_labelled_value(*complete_labelled_value)
+    .with_locale_basis(spec.locale_basis)
+}
+
+fn assert_exact_url_occurrences(text: &str, urls: &[&str]) {
+    let detector = configured_url_detector();
+    let dictionaries = DictionaryBundle::default();
+    let context = gaze_types::DetectContext::new(&[LocaleTag::Global], &dictionaries);
+    let candidates = gaze_types::Recognizer::detect(&detector, text, &context).expect("detect");
+    assert_eq!(
+        candidates.len(),
+        urls.len(),
+        "every occurrence, no markup candidate"
+    );
+    let session =
+        Session::new(Scope::Conversation("url-html-round-trip".to_string())).expect("session");
+    let (clean, manifest, _) = pipeline()
+        .clean_with_safety_net_detect_context(
+            &session,
+            RawDocument::Text(text.to_string()),
+            &[LocaleTag::Global],
+            &dictionaries,
+        )
+        .expect("clean");
+    let CleanDocument::Text(cleaned) = clean else {
+        panic!("expected text");
+    };
+    let spans: Vec<_> = manifest.iter().collect();
+    assert_eq!(spans.len(), urls.len());
+    let mut cursor = 0;
+    let mut expected = String::new();
+    let mut tokens = std::collections::HashMap::new();
+    for ((candidate, span), url) in candidates.iter().zip(spans).zip(urls) {
+        let start = cursor + text[cursor..].find(url).expect("literal fixture URL");
+        let end = start + url.len();
+        assert_eq!(candidate.span, start..end, "capture owns only raw URL");
+        assert_eq!(&text[candidate.span.clone()], *url);
+        assert_eq!(candidate.class, url_class());
+        assert_eq!(candidate.source, "url.anchored");
+        assert_eq!(candidate.recognizer_id, "url.anchored");
+        assert_eq!(candidate.canonical_form, None);
+        assert_eq!(span.raw_span, start..end);
+        assert_eq!(span.class, url_class());
+        assert!(span.origin.is_whole());
+        let token = &cleaned[span.clean_span.clone()];
+        if let Some(previous) = tokens.insert(*url, token) {
+            assert_eq!(previous, token, "repeated raw URL reuses its token");
+        }
+        expected.push_str(&text[cursor..start]);
+        expected.push_str(token);
+        cursor = end;
+    }
+    expected.push_str(&text[cursor..]);
+    assert_eq!(
+        cleaned, expected,
+        "all non-URL HTML bytes survive unchanged"
+    );
+    let mut entries = session.snapshot_entries();
+    assert_eq!(entries.len(), tokens.len());
+    for entry in &entries {
+        assert_eq!(entry.class, url_class());
+        assert_eq!(
+            tokens.get(entry.raw.as_str()).copied(),
+            Some(entry.token.as_str()),
+            "owner raw identity"
+        );
+    }
     assert_eq!(
         session
             .restore_strict_text(&cleaned)
-            .expect("escaped URL restores"),
+            .expect("strict restore"),
+        text
+    );
+    let imported = Session::import(session.export().expect("export")).expect("import");
+    let mut imported_entries = imported.snapshot_entries();
+    // HashMap iteration has no ordering contract; compare complete entries by token.
+    entries.sort_by(|left, right| left.token.cmp(&right.token));
+    imported_entries.sort_by(|left, right| left.token.cmp(&right.token));
+    assert_eq!(imported_entries, entries);
+    assert_eq!(
+        imported
+            .restore_strict_text(&cleaned)
+            .expect("imported strict restore"),
         text
     );
 }
 
 #[test]
-fn json_escaped_scheme_prefix_alone_is_not_matched() {
-    assert_unchanged(r#"The scheme https:\/\/ is not a URL on its own."#);
+fn html_selfclosing_img_and_link_keep_single_quotes_and_ascii_whitespace() {
+    let url = "https://portal.example.invalid/users/alice";
+    for (tag, attribute) in [("img", "src"), ("link", "href")] {
+        for whitespace in ["", " ", "\t", "\n", "\r", "\u{000B}", "\u{000C}", " \t\r\n"] {
+            let text = format!("<{tag} {attribute}='{url}'{whitespace}/>");
+            assert_exact_url_occurrences(&text, &[url]);
+        }
+    }
 }
 
 #[test]
-fn json_escaped_bare_host_is_not_matched() {
-    // The escaped separator does not open a bare-host path: without a scheme or `www.` the A4
-    // negative-corpus boundary above still holds.
-    assert_unchanged(r#"{"path":"portal.example.invalid\/orders\/2026"}"#);
+fn html_selfclosing_capture_resumes_for_nearby_attributes_and_repeated_urls() {
+    let one = "https://portal.example.invalid/users/alice";
+    let two = r"https:\u002F\/portal.example.invalid/users/\uD83D\uDE80\u002f";
+    let text = format!("é:<img alt='avatar' data-url='{one}' src='{one}'/><link data-state='ready' href='{two}' \t/><img src='{one}'/> units=81.9");
+    assert_exact_url_occurrences(&text, &[one, one, two, one]);
+}
+
+#[test]
+fn html_selfclosing_uses_complete_unicode_units_and_all_scheme_slash_pairs() {
+    for left in ["/", r"\/", r"\u002f", r"\u002F"] {
+        for right in ["/", r"\/", r"\u002f", r"\u002F"] {
+            for suffix in [
+                r"/users/\u0061lice",
+                r"/\u00DF/é",
+                r"/\uD83D\ude80",
+                r"/users\u002falice?owner=\u0061lice\u002F",
+                r"/\u0022\u003C\u003e\u007B\u007d\u005c",
+            ] {
+                let url = format!("https:{left}{right}portal.example.invalid{suffix}");
+                let text = format!("ß:<img src='{url}'/> count=42");
+                assert_exact_url_occurrences(&text, &[&url]);
+            }
+        }
+    }
+}
+
+#[test]
+fn quoted_selfclosing_lexical_boundary_and_malformed_lookalikes_keep_fallback() {
+    let url = "https://portal.example.invalid/users/alice";
+    // A complete quoted delimiter is lexical, even outside an HTML document.
+    assert_exact_url_occurrences(&format!("note '{url}'/> units=81.9"), &[url]);
+    for (suffix, owned_tail) in [
+        ("/>", "/"),
+        ("' / >", "'"),
+        ("'/", "'/"),
+        ("'/>later", ""),
+        ("'\u{00a0}/>", ""),
+        ("'\\t/>", ""),
+        ("'//>", "'//"),
+    ] {
+        let text = format!("<img src='{url}{suffix}");
+        let expected = format!("{url}{owned_tail}");
+        // Whitespace and unsupported raw backslashes stop the generic fallback.
+        let expected = if suffix == "' / >" {
+            url.to_string()
+        } else {
+            expected
+        };
+        assert_exact_url_occurrences(&text, &[&expected]);
+    }
+    for text in [
+        "<img src='portal.example.invalid/users/alice'/>",
+        "<img src='https:'/>",
+        "www.",
+    ] {
+        assert_unchanged(text);
+        let dictionaries = DictionaryBundle::default();
+        let context = gaze_types::DetectContext::new(&[LocaleTag::Global], &dictionaries);
+        assert!(
+            gaze_types::Recognizer::detect(&configured_url_detector(), text, &context)
+                .expect("detect")
+                .is_empty()
+        );
+    }
+}
+
+#[test]
+fn html_capture_preserves_literal_and_encoded_apostrophe_uri_data() {
+    for url in [
+        "https://portal.example.invalid/O'/notes",
+        "https://portal.example.invalid/O'Brien?q=O'Brien",
+        "https://portal.example.invalid/O%27/notes",
+        r"https:\/\/portal.example.invalid/O'/notes",
+        r"https://portal.example.invalid/O\u0027/notes",
+    ] {
+        for text in [
+            format!(r#"{{"w":"{url}","n":42}}"#),
+            format!(r#"<img src="{url}"/>"#),
+            format!("Visit {url} now."),
+        ] {
+            assert_exact_url_occurrences(&text, &[url]);
+        }
+        if !url.contains('\'') {
+            assert_exact_url_occurrences(&format!("<link href='{url}'/>"), &[url]);
+        }
+    }
+}
+
+#[test]
+fn html_preserved_url_keeps_residual_email_ownership_and_round_trip() {
+    let url = "https://portal.example.invalid/users/alice@example.invalid";
+    let text = format!("é:<img src='{url}'/> contact=bob@example.invalid units=81.9");
+    let session =
+        Session::new(Scope::Conversation("url-html-residual".to_string())).expect("session");
+    let (clean, manifest, _) = pipeline_with_actions(Action::Preserve, Action::Tokenize)
+        .clean_with_safety_net_detect_context(
+            &session,
+            RawDocument::Text(text.clone()),
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+        )
+        .expect("clean");
+    let CleanDocument::Text(cleaned) = clean else {
+        panic!("expected text");
+    };
+    assert_eq!(
+        manifest.len(),
+        2,
+        "both emails remain protected under URL preserve"
+    );
+    let mut expected = text.clone();
+    for span in manifest.iter() {
+        assert_eq!(span.class, PiiClass::Email);
+        let raw = &text[span.raw_span.clone()];
+        assert!(matches!(
+            raw,
+            "alice@example.invalid" | "bob@example.invalid"
+        ));
+        expected = expected.replacen(raw, &cleaned[span.clean_span.clone()], 1);
+    }
+    assert_eq!(cleaned, expected);
+    assert_eq!(
+        session.restore_strict_text(&cleaned).expect("restore"),
+        text
+    );
+    let imported = Session::import(session.export().expect("export")).expect("import");
+    assert_eq!(
+        imported
+            .restore_strict_text(&cleaned)
+            .expect("imported restore"),
+        text
+    );
 }

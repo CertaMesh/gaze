@@ -1329,25 +1329,14 @@ license = "Apache-2.0"
 # are the remaining 12.3% and are deliberately NOT matched: 97 of the A4 negative documents
 # contain bare-host shapes, so no bare-host rule can clear the negative gate.
 #
-# Trailing-boundary rule: the match runs to the next whitespace and then gives back a run of
-# sentence and markup punctuation, so `.`, `,`, `;`, `:`, `!`, `?`, `)`, `]`, `}`, `>`, `"`, `'`
-# never end a match. This is measured, not stylistic: running to whitespace without giving those
-# back covers exactly the same 232 spans and 6,385 bytes but produces non-gold matched bytes in
-# 107 holdout documents instead of 12 — sentence-final punctuation is the dominant
-# false-positive driver for an anchored URL rule.
-#
-# Delimiter rule: the body also stops at `"`, `<`, `>`, `{`, `}` and `\`, which RFC 3986 does not
-# allow unescaped in a URI and which delimit JSON, HTML and Markdown. Without it, a URL in compact
-# JSON or an HTML attribute ran past its closing quote to the next whitespace and swallowed the
-# keys, values or link text after it (#743). The final character excludes the same set, so
-# `<p>url</p>` does not end on `<`. `'` stays in the body when a URL character other than `/`
-# follows it: it is a legal sub-delimiter and real paths carry it (`/wiki/O'Brien`, `/it's/`),
-# while `'>` and `'/>` close a single-quoted attribute.
-#
-# JSON-escaped slashes: JSON may write `/` as `\/`, and PHP's `json_encode()` does by default. The
-# anchor accepts `https:\/\/` and the body and final character accept `\/` as one unit, so an
-# escaped URL is one token. Before, it was not detected at all without `www.` (#744). A lone `\`
-# still ends the body, which keeps a JSON-escaped quote (`\"`) after a URL outside the token.
+# Structural boundaries (`"`, `<`, `>`, `{`, `}`, and unpaired backslashes) stop the
+# body before compact JSON fields or HTML markup. JSON may escape each slash independently:
+# accept slash and Unicode-escaped slash units in the scheme. Complete JSON
+# Unicode escape units retain their original six bytes in the body and at its end.
+# The escape marker stays lowercase u; malformed and unsupported escapes stop here.
+# Apostrophes remain valid inside URI paths and queries. Trailing sentence/markup punctuation
+# is still given back; the original holdout measured 107 non-gold documents without that
+# give-back versus 12 with it. The structural/escaped forms need fresh benchmark evidence.
 [[recognizers]]
 id = "url.anchored"
 safety_tier = "safe_default"
@@ -1361,7 +1350,10 @@ kind = "regex"
 # Adding this recognizer changes the committed core-no-policy bundle tokenization snapshot
 # (11 -> 12 detections). The `// drift-ack:` acknowledgement the gate requires lives in
 # crates/gaze-recognizers/tests/url_anchored.rs; the rationale lives in CHANGELOG.md.
-pattern = '''(?i)(?-u:\b)(?:https?:(?://|\\/\\/)|www\.)(?:[^\s"'<>{}\\]|\\/|'[^\s"<>{}\\/])*(?:[^\s.,;:!?)\]}>"'<{\\]|\\/)'''
+# A quoted self-closing value owns only its URL capture, leaving markup outside it.
+# The generic fallback keeps literal apostrophes inside ordinary URI paths.
+pattern = '''(?i)(?:'((?-u:\b)(?:https?:(?:/|\\(?:/|(?-i:u)002f)){2}|www\.)(?:[^\s"<>{}\x27\\]|\\(?:/|(?-i:u)[0-9a-f]{4}))*(?:[^\s"<>{}\\.,;:!?)\]']|\\(?:/|(?-i:u)[0-9a-f]{4})))'[ \t\n\r\x0B\x0C]*/>|((?-u:\b)(?:https?:(?:/|\\(?:/|(?-i:u)002f)){2}|www\.)(?:[^\s"<>{}\\]|\\(?:/|(?-i:u)[0-9a-f]{4}))*(?:[^\s"<>{}\\.,;:!?)\]']|\\(?:/|(?-i:u)[0-9a-f]{4}))))'''
+capture_groups = [1, 2]
 
 [recognizers.scoring]
 # Above the 0.70 heuristic floor: an explicit scheme or `www.` prefix is structural evidence,
