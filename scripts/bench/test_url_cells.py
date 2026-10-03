@@ -125,7 +125,8 @@ class GeneratedCellTests(unittest.TestCase):
         with self.assertRaisesRegex(agentic.LayerError, "partition"):
             urls.generate("training")
 
-    def test_records_fit_existing_schema_and_current_contract_rejects_unactivated_url(self):
+    def test_records_fit_existing_schema_and_inactive_v9_contract_rejects_url(self):
+        import hashlib
         import json
         import agentic_layers as agentic
         import gaze_bench_score as score
@@ -147,9 +148,45 @@ class GeneratedCellTests(unittest.TestCase):
                          score.load_scored_label_contract(root / "docs/reference/benchmarks/scored-labels-v2.json")):
             applied = score.apply_scored_label_contract(documents, contract)
             self.assertEqual([d.spans for d in applied], [d.spans for d in documents])
-        current = agentic.load_contract(root)
+        # The committed v9 profile predates URL; the ambient profile may score it.
+        inactive_path = root / "docs/reference/benchmarks/scored-labels-agentic-generator-v9.json"
+        inactive_raw = inactive_path.read_bytes()
+        self.assertEqual(len(inactive_raw), 11285)
+        self.assertEqual(hashlib.sha256(inactive_raw).hexdigest(),
+                         "f9d0cfff6ebc2feac3bd73567b5800af2f38ef1df9e7e10e5e7e64ebd2e93543")
+        self.assertEqual(json.loads(inactive_raw)["corpus"]["generator_version"], 9)
+        inactive = agentic.load_contract(root, version=9)
+        self.assertEqual(inactive.path, inactive_path.relative_to(root).as_posix())
+        self.assertEqual(inactive.sha256, hashlib.sha256(inactive_raw).hexdigest())
+        self.assertNotIn("URL", inactive.scored_labels | inactive.excluded_labels)
         with self.assertRaisesRegex(score.ScoredLabelContractError, "URL"):
-            score.apply_scored_label_contract(documents, current)
+            score.apply_scored_label_contract(documents, inactive)
+
+    def test_current_contract_scores_url_and_preserves_complete_source_gold(self):
+        import json
+        import agentic_layers as agentic
+        import gaze_bench_score as score
+        root = Path(agentic.__file__).resolve().parents[2]
+        current = agentic.load_contract(root)
+        profile = json.loads((root / agentic.SCORED_LABELS_PATH).read_bytes())
+        self.assertEqual(profile["corpus"]["generator_version"], agentic.GENERATOR_VERSION)
+        self.assertIn("URL", current.scored_labels)
+        self.assertNotIn("URL", current.excluded_labels)
+        for partition in ("dev", "test"):
+            with self.subTest(partition=partition):
+                records = urls.generate_extended(partition)
+                documents = [r.to_document() for r in records]
+                expected_spans = [tuple(score.Span(g.start, g.end, "URL") for g in r.gold)
+                                  for r in records]
+                self.assertGreater(sum(map(len, expected_spans)), 0)
+                try:
+                    applied = score.apply_scored_label_contract(documents, current)
+                except score.ScoredLabelContractError as error:
+                    self.fail(f"current profile must accept URL gold: {error}")
+                self.assertEqual([d.spans for d in applied], expected_spans)
+                self.assertEqual([(d.uid, d.text, d.cell) for d in applied],
+                                 [(d.uid, d.text, d.cell) for d in documents])
+                self.assertTrue(all(not d.excluded_spans for d in applied))
 
     def test_existing_scorer_prices_raw_leaks_surrounds_and_repeat_near_misses(self):
         import gaze_bench_score as score
