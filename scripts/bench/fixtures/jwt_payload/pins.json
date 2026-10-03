@@ -1,0 +1,18 @@
+{
+  "counts": {
+    "benign": 128,
+    "control": 8,
+    "positive": 128
+  },
+  "files": {
+    "dev.jsonl": "4bdada2acfcc59d3415615420a33467d90a0597a1fabc03e932bf1de5b8ceff4",
+    "test.jsonl": "db0bf300325e5e7f1116bc0066de86298f8d4a1c847ca23f55c1125d9d4dfb08"
+  },
+  "sources": {
+    "../../crates/gaze-recognizers/examples/jwt_payload_probe.rs": "aa3258fbfef7a3a0b64f6cead9490c4ea64daa08699b26c7e257f7da81e8fefb",
+    "fixtures/jwt_payload/policy.toml": "a013a4cc08ec61a48aefe67d5340bd0459e16710b5ae54fa5b1c0b4d3a3b0bda",
+    "jwt_payload_oracle.py": "edddd72c5ea70a9605fb84e48dbdaaef6287e3a04f23a6ccc608dc40a67462dd",
+    "test_jwt_payload_oracle.py": "98f9216fc611a25c9f01fbeeca75c0857280533478467e70fb461805f6a2232e"
+  },
+  "version": "jwt-payload-supplement-v1"
+}
