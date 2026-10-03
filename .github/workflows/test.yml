@@ -113,6 +113,8 @@ jobs:
             ${{ runner.os }}-cargo-test-dependencies-v1-
       - name: Test shard ownership and evidence contracts
         run: python3 -m unittest discover -s scripts/ci
+      - name: Test release publication readiness gate
+        run: python3 -m unittest discover -s scripts/gate -p 'test_release_readiness.py'
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
       - name: README version check
