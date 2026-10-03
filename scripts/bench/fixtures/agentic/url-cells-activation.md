@@ -1,9 +1,18 @@
 # Inactive URL benchmark cells
 
-`scripts/bench/url_cells.py` prepares additive A/D/R records. The active
-`agentic_layers.generate()` does not import it, and the current agentic label
-contract deliberately fails closed on `URL`. No shipping generator version is
-allocated by this module.
+`scripts/bench/url_cells.py` prepares additive A/D/R records. These cells were
+prepared against the committed generator-v9 label contract, which has no `URL`
+ruling and deliberately fails closed on their URL gold. The active
+`agentic_layers.generate()` does not import this module. No shipping generator
+version is allocated by it.
+
+The composite source also contains the public generator-v10 profile, which
+explicitly scores `URL` for its own URL population. The source controls retain
+the historical v9 rejection and separately check that applying the current
+profile preserves this module's complete original and extended URL gold.
+Those application checks do not accept the public profile's final allocation,
+runtime, gain or history evidence. Root allocation after the pending tax and
+phone additions and the activation checklist below remain required.
 
 The module emits 760 distinct source documents per partition: 520 A positives,
 168 D counterweights, and 72 R repeats. Its seeded dev/test source templates,
