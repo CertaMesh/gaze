@@ -24,6 +24,7 @@ on:
 permissions:
   contents: write
   checks: read
+  actions: read
 
 jobs:
   scrub-public-text-preflight:
