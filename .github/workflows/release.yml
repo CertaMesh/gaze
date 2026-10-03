@@ -23,6 +23,8 @@ on:
 
 permissions:
   contents: write
+  checks: read
+  actions: read
 
 jobs:
   scrub-public-text-preflight:
@@ -217,6 +219,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Require accepted post-tag benchmark readiness
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/gate/release_readiness.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --release-tag "$GITHUB_REF_NAME" \
+            --release-commit "$GITHUB_SHA"
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
       - uses: actions/download-artifact@v8
         with:

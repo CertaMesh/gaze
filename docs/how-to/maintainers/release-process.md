@@ -8,7 +8,10 @@
 
 Source: [`.github/workflows/release.yml`](../../../.github/workflows/release.yml).
 
-- Triggered on `v*` tag pushes.
+- Triggered on `v*` tag pushes, but creates no GitHub Release until the
+  signed, immutable post-tag benchmark-readiness receipt passes. Retrying the
+  held tag workflow publishes the original tag commit; manual dispatch cannot
+  create a release.
 - Builds and uploads platform binary artifacts plus a source tarball to the GitHub Releases page.
 - The GitHub Release body uses GitHub-generated release notes from the tag history.
 - `CHANGELOG.md` remains the curated human source for release highlights and is scrubbed before publication; committed `dist/release-notes/` files are intentionally not maintained.
@@ -20,6 +23,8 @@ Source: [`.github/workflows/release.yml`](../../../.github/workflows/release.yml
 Source: [`.github/workflows/publish-crates.yml`](../../../.github/workflows/publish-crates.yml).
 
 - Triggered on `v*` tag pushes (with `workflow_dispatch` dry-run available).
+  Real publication is held until the same signed, immutable post-tag
+  benchmark-readiness receipt passes; manual dispatch rejects non-dry runs.
 - Authenticates to crates.io via OIDC trusted-publisher (`rust-lang/crates-io-auth-action`); no long-lived `CARGO_REGISTRY_TOKEN` secret.
 - Derives the publish set and topological order from `cargo metadata` with `cargo run -p xtask -- publish-plan`. Every workspace member with `publish != false` is included automatically, including new crates. The core crate is published as `gaze-pii` while its library target remains `gaze`.
 - Runs a manifest pre-flight before any real publish: `cargo package --no-verify --workspace --exclude xtask` for the workspace. Workspace packaging resolves coordinated, not-yet-published dependency versions together. Per-crate packaging would resolve those versions against crates.io before they exist. This catches unpublishable manifests before OIDC auth or partial publishing.
@@ -34,7 +39,17 @@ cargo publish -p <crate>
 After the seed publish, add the crate's Trusted Publisher on crates.io for `CertaMesh/gaze` and `.github/workflows/publish-crates.yml`, then re-run the publish workflow. `workflow_dispatch` has a `check_new_crates` input for exceptional dry-run diagnostics, but tag releases keep the guard on.
 - Browse crates at <https://crates.io/crates/gaze-pii> (and sibling crate pages).
 
-Cutting a release: tag the merge commit on `main` with `vX.Y.Z` and push the tag. Both workflows fire from the same tag push; no manual crates.io step is needed for crates already in the OIDC publish loop.
+Cutting a release uses the approved two-commit sequence: merge and freeze the
+measured release commit `R`; measure it and validate the complete private
+preview/evidence; create an annotated `vX.Y.Z` tag where `T = R`; then render,
+dogfood, and merge the public benchmark documentation commit `D`. `D` owns the
+version scorecards, pages, history and charts, but never replaces the measured
+harness or renderer identities. A signed annotated `release-readiness/vX.Y.Z`
+tag targets `D` and binds `R`, the real release tag object, `D`, frozen
+harness/renderer commits, immutable evidence-manifest digest, public manifest digest,
+scorecard bytes, and successful documentation checks. Only retry the held tag
+workflows after that receipt passes; do not publish manually. The readiness tag
+namespace must be protected against update and deletion.
 
 ## Pre-tag model-setup ownership gate
 

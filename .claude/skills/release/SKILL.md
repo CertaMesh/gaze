@@ -32,19 +32,49 @@ Run from `main` after all release-blocker PRs are merged.
 8. Verify benchmark claims in the changelog or release PR body link to the
    script and hardware specification that produced them. This preserves the
    `feedback-bench-claims-reproducible` memory.
-9. Pair every release with its own benchmark: version X ships with benchmark X.
-   Run the scorecard harness on the release commit in a fresh anvil worktree
-   (see the `docs/reference/benchmarks` README for the command and the hardware
-   spec), store the result as
-   `docs/reference/benchmarks/scorecard-vX.Y.Z.json`, and add one row and one
-   chart point keyed by `vX.Y.Z` to the consolidated benchmark document, with
-   commit sha, script, and hardware as secondary columns. Dogfood the updated
-   document. A release without a fresh benchmark is blocked.
-10. Confirm every detection PR merged since the last tag carries passing
+9. Use the approved split release/documentation sequence. After all approved
+   source, version, workflow, and release-note changes have merged through the
+   protected process, freeze the exact release commit `R` and the harness,
+   input, policy, model, and renderer identities. Measure `R` freshly in a
+   clean worktree, retain an immutable private evidence bundle `E`, complete
+   the gains, history, competitor, native, and private-preview checks, and
+   dogfood the actual private preview. The pretag evidence must prove
+   `measured_commit = R`, name every frozen input, and include the complete
+   fresh scorecards, historical comparisons, competitor results, receipts, and
+   failed attempts. A branch name, predicted SHA, or “same code” statement is
+   never evidence.
+10. Only then create and push the signed annotated release tag. Its peeled
+    target `T` must equal `R`; record both `T` and the annotated tag-object ID.
+    Do not put the later documentation commit in the release tag tree.
+11. After the real tag exists, render and validate the public benchmark in an
+    owned staging checkout. Commit the version-owned scorecards, history,
+    charts, pages, and evidence bindings in a later signed, protected
+    documentation commit `D`. Dogfood the actual public bytes and verify the
+    docs checks, the public scorecard hashes, and this exact equality:
+    `T = E.measured_commit = scorecard.gaze.revision = history.commit = R`.
+    `D` must not silently replace the frozen harness or renderer identities.
+12. Create a signed annotated `release-readiness/vX.Y.Z` tag targeting `D`.
+    Its `gaze-release-readiness-v1` receipt binds `R`, the real release-tag
+    object, `D`, the frozen harness and renderer commits, immutable `E` digest,
+    and the SHA-256 of
+    `docs/reference/benchmarks/release-readiness/vX.Y.Z.json`. That manifest
+    repeats those identities, names the immutable evidence-manifest path and
+    digest,
+    hashes every published scorecard, and lists the successful documentation
+    checks (including `docs`). Protect this readiness-tag namespace against
+    update/deletion. The workflows independently fetch GitHub’s immutable tag,
+    commit, content, and check-run objects; missing, stale, failed, unsigned,
+    or mismatched receipts fail closed.
+13. A tag push initially leaves both publication paths held. After `D` and its
+    readiness tag are accepted, retry the original failed tag workflow runs;
+    they publish from the unchanged `R` tag. Never manually publish crates or
+    create a release to bypass the hold. Manual crate dispatch remains dry-run
+    only.
+14. Confirm every detection PR merged since the last tag carries passing
     evidence under the
     [benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate), and that
     past-release rows were re-measured if the benchmark itself changed.
-11. Re-run `scripts/bench/compare/compare.py` for this release's Gaze rows and
+15. Re-run `scripts/bench/compare/compare.py` for this release's Gaze rows and
     every competitor on the same corpus, contracts, and variant packs. Update
     `comparison.json` and `competitors.md`; retain aggregate results and model
     hashes. The PR docs gate checks competitor inputs, while this release step
@@ -55,7 +85,7 @@ checklist.
 
 ## Tag Procedure
 
-Only after explicit user lock signal:
+Only after explicit user lock signal and steps 1–10 above have passed:
 
 ```bash
 git tag -a vX.Y.Z -m "vX.Y.Z" <merge-sha>
@@ -65,7 +95,8 @@ git push origin vX.Y.Z
 Use an annotated tag on the merge commit. Do not tag a local-only commit, an
 unmerged branch head, or a dirty working tree.
 
-The tag push auto-fires two workflows:
+The tag push auto-fires two workflows, which build but intentionally hold
+publication until the posttag documentation receipt passes:
 
 - `release.yml`: builds binaries and creates the GitHub Release.
 - `publish-crates.yml`: publishes every workspace member with `publish != false`
@@ -74,7 +105,7 @@ The tag push auto-fires two workflows:
   included automatically.
 
 Do not publish to crates.io manually. The workflow owns publication order and
-idempotent retries.
+idempotent retries after the exact same tag passes readiness.
 
 ## Post-Tag Verification
 
