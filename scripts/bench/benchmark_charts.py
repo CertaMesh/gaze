@@ -73,6 +73,23 @@ PROVENANCE_NOTE = (
 )
 
 
+#: The own-corpus Presidio bar when `presidio-tuned.json` exists: the tuned row that
+#: scores the higher test-half character F2 (`tuned_presidio/tune.py chart_choice`).
+TUNED_BAR_NAME = "Presidio (tuned)"
+_TUNED_TAIL = (
+    ", the best of three tuned Presidio rows by test-half F2; like every bar it shows all "
+    "of layer C, validation half included; Presidio's defaults are in competitors.md"
+)
+TUNED_CAPTIONS = {
+    "presidio-tuned-presidio-research": "Presidio tuned by its authors for their own corpus "
+    "(Presidio Research's published setup), applied unchanged" + _TUNED_TAIL,
+    "presidio-tuned-own-leak-first": "Presidio tuned for this corpus on its validation half "
+    "(fewest leaked bytes first)" + _TUNED_TAIL,
+    "presidio-tuned-own-f2": "Presidio tuned for this corpus on its validation half "
+    "(highest F2)" + _TUNED_TAIL,
+}
+
+
 class ChartError(Exception):
     """The committed data cannot produce a truthful chart."""
 
@@ -170,18 +187,29 @@ def own_panel(
         Bar(row.name, row.f2, row.leaked_bytes, row.fp_per_1k, gaze=True)
         for row in gaze
     ]
+    tuned = comparison.get("presidio_tuned")
+    notes, captions = [], []
     for key, name in declared.items():
-        cell = comparison["tools"][name]["contracts"]["v3"]["C"]
+        if key == "presidio" and tuned is not None:
+            # The declared default moves to competitors.md; the bar is the better tuned row.
+            row = tuned["chart"]["row"]
+            cell = tuned["rows"][row]["contracts"]["v3"]["C"]
+            column, bar_name = SHORT_NAMES[key], TUNED_BAR_NAME
+            notes.append(f"{SHORT_NAMES[key]}: tuned")
+            captions.append(f"Own corpus: {TUNED_CAPTIONS[row]}")
+        else:
+            cell = comparison["tools"][name]["contracts"]["v3"]["C"]
+            column, bar_name = "", SHORT_NAMES[key]
         fp = cell["false_positive_bytes_after_gold_gap"]
         fp = cell["false_positive_bytes"] if fp is None else fp
         skipped += cell["skipped_documents"]
         view = View.of(cell["metrics"]["product_coverage"]["full"], fp=fp)
-        bars.append(Bar(SHORT_NAMES[key], view.f2, view.leaked, view.fp_per_1k))
+        bars.append(Bar(bar_name, view.f2, view.leaked, view.fp_per_1k, column=column))
     return Panel(
         "Own corpus", f"{corpus_name} · {layer:,} docs, {splits}",
         "Scored labels v3: the labels Gaze commits to detect", tuple(bars),
         skipped=skipped, refused=tuple((row.name, row.refused) for row in gaze),
-        documents=layer,
+        documents=layer, note="; ".join(notes), caption="; ".join(captions),
     )
 
 

@@ -14,12 +14,9 @@ import agentic_layers
 
 ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs/reference/benchmarks/README.md"
-# The ledger is the generator v8 measurement. The version is pinned rather than
-# read from the generator: a later generator keeps every v8 document byte
-# identical, so the identity is rebuilt from it and the committed v8 contract,
-# and the table keeps saying which corpus it measured until it is re-measured.
-# The generator v4 ledger stays committed as the earlier measurement.
-GENERATOR_VERSION = 8
+# Pin the measured version so a later generator cannot relabel these rows.
+# Earlier v4 and v8 ledgers remain committed as historical measurements.
+GENERATOR_VERSION = 9
 HISTORY = ROOT / f"docs/reference/benchmarks/agentic-adjacency-v{GENERATOR_VERSION}-history.json"
 CORPUS_SHA256, CONTRACT_SHA256 = agentic_layers.corpus_identity(ROOT, GENERATOR_VERSION)
 POLICY_SHA256 = "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"

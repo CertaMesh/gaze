@@ -408,7 +408,7 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 0.665 | **0.868** | 0.765 | 0.194 | 0.565 | 0.360 | 0.794 | 0.797 |
+| Own corpus | 0.665 | 0.868 | **0.926 (tuned)** | 0.194 | 0.565 | 0.360 | 0.794 | 0.797 |
 | Presidio Research | not run | 0.785 | **0.918 (tuned)** | 0.147 | 0.639 | 0.538 | 0.692 | 0.663 |
 | PIIBench-commercial | not run | 0.618 | **0.665** | 0.183 | 0.522 | 0.441 | 0.532 | 0.400 |
 
@@ -416,7 +416,7 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 22,144 | **13,319** | 25,314 | 103,617 | 29,142 | 84,397 | 20,152 | 24,080 |
+| Own corpus | 22,144 | 13,319 | **2,283 (tuned)** | 103,617 | 29,142 | 84,397 | 20,152 | 24,080 |
 | Presidio Research | not run | 9,769 | **2,857 (tuned)** | 34,810 | 15,769 | 20,226 | 13,326 | 15,305 |
 | PIIBench-commercial | not run | 107,701 | **87,853** | 222,697 | 114,880 | 145,119 | 127,361 | 170,336 |
 
@@ -424,19 +424,20 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 164.9 | 19.4 | 42.9 | **6.1** | 255.6 | 12.5 | 54.0 | 28.9 |
+| Own corpus | 164.9 | 19.4 | 30.6 (tuned) | **6.1** | 255.6 | 12.5 | 54.0 | 28.9 |
 | Presidio Research | not run | 10.6 | 38.6 (tuned) | **0.0** | 31.5 | 14.6 | 38.3 | 5.2 |
 | PIIBench-commercial | not run | 20.4 | 38.0 | **1.9** | 94.1 | 71.2 | 36.6 | 5.2 |
 
 A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.14 0, Gaze 0.15 0.
 
+Own corpus: Presidio tuned for this corpus on its validation half (highest F2), the best of three tuned Presidio rows by test-half F2; like every bar it shows all of layer C, validation half included; Presidio's defaults are in competitors.md.
 Presidio Research: Presidio tuned for this dataset by its authors (their published custom setup).
 PIIBench-commercial: PIIBench publishes no vendor-tuned Presidio, so Presidio is the declared best configuration.
 
 - **Own corpus:** Kiji EN/DE holdout and A4 negatives, 2,910 documents, scored labels v3 (the labels Gaze commits to detect, protected repeats credited). Gaze from [`release-history.json`](release-history.json) (the shipped default of each tagged release); competitors from [`comparison.json`](comparison.json).
 - **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
 - **PIIBench-commercial:** pritesh-2711/pii-bench (5,000 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
-- **Configurations:** competitors use the rows declared in [`chart-configs.json`](../../../scripts/bench/compare/chart-configs.json), chosen before results were reviewed; full versions and settings are in [`competitors.md`](competitors.md).
+- **Configurations:** competitors use the rows declared in [`chart-configs.json`](../../../scripts/bench/compare/chart-configs.json), chosen before results were reviewed; full versions and settings are in [`competitors.md`](competitors.md). On the own corpus the Presidio bar is instead the best tuned Presidio row from [`presidio-tuned.json`](presidio-tuned.json) (selection and every tuned number in [`competitors.md`](competitors.md#tuned-presidio)).
 - **Metric:** F2 counts Unicode code points (not grapheme clusters) inside the merged byte spans of each document, ignores labels, pools every document (micro), weights recall four times precision, scores 0 when precision and recall are both 0 (0/0 = 0), and counts all of a skipped document's gold characters as missed.
 - **False positives:** F2 counts every false-positive character for every tool; the false-positive row (bytes redacted that are not PII, per 1,000 bytes of the scored documents) also credits a protected repeat of a labelled value on the own corpus (contract v3). Every tool is treated identically within each row, and the third-party sets have no such credit.
 - **Gaze release scores:** each tagged release is scored by replaying its committed observation record over the corpus (`compare/release_char_level.py record`). The offline `check` that CI runs proves the stored numbers are consistent with the committed record, its evidence file and the UTF-8 structure of that evidence; only `record` (the corpus replay) proves the character counts, so a pull request that changes `release-char-level.json` or its evidence file must include the replay command's output in its description.
@@ -1201,6 +1202,12 @@ model:
   postcodes](#cued-ages-birth-dates-short-cards-and-postcodes) below. The v7
   documents remain byte identical within each partition; the generator and
   both partition hashes are pinned at v8.
+- **CRLF blocks and German plates (generator v9):** layer A adds whole
+  address parts joined by CRLF and cued German plates. Layer D adds
+  designator and plate-shaped references, including manufacturing plates.
+  See [CRLF blocks and German registration plates](#crlf-blocks-and-german-registration-plates)
+  below. The v8 documents and contract remain byte identical; both v9
+  partition hashes are pinned.
 - **Checksum code:** written from the published standards, not from Gaze's
   validators. Standard test vectors pin it, and the validator probe
   cross-checks it on every run.
@@ -1684,12 +1691,52 @@ Two options exist for v0.14.0 only, and the output records both:
 
 Both options are off by default.
 
+### CRLF blocks and German registration plates
+
+Generator v9 adds 36 layer A documents and 40 layer D documents per
+partition, under a new `block_` surface prefix. US suite, German Wohnung and
+military address blocks write CRLF between gold parts. Cued German plates in
+prose, log fields and JSON score the whole district, letter series and serial
+number as `LICENSEPLATE`. These plates are unassignable (leading-zero serial),
+using dev 0100-0399 and test 0600-0899. Every earlier generator v8 document stays byte
+identical, and its scored-label contract is frozen by version.
+
+The benign twins carry test-suite and storage-box labels before fixture
+postcodes, including CRLF joins, bare CR and blank lines. They also carry
+identically shaped build or batch references. Near-cue references include a plate word in an unrelated
+clause. An English mounting-plate reference retains an immediate `plate` label: it is
+a deliberately ambiguous manufacturing counterweight, not vehicle gold. Its typed
+cell must keep both the cue and English language so the format-basis plate rule
+cannot receive free precision credit. Typed cells check complete address gold, CRLF between parts,
+whole-plate gold after an immediate label, and a benign counterweight paid
+by both broad and narrow shape rules. Generation fails if these guards drift.
+
+A model-free regex replay on the 76 new test documents applies every broad
+or narrow pattern to each document and maps character offsets to UTF-8 byte
+offsets before scoring. Both mutants cover 374 layer D benign
+bytes. The broad mutant covers 411 gold bytes and 12 layer A false-positive
+bytes; the narrow mutant covers 351 gold bytes and zero layer A false-positive
+bytes. These deliberately bad fixtures live under
+`scripts/bench/fixtures/agentic/`; the corpus guards require counterweights
+for every shape under both mutants. The leading-zero serial correction
+changes the corpus, so the earlier binary preview is superseded. Fresh binary
+measurement and the full v2 and v1 gain gate remain required.
+
+All four displayed release arms below have been re-measured on the frozen v9
+test corpus. Their own release binaries provide detection; the current harness
+provides the corpus and scoring. The earlier v8 ledger remains byte-identical.
+
 ### Measured adjacency layer history
 
-The release rows below use generator v8's test partition and the setup policy,
-so they include the v5 to v8 cells (labelled lookalikes, address blocks, phone
-shapes, cued ages, birth dates, short cards and postcodes). The table is
-rendered from the [v8 ledger](agentic-adjacency-v8-history.json). The earlier
+The preserved phone and cued-cell prose above describes the historical
+[v8 measurements](agentic-adjacency-v8-history.json). Its links lead to this
+current comparison, which has since been re-measured on v9 below.
+
+The release rows below use generator v9's test partition and the setup policy,
+so they include the v5 to v9 cells (labelled lookalikes, address blocks, phone
+shapes, cued ages, birth dates, short cards, postcodes, CRLF blocks and German
+plates). The table is rendered from the [v9 ledger](agentic-adjacency-v9-history.json).
+The earlier [v8 ledger](agentic-adjacency-v8-history.json) on corpus `ddd23455…`,
 [v4 ledger](agentic-adjacency-v4-history.json) on corpus `387a35ac…` and the
 older `agentic_layers` aggregates embedded in
 [`release-history.json`](release-history.json) (corpus `c751da0b…`) are
@@ -1698,31 +1745,33 @@ retained as historical data and do not feed this table.
 Record the past-release `agentic_layers.py measure` outputs with
 `render_agentic_adjacency_doc.py --record`, then render this table from its
 committed ledger. Do not edit the rows by hand. The renderer pins the
-generator version, so a later generator leaves these rows bound to v8 until
+generator version, so a later generator leaves these rows bound to v9 until
 they are re-measured.
 
 <!-- BEGIN GENERATED: agentic-adjacency -->
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.15.1` `policy-file` | 20,400 / 56,510 | 1,526 | 4,662 | 374 / 5,142 | 403 |
-| `v0.15.0` `policy-file` | 20,573 / 56,510 | 1,526 | 4,662 | 374 / 5,142 | 403 |
-| `v0.14.0` `full-stack-kiji-resolve` | 29,695 / 56,510 | 5,308 | 3,893 | 525 / 5,142 | 190 |
-| `v0.14.0` `pass2-ner` | 30,320 / 56,510 | 988 | 3,229 | 550 / 5,142 | 140 |
+| `v0.15.1` `policy-file` | 20,641 / 57,374 | 1,532 | 4,882 | 374 / 5,142 | 403 |
+| `v0.15.0` `policy-file` | 20,814 / 57,374 | 1,532 | 4,882 | 374 / 5,142 | 403 |
+| `v0.14.0` `full-stack-kiji-resolve` | 30,130 / 57,374 | 5,479 | 4,108 | 525 / 5,142 | 190 |
+| `v0.14.0` `pass2-ner` | 30,781 / 57,374 | 994 | 3,353 | 550 / 5,142 | 140 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v8-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v8, test corpus `ddd234551bca…`, setup policy `f909a23aecac…`.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v9-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v9, test corpus `b2e363763fd7…`, setup policy `f909a23aecac…`.
 
 <!-- END GENERATED: agentic-adjacency -->
 
-**How these rows were measured.** Each release's `clean_for_bench` was
-rebuilt at its tag with Rust 1.96.0 (`--release -p gaze-recognizers --example
+**How these rows were measured.** Each release's `clean_for_bench` was built
+at its tag with Rust 1.96.0 (`--release -p gaze-recognizers --example
 clean_for_bench`, feature `safety-net-nym` for v0.15.x and `safety-net-kiji`
-for v0.14.0). The v0.15.0 binary is byte-identical to the one in the v4 ledger;
-the v0.15.1 and v0.14.0 rebuilds come from the same source revisions but differ
-in binary SHA-256, and the v8 ledger records the new digests. The v0.14.0
+for v0.14.0). The v9 measurement reuses those verified binaries: their hashes
+and clean source revisions match the v8 ledger. The v0.15.0 binary is also
+byte-identical to the one in the v4 ledger; the v0.15.1 and v0.14.0 binaries
+come from the same source revisions as v4 but differ in binary SHA-256.
+The v9 ledger records binary and fresh scorecard digests. The v0.14.0
 `full-stack-kiji-resolve` arm also needs `GAZE_KIJI_DISTILBERT_MODEL_DIR`
 exported (v0.14.0's own harness set it; today's harness does not, and the arm
-fails closed without it). Layer R did not change between v4 and v8, and every
+fails closed without it). Layer R did not change between v4 and v9, and every
 row reproduces its v4 layer R numbers exactly.
 
 ### Hardware spec template
