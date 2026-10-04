@@ -6,9 +6,9 @@ use std::io::{self, BufRead, Write};
 use std::path::Path;
 
 use gaze::{
-    CleanDocument, Context, DictionaryBundle, LocaleChain, LocaleTag, Policy,
-    Rulepack, RulepackSource, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope,
-    Session, SensitiveSnapshot,
+    CleanDocument, Context, DictionaryBundle, LocaleChain, LocaleTag, Policy, Rulepack,
+    RulepackSource, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope, SensitiveSnapshot,
+    Session,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -34,7 +34,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("expected exactly one pinned opt-in policy path".into());
     }
     let commit = option_env!("GAZE_JWT_BUILD_COMMIT").ok_or("missing build commit pin")?;
-    if commit.len() != 40 || !commit.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) {
+    if commit.len() != 40
+        || !commit
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    {
         return Err("invalid build commit pin".into());
     }
     let bytes = std::fs::read(&args[1])?;
@@ -49,16 +53,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         record_match_kinds: Default::default(),
         record_value_rejections: Default::default(),
     };
-    let packs = ["core", "secrets"].map(|name| {
-        Rulepack::load(RulepackSource::Embedded(gaze_recognizers::embedded(name).expect("bundle")))
-    }).into_iter().collect::<Result<Vec<_>, _>>()?;
-    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(&[LocaleTag::Global]));
+    let packs = ["core", "secrets"]
+        .map(|name| {
+            Rulepack::load(RulepackSource::Embedded(
+                gaze_recognizers::embedded(name).expect("bundle"),
+            ))
+        })
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+    let chain =
+        LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(&[LocaleTag::Global]));
     let pipeline = gaze_assembly::build_pipeline(&policy, &context, &packs, &chain, None)?;
     let mut out = io::BufWriter::new(io::stdout().lock());
-    serde_json::to_writer(&mut out, &json!({
-        "protocol": PROTOCOL, "build_commit": commit,
-        "policy_sha256": hash(&bytes), "model_free": true,
-    }))?;
+    serde_json::to_writer(
+        &mut out,
+        &json!({
+            "protocol": PROTOCOL, "build_commit": commit,
+            "policy_sha256": hash(&bytes), "model_free": true,
+        }),
+    )?;
     out.write_all(b"\n")?;
     out.flush()?;
     let mut seen = HashSet::new();
@@ -69,10 +82,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err("empty or duplicate request".into());
         }
         let session = Session::new(Scope::Conversation(request.id.clone()))?;
-        let cleaned = pipeline.clean_text_with_safety_net_policy_detect_context_and_protection_trace(
-            &session, &request.text, &[LocaleTag::Global], &DictionaryBundle::default(),
-            SafetyNetPolicy::new(SafetyNetMode::Strict, SafetyNetFallback::Strict),
-        );
+        let cleaned = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                &request.text,
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Strict, SafetyNetFallback::Strict),
+            );
         let record = match cleaned {
             Err(error) => json!({
                 "id": request.id, "input_sha256": hash(request.text.as_bytes()),
@@ -81,20 +98,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "manifest": [], "trace": [],
             }),
             Ok((doc, spans, _, trace)) => {
-                let CleanDocument::Text(clean) = doc else { return Err("nontext result".into()); };
-                let manifest = spans.iter().map(|span| {
-                    let token = clean.get(span.clean_span.clone()).ok_or("invalid clean span")?;
-                    Ok(json!({
-                        "raw_span": [span.raw_span.start, span.raw_span.end],
-                        "clean_span": [span.clean_span.start, span.clean_span.end],
-                        "class": span.class.to_canonical_str(),
-                        "token_restore": session.restore(token),
-                    }))
-                }).collect::<Result<Vec<Value>, &str>>()?;
-                let trace = trace.iter().map(|item| json!({
-                    "raw_span": [item.raw_start(), item.raw_end()],
-                    "class": item.class().to_canonical_str(), "sources": item.source_ids(),
-                })).collect::<Vec<_>>();
+                let CleanDocument::Text(clean) = doc else {
+                    return Err("nontext result".into());
+                };
+                let manifest = spans
+                    .iter()
+                    .map(|span| {
+                        let token = clean
+                            .get(span.clean_span.clone())
+                            .ok_or("invalid clean span")?;
+                        Ok(json!({
+                            "raw_span": [span.raw_span.start, span.raw_span.end],
+                            "clean_span": [span.clean_span.start, span.clean_span.end],
+                            "class": span.class.to_canonical_str(),
+                            "token_restore": session.restore(token),
+                        }))
+                    })
+                    .collect::<Result<Vec<Value>, &str>>()?;
+                let trace = trace
+                    .iter()
+                    .map(|item| {
+                        json!({
+                            "raw_span": [item.raw_start(), item.raw_end()],
+                            "class": item.class().to_canonical_str(), "sources": item.source_ids(),
+                        })
+                    })
+                    .collect::<Vec<_>>();
                 let restored = pipeline.restore_strict_text(&session, &clean).ok();
                 let snapshot = session.export()?.into_bytes();
                 let imported = Session::import(SensitiveSnapshot::from(snapshot))?;
@@ -134,11 +163,18 @@ mod tests {
         assert!(policy.detectors.is_empty());
         assert!(policy.ner.is_none());
         assert!(policy.dob_judge.is_none());
-        assert_eq!(policy.safety_net.backend, gaze::SafetyNetPolicyBackend::None);
+        assert_eq!(
+            policy.safety_net.backend,
+            gaze::SafetyNetPolicyBackend::None
+        );
         assert_eq!(policy.rules.len(), 2);
-        assert!(matches!(&policy.rules[0], gaze::RuleSpec::Class { class, action }
-            if class.to_canonical_str() == "custom:security_token" && *action == gaze::Action::Tokenize));
-        assert!(matches!(&policy.rules[1], gaze::RuleSpec::Default { action }
-            if *action == gaze::Action::Preserve));
+        assert!(
+            matches!(&policy.rules[0], gaze::RuleSpec::Class { class, action }
+            if class.to_canonical_str() == "custom:security_token" && *action == gaze::Action::Tokenize)
+        );
+        assert!(
+            matches!(&policy.rules[1], gaze::RuleSpec::Default { action }
+            if *action == gaze::Action::Preserve)
+        );
     }
 }
