@@ -13,6 +13,22 @@ H = "c" * 40
 P = "d" * 40
 TAG = "e" * 40
 E = "1" * 64
+SIGNATURE = "-----BEGIN SSH SIGNATURE-----\nc3ludGhldGljLXNpZ25hdHVyZQ==\n-----END SSH SIGNATURE-----\n"
+
+
+def signed_readiness_tag(receipt):
+    # Model GitHub's verified API envelope; cryptographic verification is upstream.
+    receipt = receipt.rstrip("\n") + "\n"
+    return {
+        "object": {"type": "commit", "sha": D},
+        "message": receipt + SIGNATURE,
+        "verification": {
+            "verified": True,
+            "signature": SIGNATURE,
+            "payload": f"object {D}\ntype commit\ntag release-readiness/v0.16.0\n"
+            "tagger Fixture <signer@example.invalid> 0 +0000\n\n" + receipt,
+        },
+    }
 
 
 def inputs():
@@ -49,7 +65,7 @@ def inputs():
         "release_tag_object": {"type": "tag", "sha": TAG},
         "release_tag": {"object": {"type": "commit", "sha": R}, "verification": {"verified": True}},
         "readiness_tag_object": {"type": "tag", "sha": "f" * 40},
-        "readiness_tag": {"object": {"type": "commit", "sha": D}, "verification": {"verified": True}, "message": receipt},
+        "readiness_tag": signed_readiness_tag(receipt),
         "document_bytes": raw,
         "checks": [
             {"name": "docs", "conclusion": "success", "app": {"slug": "github-actions"}},
@@ -103,6 +119,56 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertEqual(result.release_commit, R)
         self.assertEqual(result.documentation_commit, D)
 
+    def test_rejects_malformed_data_in_signed_receipt(self):
+        receipt = inputs()["readiness_tag"]["verification"]["payload"].partition("\n\n")[2]
+        for malformed in (
+            "unexpected prefix\n" + receipt,
+            receipt + "malformed line\n",
+            receipt + "version=0.16.0\n",
+        ):
+            with self.subTest(receipt=malformed):
+                values = inputs()
+                values["readiness_tag"] = signed_readiness_tag(malformed)
+                with self.assertRaises(gate.ReadinessError):
+                    gate.validate(**values)
+
+    def test_rejects_message_data_outside_verified_receipt_payload(self):
+        values = inputs()
+        tag = values["readiness_tag"]
+        tag["message"] = tag["message"].replace(SIGNATURE, "malformed line\n" + SIGNATURE)
+        with self.assertRaisesRegex(gate.ReadinessError, "does not match the verified payload"):
+            gate.validate(**values)
+
+    def test_rejects_missing_or_malformed_signed_receipt_envelope(self):
+        payload = inputs()["readiness_tag"]["verification"]["payload"]
+        for field, invalid_value in (
+            ("payload", None),
+            ("payload", "gaze-release-readiness-v1\nversion=0.16.0\n"),
+            ("payload", payload.replace(f"object {D}\n", f"object {R}\n")),
+            ("payload", payload.replace("type commit\n", "type tree\n")),
+            ("payload", payload.replace("tag release-readiness/v0.16.0\n", "tag other/v0.16.0\n")),
+            ("signature", None),
+            ("signature", ""),
+            ("signature", "different signature"),
+        ):
+            with self.subTest(field=field, value=invalid_value):
+                values = inputs()
+                values["readiness_tag"]["verification"][field] = invalid_value
+                with self.assertRaisesRegex(gate.ReadinessError, "verified payload"):
+                    gate.validate(**values)
+
+    def test_rejects_wrong_version_or_missing_field_in_signed_receipt(self):
+        receipt = inputs()["readiness_tag"]["verification"]["payload"].partition("\n\n")[2]
+        for malformed, error in (
+            (receipt.replace("version=0.16.0", "version=0.15.1"), "version does not match"),
+            (receipt.replace(f"harness_commit={H}\n", ""), "missing harness_commit"),
+        ):
+            with self.subTest(receipt=malformed):
+                values = inputs()
+                values["readiness_tag"] = signed_readiness_tag(malformed)
+                with self.assertRaisesRegex(gate.ReadinessError, error):
+                    gate.validate(**values)
+
     def test_rejects_missing_readiness_signature(self):
         values = inputs()
         values["readiness_tag"]["verification"]["verified"] = False
@@ -133,8 +199,9 @@ class ReleaseReadinessTests(unittest.TestCase):
         document["harness_commit"] = D
         raw = json.dumps(document, sort_keys=True).encode()
         values["document_bytes"] = raw
-        values["readiness_tag"]["message"] = values["readiness_tag"]["message"].replace(
-            hashlib.sha256(inputs()["document_bytes"]).hexdigest(), hashlib.sha256(raw).hexdigest()
+        receipt = values["readiness_tag"]["verification"]["payload"].partition("\n\n")[2]
+        values["readiness_tag"] = signed_readiness_tag(
+            receipt.replace(hashlib.sha256(inputs()["document_bytes"]).hexdigest(), hashlib.sha256(raw).hexdigest())
         )
         with self.assertRaisesRegex(gate.ReadinessError, "harness_commit"):
             gate.validate(**values)
@@ -162,12 +229,12 @@ class ReleaseReadinessTests(unittest.TestCase):
         scorecard_path = next(iter(document["scorecards"]))
         document["scorecards"][scorecard_path] = hashlib.sha256(scorecard_bytes).hexdigest()
         document_bytes = json.dumps(document, sort_keys=True).encode()
-        message = values["readiness_tag"]["message"]
+        message = values["readiness_tag"]["verification"]["payload"].partition("\n\n")[2]
         message = message.replace(E, document["evidence"]["sha256"])
         message = message.replace(
             hashlib.sha256(values["document_bytes"]).hexdigest(), hashlib.sha256(document_bytes).hexdigest()
         )
-        values["readiness_tag"]["message"] = message
+        values["readiness_tag"] = signed_readiness_tag(message)
 
         def encoded(body):
             # GitHub Contents API wraps base64 at 60 columns and adds a final LF.

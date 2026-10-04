@@ -90,7 +90,19 @@ def validate(
         raise ReadinessError("readiness tag must target the accepted documentation commit")
     documentation_commit = require_sha(readiness_tag["object"].get("sha"), "documentation commit")
 
-    receipt = parse_receipt(str(readiness_tag.get("message", "")))
+    # GitHub's message includes signature armor; the verified payload does not.
+    verification = readiness_tag["verification"]
+    payload = verification.get("payload")
+    signature = verification.get("signature")
+    if not isinstance(payload, str) or not isinstance(signature, str) or not signature:
+        raise ReadinessError("readiness tag is missing its verified payload or signature")
+    headers, separator, receipt_message = payload.partition("\n\n")
+    expected_headers = f"object {documentation_commit}\ntype commit\ntag release-readiness/v{version}\n"
+    if not separator or not headers.startswith(expected_headers):
+        raise ReadinessError("readiness tag has a malformed verified payload")
+    if readiness_tag.get("message") != receipt_message + signature:
+        raise ReadinessError("readiness tag message does not match the verified payload and signature")
+    receipt = parse_receipt(receipt_message)
     if receipt.get("version") != version:
         raise ReadinessError("readiness receipt version does not match the release tag")
     if required(receipt, "release_commit") != expected_release_commit:
