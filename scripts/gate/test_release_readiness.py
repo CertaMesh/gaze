@@ -137,13 +137,21 @@ def digest(raw):
 
 
 def card_identity(card):
-    return {
+    identity = {
         "dataset": {k: copy.deepcopy(v) for k, v in card["dataset"].items() if k in ("repository", "revision", "file", "integrity", "evaluated_population", "sampling")},
         "parameters": copy.deepcopy(card["parameters"]),
         "policy_sha256": card["parameters"]["policy_sha256"],
         "model_bundles": copy.deepcopy(card["runner_provenance"]["model_bundles"]),
         "scored_label_contract": card.get("scoring", {}).get("scored_label_contract"),
     }
+    if isinstance(card.get("layers"), dict):
+        identity["agentic_layers"] = copy.deepcopy({
+            "generator": card["layers"].get("generator"),
+            "scored_label_contract": card["layers"].get("scored_label_contract"),
+            "binary_commit": card.get("binary_commit", card.get("gaze")),
+            "binary_sha256": card.get("binary_sha256"),
+        })
+    return identity
 
 
 def synthetic_card(contract, contract_bytes):
@@ -243,6 +251,8 @@ class ApiFixture:
             },
         ]
         self.contract_bytes = {i: raw_json({"schema_version": 1, "version": i}) for i in (2, 3)}
+        self.layer_contract_path = PREFIX + "scored-labels-agentic.json"
+        self.layer_contract_bytes = (ROOT / self.layer_contract_path).read_bytes()
         self.cards = {CARD_PATHS[i]: synthetic_card(i, self.contract_bytes.get(i)) for i in (1, 2, 3)}
         self.evidence = {
             "schema_version": 1,
@@ -354,6 +364,9 @@ class ApiFixture:
             if file.startswith(PREFIX + "scored-labels-v"):
                 assert ref == H
                 raw = self.contract_bytes[int(file[-6])]
+            elif file == self.layer_contract_path:
+                assert ref == H
+                raw = self.layer_contract_bytes
             else:
                 assert ref == D
                 raw = files[file]
@@ -369,12 +382,126 @@ def api_fixture():
     return ApiFixture()
 
 
+def layered_fixture(explicit_binary=True):
+    fixture = api_fixture()
+    contract = json.loads(fixture.layer_contract_bytes)
+    for card in fixture.cards.values():
+        if explicit_binary:
+            card["binary_commit"] = {"revision": R, "dirty": False}
+            card["binary_sha256"] = "7" * 64
+        # Actual producer manifest/report layout; generated gold is separate
+        # from the primary corpus and uses its own H contract in every slot.
+        card["layers"] = {
+            "schema_version": 1,
+            "generator": {
+                "generator": contract["corpus"]["generator"],
+                "generator_version": contract["corpus"]["generator_version"],
+                "partition": contract["corpus"]["published_partition"],
+                "seed": 20260710, "docs_per_family": 1, "documents": 6,
+                "documents_by_layer": {"A": 2, "D": 2, "R": 2},
+                "corpus_sha256": "5" * 64, "synthetic_only": True,
+            },
+            "scored_label_contract": {
+                "id": contract["contract"], "version": contract["contract_version"],
+                "file": fixture.layer_contract_path, "file_sha256": digest(fixture.layer_contract_bytes),
+                "excluded_labels": [], "neutral_prediction_classes": [],
+                "scored_gold_entities": 4, "scored_gold_utf8_bytes": 20,
+                "excluded_gold_entities": 0, "excluded_gold_utf8_bytes": 0,
+                "scored_gold_digest": "6" * 64,
+            },
+            "C": {"source": "runs", "description": "Primary corpus"},
+        }
+        for name in ("A", "D", "R"):
+            run = copy.deepcopy(card["runs"][0])
+            run["per_label_recall"] = {}
+            card["layers"][name] = {"description": "Synthetic generated layer",
+                                     "population": {"documents": 2, "entities": 2}, "runs": [run]}
+    fixture.seal(refresh_history=True)
+    return fixture
+
+
 class ReleaseReadinessTests(unittest.TestCase):
+    def test_accepts_complete_current_layers_with_distinct_frozen_generated_input(self):
+        for explicit in (True, False):
+            fixture = layered_fixture(explicit_binary=explicit)
+            primary = fixture.cards[CARD_PATHS[1]]
+            self.assertNotEqual(primary["dataset"]["integrity"]["sha256"], primary["layers"]["generator"]["corpus_sha256"])
+            historical = fixture.history["releases"][0]["agentic_layers"]
+            historical["binary_commit"] = {"revision": "8" * 40, "dirty": False}
+            historical["harness_commit"] = {"revision": "9" * 40, "dirty": False}
+            fixture.seal()
+            self.assertEqual(gate.main(ARGV, fixture.get), 0)
+
+    def test_rejects_resealed_explicit_layer_binary_contradicting_clean_R(self):
+        for slot in (1, 2, 3):
+            for identity in ({"revision": D, "dirty": False}, {"revision": R, "dirty": True},
+                             {"revision": D, "dirty": True}, {"revision": R}, None):
+                with self.subTest(slot=slot, identity=identity):
+                    fixture = layered_fixture()
+                    fixture.cards[CARD_PATHS[slot]]["binary_commit"] = identity
+                    fixture.seal(refresh_history=True)
+                    self.assertEqual(fixture.cards[CARD_PATHS[slot]]["gaze"], {"revision": R, "dirty": False})
+                    with self.assertRaisesRegex(gate.ReadinessError, "layer binary must record clean measured R"):
+                        gate.main(ARGV, fixture.get)
+
+    def test_rejects_generated_identity_replacement_against_frozen_evidence(self):
+        for slot in (1, 2, 3):
+            for key, field, replacement in (("generator", "corpus_sha256", "0" * 64),
+                                            ("generator", "seed", 123),
+                                            ("scored_label_contract", "file_sha256", "0" * 64)):
+                with self.subTest(slot=slot, field=field):
+                    fixture = layered_fixture()
+                    frozen = copy.deepcopy(fixture.evidence["scorecards"][CARD_PATHS[slot]]["identities"])
+                    fixture.cards[CARD_PATHS[slot]]["layers"][key][field] = replacement
+                    fixture.seal(refresh_history=True)
+                    fixture.evidence["scorecards"][CARD_PATHS[slot]]["identities"] = frozen
+                    fixture.seal(refresh_identities=False)
+                    self.assertEqual(fixture.document["scorecards"][CARD_PATHS[slot]], fixture.evidence["scorecards"][CARD_PATHS[slot]]["sha256"])
+                    with self.assertRaisesRegex(gate.ReadinessError, "frozen input/policy/model identities"):
+                        gate.main(ARGV, fixture.get)
+
+    def test_rejects_resealed_generated_contract_not_matching_own_H_file(self):
+        for mutation in ("digest", "id", "version", "generator_version", "partition", "unsafe_file", "missing_file", "empty_D"):
+            with self.subTest(mutation=mutation):
+                fixture = layered_fixture()
+                for card in fixture.cards.values():
+                    layers = card["layers"]
+                    contract = layers["scored_label_contract"]
+                    if mutation == "digest":
+                        contract["file_sha256"] = "0" * 64
+                    elif mutation == "id":
+                        contract["id"] = "other-contract"
+                    elif mutation == "version":
+                        contract["version"] += 1
+                    elif mutation == "generator_version":
+                        layers["generator"]["generator_version"] += 1
+                    elif mutation == "partition":
+                        layers["generator"]["partition"] = "train"
+                    elif mutation == "unsafe_file":
+                        contract["file"] = PREFIX + "../scored-labels-agentic.json"
+                    elif mutation == "missing_file":
+                        del contract["file"]
+                    else:
+                        layers["D"]["runs"] = []
+                fixture.seal(refresh_history=True)
+                error = ("frozen generated-layer contract bytes" if mutation == "digest" else
+                         "path is unsafe" if mutation == "unsafe_file" else
+                         "path is unsafe" if mutation == "missing_file" else
+                         "layer D must have measured runs" if mutation == "empty_D" else
+                         "identity does not match its frozen H contract")
+                with self.assertRaisesRegex(gate.ReadinessError, error):
+                    gate.main(ARGV, fixture.get)
+
     def test_rejects_release_tag_alias_and_inconsistent_signed_envelope(self):
         values = inputs()
         values["release_tag"] = signed_release_tag("v0.15.1")
         with self.assertRaisesRegex(gate.ReadinessError, "own name"):
             gate.validate(**values)
+        fixture = api_fixture()
+        def get(path):
+            return signed_release_tag("v0.15.1") if path == f"/git/tags/{TAG}" else fixture.get(path)
+        with self.assertRaisesRegex(gate.ReadinessError, "own name"):
+            gate.main(ARGV, get)
         for field, value in (("tag", "v0.15.1"), ("payload", None), ("signature", None),
                              ("signature", "different signature"), ("message", "extra message")):
             with self.subTest(field=field):
@@ -455,6 +582,54 @@ class ReleaseReadinessTests(unittest.TestCase):
         historical["note"] = "Historical source retained"
         fixture.seal()
         self.assertEqual(gate.main(ARGV, fixture.get), 0)
+
+    def test_accepts_measured_optional_history_fields_and_rejects_their_drift(self):
+        fixture = layered_fixture()
+        for card in fixture.cards.values():
+            card["observation_record"] = {
+                "format": "gzip-jsonl", "schema_version": 2, "file": "observations.jsonl.gz",
+                "sha256": "6" * 64, "bytes": 100, "observations": 2,
+                "corpus_sha256": card["dataset"]["integrity"]["sha256"],
+            }
+            card["runner_provenance"].update({
+                "entry_point": gate.render.PAST_RELEASE_ENTRY_POINT,
+                "harness_revision": H, "binary_sha256": "7" * 64,
+                "manifest_replacing_actions": ["tokenize"],
+            })
+            card["runs"][0]["validator_recall_by_label"] = {"custom:fixture": {
+                "applicability": "applicable", "validator_kinds": ["synthetic"],
+                "gold_spans": 2, "validator_failed_gold_spans": 1,
+                "validator_backed_recall": {"full_coverage_recall": 1.0},
+                "shape_only_recall": {"full_coverage_recall": 1.0},
+                "production_recall_by_gold_validity": {
+                    "validator_passed_gold": {"leaked_utf8_bytes": 0},
+                    "validator_failed_gold": {"leaked_utf8_bytes": 0},
+                },
+            }}
+        fixture.seal(refresh_history=True)
+        self.assertEqual(gate.main(ARGV, fixture.get), 0)
+        self.assertIn("`custom:fixture`", gate.render.render_current_release(fixture.history))
+        original = copy.deepcopy(fixture.history)
+        for slot, key in ((1, "validator_recall"), (1, "observation_record"),
+                          (2, "measurement"), (2, "observation_record"), (3, "agentic_layers")):
+            for mutation in ("delete", "change"):
+                with self.subTest(slot=slot, key=key, mutation=mutation):
+                    fixture.history = copy.deepcopy(original)
+                    row = fixture.history["releases"][-1]
+                    target = row if slot == 1 else row["contract_results"][slot - 2]
+                    if mutation == "delete":
+                        del target[key]
+                    elif key == "validator_recall":
+                        target[key]["custom:fixture"]["gold_spans"] += 1
+                    elif key == "observation_record":
+                        target[key]["bytes"] += 1
+                    elif key == "measurement":
+                        target[key]["binary_sha256"] = "8" * 64
+                    else:
+                        target[key]["binary_commit"] = {"revision": D, "dirty": True}
+                    fixture.seal()
+                    with self.assertRaisesRegex(gate.ReadinessError, f"current history {key}"):
+                        gate.main(ARGV, fixture.get)
 
     def test_content_bytes_accepts_unwrapped_base64(self):
         raw = b"manifest\n"

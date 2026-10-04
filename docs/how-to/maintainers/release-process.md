@@ -50,6 +50,9 @@ merge and freeze measured `R`; measure and accept private evidence `E`; create
 signed annotated `vX.Y.Z` with `T = R`; render/dogfood/merge public documentation
 `D`; then create signed annotated `release-readiness/vX.Y.Z` targeting `D`.
 Only retry the original guarded workflows after independent readiness acceptance.
+The release tag object's own API name and verified payload tag header must both
+name `vX.Y.Z`, with the signed commit header targeting `R` and the API message
+equal to the signed message plus signature.
 
 ## Readiness acceptance boundary
 
@@ -91,12 +94,25 @@ The current inventory is exactly `scorecard-vX.Y.Z.json` (contract v1),
 The gate reuses the existing schema-v4 renderer projection, requires nonempty
 runs and explicit clean `gaze.revision = R`, and verifies the current history
 row and each contract result against those projections and byte digests.
+The join checks field presence as well as values, including optional validator,
+layer, observation and measurement fields. Only `note` and `date` annotations
+are exempt; the primary row's contract results are joined separately.
 The three cards share frozen input/parameter/model identities; policy bytes
 match both recorded policy digests, model expected/observed digests agree, and
 v2/v3 scored-contract files are fetched at frozen harness commit `H` and hashed.
 If the runner records `harness_revision`, it must equal `H`. H/P execution and
 model/corpus custody remain attested, rather than inferred from repeated SHAs.
 Historical rows keep their own measured commits; they are not forced to equal R.
+For a card with generated layers, its evidence `identities.agentic_layers` also
+binds the complete `layers.generator` manifest and `layers.scored_label_contract`
+report, plus `binary_commit` (falling back to `gaze`) and `binary_sha256` (null
+when the producer does not record it). An explicit current binary commit must
+be clean `R`. A, D and R each require measured runs. The generated corpus digest
+belongs to these layers, independently of layer C's corpus digest. The layer
+contract's recorded `file` is fetched at `H`; its bytes, contract ID/version and
+generator/version/partition must match the recorded identities. The three cards
+share these frozen layer identities. This joins declared inputs and code; actual
+generation, binary execution and custody remain maintainer-attested.
 Changing this inventory requires a reviewed contract revision, not an omitted card.
 
 Every acceptance gate has `status: PASS` and `receipt: {path, sha256}`. Its exact

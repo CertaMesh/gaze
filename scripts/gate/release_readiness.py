@@ -362,8 +362,53 @@ def scorecard_identities(card):
     ) if key in dataset}
     if parameters.get("profile") != "full":
         raise ReadinessError("release scorecards must record the full benchmark profile")
-    return {"dataset": input_identity, "parameters": parameters, "policy_sha256": policy,
-            "model_bundles": models, "scored_label_contract": card.get("scoring", {}).get("scored_label_contract")}
+    identities = {"dataset": input_identity, "parameters": parameters, "policy_sha256": policy,
+                  "model_bundles": models, "scored_label_contract": card.get("scoring", {}).get("scored_label_contract")}
+    if "layers" in card:
+        layers = card["layers"]
+        if not isinstance(layers, dict) or not isinstance(layers.get("generator"), dict) or not isinstance(layers.get("scored_label_contract"), dict):
+            raise ReadinessError("generated layer input/contract identity is missing")
+        require_sha(layers["generator"].get("corpus_sha256"), "generated corpus digest", 64)
+        identities["agentic_layers"] = {
+            "generator": layers["generator"],
+            "scored_label_contract": layers["scored_label_contract"],
+            "binary_commit": card.get("binary_commit", card.get("gaze")),
+            "binary_sha256": card.get("binary_sha256"),
+        }
+    return identities
+
+
+def verify_current_layers(get, card, release, harness):
+    # An explicit binary identity cannot be hidden by the top-level clean R.
+    if "binary_commit" in card:
+        binary = card["binary_commit"]
+        if not isinstance(binary, dict) or binary.get("revision") != release or binary.get("dirty") is not False:
+            raise ReadinessError("current layer binary must record clean measured R")
+    if "binary_sha256" in card:
+        require_sha(card["binary_sha256"], "current binary digest", 64)
+    if "layers" not in card:
+        return
+    layers = card["layers"]
+    contract = layers["scored_label_contract"]
+    # Generated gold has its own contract, independent of the C v1/v2/v3 slot.
+    raw = bound_content(get, {"path": contract.get("file"), "sha256": contract.get("file_sha256")},
+                        harness, "frozen generated-layer contract")
+    frozen = json_object(raw, "frozen generated-layer contract")
+    generator = layers["generator"]
+    corpus = frozen.get("corpus")
+    if (contract.get("id") != frozen.get("contract")
+            or type(contract.get("version")) is not int
+            or contract["version"] != frozen.get("contract_version")
+            or not isinstance(corpus, dict)
+            or generator.get("generator") != corpus.get("generator")
+            or type(generator.get("generator_version")) is not int
+            or generator["generator_version"] != corpus.get("generator_version")
+            or generator.get("partition") != corpus.get("published_partition")):
+        raise ReadinessError("generated-layer identity does not match its frozen H contract")
+    for name in ("A", "D", "R"):
+        block = layers.get(name)
+        if not isinstance(block, dict) or not isinstance(block.get("runs"), list) or not block["runs"]:
+            raise ReadinessError(f"current generated layer {name} must have measured runs")
 
 
 def verify_evidence(get, document, evidence, commit):
@@ -427,6 +472,7 @@ def verify_evidence(get, document, evidence, commit):
             identities = scorecard_identities(card)
             if evidence["scorecards"][path] != {"sha256": digest, "identities": identities}:
                 raise ReadinessError("scorecard frozen input/policy/model identities do not match evidence")
+            verify_current_layers(get, card, release, document["harness_commit"])
             common = {key: value for key, value in identities.items() if key != "scored_label_contract"}
             if shared_identity is not None and common != shared_identity:
                 raise ReadinessError("current scorecards do not share frozen inputs/policy/models")
