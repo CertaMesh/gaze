@@ -13,7 +13,23 @@ import sys
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Mapping
+
+
+# Reuse the shipped stdlib renderer's schema/projection; never execute benchmarks.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bench"))
+import render_benchmark_doc as render
+
+
+BENCH = "docs/reference/benchmarks/"
+MANDATORY_ACCEPTANCE = frozenset({
+    "release_preflight", "benchmark_gain_v1", "benchmark_gain_v2",
+    "historical_comparisons", "competitors", "native", "restore", "manifest",
+    "private_preview", "public_documentation", "timing_authority",
+    "tag_namespace", "publisher_refs",
+})
+GITHUB_ACTIONS_APP_ID = 15368
 
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -118,12 +134,7 @@ def validate(
     if hashlib.sha256(document_bytes).hexdigest() != manifest_sha256:
         raise ReadinessError("documentation readiness manifest bytes do not match the signed receipt")
 
-    try:
-        document = json.loads(document_bytes)
-    except json.JSONDecodeError as exc:
-        raise ReadinessError("documentation readiness manifest is not JSON") from exc
-    if not isinstance(document, dict):
-        raise ReadinessError("documentation readiness manifest must be an object")
+    document = json_object(document_bytes, "documentation readiness manifest")
     expected_document = {
         "version": version,
         "release_commit": expected_release_commit,
@@ -154,11 +165,13 @@ def validate(
     successful = {
         check.get("name")
         for check in checks
-        if check.get("conclusion") == "success" and check.get("app", {}).get("slug") == "github-actions"
+        if trusted_check(check, documentation_commit)
     }
     missing = [check for check in required_checks if not isinstance(check, str) or check not in successful]
     if missing:
-        raise ReadinessError(f"accepted documentation commit lacks successful required checks: {', '.join(map(str, missing))}")
+        raise ReadinessError(
+            f"accepted documentation commit lacks successful required checks: {', '.join(map(str, missing))}",
+        )
     return ReadyRelease(expected_release_commit, documentation_commit)
 
 
@@ -185,12 +198,254 @@ def content_bytes(content: Mapping[str, Any], description: str) -> bytes:
         raise ReadinessError(f"{description} has invalid base64 content") from exc
 
 
-def workflow_run_id(check: Mapping[str, Any]) -> str:
-    details_url = check.get("details_url")
-    match = re.search(r"/actions/runs/(\d+)(?:/|$)", details_url) if isinstance(details_url, str) else None
-    if match is None:
-        raise ReadinessError("docs check has no GitHub Actions workflow-run URL")
+def trusted_check(check: Mapping[str, Any], commit: str) -> bool:
+    return (
+        check.get("head_sha") == commit
+        and check.get("status") == "completed"
+        and check.get("conclusion") == "success"
+        and isinstance(check.get("app"), dict)
+        and check["app"].get("slug") == "github-actions"
+        and check["app"].get("id") == GITHUB_ACTIONS_APP_ID
+    )
+
+
+def workflow_run_id(check: Mapping[str, Any], repository: str) -> str:
+    # Anchor the origin, repository and job identity, not just a URL substring.
+    match = re.fullmatch(
+        rf"https://github\.com/{re.escape(repository)}/actions/runs/([1-9][0-9]*)/job/([1-9][0-9]*)",
+        check.get("details_url", "") if isinstance(check.get("details_url"), str) else "",
+    )
+    if match is None or type(check.get("id")) is not int or str(check["id"]) != match.group(2):
+        raise ReadinessError("docs check has no trusted repository workflow-run/job URL")
     return match.group(1)
+
+
+def verify_documentation_source(get, repository, release_commit, commit, checks):
+    repo = get("")
+    if repo.get("full_name") != repository or type(repo.get("id")) is not int:
+        raise ReadinessError("repository identity is invalid")
+    default = repo.get("default_branch")
+    if not isinstance(default, str) or not default:
+        raise ReadinessError("repository default branch is missing")
+    branch = get(f"/branches/{urllib.parse.quote(default, safe='')}")
+    tip = require_sha(branch.get("commit", {}).get("sha"), "default branch tip")
+    if branch.get("name") != default or branch.get("protected") is not True:
+        raise ReadinessError("documentation default branch is not protected")
+    for base, head in ((release_commit, commit), (commit, tip)):
+        compare = get(f"/compare/{base}...{head}")
+        if (
+            compare.get("status") not in {"ahead", "identical"}
+            or compare.get("base_commit", {}).get("sha") != base
+            or compare.get("merge_base_commit", {}).get("sha") != base
+        ):
+            raise ReadinessError("documentation must descend from R and belong to the protected default branch")
+    # A commit may have both PR and main checks. Select one complete trusted
+    # main run; use that same check for every join rather than mixing records.
+    for docs_check in checks:
+        if docs_check.get("name") != "docs" or not trusted_check(docs_check, commit):
+            continue
+        try:
+            verify_docs_run(get, repository, repo, default, commit, docs_check)
+        except ReadinessError:
+            continue
+        return
+    raise ReadinessError("accepted documentation commit lacks a joined successful main docs run")
+
+
+def verify_docs_run(get, repository, repo, default, commit, docs_check):
+    run_id = workflow_run_id(docs_check, repository)
+    run = get(f"/actions/runs/{run_id}")
+    workflow = get("/actions/workflows/docs.yml")
+    suite_id = docs_check.get("check_suite", {}).get("id")
+    if (
+        type(suite_id) is not int or suite_id <= 0
+        or run.get("check_suite_id") != suite_id
+        or type(run.get("id")) is not int or str(run["id"]) != run_id
+        or type(workflow.get("id")) is not int
+        or run.get("workflow_id") != workflow["id"]
+        or workflow.get("path") != ".github/workflows/docs.yml"
+        or run.get("path") != ".github/workflows/docs.yml"
+        or run.get("head_sha") != commit
+        or run.get("status") != "completed" or run.get("conclusion") != "success"
+        or run.get("head_branch") != default or run.get("event") != "push"
+        or any(run.get(key, {}).get("id") != repo["id"] or run.get(key, {}).get("full_name") != repository
+               for key in ("repository", "head_repository"))
+    ):
+        raise ReadinessError(
+            "docs check is not a successful docs.yml run joined to the protected documentation source",
+        )
+
+
+def json_object(raw: bytes, description: str) -> dict[str, Any]:
+    def unique_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ReadinessError(f"{description} contains duplicate JSON keys")
+            result[key] = value
+        return result
+
+    def reject_constant(value):
+        raise ReadinessError(f"{description} contains a non-finite JSON value")
+
+    try:
+        value = json.loads(raw, object_pairs_hook=unique_pairs, parse_constant=reject_constant)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise ReadinessError(f"{description} is not JSON") from exc
+    if not isinstance(value, dict):
+        raise ReadinessError(f"{description} must be an object")
+    return value
+
+
+def bound_content(get, binding, commit, description):
+    if not isinstance(binding, dict):
+        raise ReadinessError(f"{description} binding is missing")
+    path = binding.get("path")
+    if (not isinstance(path, str) or not path.startswith(BENCH)
+            or any(part in {"", ".", ".."} for part in path.split("/"))):
+        raise ReadinessError(f"{description} path is unsafe")
+    expected = require_sha(binding.get("sha256"), f"{description} digest", 64)
+    raw = content_bytes(get(f"/contents/{urllib.parse.quote(path, safe='/')}?ref={commit}"), description)
+    if hashlib.sha256(raw).hexdigest() != expected:
+        raise ReadinessError(f"{description} bytes do not match their binding")
+    return raw
+
+
+def scorecard_identities(card):
+    dataset, parameters = card.get("dataset"), card.get("parameters")
+    provenance = card.get("runner_provenance")
+    if not all(isinstance(v, dict) for v in (dataset, parameters, provenance)):
+        raise ReadinessError("scorecard input/policy/model provenance is incomplete")
+    policy = require_sha(parameters.get("policy_sha256"), "scorecard policy digest", 64)
+    if provenance.get("policy", {}).get("sha256") != policy:
+        raise ReadinessError("scorecard policy provenance does not match parameters")
+    models = provenance.get("model_bundles")
+    if not isinstance(models, list):
+        raise ReadinessError("scorecard model bundle inventory is missing")
+    seen = set()
+    for model in models:
+        if not isinstance(model, dict) or not isinstance(model.get("model_id"), str) or not model["model_id"] or model["model_id"] in seen:
+            raise ReadinessError("scorecard model identity is invalid or duplicated")
+        seen.add(model["model_id"])
+        expected = require_sha(model.get("expected_sha256"), "model expected digest", 64)
+        if model.get("observed_sha256") != expected:
+            raise ReadinessError("scorecard model observed digest does not match expected digest")
+    input_identity = {key: dataset[key] for key in (
+        "repository", "revision", "file", "integrity", "evaluated_population", "sampling"
+    ) if key in dataset}
+    if parameters.get("profile") != "full":
+        raise ReadinessError("release scorecards must record the full benchmark profile")
+    return {"dataset": input_identity, "parameters": parameters, "policy_sha256": policy,
+            "model_bundles": models, "scored_label_contract": card.get("scoring", {}).get("scored_label_contract")}
+
+
+def verify_evidence(get, document, evidence, commit):
+    # A signed maintainer attests execution and acceptance. This verifier joins
+    # identities, schema, completeness and PASS receipts; it does not rerun gates.
+    release = document["release_commit"]
+    if type(document.get("schema_version")) is not int or document["schema_version"] != 1 or type(evidence.get("schema_version")) is not int or evidence["schema_version"] != 1 or evidence.get("format") != "gaze-release-evidence-v1":
+        raise ReadinessError("unknown release documentation/evidence contract")
+    if set(evidence) != {
+        "schema_version", "format", "version", "release_commit", "measured_commit",
+        "harness_commit", "renderer_commit", "status", "scorecards", "acceptance", "history",
+    }:
+        raise ReadinessError("release evidence has missing or unknown fields")
+    for key in ("version", "release_commit", "harness_commit", "renderer_commit"):
+        if evidence.get(key) != document[key]:
+            raise ReadinessError(f"immutable evidence manifest {key} does not match the readiness manifest")
+    if evidence.get("measured_commit") != release or evidence.get("status") != "PASS":
+        raise ReadinessError("evidence does not accept the actual measured release commit")
+    acceptance = evidence.get("acceptance")
+    if not isinstance(acceptance, dict) or acceptance.get("authority") != "signed-maintainer":
+        raise ReadinessError("explicit signed maintainer acceptance is required")
+    gates = acceptance.get("gates")
+    if not isinstance(gates, dict) or set(gates) != MANDATORY_ACCEPTANCE:
+        raise ReadinessError("mandatory gate acceptance inventory is incomplete or unknown")
+    for name, result in gates.items():
+        if not isinstance(result, dict) or result.get("status") != "PASS":
+            raise ReadinessError(f"mandatory gate {name} is not accepted PASS")
+        receipt = json_object(bound_content(get, result.get("receipt"), commit, f"{name} acceptance receipt"), name)
+        if type(receipt.get("schema_version")) is not int or receipt["schema_version"] != 1 or receipt.get("gate") != name or receipt.get("status") != "PASS" or receipt.get("release_commit") != release:
+            raise ReadinessError(f"mandatory gate {name} receipt does not accept R")
+    version = "v" + document["version"]
+    paths = {
+        1: BENCH + f"scorecard-{version}.json",
+        **{n: BENCH + f"scorecard-{version}-scored-labels-v{n}.json" for n in (2, 3)},
+    }
+    if set(document["scorecards"]) != set(paths.values()) or not isinstance(evidence.get("scorecards"), dict) or set(evidence["scorecards"]) != set(paths.values()):
+        raise ReadinessError("release must bind the complete version-owned v1/v2/v3 scorecard inventory")
+    if evidence.get("history") != document.get("history"):
+        raise ReadinessError("evidence/history digest binding does not match documentation")
+    if not isinstance(document.get("history"), dict) or document["history"].get("path") != BENCH + "release-history.json":
+        raise ReadinessError("current release history binding is missing")
+    history = json_object(bound_content(get, document["history"], commit, "release history"), "release history")
+    policy_digest = hashlib.sha256(bound_content(get, document.get("policy"), commit, "frozen policy")).hexdigest()
+    try:
+        render.validate_history(history)
+        rows = [r for r in history["releases"] if r["version"] == version]
+        if len(rows) != 1 or history["releases"][-1] != rows[0]:
+            raise ReadinessError("release history must end with exactly one current release row")
+        row = rows[0]
+        if row.get("commit") != release or row.get("provisional") is not False:
+            raise ReadinessError("current history row must record the actual non-provisional R")
+        results = row.get("contract_results")
+        if not isinstance(results, list) or {r["scored_label_contract"]["version"] for r in results} != {2, 3} or len(results) != 2:
+            raise ReadinessError("current history must join contract v1/v2/v3 scorecards")
+        shared_identity = None
+        for number, path in paths.items():
+            digest = document["scorecards"][path]
+            card = json_object(bound_content(get, {"path": path, "sha256": digest}, commit, "scorecard"), "scorecard")
+            if card.get("gaze", {}).get("revision") != release or card.get("gaze", {}).get("dirty") is not False:
+                raise ReadinessError("current scorecard must record clean measured R")
+            identities = scorecard_identities(card)
+            if evidence["scorecards"][path] != {"sha256": digest, "identities": identities}:
+                raise ReadinessError("scorecard frozen input/policy/model identities do not match evidence")
+            common = {key: value for key, value in identities.items() if key != "scored_label_contract"}
+            if shared_identity is not None and common != shared_identity:
+                raise ReadinessError("current scorecards do not share frozen inputs/policy/models")
+            shared_identity = common
+            if identities["policy_sha256"] != policy_digest:
+                raise ReadinessError("scorecard policy differs from frozen policy bytes")
+            harness_revision = card["runner_provenance"].get("harness_revision")
+            if harness_revision is not None and harness_revision != document["harness_commit"]:
+                raise ReadinessError("scorecard measured harness differs from frozen H")
+            if number > 1:
+                contract = identities["scored_label_contract"]
+                if not isinstance(contract, dict) or contract.get("version") != number:
+                    raise ReadinessError("scorecard scored-label contract does not match its inventory slot")
+                bound_content(
+                    get,
+                    {
+                        "path": BENCH + f"scored-labels-v{number}.json",
+                        "sha256": contract.get("file_sha256"),
+                    },
+                    document["harness_commit"],
+                    "frozen scored-label contract",
+                )
+                projected = render.contract_result_from_scorecard(
+                    card,
+                    row,
+                    scorecard_filename=Path(path).name,
+                    scorecard_sha256=digest,
+                )
+                actual = next(r for r in results if r["scored_label_contract"]["version"] == number)
+            else:
+                if render._scored_label_contract(card) is not None:
+                    raise ReadinessError("primary scorecard must use scored-label contract v1")
+                projected = render.history_entry_from_scorecard(
+                    card,
+                    version=version,
+                    machine=row["machine"],
+                    scorecard_filename=Path(path).name,
+                    scorecard_sha256=digest,
+                    shipped_arm=render.shipped_default_arm(row),
+                )
+                actual = row
+            for key, value in projected.items():
+                if key not in {"note", "date"} and actual.get(key) != value:
+                    raise ReadinessError(f"current history {key} does not match scorecard projection")
+    except (render.RenderError, KeyError, TypeError, AttributeError) as exc:
+        raise ReadinessError(f"invalid release scorecard/history schema: {exc}") from exc
 
 
 def main(argv: list[str] | None = None, get: Callable[[str], Mapping[str, Any]] | None = None) -> int:
@@ -221,7 +476,7 @@ def main(argv: list[str] | None = None, get: Callable[[str], Mapping[str, Any]] 
     document = get(f"/contents/{document_path}?ref={documentation_commit}")
     document_bytes = content_bytes(document, "documentation readiness manifest")
     checks = get(f"/commits/{documentation_commit}/check-runs?per_page=100").get("check_runs")
-    if not isinstance(checks, list):
+    if not isinstance(checks, list) or not all(isinstance(check, dict) for check in checks):
         raise ReadinessError("GitHub check-runs response is malformed")
     ready = validate(
         version=version,
@@ -233,9 +488,9 @@ def main(argv: list[str] | None = None, get: Callable[[str], Mapping[str, Any]] 
         document_bytes=document_bytes,
         checks=checks,
     )
-    document_json = json.loads(document_bytes)
+    document_json = json_object(document_bytes, "documentation readiness manifest")
     documentation_commit_object = get(f"/git/commits/{documentation_commit}")
-    if documentation_commit_object.get("verification", {}).get("verified") is not True:
+    if documentation_commit_object.get("sha") != documentation_commit or documentation_commit_object.get("verification", {}).get("verified") is not True:
         raise ReadinessError("accepted documentation commit signature is not verified")
     evidence = document_json["evidence"]
     evidence_path = evidence["manifest_path"]
@@ -247,33 +502,12 @@ def main(argv: list[str] | None = None, get: Callable[[str], Mapping[str, Any]] 
     )
     if hashlib.sha256(evidence_bytes).hexdigest() != evidence["sha256"]:
         raise ReadinessError("immutable evidence manifest bytes do not match the readiness manifest")
-    try:
-        evidence_manifest = json.loads(evidence_bytes)
-    except json.JSONDecodeError as exc:
-        raise ReadinessError("immutable evidence manifest is not JSON") from exc
-    for identity in ("release_commit", "harness_commit", "renderer_commit"):
-        if evidence_manifest.get(identity) != document_json[identity]:
-            raise ReadinessError(f"immutable evidence manifest {identity} does not match the readiness manifest")
-    docs_check = next(
-        (check for check in checks if check.get("name") == "docs" and check.get("conclusion") == "success"), None
+    evidence_manifest = json_object(evidence_bytes, "immutable evidence manifest")
+    verify_documentation_source(get, args.repository, ready.release_commit, documentation_commit, checks)
+    verify_evidence(get, document_json, evidence_manifest, documentation_commit)
+    print(
+        f"release readiness accepted: release={ready.release_commit} documentation={ready.documentation_commit}",
     )
-    if docs_check is None:
-        raise ReadinessError("accepted documentation commit has no successful docs check")
-    docs_run = get(f"/actions/runs/{workflow_run_id(docs_check)}")
-    if (
-        docs_run.get("path") != ".github/workflows/docs.yml"
-        or docs_run.get("head_sha") != documentation_commit
-        or docs_run.get("conclusion") != "success"
-    ):
-        raise ReadinessError("docs check is not a successful docs.yml run for the accepted documentation commit")
-    for path, expected_digest in document_json["scorecards"].items():
-        if path.startswith("/") or ".." in path.split("/"):
-            raise ReadinessError("documentation readiness manifest scorecard path is unsafe")
-        scorecard = get(f"/contents/{urllib.parse.quote(path, safe='/')}?ref={documentation_commit}")
-        actual_digest = hashlib.sha256(content_bytes(scorecard, f"scorecard {path}")).hexdigest()
-        if actual_digest != expected_digest:
-            raise ReadinessError(f"documentation scorecard bytes do not match the readiness manifest: {path}")
-    print(f"release readiness accepted: release={ready.release_commit} documentation={ready.documentation_commit}")
     return 0
 
 
