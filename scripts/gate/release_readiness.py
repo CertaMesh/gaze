@@ -7,6 +7,7 @@ import argparse
 import base64
 import hashlib
 import json
+import math
 import os
 import re
 import sys
@@ -97,6 +98,18 @@ def validate(
         raise ReadinessError("release tag must target a commit")
     if release_tag["object"].get("sha") != expected_release_commit:
         raise ReadinessError("release tag target does not equal the measured release commit")
+    verification = release_tag["verification"]
+    payload, signature = verification.get("payload"), verification.get("signature")
+    if release_tag.get("tag") != f"v{version}":
+        raise ReadinessError("release tag own name does not match the requested release tag")
+    if not isinstance(payload, str) or not isinstance(signature, str) or not signature:
+        raise ReadinessError("release tag is missing its verified payload or signature")
+    headers, separator, message = payload.partition("\n\n")
+    expected_headers = f"object {expected_release_commit}\ntype commit\ntag v{version}\n"
+    if not separator or not headers.startswith(expected_headers):
+        raise ReadinessError("release tag has a malformed verified payload")
+    if release_tag.get("message") != message + signature:
+        raise ReadinessError("release tag message does not match the verified payload and signature")
 
     if readiness_tag_object.get("type") != "tag":
         raise ReadinessError("readiness tag must be annotated")
@@ -288,8 +301,17 @@ def json_object(raw: bytes, description: str) -> dict[str, Any]:
     def reject_constant(value):
         raise ReadinessError(f"{description} contains a non-finite JSON value")
 
+    def finite_float(raw):
+        value = float(raw)
+        if not math.isfinite(value):
+            reject_constant(raw)
+        return value
+
     try:
-        value = json.loads(raw, object_pairs_hook=unique_pairs, parse_constant=reject_constant)
+        value = json.loads(raw, object_pairs_hook=unique_pairs, parse_constant=reject_constant,
+                           parse_float=finite_float)
+    except ReadinessError:
+        raise
     except (ValueError, UnicodeDecodeError) as exc:
         raise ReadinessError(f"{description} is not JSON") from exc
     if not isinstance(value, dict):
@@ -446,8 +468,14 @@ def verify_evidence(get, document, evidence, commit):
                     shipped_arm=render.shipped_default_arm(row),
                 )
                 actual = row
-            for key, value in projected.items():
-                if key not in {"note", "date"} and actual.get(key) != value:
+            # Only note/date are annotations. Contract results on the primary
+            # row are joined separately above; every other field must be a
+            # measured projection, including optional fields that are absent.
+            annotations = {"note", "date"}
+            if number == 1:
+                annotations.add("contract_results")
+            for key in (actual.keys() | projected.keys()) - annotations:
+                if key not in actual or key not in projected or actual[key] != projected[key]:
                     raise ReadinessError(f"current history {key} does not match scorecard projection")
     except (render.RenderError, KeyError, TypeError, AttributeError) as exc:
         raise ReadinessError(f"invalid release scorecard/history schema: {exc}") from exc

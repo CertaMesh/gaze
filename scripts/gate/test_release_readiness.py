@@ -32,6 +32,21 @@ def signed_readiness_tag(receipt):
     }
 
 
+def signed_release_tag(name="v0.16.0"):
+    # Synthetic API envelope: this exercises binding, not cryptography.
+    message = name + "\n"
+    return {
+        "tag": name,
+        "object": {"type": "commit", "sha": R},
+        "message": message + SIGNATURE,
+        "verification": {
+            "verified": True, "signature": SIGNATURE,
+            "payload": f"object {R}\ntype commit\ntag {name}\n"
+            "tagger Fixture <signer@example.invalid> 0 +0000\n\n" + message,
+        },
+    }
+
+
 def inputs():
     document = {
         "version": "0.16.0",
@@ -64,7 +79,7 @@ def inputs():
         "version": "0.16.0",
         "expected_release_commit": R,
         "release_tag_object": {"type": "tag", "sha": TAG},
-        "release_tag": {"object": {"type": "commit", "sha": R}, "verification": {"verified": True}},
+        "release_tag": signed_release_tag(),
         "readiness_tag_object": {"type": "tag", "sha": "f" * 40},
         "readiness_tag": signed_readiness_tag(receipt),
         "document_bytes": raw,
@@ -355,6 +370,92 @@ def api_fixture():
 
 
 class ReleaseReadinessTests(unittest.TestCase):
+    def test_rejects_release_tag_alias_and_inconsistent_signed_envelope(self):
+        values = inputs()
+        values["release_tag"] = signed_release_tag("v0.15.1")
+        with self.assertRaisesRegex(gate.ReadinessError, "own name"):
+            gate.validate(**values)
+        for field, value in (("tag", "v0.15.1"), ("payload", None), ("signature", None),
+                             ("signature", "different signature"), ("message", "extra message")):
+            with self.subTest(field=field):
+                values = inputs()
+                target = values["release_tag"] if field in ("tag", "message") else values["release_tag"]["verification"]
+                target[field] = value
+                with self.assertRaises(gate.ReadinessError):
+                    gate.validate(**values)
+        for old, new in (("tag v0.16.0\n", "tag v0.15.1\n"),
+                         (f"object {R}\n", f"object {D}\n"), ("type commit\n", "type tree\n")):
+            values = inputs()
+            values["release_tag"]["verification"]["payload"] = values["release_tag"]["verification"]["payload"].replace(old, new)
+            with self.assertRaisesRegex(gate.ReadinessError, "verified payload"):
+                gate.validate(**values)
+
+    def test_json_rejects_nested_overflow_and_retains_finite_numbers(self):
+        for number in ("1e999", "-1e999", "NaN", "Infinity", "-Infinity"):
+            with self.subTest(number=number):
+                with self.assertRaisesRegex(gate.ReadinessError, "non-finite"):
+                    gate.json_object(('{"outer":[{"value":' + number + '}]}').encode(), "fixture")
+        self.assertEqual(gate.json_object(b'{"values":[1e308,-1e308,0.5,1e-999,17]}', "fixture"),
+                         {"values": [1e308, -1e308, .5, 0.0, 17]})
+
+    def test_rejects_fully_resealed_overflow_scorecards(self):
+        original = raw_json
+        try:
+            globals()["raw_json"] = lambda value: original(value).replace(b"Infinity", b"1e999")
+            fixture = api_fixture()
+            for card in fixture.cards.values():
+                card["runs"][0]["metrics"]["utf8_bytes"]["leak_rate"] = float("inf")
+            fixture.seal(refresh_history=True)
+            self.assertIn(b"1e999", fixture.card_bytes[CARD_PATHS[1]])
+            with self.assertRaisesRegex(gate.ReadinessError, "non-finite"):
+                gate.main(ARGV, fixture.get)
+        finally:
+            globals()["raw_json"] = original
+
+    def test_rejects_actual_only_semantic_fields_in_both_history_projections(self):
+        fixture = api_fixture()
+        validator = {"custom:fixture": {
+            "validator_kinds": ["synthetic"], "gold_spans": 2, "validator_failed_gold_spans": 1,
+            "validator_backed_full_coverage_recall": 1.0, "shape_only_full_coverage_recall": 1.0,
+            "leaked_utf8_bytes_validator_passed_gold": 0, "leaked_utf8_bytes_validator_failed_gold": 0,
+        }}
+        observation = {"format": "gzip-jsonl", "schema_version": 2, "file": "observations.jsonl.gz",
+                       "sha256": "6" * 64, "bytes": 100, "observations": 2,
+                       "corpus_sha256": fixture.history["releases"][-1]["dataset"]["integrity"]["sha256"]}
+        measurement = {"method": "past release, today's harness", "harness_revision": H,
+                       "binary_sha256": "7" * 64, "manifest_replacing_actions": ["tokenize"]}
+        additions = {"validator_recall": validator, "agentic_layers": {"arms": {}},
+                     "observation_record": observation, "measurement": measurement}
+        for slot in (1, 2, 3):
+            for key, value in additions.items():
+                with self.subTest(slot=slot, key=key):
+                    fixture = api_fixture()
+                    row = fixture.history["releases"][-1]
+                    actual = row if slot == 1 else row["contract_results"][slot - 2]
+                    actual[key] = copy.deepcopy(value)
+                    fixture.seal(refresh_history=False)
+                    # The normal renderer accepts these shapes; rejection must
+                    # be the measured semantic join, not a stale digest/schema.
+                    gate.render.validate_history(fixture.history)
+                    with self.assertRaisesRegex(gate.ReadinessError, f"current history {key}"):
+                        gate.main(ARGV, fixture.get)
+        fixture = api_fixture()
+        fixture.history["releases"][-1]["scored_label_contract"] = None
+        fixture.seal()
+        with self.assertRaisesRegex(gate.ReadinessError, "current history scored_label_contract"):
+            gate.main(ARGV, fixture.get)
+
+    def test_accepts_history_annotations_and_historical_measurements(self):
+        fixture = api_fixture()
+        row, historical = fixture.history["releases"][-1], fixture.history["releases"][0]
+        row["note"], row["date"] = "Maintainer annotation", "2026-10-04"
+        for result in row["contract_results"]:
+            result["note"], result["date"] = "Contract annotation", "2026-10-04"
+        historical["measurement"] = {"harness_revision": "8" * 40, "binary_sha256": "8" * 64}
+        historical["note"] = "Historical source retained"
+        fixture.seal()
+        self.assertEqual(gate.main(ARGV, fixture.get), 0)
+
     def test_content_bytes_accepts_unwrapped_base64(self):
         raw = b"manifest\n"
         response = {"encoding": "base64", "content": base64.b64encode(raw).decode("ascii")}
