@@ -165,8 +165,10 @@ def github_get(repository: str, path: str, token: str) -> Mapping[str, Any]:
 def content_bytes(content: Mapping[str, Any], description: str) -> bytes:
     if content.get("encoding") != "base64" or not isinstance(content.get("content"), str):
         raise ReadinessError(f"{description} is not a base64 GitHub content response")
+    # GitHub wraps base64 with line breaks; keep every other character strict.
+    encoded = content["content"].replace("\r", "").replace("\n", "")
     try:
-        return base64.b64decode(content["content"], validate=True)
+        return base64.b64decode(encoded, validate=True)
     except ValueError as exc:
         raise ReadinessError(f"{description} has invalid base64 content") from exc
 
@@ -247,8 +249,7 @@ def main(argv: list[str] | None = None, get: Callable[[str], Mapping[str, Any]] 
         raise ReadinessError("accepted documentation commit has no successful docs check")
     docs_run = get(f"/actions/runs/{workflow_run_id(docs_check)}")
     if (
-        not isinstance(docs_run.get("path"), str)
-        or not docs_run["path"].startswith(".github/workflows/docs.yml@")
+        docs_run.get("path") != ".github/workflows/docs.yml"
         or docs_run.get("head_sha") != documentation_commit
         or docs_run.get("conclusion") != "success"
     ):

@@ -59,6 +59,45 @@ def inputs():
 
 
 class ReleaseReadinessTests(unittest.TestCase):
+    def test_content_bytes_accepts_unwrapped_base64(self):
+        raw = b"manifest\n"
+        response = {"encoding": "base64", "content": base64.b64encode(raw).decode("ascii")}
+        self.assertEqual(gate.content_bytes(response, "manifest"), raw)
+
+    def test_content_bytes_accepts_wrapped_base64_without_changing_bytes(self):
+        raw = bytes(range(256))
+        encoded = base64.b64encode(raw).decode("ascii")
+        for newline in ("\n", "\r\n"):
+            with self.subTest(newline=newline):
+                wrapped = newline.join(encoded[i:i + 60] for i in range(0, len(encoded), 60)) + newline
+                response = {"encoding": "base64", "content": wrapped}
+                self.assertEqual(gate.content_bytes(response, "manifest"), raw)
+
+    def test_content_bytes_rejects_malformed_base64_even_when_wrapped(self):
+        for encoded in (
+            "bWFu\naWZl%c3Q=\n",  # Invalid alphabet character.
+            "bWFu\naWZlc3Q\n",  # Missing padding.
+            "bWFu\naWZlc3Q===\n",  # Excess padding.
+            "bWFu\naWZlc3Q=AAAA\n",  # Data after padding.
+            "bWFu\naWZlc3Q=\u00e9\n",  # Non-ASCII character.
+            "bWFu\naWZl c3Q=\n",  # Space is not a line separator.
+            "bWFu\naWZl\tc3Q=\n",  # Tab is not a line separator.
+        ):
+            with self.subTest(encoded=encoded):
+                with self.assertRaisesRegex(gate.ReadinessError, "manifest has invalid base64 content"):
+                    gate.content_bytes({"encoding": "base64", "content": encoded}, "manifest")
+
+    def test_content_bytes_rejects_invalid_content_response(self):
+        for response in (
+            {"encoding": "none", "content": "bWFuaWZlc3Q="},
+            {"encoding": "base64", "content": None},
+            {"encoding": "base64", "content": b"bWFuaWZlc3Q="},
+            {"encoding": "base64"},
+        ):
+            with self.subTest(response=response):
+                with self.assertRaisesRegex(gate.ReadinessError, "not a base64 GitHub content response"):
+                    gate.content_bytes(response, "manifest")
+
     def test_accepts_complete_exact_immutable_readiness(self):
         result = gate.validate(**inputs())
         self.assertEqual(result.release_commit, R)
@@ -112,14 +151,14 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("Reject manual crate publication", crates)
         self.assertIn("inputs.dry_run != true", crates)
 
-    def test_main_accepts_exact_document_evidence_scorecards_and_docs_workflow(self):
+    def test_main_accepts_wrapped_content_and_exact_docs_workflow_path(self):
         values = inputs()
         evidence_bytes = json.dumps(
             {"release_commit": R, "harness_commit": H, "renderer_commit": P}, sort_keys=True
         ).encode()
         document = json.loads(values["document_bytes"])
         document["evidence"]["sha256"] = hashlib.sha256(evidence_bytes).hexdigest()
-        scorecard_bytes = b"scorecard"
+        scorecard_bytes = json.dumps({"gaze": {"revision": R}, "leaked_bytes": 0}, sort_keys=True).encode() + b"\n"
         scorecard_path = next(iter(document["scorecards"]))
         document["scorecards"][scorecard_path] = hashlib.sha256(scorecard_bytes).hexdigest()
         document_bytes = json.dumps(document, sort_keys=True).encode()
@@ -129,7 +168,18 @@ class ReleaseReadinessTests(unittest.TestCase):
             hashlib.sha256(values["document_bytes"]).hexdigest(), hashlib.sha256(document_bytes).hexdigest()
         )
         values["readiness_tag"]["message"] = message
-        encoded = lambda body: {"encoding": "base64", "content": base64.b64encode(body).decode()}
+
+        def encoded(body):
+            # GitHub Contents API wraps base64 at 60 columns and adds a final LF.
+            payload = base64.b64encode(body).decode("ascii")
+            self.assertGreater(len(payload), 60)
+            return {
+                "encoding": "base64",
+                "content": "\n".join(payload[i:i + 60] for i in range(0, len(payload), 60)) + "\n",
+            }
+
+        docs_run = {"path": ".github/workflows/docs.yml", "head_sha": D, "conclusion": "success"}
+        docs_check_app = "github-actions"
 
         def get(path):
             if path.endswith("tags%2Fv0.16.0"):
@@ -154,7 +204,7 @@ class ReleaseReadinessTests(unittest.TestCase):
                         {
                             "name": "docs",
                             "conclusion": "success",
-                            "app": {"slug": "github-actions"},
+                            "app": {"slug": docs_check_app},
                             "details_url": "https://github.com/CertaMesh/gaze/actions/runs/42/job/7",
                         },
                         {
@@ -165,13 +215,38 @@ class ReleaseReadinessTests(unittest.TestCase):
                     ]
                 }
             if path == "/actions/runs/42":
-                return {"path": f".github/workflows/docs.yml@{D}", "head_sha": D, "conclusion": "success"}
+                return docs_run
             self.fail(f"unexpected API path: {path}")
 
         self.assertEqual(
             gate.main(["--repository", "CertaMesh/gaze", "--release-tag", "v0.16.0", "--release-commit", R], get),
             0,
         )
+        for docs_workflow_path in (
+            ".github/workflows/docs.yml.bak",
+            f".github/workflows/docs.yml@{D}",
+            ".github/workflows/docs-extra.yml",
+            ".github/workflows/other/docs.yml",
+        ):
+            with self.subTest(docs_workflow_path=docs_workflow_path):
+                docs_run["path"] = docs_workflow_path
+                with self.assertRaisesRegex(gate.ReadinessError, "not a successful docs.yml run"):
+                    gate.main(
+                        ["--repository", "CertaMesh/gaze", "--release-tag", "v0.16.0", "--release-commit", R], get
+                    )
+        docs_run["path"] = ".github/workflows/docs.yml"
+        for field, invalid_value in (("head_sha", R), ("conclusion", "failure")):
+            with self.subTest(field=field):
+                original_value = docs_run[field]
+                docs_run[field] = invalid_value
+                with self.assertRaisesRegex(gate.ReadinessError, "not a successful docs.yml run"):
+                    gate.main(
+                        ["--repository", "CertaMesh/gaze", "--release-tag", "v0.16.0", "--release-commit", R], get
+                    )
+                docs_run[field] = original_value
+        docs_check_app = "other-app"
+        with self.assertRaisesRegex(gate.ReadinessError, "lacks successful required checks: docs"):
+            gate.main(["--repository", "CertaMesh/gaze", "--release-tag", "v0.16.0", "--release-commit", R], get)
 
 
 if __name__ == "__main__":
