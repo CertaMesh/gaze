@@ -316,6 +316,11 @@ def scorecard_identities(card):
     provenance = card.get("runner_provenance")
     if not all(isinstance(v, dict) for v in (dataset, parameters, provenance)):
         raise ReadinessError("scorecard input/policy/model provenance is incomplete")
+    if not all(isinstance(dataset.get(key), str) and dataset[key] for key in ("repository", "revision", "file")):
+        raise ReadinessError("scorecard frozen input identity is incomplete")
+    population = dataset.get("evaluated_population")
+    if not isinstance(population, dict) or type(population.get("documents")) is not int or population["documents"] <= 0:
+        raise ReadinessError("scorecard must describe an actually evaluated population")
     policy = require_sha(parameters.get("policy_sha256"), "scorecard policy digest", 64)
     if provenance.get("policy", {}).get("sha256") != policy:
         raise ReadinessError("scorecard policy provenance does not match parameters")

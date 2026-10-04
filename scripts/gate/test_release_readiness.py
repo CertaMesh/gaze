@@ -513,6 +513,22 @@ class ReleaseReadinessTests(unittest.TestCase):
             with self.assertRaises(gate.ReadinessError):
                 gate.main(ARGV, fixture.get)
 
+    def test_rejects_incomplete_frozen_input_identity(self):
+        for field in ("repository", "revision", "file"):
+            with self.subTest(field=field):
+                fixture = api_fixture()
+                for card in fixture.cards.values():
+                    del card["dataset"][field]
+                fixture.seal(refresh_history=True)
+                with self.assertRaises(gate.ReadinessError):
+                    gate.main(ARGV, fixture.get)
+        fixture = api_fixture()
+        for card in fixture.cards.values():
+            card["dataset"]["evaluated_population"]["documents"] = 0
+        fixture.seal(refresh_history=True)
+        with self.assertRaises(gate.ReadinessError):
+            gate.main(ARGV, fixture.get)
+
     def test_rejects_model_policy_and_input_changes_even_with_resealed_identities(self):
         for mutation in ("model", "policy", "dataset", "profile"):
             fixture = api_fixture()
