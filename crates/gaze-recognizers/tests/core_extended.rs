@@ -259,7 +259,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "vat.es",
         ])
     );
-    assert_eq!(core.recognizers.len(), 50);
+    assert_eq!(core.recognizers.len(), 54);
     for id in [
         "name.forward_marker",
         "name.agent_recipient",
@@ -268,8 +268,12 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
         "postal.de",
         "postal.us",
         "postal.cued_four_digit",
+        "postal.cued_short",
         "postal.au",
         "age.cue",
+        "age.phrase",
+        "birth_date.answer",
+        "card.cued_short",
         // Bilingual cue-anchored government-ID recognizers with no national shape stay on
         // document basis (`global`).
         "tax_number.cue_anchored",
@@ -1554,7 +1558,8 @@ fn phase2_iban_and_cards_are_universal_classes_with_cued_siblings() {
             .filter(|recognizer| recognizer.class == PiiClass::Custom("credit_card".to_string()))
             .map(|recognizer| recognizer.id.as_str())
             .collect::<std::collections::BTreeSet<_>>(),
-        std::collections::BTreeSet::from(["card.cued", "card.structural"])
+        // `card.cued_short`: 12 to 15 Maestro digits directly after a card label.
+        std::collections::BTreeSet::from(["card.cued", "card.cued_short", "card.structural"])
     );
 
     for locale in [
