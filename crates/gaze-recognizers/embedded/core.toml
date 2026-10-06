@@ -602,6 +602,58 @@ priority = 80
 
 [recognizers.token]
 
+# A 12- to 15-digit card number (Maestro issues 12 to 19 digits) directly after a
+# card label. `card.cued` covers 16 to 19 digits; below 16 a compact number is as
+# often an order, tracking or timestamp value, so this rule needs the label right
+# before the value: only a separator (`:`, `=`, quotes), a copula (`is`, `ist`,
+# `lautet`) or one nested JSON key may stand between them. `card reader serial`
+# or `card terminal ID is` never reach the number. The issuer prefix is Maestro's
+# (50, 56 to 69). As in `card.cued`, a Luhn failure is recorded, never a veto.
+[[recognizers]]
+id = "card.cued_short"
+safety_tier = "safe_default"
+class = "custom:credit_card"
+cooperates_with = ["card.structural", "card.cued"]
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''
+(?x)
+(?i:
+  \b(?:(?:credit|debit|payment|bank|prepaid|gift)[\x20_-]?)?cards?(?:[\x20_-]?(?:number|num|no|nr))?\b\.?
+| \b(?:kredit|debit|bank|ec|giro|geld|prepaid)[\x20-]?karten?(?:nummer|nr)?\b\.?
+| \bkarten?(?:nummer|nr)\b\.?
+| \bmaestro\b
+)
+(?:
+  ["'\x20]*:\x20*\{\x20*"(?:number|num|pan|value)"\x20*:\x20*"
+| ["'\x20]*[:=]?["'\x20]*(?i:(?:is|ist|lautet)\x20+)?
+)
+\b(
+  (?:5[06-9]|6[0-9])[0-9]{2}[\x20\x{00A0}\x{202F}-][0-9]{4}[\x20\x{00A0}\x{202F}-][0-9]{4}
+| (?:5[06-9]|6[0-9])[0-9]{10,13}
+)
+(?:[^\d\x20\x{00A0}\x{202F}-]|[\x20\x{00A0}\x{202F}-][^\d]|[\x20\x{00A0}\x{202F}-]?\z)
+'''
+capture_groups = [1]
+
+[recognizers.validator]
+kind = "luhn"
+on_fail = "record"
+
+[recognizers.scoring]
+base = 0.70
+priority = 80
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
 [[recognizers]]
 id = "ip.v4"
 safety_tier = "safe_default"
@@ -1119,6 +1171,53 @@ cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "posta
 kind = "regex"
 pattern = '''(?ix)\b(?:postcode|postal[\x20\t_-]*code|zip(?:[\x20\t_-]*code)?)\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?([0-9]{4})\b'''
 capture_groups = [1]
+
+[recognizers.scoring]
+base = 0.70
+priority = 70
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# A short or foreign postcode directly after a postal label: Swedish `NNN NN`,
+# Polish `NN-NNN`, Brazilian `NNNNN-NNN`, six digits (India, Russia, China) and
+# three digits (Iceland, Faroe; after an English or Icelandic label only). None
+# has a structural signal of its own, so the label is mandatory and must stand
+# right before the value (separators and a copula only). Four- and five-digit codes stay with `postal.cued_four_digit`
+# and the locale rules.
+[[recognizers]]
+id = "postal.cued_short"
+safety_tier = "safe_default"
+class = "custom:postal_code"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.gb", "postal.ie", "postal.cued_four_digit"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?ix)
+(?:
+  \b(?:zip(?:[\x20\t_-]*code)?|postcode|postal[\x20\t_-]*code|post[\x20\t_-]*code|plz|postleitzahl|cep|postnummer|kod[\x20\t]+pocztowy|code[\x20\t]+postal|p[oó]stn[uú]mer)\b
+  [\x20\t\x{A0}\x{202F}:="'-]*(?:(?:is|ist|lautet)[\x20\t\x{A0}\x{202F}]+)?
+  (
+    [1-9][0-9]{2}[\x20\x{A0}\x{202F}][0-9]{2}
+  | [0-9]{2}-[0-9]{3}
+  | [0-9]{5}-[0-9]{3}
+  | [1-9][0-9]{5}
+  )
+ |
+  # Three digits (Iceland, Faroe) only after an English or Icelandic label: after
+  # `PLZ` a three-digit number is no German, Austrian or Swiss code.
+  \b(?:zip(?:[\x20\t_-]*code)?|postcode|postal[\x20\t_-]*code|post[\x20\t_-]*code|p[oó]stn[uú]mer)\b
+  [\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?
+  ([1-9][0-9]{2})
+)
+(?:[^\d\x20\x{A0}\x{202F}-]|[\x20\x{A0}\x{202F}-][^\d]|[\x20\x{A0}\x{202F}-]?\z)'''
+capture_groups = [1, 2]
 
 [recognizers.scoring]
 base = 0.70
@@ -1872,6 +1971,53 @@ priority = 100
 origin = "project-authored"
 license = "Apache-2.0"
 
+# A date of birth given as the answer one sentence after the question
+# (`date of birth? It's 3/11/1987`, `Geburtsdatum. Es ist der 11.03.1987`).
+# `birth_date.cue` stops at the sentence break; here the break must be followed
+# directly by a copula (`it's`, `it is`, `that's`, `es ist`, `das ist`), so an
+# unrelated next sentence (`Last login was 3/11/2026`) never licenses its date.
+# The date shapes are `birth_date.cue`'s.
+[[recognizers]]
+id = "birth_date.answer"
+safety_tier = "safe_default"
+class = "custom:birth_date"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+cooperates_with = ["birth_date.cue"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''
+(?ix)
+(?:\b|_)
+(?:dob|date[\x20_-]?of[\x20_-]?birth|birth[\x20_-]?date|birthday|geburts[\x20_-]?datum|geburtstag)\b
+[\x20\t]*[?.!]+["'’)\]]*(?:[\x20\t]+|[\x20\t]*\r?\n[\x20\t]*)
+(?:it[’']?s|it[\x20\t]+is|that[’']?s|that[\x20\t]+is|es[\x20\t]+ist|das[\x20\t]+ist)
+(?:[\x20\t]+(?:der|den|am|on|the))?[\x20\t\x{A0}\x{202F}]+
+(
+    [0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])
+  | [0-9]{4}/(?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])
+  | [0-9]{4}\.(?:0[1-9]|1[0-2])\.(?:0[1-9]|[12][0-9]|3[01])
+  | (?:0?[1-9]|[12][0-9]|3[01])\.(?:0?[1-9]|1[0-2])\.(?:[0-9]{4}|[0-9]{2})
+  | (?:0?[1-9]|[12][0-9]|3[01])-(?:0?[1-9]|1[0-2])-(?:[0-9]{4}|[0-9]{2})
+  | (?:(?:0?[1-9]|[12][0-9]|3[01])/(?:0?[1-9]|1[0-2])|(?:0?[1-9]|1[0-2])/(?:0?[1-9]|[12][0-9]|3[01]))/(?:[0-9]{4}|[0-9]{2})
+  | (?:0?[1-9]|[12][0-9]|3[01])(?:st|nd|rd|th)?\.?[\x20\t\x{A0}\x{202F}]+(?:of[\x20\t\x{A0}\x{202F}]+)?(?:january|february|march|april|may|june|july|august|september|october|november|december|januar|jänner|februar|märz|mai|juni|juli|oktober|dezember|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|okt|nov|dec|dez)\.?,?[\x20\t\x{A0}\x{202F}]+[0-9]{4}
+  | (?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)\.?[\x20\t\x{A0}\x{202F}]+(?:0?[1-9]|[12][0-9]|3[01])(?:st|nd|rd|th)?,?[\x20\t\x{A0}\x{202F}]+[0-9]{4}
+)(?:[^\w./-]|\.(?:[^\w./-]|\z)|\z)
+'''
+capture_groups = [1]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
 # An age needs a structured field or a person frame. Shorter units are durations,
 # and object ages are not person quasi-identifiers. Capture only the number.
 [[recognizers]]
@@ -1914,6 +2060,71 @@ pattern = '''(?ix)
   (?:[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
 )'''
 capture_groups = [1, 2, 3, 4, 5, 6]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# A person's age in wording `age.cue` does not cover: `turned` / `geworden`,
+# `at the age of` / `im Alter von`, `y/o`, and `year old female|male`. Each form
+# needs a person: a person word before `turned` or `at the age of`, a copula
+# before `y/o` or a person noun after it. An age followed by a unit or an
+# object is refused by position, not by lookahead: `turned` only licenses the
+# number when a clause boundary or a time word follows, and a leading
+# alternative consumes `N year old female <animal>` without a capture group, so
+# the whole match yields no span. Capture only the number.
+[[recognizers]]
+id = "age.phrase"
+safety_tier = "safe_default"
+class = "custom:age"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+cooperates_with = ["age.cue"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?ix)
+(?:
+  # A year-old female or male animal is no person: consumed, no capture.
+  \b(?:[1-9][0-9]?|1[01][0-9]|12[0-2])[\x20\x{A0}\x{202F}-]+(?:years?|yrs?)[\x20\x{A0}\x{202F}-]+old[\x20\x{A0}\x{202F}-]+(?:fe)?male[\x20\x{A0}\x{202F}-]+
+  (?:cat|kitten|dog|puppy|horse|pony|mare|stallion|gelding|colt|filly|foal|cow|bull|calf|goat|sheep|ewe|ram|pig|sow|boar|rabbit|parrot|bird|ferret|hamster|labrador|retriever|terrier|shepherd|spaniel|poodle|bulldog|beagle|collie|husky|dachshund|donkey|camel|llama|alpaca|tortoise|turtle|snake|lizard|elephant|lion|tiger|bear|wolf|deer|dolphin|whale|gorilla|chimpanzee)\b
+ |
+  \b((?:[1-9][0-9]?|1[01][0-9]|12[0-2]))[\x20\x{A0}\x{202F}-]+(?:years?|yrs?)[\x20\x{A0}\x{202F}-]+old[\x20\x{A0}\x{202F}-]+(?:fe)?male\b
+ |
+  # A person turned N, followed by a clause boundary or a time word (never a unit).
+  \b(?:i|he|she|we|patient|customer|client|applicant|mother|father|mom|mum|dad|son|daughter|wife|husband|brother|sister|grandmother|grandfather|grandma|grandpa|grandson|granddaughter|aunt|uncle|niece|nephew|friend|boyfriend|girlfriend|baby|kid|child|boy|girl|woman|man|lady|guy)\b
+  [^\n.!?]{0,32}?\b(?:turned|turns|turning|turn)[\x20\t\x{A0}\x{202F}]+
+  ((?:[1-9][0-9]?|1[01][0-9]|12[0-2]))
+  (?:[\x20\t\x{A0}\x{202F}]*(?:[,.;:!?)}\]"']|\r?\n|\z)|[\x20\t\x{A0}\x{202F}]+(?:and|but|so|or|last|this|next|in|on|at|yesterday|today|recently|already|when|while|because|since|before|after|years?|yrs?)\b)
+ |
+  \b(?:ich|er|sie|mutter|vater|mama|papa|sohn|tochter|oma|opa|bruder|schwester|frau|mann|kind|patientin|patient|kundin|kunde|tante|onkel|enkelin|enkel|freundin|freund)\b
+  [^\n.!?]{0,40}?\b(?:bin|bist|ist|sind|war|wurde|wird|werde|wirst)\b[^\n.!?0-9]{0,32}?
+  \b((?:[1-9][0-9]?|1[01][0-9]|12[0-2]))[\x20\t\x{A0}\x{202F}]+(?:jahre[\x20\t\x{A0}\x{202F}]+(?:alt[\x20\t\x{A0}\x{202F}]+)?)?geworden\b
+ |
+  # A person did something at the age of N.
+  \b(?:i|he|she|we|patient|customer|client|applicant|mother|father|mom|mum|dad|son|daughter|wife|husband|brother|sister|grandmother|grandfather|grandma|grandpa|grandson|granddaughter|aunt|uncle|niece|nephew|friend|boyfriend|girlfriend|baby|kid|child|boy|girl|woman|man|lady|guy)\b
+  [^\n.!?]{0,64}?\bat[\x20\t\x{A0}\x{202F}]+the[\x20\t\x{A0}\x{202F}]+age[\x20\t\x{A0}\x{202F}]+of[\x20\t\x{A0}\x{202F}]+
+  ((?:[1-9][0-9]?|1[01][0-9]|12[0-2]))\b
+ |
+  \b(?:ich|er|sie|mutter|vater|mama|papa|sohn|tochter|oma|opa|bruder|schwester|frau|mann|kind|patientin|patient|kundin|kunde|tante|onkel|enkelin|enkel|freundin|freund)\b
+  [^\n.!?]{0,64}?\bim[\x20\t\x{A0}\x{202F}]+alter[\x20\t\x{A0}\x{202F}]+von[\x20\t\x{A0}\x{202F}]+
+  ((?:[1-9][0-9]?|1[01][0-9]|12[0-2]))[\x20\t\x{A0}\x{202F}]+jahren\b
+ |
+  # N y/o after a person copula, or before a person noun.
+  \b(?:i[’']?m|i[\x20\t\x{A0}\x{202F}]+am|(?:he|she)(?:[’']s|[\x20\t\x{A0}\x{202F}]+(?:is|was))|(?:patient|pt|client|customer|who)[\x20\t\x{A0}\x{202F}]+(?:is|was))
+  (?:[\x20\t\x{A0}\x{202F}]+an?)?[\x20\t\x{A0}\x{202F}]+
+  ((?:[1-9][0-9]?|1[01][0-9]|12[0-2]))[\x20\t\x{A0}\x{202F}]?y/o\b
+ |
+  \b((?:[1-9][0-9]?|1[01][0-9]|12[0-2]))[\x20\t\x{A0}\x{202F}]?y/o[\x20\t\x{A0}\x{202F}]+(?:(?:fe)?male|man|woman|boy|girl|guy|lady|patient)\b
+)'''
+capture_groups = [1, 2, 3, 4, 5, 6, 7]
 
 [recognizers.scoring]
 base = 0.90

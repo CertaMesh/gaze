@@ -120,6 +120,7 @@
     "gaze-recognizers::context_sensitivity_v0_6",
     "gaze-recognizers::core_extended",
     "gaze-recognizers::coverage_loop",
+    "gaze-recognizers::cued_short_values",
     "gaze-recognizers::dob_judge_live",
     "gaze-recognizers::explicit_field_collision_control",
     "gaze-recognizers::explicit_fields",
