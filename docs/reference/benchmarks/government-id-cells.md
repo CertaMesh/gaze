@@ -6,8 +6,8 @@ line breaks. It includes prose, log fields, tool-call JSON and tool-result
 text. Four-digit SSN tails require an explicit ending relation. Gold spans
 come from independently inserted synthetic values, never detector output.
 
-Generator v10 adds twenty typed shapes, 80 A documents and 84 D documents per
-partition: 2.80% and 7.17% growth over frozen generator v9. Previous v9 and v8
+Generator v11 adds twenty typed shapes, 80 A documents and 84 D documents per
+partition: 2.73% and 7.00% growth over frozen generator v10. Previous v10, v9 and v8
 documents, scoring contracts and measurement ledgers remain byte-identical.
 The original government-ID slice is unchanged. Templates and values are disjoint
 between dev and test; each value includes a partition marker. Zero-led US SSN
@@ -37,8 +37,8 @@ maintainer on the shared benchmark machine. No rows or gains are claimed here
 until that evidence is available. The existing benchmark headline remains the
 latest measured corpus; this pending slice does not replace it.
 
-The adjacency renderer defaults to the measured v9 ledger. New v10 receipts
-must select `--generator-version 10`; a v9 corpus or contract is rejected.
+The adjacency renderer defaults to the measured v10 ledger. New v11 receipts
+must select `--generator-version 11`; a v10 corpus or contract is rejected.
 The required rows are v0.15.1 and v0.15.0 on their own setup policies, and
 v0.14.0 on its full-stack Kiji and pass-2 NER arms. Legacy manifest and model
 environment semantics must stay attached to those old binaries.

@@ -1,0 +1,17 @@
+# Deliberately narrow rules for the URL counterweight check. Each is the rule
+# a detector would plausibly write for one shape once it drops the scheme or
+# `www.` anchor: a dotted host with a letter top-level label followed by a
+# path, plain or JSON-escaped. Appended to a policy, they must lower layer A's
+# leak on the `url_` cells AND raise layer D's false-positive bytes on the
+# same-shape twins. The patterns equal URL_NARROW_PATTERNS in agentic_layers.py
+# (a test pins them). Never ship these rules.
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_url_plain"
+pattern = '\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/[^\s\x22\x27<>()]*'
+class = "custom:mutant_url"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_url_escaped"
+pattern = '\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:\\/[A-Za-z0-9_.~-]+)+'
+class = "custom:mutant_url"

@@ -40,7 +40,7 @@ import gaze_bench_score as score
 import government_id_cells as government_ids
 
 
-GENERATOR_VERSION = 10
+GENERATOR_VERSION = 11
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -3139,7 +3139,7 @@ CREDIT_GUARD_SINCE: dict[str, int] = {
 
 
 CREDIT_GUARD_FAMILIES["TAXNUM"] += government_ids.TAX_GUARD_FAMILIES
-CREDIT_GUARD_SINCE.update({family: 10 for family in government_ids.TAX_GUARD_FAMILIES})
+CREDIT_GUARD_SINCE.update({family: 11 for family in government_ids.TAX_GUARD_FAMILIES})
 
 
 def guard_families(generator_version: int) -> list[str]:
@@ -3442,9 +3442,337 @@ def check_block_cells(records: Sequence[Record]) -> None:
         raise LayerError(f"block shapes with no narrow layer D counterweight: {sorted(s.value for s in scored - paid)}")
 
 
+# --------------------------------------------------------------------------
+# URLs in structured text (generator v10). Agents send compact JSON, HTML and
+# Markdown, not only prose. Layer A writes a URL that points at a person (a
+# profile page with the person's name in its path, or a personal site on
+# their surname) where a structural delimiter ends it: the closing quote of a
+# compact JSON value with sibling keys after it, JSON whose slashes are
+# escaped as `\/` (PHP's `json_encode()` default), a JSON-escaped quote
+# (`\"`), a double- or single-quoted HTML attribute with link text after it,
+# a single-quoted attribute of a self-closing tag (`href='...'/>`), and element
+# text before a closing tag. A Markdown link and a path with a mid-path
+# apostrophe followed by a letter (`/wiki/Name_O'Brien`) are controls the
+# shipped rule already covers exactly. The whole URL is gold, scheme included. Layer D writes the
+# same structures with no URL anchor in them: escaped routes and MIME types,
+# service hosts with a path, and relative links. A rule that drops the scheme
+# or `www.` anchor pays there.
+
+URL_SURFACES = ("url_tool_json", "url_html", "url_markdown", "url_prose")
+DOCS_PER_URL_CELL = {LAYER_IDENTIFIERS: 6, LAYER_LOOKALIKES: 4}
+
+
+class UrlShape(str, Enum):
+    """How the URL's slashes are written."""
+    PLAIN = "plain"
+    ESCAPED = "escaped"
+
+
+# Every gold value of a shape matches its pattern in full: an explicit scheme
+# or `www.`, a reserved `.invalid` host and at least one path segment.
+URL_SHAPE_PATTERNS: dict[UrlShape, str] = {
+    UrlShape.PLAIN: (
+        r"(?:https?://(?:www\.)?|www\.)[a-z0-9-]+(?:\.[a-z0-9-]+)*\.invalid(?:/[A-Za-z0-9_.~\x27-]+)+/?"
+    ),
+    UrlShape.ESCAPED: (
+        r"(?:https?:\\/\\/(?:www\.)?|www\.)[a-z0-9-]+(?:\.[a-z0-9-]+)*\.invalid(?:\\/[A-Za-z0-9_.~-]+)+(?:\\/)?"
+    ),
+}
+# A URL anchor anywhere in a document, plain or JSON-escaped.
+URL_ANCHOR = r"(?i)(?:https?:(?://|\\/\\/)|\bwww\.)"
+# The over-broad rule for each shape: any slash-joined or escaped path with no
+# scheme or `www.` anchor. Every A value matches it and so does every layer D
+# twin of the shape. No apostrophes: the mutant policies carry these patterns
+# as TOML literal strings. A bare dotted name is not broad enough to ship as a
+# mutant either: Gaze refuses a custom pattern that matches a token shape such
+# as `email1.deadbeef@gaze-fake.invalid`.
+URL_BROAD_PATTERNS: dict[UrlShape, str] = {
+    UrlShape.PLAIN: r"\b[A-Za-z0-9._-]+(?:/[A-Za-z0-9._~-]+)+",
+    UrlShape.ESCAPED: r"[A-Za-z0-9.-]*(?:\\/[A-Za-z0-9_.~-]+)+",
+}
+# The rule a detector would plausibly write for each shape: a dotted host with
+# a letter top-level label followed by a path, plain or escaped, with no
+# anchor. Every A value matches it, and so does at least one layer D twin.
+URL_NARROW_PATTERNS: dict[UrlShape, str] = {
+    UrlShape.PLAIN: r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/[^\s\x22\x27<>()]*",
+    UrlShape.ESCAPED: r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:\\/[A-Za-z0-9_.~-]+)+",
+}
+# The reference reading (`url_reading`): what a whole URL looks like in place.
+URL_DELIMITER_BEFORE = " \t\n\"'(>["
+URL_DELIMITER_AFTER = r"(?:$|[\s\x22\x27<)\\]|[.,;:!?](?:\s|$))"
+
+
+def url_reading(text: str, start: int, end: int) -> bool:
+    """Whether the value at character offsets [start, end) is a whole URL.
+
+    This is the reference semantics the cells are built around, not a rule to
+    ship: a layer A value starts with a scheme or `www.` right after a
+    delimiter and ends right before one; a layer D value has no anchor."""
+    import re
+
+    if not re.match(URL_ANCHOR, text[start:end]):
+        return False
+    if start and text[start - 1] not in URL_DELIMITER_BEFORE:
+        return False
+    return re.match(URL_DELIMITER_AFTER, text[end:]) is not None
+
+
+@dataclass(frozen=True)
+class UrlCell:
+    """One layer A cell: {V} is the gold URL. A `control` cell is a shape the
+    shipped rule already covers exactly."""
+    family: str
+    shape: UrlShape
+    surface: str
+    language: str
+    region: str
+    templates: Mapping[str, str]
+    make: Callable[[Rng, str, int], str]
+    control: bool = False
+
+
+@dataclass(frozen=True)
+class UrlTwin:
+    """One layer D cell: {X} is a benign value of the shape with no URL anchor."""
+    family: str
+    shape: UrlShape
+    surface: str
+    language: str
+    region: str
+    templates: Mapping[str, str]
+    make: Callable[[Rng, str, int], str]
+
+
+def _url_cell(family: str, shape: UrlShape, surface: str, language: str, region: str, dev: str, test: str,
+              make: Callable[[Rng, str, int], str], control: bool = False) -> UrlCell:
+    return UrlCell(family, shape, f"url_{surface}", language, region, {"dev": dev, "test": test}, make, control)
+
+
+def _url_twin(family: str, shape: UrlShape, surface: str, language: str, region: str, dev: str, test: str,
+              make: Callable[[Rng, str, int], str]) -> UrlTwin:
+    return UrlTwin(family, shape, f"url_{surface}", language, region, {"dev": dev, "test": test}, make)
+
+
+URL_PROFILE_HOSTS = {"dev": ("profile.example.invalid", "people.example.invalid"),
+                     "test": ("members.example.invalid", "community.example.invalid")}
+URL_PROFILE_PATHS = {"dev": ("users/{g}-{s}", "people/{g}.{s}/profile"),
+                     "test": ("u/{g}_{s}", "members/{s}-{g}/about")}
+URL_SITE_PATHS = {"dev": ("kontakt", "ueber-mich"), "test": ("contact", "about-me")}
+URL_WIKI_HOSTS = {"dev": "wiki.example.invalid", "test": "encyclopedia.example.invalid"}
+URL_TWIN_ROUTES = {"dev": ("api/v1/items", "api/v2/orders/{n}/lines"),
+                   "test": ("internal/jobs/{n}", "v3/catalog/entries")}
+URL_TWIN_MIME = {"dev": ("text/html", "image/png", "text/plain"),
+                 "test": ("application/json", "text/csv", "application/pdf")}
+URL_TWIN_HOSTS = {"dev": ("api.example.invalid", "files.example.invalid"),
+                  "test": ("svc.example.invalid", "cdn.example.invalid")}
+URL_TWIN_HOST_PATHS = {"dev": ("v1/items", "drop/{n}"), "test": ("v2/health", "assets/{n}")}
+URL_TWIN_DOCUMENTS = {"dev": ("docs/guide.html", "help/faq.html"),
+                      "test": ("manual/setup.html", "notes/changelog.md")}
+
+
+def _url_slug(value: str) -> str:
+    return _ascii_fold(value).lower()
+
+
+def _profile_url(rng: Rng, partition: str, escaped: bool) -> str:
+    """A profile page with the person's name in its path, `https` scheme."""
+    given, surname = (_url_slug(part) for part in _person(rng, partition))
+    path = rng.choice(URL_PROFILE_PATHS[partition]).format(g=given, s=surname)
+    value = f"https://{rng.choice(URL_PROFILE_HOSTS[partition])}/{path}"
+    return value.replace("/", "\\/") if escaped else value
+
+
+def _site_url(rng: Rng, partition: str, index: int, escaped: bool) -> str:
+    """A personal site on the person's surname: `https://www.` and bare `www.` in turn."""
+    _, surname = _person(rng, partition)
+    value = f"www.{_url_slug(surname)}.example.invalid/{rng.choice(URL_SITE_PATHS[partition])}"
+    if index % 2 == 0:
+        value = f"https://{value}"
+    return value.replace("/", "\\/") if escaped else value
+
+
+def _wiki_url(rng: Rng, partition: str, index: int) -> str:
+    """An article on a person whose surname carries an apostrophe."""
+    given, surname = (_ascii_fold(part) for part in _person(rng, partition))
+    return f"https://{URL_WIKI_HOSTS[partition]}/wiki/{given}_O'{surname}"
+
+
+def _escaped(value: str) -> str:
+    return value.replace("/", "\\/")
+
+
+def _route(rng: Rng, partition: str, index: int) -> str:
+    return _escaped("/" + rng.choice(URL_TWIN_ROUTES[partition]).format(n=rng.digits(4)))
+
+
+def _mime(rng: Rng, partition: str, index: int) -> str:
+    return _escaped(rng.choice(URL_TWIN_MIME[partition]))
+
+
+def _service_host(rng: Rng, partition: str, index: int) -> str:
+    path = rng.choice(URL_TWIN_HOST_PATHS[partition]).format(n=rng.digits(4))
+    return f"{rng.choice(URL_TWIN_HOSTS[partition])}/{path}"
+
+
+def _document_link(rng: Rng, partition: str, index: int) -> str:
+    return rng.choice(URL_TWIN_DOCUMENTS[partition])
+
+
+U_ = UrlShape
+URL_CELLS = (
+    _url_cell("url_json_sibling", U_.PLAIN, "tool_json", "en", "US",
+              '{"customer":{"website":"{V}","status":"open"}}',
+              '{"contact":{"homepage":"{V}"},"state":"pending","priority":2}',
+              lambda rng, partition, index: _profile_url(rng, partition, False)),
+    _url_cell("url_json_www_sibling", U_.PLAIN, "tool_json", "de", "DE",
+              '{"profile":{"site":"{V}","public":true}}',
+              '{"author":{"web":"{V}","posts":12}}',
+              lambda rng, partition, index: _site_url(rng, partition, index, False)),
+    _url_cell("url_json_escaped", U_.ESCAPED, "tool_json", "en", "US",
+              '{"user":{"profile_url":"{V}","verified":true}}',
+              '{"member":{"url":"{V}","since":2021}}',
+              lambda rng, partition, index: _profile_url(rng, partition, True)),
+    _url_cell("url_json_escaped_www", U_.ESCAPED, "tool_json", "de", "DE",
+              '{"lead":{"website":"{V}","source":"form"}}',
+              '{"vendor_contact":{"homepage":"{V}","tier":"gold"}}',
+              lambda rng, partition, index: _site_url(rng, partition, index, True)),
+    _url_cell("url_json_escaped_quote", U_.PLAIN, "tool_json", "en", "US",
+              '{"note":"see \\"{V}\\" for her profile"}',
+              '{"comment":"profile link \\"{V}\\" was sent"}',
+              lambda rng, partition, index: _profile_url(rng, partition, False)),
+    _url_cell("url_html_attribute", U_.PLAIN, "html", "en", "US",
+              '<a href="{V}">Profile</a> and <b>more</b> below',
+              '<p>Contact: <a rel="me" href="{V}">homepage</a></p>',
+              lambda rng, partition, index: _profile_url(rng, partition, False)),
+    _url_cell("url_html_single_quoted", U_.PLAIN, "html", "en", "US",
+              "<a href='{V}'>Website</a> is new",
+              "<p>Visit <a class='ext' href='{V}'>her site</a></p>",
+              lambda rng, partition, index: _site_url(rng, partition, index, False)),
+    _url_cell("url_html_self_closing", U_.PLAIN, "html", "en", "US",
+              "<link rel='me' href='{V}'/>",
+              "<head><link rel='author' href='{V}'/></head>",
+              lambda rng, partition, index: _profile_url(rng, partition, False)),
+    _url_cell("url_html_text", U_.PLAIN, "html", "en", "US",
+              "<p>{V}</p>",
+              "<li>Profile: {V}</li>",
+              lambda rng, partition, index: _profile_url(rng, partition, False)),
+    _url_cell("url_markdown_link", U_.PLAIN, "markdown", "en", "US",
+              "See [her profile]({V}) for details.",
+              "Contact: [homepage]({V}).",
+              lambda rng, partition, index: _profile_url(rng, partition, False), control=True),
+    _url_cell("url_prose_apostrophe", U_.PLAIN, "prose", "en", "US",
+              "Her page {V} was updated yesterday.",
+              "The article {V} mentions him.",
+              _wiki_url, control=True),
+)
+# Layer D. {X} is benign: it matches the shape's broad pattern and carries no
+# scheme or `www.` anchor.
+URL_TWINS = (
+    _url_twin("url_twin_json_route", U_.ESCAPED, "tool_json", "en", "US",
+              '{"route":"{X}","method":"GET"}', '{"path":"{X}","status":404}', _route),
+    _url_twin("url_twin_json_mime", U_.ESCAPED, "tool_json", "en", "US",
+              '{"mime":"{X}","size":512}', '{"content_type":"{X}","encoding":"utf-8"}', _mime),
+    _url_twin("url_twin_json_escaped_host", U_.ESCAPED, "tool_json", "en", "US",
+              '{"upstream":"{X}","port":443}', '{"host":"{X}","tls":true}',
+              lambda rng, partition, index: _escaped(_service_host(rng, partition, index))),
+    _url_twin("url_twin_json_service_host", U_.PLAIN, "tool_json", "en", "US",
+              '{"endpoint":"{X}","method":"POST"}', '{"mirror":"{X}","retries":3}', _service_host),
+    _url_twin("url_twin_prose_service_host", U_.PLAIN, "prose", "en", "US",
+              "Uploads to {X} failed again.", "The mirror {X} is read-only today.", _service_host),
+    _url_twin("url_twin_html_relative", U_.PLAIN, "html", "en", "US",
+              '<a href="{X}">Guide</a> and <b>more</b> below',
+              "<p>Read <a class='doc' href='{X}'>the setup notes</a></p>", _document_link),
+    _url_twin("url_twin_markdown_relative", U_.PLAIN, "markdown", "en", "US",
+              "See [the guide]({X}) for details.", "Notes: [changelog]({X}).", _document_link),
+)
+del U_
+
+
+def _url_records(cells: Sequence[UrlCell | UrlTwin], partition: str, layer: str) -> list[Record]:
+    seed = PARTITION_SEEDS[partition]
+    records: list[Record] = []
+    for cell in cells:
+        rng = Rng(seed, f"{layer}/url/{cell.family}")
+        for index in range(DOCS_PER_URL_CELL[layer]):
+            value = cell.make(rng, partition, index)
+            if isinstance(cell, UrlCell):
+                fields = {"V": (value, "URL")}
+                validity = UNCHECKED
+            else:
+                fields = {"X": (value, DECOY_PREFIX + "benign")}
+                validity = BENIGN
+            text, gold, decoys = _fill_with_decoys(cell.templates[partition], fields)
+            records.append(Record(
+                uid=f"agentic-{partition}-{layer}-{cell.family}-{index:03d}-{cell.surface}",
+                partition=partition, layer=layer, family=cell.family, surface=cell.surface,
+                validity=validity,
+                group=f"{partition}-{layer}-{cell.family}-{index:03d}",
+                template=f"url/{cell.family}/{partition}",
+                language=cell.language, region=cell.region,
+                text=text, gold=gold, decoys=decoys,
+            ))
+    return records
+
+
+def check_url_cells(records: Sequence[Record]) -> None:
+    """Fail closed unless every A value is one whole URL in its shape, the only
+    URL anchor in its document and read as a whole URL in place, and every
+    shape A scores has layer D twins with no anchor at all: its broad rule must
+    pay in layer D, and so must its narrow rule."""
+    import re
+
+    cells = {cell.family: cell for cell in URL_CELLS}
+    twins = {twin.family: twin for twin in URL_TWINS}
+    unused = sorted(t.family for t in URL_TWINS if t.shape not in {c.shape for c in URL_CELLS})
+    if unused:
+        raise LayerError(f"layer D URL twins no layer A cell uses: {unused}")
+    scored: dict[UrlShape, str] = {}
+    paid: set[UrlShape] = set()
+    narrow_paid: set[UrlShape] = set()
+    for record in records:
+        if not record.surface.startswith("url_"):
+            continue
+        if record.layer == LAYER_IDENTIFIERS:
+            cell = cells[record.family]
+            if record.decoys or len(record.gold) != 1 or record.gold[0].label != "URL":
+                raise LayerError(f"{record.uid}: expected exactly one URL gold and no decoy")
+            start, end = _char_span(record.text, record.gold[0])
+            value = record.gold[0].value
+            if not re.fullmatch(URL_SHAPE_PATTERNS[cell.shape], value):
+                raise LayerError(f"{record.uid}: {value!r} is not a {cell.shape.value} URL")
+            if any(not (start <= m.start() < end) for m in re.finditer(URL_ANCHOR, record.text)):
+                raise LayerError(f"{record.uid}: a URL anchor outside the gold value")
+            for kind, patterns in (("broad", URL_BROAD_PATTERNS), ("narrow", URL_NARROW_PATTERNS)):
+                if not _overlaps(patterns[cell.shape], record.text, start, end):
+                    raise LayerError(f"{record.uid}: the {cell.shape.value} {kind} pattern misses {value!r}")
+            if not url_reading(record.text, start, end):
+                raise LayerError(f"{record.uid}: {value!r} is not a whole URL in place")
+            scored.setdefault(cell.shape, record.uid)
+        else:
+            twin = twins[record.family]
+            if record.gold:
+                raise LayerError(f"{record.uid}: a layer D URL twin carries gold")
+            if len(record.decoys) != 1:
+                raise LayerError(f"{record.uid}: expected one benign decoy")
+            if re.search(URL_ANCHOR, record.text):
+                raise LayerError(f"{record.uid}: a layer D URL twin carries a URL anchor")
+            start, end = _char_span(record.text, record.decoys[0])
+            if not _overlaps(URL_BROAD_PATTERNS[twin.shape], record.text, start, end):
+                raise LayerError(f"{record.uid}: the {twin.shape.value} broad pattern misses the decoy")
+            paid.add(twin.shape)
+            if _overlaps(URL_NARROW_PATTERNS[twin.shape], record.text, start, end):
+                narrow_paid.add(twin.shape)
+    uncovered = sorted(shape.value for shape in set(scored) - paid)
+    if uncovered:
+        raise LayerError(f"URL shapes with no layer D counterweight: {uncovered}")
+    free = sorted(shape.value for shape in set(scored) - narrow_paid)
+    if free:
+        raise LayerError(f"URL shapes whose narrow rule pays nothing in layer D: {free}")
+
+
 # The surface prefix each generator version added. Every earlier document stays
 # byte identical, so an older corpus is a filter of the current one.
-GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "cue_", 9: "block_", 10: "gov_"}
+GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "cue_", 9: "block_", 10: "url_", 11: "gov_"}
 
 
 def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
@@ -3457,6 +3785,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    10: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v10.json"),
     9: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v9.json"),
     4: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v4.json"),
     5: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v5.json"),
@@ -3705,6 +4034,8 @@ def generate(partition: str) -> list[Record]:
         + _cue_records(CUE_TWINS, partition, LAYER_LOOKALIKES)
         + _block_records(BLOCK_CELLS, partition)
         + _block_records(BLOCK_TWINS, partition)
+        + _url_records(URL_CELLS, partition, LAYER_IDENTIFIERS)
+        + _url_records(URL_TWINS, partition, LAYER_LOOKALIKES)
         + government_ids.records(sys.modules[__name__], partition)
     )
     check_lookalike_pairs(records)
@@ -3712,6 +4043,7 @@ def generate(partition: str) -> list[Record]:
     check_phone_cells(records)
     check_cue_cells(records)
     check_block_cells(records)
+    check_url_cells(records)
     for record in records:
         encoded = record.text.encode("utf-8")
         for gold in record.gold:

@@ -140,7 +140,7 @@ class GovernmentCellsTests(unittest.TestCase):
         for surface in ('gov_prose', 'gov_log_kv', 'gov_tool_json', 'gov_tool_result'):
             self.assertTrue(a.invalid_twin_credited('TAXNUM', surface))
         self.assertFalse(a.invalid_twin_credited('TAXNUM', 'prose_nocue'))
-        added = set(a.guard_families(10)) - set(a.guard_families(9))
+        added = set(a.guard_families(11)) - set(a.guard_families(10))
         self.assertEqual(added, {'gov_twin_tax_eleven', 'gov_near_tax_eleven',
                                  'gov_twin_tax_grouped', 'gov_near_tax_grouped'})
 
