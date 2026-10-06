@@ -1,0 +1,16 @@
+# Deliberately over-broad rules for the URL counterweight check. Each tags
+# one URL shape with no scheme and no `www.` anchor: any slash-joined path, any
+# JSON-escaped path. Appended to a policy, they must lower layer A's leak on
+# the `url_` cells AND raise layer D's false-positive bytes on their twins. The
+# patterns equal URL_BROAD_PATTERNS in agentic_layers.py (a test pins them).
+# Never ship these rules.
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_url_plain"
+pattern = '\b[A-Za-z0-9._-]+(?:/[A-Za-z0-9._~-]+)+'
+class = "custom:mutant_url"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_url_escaped"
+pattern = '[A-Za-z0-9.-]*(?:\\/[A-Za-z0-9_.~-]+)+'
+class = "custom:mutant_url"
