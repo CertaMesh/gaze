@@ -45,7 +45,7 @@ def encode(value: str) -> str:
 
 def placement(partition: str, family: str, variant: int) -> tuple[str, str]:
     if family.startswith("cued_prefixed_"):
-        return partition + " " + family + " token: ", SUFFIXES[variant]
+        return partition + " " + family + " token: ", (".extra. Next." if variant == 0 else SUFFIXES[variant])
     if family == "prefixed_hyphen":
         return partition + " prefix-", SUFFIXES[variant]
     if family == "prefixed_dot":

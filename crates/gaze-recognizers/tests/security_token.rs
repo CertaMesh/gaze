@@ -384,6 +384,9 @@ fn jwt_claims_stay_protected_beside_dotted_and_hyphenated_context() {
         ("", "..."),
         ("prefix-", ""),
         ("prefix.", ""),
+        ("prefix-", ".extra"),
+        ("prefix.", ".extra"),
+        ("my-service.", ".extra"),
     ] {
         let value = format!("{prefix}{PERSONAL_JWT}{suffix}");
         assert_whole_values(&value, &[PERSONAL_JWT]);
