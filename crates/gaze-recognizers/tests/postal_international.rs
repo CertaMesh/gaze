@@ -646,6 +646,34 @@ fn document_basis_numeric_rules_keep_their_locale_gates() {
 // ======================================================= restore
 
 #[test]
+fn numeric_postal_codes_ignore_inventory_suffixes_and_restore_addresses() {
+    for locale in [LocaleTag::DeDe, LocaleTag::EnUs] {
+        let pipeline = pipeline_for(&[locale.clone()]);
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let original = "Inventory SKU-WIDGET-54321; destination DE-54321 Musterstadt.";
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(original.to_string()),
+                &[locale],
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(clean_text) = clean else {
+            panic!("expected text");
+        };
+        assert!(clean_text.contains("SKU-WIDGET-54321"));
+        assert!(!clean_text.contains("DE-54321"));
+        assert_eq!(
+            pipeline
+                .restore_strict_text(&session, &clean_text)
+                .expect("restore"),
+            original,
+        );
+    }
+}
+
+#[test]
 fn international_postal_codes_restore_exactly() {
     let pipeline = pipeline_for(&[LocaleTag::Global]);
     let session = Session::new(Scope::Ephemeral).expect("session");

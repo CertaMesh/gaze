@@ -452,6 +452,11 @@ impl RegexDetector {
     }
 
     fn boundary_accepts(&self, input: &str, span: &std::ops::Range<usize>) -> bool {
+        if matches!(self.source.as_str(), "postal.de" | "postal.us")
+            && has_sku_identifier_prefix(input, span.start)
+        {
+            return false;
+        }
         if self.identifier_run_boundary && gaze_types::word_run_extends_identifier(input, span.end)
         {
             return false;
@@ -471,6 +476,23 @@ impl RegexDetector {
 
         previous_ok && next_ok
     }
+}
+
+/// `SKU-` explicitly identifies a stock-keeping unit, not a postal address.
+/// Check the complete connected prefix, so country prefixes and hyphenated
+/// place names remain eligible. Adopter recognizers can still protect the SKU
+/// itself when inventory identifiers are part of their PII contract.
+fn has_sku_identifier_prefix(input: &str, start: usize) -> bool {
+    let before = &input[..start];
+    let prefix_start = before
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| !ch.is_alphanumeric() && !matches!(ch, '-' | '_'))
+        .map_or(0, |(at, ch)| at + ch.len_utf8());
+    let prefix = &before[prefix_start..];
+    prefix
+        .get(..4)
+        .is_some_and(|tag| tag.eq_ignore_ascii_case("sku-"))
 }
 
 /// A regex capture proves the first group. Scan the rest as a value run, stopping at the first
@@ -660,6 +682,80 @@ fn is_ascii_email_continuation(ch: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn numeric_postal_rules_ignore_sku_identifier_suffixes() {
+        for (id, pattern) in [
+            ("postal.de", r"\b\d{5}\b"),
+            ("postal.us", r"\b\d{5}(-\d{4})?\b"),
+        ] {
+            let detector =
+                RegexDetector::with_source(pattern, PiiClass::custom("postal_code").unwrap(), id)
+                    .unwrap();
+            for text in [
+                "SKU-WIDGET-54321",
+                "sku-widget-54321",
+                "SKU-54321",
+                "SKU-SECTION-ITEM-54321",
+                "SKU-ÄNDERUNG-54321",
+                "(SKU-WIDGET-54321)",
+                "SKU-PART12-54321-6789",
+            ] {
+                assert!(detector.spans(text, None).is_empty(), "{id}: {text}");
+            }
+        }
+    }
+
+    #[test]
+    fn numeric_postal_rules_keep_country_address_and_label_prefixes() {
+        for id in ["postal.de", "postal.us"] {
+            let detector = RegexDetector::with_source(
+                r"\b\d{5}\b",
+                PiiClass::custom("postal_code").unwrap(),
+                id,
+            )
+            .unwrap();
+            for text in [
+                "54321 Musterstadt",
+                "DE-54321 Musterstadt",
+                "US-54321",
+                "12-A-54321 Musterstadt",
+                "Musterweg-12-A-54321 Musterstadt",
+                "postal-code-54321",
+                "POST-CODE-54321",
+                "ZIP-CODE-54321",
+                "SKU: 54321",
+                "Muster-Stadt-54321",
+                "INVENTORY-PART-54321",
+                "ÄNDERUNG-ARTIKEL-54321",
+            ] {
+                let start = text.find("54321").unwrap();
+                assert_eq!(
+                    detector.spans(text, None),
+                    vec![start..start + 5],
+                    "{id}: {text}"
+                );
+            }
+        }
+        let us = RegexDetector::with_source(
+            r"\b\d{5}(-\d{4})?\b",
+            PiiClass::custom("postal_code").unwrap(),
+            "postal.us",
+        )
+        .unwrap();
+        assert_eq!(us.spans("US-54321-6789", None), vec![3..13]);
+    }
+
+    #[test]
+    fn sku_postal_boundary_does_not_change_adopter_regexes() {
+        let detector = RegexDetector::with_source(
+            r"\b\d{5}\b",
+            PiiClass::custom("part_number").unwrap(),
+            "adopter.inventory",
+        )
+        .unwrap();
+        assert_eq!(detector.spans("SKU-WIDGET-54321", None), vec![11..16]);
+    }
 
     #[test]
     fn scanner_never_cuts_a_proven_capture_at_any_internal_boundary() {
