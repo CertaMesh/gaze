@@ -484,11 +484,19 @@ impl RegexDetector {
 /// itself when inventory identifiers are part of their PII contract.
 fn has_sku_identifier_prefix(input: &str, start: usize) -> bool {
     let before = &input[..start];
-    let prefix_start = before
-        .char_indices()
-        .rev()
-        .find(|(_, ch)| !ch.is_alphanumeric() && !matches!(ch, '-' | '_'))
-        .map_or(0, |(at, ch)| at + ch.len_utf8());
+    // Bound work per match. If a connected prefix is too long to establish its
+    // namespace, retain the detection rather than suppress uncertain evidence.
+    const MAX_PREFIX_CHARS: usize = 256;
+    let mut prefix_start = 0;
+    for (count, (at, ch)) in before.char_indices().rev().enumerate() {
+        if !ch.is_alphanumeric() && !matches!(ch, '-' | '_') {
+            prefix_start = at + ch.len_utf8();
+            break;
+        }
+        if count >= MAX_PREFIX_CHARS {
+            return false;
+        }
+    }
     let prefix = &before[prefix_start..];
     prefix
         .get(..4)
@@ -755,6 +763,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(detector.spans("SKU-WIDGET-54321", None), vec![11..16]);
+    }
+
+    #[test]
+    fn sku_prefix_scan_keeps_detection_when_its_work_budget_is_exhausted() {
+        let text = format!("SKU-{}-54321", "a".repeat(300));
+        assert!(!has_sku_identifier_prefix(&text, text.len() - 5));
+        let text = format!("SKU-{}-54321", "ä".repeat(300));
+        assert!(!has_sku_identifier_prefix(&text, text.len() - 5));
     }
 
     #[test]

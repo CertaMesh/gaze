@@ -648,7 +648,7 @@ fn document_basis_numeric_rules_keep_their_locale_gates() {
 #[test]
 fn numeric_postal_codes_ignore_inventory_suffixes_and_restore_addresses() {
     for locale in [LocaleTag::DeDe, LocaleTag::EnUs] {
-        let pipeline = pipeline_for(&[locale.clone()]);
+        let pipeline = pipeline_for(std::slice::from_ref(&locale));
         let session = Session::new(Scope::Ephemeral).expect("session");
         let original = "Inventory SKU-WIDGET-54321; destination DE-54321 Musterstadt.";
         let (clean, _, _) = pipeline
