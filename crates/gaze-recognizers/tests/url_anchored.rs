@@ -489,7 +489,7 @@ fn assert_exact_url_token(text: &str, url: &str) {
         panic!("expected text");
     };
     assert_eq!(manifest.len(), 1, "one whole URL token for {text:?}");
-    let span = manifest.iter().next().expect("URL span");
+    let span = manifest.first().expect("URL span");
     assert_eq!(span.class, url_class());
     assert!(
         span.origin.is_whole(),
