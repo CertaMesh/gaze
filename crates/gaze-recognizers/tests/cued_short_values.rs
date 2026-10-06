@@ -11,11 +11,12 @@ use gaze::{DictionaryBundle, LocaleTag, SafetyNetPolicy, Scope, Session};
 use gaze_assembly::{CorePipeline, CorePipelineConfig};
 use proptest::prelude::*;
 
-const SOURCES: [&str; 4] = [
+const SOURCES: [&str; 5] = [
     "age.phrase",
     "birth_date.answer",
     "card.cued_short",
     "postal.cued_short",
+    "postal.cued_four_digit",
 ];
 
 fn core() -> CorePipeline {
@@ -126,6 +127,11 @@ fn age_phrase_refuses_objects_animals_units_and_missing_persons() {
         "The shelter has a 3 year old female cat for adoption.",
         "They sold the 9-year-old male horse last week.",
         "I turned 130 last week.",
+        // A decimal is a distance or a quantity, never an age: `.` before a digit is no boundary.
+        "He turned 3.5 km into the run.",
+        "She turned 2,5 Runden.",
+        // `we` turning a number is a company or a team anniversary, not one person's age.
+        "We turn 10 in March!",
     ] {
         assert_untouched(&core, raw);
     }
@@ -226,6 +232,9 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         ("zip_code=70928-012 result=hit", "70928-012"),
         ("My zip code is 195.", "195"),
         ("Postal code: 614. Thanks!", "614"),
+        ("zip: 614", "614"),
+        ("{\"zip\":\"560001\"}", "560001"),
+        ("ZIP 481 22", "481 22"),
     ] {
         assert_protected_by(&core, raw, code, "postal.cued_short");
     }
@@ -241,7 +250,21 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         // No German, Austrian or Swiss code has three digits (`postal_at_ch.rs` pins it too).
         "PLZ: 123",
         "PLZ 123 fehlt noch",
+        // `.zip` is a file extension and a bare `zip` without label punctuation is a verb.
+        "Uploaded backup.zip 120 KB",
+        "archive.zip: 345 MB",
+        "I'll zip 250 photos tonight.",
+        "zip 123456 rows",
     ] {
+        assert_untouched(&core, raw);
+    }
+}
+
+#[test]
+fn postal_cued_four_digit_refuses_a_zip_file_extension() {
+    let core = core();
+    assert_protected_by(&core, "zip code 1200", "1200", "postal.cued_four_digit");
+    for raw in ["Uploaded backup.zip 1200 KB", "archive.zip: 3450 MB"] {
         assert_untouched(&core, raw);
     }
 }
