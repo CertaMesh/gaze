@@ -17,7 +17,8 @@ invented zero-led test identifiers rather than sampled national identifiers.
 
 D includes the same exact shapes as invoice/order/reference/vehicle IDs and
 technical licences. Near-cue twins put an ID label before a second field that
-owns the value. Tax rates and invoice amounts are benign. Both shape-only and
+owns the value. Identifier-shaped digit runs after tax-rate and invoice-amount labels are
+benign; these twins do not establish precision on ordinary rates or amounts. Both shape-only and
 narrow near-cue mutants must overlap benign bytes for every shape. Generation
 fails closed on wrong gold ownership, incomplete spans, missing counterweights,
 wrong shape, population or lineage tampering, or accidentally valid Steuer-ID values. The committed mutant
@@ -39,6 +40,9 @@ latest measured corpus; this pending slice does not replace it.
 
 The adjacency renderer defaults to the measured v10 ledger. New v11 receipts
 must select `--generator-version 11`; a v10 corpus or contract is rejected.
+Once the complete v11 ledger is recorded, switch the renderer's measured
+`GENERATOR_VERSION` to 11 in the same evidence commit so its default
+`--check` verifies the new table.
 The required rows are v0.15.1 and v0.15.0 on their own setup policies, and
 v0.14.0 on its full-stack Kiji and pass-2 NER arms. Legacy manifest and model
 environment semantics must stay attached to those old binaries.

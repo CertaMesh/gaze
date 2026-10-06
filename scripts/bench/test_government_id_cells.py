@@ -124,6 +124,15 @@ class GovernmentCellsTests(unittest.TestCase):
         with self.assertRaisesRegex(a.LayerError, 'shape'):
             g.check(a, [dataclasses.replace(row, gold=[span])])
 
+    def test_cue_substrings_do_not_own_values(self):
+        for shape, prefix, value in (
+                (g.Shape.TAX_NINE, 'Justin is ', '000812345'),
+                (g.Shape.SSN_US, 'assn: ', '000-81-2345')):
+            cell = next(c for c in g.CELLS if c.shape == shape)
+            text = prefix + value
+            self.assertFalse(g.reading(cell, text, len(prefix)))
+            self.assertIsNone(re.search(g.NARROW[shape], text))
+
     def test_full_ssn_and_steuer_values_are_unassignable(self):
         for partition in a.PARTITIONS:
             for row in g.records(a, partition):

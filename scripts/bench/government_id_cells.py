@@ -67,10 +67,10 @@ PATTERNS = {
 INVALID_TAX_SHAPES = frozenset((Shape.TAX_ELEVEN, Shape.TAX_GROUPED))
 
 CUES = {
-    "TAXNUM": r"(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)",
-    "SSN": r"(?:social security number|SSN|social insurance number|Sozialversicherungsnummer|AHV number)",
-    "IDCARDNUM": r"(?:identity card number|ID card number|identification card|Personalausweisnummer)",
-    "NATIONALID": r"(?:national identification number|national ID number|national identity number|nationale Identifikationsnummer)",
+    "TAXNUM": r"\b(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)\b",
+    "SSN": r"\b(?:social security number|SSN|social insurance number|Sozialversicherungsnummer|AHV number)\b",
+    "IDCARDNUM": r"\b(?:identity card number|ID card number|identification card|Personalausweisnummer)\b",
+    "NATIONALID": r"\b(?:national identification number|national ID number|national identity number|nationale Identifikationsnummer)\b",
 }
 # Shape-only mutants drop semantics. Near-cue mutants retain an exact shape but
 # allow a second field to own the digits. Both must pay for their own shape.
