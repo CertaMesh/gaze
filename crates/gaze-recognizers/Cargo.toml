@@ -49,6 +49,7 @@ windows-sys = { version = "0.61", features = ["Win32_System_Pipes"] }
 
 [dev-dependencies]
 criterion = "0.5"
+proptest = "1"
 regex = "1"
 gaze = { path = "../gaze", package = "gaze-pii", default-features = false, features = ["test-support"] }
 gaze-assembly = { path = "../gaze-assembly", features = ["safety-net-nym"] }
