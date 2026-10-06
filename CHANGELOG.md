@@ -74,8 +74,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Bearer`, `token:` or `api_key=`, and sent its payload and signature to the
   model raw. The payload carries claims about a person (`sub`, `email`,
   `name`). The cue arm of `security_token.anchored` now takes a complete
-  three-segment JWT before its generic value, which still stops before a full
-  stop. The gate policy does not load `secrets` and `SECURITYTOKEN` is outside
+  three-segment JWT before its generic value, including a cued dotted or
+  hyphenated prefix. Bare JWT protection beside dots, hyphens and ellipses is
+  preserved. Generic cued values still stop at a dot; their original partial
+  protection is preserved, without claiming support for arbitrary dotted
+  credentials or unsigned JWTs. The gate policy does not load `secrets` and `SECURITYTOKEN` is outside
   the PII contract, so the gate scorecards are identical under v2 and v1; with
   `secrets` added to the setup policy, layers C, A, D and R are unchanged too,
   with no new false-positive byte.

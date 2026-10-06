@@ -26,7 +26,7 @@ CUES = (
     "auth-token", "authorizationtoken", "authorization token", "authorization_token",
     "authorization-token", "bearer", "token", "BEARER", "SICHERHEITSTOKEN",
 )
-FAMILIES = CUES + ("bare", "json_token", "json_api_key", "multiline_fallback")
+FAMILIES = CUES + ("bare", "json_token", "json_api_key", "multiline_fallback", "prefixed_hyphen", "prefixed_dot", "jwt_tail", "jwt_ellipsis", "cued_prefixed_hyphen", "cued_prefixed_dot")
 CONTROL_FAMILIES = ("bare_nonpersonal",)
 HEADER = "eyJhbGciOiJIUzI1NiJ9"
 PAYLOAD = "eyJzdWIiOiJhbGljZUBleGFtcGxlLmludmFsaWQifQ"
@@ -44,6 +44,16 @@ def encode(value: str) -> str:
 
 
 def placement(partition: str, family: str, variant: int) -> tuple[str, str]:
+    if family.startswith("cued_prefixed_"):
+        return partition + " " + family + " token: ", SUFFIXES[variant]
+    if family == "prefixed_hyphen":
+        return partition + " prefix-", SUFFIXES[variant]
+    if family == "prefixed_dot":
+        return partition + " prefix.", SUFFIXES[variant]
+    if family == "jwt_tail":
+        return partition + " token: ", ".extra" + SUFFIXES[variant]
+    if family == "jwt_ellipsis":
+        return partition + " token: ", "... Next."
     if family in ("bare", "bare_nonpersonal"):
         return partition + (" value ", ' "', " (", "\n")[variant], ('', '"', ")", ".")[variant]
     if family.startswith("json_"):
@@ -64,7 +74,7 @@ def inserted(partition: str, family: str, variant: int, kind: str, value: str,
         "text": prefix + value + suffix, "value": value,
         "value_span": [start, start + len(value.encode())],
         "payload": PAYLOAD if personal else None,
-        "payload_span": [start + len(HEADER) + 1, start + len(HEADER) + 1 + len(PAYLOAD)] if personal else None,
+        "payload_span": [start + value.index(PAYLOAD), start + value.index(PAYLOAD) + len(PAYLOAD)] if personal else None,
         "protect": protect, "reason": reason, "class": CLASS, "source": SOURCE,
     }
     row["input_sha256"] = digest(row["text"].encode())
@@ -76,28 +86,20 @@ def generate() -> list[dict]:
     # These shapes have no personal claims. Expectations come from source insertion,
     # never from executing a detector or decoding a prediction.
     malformed = (
-        "eyJabcd." + PUBLIC_PAYLOAD + ".synthetic_signature",  # short first
-        HEADER + ".abcd.synthetic_signature",                 # short middle
-        HEADER + "." + PUBLIC_PAYLOAD + ".abcd",              # short last
-        HEADER + "." + PUBLIC_PAYLOAD,                         # two segments
-        HEADER + "." + PUBLIC_PAYLOAD + ".synthetic_signature.extra",
-        "synthetic_build_identifier.more",                    # dotted build
-        "prefix-" + HEADER + "." + PUBLIC_PAYLOAD + ".synthetic_signature",
-        "prefix." + HEADER + "." + PUBLIC_PAYLOAD + ".synthetic_signature",
-        "order_reference_value.more",                          # dotted order
-        "code_handler_registry.more",                          # dotted code
-        "eYJhbGciOiJIUzI1NiJ9." + PUBLIC_PAYLOAD + ".synthetic_signature",
-        "akiaiosfodnn7example.more",                            # lowercase issuer
-        "AKIAIOSFODNN7EXAMPLE.extra",                            # glued issuer
-        HEADER + "..synthetic_signature",                      # empty middle
-        "synthetic_build_identifier..",                        # extra punctuation
-        "order-reference-value.more",                          # hyphen identifier
+        "eyJabc.x.y", "eyJabc.x", "eyJabc..sig", "eyJabc.x.y.z",
+        "build.more", "order_ref.v2", "code_fn.more", "prefix-eyJabc",
+        "prefix.eyJabc", "eYJabc.x.y", "akiaexample", "AKIAEXAMPLE",
+        "eyJabc..", "build_id..", "order-ref.v2", "code_fn.x",
     )
     for partition in ("dev", "test"):
         for index, family in enumerate(FAMILIES):
             for variant in range(4):
                 signature = encode(f"synthetic-signature-{partition}-{index}-{variant}")
                 jwt = HEADER + "." + PAYLOAD + "." + signature
+                if family == "cued_prefixed_hyphen":
+                    jwt = "prefix-" + jwt
+                elif family == "cued_prefixed_dot":
+                    jwt = "prefix." + jwt
                 rows.append(inserted(partition, family, variant, "positive", jwt,
                                      "Whole JWT owns encoded personal sub; punctuation stays outside.", True, True))
                 bad = malformed[(index * 4 + variant) % len(malformed)]
@@ -141,10 +143,16 @@ def validate_fixture(row: dict) -> None:
         raise ValueError("fixture pair/id mismatch")
     personal = row["kind"] == "positive"
     if personal:
-        expected = [start + len(HEADER) + 1, start + len(HEADER) + 1 + len(PAYLOAD)]
+        value = row["value"]
+        expected = [start + value.index(PAYLOAD), start + value.index(PAYLOAD) + len(PAYLOAD)]
         if not row["protect"] or row["payload"] != PAYLOAD or row["payload_span"] != expected:
             raise ValueError("personal payload gold mismatch")
-        if row["value"].split(".")[:2] != [HEADER, PAYLOAD] or len(row["value"].split(".")) != 3:
+        jwt = value
+        if row["family"] == "cued_prefixed_hyphen":
+            jwt = value.removeprefix("prefix-")
+        elif row["family"] == "cued_prefixed_dot":
+            jwt = value.removeprefix("prefix.")
+        if jwt.split(".")[:2] != [HEADER, PAYLOAD] or len(jwt.split(".")) != 3:
             raise ValueError("positive JWT shape mismatch")
         if base64.urlsafe_b64decode(PAYLOAD + "==") != b'{"sub":"alice@example.invalid"}':
             raise ValueError("personal payload mismatch")
@@ -287,7 +295,7 @@ def score_stream(rows: list[dict], output: str, policy_sha256: str, commit: str)
 def load_corpus(directory: Path = FIXTURES) -> list[dict]:
     pin = strict_json((directory / "pins.json").read_text())
     if (set(pin) != {"version", "counts", "files", "sources"} or
-            pin.get("version") != VERSION or pin.get("counts") != {"positive": 128, "benign": 128, "control": 8} or
+            pin.get("version") != VERSION or pin.get("counts") != {"positive": 152, "benign": 152, "control": 8} or
             set(pin["files"]) != {"dev.jsonl", "test.jsonl"} or
             set(pin["sources"]) != set(PINNED_SOURCES)):
         raise ValueError("corpus pin schema mismatch")
@@ -342,7 +350,7 @@ def write_corpus() -> None:
         data = "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
                        for row in rows if row["partition"] == partition).encode()
         (FIXTURES / (partition + ".jsonl")).write_bytes(data)
-    pin = {"version": VERSION, "counts": {"positive": 128, "benign": 128, "control": 8},
+    pin = {"version": VERSION, "counts": {"positive": 152, "benign": 152, "control": 8},
            "files": {part + ".jsonl": digest((FIXTURES / (part + ".jsonl")).read_bytes())
                      for part in ("dev", "test")},
            "sources": {name: digest((Path(__file__).parent / name).read_bytes()) for name in PINNED_SOURCES}}

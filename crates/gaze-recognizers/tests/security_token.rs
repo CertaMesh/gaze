@@ -343,7 +343,7 @@ fn cue_selection_keeps_the_two_public_capture_indices() {
         (PERSONAL_JWT.to_string(), 1, 0),
         (format!("Bearer {PERSONAL_JWT}"), 2, 0),
         (format!("token: {PERSONAL_JWT}"), 2, 0),
-        (format!(r#"{{"token":"{PERSONAL_JWT}"}}"#), 1, 9),
+        (format!(r#"{{"token":"{PERSONAL_JWT}"}}"#), 1, 10),
     ] {
         let captures = regex.captures(&text).unwrap();
         assert_eq!(captures.get(0).unwrap().start(), full_start, "{text:?}");
@@ -376,29 +376,37 @@ fn opaque_tokens_and_aws_keys_preserve_sentence_punctuation() {
 }
 
 #[test]
-fn malformed_dotted_values_never_emit_a_partial_prefix() {
-    let header = "eyJhbGciOiJIUzI1NiJ9";
-    let payload = "eyJzdWIiOiJhbGljZUBleGFtcGxlLmludmFsaWQifQ";
-    for value in [
-        format!("{header}.{payload}"),
-        format!("{header}.{payload}.abcd"),
-        format!("{header}.abcd.synthetic_signature"),
-        format!("eyJabcd.{payload}.synthetic_signature"),
-        format!("{header}..synthetic_signature"),
-        format!("{PERSONAL_JWT}.extra"),
-        format!("{PERSONAL_JWT}._"),
-        format!("{PERSONAL_JWT}.."),
-        format!("prefix-{PERSONAL_JWT}"),
-        format!("prefix.{PERSONAL_JWT}"),
-        "synthetic_opaque_value.more".to_string(),
-        "AKIAIOSFODNN7EXAMPLE.extra".to_string(),
+fn jwt_claims_stay_protected_beside_dotted_and_hyphenated_context() {
+    for (prefix, suffix) in [
+        ("", ".extra"),
+        ("", "._"),
+        ("", ".."),
+        ("", "..."),
+        ("prefix-", ""),
+        ("prefix.", ""),
     ] {
-        assert_unchanged(&value);
-        assert_unchanged(&format!("token: {value}"));
+        let value = format!("{prefix}{PERSONAL_JWT}{suffix}");
+        assert_whole_values(&value, &[PERSONAL_JWT]);
+        let credential = format!("{prefix}{PERSONAL_JWT}");
+        assert_whole_values(&format!("token: {value}"), &[&credential]);
     }
-    let opaque = "AKIAIOSFODNN7EXAMPLE-extra";
-    assert_unchanged(opaque);
-    assert_whole_values(&format!("token: {opaque}"), &[opaque]);
+}
+
+#[test]
+fn opaque_cue_and_aws_protection_do_not_regress_beside_dots() {
+    assert_whole_values(
+        "token: synthetic_opaque_value.more",
+        &["synthetic_opaque_value"],
+    );
+    for suffix in [".extra", "-extra", ".."] {
+        assert_whole_values(
+            &format!("AKIAIOSFODNN7EXAMPLE{suffix}"),
+            &["AKIAIOSFODNN7EXAMPLE"],
+        );
+    }
+    // A cued opaque run remains protected even when it is not a supported JWT.
+    let header = "eyJhbGciOiJIUzI1NiJ9";
+    assert_whole_values(&format!("token: {header}.short"), &[header]);
     for input in [
         "token:\nsynthetic_opaque_value",
         "token:     synthetic_opaque_value",

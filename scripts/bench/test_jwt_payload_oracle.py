@@ -18,8 +18,8 @@ class CorpusTests(unittest.TestCase):
             selected = [r for r in rows if r["partition"] == partition]
             positives = [r for r in selected if r["kind"] == "positive"]
             benign = [r for r in selected if r["kind"] == "benign"]
-            self.assertEqual(len(positives), 128)
-            self.assertEqual(len(benign), 128)
+            self.assertEqual(len(positives), 152)
+            self.assertEqual(len(benign), 152)
             self.assertEqual({r["pair"] for r in positives}, {r["pair"] for r in benign})
             for row in selected:
                 oracle.validate_fixture(row)

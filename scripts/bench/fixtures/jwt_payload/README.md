@@ -6,10 +6,10 @@ benchmark layer or an accepted gate. The supplemental acceptance contract is
 its generator version, shipping policy, scored labels, scoring mechanics or
 historical tables.
 
-Each dev/test partition contains 128 positives, 128 matched benign counterweights
-and eight controls. The 32 positive families are the 28 explicit cue spellings,
+Each dev/test partition contains 152 positives, 152 matched benign counterweights
+and eight controls. The 38 positive families are the 28 explicit cue spellings,
 bare JWT, compact JSON `token`, compact JSON `api_key`, and unsupported multiline
-cue with bare fallback. Four templates vary colon, equals, space and lexical
+cue with bare fallback, bare and cued prefixed JWT contexts, a dotted tail and an ellipsis. Four templates vary colon, equals, space and lexical
 delimiters, quoting, records and punctuation. The synthetic personal claim is
 only `{"sub":"alice@example.invalid"}`. Signature bytes name their synthetic
 origin and partition. No detector supplies gold: `inserted` concatenates prefix,
@@ -17,9 +17,10 @@ value and suffix and records their exact UTF-8 byte offsets. Payload offsets
 refer to the base64url segment, never to ordinary EMAIL gold.
 
 Each matched benign case carries its expected unchanged outcome. Across the
-matrix, first/middle/final short segments, two/four/empty segments, dotted build,
-order and code identifiers, glued prefixes and case-sensitive issuer boundaries
-challenge the cue or JSON/bare surface. They contain no personal claims. The
+matrix, short malformed segments and short build, order and code identifiers
+challenge the cue or JSON/bare surface. They contain no personal claims. Complete
+JWTs beside dots and hyphens are personal positives, never benign counterweights.
+Long cued opaque runs remain credentials even if they contain no personal claim. The
 separate controls preserve supported opaque cued credentials, published AWS
 example shapes and a **bare** nonpersonal JWT; lowercase/short issuer and code
 controls stay unchanged. These credentials are not FP merely because they lack
@@ -71,9 +72,8 @@ Proposed conditions, reported per partition and kind:
    the run instead of yielding a partial successful scorecard.
 4. Fresh native regression RED, candidate GREEN and assertion mutants remain
    required. Remove cue-JWT arm: native capture-selection test must fail, even
-   though bare fallback may protect the payload. Admit opaque dots, remove run
-   guards and drop capture 2: corresponding native precision/ownership tests
-   must fail on assertions, not compiler errors. The Python assertion mutants
+   though bare fallback may protect the payload. Reject dotted/hyphenated JWT context or drop capture 2: corresponding native
+   recall/ownership tests must fail on assertions, not compiler errors. The Python assertion mutants
    separately prove partial-header leak, FP and restore checks are sensitive.
 5. Fresh entire-PII default setup-policy v2 **and** v1 base/current-candidate
    no-regression runs remain required later. Use each side's own setup policy,

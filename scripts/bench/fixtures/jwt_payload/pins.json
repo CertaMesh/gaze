@@ -1,18 +1,18 @@
 {
   "counts": {
-    "benign": 128,
+    "benign": 152,
     "control": 8,
-    "positive": 128
+    "positive": 152
   },
   "files": {
-    "dev.jsonl": "4bdada2acfcc59d3415615420a33467d90a0597a1fabc03e932bf1de5b8ceff4",
-    "test.jsonl": "db0bf300325e5e7f1116bc0066de86298f8d4a1c847ca23f55c1125d9d4dfb08"
+    "dev.jsonl": "de17684952c8fa28c7b5149feeffdaa565dc49c777d417723b079926fba7eecf",
+    "test.jsonl": "45664abd33d279336661627b71b190c46d77f7ebee6b723a1887aae008a8e0ae"
   },
   "sources": {
     "../../crates/gaze-recognizers/examples/jwt_payload_probe.rs": "e34e700c34accae8494bb465a4248e621e479ab77c5e3ec18b26d06171d3c1aa",
     "fixtures/jwt_payload/policy.toml": "a013a4cc08ec61a48aefe67d5340bd0459e16710b5ae54fa5b1c0b4d3a3b0bda",
-    "jwt_payload_oracle.py": "edddd72c5ea70a9605fb84e48dbdaaef6287e3a04f23a6ccc608dc40a67462dd",
-    "test_jwt_payload_oracle.py": "98f9216fc611a25c9f01fbeeca75c0857280533478467e70fb461805f6a2232e"
+    "jwt_payload_oracle.py": "bd46b793d764a7759b9805f6477f9b63274dabe6e3c94233901620715ed1aee6",
+    "test_jwt_payload_oracle.py": "6bbb2d9371f3326b8813ded8d91455961f6b3b252d2e8e89586b260333b55b60"
   },
   "version": "jwt-payload-supplement-v1"
 }
