@@ -92,6 +92,20 @@ fn age_phrase_branches_each_have_a_distinct_probe() {
         ("We both turned 40 last year.", "40"),
         ("We turned 40 in March.", "40"),
         ("We turn 40 next year.", "40"),
+        ("we turn 40 in June", "40"),
+        ("We turn 30 in two weeks!", "30"),
+        ("We turn 65 in April and retire.", "65"),
+        // Collective personal ages stay protected even when wording could be an anniversary.
+        ("We turn 10 in March!", "10"),
+        ("We turn 10 in March! Our birthdays are in May.", "10"),
+        (
+            "We turn 10 in March; celebrate our studio anniversary.",
+            "10",
+        ),
+        (
+            r#"{"note":"We turn 10 in March","reason":"birthday party"}"#,
+            "10",
+        ),
         (
             "We turn 60 in May, both of us are celebrating our birthdays.",
             "60",
@@ -150,11 +164,6 @@ fn age_phrase_refuses_objects_animals_units_and_missing_persons() {
         // A decimal is a distance or a quantity, never an age: `.` before a digit is no boundary.
         "He turned 3.5 km into the run.",
         "She turned 2,5 Runden.",
-        // The direct `we turn N in` wording describes an anniversary.
-        "We turn 10 in March!",
-        "We turn 10 in March! Our birthdays are in May.",
-        "We turn 10 in March; celebrate our studio anniversary.",
-        r#"{"note":"We turn 10 in March","reason":"birthday party"}"#,
     ] {
         assert_untouched(&core, raw);
     }

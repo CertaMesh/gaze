@@ -1056,6 +1056,15 @@ mod tests {
             ("customer.zip=560001", "560001"),
             (r#"order.shipping.zip = "481 22""#, "481 22"),
             ("We both turned 40 last year.", "40"),
+            ("we turn 40 in June", "40"),
+            ("We turn 30 in two weeks!", "30"),
+            ("We turn 65 in April and retire.", "65"),
+            ("We turn 10 in March!", "10"),
+            ("We turn 10 in March! Our birthdays are in May.", "10"),
+            (
+                r#"{"note":"We turn 10 in March","reason":"birthday party"}"#,
+                "10",
+            ),
             (
                 "We turn 60 in May, both of us are celebrating our birthdays.",
                 "60",
@@ -1109,12 +1118,6 @@ mod tests {
             ("zip 250 B", "250"),
             ("He turned 3.5 km into the run.", "3.5"),
             ("She turned 2,5 Runden.", "2,5"),
-            ("We turn 10 in March!", "10"),
-            ("We turn 10 in March! Our birthdays are in May.", "10"),
-            (
-                r#"{"note":"We turn 10 in March","reason":"birthday party"}"#,
-                "10",
-            ),
         ] {
             let session = Session::from_policy(&resolved.policy).unwrap();
             let (_, spans, _) = resolved
