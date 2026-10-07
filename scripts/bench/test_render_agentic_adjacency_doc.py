@@ -56,16 +56,16 @@ class AdjacencyHistoryTests(unittest.TestCase):
             self.assertEqual(history.read_bytes(), original)
 
     def test_current_inputs_cannot_relabel_the_frozen_ledger(self) -> None:
-        current = render.HistoryInputs.for_version(11)
+        current = render.HistoryInputs.for_version(12)
         frozen = render.HistoryInputs.for_version(10)
         with self.assertRaisesRegex(render.HistoryError, 'generator version differs'):
             render.load_history(frozen.path, current)
-        self.assertEqual(current.path.name, 'agentic-adjacency-v11-history.json')
+        self.assertEqual(current.path.name, 'agentic-adjacency-v12-history.json')
         self.assertNotEqual(current.corpus_sha256, frozen.corpus_sha256)
         self.assertNotEqual(current.contract_sha256, frozen.contract_sha256)
 
     def test_current_scorecard_requires_its_own_corpus_and_contract(self) -> None:
-        current = render.HistoryInputs.for_version(11)
+        current = render.HistoryInputs.for_version(12)
         frozen = render.HistoryInputs.for_version(10)
         value = scorecard(current.corpus_sha256)
         value['layers']['generator']['generator_version'] = current.version
@@ -79,7 +79,7 @@ class AdjacencyHistoryTests(unittest.TestCase):
                 changed = json.loads(json.dumps(value))
                 changed['layers']['generator'][field] = stale
                 path.write_text(json.dumps(changed), encoding='utf-8')
-                with self.assertRaisesRegex(render.HistoryError, 'pinned v11 test corpus'):
+                with self.assertRaisesRegex(render.HistoryError, 'pinned v12 test corpus'):
                     render.rows_from_scorecard(path, current)
             value['layers']['scored_label_contract']['file_sha256'] = frozen.contract_sha256
             path.write_text(json.dumps(value), encoding='utf-8')

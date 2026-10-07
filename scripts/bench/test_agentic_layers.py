@@ -30,7 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
     "dev": "5675f3bb735e60923e04a26ba94984d7911462a62e44c5bfea0baff2c2ebf85b",
-    "test": "0748ced886e365873a928601d44029d5c7952f1845c5f29705c56a67fa53de84"
+    "test": "0748ced886e365873a928601d44029d5c7952f1845c5f29705c56a67fa53de84",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -1149,35 +1149,35 @@ class CueCellTests(unittest.TestCase):
     # partition. A narrow rule with no D cost would ship its false positives
     # unmeasured.
     NARROW_D_COST = {
-    "dev": {
-        "age_turned": 24,
-        "age_at_the_age_of": 12,
-        "age_yo": 4,
-        "age_year_old_gender": 4,
-        "dob_sentence_break": 4,
-        "card_short_compact": 8,
-        "card_short_grouped": 29,
-        "zip_se": 4,
-        "zip_pl": 4,
-        "zip_six": 12,
-        "zip_br": 4,
-        "zip_three": 20
-    },
-    "test": {
-        "age_turned": 24,
-        "age_at_the_age_of": 12,
-        "age_yo": 4,
-        "age_year_old_gender": 4,
-        "dob_sentence_break": 4,
-        "card_short_compact": 8,
-        "card_short_grouped": 8,
-        "zip_se": 4,
-        "zip_pl": 4,
-        "zip_six": 12,
-        "zip_br": 4,
-        "zip_three": 20
+        "dev": {
+            "age_turned": 24,
+            "age_at_the_age_of": 12,
+            "age_yo": 4,
+            "age_year_old_gender": 4,
+            "dob_sentence_break": 4,
+            "card_short_compact": 8,
+            "card_short_grouped": 29,
+            "zip_se": 4,
+            "zip_pl": 4,
+            "zip_six": 12,
+            "zip_br": 4,
+            "zip_three": 20
+        },
+        "test": {
+            "age_turned": 24,
+            "age_at_the_age_of": 12,
+            "age_yo": 4,
+            "age_year_old_gender": 4,
+            "dob_sentence_break": 4,
+            "card_short_compact": 8,
+            "card_short_grouped": 8,
+            "zip_se": 4,
+            "zip_pl": 4,
+            "zip_six": 12,
+            "zip_br": 4,
+            "zip_three": 20
+        }
     }
-}
 
     def test_each_narrow_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
         for partition in agentic.PARTITIONS:
