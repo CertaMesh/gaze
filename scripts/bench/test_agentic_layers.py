@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "56c1e1934f9a53fdf686db351f0a8408d85a5293bffcaef919c950723f88394b",
-    "test": "16c64092cf922f11364fc3e34cce26aa57e58a95aaaeb00cdd6f758cf0dde09e",
+    "dev": "5675f3bb735e60923e04a26ba94984d7911462a62e44c5bfea0baff2c2ebf85b",
+    "test": "0748ced886e365873a928601d44029d5c7952f1845c5f29705c56a67fa53de84"
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -1149,14 +1149,35 @@ class CueCellTests(unittest.TestCase):
     # partition. A narrow rule with no D cost would ship its false positives
     # unmeasured.
     NARROW_D_COST = {
-        # Decimal motion adds age costs; compression counts add ZIP costs.
-        "dev": {"age_turned": 24, "age_at_the_age_of": 12, "age_yo": 4, "age_year_old_gender": 4,
-                "dob_sentence_break": 4, "card_short_compact": 8, "card_short_grouped": 29,
-                "zip_se": 4, "zip_pl": 4, "zip_six": 12, "zip_br": 4, "zip_three": 20},
-        "test": {"age_turned": 24, "age_at_the_age_of": 12, "age_yo": 4, "age_year_old_gender": 4,
-                 "dob_sentence_break": 4, "card_short_compact": 8, "card_short_grouped": 8,
-                 "zip_se": 4, "zip_pl": 4, "zip_six": 12, "zip_br": 4, "zip_three": 20},
+    "dev": {
+        "age_turned": 24,
+        "age_at_the_age_of": 12,
+        "age_yo": 4,
+        "age_year_old_gender": 4,
+        "dob_sentence_break": 4,
+        "card_short_compact": 8,
+        "card_short_grouped": 29,
+        "zip_se": 4,
+        "zip_pl": 4,
+        "zip_six": 12,
+        "zip_br": 4,
+        "zip_three": 20
+    },
+    "test": {
+        "age_turned": 24,
+        "age_at_the_age_of": 12,
+        "age_yo": 4,
+        "age_year_old_gender": 4,
+        "dob_sentence_break": 4,
+        "card_short_compact": 8,
+        "card_short_grouped": 8,
+        "zip_se": 4,
+        "zip_pl": 4,
+        "zip_six": 12,
+        "zip_br": 4,
+        "zip_three": 20
     }
+}
 
     def test_each_narrow_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
         for partition in agentic.PARTITIONS:
@@ -2874,9 +2895,21 @@ class ZipAgeGenerationTests(unittest.TestCase):
                              {g.value for r in test for g in (*r.gold, *r.decoys)})
             self.assertGreater(len({g.value for r in test for g in (*r.gold, *r.decoys)}), 1)
 
+    def test_published_cells_cover_both_sides_of_ambiguous_wording(self):
+        records = agentic._zip_age_records("test")
+        for family in ("postal_ship", "postal_send", "postal_block", "postal_road"):
+            cells = [r for r in records if r.family == family]
+            self.assertEqual({r.region for r in cells}, {"US", "IS", "DK", "IN", "SE", "PL"})
+        for family in {r.family for r in records}:
+            self.assertEqual(len({r.template for r in records if r.family == family}), 3)
+        self.assertTrue(any("we turn" in r.text.lower() and "birthdays" in r.text
+                            for r in records if r.family == "age_collective_future"))
+        for word in ("GiB", "KiB", "attachments", "entries", "zipped"):
+            self.assertTrue(any(word in r.text for r in records if r.layer == "D"), word)
+
     def test_whole_values_and_benign_numeric_shapes(self):
         records = agentic._zip_age_records("test")
-        self.assertEqual(sum(r.layer == "A" for r in records), 70)
+        self.assertEqual(sum(r.layer == "A" for r in records), 80)
         self.assertEqual(sum(r.layer == "D" for r in records), 80)
         for r in records:
             spans = r.gold if r.layer == "A" else r.decoys
