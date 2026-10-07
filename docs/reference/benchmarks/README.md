@@ -1814,14 +1814,16 @@ The preserved phone and cued-cell prose above describes the historical
 [v8 measurements](agentic-adjacency-v8-history.json), and the release
 statement of the CRLF and plate section the historical
 [v9 measurements](agentic-adjacency-v9-history.json). Their links lead to this
-current comparison, which has since been re-measured on v11 below.
+current comparison, which has since been re-measured on v12 below.
 
-The release rows below use generator v11's test partition and the setup
-policy, so they include the v5 to v11 cells (labelled lookalikes, address
+The release rows below use generator v12's test partition and the setup
+policy, so they include the v5 to v12 cells (labelled lookalikes, address
 blocks, phone shapes, cued ages, birth dates, short cards, postcodes, CRLF
-blocks and German plates, URLs in structured text, tax and government IDs).
+blocks and German plates, URLs in structured text, tax and government IDs,
+ZIP compression lookalikes and personal age wording).
 The table is rendered from
-the [v11 ledger](agentic-adjacency-v11-history.json). The earlier
+the [v12 ledger](agentic-adjacency-v12-history.json). The earlier
+[v11 ledger](agentic-adjacency-v11-history.json) on corpus `bab908df…`,
 [v10 ledger](agentic-adjacency-v10-history.json) on corpus `dfd4cba8…`,
 [v9 ledger](agentic-adjacency-v9-history.json) on corpus `b2e36376…`,
 [v8 ledger](agentic-adjacency-v8-history.json) on corpus `ddd23455…`,
@@ -1833,19 +1835,28 @@ retained as historical data and do not feed this table.
 Record the past-release `agentic_layers.py measure` outputs with
 `render_agentic_adjacency_doc.py --record`, then render this table from its
 committed ledger. Do not edit the rows by hand. The renderer pins the
-generator version, so a later generator leaves these rows bound to v11 until
+generator version, so a later generator leaves these rows bound to v12 until
 they are re-measured.
+
+Generator v12 adds 80 postcode and age positives and 80 benign counterweights
+per partition, with three templates per family. Postal instructions span
+three-, four-, five- and six-digit, Swedish and Polish layouts. Personal
+collective birthdays, future birthday months and child ages are scored;
+archive sizes, compression counts, decimal motion and explicit company
+anniversaries are benign. Each numeric value alone is gold or a decoy; street
+suffixes supply context and are not additional street gold in these cells.
+Earlier corpora and contracts remain byte-identical.
 
 <!-- BEGIN GENERATED: agentic-adjacency -->
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.15.1` `policy-file` | 21,795 / 61,803 | 2,102 | 5,069 | 374 / 5,142 | 403 |
-| `v0.15.0` `policy-file` | 21,968 / 61,803 | 2,102 | 5,069 | 374 / 5,142 | 403 |
-| `v0.14.0` `full-stack-kiji-resolve` | 31,354 / 61,803 | 6,232 | 4,251 | 525 / 5,142 | 190 |
-| `v0.14.0` `pass2-ner` | 32,022 / 61,803 | 1,564 | 3,393 | 550 / 5,142 | 140 |
+| `v0.15.1` `policy-file` | 22,029 / 62,109 | 2,249 | 5,149 | 374 / 5,142 | 403 |
+| `v0.15.0` `policy-file` | 22,202 / 62,109 | 2,249 | 5,149 | 374 / 5,142 | 403 |
+| `v0.14.0` `full-stack-kiji-resolve` | 31,620 / 62,109 | 6,382 | 4,366 | 525 / 5,142 | 190 |
+| `v0.14.0` `pass2-ner` | 32,288 / 62,109 | 1,711 | 3,433 | 550 / 5,142 | 140 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v11-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v11, test corpus `bab908dfd2f6…`, setup policy `f909a23aecac…`.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v12-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v12, test corpus `0748ced886e3…`, setup policy `f909a23aecac…`.
 
 <!-- END GENERATED: agentic-adjacency -->
 
@@ -1866,7 +1877,7 @@ in their historical ledgers.
 All historical arms completed without refusals. Historical contract limits
 remain visible in the scorecards: each v0.15.x arm has four non-exact restores
 and four invalid manifests in A. The v0.14.0 Kiji arm has 42 non-exact
-restores in A and one each in D and R, corresponding to its redact actions;
+restores in A, three in D and one in R, corresponding to its redact actions;
 its manifests are valid. The v0.14.0 pass-2 NER arm restores every document
 exactly with valid manifests. These old release results are historical
 measurements, not a current detection-change gate.
