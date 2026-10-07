@@ -40,7 +40,7 @@ import gaze_bench_score as score
 import government_id_cells as government_ids
 
 
-GENERATOR_VERSION = 11
+GENERATOR_VERSION = 12
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -3770,9 +3770,161 @@ def check_url_cells(records: Sequence[Record]) -> None:
         raise LayerError(f"URL shapes whose narrow rule pays nothing in layer D: {free}")
 
 
+# ZIP postal instructions versus compression, and personal ages versus motion
+# and anniversaries (generator v12). Templates are split before generation;
+# values and gold offsets come from insertion, independently of detector rules.
+ZIP_AGE_CELLS = (
+    ("postal_ship", "ZIPCODE", "US", "Ship to zip {V} for delivery.",
+     "Please ship to zip {V} before Friday."),
+    ("postal_send", "ZIPCODE", "US", "Please send it to zip {V} tomorrow.",
+     "Send it to zip {V}, with delivery confirmation."),
+    ("postal_change", "ZIPCODE", "SE", "Update the destination to zip {V} today.",
+     "Change to zip {V} for the next parcel."),
+    ("postal_block", "ZIPCODE", "US", "Deliver to zip {V} A-block, reception desk.",
+     "Delivery address: zip {V} B-block, upper entrance."),
+    ("postal_road", "ZIPCODE", "US", "ZIP {V} Alderhaven Road, delivery entrance.",
+     "ZIP {V} Birchridge Road, parcel entrance."),
+    ("age_collective", "AGE", "US", "We both turned {V} this spring.",
+     "We both turned {V} last year and celebrated together."),
+    ("age_collective_future", "AGE", "US", "We turn {V} in June, both of us have birthdays that week.",
+     "We turn {V} in May, both of us are celebrating our birthdays."),
+    ("age_child", "AGE", "US", "My daughter turned {V} this week.",
+     "My son turned {V} yesterday and had a birthday party."),
+)
+ZIP_AGE_TWINS = (
+    ("archive_kb", "US", "backup.zip {V} KB, ready to download.",
+     "snapshot.zip {V} KB, ready to upload."),
+    ("archive_mb", "US", "report.zip ({V} MB), stored locally.",
+     "summary.zip ({V} MB), retained for testing."),
+    ("archive_colon", "US", "archive.zip: {V} KB after compression.",
+     "export.zip: {V} KB before transfer."),
+    ("verb_photos", "US", "I'll zip {V} images this evening.",
+     "I'll zip {V} photos tonight for the backup."),
+    ("verb_rows", "US", "Zip {V} entries into one archive.",
+     "Please zip {V} rows before uploading the results."),
+    ("turned_distance", "US", "We turned {V} km into the route.",
+     "She turned {V} km after the starting point."),
+    ("turned_laps", "DE", "We turned {V} Runden on the track.",
+     "She turned {V} Runden during training."),
+    ("anniversary", "US", "We turn {V} in June! Celebrate our studio anniversary.",
+     "We turn {V} in March! Join our company anniversary celebration."),
+)
+
+
+# Both published and development partitions vary wording, compression units
+# and objects, so precision is measured across several ordinary contexts.
+ZIP_AGE_VARIANTS = {
+    "postal_ship": {
+        "dev": ("Ship the order to zip {V} tomorrow.", "For delivery, please ship to zip {V}."),
+        "test": ("Ship to zip {V}, using the updated destination.", "Send the parcel to zip {V} with tracking.")},
+    "postal_send": {
+        "dev": ("Send this package to zip {V} next week.", "Route the parcel to zip {V}."),
+        "test": ("Please send it to zip {V} on Monday.", "Forward the package to zip {V} today.")},
+    "postal_change": {
+        "dev": ("Switch my delivery address to zip {V}.", "Change to zip {V} for my order."),
+        "test": ("Update the shipping destination to zip {V}.", "Change to zip {V} before dispatch.")},
+    "postal_block": {
+        "dev": ("Address: zip {V} C-block, mailroom.", "Our delivery point is zip {V} D-block."),
+        "test": ("My address is zip {V} E-block, reception.", "Ship here: zip {V} F-block, lobby.")},
+    "postal_road": {
+        "dev": ("ZIP {V} Cedarhaven Road, receiving door.", "Postal address: ZIP {V} Elmhaven Road."),
+        "test": ("ZIP {V} Firridge Road, back entrance.", "Delivery point: ZIP {V} Mapleridge Road.")},
+    "age_collective": {
+        "dev": ("We both turned {V} in January and shared a birthday cake.", "Both of us turned {V} this month."),
+        "test": ("We both turned {V} in September, on the same birthday.", "My partner and I both turned {V} last summer.")},
+    "age_collective_future": {
+        "dev": ("We turn {V} in August; our birthdays are one day apart.", "We turn {V} in April, and both want a birthday party."),
+        "test": ("We turn {V} in October; our birthdays fall on the same day.", "We turn {V} in July, both celebrating another year of life.")},
+    "age_child": {
+        "dev": ("My son turned {V} this morning.", "My daughter turned {V} at her birthday celebration."),
+        "test": ("My daughter turned {V} last weekend.", "My son turned {V} on his birthday last month.")},
+    "archive_kb": {
+        "dev": ("bundle.zip weighs {V} KB.", "draft.zip - {V} KiB on disk."),
+        "test": ("backup.zip weighs {V} KB after saving.", "collection.zip - {V} KiB, compressed size.")},
+    "archive_mb": {
+        "dev": ("build.zip ({V} GiB), available offline.", "assets.zip takes {V} MB on disk."),
+        "test": ("report.zip ({V} GiB), ready for transfer.", "release.zip takes {V} MiB on disk.")},
+    "archive_colon": {
+        "dev": ("source.zip: {V} KiB, checksum verified.", "logs.zip: {V} bytes, compressed."),
+        "test": ("archive.zip: {V} KiB after packing.", "records.zip: {V} bytes, ready to download.")},
+    "verb_photos": {
+        "dev": ("We will zip {V} attachments before lunch.", "Could you zip {V} pictures for storage?"),
+        "test": ("Zip {V} attachments for the upload.", "Could you zip {V} pictures into one file?")},
+    "verb_rows": {
+        "dev": ("Please zip {V} records for export.", "The script zipped {V} rows yesterday."),
+        "test": ("Zip {V} entries for the download.", "The job zipped {V} files into the archive.")},
+    "turned_distance": {
+        "dev": ("He turned {V} miles into the hike.", "She turned {V} metres after the marker."),
+        "test": ("We turned {V} miles after leaving the camp.", "He turned {V} metres past the sign.")},
+    "turned_laps": {
+        "dev": ("I turned {V} Runden on the circuit.", "She turned {V} Runden into the race."),
+        "test": ("We turned {V} Runden during the practice session.", "He turned {V} Runden on the oval.")},
+    "anniversary": {
+        "dev": ("We turn {V} in July! Mark our workshop anniversary.", "We turn {V} in May! Our business has been open that many years."),
+        "test": ("We turn {V} in February! It is our museum anniversary.", "We turn {V} in April! That is how long our shop has been open.")},
+}
+
+
+def _postal_instruction_value(rng: Rng, partition: str, index: int) -> tuple[str, str]:
+    # Postal meaning comes from the instruction, not from one country's layout.
+    shapes = ((None, "US"), (CueShape.ZIP_THREE, "IS"), ("four", "DK"),
+              (CueShape.ZIP_SIX, "IN"), (CueShape.ZIP_SE, "SE"), (CueShape.ZIP_PL, "PL"))
+    shape, region = shapes[index % len(shapes)]
+    if shape is None:
+        return _zip5(rng, partition), region
+    if shape == "four":
+        return str(rng.between(1000, 4999) if partition == "dev" else rng.between(5000, 9999)), region
+    return _zip_maker(shape)(rng, partition, index), region
+
+
+def _zip_age_records(partition: str) -> list[Record]:
+    records = []
+    for layer, cells in ((LAYER_IDENTIFIERS, ZIP_AGE_CELLS), (LAYER_LOOKALIKES, ZIP_AGE_TWINS)):
+        for cell in cells:
+            family = cell[0]
+            rng = Rng(PARTITION_SEEDS[partition], f"{layer}/zipage/{family}")
+            if layer == LAYER_IDENTIFIERS:
+                _, label, region, dev, test = cell
+            else:
+                _, region, dev, test = cell
+                label = DECOY_PREFIX + "benign"
+            for index in range(10):
+                if family == "postal_change":
+                    value = _zip_maker(CueShape.ZIP_SE)(rng, partition, index)
+                elif family.startswith("postal_"):
+                    value, region = _postal_instruction_value(rng, partition, index)
+                elif family == "age_child":
+                    ages = tuple(range(2, 18, 2)) if partition == "dev" else tuple(range(1, 18, 2))
+                    value = str(ages[index % len(ages)])
+                elif family in ("age_collective", "age_collective_future"):
+                    value = _age(rng, partition, index)
+                elif family in ("archive_mb", "turned_distance", "turned_laps"):
+                    whole = rng.between(1, 4) if partition == "dev" else rng.between(5, 9)
+                    value = f"{whole}{',' if family == 'turned_laps' else '.'}{rng.between(1, 9)}"
+                elif family == "anniversary":
+                    value = str(rng.between(2, 14) if partition == "dev" else rng.between(15, 29))
+                else:
+                    digits = 3 + index % 4
+                    low = 10 ** (digits - 1)
+                    midpoint = 5 * low
+                    value = str(rng.between(low, midpoint - 1) if partition == "dev" else rng.between(midpoint, 10 * low - 1))
+                templates = (dev if partition == "dev" else test, *ZIP_AGE_VARIANTS[family][partition])
+                text, gold, decoys = _fill_with_decoys(templates[index % len(templates)], {"V": (value, label)})
+                records.append(Record(
+                    uid=f"agentic-{partition}-{layer}-{family}-{index:03d}-zipage_prose",
+                    partition=partition, layer=layer, family=family, surface="zipage_prose",
+                    validity=UNCHECKED if layer == LAYER_IDENTIFIERS else BENIGN,
+                    group=f"{partition}-{layer}-{family}-{index:03d}",
+                    template=f"zipage/{family}/{partition}/{index % len(templates)}",
+                    language="de" if region == "DE" else "en", region=region,
+                    text=text, gold=gold, decoys=decoys,
+                ))
+    return records
+
+
 # The surface prefix each generator version added. Every earlier document stays
 # byte identical, so an older corpus is a filter of the current one.
-GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "cue_", 9: "block_", 10: "url_", 11: "gov_"}
+GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "cue_", 9: "block_", 10: "url_", 11: "gov_", 12: "zipage_"}
 
 
 def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
@@ -3785,6 +3937,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    11: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v11.json"),
     10: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v10.json"),
     9: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v9.json"),
     4: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v4.json"),
@@ -4037,6 +4190,7 @@ def generate(partition: str) -> list[Record]:
         + _url_records(URL_CELLS, partition, LAYER_IDENTIFIERS)
         + _url_records(URL_TWINS, partition, LAYER_LOOKALIKES)
         + government_ids.records(sys.modules[__name__], partition)
+        + _zip_age_records(partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)

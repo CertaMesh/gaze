@@ -16,8 +16,8 @@ import agentic_layers
 ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs/reference/benchmarks/README.md"
 # Pin the measured version so a later generator cannot relabel these rows.
-# Earlier v4, v8, v9 and v10 ledgers remain committed as historical measurements.
-GENERATOR_VERSION = 11
+# Earlier v4, v8, v9, v10 and v11 ledgers remain committed as historical measurements.
+GENERATOR_VERSION = 12
 HISTORY = ROOT / f"docs/reference/benchmarks/agentic-adjacency-v{GENERATOR_VERSION}-history.json"
 CORPUS_SHA256, CONTRACT_SHA256 = agentic_layers.corpus_identity(ROOT, GENERATOR_VERSION)
 
