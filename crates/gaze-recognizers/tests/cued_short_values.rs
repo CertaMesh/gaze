@@ -92,6 +92,23 @@ fn age_phrase_branches_each_have_a_distinct_probe() {
         ("We both turned 40 last year.", "40"),
         ("We turned 40 in March.", "40"),
         ("We turn 40 next year.", "40"),
+        (
+            "We turn 60 in May, both of us are celebrating our birthdays.",
+            "60",
+        ),
+        (
+            "We turn 42 in October; our birthdays fall on the same day.",
+            "42",
+        ),
+        (
+            "We turn 31 in July, both celebrating another year of life.",
+            "31",
+        ),
+        ("We turn 22 next autumn and want a birthday party.", "22"),
+        (
+            "We turn 47 in December, then we will be 47 years old.",
+            "47",
+        ),
         ("note=\"customer turned 33\"", "33"),
         ("I'll turn 40 next month.", "40"),
         // geworden
@@ -135,6 +152,9 @@ fn age_phrase_refuses_objects_animals_units_and_missing_persons() {
         "She turned 2,5 Runden.",
         // The direct `we turn N in` wording describes an anniversary.
         "We turn 10 in March!",
+        "We turn 10 in March! Our birthdays are in May.",
+        "We turn 10 in March; celebrate our studio anniversary.",
+        r#"{"note":"We turn 10 in March","reason":"birthday party"}"#,
     ] {
         assert_untouched(&core, raw);
     }

@@ -2127,7 +2127,7 @@ pattern = '''(?ix)
   \b(?:i|he|she|we|patient|customer|client|applicant|mother|father|mom|mum|dad|son|daughter|wife|husband|brother|sister|grandmother|grandfather|grandma|grandpa|grandson|granddaughter|aunt|uncle|niece|nephew|friend|boyfriend|girlfriend|baby|kid|child|boy|girl|woman|man|lady|guy)\b
   [^\n.!?]{0,32}?\b(?:turned|turns|turning|turn)[\x20\t\x{A0}\x{202F}]+
   ((?:[1-9][0-9]?|1[01][0-9]|12[0-2]))
-  (?:[\x20\t\x{A0}\x{202F}]*(?:[;:!?)}\]"']|[,.](?:[^0-9]|\z)|\r?\n|\z)|[\x20\t\x{A0}\x{202F}]+(?:and|but|so|or|last|this|next|in|on|at|yesterday|today|recently|already|when|while|because|since|before|after|years?|yrs?)\b)
+  (?:[\x20\t\x{A0}\x{202F}]*(?:[;:!?)}\]"']|[,.](?:[^0-9]|\z)|\r?\n|\z)|[\x20\t\x{A0}\x{202F}]+(?:in\b(?:[^\n.!?"{}\[\]]{0,160}?\b(?:birthdays?|years?[\x20\t\x{A0}\x{202F}]+(?:old|of[\x20\t\x{A0}\x{202F}]+life))\b)?|(?:and|but|so|or|last|this|next|on|at|yesterday|today|recently|already|when|while|because|since|before|after|years?|yrs?)\b))
  |
   \b(?:ich|er|sie|mutter|vater|mama|papa|sohn|tochter|oma|opa|bruder|schwester|frau|mann|kind|patientin|patient|kundin|kunde|tante|onkel|enkelin|enkel|freundin|freund)\b
   [^\n.!?]{0,40}?\b(?:bin|bist|ist|sind|war|wurde|wird|werde|wirst)\b[^\n.!?0-9]{0,32}?
@@ -2152,8 +2152,10 @@ pattern = '''(?ix)
 capture_groups = [1, 2, 3, 4, 5, 6, 7]
 
 [recognizers.context]
-# Refuse the direct anniversary phrase; keep collective personal ages.
-reject_match_regex = '''(?i)\Awe[\x20\t\x{A0}\x{202F}]+turn[\x20\t\x{A0}\x{202F}]+[0-9]+[\x20\t\x{A0}\x{202F}]+in\b'''
+# Refuse the direct anniversary phrase only when no bounded personal continuation
+# was captured. Birthday / years-old / years-of-life cues keep collective ages.
+# The continuation cannot cross a sentence, newline or JSON string/record boundary.
+reject_match_regex = '''(?i)\Awe[\x20\t\x{A0}\x{202F}]+turn[\x20\t\x{A0}\x{202F}]+[0-9]+[\x20\t\x{A0}\x{202F}]+in\b\z'''
 
 [recognizers.scoring]
 base = 0.90
