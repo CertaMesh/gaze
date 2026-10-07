@@ -26,8 +26,10 @@ the upstream call, and Gaze restores owner-visible response text on the way back
   variables or equivalent client options.
 - Provider API keys for the upstream services your application already calls.
 
-For a minimal policy, start with the same deterministic floor you use for
-`gaze clean`:
+For a minimal proxy policy, start with this deterministic email rule.
+Ephemeral session scope is valid for the proxy. For `gaze clean`, use
+`scope = "conversation"` instead: ephemeral sessions forbid the session blob
+export that `gaze clean` requires and return `PolicyConfig` (exit 2).
 
 ```toml
 [session]

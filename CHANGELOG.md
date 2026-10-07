@@ -5,348 +5,125 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.16.0] - <<DATE>>
 
-### Added
-
-- **Dashboard purge acknowledgements.** `DashboardControl::wait_for_epoch` waits for
-  completed browser purges without polling. Inspection control threads can use
-  `begin_logical_blocking` to acquire the registration lock after a purge acknowledgement;
-  the existing producer API stays nonblocking. Lifecycle tests now synchronize browser
-  workers and await every accepted purge, including disable and child-reap checks.
-
-- **Address-block growth.** When a postcode, a NER street
-  or city, or a house number is already protected, the unit designator, box,
-  state code or military post office written right beside it now joins the
-  protection as its own `location` token: `Suite 312`, `Apt. 4B`,
-  `PO Box 417`, `Wohnung 7`, `3. Etage`, `Postfach 505`, `IL` in
-  `Brinmoor, IL 00068`, and `PSC 806, Box 9504, FPO AA`. Growth crosses only
-  spaces, one comma and one line feed, never a sentence end or a JSON field
-  boundary; a postcode never grows a unit to its right, a state code needs a
-  protected postcode after it, and a designator with no protected address
-  beside it stays raw.
-  Words come from new `locale-en` / `locale-de` buckets; each piece's
-  recognizer id (`address.block.*`, `gaze::AddressGrowth`) records why it
-  joined. It runs under the new `[address_blocks] enabled = true` policy
-  section, which `gaze setup` writes; a policy without it grows nothing. See
-  the policy reference, "Address blocks".
-
-### Breaking
-
-- **Typed `Context` literals gain `record_match_kinds` and `record_value_rejections`.** Add
-  both fields with `Default::default()` to direct Rust struct literals.
-  Caller-known record matching now defaults to selected class and match-kind
-  pairs from the v5 oracle; callers who need off-by-default variants must opt in through the
-  context JSON. See the policy reference and UPGRADE.md.
-
-- **Context JSON is size-bounded and duplicate-key strict.** Files larger than
-  4 MiB and JSON objects with duplicate keys now fail closed. Parse errors are
-  generic to avoid echoing raw context into logs. See UPGRADE.md.
-
-- **Repeat-value sweep evidence is declared per emitter, and the default is
-  `Learned`**. `Recognizer` and `Detector` gain
-  `fn evidence(&self) -> EvidenceKind`, which defaults to
-  `EvidenceKind::Learned`, and `Candidate` gains an `evidence` field that the
-  registry stamps from it. The sweep and the resolver's evidence tiers used to
-  treat everything except a hard-coded list of ids (`ner`, `dob.gliner`, the
-  house-number id) as rule evidence and propagate it. Bundled and policy
-  custom rulepack recognizers declare `Rule`, so their behaviour is unchanged.
-  An adopter `Recognizer` or `Detector` that declares nothing stops seeding
-  the sweep, and in cross-class containment its span no longer swallows an
-  enclosed rule candidate of another class (the tokens split around it; no
-  raw bytes ship). Declare `Rule` to keep v0.15 behaviour. See UPGRADE.md.
-- **`gaze_proxy::ProviderAdapter::contract()` is required**. The default body, which silently gave every third-party adapter
-  `AdapterContract::legacy()`, is gone; an adapter that declares no contract
-  no longer compiles (`E0046`). Add
-  `fn contract(&self) -> AdapterContract<'_> { AdapterContract::legacy() }`
-  to keep today's behavior. The bundled OpenAI and Gemini adapters now declare
-  it explicitly; `PiiSurface` is unchanged. See UPGRADE.md.
-- **`session_blob` / `SensitiveSnapshot` now use envelope version 6**,
-  which records each manifest entry's evidence tier. Gaze v0.15 and older
-  refuse a v6 blob with `InvalidSnapshotVersion(6)`. v5 and older blobs still
-  import and restore, but their values do not seed the sweep.
+Release draft: date and benchmark claims await the release-commit measurement.
 
 ### Security
 
-- **A URL with JSON-escaped slashes is tokenized (#744).** JSON may escape
-  every slash with a backslash, and PHP's `json_encode()` does so by default.
-  Every release up to and including v0.15.1 sent such a URL to the model raw
-  unless its host had a `www` prefix; with the prefix, the token started after
-  the escaped scheme, which stayed raw. `url.anchored` now accepts the escaped
-  scheme separator and escaped slashes inside the URL. A scheme or a `www`
-  prefix is still required, so escaped routes, MIME types and bare hosts stay
-  untouched. Benchmark gain gate on generator v10 (#746), setup policy, seed
-  20260710, together with the delimiter fix below: layer A leaked bytes −348
-  under v2 and v1, false-positive bytes −546; layers C, D and R unchanged,
-  with zero refusals and every document restored exactly.
+- **Repeat-value protection.** Rule-found values now protect repeated copies in
+  the document and later session turns, including case variants and distinctive
+  name parts. Header names accept Unicode, hyphens and apostrophes; NER spans
+  grow to whole words. Learned and checksum-failed values do not seed the sweep.
+  Earlier proxy JSON fields are still outside the sweep's coverage.
+- **Address protection.** NER streets license adjacent house numbers; protected
+  address anchors grow to nearby units, boxes, state codes and military post
+  offices. `gaze setup` enables `[address_blocks]`; existing policies must opt in.
+  Australian state-and-postcode spans are protected under the `en-AU` locale.
+- **Birth-date cues.** Prose, tool-call JSON and logs recognize birth-date cues
+  and additional date formats across six languages. Dates without a birth cue
+  still depend on the safety net.
+- **Labelled identifiers.** Tax, driver-licence and identity-card fields protect
+  grouped values whole. Cued phone and government-ID values remain protected
+  when validation fails. Recorded validator failures are auditable and never
+  seed the repeat-value sweep.
+- **Financial data.** Registry-shaped IBANs remain protected when mod-97 fails;
+  cued IBAN and payment-card layouts also protect invalid checksums. Uncued
+  cards retain their Luhn veto. Some uncued or compact invalid card shapes
+  remain outside coverage; see the [validator contract](docs/explanation/detection/validator-veto.md#recorded-failures).
+- **URLs and credentials.** JSON-escaped URL slashes are recognized (#744).
+  URL tokens stop at compact JSON and HTML boundaries (#743). In the opt-in
+  `secrets` pack, a cued JWT is protected whole, including its payload and
+  signature; generic dotted credentials and unsigned JWTs remain unsupported.
 
-- **A JWT after a credential cue is tokenized whole in the opt-in `secrets`
-  pack (#745).** With `secrets` loaded, every release up to and including
-  v0.15.1 tokenized only the JOSE header of a JWT that follows a cue such as
-  `Bearer`, `token:` or `api_key=`, and sent its payload and signature to the
-  model raw. The payload carries claims about a person (`sub`, `email`,
-  `name`). The cue arm of `security_token.anchored` now takes a complete
-  three-segment JWT before its generic value, including a cued dotted or
-  hyphenated prefix. Bare JWT protection beside dots, hyphens and ellipses is
-  preserved. Generic cued values still stop at a dot; their original partial
-  protection is preserved, without claiming support for arbitrary dotted
-  credentials or unsigned JWTs. The gate policy does not load `secrets` and `SECURITYTOKEN` is outside
-  the PII contract, so the gate scorecards are identical under v2 and v1; with
-  `secrets` added to the setup policy, layers C, A, D and R are unchanged too,
-  with no new false-positive byte.
+### Breaking
 
-- **Labelled tax, driver-licence, and identity-card values now close whole-field
-  leaks.** Three safe-default `core` recognizers cover class-specific fields
-  across English, German, French, Dutch, and Portuguese. A shared scanner
-  extends bounded regex captures through grouped values, stops at dates and
-  later fields, and records a typed reason when it crosses a size limit or
-  boundary. Tokens restore exactly. Nym also scans a byte-aligned neutral
-  token view to find PII hidden by nearby manifest tokens. Against main
-  `3956a611`, the fresh v2/v1 gates remove 1,127/1,366 leaked bytes in layer C
-  for 129 added false-positive bytes; A, D, and R are unchanged, with zero
-  refusals, fallback redactions, restore failures, or invalid manifests.
-
-- **Cued phone and government-ID values remain protected when validation fails.**
-  The new `phone.e164.spaced.cued` and `phone.national.us.cued` recognizers keep
-  labelled phone-shaped values that a regional parser rejects, using English
-  and loaded German, French, Dutch, and Brazilian phone-label buckets. Cued Steuer-ID,
-  BSN, and CPF rules now keep checksum-failed values. Each winner carries the
-  typed failure reason in audit metadata, restores exactly, and cannot seed
-  the repeat-value sweep. All-zero Steuer-ID/BSN placeholders and vehicle-ID
-  labels stay raw. Broad uncued phone scans and other validator-backed rules
-  retain their vetoes; `phone.national.de` has no separate cued relaxation.
-
-- **All-caps, lower-case and hyphenated copies of a header name no longer ship
-  raw**. Three stages leaked. The repeat-value sweep matched
-  a cue-found `Herr Tobias Brenner` only as a whole or as title-case parts, so
-  `TOBIAS BRENNER` shipped raw; runs of two or more adjacent name parts now
-  match in any case when one part is distinctive, and parts also sweep in
-  upper case. `email.header.name` took only ASCII title-case parts, so
-  `From: Jorunn Vasquez-Ellery <…>` found no rule value and `-Elle` shipped raw
-  in the header; parts may now be all caps, carry diacritics, or join with a
-  hyphen or apostrophe. NER spans stopped inside words (`jorunn vas`); name,
-  location and organization spans now grow to whole words, and name spans and
-  swept name copies over hyphen- or apostrophe-glued parts. Regex
-  `pattern_template` values can now use `\p{…}` Unicode classes. Benchmark
-  gain gate (setup policy, seed 20260710): leaked bytes v2 −151, v1 −210,
-  false-positive bytes +95, zero refusals, exact restore unchanged.
-
-- **IBAN and payment card numbers are tokenized even when mod-97 or Luhn
-  fails**. A mistyped or masked account or card number is
-  still someone's financial data. `iban.structural` now keeps a
-  registry-shaped IBAN that fails mod-97; the new `iban.cued` tokenizes an
-  IBAN-structured value after the word `IBAN` whose country code is a real
-  ISO 3166-1 code (or `UK`) outside the IBAN registry; the new `card.cued` tokenizes a card layout after a card cue
-  (`card`, `Karte` compounds, card brands) when it fails Luhn.
-  `card.structural` keeps its Luhn veto, so an uncued 16-digit order or
-  voucher number stays untouched. After a card cue a 4-4-4-4-3 number is one
-  token. Known limitation: a Luhn-failing 13- or 15-digit compact card number
-  not starting with 3 stays raw, because those shapes are phone numbers and
-  epoch-millisecond timestamps as often. The winner's audit row carries
-  `validator_fail_reason`, and a checksum-failed value is never swept to other
-  copies. Rulepacks gain `[recognizers.validator] on_fail = "record"`, which
-  the loader originally accepted only for `iban_mod97` and `luhn`; the new
-  cued phone and government-ID rules above extend that explicit allowlist.
-  `Candidate` gains
-  `validator_fail_reason`, and `Recognizer` gains `validator_on_fail()`
-  (default `Veto`). See
-  [validator veto](docs/explanation/detection/validator-veto.md#recorded-failures).
-- **Australian state plus postcode addresses are tokenized deterministically**.
-  `postal.au` protects the state abbreviation and four-digit
-  postcode together whenever `en-AU` is in the effective locale chain, so
-  these spans no longer rely on Nym context. The no-policy `core-extended`
-  chain includes `en-AU` on every document. New Zealand postcodes remain
-  outside this rule. For strict same-class overlaps, the containing span wins
-  and the enclosed candidate is audited as a loser when doing so preserves
-  every byte covered by prior arbitration of that candidate pool. This gives the joined AU
-  token precedence under shipped locale chains while `postal.at_ch` still
-  protects an out-of-range code or a code on a chain without `en-AU`.
-  The address anchor refuses common English and German function words,
-  but other capitalised words, including German nouns, can still trigger it;
-  terminal CSV/table state-and-number cells, including years, can also match.
-
-- **Dates of birth after a birth cue are tokenized**.
-  Every release up to and including v0.15.1 sent these raw through
-  `gaze clean` and `gaze proxy` alike: a German birth-date field,
-  a DOB field in a tool result, a French day-first birth date, and any
-  month-name or two-digit-year date. `birth_date.cue` only read a line-start
-  field record (a structured DOB field) and `born on` / `geboren am`.
-- A value a rule found once is now tokenized everywhere it repeats. Before,
-  a copy was protected only when a recognizer fired at that exact spot, so a
-  name caught in an email header shipped raw in the body, in another case, or
-  in the next turn of a daemon or proxy session. See
-  [`docs/explanation/detection/manifest-sweep.md`](docs/explanation/detection/manifest-sweep.md).
-
-- **House numbers beside a street the NER model found are tokenized**.
-  Every release up to and including v0.15.1 tokenized
-  `Musterweg` in `Musterweg 17b` and `Example Street` in `17 Example Street`,
-  but sent the house number raw, because the location span ends at the
-  street word.
+- **Context contract.** Direct Rust `Context` literals need
+  `record_match_kinds` and `record_value_rejections`, both accepting
+  `Default::default()`. Context JSON is limited to 4 MiB and rejects duplicate
+  keys with generic errors that do not echo its contents.
+- **Recognizer evidence.** `Recognizer` and `Detector` gain `evidence()`, which
+  defaults to `EvidenceKind::Learned`; `Candidate` gains `evidence` and
+  `validator_fail_reason`; `Recognizer` gains `validator_on_fail()`. Declare
+  `Rule` for trusted rule evidence to retain
+  repeat-value propagation. Cross-class containment preserves enclosed rule
+  candidates rather than letting learned spans swallow them.
+- **Provider contract.** Third-party `ProviderAdapter` implementations must
+  implement `contract()` explicitly; returning `AdapterContract::legacy()`
+  preserves the previous behavior.
+- **Snapshot contract.** Session envelopes use version 6 to record evidence.
+  v0.15 and older reject v6 blobs; older blobs still import and restore but
+  their values cannot seed the repeat-value sweep.
+- **CLI exit-code change (#750).** `gaze clean` with
+  `[session] scope = "ephemeral"` now fails with `PolicyConfig`, exit 2 and an explanatory
+  `detail`, replacing opaque `Pipeline`, exit 3. Scripts checking exit codes
+  will notice. Use `conversation`, or `persistent` with a positive `ttl_secs`.
+  Ephemeral scope remains valid for the proxy. See [UPGRADE.md](UPGRADE.md).
 
 ### Added
 
-- **Per-mechanism benchmark arms**. A release row measures
-  the whole stack; a mechanism arm measures one mechanism on its own: the same
-  binary, corpus and seed with and without one policy delta file under
-  `scripts/bench/mechanisms/`. `scripts/bench/mechanism_arms.py record`
-  refuses a pair unless the candidate policy is exactly base plus delta and
-  all four runs (v2 and v1) share one clean commit, corpus, seed and scored
-  population; it commits both observation records and `check` (run by the
-  docs workflow) re-derives every number from them, v3 included. Releases
-  older than a mechanism say so in their cell. The GLiNER DOB judge is the
-  first row: on the main corpus it cut layer C leaked bytes by 85
-  (DATEOFBIRTH 810 to 725) and agentic layer A by 20 under contracts v2 and
-  v1, with no false-positive bytes added and no refusals. It stays opt-in
-  (`gaze setup --dob-judge`) until its 352 MB bundle is shrunk:
-  on a quiet Apple M5 Max (`scripts/bench/mechanism_latency.py`, 200
-  documents) it moved warm p50 75.6 to 76.1 ms, p95 137 to 160 ms, the cold
-  first document 2.2 to 3.7 s and peak RSS 1,076 to 1,740 MiB.
-- **The contract v3 gold-gap audit passed**: 3 of 200
-  sampled credits failed (one-sided 95 % bound 3.83 %, limit 5 %), each in a
-  different document. Three model judges (Claude Opus, Codex, TypeSafe)
-  agreed on 188 cards; the user decided the 12 contested ones. Verdicts are
-  recorded per entry in `gold-gap-sample-v3.json`, and
-  `gold_gap_evidence.py accept` recomputes the result. The v2 headline is
-  unchanged here.
-- Rulepack regex recognizers can set `[recognizers.context] reject_match_regex`
-  to refuse a full regex match before emitting its capture. This field is
-  unavailable in `[[policy.custom_recognizers]]`; invalid guard regexes fail
-  pipeline assembly.
-- `ConflictTier::SameClassContainment` (`same_class_containment`) records
-  strict same-class span containment in winner and loser audit rows.
-
-- Opt-in, local GLiNER date-of-birth judge for date-shaped spans left unclaimed
-  by the rule floor. `gaze setup --dob-judge` installs a SHA-pinned ONNX bundle;
-  `[dob_judge]` enables it. The judge compares birth-date, generic-date, and
-  event-date scores with a fixed 0.65 margin before emitting a restorable
-  `birth_date` token. In a synthetic held-out probe it emitted 7/13 DOB spans
-  (EN 5/7, DE 2/4, FR 0/2) and 1/19 business-date spans. Cue-less DE/FR form
-  dates and later people in a list can remain raw; ambiguous business dates can
-  still be labelled as birth dates.
-- Repeat-value sweep after resolve and before the safety net. Byte-identical
-  copies reuse the token; other spellings and title-case name parts get a
-  sibling token. Only rule-found values propagate, never NER or safety-net
-  values. A lone lower-case name part stays raw (stated trade-off), as do
-  digit runs under six digits (a four-digit postcode depends on its city
-  anchor) and single surnames that are everyday words (`Richter`, `Grant`).
-  Stated gap: in `gaze proxy`, a copy in an earlier JSON field than its source
-  is not swept.
-- `ConflictTier::ManifestSweep` (`manifest_sweep`) and audit rows with
-  `provenance_stage = "manifest_sweep"` for every swept copy.
-- `Error::ManifestSweep` / `ManifestSweepError`: the request fails closed when
-  the sweep's value list passes its size cap or its matcher cannot be built.
+- **Caller-known record controls.** Selected class and match-kind defaults
+  follow the record oracle; unsafe short values are skipped individually with
+  typed reasons, and duplicate fields share a source. Callers can opt into
+  additional match kinds through context JSON. Address parts and exact single
+  names are off by default; exact declared phones and cards stay on despite
+  measured benign false positives.
+- **Optional DOB judge.** `gaze setup --dob-judge` installs a pinned local
+  GLiNER bundle for ambiguous date spans. It stays opt-in because of its bundle
+  size and memory cost; cue-less dates can still be missed and business dates
+  can be labelled as birth dates.
+- **Rulepack guards.** Regex recognizers can reject a full match through
+  `[recognizers.context] reject_match_regex`; invalid guards fail assembly.
+  The field is unavailable in policy custom recognizers.
+- **Audit and dashboard controls.** Manifest-sweep and same-class-containment
+  audit tiers explain token decisions. Dashboard callers can await completed
+  purge epochs; broken purge notification channels fail closed and disable
+  capture.
+- **Benchmark evidence.** Contract v3 applies the audited gold-gap credit to
+  false positives, with unchanged v2 leaked bytes. Per-mechanism arms and
+  tagged-version SVG panels accompany the release comparisons; v2 and v1
+  remain the release gate contracts.
 
 ### Changed
 
-- **Numeric postal rules leave SKU identifiers intact.** `postal.de` and
-  `postal.us` no longer treat numeric pieces inside connected `SKU-`
-  stock-keeping identifiers with an alphabetic product component as postal codes.
-  Numeric-only SKU forms, country prefixes, postal labels,
-  hyphenated towns and adopter-defined recognizers retain their behavior.
+- **Setup policy permissions.** `gaze setup` writes owner-only policies and
+  checks for an existing policy before downloading models. Permission-denied
+  policy errors retain `PolicyOpen`, exit 4, with a repair detail.
+- **Loopback handling.** Loopback IPv4 and IPv6 remain raw; private and
+  link-local addresses stay protected. Documentation IP ranges are excluded
+  from the bundled floor.
+- **Zip/age precision (#753, pending).** The proposed change narrows zip and
+  age matches on benign count and size phrases while preserving address
+  protection. Inclusion awaits merge and confirmation in Phase 2.
+- **Release-text hygiene.** The public-text scrub includes `UPGRADE.md` and
+  allowlists only specific public repository and SemVer links.
 
-- **Caller-known records accept checksum-valid two-letter-country IBANs.**
-  Unsafe short values are skipped individually; the Rust context reports each
-  safe field path and a typed reason. Duplicate class/value fields share one
-  record source.
-- **Caller-known record defaults follow the v5 class and match-kind oracle.**
-  Full names use exact, case-folded and combined whitespace/case matching;
-  single names use case-folded and corroborated matching. Credit cards, IBANs,
-  national IDs and Steuer IDs use exact and flexible-whitespace matching;
-  whitespace-flexible matching collapses whitespace runs but does not add or
-  remove separators, so pass values in the form the document uses.
-  passports and phones use exact matching. Address parts and exact single
-  names are off by default, leaving 337 and 123 more leaked gold bytes than
-  the all-on arm but avoiding their measured benign counterweights. Exact
-  declared phones and credit cards remain on by user decision despite 69 and
-  99 added layer D benign bytes. Callers may override a group through
-  `record_match_kinds` in the call-scoped context JSON. The final shipped-default
-  oracle cuts leaked bytes by 6,064 with 258 added false-positive bytes under
-  both scored-label contracts; no-record scorecards match main exactly.
-- **Loopback IP addresses no longer tokenize.** The bundled IPv4 and IPv6
-  rules reject `127.0.0.0/8`, `::1` and IPv4-mapped or IPv4-compatible
-  loopback with the new
-  `ipv4_loopback_range` / `ipv6_loopback_range` reasons: a loopback address
-  never leaves the host. Private and link-local addresses stay protected.
-- **README and benchmark charts are static SVG panels**. One panel per benchmark with the value printed on every bar, light and dark variants, released Gaze versions and declared competitor configurations only; the mermaid `xychart-beta` charts (no labels on GitHub) and the README results table are gone. See `docs/reference/benchmarks/README.md#benchmark-panels`. The headline row is character-level F2 (β=2, label-agnostic, micro) with leaked bytes under each bar; tagged Gaze releases are scored by `release_char_level.py` from their committed observation records.
+### Benchmark
 
-- **The benchmark headline is scored-label contract v3** (after the gold-gap audit passed). Leaked bytes are unchanged from v2; false
-  positives and byte precision are after the audited gold-gap credit, which
-  gets its own column. For the `gaze setup` default (v0.15.0 and v0.15.1):
-  13,319 leaked bytes, 18,488 false-positive bytes (v2: 30,073), byte
-  precision 0.856 (v2: 0.786). v2 and v1 stay beside it, and the merge and
-  release gates still read v2 and v1. v0.15.0's and v0.14.0's v3 numbers come
-  from new observation records of their own benchmark binaries; each record
-  reproduces the release's committed v1 and v2 results
-  (`verify_record_scorecards.py --capture`).
+- Layer C leaked bytes versus v0.15.1, contract v2: <<BENCH>>.
+- Layer C leaked bytes versus v0.15.1, contract v1: <<BENCH>>.
+- Layer C false-positive bytes versus v0.15.1, contracts v2/v1/v3: <<BENCH>>.
+- Layer C headline results, contract v3: <<BENCH>>.
+- Layers A/D/R leaked and false-positive bytes, refusals, restore and manifest
+  results versus v0.15.1: <<BENCH>>.
 
-- **[bundle-tokenization-drift] `core` and `secrets` snapshots record a new corpus hash.** A comment line in the drift corpus lost a private tracker id; every detection entry is unchanged.
+These placeholders will be filled from the release commit using
+[`run_no_opf_benchmark.py`](scripts/bench/run_no_opf_benchmark.py), seed 20260710,
+its own setup policy, and v1/v3 rescoring of the v2 observations on a MacBook
+Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71).
 
-- **[bundle-tokenization-drift] `core` excludes documentation IPs.** The
-  no-policy snapshot drops RFC 5737 IPv4 and RFC 3849 IPv6 detections; nearby
-  non-documentation addresses still tokenize and restore.
-- **A NER street licenses the house number beside it.** After conflict
-  resolution, a winning NER location whose last word is a street word of an
-  active locale tokenizes the adjacent house number (`17`, `17b`, `9A`,
-  `12-14`, `12/3`) as its own `location` token with recognizer id
-  `address.house_number.street_corroborated`. German writes the number after
-  a street ending (`-straße`, `-weg`, `-platz`, …, from
-  `[locale.street_suffixes_number_after]` in `locale-de`); English writes it
-  before a street type (`Street`, `Road`, `Drive`, …, from
-  `[locale.street_types_number_before]` in `locale-en`). A city, a bare street
-  word, a number across a line break, tab or table border, a five-digit
-  number, a bare year (1900–2099) after a German street (`Bahnhofstraße
-  2025`), and a decimal or time never qualify. A spaced range before an
-  English street (`12 - 14 Harbor Road`) is covered whole. Only policies that load a
-  locale pack with these lists and run NER change: `core` alone, or a policy
-  without `[ner]`, tokenizes exactly what it did before. Known limit: the
-  lexicon cannot tell a street from a title the NER model mislabels as a
-  location (`Chapter 12 Civil Court`), and a year right before an English
-  street (`In 2019 Abbey Road …`) is tokenized.
+### Disclosures
 
-- **`birth_date.cue` reads birth cues in prose, tool-call JSON and
-  `key=value` logs.** Cues cover en, de, fr, nl, da and es (`DOB`,
-  `date of birth`, `born`, `Geburtsdatum`, `geb.`, `geboren am`,
-  `am … geboren`, `née le`, `date de naissance`, `geboortedatum`,
-  `født den`, `fecha de nacimiento`, and more); JSON keys may be snake, camel
-  or kebab case with an underscore prefix (`customer_dob`, `dateOfBirth`,
-  `birth-date`). Dates may be ISO, year-first with `/` or `.`, compact
-  `YYYYMMDD`, day-first with `.` or `-`, slash in either order, two-digit
-  years, or month names in those six languages. A date without a birth cue
-  is still left alone, so invoice, log and release dates are unchanged. Every
-  value the old rule captured is still captured with the same span.
-- **`gaze setup` writes `gaze.toml` owner-only (mode 0600) on purpose, and
-  checks for an existing policy before downloading any model.** An existing
-  policy without `--force` now fails before the NER and Nym downloads instead
-  of after them. When another account runs gaze with that policy (setup as
-  admin, run as a service user), `Policy::load` returns the new
-  `PolicyError::ReadPermissionDenied { path, source }` and the CLI keeps the
-  `PolicyOpen` / exit 4 envelope with a `detail` that names the file and the
-  `chown` / `chmod 0640` fix. It still fails closed. See
-  [Policy file permissions](docs/reference/policy.md#policy-file-permissions).
-- **The release text scrub covers `UPGRADE.md` and allows two public link
-  shapes.** `xtask scrub-public-text` no longer flags links to this
-  repository's pull requests, issues and releases, or to the SemVer
-  specification. The host must match exactly and the whole path must fit a
-  fixed pattern, so any other URL, a lookalike host or free text in the path
-  still fails. The release preflight and the tag-push scrub steps in both
-  release workflows now include `UPGRADE.md`, and a workspace test keeps it
-  clean on every PR.
-
-### Fixed
-
-- **A URL token ends where the URL ends in compact JSON and HTML (#743).**
-  `url.anchored` ran from the scheme to the next whitespace, so in compact
-  JSON or an HTML attribute the token also covered the closing quote and every
-  key, value or link text up to the next space. Restore was byte-exact and
-  nothing leaked, but the model lost those fields. The match now stops at
-  `"`, `<`, `>`, `{`, `}`, at a backslash that does not escape a slash, and at
-  a single quote that closes an attribute; an apostrophe inside a path stays
-  part of the URL.
-
-- **Dashboard purge fails closed on a broken notification channel.** Browser
-  purge requests return 503 instead of falsely reporting acceptance when delivery
-  fails. The child clears captured data, invalidates sessions and response leases,
-  and stops so the supervisor permanently disables dashboard capture.
+- Preliminary PIIBench IPv6 leaked bytes rose by **220 B** versus v0.15.1,
+  likely because loopback addresses intentionally remain raw. Tagged external
+  results will be re-measured after the release.
+- Preliminary layer R false-positive bytes rose from **403 to 419** versus
+  v0.15.1. The release-commit run must confirm the final value.
+- **Latency.** The byte-metric benchmark may run
+  on a shared host; its timings do not establish quiet-host latency. v0.16.0
+  quiet-host latency has not yet been measured. See the
+  [latency methodology](docs/reference/benchmarks/README.md#latency) and
+  [`cli-latency.py`](scripts/bench/cli-latency.py).
 
 ## [0.15.1] - 2026-09-26
 
