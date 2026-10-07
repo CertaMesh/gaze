@@ -1135,6 +1135,7 @@ mod tests {
             ("zip 123456 rows", "123456"),
             ("backup.zip 250 B", "250"),
             ("backup.zip 250 KiB", "250"),
+            ("backup.zip 250 KiB of compressed data", "250"),
             ("zip 123456 attachments", "123456"),
             ("zip 123456 pictures", "123456"),
             ("zip 123456 entries", "123456"),

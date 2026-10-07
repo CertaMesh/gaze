@@ -336,6 +336,7 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         "archive.zip: 345 MB",
         "backup.zip 250 B",
         "backup.zip 250 KiB",
+        "backup.zip 250 KiB of compressed data",
         "zip 123456 attachments",
         "zip 123456 pictures",
         "zip 123456 entries",
