@@ -1055,6 +1055,9 @@ priority = 86
 # position where the numeric patterns require a digit.
 [[recognizers]]
 id = "postal.de"
+# RegexDetector's Rust-side boundary guard excludes numeric pieces of connected
+# SKU- stock-keeping identifiers with an alphabetic product component. Numeric-only
+# SKU suffixes, country prefixes and postal labels retain detection.
 safety_tier = "locale_gated"
 class = "custom:postal_code"
 cooperates_with = ["postal.us", "postal.at_ch", "postal.cued_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
@@ -1074,6 +1077,7 @@ priority = 70
 
 [[recognizers]]
 id = "postal.us"
+# The same Rust-side SKU- boundary guard applies to five-digit ZIP and ZIP+4 shapes.
 safety_tier = "locale_gated"
 class = "custom:postal_code"
 cooperates_with = ["postal.de", "postal.at_ch", "postal.cued_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]

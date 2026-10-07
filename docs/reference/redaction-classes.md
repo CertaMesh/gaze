@@ -449,6 +449,14 @@ has to disable that recognizer.
 The two postal groups differ on purpose. `postal.de` and `postal.us` match bare
 five-digit strings, a shape carrying no structural signal, so they stay
 document-basis and locale-gated and appear only in the second row.
+Their Rust-side boundary guard leaves numeric pieces inside a connected `SKU-`
+stock-keeping identifier raw (ASCII case-insensitive) only when the prefix after
+`SKU-` contains an alphabetic product component. Numeric-only `SKU-` forms keep
+detection, as do country prefixes, postal labels and hyphenated place names.
+The prefix scan is bounded
+to 256 characters; a longer uncertain prefix keeps the detection. If SKU values
+are part of an adopter's PII contract, protect them with a dictionary or custom
+recognizer for that identifier rather than relying on incidental postal matches.
 `postal.at_ch` is in the same group: a four-digit string carries even less
 signal, so it matches only directly after a postal cue or directly before a
 city-shaped token, and only for `de-AT` and `de-CH` documents. Document-basis

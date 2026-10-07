@@ -238,6 +238,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Numeric postal rules leave SKU identifiers intact.** `postal.de` and
+  `postal.us` no longer treat numeric pieces inside connected `SKU-`
+  stock-keeping identifiers with an alphabetic product component as postal codes.
+  Numeric-only SKU forms, country prefixes, postal labels,
+  hyphenated towns and adopter-defined recognizers retain their behavior.
+
 - **Caller-known records accept checksum-valid two-letter-country IBANs.**
   Unsafe short values are skipped individually; the Rust context reports each
   safe field path and a typed reason. Duplicate class/value fields share one
