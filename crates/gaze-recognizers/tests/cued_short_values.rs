@@ -89,6 +89,9 @@ fn age_phrase_branches_each_have_a_distinct_probe() {
         // turned, with a clause boundary or a time word after it
         ("I just turned 47 and booked a trip.", "47"),
         ("My mother turned 61 last week.", "61"),
+        ("We both turned 40 last year.", "40"),
+        ("We turned 40 in March.", "40"),
+        ("We turn 40 next year.", "40"),
         ("note=\"customer turned 33\"", "33"),
         ("I'll turn 40 next month.", "40"),
         // geworden
@@ -130,7 +133,7 @@ fn age_phrase_refuses_objects_animals_units_and_missing_persons() {
         // A decimal is a distance or a quantity, never an age: `.` before a digit is no boundary.
         "He turned 3.5 km into the run.",
         "She turned 2,5 Runden.",
-        // `we` turning a number is a company or a team anniversary, not one person's age.
+        // The direct `we turn N in` wording describes an anniversary.
         "We turn 10 in March!",
     ] {
         assert_untouched(&core, raw);
@@ -232,6 +235,16 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         ("zip_code=70928-012 result=hit", "70928-012"),
         ("My zip code is 195.", "195"),
         ("Postal code: 614. Thanks!", "614"),
+        ("My zip is 560001.", "560001"),
+        ("My zip is 195.", "195"),
+        ("ZIP 560001", "560001"),
+        ("zip 560001", "560001"),
+        ("zip\t560001", "560001"),
+        ("Zip - 560001", "560001"),
+        ("zip 110001, Delhi", "110001"),
+        ("(zip 560001)", "560001"),
+        ("customer.zip=560001", "560001"),
+        (r#"order.shipping.zip = "481 22""#, "481 22"),
         ("zip: 614", "614"),
         ("{\"zip\":\"560001\"}", "560001"),
         ("ZIP 481 22", "481 22"),
@@ -250,21 +263,42 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         // No German, Austrian or Swiss code has three digits (`postal_at_ch.rs` pins it too).
         "PLZ: 123",
         "PLZ 123 fehlt noch",
-        // `.zip` is a file extension and a bare `zip` without label punctuation is a verb.
+        // Size units and plural counts identify archive operations.
         "Uploaded backup.zip 120 KB",
         "archive.zip: 345 MB",
         "I'll zip 250 photos tonight.",
         "zip 123456 rows",
+        "zip 560001 files",
+        "zip 560001 photos",
+        "zip 560001 items",
+        "zip 560001 records",
+        "zip 560001 lines",
+        "zip 560001 images",
+        "zip 560001 documents",
+        "backup.zip 560001 gb",
+        "backup.zip 560001 TB",
+        "backup.zip 560001 bytes",
+        "backup.zip 560001 B",
+        "I'll zip 560001",
+        "I zip 560001",
+        "we zip 560001",
+        "to zip 560001",
+        "please zip 560001",
     ] {
         assert_untouched(&core, raw);
     }
 }
 
 #[test]
-fn postal_cued_four_digit_refuses_a_zip_file_extension() {
+fn postal_cued_four_digit_preserves_fields_and_refuses_archive_sizes() {
     let core = core();
     assert_protected_by(&core, "zip code 1200", "1200", "postal.cued_four_digit");
-    for raw in ["Uploaded backup.zip 1200 KB", "archive.zip: 3450 MB"] {
+    assert_protected_by(&core, "address.zip: 8001", "8001", "postal.cued_four_digit");
+    for raw in [
+        "Uploaded backup.zip 1200 KB",
+        "archive.zip: 3450 MB",
+        "backup.zip 1200 KB",
+    ] {
         assert_untouched(&core, raw);
     }
 }
