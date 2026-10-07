@@ -37,9 +37,10 @@ from pathlib import Path
 from typing import Callable, Iterable, Mapping, Sequence
 
 import gaze_bench_score as score
+import government_id_cells as government_ids
 
 
-GENERATOR_VERSION = 10
+GENERATOR_VERSION = 11
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -89,7 +90,9 @@ CREDIT_SCOPE_BY_LABEL: dict[str, CreditScope] = {
     "BSN": CreditScope.CUED,
     "NHSNUMBER": CreditScope.CUED,
 }
-CUED_SURFACES = frozenset(SURFACES) - {"prose_nocue"}
+CUED_SURFACES = (frozenset(SURFACES) - {"prose_nocue"}) | {
+    "gov_prose", "gov_log_kv", "gov_tool_json", "gov_tool_result",
+}
 
 
 def invalid_twin_credited(label: str | None, surface: str) -> bool:
@@ -3135,6 +3138,10 @@ CREDIT_GUARD_SINCE: dict[str, int] = {
 }
 
 
+CREDIT_GUARD_FAMILIES["TAXNUM"] += government_ids.TAX_GUARD_FAMILIES
+CREDIT_GUARD_SINCE.update({family: 11 for family in government_ids.TAX_GUARD_FAMILIES})
+
+
 def guard_families(generator_version: int) -> list[str]:
     """The credit-guard families a corpus of this generator version contains."""
     return sorted({
@@ -3765,7 +3772,7 @@ def check_url_cells(records: Sequence[Record]) -> None:
 
 # The surface prefix each generator version added. Every earlier document stays
 # byte identical, so an older corpus is a filter of the current one.
-GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "cue_", 9: "block_", 10: "url_"}
+GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "cue_", 9: "block_", 10: "url_", 11: "gov_"}
 
 
 def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
@@ -3778,12 +3785,13 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
-    8: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v8.json"),
+    10: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v10.json"),
     9: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v9.json"),
     4: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v4.json"),
     5: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v5.json"),
     6: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v6.json"),
     7: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v7.json"),
+    8: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v8.json"),
 }
 
 
@@ -4028,6 +4036,7 @@ def generate(partition: str) -> list[Record]:
         + _block_records(BLOCK_TWINS, partition)
         + _url_records(URL_CELLS, partition, LAYER_IDENTIFIERS)
         + _url_records(URL_TWINS, partition, LAYER_LOOKALIKES)
+        + government_ids.records(sys.modules[__name__], partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)
@@ -4432,7 +4441,7 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
     Each row also carries `guard_false_positive`: layer D false-positive bytes
     per CREDIT_GUARD_FAMILIES family (empty for other layers).
     """
-    family_labels = {family.name: family.label for family in IDENTIFIER_FAMILIES} | CUE_FAMILY_LABELS
+    family_labels = {family.name: family.label for family in IDENTIFIER_FAMILIES} | CUE_FAMILY_LABELS | government_ids.FAMILY_LABELS
     # A scorecard that does not say which corpus it measured is held to the current one.
     version = scorecard.get("layers", {}).get("generator", {}).get("generator_version", GENERATOR_VERSION)
     if type(version) is not int:

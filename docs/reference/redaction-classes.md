@@ -131,7 +131,7 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `postal.ca` | `regex` | Canadian six-character postal codes alternating letter and digit, starting with a letter; hyphenated, compact, or separated by a space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE; not matched when preceded by `#` | `custom:postal_code` | `en-CA` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
 | `core, core-extended` | `postal.gb` | `regex` | UK postcodes across all six Royal Mail outward forms plus the special GIR outward code, followed by an inward code of one digit and two letters from the official inward alphabet; space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE separator; not matched when preceded by `#` | `custom:postal_code` | `en-GB` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
 | `core, core-extended` | `postal.ie` | `regex` | Irish Eircodes: routing key including `D6W`, plus a four-character identifier over the restricted Eircode alphabet that must carry at least one letter | `custom:postal_code` | `en-IE` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
-| `core, core-extended` | `url.anchored` | `regex` | URLs beginning with an HTTP(S) scheme or web prefix through the final non-punctuation URL character | `custom:url` | `global` | `none` | `none` | `safe_default` | yes | 0.75 | 85 |
+| `core, core-extended` | `url.anchored` | `regex` | URLs beginning with an HTTP(S) scheme, with plain or JSON-escaped slashes, or a web prefix, ending before whitespace or a JSON/HTML delimiter (`"` `<` `>` `{` `}`, a backslash that does not escape a slash, a closing single quote) and at the final non-punctuation URL character | `custom:url` | `global` | `none` | `none` | `safe_default` | yes | 0.75 | 85 |
 | `core, core-extended` | `ssn.de_cue` | `regex` | Cue-anchored SSN values after German social-insurance cues (Sozialversicherungsnummer, SV-Nummer) in dashed, dotted, or 9 to 11 digit form; format basis; DACH provenance describes cue vocabulary until native SVNR/AHV shapes ship in #2926 | `custom:ssn` | `de-DE, de-AT, de-CH` | `none` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `tax_number.cue_anchored` | `regex` | Cue-anchored tax numbers with a three-digit lead and separated digit groups after German or English tax cues; bare digit runs and the checksummed 2-3-3-3 Steuer-ID shape are excluded | `custom:tax_number` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 84 |
 | `core, core-extended` | `driver_license.cue_anchored` | `regex` | Letter-led alphanumeric licence numbers after German or English driving-licence cues | `custom:driver_license` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 83 |
@@ -449,6 +449,14 @@ has to disable that recognizer.
 The two postal groups differ on purpose. `postal.de` and `postal.us` match bare
 five-digit strings, a shape carrying no structural signal, so they stay
 document-basis and locale-gated and appear only in the second row.
+Their Rust-side boundary guard leaves numeric pieces inside a connected `SKU-`
+stock-keeping identifier raw (ASCII case-insensitive) only when the prefix after
+`SKU-` contains an alphabetic product component. Numeric-only `SKU-` forms keep
+detection, as do country prefixes, postal labels and hyphenated place names.
+The prefix scan is bounded
+to 256 characters; a longer uncertain prefix keeps the detection. If SKU values
+are part of an adopter's PII contract, protect them with a dictionary or custom
+recognizer for that identifier rather than relying on incidental postal matches.
 `postal.at_ch` is in the same group: a four-digit string carries even less
 signal, so it matches only directly after a postal cue or directly before a
 city-shaped token, and only for `de-AT` and `de-CH` documents. Document-basis
