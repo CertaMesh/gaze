@@ -1220,6 +1220,12 @@ model:
   structured text](#urls-in-structured-text) below. The v9 documents remain
   byte identical within each partition; the generator and both partition
   hashes are pinned at v10.
+- **Tax and government-ID ownership (generator v11):** twenty typed shapes
+  add 80 A positives and 84 D benign twins per partition, across prose, logs,
+  tool-call JSON and tool results. Whole-value ownership and explicit SSN-tail
+  relations are checked independently of detector output. See
+  [Tax and government-ID ownership cells](government-id-cells.md). The v10
+  documents, contract and historical ledger remain byte-identical.
 - **Checksum code:** written from the published standards, not from Gaze's
   validators. Standard test vectors pin it, and the validator probe
   cross-checks it on every run.
@@ -1808,13 +1814,15 @@ The preserved phone and cued-cell prose above describes the historical
 [v8 measurements](agentic-adjacency-v8-history.json), and the release
 statement of the CRLF and plate section the historical
 [v9 measurements](agentic-adjacency-v9-history.json). Their links lead to this
-current comparison, which has since been re-measured on v10 below.
+current comparison, which has since been re-measured on v11 below.
 
-The release rows below use generator v10's test partition and the setup
-policy, so they include the v5 to v10 cells (labelled lookalikes, address
+The release rows below use generator v11's test partition and the setup
+policy, so they include the v5 to v11 cells (labelled lookalikes, address
 blocks, phone shapes, cued ages, birth dates, short cards, postcodes, CRLF
-blocks and German plates, URLs in structured text). The table is rendered from
-the [v10 ledger](agentic-adjacency-v10-history.json). The earlier
+blocks and German plates, URLs in structured text, tax and government IDs).
+The table is rendered from
+the [v11 ledger](agentic-adjacency-v11-history.json). The earlier
+[v10 ledger](agentic-adjacency-v10-history.json) on corpus `dfd4cba8…`,
 [v9 ledger](agentic-adjacency-v9-history.json) on corpus `b2e36376…`,
 [v8 ledger](agentic-adjacency-v8-history.json) on corpus `ddd23455…`,
 [v4 ledger](agentic-adjacency-v4-history.json) on corpus `387a35ac…` and the
@@ -1825,43 +1833,43 @@ retained as historical data and do not feed this table.
 Record the past-release `agentic_layers.py measure` outputs with
 `render_agentic_adjacency_doc.py --record`, then render this table from its
 committed ledger. Do not edit the rows by hand. The renderer pins the
-generator version, so a later generator leaves these rows bound to v10 until
+generator version, so a later generator leaves these rows bound to v11 until
 they are re-measured.
 
 <!-- BEGIN GENERATED: agentic-adjacency -->
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.15.1` `policy-file` | 21,026 / 60,901 | 2,073 | 4,877 | 379 / 5,142 | 402 |
-| `v0.15.0` `policy-file` | 21,199 / 60,901 | 2,073 | 4,877 | 379 / 5,142 | 402 |
-| `v0.14.0` `full-stack-kiji-resolve` | 30,530 / 60,901 | 5,994 | 4,108 | 530 / 5,142 | 189 |
-| `v0.14.0` `pass2-ner` | 31,187 / 60,901 | 1,535 | 3,356 | 555 / 5,142 | 139 |
+| `v0.15.1` `policy-file` | 21,795 / 61,803 | 2,102 | 5,069 | 374 / 5,142 | 403 |
+| `v0.15.0` `policy-file` | 21,968 / 61,803 | 2,102 | 5,069 | 374 / 5,142 | 403 |
+| `v0.14.0` `full-stack-kiji-resolve` | 31,354 / 61,803 | 6,232 | 4,251 | 525 / 5,142 | 190 |
+| `v0.14.0` `pass2-ner` | 32,022 / 61,803 | 1,564 | 3,393 | 550 / 5,142 | 140 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v10-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v10, test corpus `dfd4cba85433…`, setup policy `6525f0002a6d…`.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v11-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v11, test corpus `bab908dfd2f6…`, setup policy `f909a23aecac…`.
 
 <!-- END GENERATED: agentic-adjacency -->
 
-**How these rows were measured.** Each release's `clean_for_bench` was
-rebuilt at its tag with Rust 1.96.0 (`--release -p gaze-recognizers --example
-clean_for_bench`, feature `safety-net-nym` for v0.15.x and `safety-net-kiji`
-for v0.14.0) on an Apple M1 Max (10 cores, 32 GB, macOS 26.5), a different
-machine from the v8 and v9 ledgers', so every binary SHA-256 differs from
-theirs; the v10 ledger records the new digests. The policy is the one
-v0.15.1's `gaze setup --non-interactive` writes on that machine
-(`6525f000…`). It differs from the release policy `f909a23a…` only in the
-home directory of its two model paths, which is why the policy digest above
-changed. The v0.14.0 `full-stack-kiji-resolve` arm also needs
-`GAZE_KIJI_DISTILBERT_MODEL_DIR` exported (v0.14.0's own harness set it;
-today's harness does not, and the arm fails closed without it); v0.14.0's own
-`gaze setup` installed that bundle. Without the URL cells, every row
-reproduces its v9 ledger numbers to within a few bytes: layer A leaks 29 to 37
-bytes more and has 29 fewer false-positive bytes (55 fewer in the
-`full-stack-kiji-resolve` arm), layer D moves by 5 bytes or fewer, and layer R
-leaks 5 bytes more with 1 fewer false-positive byte. Repeat runs on the
-measuring machine are byte-identical, so the offset comes with the machine
-(most likely the NER and Nym runtimes), not from run-to-run noise. The URL
-cells add 3,527 gold bytes to layer A: the v0.15.x rows leak 348 of them and
-the v0.14.0 rows 371, and every row puts 570 false-positive bytes on them.
+**How these rows were measured.** Each release's detection code and dependency
+files match its tag. Its `clean_for_bench` was rebuilt with Rust 1.96.0
+(`--release -p gaze-recognizers --example clean_for_bench`, feature
+`safety-net-nym` for v0.15.x and `safety-net-kiji` for v0.14.0) on a MacBook
+Pro, Apple M5 Max (18 cores, 64 GB, macOS 26.5). Each v0.15.x release uses
+its own fresh `gaze setup --non-interactive` policy; both have digest
+`f909a23a…`. The v0.14.0 arms use that policy's common model settings;
+`full-stack-kiji-resolve` also requires its Kiji model directory environment
+variable. Both v0.14.0 arms retain tokenize-only manifest semantics and
+composite-source splitting. The ledger records binary revisions, digests
+and these legacy semantics. These are byte measurements; concurrent benchmark
+slots provide no latency evidence. Earlier machine and policy bindings stay
+in their historical ledgers.
+
+All historical arms completed without refusals. Historical contract limits
+remain visible in the scorecards: each v0.15.x arm has four non-exact restores
+and four invalid manifests in A. The v0.14.0 Kiji arm has 42 non-exact
+restores in A and one each in D and R, corresponding to its redact actions;
+its manifests are valid. The v0.14.0 pass-2 NER arm restores every document
+exactly with valid manifests. These old release results are historical
+measurements, not a current detection-change gate.
 
 ### Hardware spec template
 

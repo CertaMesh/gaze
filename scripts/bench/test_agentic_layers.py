@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "2d35385772fd4966d7728fd42f5a42d683fa98b2c6b8dec11dafce116a63aebe",
-    "test": "dfd4cba854335581b85365612e6825408e9e8575b1099fbb167a527b7f6a04df",
+    "dev": "44c563a6ee1920e8e44a373d65eb11401bb5bfe3c3d2e8fb0c761388a7cff1ac",
+    "test": "bab908dfd2f6a10ae7d3a2c4764d00f03229490e5535214f95cb16bb4730b6e7",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -468,7 +468,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -919,8 +919,8 @@ class PhoneShapeCellTests(unittest.TestCase):
     # narrow rule matches, per partition. A narrow rule with no D cost here
     # would ship its false positives unmeasured.
     NARROW_D_COST = {
-        "dev": {"dotted": 8, "national_3x3": 21, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
-        "test": {"dotted": 8, "national_3x3": 25, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
+        "dev": {"dotted": 8, "national_3x3": 25, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
+        "test": {"dotted": 8, "national_3x3": 29, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
     }
 
     def test_each_narrow_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
@@ -1648,6 +1648,18 @@ class ContractTests(unittest.TestCase):
         self.assertIn("LICENSEPLATE", agentic.load_contract(REPO_ROOT, version=9).scored_labels)
         self.assertNotIn("URL", agentic.load_contract(REPO_ROOT, version=9).scored_labels)
 
+    def test_v10_corpus_and_contract_are_frozen_byte_for_byte(self) -> None:
+        expected = {
+            "dev": "2d35385772fd4966d7728fd42f5a42d683fa98b2c6b8dec11dafce116a63aebe",
+            "test": "dfd4cba854335581b85365612e6825408e9e8575b1099fbb167a527b7f6a04df",
+        }
+        for partition, digest in expected.items():
+            records = agentic.records_as_of(10, agentic.generate(partition))
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(records)).hexdigest(), digest)
+        frozen = REPO_ROOT / agentic.HISTORICAL_CONTRACTS[10]
+        self.assertEqual(hashlib.sha256(frozen.read_bytes()).hexdigest(),
+                         "0cf96848731678d3a6fea49425f283429980583cf2e078d4fbba5c37e441e1da")
+
     def test_an_older_generator_loads_its_own_committed_contract(self) -> None:
         # A record measured on v4, v5 or v6 is rescored under the contract that
         # ruled on exactly the labels that generator emitted.
@@ -1664,7 +1676,7 @@ class ContractTests(unittest.TestCase):
         for version in (8, 9):
             self.assertNotIn("URL", agentic.load_contract(REPO_ROOT, version=version).scored_labels)
         self.assertIn("URL", agentic.load_contract(REPO_ROOT).scored_labels)
-        with self.assertRaisesRegex(agentic.LayerError, "generator_version 10"):
+        with self.assertRaisesRegex(agentic.LayerError, "generator_version 11"):
             agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=9)
 
     def test_generator_version_mismatch_fails_closed(self) -> None:
@@ -1798,7 +1810,7 @@ def _scorecard(
                 "D|ref_number_16|prose|benign": {"utf8_bytes": {"leaked": 0, "false_positive": guard_fp}},
                 **{
                     f"D|{family}|prose|benign": {"utf8_bytes": {"leaked": 0, "false_positive": 0}}
-                    for family in ("ref_number_9", "ref_number_10", "ref_number_11", *CUE_CARD_TWINS)
+                    for family in agentic.guard_families(agentic.GENERATOR_VERSION) if family != "ref_number_16"
                 },
             }
         if layer == "A":
@@ -2240,7 +2252,7 @@ class GateTests(unittest.TestCase):
     def test_credit_guard_families_come_from_the_counterweights(self) -> None:
         self.assertEqual(agentic.CREDIT_GUARD_FAMILIES,
                          {"CREDITCARDNUMBER": (*CUE_CARD_TWINS, "ref_number_16"), "IBAN": (),
-                          "TAXNUM": ("ref_number_11",), "CPF": ("ref_number_11",),
+                          "TAXNUM": ("ref_number_11", "gov_twin_tax_eleven", "gov_near_tax_eleven", "gov_twin_tax_grouped", "gov_near_tax_grouped"), "CPF": ("ref_number_11",),
                           "BSN": ("ref_number_9",), "NHSNUMBER": ("ref_number_10",),
                           "PHONENUMBER": ()})
         self.assertEqual(set(agentic.CREDIT_GUARD_FAMILIES), set(agentic.CREDIT_SCOPE_BY_LABEL))
