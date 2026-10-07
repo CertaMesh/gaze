@@ -278,10 +278,26 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         ("{\"zip\":\"560001\"}", "560001"),
         ("ZIP 481 22", "481 22"),
         ("zip 195 b", "195"),
+        ("zip 195 B", "195"),
+        ("zip 195 B.", "195"),
+        ("zip 250 B", "250"),
         ("zip 195 B-block", "195"),
         ("zip 195 Block", "195"),
         ("zip 195 B5", "195"),
         ("zip 560001 lines", "560001"),
+        ("zip 560001 Rows Lane", "560001"),
+        ("zip 560001 Items Street", "560001"),
+        ("ZIP 560001 Records Road", "560001"),
+        ("zip 110001 Items Road, Delhi", "110001"),
+        ("zip 560001 Photos Ave", "560001"),
+        ("zip 560001 GB Road", "560001"),
+        ("zip: 560001 rows of houses", "560001"),
+        ("zip 195 rows Lane", "195"),
+        ("zip 195 items St.", "195"),
+        ("zip 560001 KiB Road", "560001"),
+        ("zip 481 22 Images", "481 22"),
+        ("zip 195 Rows Lane", "195"),
+        ("backup.zip 560001 gb", "560001"),
         ("backup.zip 560001 B", "560001"),
         ("I'll zip 560001", "560001"),
         ("we zip 560001", "560001"),
@@ -318,7 +334,11 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         // Size units and plural counts identify archive operations.
         "Uploaded backup.zip 120 KB",
         "archive.zip: 345 MB",
-        "zip 250 B",
+        "backup.zip 250 B",
+        "backup.zip 250 KiB",
+        "zip 123456 attachments",
+        "zip 123456 pictures",
+        "zip 123456 entries",
         "I'll zip 250 photos tonight.",
         "zip 123456 rows",
         "zip 560001 files",
@@ -327,7 +347,6 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         "zip 560001 records",
         "zip 560001 images",
         "zip 560001 documents",
-        "backup.zip 560001 gb",
         "backup.zip 560001 TB",
         "backup.zip 560001 bytes",
     ] {
@@ -346,6 +365,13 @@ fn postal_cued_four_digit_preserves_fields_and_refuses_archive_sizes() {
         "8001",
         "postal.cued_four_digit",
     );
+    for raw in [
+        "zip is 8001 KB Street",
+        "zip 8001 B",
+        "address.zip: 8001 KB Street",
+    ] {
+        assert_protected_by(&core, raw, "8001", "postal.cued_four_digit");
+    }
     for raw in [
         "Uploaded backup.zip 1200 KB",
         "archive.zip: 3450 MB",
