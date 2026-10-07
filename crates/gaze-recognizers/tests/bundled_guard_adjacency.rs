@@ -63,8 +63,8 @@ fn every_consuming_guard_recognizer_preserves_both_adjacent_values() {
         ),
         (
             "phone.national.de",
-            "+49 1555 0112233",
-            "+49 1555 0112234",
+            "+49 171 3920011",
+            "+49 171 3920012",
             ",",
         ),
         ("phone.national.us", "+1 555 0100", "+1 555 0101", ","),

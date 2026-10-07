@@ -1,0 +1,19 @@
+schema_version = "0.1.0"
+
+[session]
+scope = "conversation"
+
+[policy.rulepacks]
+bundled = ["core", "secrets"]
+
+[locale]
+active = ["global"]
+
+[[rule]]
+kind = "class"
+class = "custom:security_token"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"

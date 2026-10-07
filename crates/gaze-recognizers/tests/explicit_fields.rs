@@ -474,7 +474,7 @@ fn actual_assembly_nested_builtin_and_custom_fragments_keep_full_field_source() 
     let core = core_with_secrets().unwrap();
     for value in [
         "prefix alice@example.invalid suffix",
-        "prefix +49 1555 0112233 suffix",
+        "prefix +49 171 3920011 suffix",
         "prefix 192.0.2.1 suffix",
         "prefix 2001:db8::1 suffix",
         "prefix secret: SYNTHETICabcdef012345 suffix",
@@ -614,7 +614,7 @@ fn validator_veto_belongs_to_card_or_phone_not_declared_password() {
             "own veto missing: {rows:?}"
         );
     }
-    for value in ["4111-1111-1111-1111", "+49 1555 0112233"] {
+    for value in ["4111-1111-1111-1111", "+49 171 3920011"] {
         let core = core_with_secrets().unwrap();
         assert_source_capture(
             core.pipeline(),
