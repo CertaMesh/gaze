@@ -32,17 +32,15 @@ restore and manifest counts, plus independent prose review.
 
 ## Measurement status
 
-No detection output changes in the harness commit. Past-release remeasurement
-using this committed harness is required before merge and is scheduled by the
-maintainer on the shared benchmark machine. No rows or gains are claimed here
-until that evidence is available. The existing benchmark headline remains the
-latest measured corpus; this pending slice does not replace it.
+This benchmark-only change leaves detection code and dependencies unchanged.
+The [measured adjacency history](README.md#measured-adjacency-layer-history)
+uses generator v11 for every displayed release arm: v0.15.1 and v0.15.0 on
+fresh policies from their own setup commands, and v0.14.0 on its full-stack
+Kiji and pass-2 NER arms. Legacy manifest and model environment semantics
+remain attached to those binaries. The committed v11 ledger records their
+binary and scorecard digests. Layer C release headlines remain unchanged.
 
-The adjacency renderer defaults to the measured v10 ledger. New v11 receipts
-must select `--generator-version 11`; a v10 corpus or contract is rejected.
-Once the complete v11 ledger is recorded, switch the renderer's measured
-`GENERATOR_VERSION` to 11 in the same evidence commit so its default
-`--check` verifies the new table.
-The required rows are v0.15.1 and v0.15.0 on their own setup policies, and
-v0.14.0 on its full-stack Kiji and pass-2 NER arms. Legacy manifest and model
-environment semantics must stay attached to those old binaries.
+The adjacency renderer now defaults to measured generator v11, so its ordinary
+`--check` validates the new table. Historical inputs retain their original
+corpus, scoring-contract and setup-policy bindings; a stale receipt cannot be
+relabelled as a current measurement.

@@ -16,10 +16,18 @@ import agentic_layers
 ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs/reference/benchmarks/README.md"
 # Pin the measured version so a later generator cannot relabel these rows.
-# Earlier v4, v8 and v9 ledgers remain committed as historical measurements.
-GENERATOR_VERSION = 10
+# Earlier v4, v8, v9 and v10 ledgers remain committed as historical measurements.
+GENERATOR_VERSION = 11
 HISTORY = ROOT / f"docs/reference/benchmarks/agentic-adjacency-v{GENERATOR_VERSION}-history.json"
 CORPUS_SHA256, CONTRACT_SHA256 = agentic_layers.corpus_identity(ROOT, GENERATOR_VERSION)
+
+# Setup policies retain the model-path identity of their measuring machine.
+POLICY_SHA256 = "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"
+HISTORICAL_POLICY_SHA256 = {
+    **dict.fromkeys((4, 8, 9),
+                    "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"),
+    10: "6525f0002a6d5bf5f6d9fde6ca35f439f88cf9e6ec90af6d7f0380f805d2fec7",
+}
 
 
 @dataclass(frozen=True)
@@ -28,19 +36,17 @@ class HistoryInputs:
     corpus_sha256: str
     contract_sha256: str
     path: Path
+    policy_sha256: str
 
     @classmethod
     def for_version(cls, version: int) -> HistoryInputs:
         corpus, contract = agentic_layers.corpus_identity(ROOT, version)
         return cls(version, corpus, contract,
-                   ROOT / f'docs/reference/benchmarks/agentic-adjacency-v{version}-history.json')
+                   ROOT / f'docs/reference/benchmarks/agentic-adjacency-v{version}-history.json',
+                   HISTORICAL_POLICY_SHA256.get(version, POLICY_SHA256))
 
 
-MEASURED_INPUTS = HistoryInputs(GENERATOR_VERSION, CORPUS_SHA256, CONTRACT_SHA256, HISTORY)
-# The policy v0.15.1's `gaze setup --non-interactive` writes on the measuring
-# machine. It differs from the release policy `f909a23a…` (v4, v8 and v9
-# ledgers) only in the home directory of its two absolute model paths.
-POLICY_SHA256 = "6525f0002a6d5bf5f6d9fde6ca35f439f88cf9e6ec90af6d7f0380f805d2fec7"
+MEASURED_INPUTS = HistoryInputs.for_version(GENERATOR_VERSION)
 EXPECTED_ROWS = (
     ("v0.15.1", "policy-file"),
     ("v0.15.0", "policy-file"),
@@ -84,7 +90,7 @@ def rows_from_scorecard(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> 
     if contract.get("file_sha256") != inputs.contract_sha256:
         raise HistoryError("scorecard agentic contract differs from the committed contract")
     parameters = scorecard.get("parameters", {})
-    if parameters.get("policy_sha256") != POLICY_SHA256:
+    if parameters.get("policy_sha256") != inputs.policy_sha256:
         raise HistoryError("scorecard policy differs from the setup policy")
     binary_sha = _hex64(scorecard.get("binary_sha256"), "binary_sha256")
     binary_commit = scorecard.get("binary_commit", {})
@@ -128,7 +134,7 @@ def load_history(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> dict:
 def validate_history(value: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> dict:
     if value.get("schema_version") != 1 or value.get("generator_version") != inputs.version:
         raise HistoryError("adjacency history schema or generator version differs")
-    if value.get("corpus_sha256") != inputs.corpus_sha256 or value.get("policy_sha256") != POLICY_SHA256:
+    if value.get("corpus_sha256") != inputs.corpus_sha256 or value.get("policy_sha256") != inputs.policy_sha256:
         raise HistoryError("adjacency history corpus or policy differs")
     if value.get("contract_sha256") != inputs.contract_sha256:
         raise HistoryError("adjacency history contract differs")
@@ -167,7 +173,7 @@ def render(history: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> str:
         f"[committed measurement ledger]({inputs.path.name}) records "
         "binary and scorecard SHA-256 digests, arm and manifest semantics. "
         f"Generator v{inputs.version}, test corpus `{inputs.corpus_sha256[:12]}…`, "
-        f"setup policy `{POLICY_SHA256[:12]}…`.",
+        f"setup policy `{inputs.policy_sha256[:12]}…`.",
     ]
     return "\n".join(lines)
 
@@ -184,7 +190,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--record", type=Path, action="append", default=[])
     parser.add_argument('--generator-version', type=int, default=GENERATOR_VERSION,
-                        choices=(GENERATOR_VERSION, agentic_layers.GENERATOR_VERSION),
+                        choices=sorted({GENERATOR_VERSION, agentic_layers.GENERATOR_VERSION}),
                         help='keep measured history frozen by default; select the current corpus for new measurements')
     args = parser.parse_args()
     try:
@@ -195,7 +201,7 @@ def main() -> int:
             history = {
                 "schema_version": 1, "generator_version": inputs.version,
                 "corpus_sha256": inputs.corpus_sha256, "contract_sha256": inputs.contract_sha256,
-                "policy_sha256": POLICY_SHA256, "rows": [],
+                "policy_sha256": inputs.policy_sha256, "rows": [],
             }
             for path in args.record:
                 history["rows"].extend(rows_from_scorecard(path, inputs))
