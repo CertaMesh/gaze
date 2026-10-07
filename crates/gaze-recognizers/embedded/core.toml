@@ -1177,16 +1177,18 @@ kind = "regex"
 pattern = '''(?ix)(?:\.)?\b(?:postcode|postal[\x20\t_-]*code|zip(?:[\x20\t_-]*code)?)\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?([0-9]{4})\b
 (?:
   [\t\p{Zs}]+(?-i:KB|MB|GB|TB|KiB|MiB|GiB|TiB|bytes|B|rows|files|photos|items|records|images|documents|attachments|pictures|entries)\b
-  # Keep `of` whole, otherwise retain one continuation character for the veto.
-  # Capitalised words remain address evidence without enumerating street names.
-  (?:[\t\p{Zs}]+(?:of\b|[^\r\n\x{85}\x{2028}\x{2029}])|[^\w-]|\z)
+  # Skip whitespace and punctuation before retaining the first continuation character.
+  # Keep `of` whole so the veto cannot confuse it with a lowercase-word probe.
+  [\s\p{P}[:punct:]]*(?:of\b|[^\s\p{P}[:punct:]]|\z)
 )?'''
 capture_groups = [1]
 
 [recognizers.context]
-# Full-match evidence retains the suffix continuation; only the numeric capture is tokenized.
-# A clause boundary or lowercase word vetoes; capitalised continuations and `of` do not.
-# Retaining `of` whole keeps it distinct from a one-character lowercase-word probe.
+# Only the `zip` cue (including .zip filenames) can veto; postcode/PLZ cues never veto.
+# Full-match evidence skips whitespace/punctuation, then retains the first continuation character.
+# End of text or a Unicode lowercase start vetoes; `of` and every other start stay protected.
+# Retaining `of` whole keeps it distinct from the one-character lowercase-word probe.
+# Only the numeric capture is tokenized; quotes/brackets/line breaks do not end the evidence.
 # Uppercase B needs a .zip filename and three/four digits; six-digit ZIP + B stays protected.
 reject_match_regex = '''(?ix)
 (?:
@@ -1194,11 +1196,7 @@ reject_match_regex = '''(?ix)
  |
   \A\.zip\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?[0-9]{3,4}\x20+(?-i:B)\b
 )
-(?:
-  [\t\p{Zs}]*(?:[\r\n\x{85}\x{2028}\x{2029}.,;:!?"')\]}»”’]|\z)
- |
-  [\t\p{Zs}]+(?-i:\p{Ll})
-)\z'''
+[\s\p{P}[:punct:]]*(?-i:\p{Ll})?\z'''
 
 [recognizers.scoring]
 base = 0.70
@@ -1246,18 +1244,20 @@ pattern = '''(?ix)
 )
 (?:
   [\t\p{Zs}]+(?-i:KB|MB|GB|TB|KiB|MiB|GiB|TiB|bytes|B|rows|files|photos|items|records|images|documents|attachments|pictures|entries)\b
-  # Keep `of` whole, otherwise retain one continuation character for the veto.
-  # Capitalised words remain address evidence without enumerating street names.
-  (?:[\t\p{Zs}]+(?:of\b|[^\r\n\x{85}\x{2028}\x{2029}])|[^\w-]|\z)
+  # Skip whitespace and punctuation before retaining the first continuation character.
+  # Keep `of` whole so the veto cannot confuse it with a lowercase-word probe.
+  [\s\p{P}[:punct:]]*(?:of\b|[^\s\p{P}[:punct:]]|\z)
  |
   (?:(?-i:B)[\w-]?|[^\d\x20\x{A0}\x{202F}-]|[\x20\x{A0}\x{202F}-](?:(?-i:B)[\w-]?|[^\d])|[\x20\x{A0}\x{202F}-]?\z)
 )'''
 capture_groups = [1, 2]
 
 [recognizers.context]
-# Full-match evidence retains the suffix continuation; only the numeric capture is tokenized.
-# A clause boundary or lowercase word vetoes; capitalised continuations and `of` do not.
-# Retaining `of` whole keeps it distinct from a one-character lowercase-word probe.
+# Only the `zip` cue (including .zip filenames) can veto; postcode/PLZ cues never veto.
+# Full-match evidence skips whitespace/punctuation, then retains the first continuation character.
+# End of text or a Unicode lowercase start vetoes; `of` and every other start stay protected.
+# Retaining `of` whole keeps it distinct from the one-character lowercase-word probe.
+# Only the numeric capture is tokenized; quotes/brackets/line breaks do not end the evidence.
 # Uppercase B needs a .zip filename and three/four digits; six-digit ZIP + B stays protected.
 reject_match_regex = '''(?ix)
 (?:
@@ -1265,11 +1265,7 @@ reject_match_regex = '''(?ix)
  |
   \A\.zip\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?[0-9]{3,4}\x20+(?-i:B)\b
 )
-(?:
-  [\t\p{Zs}]*(?:[\r\n\x{85}\x{2028}\x{2029}.,;:!?"')\]}»”’]|\z)
- |
-  [\t\p{Zs}]+(?-i:\p{Ll})
-)\z'''
+[\s\p{P}[:punct:]]*(?-i:\p{Ll})?\z'''
 
 [recognizers.scoring]
 base = 0.70
