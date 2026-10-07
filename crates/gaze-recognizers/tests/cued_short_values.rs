@@ -248,6 +248,29 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         ("zip: 614", "614"),
         ("{\"zip\":\"560001\"}", "560001"),
         ("ZIP 481 22", "481 22"),
+        ("zip 195 b", "195"),
+        ("zip 195 B-block", "195"),
+        ("zip 195 Block", "195"),
+        ("zip 195 B5", "195"),
+        ("zip 560001 lines", "560001"),
+        ("backup.zip 560001 B", "560001"),
+        ("I'll zip 560001", "560001"),
+        ("we zip 560001", "560001"),
+        ("to zip 560001", "560001"),
+        ("please zip 560001", "560001"),
+        ("zip 560001 b", "560001"),
+        ("zip 560001 B-block", "560001"),
+        ("Ship to zip 560001.", "560001"),
+        ("Please ship to zip 560001", "560001"),
+        ("send it to zip 195", "195"),
+        ("Change to zip 481 22.", "481 22"),
+        ("I zip 560001", "560001"),
+        ("we zip 110001", "110001"),
+        ("zip 560001 B", "560001"),
+        ("zip 560001 b-block", "560001"),
+        ("ZIP 560001 Lines Road", "560001"),
+        ("Ship to ZIP 560001.", "560001"),
+        ("{\"zip\": \"560001\"}", "560001"),
     ] {
         assert_protected_by(&core, raw, code, "postal.cued_short");
     }
@@ -266,24 +289,18 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         // Size units and plural counts identify archive operations.
         "Uploaded backup.zip 120 KB",
         "archive.zip: 345 MB",
+        "zip 250 B",
         "I'll zip 250 photos tonight.",
         "zip 123456 rows",
         "zip 560001 files",
         "zip 560001 photos",
         "zip 560001 items",
         "zip 560001 records",
-        "zip 560001 lines",
         "zip 560001 images",
         "zip 560001 documents",
         "backup.zip 560001 gb",
         "backup.zip 560001 TB",
         "backup.zip 560001 bytes",
-        "backup.zip 560001 B",
-        "I'll zip 560001",
-        "I zip 560001",
-        "we zip 560001",
-        "to zip 560001",
-        "please zip 560001",
     ] {
         assert_untouched(&core, raw);
     }
@@ -294,6 +311,12 @@ fn postal_cued_four_digit_preserves_fields_and_refuses_archive_sizes() {
     let core = core();
     assert_protected_by(&core, "zip code 1200", "1200", "postal.cued_four_digit");
     assert_protected_by(&core, "address.zip: 8001", "8001", "postal.cued_four_digit");
+    assert_protected_by(
+        &core,
+        "Deliver to zip 8001 please",
+        "8001",
+        "postal.cued_four_digit",
+    );
     for raw in [
         "Uploaded backup.zip 1200 KB",
         "archive.zip: 3450 MB",

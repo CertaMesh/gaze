@@ -1162,7 +1162,7 @@ license = "Apache-2.0"
 # A four-digit code follows an explicit postal field cue. Street-and-town frames
 # also end in years or amounts, so they do not license a match. The cue carries
 # enough meaning to use this rule globally without activating another locale.
-# Size/count suffixes and explicit verb prefixes distinguish archive operations.
+# Size/count suffixes distinguish archive operations; preceding words never veto a postcode.
 [[recognizers]]
 id = "postal.cued_four_digit"
 safety_tier = "safe_default"
@@ -1174,13 +1174,14 @@ cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "posta
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?ix)(?:(?-i:\b(?:I'll|I|we|to|please))[\x20\t\x{A0}\x{202F}]+)?\b(?:postcode|postal[\x20\t_-]*code|zip(?:[\x20\t_-]*code)?)\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?([0-9]{4})\b(?:[\x20\t\x{A0}\x{202F}]+(?:KB|MB|GB|TB|bytes|B|rows|files|photos|items|records|lines|images|documents)\b)?'''
+pattern = '''(?ix)\b(?:postcode|postal[\x20\t_-]*code|zip(?:[\x20\t_-]*code)?)\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?([0-9]{4})\b(?:[\x20\t\x{A0}\x{202F}]+(?:(?:KB|MB|GB|TB|bytes|rows|files|photos|items|records|images|documents)\b|(?-i:B)(?:[^\w-]|\z)))?'''
 capture_groups = [1]
 
 [recognizers.context]
-# Full-match evidence includes the verb prefix and optional size/count suffix;
+# Full-match evidence includes an optional size/count suffix;
 # only the numeric capture becomes a token. Dotted fields remain postal cues.
-reject_match_regex = '''(?ix)(?:\bzip\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?[0-9][0-9\x20\x{A0}\x{202F}-]*[\x20\t\x{A0}\x{202F}]+(?:KB|MB|GB|TB|bytes|B|rows|files|photos|items|records|lines|images|documents)\b|\A(?-i:(?:I'll|I|we|to|please)[\x20\t\x{A0}\x{202F}]+zip)\b[\x20\t\x{A0}\x{202F}:="'-]*[0-9])'''
+# Standalone uppercase B is a byte unit for three/four digits, not six-digit block codes.
+reject_match_regex = '''(?ix)(?:\bzip\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?[0-9][0-9\x20\x{A0}\x{202F}-]*[\x20\t\x{A0}\x{202F}]+(?:KB|MB|GB|TB|bytes|rows|files|photos|items|records|images|documents)\b|\bzip\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?[0-9]{3,4}\x20+(?-i:B)(?:[^\w-]|\z))'''
 
 [recognizers.scoring]
 base = 0.70
@@ -1210,7 +1211,6 @@ cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "posta
 [recognizers.match]
 kind = "regex"
 pattern = '''(?ix)
-(?:(?-i:\b(?:I'll|I|we|to|please))[\x20\t\x{A0}\x{202F}]+)?
 (?:
   \b(?:zip(?:[\x20\t_-]*code)?|postcode|postal[\x20\t_-]*code|post[\x20\t_-]*code|plz|postleitzahl|cep|postnummer|kod[\x20\t]+pocztowy|code[\x20\t]+postal|p[oó]stn[uú]mer)\b
   [\x20\t\x{A0}\x{202F}:="'-]*(?:(?:is|ist|lautet)[\x20\t\x{A0}\x{202F}]+)?
@@ -1227,14 +1227,15 @@ pattern = '''(?ix)
   [\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?
   ([1-9][0-9]{2})
 )
-(?:[\x20\t\x{A0}\x{202F}]+(?:KB|MB|GB|TB|bytes|B|rows|files|photos|items|records|lines|images|documents)\b)?
+(?:[\x20\t\x{A0}\x{202F}]+(?:(?:KB|MB|GB|TB|bytes|rows|files|photos|items|records|images|documents)\b|(?-i:B)(?:[^\w-]|\z)))?
 (?:[^\d\x20\x{A0}\x{202F}-]|[\x20\x{A0}\x{202F}-][^\d]|[\x20\x{A0}\x{202F}-]?\z)'''
 capture_groups = [1, 2]
 
 [recognizers.context]
-# Full-match evidence includes the verb prefix and optional size/count suffix;
+# Full-match evidence includes an optional size/count suffix;
 # only the numeric capture becomes a token. Dotted fields remain postal cues.
-reject_match_regex = '''(?ix)(?:\bzip\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?[0-9][0-9\x20\x{A0}\x{202F}-]*[\x20\t\x{A0}\x{202F}]+(?:KB|MB|GB|TB|bytes|B|rows|files|photos|items|records|lines|images|documents)\b|\A(?-i:(?:I'll|I|we|to|please)[\x20\t\x{A0}\x{202F}]+zip)\b[\x20\t\x{A0}\x{202F}:="'-]*[0-9])'''
+# Standalone uppercase B is a byte unit for three/four digits, not six-digit block codes.
+reject_match_regex = '''(?ix)(?:\bzip\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?[0-9][0-9\x20\x{A0}\x{202F}-]*[\x20\t\x{A0}\x{202F}]+(?:KB|MB|GB|TB|bytes|rows|files|photos|items|records|images|documents)\b|\bzip\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?[0-9]{3,4}\x20+(?-i:B)(?:[^\w-]|\z))'''
 
 [recognizers.scoring]
 base = 0.70

@@ -1008,6 +1008,126 @@ mod tests {
     }
 
     #[test]
+    fn generated_policy_preserves_zip_values_after_prepositions_and_block_suffixes() {
+        // Exercise the generated policy's full bundle and locale activation, with synthetic NER.
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("__gaze_test_fixed_ner");
+        let policy_out = dir.path().join("policy.toml");
+        write_synthetic_ner_dir(&model_dir);
+        write_policy(&policy_out, &model_dir, None, false)
+            .unwrap()
+            .persist(&policy_out)
+            .unwrap();
+        let resolved = resolve_pipeline(
+            Some(&policy_out),
+            &CleanOverrides::default(),
+            &[],
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        for (raw, value) in [
+            ("Ship to zip 560001.", "560001"),
+            ("Please ship to zip 560001", "560001"),
+            ("send it to zip 195", "195"),
+            ("Change to zip 481 22.", "481 22"),
+            ("I zip 560001", "560001"),
+            ("we zip 110001", "110001"),
+            ("zip 560001 B", "560001"),
+            ("zip 560001 b-block", "560001"),
+            ("ZIP 560001 Lines Road", "560001"),
+            ("Ship to ZIP 560001.", "560001"),
+            ("Deliver to zip 8001 please", "8001"),
+            (r#"{"zip": "560001"}"#, "560001"),
+            ("My zip is 560001.", "560001"),
+            ("My zip is 195.", "195"),
+            ("ZIP 560001", "560001"),
+            ("zip 560001", "560001"),
+            ("zip\t560001", "560001"),
+            ("Zip - 560001", "560001"),
+            ("zip 110001, Delhi", "110001"),
+            ("(zip 560001)", "560001"),
+            ("address.zip: 8001", "8001"),
+            ("customer.zip=560001", "560001"),
+            (r#"order.shipping.zip = "481 22""#, "481 22"),
+            ("We both turned 40 last year.", "40"),
+        ] {
+            let session = Session::from_policy(&resolved.policy).unwrap();
+            let (clean, spans, _) = resolved
+                .pipeline
+                .clean_with_safety_net_detect_context(
+                    &session,
+                    RawDocument::Text(raw.to_string()),
+                    resolved.locale_chain.as_slice(),
+                    &resolved.dictionaries,
+                )
+                .unwrap();
+            assert!(
+                spans
+                    .iter()
+                    .any(|span| &raw[span.raw_span.clone()] == value),
+                "whole value missing in {raw:?}: {spans:?}"
+            );
+            let CleanDocument::Text(clean) = clean else {
+                panic!("text");
+            };
+            assert_eq!(
+                resolved
+                    .pipeline
+                    .restore_strict_text(&session, &clean)
+                    .unwrap(),
+                raw
+            );
+        }
+        for (raw, value) in [
+            ("Uploaded backup.zip 120 KB", "120"),
+            ("archive.zip: 345 MB", "345"),
+            ("I'll zip 250 photos tonight.", "250"),
+            ("zip 123456 rows", "123456"),
+            ("zip 250 B", "250"),
+            ("He turned 3.5 km into the run.", "3.5"),
+            ("She turned 2,5 Runden.", "2,5"),
+            ("We turn 10 in March!", "10"),
+        ] {
+            let session = Session::from_policy(&resolved.policy).unwrap();
+            let (_, spans, _) = resolved
+                .pipeline
+                .clean_with_safety_net_detect_context(
+                    &session,
+                    RawDocument::Text(raw.to_string()),
+                    resolved.locale_chain.as_slice(),
+                    &resolved.dictionaries,
+                )
+                .unwrap();
+            let start = raw.find(value).unwrap();
+            let end = start + value.len();
+            assert!(
+                spans
+                    .iter()
+                    .all(|span| span.raw_span.end <= start || span.raw_span.start >= end),
+                "benign number protected in {raw:?}: {spans:?}"
+            );
+        }
+        // Locale-specific rules still protect four-digit archive sizes under setup.
+        // Keep this limitation explicit instead of claiming a core veto silences every rule.
+        let session = Session::from_policy(&resolved.policy).unwrap();
+        let raw = "backup.zip 1200 KB";
+        let (_, spans, _) = resolved
+            .pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(raw.to_string()),
+                resolved.locale_chain.as_slice(),
+                &resolved.dictionaries,
+            )
+            .unwrap();
+        assert!(spans
+            .iter()
+            .any(|span| &raw[span.raw_span.clone()] == "1200"));
+    }
+
+    #[test]
     fn generated_policy_includes_nym_only_when_selected() {
         let dir = tempdir().unwrap();
         let ner = dir.path().join("ner");
