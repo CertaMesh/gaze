@@ -164,6 +164,7 @@ fn age_phrase_refuses_objects_animals_units_and_missing_persons() {
         // A decimal is a distance or a quantity, never an age: `.` before a digit is no boundary.
         "He turned 3.5 km into the run.",
         "She turned 2,5 Runden.",
+        "we turn 40.5",
     ] {
         assert_untouched(&core, raw);
     }
@@ -291,7 +292,25 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         ("zip 110001 Items Road, Delhi", "110001"),
         ("zip 560001 Photos Ave", "560001"),
         ("zip 560001 GB Road", "560001"),
+        ("zip 560001 KB Main Road, Bangalore", "560001"),
+        ("zip 560001 GB Main Road", "560001"),
+        ("zip 560001 TB Hospital Road", "560001"),
+        ("zip 400001 MB Marg, Mumbai", "400001"),
+        ("zip 110001 KB Marg", "110001"),
+        ("Ship to zip 560001 GB Nagar, Delhi", "560001"),
+        ("zip 560001 MB Nagar", "560001"),
+        ("zip 560001 KB Layout", "560001"),
+        ("zip 560001 GB Colony", "560001"),
+        ("zip 560001 GB Main", "560001"),
+        ("zip 560001 rows Str.", "560001"),
+        ("zip 560001 rows Layout", "560001"),
+        ("zip 560001 items Cross", "560001"),
+        ("zip 195 KiB Zürich", "195"),
+        ("zip 481 22 rows Étage", "481 22"),
+        ("zip 560001 KB Main", "560001"),
+        ("zip 560001 rows\tNagar", "560001"),
         ("zip: 560001 rows of houses", "560001"),
+        ("backup.zip 250 KiB of compressed data", "250"),
         ("zip 195 rows Lane", "195"),
         ("zip 195 items St.", "195"),
         ("zip 560001 KiB Road", "560001"),
@@ -336,7 +355,6 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         "archive.zip: 345 MB",
         "backup.zip 250 B",
         "backup.zip 250 KiB",
-        "backup.zip 250 KiB of compressed data",
         "zip 123456 attachments",
         "zip 123456 pictures",
         "zip 123456 entries",
@@ -350,6 +368,26 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         "zip 560001 documents",
         "backup.zip 560001 TB",
         "backup.zip 560001 bytes",
+        "zip 560001 KB",
+        "zip 560001 rows",
+        "{\"zip\": \"560001 KB\"}",
+        "zip 560001 KB.",
+        "zip 560001 KB, finished",
+        "zip 560001 rows; Next clause",
+        "zip 560001 KB: done",
+        "zip 560001 rows! Next clause",
+        "zip 560001 KB? Next clause",
+        "zip 560001 KB)",
+        "zip 560001 rows]",
+        "zip 560001 KB}",
+        "zip 560001 KB\"",
+        "zip 560001 rows\nLayout",
+        "zip 560001 KB\r\nMain Road",
+        "zip 560001 rows Nagar",
+        "zip 560001 KB   ",
+        "zip 560001 KB tonight",
+        "zip 560001 rows offer",
+        "zip 560001 KB tonight",
     ] {
         assert_untouched(&core, raw);
     }
@@ -366,17 +404,23 @@ fn postal_cued_four_digit_preserves_fields_and_refuses_archive_sizes() {
         "8001",
         "postal.cued_four_digit",
     );
-    for raw in [
-        "zip is 8001 KB Street",
-        "zip 8001 B",
-        "address.zip: 8001 KB Street",
+    for (raw, code) in [
+        ("zip is 8001 KB Street", "8001"),
+        ("zip 8001 B", "8001"),
+        ("address.zip: 8001 KB Street", "8001"),
+        ("zip 8001 KB Straße", "8001"),
+        ("zip 8001 GB Strasse 4", "8001"),
+        ("zip 8001 MB Weg", "8001"),
+        ("zip 1234 TB Gasse", "1234"),
+        ("zip 8001 files Platz", "8001"),
     ] {
-        assert_protected_by(&core, raw, "8001", "postal.cued_four_digit");
+        assert_protected_by(&core, raw, code, "postal.cued_four_digit");
     }
     for raw in [
         "Uploaded backup.zip 1200 KB",
         "archive.zip: 3450 MB",
         "backup.zip 1200 KB",
+        "my.zip 8001 B",
     ] {
         assert_untouched(&core, raw);
     }
