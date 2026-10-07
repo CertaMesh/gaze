@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "44c563a6ee1920e8e44a373d65eb11401bb5bfe3c3d2e8fb0c761388a7cff1ac",
-    "test": "bab908dfd2f6a10ae7d3a2c4764d00f03229490e5535214f95cb16bb4730b6e7",
+    "dev": "56c1e1934f9a53fdf686db351f0a8408d85a5293bffcaef919c950723f88394b",
+    "test": "16c64092cf922f11364fc3e34cce26aa57e58a95aaaeb00cdd6f758cf0dde09e",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -468,7 +468,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -1149,14 +1149,13 @@ class CueCellTests(unittest.TestCase):
     # partition. A narrow rule with no D cost would ship its false positives
     # unmeasured.
     NARROW_D_COST = {
-        # dev grouped: also 21 `ref_number_16` references; three digits: the
-        # three-digit near twin and the Swedish-shape one (`ticket 900 00`).
-        "dev": {"age_turned": 4, "age_at_the_age_of": 12, "age_yo": 4, "age_year_old_gender": 4, "dob_sentence_break": 4,
-                "card_short_compact": 8, "card_short_grouped": 29, "zip_se": 4, "zip_pl": 4, "zip_six": 4,
-                "zip_br": 4, "zip_three": 8},
-        "test": {"age_turned": 4, "age_at_the_age_of": 12, "age_yo": 4, "age_year_old_gender": 4, "dob_sentence_break": 4,
-                 "card_short_compact": 8, "card_short_grouped": 8, "zip_se": 4, "zip_pl": 4, "zip_six": 4,
-                 "zip_br": 4, "zip_three": 8},
+        # Decimal motion adds age costs; compression counts add ZIP costs.
+        "dev": {"age_turned": 24, "age_at_the_age_of": 12, "age_yo": 4, "age_year_old_gender": 4,
+                "dob_sentence_break": 4, "card_short_compact": 8, "card_short_grouped": 29,
+                "zip_se": 4, "zip_pl": 4, "zip_six": 12, "zip_br": 4, "zip_three": 20},
+        "test": {"age_turned": 24, "age_at_the_age_of": 12, "age_yo": 4, "age_year_old_gender": 4,
+                 "dob_sentence_break": 4, "card_short_compact": 8, "card_short_grouped": 8,
+                 "zip_se": 4, "zip_pl": 4, "zip_six": 12, "zip_br": 4, "zip_three": 20},
     }
 
     def test_each_narrow_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
@@ -1676,7 +1675,7 @@ class ContractTests(unittest.TestCase):
         for version in (8, 9):
             self.assertNotIn("URL", agentic.load_contract(REPO_ROOT, version=version).scored_labels)
         self.assertIn("URL", agentic.load_contract(REPO_ROOT).scored_labels)
-        with self.assertRaisesRegex(agentic.LayerError, "generator_version 11"):
+        with self.assertRaisesRegex(agentic.LayerError, "generator_version 12"):
             agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=9)
 
     def test_generator_version_mismatch_fails_closed(self) -> None:
@@ -2853,6 +2852,43 @@ class MutantGatePinTests(unittest.TestCase):
             self.assertTrue(provenance.get(key), key)
         # The mutant pin is a published v3 measurement, retained as historical evidence.
         self.assertEqual(provenance["generator_version"], 3)
+
+
+class ZipAgeGenerationTests(unittest.TestCase):
+    def test_v11_identity_is_preserved(self):
+        digests = {"dev": "44c563a6ee1920e8e44a373d65eb11401bb5bfe3c3d2e8fb0c761388a7cff1ac",
+                   "test": "bab908dfd2f6a10ae7d3a2c4764d00f03229490e5535214f95cb16bb4730b6e7"}
+        for partition, digest in digests.items():
+            records = agentic.records_as_of(11, agentic.generate(partition))
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(records)).hexdigest(), digest)
+        self.assertEqual(agentic.corpus_identity(REPO_ROOT, 11)[1],
+                         "aaf582d9be058132e5136f8622046cc6c45e34e32e9820438b245185d521870c")
+
+    def test_values_and_templates_are_held_out(self):
+        parts = {p: agentic._zip_age_records(p) for p in agentic.PARTITIONS}
+        for family in {r.family for r in parts["dev"]}:
+            dev = [r for r in parts["dev"] if r.family == family]
+            test = [r for r in parts["test"] if r.family == family]
+            self.assertFalse({r.template for r in dev} & {r.template for r in test})
+            self.assertFalse({g.value for r in dev for g in (*r.gold, *r.decoys)} &
+                             {g.value for r in test for g in (*r.gold, *r.decoys)})
+            self.assertGreater(len({g.value for r in test for g in (*r.gold, *r.decoys)}), 1)
+
+    def test_whole_values_and_benign_numeric_shapes(self):
+        records = agentic._zip_age_records("test")
+        self.assertEqual(sum(r.layer == "A" for r in records), 70)
+        self.assertEqual(sum(r.layer == "D" for r in records), 80)
+        for r in records:
+            spans = r.gold if r.layer == "A" else r.decoys
+            self.assertEqual(len(spans), 1)
+            self.assertEqual(bool(r.gold), r.layer == "A")
+            self.assertEqual(bool(r.decoys), r.layer == "D")
+            span = spans[0]
+            self.assertEqual(r.text.encode()[span.start:span.end].decode(), span.value)
+        for family in ("archive_kb", "archive_colon", "verb_rows", "verb_photos"):
+            self.assertEqual({len(r.decoys[0].value) for r in records if r.family == family}, {3, 4, 5, 6})
+        for family, separator in (("archive_mb", "."), ("turned_distance", "."), ("turned_laps", ",")):
+            self.assertTrue(all(separator in r.decoys[0].value for r in records if r.family == family))
 
 
 if __name__ == "__main__":

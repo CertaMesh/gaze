@@ -40,7 +40,7 @@ import gaze_bench_score as score
 import government_id_cells as government_ids
 
 
-GENERATOR_VERSION = 11
+GENERATOR_VERSION = 12
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -3770,9 +3770,92 @@ def check_url_cells(records: Sequence[Record]) -> None:
         raise LayerError(f"URL shapes whose narrow rule pays nothing in layer D: {free}")
 
 
+# ZIP postal instructions versus compression, and personal ages versus motion
+# and anniversaries (generator v12). Templates are split before generation;
+# values and gold offsets come from insertion, independently of detector rules.
+ZIP_AGE_CELLS = (
+    ("postal_ship", "ZIPCODE", "US", "Ship to zip {V} for delivery.",
+     "Please ship to zip {V} before Friday."),
+    ("postal_send", "ZIPCODE", "US", "Please send it to zip {V} tomorrow.",
+     "Send it to zip {V}, with delivery confirmation."),
+    ("postal_change", "ZIPCODE", "SE", "Update the destination to zip {V} today.",
+     "Change to zip {V} for the next parcel."),
+    ("postal_block", "ZIPCODE", "US", "Deliver to zip {V} A-block, reception desk.",
+     "Delivery address: zip {V} B-block, upper entrance."),
+    ("postal_road", "ZIPCODE", "US", "ZIP {V} Alderhaven Road, delivery entrance.",
+     "ZIP {V} Birchridge Road, parcel entrance."),
+    ("age_collective", "AGE", "US", "We both turned {V} this spring.",
+     "We both turned {V} last year and celebrated together."),
+    ("age_child", "AGE", "US", "My daughter turned {V} this week.",
+     "My son turned {V} yesterday and had a birthday party."),
+)
+ZIP_AGE_TWINS = (
+    ("archive_kb", "US", "backup.zip {V} KB, ready to download.",
+     "snapshot.zip {V} KB, ready to upload."),
+    ("archive_mb", "US", "report.zip ({V} MB), stored locally.",
+     "summary.zip ({V} MB), retained for testing."),
+    ("archive_colon", "US", "archive.zip: {V} KB after compression.",
+     "export.zip: {V} KB before transfer."),
+    ("verb_photos", "US", "I'll zip {V} images this evening.",
+     "I'll zip {V} photos tonight for the backup."),
+    ("verb_rows", "US", "Zip {V} entries into one archive.",
+     "Please zip {V} rows before uploading the results."),
+    ("turned_distance", "US", "We turned {V} km into the route.",
+     "She turned {V} km after the starting point."),
+    ("turned_laps", "DE", "We turned {V} Runden on the track.",
+     "She turned {V} Runden during training."),
+    ("anniversary", "US", "We turn {V} in June! Celebrate our studio anniversary.",
+     "We turn {V} in March! Join our company anniversary celebration."),
+)
+
+
+def _zip_age_records(partition: str) -> list[Record]:
+    records = []
+    for layer, cells in ((LAYER_IDENTIFIERS, ZIP_AGE_CELLS), (LAYER_LOOKALIKES, ZIP_AGE_TWINS)):
+        for cell in cells:
+            family = cell[0]
+            rng = Rng(PARTITION_SEEDS[partition], f"{layer}/zipage/{family}")
+            if layer == LAYER_IDENTIFIERS:
+                _, label, region, dev, test = cell
+            else:
+                _, region, dev, test = cell
+                label = DECOY_PREFIX + "benign"
+            for index in range(10):
+                if family == "postal_change":
+                    value = _zip_maker(CueShape.ZIP_SE)(rng, partition, index)
+                elif family.startswith("postal_"):
+                    value = _zip5(rng, partition)
+                elif family == "age_child":
+                    ages = tuple(range(2, 18, 2)) if partition == "dev" else tuple(range(1, 18, 2))
+                    value = str(ages[index % len(ages)])
+                elif family == "age_collective":
+                    value = _age(rng, partition, index)
+                elif family in ("archive_mb", "turned_distance", "turned_laps"):
+                    whole = rng.between(1, 4) if partition == "dev" else rng.between(5, 9)
+                    value = f"{whole}{',' if family == 'turned_laps' else '.'}{rng.between(1, 9)}"
+                elif family == "anniversary":
+                    value = str(rng.between(2, 14) if partition == "dev" else rng.between(15, 29))
+                else:
+                    digits = 3 + index % 4
+                    low = 10 ** (digits - 1)
+                    midpoint = 5 * low
+                    value = str(rng.between(low, midpoint - 1) if partition == "dev" else rng.between(midpoint, 10 * low - 1))
+                text, gold, decoys = _fill_with_decoys(dev if partition == "dev" else test, {"V": (value, label)})
+                records.append(Record(
+                    uid=f"agentic-{partition}-{layer}-{family}-{index:03d}-zipage_prose",
+                    partition=partition, layer=layer, family=family, surface="zipage_prose",
+                    validity=UNCHECKED if layer == LAYER_IDENTIFIERS else BENIGN,
+                    group=f"{partition}-{layer}-{family}-{index:03d}",
+                    template=f"zipage/{family}/{partition}",
+                    language="de" if region == "DE" else "en", region=region,
+                    text=text, gold=gold, decoys=decoys,
+                ))
+    return records
+
+
 # The surface prefix each generator version added. Every earlier document stays
 # byte identical, so an older corpus is a filter of the current one.
-GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "cue_", 9: "block_", 10: "url_", 11: "gov_"}
+GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "cue_", 9: "block_", 10: "url_", 11: "gov_", 12: "zipage_"}
 
 
 def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
@@ -3785,6 +3868,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    11: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v11.json"),
     10: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v10.json"),
     9: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v9.json"),
     4: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v4.json"),
@@ -4037,6 +4121,7 @@ def generate(partition: str) -> list[Record]:
         + _url_records(URL_CELLS, partition, LAYER_IDENTIFIERS)
         + _url_records(URL_TWINS, partition, LAYER_LOOKALIKES)
         + government_ids.records(sys.modules[__name__], partition)
+        + _zip_age_records(partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)
