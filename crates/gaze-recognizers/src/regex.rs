@@ -478,7 +478,8 @@ impl RegexDetector {
     }
 }
 
-/// `SKU-` explicitly identifies a stock-keeping unit, not a postal address.
+/// `SKU-` plus an alphabetic product component identifies a stock-keeping unit.
+/// A numeric-only suffix is ambiguous and keeps postal detection.
 /// Check the complete connected prefix, so country prefixes and hyphenated
 /// place names remain eligible. Adopter recognizers can still protect the SKU
 /// itself when inventory identifiers are part of their PII contract.
@@ -501,6 +502,9 @@ fn has_sku_identifier_prefix(input: &str, start: usize) -> bool {
     prefix
         .get(..4)
         .is_some_and(|tag| tag.eq_ignore_ascii_case("sku-"))
+        && prefix
+            .get(4..)
+            .is_some_and(|body| body.chars().any(char::is_alphabetic))
 }
 
 /// A regex capture proves the first group. Scan the rest as a value run, stopping at the first
@@ -703,7 +707,6 @@ mod tests {
             for text in [
                 "SKU-WIDGET-54321",
                 "sku-widget-54321",
-                "SKU-54321",
                 "SKU-SECTION-ITEM-54321",
                 "SKU-ÄNDERUNG-54321",
                 "(SKU-WIDGET-54321)",
@@ -733,6 +736,9 @@ mod tests {
                 "POST-CODE-54321",
                 "ZIP-CODE-54321",
                 "SKU: 54321",
+                "SKU-54321",
+                "SKU-123-54321",
+                "SKU-54321\n\nDelivery ZIP above.",
                 "Muster-Stadt-54321",
                 "INVENTORY-PART-54321",
                 "ÄNDERUNG-ARTIKEL-54321",

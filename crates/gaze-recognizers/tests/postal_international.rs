@@ -650,7 +650,7 @@ fn numeric_postal_codes_ignore_inventory_suffixes_and_restore_addresses() {
     for locale in [LocaleTag::DeDe, LocaleTag::EnUs] {
         let pipeline = pipeline_for(std::slice::from_ref(&locale));
         let session = Session::new(Scope::Ephemeral).expect("session");
-        let original = "Inventory SKU-WIDGET-54321; destination DE-54321 Musterstadt.";
+        let original = "Inventory SKU-WIDGET-54321; destination DE-54321 Musterstadt. Delivery ZIP: SKU-67890.";
         let (clean, _, _) = pipeline
             .clean_with_safety_net_detect_context(
                 &session,
@@ -664,6 +664,7 @@ fn numeric_postal_codes_ignore_inventory_suffixes_and_restore_addresses() {
         };
         assert!(clean_text.contains("SKU-WIDGET-54321"));
         assert!(!clean_text.contains("DE-54321"));
+        assert!(!clean_text.contains("SKU-67890"));
         assert_eq!(
             pipeline
                 .restore_strict_text(&session, &clean_text)

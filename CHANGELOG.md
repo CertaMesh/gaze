@@ -213,7 +213,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Numeric postal rules leave SKU identifiers intact.** `postal.de` and
   `postal.us` no longer treat numeric pieces inside connected `SKU-`
-  stock-keeping identifiers as postal codes. Country prefixes, postal labels,
+  stock-keeping identifiers with an alphabetic product component as postal codes.
+  Numeric-only SKU forms, country prefixes, postal labels,
   hyphenated towns and adopter-defined recognizers retain their behavior.
 
 - **Caller-known records accept checksum-valid two-letter-country IBANs.**
