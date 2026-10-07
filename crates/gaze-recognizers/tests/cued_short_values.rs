@@ -253,6 +253,50 @@ fn card_cued_short_takes_maestro_lengths_right_after_a_card_label() {
 fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() {
     let core = core();
     for (raw, code) in [
+        // ZIP size/count ambiguity stays protected, including a value at end of a field.
+        ("Uploaded backup.zip 120 KB", "120"),
+        ("archive.zip: 345 MB", "345"),
+        ("backup.zip 250 B", "250"),
+        ("backup.zip 250 KiB", "250"),
+        ("zip 123456 attachments", "123456"),
+        ("zip 123456 pictures", "123456"),
+        ("zip 123456 entries", "123456"),
+        ("zip 123456 rows", "123456"),
+        ("zip 560001 files", "560001"),
+        ("zip 560001 photos", "560001"),
+        ("zip 560001 items", "560001"),
+        ("zip 560001 records", "560001"),
+        ("zip 560001 images", "560001"),
+        ("zip 560001 documents", "560001"),
+        ("backup.zip 560001 TB", "560001"),
+        ("backup.zip 560001 bytes", "560001"),
+        ("zip 560001 KB", "560001"),
+        ("zip 560001 rows", "560001"),
+        ("{\"zip\": \"560001 KB\"}", "560001"),
+        ("zip 560001 KB.", "560001"),
+        ("zip 560001 KB)", "560001"),
+        ("zip 560001 rows]", "560001"),
+        ("zip 560001 KB}", "560001"),
+        ("zip 560001 KB\"", "560001"),
+        ("zip 560001 KB   ", "560001"),
+        ("zip 560001 KB,;\n]”", "560001"),
+        ("zip 560001 rows.", "560001"),
+        ("zip 560001 KB!? ) ] } \" ' ” ’ »", "560001"),
+        (
+            "Street: Main Road\nCity: Bangalore\nzip: 560001 rows",
+            "560001",
+        ),
+        (r#"{"street": "Main Road", "zip": "560001 KB"}"#, "560001"),
+        (r#"["Main Road", "zip 560001 KB"]"#, "560001"),
+        (
+            "street: Main Road\ncity: Bangalore\nzip: 560001 KB",
+            "560001",
+        ),
+        (
+            "street: Main Road\ncity: Bangalore\nzip: 560001 rows",
+            "560001",
+        ),
+        ("Main Road, Bangalore, zip 560001 KB", "560001"),
         // Any trailing content keeps protection, including lowercase words and markup.
         ("I'll zip 250 photos tonight.", "250"),
         ("zip 560001 KB, finished", "560001"),
@@ -351,7 +395,7 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         ("zip 560001 KB, 道路", "560001"),
         ("zip 560001 KB; 4 Main Road", "560001"),
         ("zip 560001 rows\n\"of houses\"", "560001"),
-        // Only zip cues veto: postcode/PLZ cues protect even benign-looking suffixes.
+        // Postal cues protect even benign-looking size/count suffixes.
         ("postcode 560001 KB", "560001"),
         ("PLZ 560001 KB, main road", "560001"),
         ("postal code 195 rows", "195"),
@@ -417,42 +461,13 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         // No German, Austrian or Swiss code has three digits (`postal_at_ch.rs` pins it too).
         "PLZ: 123",
         "PLZ 123 fehlt noch",
-        // Exact-case size/count suffixes veto only at actual end of input.
-        "Uploaded backup.zip 120 KB",
-        "archive.zip: 345 MB",
-        "backup.zip 250 B",
-        "backup.zip 250 KiB",
-        "zip 123456 attachments",
-        "zip 123456 pictures",
-        "zip 123456 entries",
-        "zip 123456 rows",
-        "zip 560001 files",
-        "zip 560001 photos",
-        "zip 560001 items",
-        "zip 560001 records",
-        "zip 560001 images",
-        "zip 560001 documents",
-        "backup.zip 560001 TB",
-        "backup.zip 560001 bytes",
-        "zip 560001 KB",
-        "zip 560001 rows",
-        "{\"zip\": \"560001 KB\"}",
-        "zip 560001 KB.",
-        "zip 560001 KB)",
-        "zip 560001 rows]",
-        "zip 560001 KB}",
-        "zip 560001 KB\"",
-        "zip 560001 KB   ",
-        "zip 560001 KB,;\n]”",
-        "zip 560001 rows.",
-        "zip 560001 KB!? ) ] } \" ' ” ’ »",
     ] {
         assert_untouched(&core, raw);
     }
 }
 
 #[test]
-fn postal_cued_four_digit_preserves_fields_and_refuses_archive_sizes() {
+fn postal_cued_four_digit_preserves_fields_and_archive_size_lookalikes() {
     let core = core();
     assert_protected_by(&core, "zip code 1200", "1200", "postal.cued_four_digit");
     assert_protected_by(&core, "address.zip: 8001", "8001", "postal.cued_four_digit");
@@ -463,6 +478,13 @@ fn postal_cued_four_digit_preserves_fields_and_refuses_archive_sizes() {
         "postal.cued_four_digit",
     );
     for (raw, code) in [
+        ("Hauptstrasse 4, Zürich, zip 8001 KB", "8001"),
+        (r#"{"street": "Hauptstrasse 4", "zip": "8001 KB"}"#, "8001"),
+        ("street: Hauptstrasse 4\ncity: Zürich\nzip: 8001 KB", "8001"),
+        ("Uploaded backup.zip 1200 KB", "1200"),
+        ("archive.zip: 3450 MB", "3450"),
+        ("backup.zip 1200 KB", "1200"),
+        ("my.zip 8001 B", "8001"),
         ("<p>zip 8001 KB</p><p>Hauptstrasse 4</p>", "8001"),
         ("zip: 8001 KB\ncity: Zürich", "8001"),
         ("zip 8001 KB main road", "8001"),
@@ -476,18 +498,10 @@ fn postal_cued_four_digit_preserves_fields_and_refuses_archive_sizes() {
         ("zip 8001 files Platz", "8001"),
         ("zip 8001 MB, Zürich", "8001"),
         ("zip 8001 KB, Hauptstrasse 4, Zürich", "8001"),
-        // The suffix veto is specific to zip; postcode cues never veto.
+        // Every postal cue preserves size/count lookalikes.
         ("postcode 8001 KB", "8001"),
     ] {
         assert_protected_by(&core, raw, code, "postal.cued_four_digit");
-    }
-    for raw in [
-        "Uploaded backup.zip 1200 KB",
-        "archive.zip: 3450 MB",
-        "backup.zip 1200 KB",
-        "my.zip 8001 B",
-    ] {
-        assert_untouched(&core, raw);
     }
 }
 

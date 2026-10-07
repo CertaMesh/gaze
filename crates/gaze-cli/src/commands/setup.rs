@@ -1028,7 +1028,46 @@ mod tests {
         )
         .unwrap();
         for (raw, value) in [
-            // Any trailing content keeps protection; only terminal suffixes veto.
+            // ZIP size/count lookalikes remain protected, even as the last address field.
+            ("Uploaded backup.zip 120 KB", "120"),
+            ("archive.zip: 345 MB", "345"),
+            ("zip 123456 rows", "123456"),
+            ("backup.zip 250 B", "250"),
+            ("backup.zip 250 KiB", "250"),
+            ("zip 123456 attachments", "123456"),
+            ("zip 123456 pictures", "123456"),
+            ("zip 123456 entries", "123456"),
+            ("zip 560001 KB", "560001"),
+            ("zip 560001 rows", "560001"),
+            ("{\"zip\": \"560001 KB\"}", "560001"),
+            ("zip 560001 KB.", "560001"),
+            ("zip 560001 KB)", "560001"),
+            ("zip 560001 rows]", "560001"),
+            ("zip 560001 KB}", "560001"),
+            ("zip 560001 KB\"", "560001"),
+            ("zip 560001 KB   ", "560001"),
+            ("zip 560001 KB,;\n]”", "560001"),
+            ("zip 560001 rows.", "560001"),
+            ("zip 560001 KB!? ) ] } \" ' ” ’ »", "560001"),
+            ("Main Road, Bangalore, zip 560001 KB", "560001"),
+            (
+                "Street: Main Road\nCity: Bangalore\nzip: 560001 rows",
+                "560001",
+            ),
+            (r#"{"street": "Main Road", "zip": "560001 KB"}"#, "560001"),
+            (r#"["Main Road", "zip 560001 KB"]"#, "560001"),
+            (
+                "street: Main Road\ncity: Bangalore\nzip: 560001 KB",
+                "560001",
+            ),
+            (
+                "street: Main Road\ncity: Bangalore\nzip: 560001 rows",
+                "560001",
+            ),
+            ("Hauptstrasse 4, Zürich, zip 8001 KB", "8001"),
+            (r#"{"street": "Hauptstrasse 4", "zip": "8001 KB"}"#, "8001"),
+            ("street: Hauptstrasse 4\ncity: Zürich\nzip: 8001 KB", "8001"),
+            // Archive/count wording never vetoes a cued postal value.
             ("I'll zip 250 photos tonight.", "250"),
             ("zip 560001 KB, finished", "560001"),
             ("zip 560001 KB: done", "560001"),
@@ -1095,7 +1134,7 @@ mod tests {
             ("zip 560001 GB Road", "560001"),
             ("zip 560001 KB Main Road, Bangalore", "560001"),
             ("zip 560001 GB Main Road", "560001"),
-            // Punctuation/line breaks before more content never veto; only zip cues can veto.
+            // Postal protection survives punctuation, line breaks and serialized fields.
             ("zip 560001 GB, Delhi", "560001"),
             ("Ship to zip 560001 KB, Koramangala, Bangalore", "560001"),
             ("zip 560001 KB, Main Road, Bangalore", "560001"),
@@ -1225,26 +1264,6 @@ mod tests {
             );
         }
         for (raw, value) in [
-            ("Uploaded backup.zip 120 KB", "120"),
-            ("archive.zip: 345 MB", "345"),
-            ("zip 123456 rows", "123456"),
-            ("backup.zip 250 B", "250"),
-            ("backup.zip 250 KiB", "250"),
-            ("zip 123456 attachments", "123456"),
-            ("zip 123456 pictures", "123456"),
-            ("zip 123456 entries", "123456"),
-            ("zip 560001 KB", "560001"),
-            ("zip 560001 rows", "560001"),
-            ("{\"zip\": \"560001 KB\"}", "560001"),
-            ("zip 560001 KB.", "560001"),
-            ("zip 560001 KB)", "560001"),
-            ("zip 560001 rows]", "560001"),
-            ("zip 560001 KB}", "560001"),
-            ("zip 560001 KB\"", "560001"),
-            ("zip 560001 KB   ", "560001"),
-            ("zip 560001 KB,;\n]”", "560001"),
-            ("zip 560001 rows.", "560001"),
-            ("zip 560001 KB!? ) ] } \" ' ” ’ »", "560001"),
             ("we turn 40.5", "40.5"),
             ("He turned 3.5 km into the run.", "3.5"),
             ("She turned 2,5 Runden.", "2,5"),
@@ -1268,8 +1287,7 @@ mod tests {
                 "benign number protected in {raw:?}: {spans:?}"
             );
         }
-        // Locale-specific rules still protect four-digit archive sizes under setup.
-        // Keep this limitation explicit instead of claiming a core veto silences every rule.
+        // Archive sizes remain accepted false positives under the setup policy too.
         let session = Session::from_policy(&resolved.policy).unwrap();
         let raw = "backup.zip 1200 KB";
         let (_, spans, _) = resolved
