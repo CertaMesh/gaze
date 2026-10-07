@@ -68,6 +68,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **A URL with JSON-escaped slashes is tokenized (#744).** JSON may escape
+  every slash with a backslash, and PHP's `json_encode()` does so by default.
+  Every release up to and including v0.15.1 sent such a URL to the model raw
+  unless its host had a `www` prefix; with the prefix, the token started after
+  the escaped scheme, which stayed raw. `url.anchored` now accepts the escaped
+  scheme separator and escaped slashes inside the URL. A scheme or a `www`
+  prefix is still required, so escaped routes, MIME types and bare hosts stay
+  untouched. Benchmark gain gate on generator v10 (#746), setup policy, seed
+  20260710, together with the delimiter fix below: layer A leaked bytes −348
+  under v2 and v1, false-positive bytes −546; layers C, D and R unchanged,
+  with zero refusals and every document restored exactly.
+
+- **A JWT after a credential cue is tokenized whole in the opt-in `secrets`
+  pack (#745).** With `secrets` loaded, every release up to and including
+  v0.15.1 tokenized only the JOSE header of a JWT that follows a cue such as
+  `Bearer`, `token:` or `api_key=`, and sent its payload and signature to the
+  model raw. The payload carries claims about a person (`sub`, `email`,
+  `name`). The cue arm of `security_token.anchored` now takes a complete
+  three-segment JWT before its generic value, including a cued dotted or
+  hyphenated prefix. Bare JWT protection beside dots, hyphens and ellipses is
+  preserved. Generic cued values still stop at a dot; their original partial
+  protection is preserved, without claiming support for arbitrary dotted
+  credentials or unsigned JWTs. The gate policy does not load `secrets` and `SECURITYTOKEN` is outside
+  the PII contract, so the gate scorecards are identical under v2 and v1; with
+  `secrets` added to the setup policy, layers C, A, D and R are unchanged too,
+  with no new false-positive byte.
+
 - **Labelled tax, driver-licence, and identity-card values now close whole-field
   leaks.** Three safe-default `core` recognizers cover class-specific fields
   across English, German, French, Dutch, and Portuguese. A shared scanner
@@ -211,6 +238,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Numeric postal rules leave SKU identifiers intact.** `postal.de` and
+  `postal.us` no longer treat numeric pieces inside connected `SKU-`
+  stock-keeping identifiers with an alphabetic product component as postal codes.
+  Numeric-only SKU forms, country prefixes, postal labels,
+  hyphenated towns and adopter-defined recognizers retain their behavior.
+
 - **Caller-known records accept checksum-valid two-letter-country IBANs.**
   Unsafe short values are skipped individually; the Rust context reports each
   safe field path and a typed reason. Duplicate class/value fields share one
@@ -300,6 +333,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clean on every PR.
 
 ### Fixed
+
+- **A URL token ends where the URL ends in compact JSON and HTML (#743).**
+  `url.anchored` ran from the scheme to the next whitespace, so in compact
+  JSON or an HTML attribute the token also covered the closing quote and every
+  key, value or link text up to the next space. Restore was byte-exact and
+  nothing leaked, but the model lost those fields. The match now stops at
+  `"`, `<`, `>`, `{`, `}`, at a backslash that does not escape a slash, and at
+  a single quote that closes an attribute; an apostrophe inside a path stays
+  part of the URL.
 
 - **Dashboard purge fails closed on a broken notification channel.** Browser
   purge requests return 503 instead of falsely reporting acceptance when delivery

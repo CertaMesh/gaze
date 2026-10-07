@@ -131,7 +131,7 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `postal.ca` | `regex` | Canadian six-character postal codes alternating letter and digit, starting with a letter; hyphenated, compact, or separated by a space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE; not matched when preceded by `#` | `custom:postal_code` | `en-CA` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
 | `core, core-extended` | `postal.gb` | `regex` | UK postcodes across all six Royal Mail outward forms plus the special GIR outward code, followed by an inward code of one digit and two letters from the official inward alphabet; space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE separator; not matched when preceded by `#` | `custom:postal_code` | `en-GB` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
 | `core, core-extended` | `postal.ie` | `regex` | Irish Eircodes: routing key including `D6W`, plus a four-character identifier over the restricted Eircode alphabet that must carry at least one letter | `custom:postal_code` | `en-IE` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
-| `core, core-extended` | `url.anchored` | `regex` | URLs beginning with an HTTP(S) scheme or web prefix through the final non-punctuation URL character | `custom:url` | `global` | `none` | `none` | `safe_default` | yes | 0.75 | 85 |
+| `core, core-extended` | `url.anchored` | `regex` | URLs beginning with an HTTP(S) scheme, with plain or JSON-escaped slashes, or a web prefix, ending before whitespace or a JSON/HTML delimiter (`"` `<` `>` `{` `}`, a backslash that does not escape a slash, a closing single quote) and at the final non-punctuation URL character | `custom:url` | `global` | `none` | `none` | `safe_default` | yes | 0.75 | 85 |
 | `core, core-extended` | `ssn.de_cue` | `regex` | Cue-anchored SSN values after German social-insurance cues (Sozialversicherungsnummer, SV-Nummer) in dashed, dotted, or 9 to 11 digit form; format basis; DACH provenance describes cue vocabulary until native SVNR/AHV shapes ship in #2926 | `custom:ssn` | `de-DE, de-AT, de-CH` | `none` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `tax_number.cue_anchored` | `regex` | Cue-anchored tax numbers with a three-digit lead and separated digit groups after German or English tax cues; bare digit runs and the checksummed 2-3-3-3 Steuer-ID shape are excluded | `custom:tax_number` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 84 |
 | `core, core-extended` | `driver_license.cue_anchored` | `regex` | Letter-led alphanumeric licence numbers after German or English driving-licence cues | `custom:driver_license` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 83 |
@@ -144,7 +144,7 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `birth_date.answer` | `regex` | A numeric or month-name date given as the answer one sentence after a date-of-birth cue: the sentence break must be followed directly by `it's`, `it is`, `that's`, `es ist` or `das ist`, so a date after any other sentence stays raw | `custom:birth_date` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 | `core, core-extended` | `age.cue` | `regex` | Numeric person age from 0 to 122 in a structured field or a person-framed year phrase; only the number is tokenized | `custom:age` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 | `core, core-extended` | `age.phrase` | `regex` | Numeric person age from 1 to 122 after `turned` with a person word before it and a clause boundary or time word after it, before `geworden` after a person word and a copula, after `at the age of` / `im Alter von` with a person word before it, before `y/o` after a person copula or before a person noun, and before `year old female`/`male` unless an animal noun follows; only the number is tokenized | `custom:age` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
-| `secrets` | `security_token.anchored` | `regex` | Cue-anchored credential values plus structurally prefixed AWS access keys and three-segment JWTs | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 87 |
+| `secrets` | `security_token.anchored` | `regex` | Cue-anchored credential values (a complete three-segment JWT after a cue included) plus structurally prefixed AWS access keys and three-segment JWTs | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 87 |
 | `secrets` | `password.field` | `regex` | Values in explicit EN/DE password or passphrase records; 1 to 256 normalized grammar units, with matching quoted or plain scalar syntax; not a raw-byte ceiling | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 <!-- redaction-classes-gate:recognizers:end -->
 
@@ -449,6 +449,14 @@ has to disable that recognizer.
 The two postal groups differ on purpose. `postal.de` and `postal.us` match bare
 five-digit strings, a shape carrying no structural signal, so they stay
 document-basis and locale-gated and appear only in the second row.
+Their Rust-side boundary guard leaves numeric pieces inside a connected `SKU-`
+stock-keeping identifier raw (ASCII case-insensitive) only when the prefix after
+`SKU-` contains an alphabetic product component. Numeric-only `SKU-` forms keep
+detection, as do country prefixes, postal labels and hyphenated place names.
+The prefix scan is bounded
+to 256 characters; a longer uncertain prefix keeps the detection. If SKU values
+are part of an adopter's PII contract, protect them with a dictionary or custom
+recognizer for that identifier rather than relying on incidental postal matches.
 `postal.at_ch` is in the same group: a four-digit string carries even less
 signal, so it matches only directly after a postal cue or directly before a
 city-shaped token, and only for `de-AT` and `de-CH` documents. Document-basis

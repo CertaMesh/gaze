@@ -340,11 +340,13 @@ exports a `SensitiveSnapshot` (the `session_blob` field of stdout) so that
 
 - `scope = "ephemeral"` — *not usable from the CLI*. The library refuses to
   export ephemeral sessions (`Error::ExportForbidden`); a CLI invocation
-  with this scope would be unable to emit `session_blob`.
-- `scope = "conversation"` — reserved for library callers that scope
-  sessions to a specific conversation id; the CLI does not surface this
-  today.
-- `scope = "persistent"` — the only scope `gaze clean` produces. Requires
+  with this scope would be unable to emit `session_blob`. `gaze clean`
+  rejects it with `PolicyConfig`, exit 2, and a safe `detail` explaining
+  the export restriction and suggesting `conversation` or `persistent`.
+  No clean text or session blob is emitted.
+- `scope = "conversation"` — the CLI uses conversation id `"cli"` and
+  exports a session blob for a later `gaze restore` invocation.
+- `scope = "persistent"` — exports a session blob with an expiry. Requires
   `ttl_secs > 0`.
 
 The `--session-ttl=<secs>` CLI flag overrides the policy TTL for persistent
@@ -1144,7 +1146,7 @@ CLI flag > policy.toml > Gaze default
 
 | Policy field | CLI flag | Notes |
 |--------------|----------|-------|
-| `[session].scope` | `--session-scope <ephemeral|conversation|persistent>` | Overrides session lifetime for the current clean run. `ephemeral` keeps export-forbidden semantics, so pipe-mode clean exits `Pipeline` if a session blob would be required. |
+| `[session].scope` | `--session-scope <ephemeral|conversation|persistent>` | Overrides session lifetime for the current clean run. `ephemeral` keeps export-forbidden semantics, so pipe-mode clean exits `PolicyConfig` (exit 2) with a `detail` explaining the restriction and suggesting `conversation` or `persistent`. |
 | `[session].ttl_secs` | `--session-ttl <SECONDS>` | Existing override for persistent session TTL. |
 | `[ner].model_dir` | `--ner-model-dir <PATH>` | Overrides the NER model directory. If neither CLI nor TOML sets a model directory, no NER detector is registered. |
 | `[ner].locale` | `--ner-locale <BCP47>` | Overrides the NER locale hint. TOML accepts one BCP47 string, not a list. Invalid tags fail closed with `PolicyConfig`. |

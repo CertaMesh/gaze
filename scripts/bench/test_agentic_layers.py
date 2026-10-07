@@ -29,6 +29,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
+    "dev": "5675f3bb735e60923e04a26ba94984d7911462a62e44c5bfea0baff2c2ebf85b",
+    "test": "0748ced886e365873a928601d44029d5c7952f1845c5f29705c56a67fa53de84",
+}
+# v9: everything before the URL cells.
+V9_CORPUS_SHA256 = {
     "dev": "6e1b24bf66f672e45d69b6f38f56db3da0d085ea0cd4241f5d7310bfddcdf0d1",
     "test": "b2e363763fd7d3bf1b2678af5c5f45af92e6ebc20a38f78072be0f0ee541f7c6",
 }
@@ -143,6 +148,8 @@ class GeneratorTests(unittest.TestCase):
 
     def test_previous_partition_documents_are_byte_identical(self) -> None:
         for partition, records in self.corpora.items():
+            v9 = agentic.records_as_of(9, records)
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(v9)).hexdigest(), V9_CORPUS_SHA256[partition])
             v8 = agentic.records_as_of(8, records)
             self.assertEqual(hashlib.sha256(agentic.corpus_bytes(v8)).hexdigest(), V8_CORPUS_SHA256[partition])
             v7 = agentic.records_as_of(7, records)
@@ -461,7 +468,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -912,8 +919,8 @@ class PhoneShapeCellTests(unittest.TestCase):
     # narrow rule matches, per partition. A narrow rule with no D cost here
     # would ship its false positives unmeasured.
     NARROW_D_COST = {
-        "dev": {"dotted": 8, "national_3x3": 21, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
-        "test": {"dotted": 8, "national_3x3": 25, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
+        "dev": {"dotted": 8, "national_3x3": 25, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
+        "test": {"dotted": 8, "national_3x3": 29, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
     }
 
     def test_each_narrow_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
@@ -1142,14 +1149,34 @@ class CueCellTests(unittest.TestCase):
     # partition. A narrow rule with no D cost would ship its false positives
     # unmeasured.
     NARROW_D_COST = {
-        # dev grouped: also 21 `ref_number_16` references; three digits: the
-        # three-digit near twin and the Swedish-shape one (`ticket 900 00`).
-        "dev": {"age_turned": 4, "age_at_the_age_of": 12, "age_yo": 4, "age_year_old_gender": 4, "dob_sentence_break": 4,
-                "card_short_compact": 8, "card_short_grouped": 29, "zip_se": 4, "zip_pl": 4, "zip_six": 4,
-                "zip_br": 4, "zip_three": 8},
-        "test": {"age_turned": 4, "age_at_the_age_of": 12, "age_yo": 4, "age_year_old_gender": 4, "dob_sentence_break": 4,
-                 "card_short_compact": 8, "card_short_grouped": 8, "zip_se": 4, "zip_pl": 4, "zip_six": 4,
-                 "zip_br": 4, "zip_three": 8},
+        "dev": {
+            "age_turned": 24,
+            "age_at_the_age_of": 12,
+            "age_yo": 4,
+            "age_year_old_gender": 4,
+            "dob_sentence_break": 4,
+            "card_short_compact": 8,
+            "card_short_grouped": 29,
+            "zip_se": 4,
+            "zip_pl": 4,
+            "zip_six": 12,
+            "zip_br": 4,
+            "zip_three": 20
+        },
+        "test": {
+            "age_turned": 24,
+            "age_at_the_age_of": 12,
+            "age_yo": 4,
+            "age_year_old_gender": 4,
+            "dob_sentence_break": 4,
+            "card_short_compact": 8,
+            "card_short_grouped": 8,
+            "zip_se": 4,
+            "zip_pl": 4,
+            "zip_six": 12,
+            "zip_br": 4,
+            "zip_three": 20
+        }
     }
 
     def test_each_narrow_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
@@ -1257,6 +1284,205 @@ class CueCellTests(unittest.TestCase):
                               make=lambda rng, partition, index: "12345")
         with self.assertRaisesRegex(agentic.LayerError, "broad pattern misses the decoy"):
             self.generate_with(CUE_TWINS=twins)
+
+
+class UrlCellTests(unittest.TestCase):
+    """Whole URLs that a structural delimiter ends in compact JSON, escaped
+    JSON, HTML and Markdown; each shape's broad and narrow rules pay in its
+    layer D twins, which carry no URL anchor."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.full = {partition: agentic.generate(partition) for partition in agentic.PARTITIONS}
+        cls.cells = {
+            partition: [r for r in records if r.surface.startswith("url_")]
+            for partition, records in cls.full.items()
+        }
+
+    def generate_with(self, **patches) -> None:
+        with contextlib.ExitStack() as stack:
+            for name, value in patches.items():
+                stack.enter_context(mock.patch.object(agentic, name, value))
+            agentic.generate("test")
+
+    @staticmethod
+    def replaced(cells: tuple, family: str, **changes) -> tuple:
+        return tuple(dataclasses.replace(c, **changes) if c.family == family else c for c in cells)
+
+    def test_every_cell_and_twin_is_generated_in_both_partitions(self) -> None:
+        for partition, records in self.cells.items():
+            for layer, cells in (("A", agentic.URL_CELLS), ("D", agentic.URL_TWINS)):
+                for cell in cells:
+                    matching = [r for r in records if r.layer == layer and r.family == cell.family]
+                    self.assertEqual(len(matching), agentic.DOCS_PER_URL_CELL[layer], (partition, cell.family))
+            for layer in ("A", "D"):
+                self.assertEqual({r.surface for r in records if r.layer == layer}, set(agentic.URL_SURFACES))
+        self.assertEqual({c.shape for c in agentic.URL_CELLS}, set(agentic.UrlShape))
+        self.assertEqual({t.shape for t in agentic.URL_TWINS}, set(agentic.UrlShape))
+
+    def test_growth_stays_within_ten_percent_per_layer(self) -> None:
+        for layer in ("A", "D"):
+            new = sum(1 for r in self.cells["test"] if r.layer == layer)
+            old = sum(1 for r in self.full["test"] if r.layer == layer) - new
+            self.assertLessEqual(new * 10, old, layer)
+
+    def test_the_whole_url_is_gold(self) -> None:
+        for records in self.cells.values():
+            for record in (r for r in records if r.layer == "A"):
+                (gold,) = record.gold
+                self.assertEqual(gold.label, "URL")
+                encoded = record.text.encode("utf-8")
+                self.assertEqual(encoded[gold.start : gold.end].decode("utf-8"), gold.value)
+                self.assertRegex(gold.value, r"^(?:https://|https:\\/\\/|www\.)")
+
+    def test_structured_cells_parse(self) -> None:
+        for records in self.cells.values():
+            for record in records:
+                if record.surface == "url_tool_json":
+                    json.loads(record.text)
+
+    def test_escaped_cells_decode_to_a_plain_url(self) -> None:
+        # The escaped JSON value is a URL like the plain cells write; only the
+        # slashes are escaped, as `json_encode()` writes them.
+        families = {c.family for c in agentic.URL_CELLS if c.shape is agentic.UrlShape.ESCAPED}
+        values = [r.gold[0].value for records in self.cells.values() for r in records
+                  if r.layer == "A" and r.family in families]
+        self.assertTrue(values)
+        for value in values:
+            decoded = json.loads(f'"{value}"')
+            self.assertEqual(decoded, value.replace("\\/", "/"))
+            self.assertRegex(decoded, f"^{agentic.URL_SHAPE_PATTERNS[agentic.UrlShape.PLAIN]}$")
+
+    def test_templates_and_values_split_by_partition(self) -> None:
+        for cell in (*agentic.URL_CELLS, *agentic.URL_TWINS):
+            self.assertNotEqual(cell.templates["dev"], cell.templates["test"], cell.family)
+        values = {p: {g.value for r in rs for g in r.gold} for p, rs in self.cells.items()}
+        self.assertFalse(values["dev"] & values["test"])
+        decoys = {p: {d.value for r in rs for d in r.decoys} for p, rs in self.cells.items()}
+        self.assertFalse(decoys["dev"] & decoys["test"])
+
+    def test_www_cells_write_the_scheme_and_bare_www_in_turn(self) -> None:
+        for records in self.cells.values():
+            for family in ("url_json_www_sibling", "url_json_escaped_www", "url_html_single_quoted"):
+                values = [r.gold[0].value for r in records if r.family == family]
+                self.assertEqual({v.startswith("https:") for v in values}, {True, False}, family)
+
+    def test_each_broad_and_narrow_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
+        for shape in agentic.UrlShape:
+            families = {c.family for c in agentic.URL_CELLS if c.shape is shape}
+            twins = {t.family for t in agentic.URL_TWINS if t.shape is shape}
+            broad = re.compile(agentic.URL_BROAD_PATTERNS[shape])
+            narrow = re.compile(agentic.URL_NARROW_PATTERNS[shape])
+            for records in self.cells.values():
+                for rule in (broad, narrow):
+                    catches = [r for r in records if r.family in families and rule.search(r.text)]
+                    self.assertEqual(len(catches), agentic.DOCS_PER_URL_CELL["A"] * len(families), (shape, rule))
+                costs = [r for r in records if r.family in twins and broad.search(r.text)]
+                self.assertEqual(len(costs), agentic.DOCS_PER_URL_CELL["D"] * len(twins), shape)
+                self.assertTrue(any(r.family in twins and narrow.search(r.text) for r in records), shape)
+
+    def test_no_layer_d_twin_carries_a_url_anchor(self) -> None:
+        anchor = re.compile(agentic.URL_ANCHOR)
+        for records in self.cells.values():
+            for record in (r for r in records if r.layer == "D"):
+                self.assertIsNone(anchor.search(record.text), record.uid)
+
+    def test_mutant_policies_carry_the_broad_and_narrow_patterns(self) -> None:
+        for name, table in (("broad", agentic.URL_BROAD_PATTERNS), ("narrow", agentic.URL_NARROW_PATTERNS)):
+            path = REPO_ROOT / f"scripts/bench/fixtures/agentic/mutant-{name}-url-shapes.toml"
+            patterns = re.findall(r"^pattern = '(.*)'$", path.read_text(encoding="utf-8"), flags=re.MULTILINE)
+            self.assertEqual(sorted(patterns), sorted(table.values()), name)
+
+    def test_the_shipped_url_rule_reaches_every_cell_and_no_twin(self) -> None:
+        # Python spelling of `url.anchored` (`(?-u:\b)` is Rust syntax). Whatever
+        # its body, its scheme or `www.` anchor never reaches a twin.
+        core = (REPO_ROOT / "crates/gaze-recognizers/embedded/core.toml").read_text(encoding="utf-8")
+        block = core[core.index('id = "url.anchored"'):]
+        pattern = re.search(r"^pattern = '{3}(.*)'{3}$", block, flags=re.MULTILINE).group(1)
+        rule = re.compile(pattern.replace("(?-u:\\b)", "\\b"))
+        for records in self.cells.values():
+            for record in records:
+                if record.layer == "D":
+                    self.assertIsNone(rule.search(record.text), record.uid)
+                elif record.family not in {"url_json_escaped"}:
+                    # The plain-anchor rule reaches every cell but the escaped
+                    # scheme without `www.`.
+                    self.assertIsNotNone(rule.search(record.text), record.uid)
+
+    def test_self_closing_cell_ends_right_before_the_closing_quote(self) -> None:
+        # `href='URL'/>`: the `'` is followed by `/`, which a URL may contain,
+        # so only the quote itself can end the match.
+        for records in self.cells.values():
+            cells = [r for r in records if r.family == "url_html_self_closing"]
+            self.assertEqual(len(cells), agentic.DOCS_PER_URL_CELL["A"])
+            for record in cells:
+                end = agentic._char_span(record.text, record.gold[0])[1]
+                self.assertTrue(record.text[end:].startswith("'/>"), record.uid)
+
+    def test_apostrophe_control_has_a_letter_after_a_mid_path_apostrophe(self) -> None:
+        for records in self.cells.values():
+            values = [r.gold[0].value for r in records if r.family == "url_prose_apostrophe"]
+            self.assertEqual(len(values), agentic.DOCS_PER_URL_CELL["A"])
+            for value in values:
+                self.assertRegex(value, r"/[^/]*'[A-Za-z][^/]*$")
+
+    def test_url_reading_examples(self) -> None:
+        def reads(text, value):
+            start = text.index(value)
+            return agentic.url_reading(text, start, start + len(value))
+
+        url = "https://members.example.invalid/u/anna_schmidt"
+        self.assertTrue(reads(f'{{"w":"{url}","x":"1"}}', url))
+        self.assertTrue(reads(f"<p>{url}</p>", url))
+        self.assertTrue(reads(f"see [p]({url}).", url))
+        self.assertFalse(reads(f'{{"w":"{url}x","x":"1"}}', url))
+        self.assertFalse(reads(f'{{"w":"x{url}","x":"1"}}', url))
+        self.assertFalse(reads('{"host":"cdn.example.invalid\\/v2"}', "cdn.example.invalid\\/v2"))
+
+    def test_a_shape_without_a_twin_fails_generation(self) -> None:
+        twins = tuple(t for t in agentic.URL_TWINS if t.shape is not agentic.UrlShape.ESCAPED)
+        with self.assertRaisesRegex(agentic.LayerError, r"no layer D counterweight: \['escaped'\]"):
+            self.generate_with(URL_TWINS=twins)
+
+    def test_a_twin_no_cell_uses_fails_generation(self) -> None:
+        cells = tuple(c for c in agentic.URL_CELLS if c.shape is not agentic.UrlShape.ESCAPED)
+        with self.assertRaisesRegex(agentic.LayerError, "no layer A cell uses"):
+            self.generate_with(URL_CELLS=cells)
+
+    def test_a_shape_whose_narrow_rule_pays_nothing_fails_generation(self) -> None:
+        twins = tuple(t for t in agentic.URL_TWINS if t.family != "url_twin_json_escaped_host")
+        with self.assertRaisesRegex(agentic.LayerError, r"narrow rule pays nothing in layer D: \['escaped'\]"):
+            self.generate_with(URL_TWINS=twins)
+
+    def test_a_cut_url_in_layer_a_fails_generation(self) -> None:
+        cells = self.replaced(agentic.URL_CELLS, "url_json_sibling",
+                              templates={"dev": "x", "test": '{"w":"{V}/extra","x":"1"}'})
+        with self.assertRaisesRegex(agentic.LayerError, "is not a whole URL in place"):
+            self.generate_with(URL_CELLS=cells)
+
+    def test_a_second_url_in_layer_a_fails_generation(self) -> None:
+        cells = self.replaced(agentic.URL_CELLS, "url_html_text",
+                              templates={"dev": "x", "test": "<p>{V}</p><p>www.example.invalid/a</p>"})
+        with self.assertRaisesRegex(agentic.LayerError, "a URL anchor outside the gold value"):
+            self.generate_with(URL_CELLS=cells)
+
+    def test_a_value_outside_its_shape_fails_generation(self) -> None:
+        cells = self.replaced(agentic.URL_CELLS, "url_json_escaped",
+                              make=lambda rng, partition, index: "https://members.example.invalid/u/x")
+        with self.assertRaisesRegex(agentic.LayerError, "is not a escaped URL"):
+            self.generate_with(URL_CELLS=cells)
+
+    def test_a_twin_with_a_url_anchor_fails_generation(self) -> None:
+        twins = self.replaced(agentic.URL_TWINS, "url_twin_json_service_host",
+                              make=lambda rng, partition, index: "https://svc.example.invalid/v2/health")
+        with self.assertRaisesRegex(agentic.LayerError, "carries a URL anchor"):
+            self.generate_with(URL_TWINS=twins)
+
+    def test_a_twin_the_broad_rule_misses_fails_generation(self) -> None:
+        twins = self.replaced(agentic.URL_TWINS, "url_twin_json_mime",
+                              make=lambda rng, partition, index: "plain")
+        with self.assertRaisesRegex(agentic.LayerError, "broad pattern misses the decoy"):
+            self.generate_with(URL_TWINS=twins)
 
 
 class PartitionTests(unittest.TestCase):
@@ -1436,6 +1662,24 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn("LICENSEPLATE", agentic.load_contract(REPO_ROOT, version=8).scored_labels)
         self.assertIn("LICENSEPLATE", agentic.load_contract(REPO_ROOT).scored_labels)
 
+    def test_v9_contract_is_frozen_byte_for_byte(self) -> None:
+        frozen = REPO_ROOT / agentic.HISTORICAL_CONTRACTS[9]
+        self.assertEqual(hashlib.sha256(frozen.read_bytes()).hexdigest(), "f9d0cfff6ebc2feac3bd73567b5800af2f38ef1df9e7e10e5e7e64ebd2e93543")
+        self.assertIn("LICENSEPLATE", agentic.load_contract(REPO_ROOT, version=9).scored_labels)
+        self.assertNotIn("URL", agentic.load_contract(REPO_ROOT, version=9).scored_labels)
+
+    def test_v10_corpus_and_contract_are_frozen_byte_for_byte(self) -> None:
+        expected = {
+            "dev": "2d35385772fd4966d7728fd42f5a42d683fa98b2c6b8dec11dafce116a63aebe",
+            "test": "dfd4cba854335581b85365612e6825408e9e8575b1099fbb167a527b7f6a04df",
+        }
+        for partition, digest in expected.items():
+            records = agentic.records_as_of(10, agentic.generate(partition))
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(records)).hexdigest(), digest)
+        frozen = REPO_ROOT / agentic.HISTORICAL_CONTRACTS[10]
+        self.assertEqual(hashlib.sha256(frozen.read_bytes()).hexdigest(),
+                         "0cf96848731678d3a6fea49425f283429980583cf2e078d4fbba5c37e441e1da")
+
     def test_an_older_generator_loads_its_own_committed_contract(self) -> None:
         # A record measured on v4, v5 or v6 is rescored under the contract that
         # ruled on exactly the labels that generator emitted.
@@ -1449,8 +1693,11 @@ class ContractTests(unittest.TestCase):
         self.assertIn("STREET", agentic.load_contract(REPO_ROOT).scored_labels)
         with self.assertRaisesRegex(agentic.LayerError, "no committed scored-label contract"):
             agentic.load_contract(REPO_ROOT, version=3)
-        with self.assertRaisesRegex(agentic.LayerError, "generator_version 9"):
-            agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=7)
+        for version in (8, 9):
+            self.assertNotIn("URL", agentic.load_contract(REPO_ROOT, version=version).scored_labels)
+        self.assertIn("URL", agentic.load_contract(REPO_ROOT).scored_labels)
+        with self.assertRaisesRegex(agentic.LayerError, "generator_version 12"):
+            agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=9)
 
     def test_generator_version_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1583,7 +1830,7 @@ def _scorecard(
                 "D|ref_number_16|prose|benign": {"utf8_bytes": {"leaked": 0, "false_positive": guard_fp}},
                 **{
                     f"D|{family}|prose|benign": {"utf8_bytes": {"leaked": 0, "false_positive": 0}}
-                    for family in ("ref_number_9", "ref_number_10", "ref_number_11", *CUE_CARD_TWINS)
+                    for family in agentic.guard_families(agentic.GENERATOR_VERSION) if family != "ref_number_16"
                 },
             }
         if layer == "A":
@@ -2025,7 +2272,7 @@ class GateTests(unittest.TestCase):
     def test_credit_guard_families_come_from_the_counterweights(self) -> None:
         self.assertEqual(agentic.CREDIT_GUARD_FAMILIES,
                          {"CREDITCARDNUMBER": (*CUE_CARD_TWINS, "ref_number_16"), "IBAN": (),
-                          "TAXNUM": ("ref_number_11",), "CPF": ("ref_number_11",),
+                          "TAXNUM": ("ref_number_11", "gov_twin_tax_eleven", "gov_near_tax_eleven", "gov_twin_tax_grouped", "gov_near_tax_grouped"), "CPF": ("ref_number_11",),
                           "BSN": ("ref_number_9",), "NHSNUMBER": ("ref_number_10",),
                           "PHONENUMBER": ()})
         self.assertEqual(set(agentic.CREDIT_GUARD_FAMILIES), set(agentic.CREDIT_SCOPE_BY_LABEL))
@@ -2626,6 +2873,55 @@ class MutantGatePinTests(unittest.TestCase):
             self.assertTrue(provenance.get(key), key)
         # The mutant pin is a published v3 measurement, retained as historical evidence.
         self.assertEqual(provenance["generator_version"], 3)
+
+
+class ZipAgeGenerationTests(unittest.TestCase):
+    def test_v11_identity_is_preserved(self):
+        digests = {"dev": "44c563a6ee1920e8e44a373d65eb11401bb5bfe3c3d2e8fb0c761388a7cff1ac",
+                   "test": "bab908dfd2f6a10ae7d3a2c4764d00f03229490e5535214f95cb16bb4730b6e7"}
+        for partition, digest in digests.items():
+            records = agentic.records_as_of(11, agentic.generate(partition))
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(records)).hexdigest(), digest)
+        self.assertEqual(agentic.corpus_identity(REPO_ROOT, 11)[1],
+                         "aaf582d9be058132e5136f8622046cc6c45e34e32e9820438b245185d521870c")
+
+    def test_values_and_templates_are_held_out(self):
+        parts = {p: agentic._zip_age_records(p) for p in agentic.PARTITIONS}
+        for family in {r.family for r in parts["dev"]}:
+            dev = [r for r in parts["dev"] if r.family == family]
+            test = [r for r in parts["test"] if r.family == family]
+            self.assertFalse({r.template for r in dev} & {r.template for r in test})
+            self.assertFalse({g.value for r in dev for g in (*r.gold, *r.decoys)} &
+                             {g.value for r in test for g in (*r.gold, *r.decoys)})
+            self.assertGreater(len({g.value for r in test for g in (*r.gold, *r.decoys)}), 1)
+
+    def test_published_cells_cover_both_sides_of_ambiguous_wording(self):
+        records = agentic._zip_age_records("test")
+        for family in ("postal_ship", "postal_send", "postal_block", "postal_road"):
+            cells = [r for r in records if r.family == family]
+            self.assertEqual({r.region for r in cells}, {"US", "IS", "DK", "IN", "SE", "PL"})
+        for family in {r.family for r in records}:
+            self.assertEqual(len({r.template for r in records if r.family == family}), 3)
+        self.assertTrue(any("we turn" in r.text.lower() and "birthdays" in r.text
+                            for r in records if r.family == "age_collective_future"))
+        for word in ("GiB", "KiB", "attachments", "entries", "zipped"):
+            self.assertTrue(any(word in r.text for r in records if r.layer == "D"), word)
+
+    def test_whole_values_and_benign_numeric_shapes(self):
+        records = agentic._zip_age_records("test")
+        self.assertEqual(sum(r.layer == "A" for r in records), 80)
+        self.assertEqual(sum(r.layer == "D" for r in records), 80)
+        for r in records:
+            spans = r.gold if r.layer == "A" else r.decoys
+            self.assertEqual(len(spans), 1)
+            self.assertEqual(bool(r.gold), r.layer == "A")
+            self.assertEqual(bool(r.decoys), r.layer == "D")
+            span = spans[0]
+            self.assertEqual(r.text.encode()[span.start:span.end].decode(), span.value)
+        for family in ("archive_kb", "archive_colon", "verb_rows", "verb_photos"):
+            self.assertEqual({len(r.decoys[0].value) for r in records if r.family == family}, {3, 4, 5, 6})
+        for family, separator in (("archive_mb", "."), ("turned_distance", "."), ("turned_laps", ",")):
+            self.assertTrue(all(separator in r.decoys[0].value for r in records if r.family == family))
 
 
 if __name__ == "__main__":
