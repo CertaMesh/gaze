@@ -2689,12 +2689,68 @@ fn s1_session_scope_override_changes_observed_session_semantics() {
     );
     assert_eq!(
         ephemeral.status.code(),
-        Some(3),
+        Some(2),
         "ephemeral sessions must retain export-forbidden semantics"
     );
     assert_eq!(
         parse_stderr_variant(&ephemeral.stderr),
-        json!({ "error": "Pipeline", "exit": 3 })
+        ephemeral_scope_error()
+    );
+    assert!(ephemeral.stdout.is_empty());
+}
+
+fn ephemeral_scope_error() -> Value {
+    json!({
+        "error": "PolicyConfig",
+        "exit": 2,
+        "detail": "gaze clean cannot use session scope ephemeral: ephemeral sessions forbid session_blob export; use scope conversation or persistent with ttl_secs > 0"
+    })
+}
+
+#[test]
+fn ephemeral_clean_policy_and_cli_return_exact_safe_configuration_error() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+schema_version = "0.1.0"
+[session]
+scope = "ephemeral"
+[policy.rulepacks]
+bundled = ["core"]
+[[rule]]
+kind = "default"
+action = "tokenize"
+"#,
+    )
+    .unwrap();
+    let policy_arg = format!("--policy={}", path.display());
+    for args in [vec![policy_arg.as_str()], vec!["--session-scope=ephemeral"]] {
+        let out = clean_raw_with_args(&args, "mail alice@example.invalid");
+        assert_eq!(out.status.code(), Some(2));
+        assert!(
+            out.stdout.is_empty(),
+            "configuration errors must fail closed"
+        );
+        assert_eq!(
+            parse_stderr_variant(&out.stderr),
+            ephemeral_scope_error(),
+            "only the exact safe error envelope may reach stderr"
+        );
+    }
+
+    let out = clean_json_with_args(
+        &[&policy_arg, "--session-scope=conversation"],
+        "mail alice@example.invalid",
+    );
+    assert!(!out["clean_text"]
+        .as_str()
+        .unwrap()
+        .contains("alice@example.invalid"));
+    assert_eq!(
+        session_blob_scope(out["session_blob"].as_str().unwrap()),
+        json!({ "Conversation": "cli" })
     );
 }
 

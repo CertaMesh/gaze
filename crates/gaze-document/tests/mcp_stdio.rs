@@ -244,7 +244,7 @@ async fn stdio_document_tools_return_clean_payloads() {
         .expect("file tool call returns");
     if file_result.is_error == Some(true) {
         let text = &file_result.content[0].as_text().unwrap().text;
-        if text.starts_with("backend-unavailable:") {
+        if text == "backend-unavailable" {
             eprintln!("SKIP: {text}");
             client.cancel().await.expect("client cancels");
             server_task.await.expect("server finishes");

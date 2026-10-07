@@ -125,6 +125,11 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         &options,
         Some(Arc::clone(&counter) as Arc<dyn RedactionLogger>),
     )?;
+    if resolved.policy.session.scope == SessionScope::Ephemeral {
+        return Err(CliError::PolicyConfigDetail(
+            "gaze clean cannot use session scope ephemeral: ephemeral sessions forbid session_blob export; use scope conversation or persistent with ttl_secs > 0".into(),
+        ));
+    }
     let dictionary_stats = resolved.dictionaries.stats();
     let effective_policy = resolved.policy;
     let loaded_rulepacks = resolved.rulepacks;
