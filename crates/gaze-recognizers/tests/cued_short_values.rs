@@ -253,6 +253,46 @@ fn card_cued_short_takes_maestro_lengths_right_after_a_card_label() {
 fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() {
     let core = core();
     for (raw, code) in [
+        // Any trailing content keeps protection, including lowercase words and markup.
+        ("I'll zip 250 photos tonight.", "250"),
+        ("zip 560001 KB, finished", "560001"),
+        ("zip 560001 KB: done", "560001"),
+        ("zip 560001 KB tonight", "560001"),
+        ("zip 560001 rows offer", "560001"),
+        ("zip 560001 KB tonight", "560001"),
+        ("zip 560001 KB main road", "560001"),
+        ("zip 560001 KB, main road", "560001"),
+        ("zip 560001 KB\nmain road", "560001"),
+        ("zip 560001 KB [“äußere straße”]", "560001"),
+        ("zip 560001 rows\n\"offer\"", "560001"),
+        ("zip 560001 KB <main road>", "560001"),
+        ("zip 560001 KB | main road", "560001"),
+        (
+            r#"{"address": "zip 560001 KB\r\nMain Road, Bangalore"}"#,
+            "560001",
+        ),
+        (
+            r#"{"address": "zip 560001 KB\tMain Road, Bangalore"}"#,
+            "560001",
+        ),
+        (
+            r#"{"address": "zip 560001 KB\u000aMain Road, Bangalore"}"#,
+            "560001",
+        ),
+        (
+            r#"{"address": "zip 560001 rows\nConnaught Place"}"#,
+            "560001",
+        ),
+        ("zip 560001 KB<br>Main Road", "560001"),
+        ("zip 560001 KB<br/>Main Road", "560001"),
+        ("<td>zip 560001 KB</td><td>Main Road</td>", "560001"),
+        ("zip 560001 KB&nbsp;Main Road", "560001"),
+        (r#"{"zip": "560001 KB", "street": "Main Road"}"#, "560001"),
+        ("zip: 560001 KB\nstreet: Main Road", "560001"),
+        (
+            r#"{"address": "zip 560001 KB\nMain Road, Bangalore"}"#,
+            "560001",
+        ),
         ("Ship it to the office, ZIP: 481 22.", "481 22"),
         (
             "Our postcode is 508\u{a0}80 if the courier asks.",
@@ -377,7 +417,7 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         // No German, Austrian or Swiss code has three digits (`postal_at_ch.rs` pins it too).
         "PLZ: 123",
         "PLZ 123 fehlt noch",
-        // Size units and plural counts identify archive operations.
+        // Exact-case size/count suffixes veto only at actual end of input.
         "Uploaded backup.zip 120 KB",
         "archive.zip: 345 MB",
         "backup.zip 250 B",
@@ -385,7 +425,6 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         "zip 123456 attachments",
         "zip 123456 pictures",
         "zip 123456 entries",
-        "I'll zip 250 photos tonight.",
         "zip 123456 rows",
         "zip 560001 files",
         "zip 560001 photos",
@@ -399,24 +438,14 @@ fn postal_cued_short_takes_short_and_foreign_codes_right_after_a_postal_label() 
         "zip 560001 rows",
         "{\"zip\": \"560001 KB\"}",
         "zip 560001 KB.",
-        "zip 560001 KB, finished",
-        "zip 560001 KB: done",
         "zip 560001 KB)",
         "zip 560001 rows]",
         "zip 560001 KB}",
         "zip 560001 KB\"",
         "zip 560001 KB   ",
-        "zip 560001 KB tonight",
-        "zip 560001 rows offer",
-        "zip 560001 KB tonight",
-        "zip 560001 KB main road",
-        "zip 560001 KB, main road",
-        "zip 560001 KB\nmain road",
-        "zip 560001 KB [“äußere straße”]",
-        "zip 560001 rows\n\"offer\"",
         "zip 560001 KB,;\n]”",
-        "zip 560001 KB <main road>",
-        "zip 560001 KB | main road",
+        "zip 560001 rows.",
+        "zip 560001 KB!? ) ] } \" ' ” ’ »",
     ] {
         assert_untouched(&core, raw);
     }
@@ -434,6 +463,9 @@ fn postal_cued_four_digit_preserves_fields_and_refuses_archive_sizes() {
         "postal.cued_four_digit",
     );
     for (raw, code) in [
+        ("<p>zip 8001 KB</p><p>Hauptstrasse 4</p>", "8001"),
+        ("zip: 8001 KB\ncity: Zürich", "8001"),
+        ("zip 8001 KB main road", "8001"),
         ("zip is 8001 KB Street", "8001"),
         ("zip 8001 B", "8001"),
         ("address.zip: 8001 KB Street", "8001"),
