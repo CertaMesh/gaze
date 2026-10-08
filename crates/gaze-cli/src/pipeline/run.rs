@@ -3,14 +3,17 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc,
 };
+#[cfg(feature = "safety-net-openai")]
 use std::time::Duration;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use serde::Serialize;
 
+#[cfg(feature = "safety-net-openai")]
+use gaze::LocaleTag;
 use gaze::{
-    DictionarySource, DocumentKind, LeakKind, LeakReport, LeakReportTelemetry, LocaleTag, PiiClass,
+    DictionarySource, DocumentKind, LeakKind, LeakReport, LeakReportTelemetry, PiiClass,
     RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, Result as GazeResult,
     SensitiveSnapshot, Session, SessionScope, SessionSnapshotEntry, TypedContext,
 };

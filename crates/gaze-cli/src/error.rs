@@ -31,6 +31,8 @@ pub(crate) enum CliError {
     SafetyNetFailure {
         variant: &'static str,
     },
+    // Only `gaze setup` builds this; keep the closed variant set stable without it.
+    #[cfg_attr(not(feature = "setup"), allow(dead_code))]
     SetupDetail(String),
     /// Pinned-artifact contract violation: a safety-net backend was requested
     /// but its required artifact (e.g. `SHA256SUMS`) is missing on disk. Exit
