@@ -23,14 +23,23 @@ The release-candidate benchmark meets all three improvement targets versus v0.15
   Australian state-and-postcode spans are protected under the `en-AU` locale.
 - **Birth-date cues.** Prose, tool-call JSON and logs recognize birth-date cues
   and additional date formats across six languages. Dates without a birth cue
-  still depend on the safety net.
+  still depend on the safety net. DOB answers after a sentence break are
+  protected when the answer starts with an English or German copula (#742).
+- **Person ages.** Labelled age fields and person-framed age phrases protect
+  the numeric value, including additional English and German forms. Object
+  ages and durations remain outside these rules (#709, #742).
+- **Cued postcodes.** `postal.cued_four_digit` protects directly labelled
+  four-digit values globally. Additional rules cover directly labelled short
+  and foreign postcode formats; unlabelled New Zealand addresses remain
+  outside the four-digit cue rule (#709, #742).
 - **Labelled identifiers.** Tax, driver-licence and identity-card fields protect
   grouped values whole. Cued phone and government-ID values remain protected
   when validation fails. Recorded validator failures are auditable and never
   seed the repeat-value sweep.
 - **Financial data.** Registry-shaped IBANs remain protected when mod-97 fails;
   cued IBAN and payment-card layouts also protect invalid checksums. Uncued
-  cards retain their Luhn veto. Some uncued or compact invalid card shapes
+  cards retain their Luhn veto. Direct card labels also protect compact
+  12–15-digit Maestro-prefixed values and grouped 12-digit values (#742). Some uncued or compact invalid card shapes
   remain outside coverage; see the [validator contract](docs/explanation/detection/validator-veto.md#recorded-failures).
 - **URLs and credentials.** JSON-escaped URL slashes are recognized (#744).
   URL tokens stop at compact JSON and HTML boundaries (#743). In the opt-in
@@ -85,8 +94,30 @@ The release-candidate benchmark meets all three improvement targets versus v0.15
   tagged-version SVG panels accompany the release comparisons; v2 and v1
   remain the release gate contracts.
 
+### Fixed
+
+- **Strict restore preserves literal angle brackets beside owned tokens.**
+  Mail-header, HTML and nested angle wrappers round-trip exactly; unowned or
+  malformed token shapes still fail closed (#727).
+- **Reversible safety-net fallback.** `SafetyNetFallback::Redact` tokenizes
+  post-resolution residuals when every residual can be resolved, preserving
+  exact restore; otherwise it retains the redaction fallback (#680).
+- **SKU precision.** Bundled German and US postal rules leave connected
+  `SKU-` identifiers with an alphabetic product component unchanged.
+  Numeric-only SKU forms retain postal detection (#754).
+- **Pagination precision.** Nym's building-number guard skips ASCII-digit
+  pagination metadata under a finite set of structured keys and records the
+  typed refusal reason; other labels remain eligible (#711).
+- **Adjacent IPv6 protection.** Regex scanning resumes after the emitted
+  capture, so neighbouring addresses can reuse their shared separator without
+  losing the second match (#677).
+
 ### Changed
 
+- **Large-input scaling.** `gaze clean` removes five quadratic processing
+  steps while preserving output and exact restore. In the synthetic 4 MiB
+  locale workloads measured for #688, the slowest case fell from 23 minutes
+  to about one second; this is separate from setup-policy latency below.
 - **Setup policy permissions.** `gaze setup` writes owner-only policies and
   checks for an existing policy before downloading models. Permission-denied
   policy errors retain `PolicyOpen`, exit 4, with a repair detail.
@@ -274,31 +305,6 @@ pipeline.
 
 ### Fixed
 
-- **Strict restore round-trips a literal `<` or `>` beside a token.** The
-  strict token scanner rejected any token whose neighbouring byte was `<` or
-  `>` as a "nested wrapper", so an email address in a mail header's angle
-  brackets, a card number followed by `><`, HTML, or generics cleaned fine but
-  strict restore failed with `UnknownToken`. Tokens are already matched by
-  their exact grammar, so the veto is gone and neighbouring angle brackets
-  restore as literal text. It failed closed (no raw bytes shipped), but broke
-  exact restore on 580 of 20,000 seeded fragment documents under the `core`
-  pack; now 0 (`crates/gaze-assembly/tests/angle_adjacent_restore.rs`,
-  `GAZE_ANGLE_PROBE_DOCS=20000`). In the session strict APIs
-  (`Session::restore_strict_text` and its variants, `validate_token_shapes`)
-  and the `gaze_read_file` path gate, unowned or malformed tokens inside angle
-  brackets still fail closed. `gaze::token_shape::validate_restore_shapes` and
-  the `gaze_read_file` path gate now accept `<<{owned token}>>`; an unowned
-  token there is still rejected before any filesystem access.
-- **The safety net's `Redact` fallback tokenizes a residual it can resolve
-  instead of redacting it**. A token's class name in the
-  re-scan text can make Nym flag the plain value beside it, so each resolve
-  round can surface one more value. After the one follow-up round the fallback
-  replaced the next one with a `[REDACTED:<class>]` marker, and restore was no
-  longer exact: `…15(2), 45-60. Based at 12 Kowhai Lane, Building 4…` lost its
-  `(2)`. `SafetyNetFallback::Redact` now tokenizes the residuals a
-  post-resolution re-scan found when every one of them can be tokenized, and
-  redacts only otherwise. A first-pass refusal still redacts. Bytes are
-  protected either way; the scan count is unchanged. See UPGRADE.md.
 - **`gaze proxy` tokenizes what the safety net flags instead of refusing the
   request.** Under the policy `gaze setup` writes (Nym enabled), the proxy
   answered `500 {"error":"Pipeline"}` to any request containing a date, such

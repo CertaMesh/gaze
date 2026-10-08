@@ -66,17 +66,12 @@ class RecordReplayTests(unittest.TestCase):
             bench / "scored-labels-v3.json",
             display_path="docs/reference/benchmarks/scored-labels-v3.json",
         )
-        records = {
-            "v0.14.0": "observations-v0.14.0.jsonl.gz",
-            "v0.15.0": "observations-v0.15.0.jsonl.gz",
-            "v0.15.1": "observations-v0.15.1.jsonl.gz",
-        }
         for release in history["releases"]:
             [result] = [
                 item for item in release.get("contract_results", ())
                 if item["scored_label_contract"]["version"] == 3
             ]
-            path = bench / records[release["version"]]
+            path = bench / f"observations-{release['version']}.jsonl.gz"
             pointer = result.get("observation_record") or release["observation_record"]
             self.assertEqual(pointer["file"], path.name)
             self.assertEqual(score.sha256_file(path), pointer["sha256"])
