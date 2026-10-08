@@ -666,12 +666,12 @@ Each row runs the same binary, corpus and seed twice: once with the base policy,
 
 Shipped releases, one column per release:
 
-| Mechanism | `v0.15.1` | `v0.15.0` | `v0.14.0` |
-| --- | --- | --- | --- |
-| GLiNER date-of-birth judge | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
-| Nym safety net | not measured for this release | not measured for this release | not available: mechanism added in v0.15 |
-| Davlan NER | not measured for this release | not measured for this release | not available: setup default added in v0.15 |
-| Address-block growth | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
+| Mechanism | `v0.16.0` | `v0.15.1` | `v0.15.0` | `v0.14.0` |
+| --- | --- | --- | --- | --- |
+| GLiNER date-of-birth judge | not measured for this release | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
+| Nym safety net | not measured for this release | not measured for this release | not measured for this release | not available: mechanism added in v0.15 |
+| Davlan NER | not measured for this release | not measured for this release | not measured for this release | not available: setup default added in v0.15 |
+| Address-block growth | not measured for this release | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
 
 <!-- END GENERATED: mechanism-arms -->
 
