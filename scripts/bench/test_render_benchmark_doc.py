@@ -984,8 +984,8 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         )
         for panel in third:
             self.assertEqual([b.name for b in panel.bars if b.gaze], ["Gaze 0.16"])
-        # The committed tagged v0.15.1 runs fill the third-party slots with their own numbers.
-        for panel, (f2, leaked) in zip(third, ((0.7850906648757555, 9769), (0.6180332286160448, 107701))):
+        # The committed tagged v0.16.0 runs fill the third-party slots with their own numbers.
+        for panel, (f2, leaked) in zip(third, ((0.824876405570663, 7984), (0.6268247149238055, 105077))):
             bar = next(b for b in panel.bars if b.gaze)
             self.assertEqual(bar.f2, f2)
             self.assertEqual(bar.leaked, leaked)
@@ -1060,11 +1060,11 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             render.chart_panels(history, self.comparison, self.their)
 
     def test_a_third_party_gaze_slot_is_the_committed_tagged_run_and_pending_without_one(self):
-        # The committed gaze-v0.15.1 rows fill the slots with that run's own numbers, exactly.
+        # The committed gaze-v0.16.0 rows fill the slots with that run's own numbers, exactly.
         for key, panel, (f2, leaked, fp) in zip(
                 ("presidio-research", "piibench-commercial"), self.panels()[1:],
-                ((0.7850906648757555, 9769, 1352), (0.6180332286160448, 107701, 47616))):
-            row = self.their[key]["rows"]["gaze-v0.15.1"]["product_coverage"]
+                ((0.824876405570663, 7984, 1364), (0.6268247149238055, 105077, 48309))):
+            row = self.their[key]["rows"]["gaze-v0.16.0"]["product_coverage"]
             self.assertEqual((row["char_level"]["f2"], row["leaked_bytes"], row["false_positive_bytes"]),
                              (f2, leaked, fp))
             bar = next(b for b in panel.bars if b.gaze)

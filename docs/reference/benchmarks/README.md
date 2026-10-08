@@ -85,6 +85,15 @@ fail-closed invalid-output rate. `full-stack-nym-resolve` exercises the in-proce
 Nym-small net and needs its pinned bundle. The v0.16 `gaze setup` default is
 rules plus NER plus Nym; its tagged measurement is in the v0.16 release row.
 
+The v0.16 comparison mapping adds `custom:age` → `AGE`. Historical comparison
+predictions are unavailable for a live replay. Their published scores are retained:
+the older Gaze revisions cannot emit that label, and their composed mappings and
+common-label intersections are unchanged. The committed
+[`refresh_age_mapping.py`](../../../scripts/bench/compare/refresh_age_mapping.py)
+audit verifies those claims against each row’s recorded harness revision. Release
+character scores are replayed from the committed observations; new third-party
+v0.16 rows come from paired builds of the release tag.
+
 Warm per-document latency of the Nym arm is measured by
 [`scripts/bench/nym-warm-latency.py`](../../../scripts/bench/nym-warm-latency.py)
 (`uv run --with tokenizers python scripts/bench/nym-warm-latency.py --repo-root .`
