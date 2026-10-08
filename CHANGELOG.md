@@ -92,9 +92,6 @@ Release draft: date and benchmark claims await the release-commit measurement.
 - **Loopback handling.** Loopback IPv4 and IPv6 remain raw; private and
   link-local addresses stay protected. Documentation IP ranges are excluded
   from the bundled floor.
-- **Zip/age precision (#753, pending).** The proposed change narrows zip and
-  age matches on benign count and size phrases while preserving address
-  protection. Inclusion awaits merge and confirmation in Phase 2.
 - **Release-text hygiene.** The public-text scrub includes `UPGRADE.md` and
   allowlists only specific public repository and SemVer links.
 
