@@ -419,7 +419,7 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Own corpus | 0.868 | 0.912 | **0.926 (tuned)** | 0.194 | 0.565 | 0.360 | 0.794 | 0.797 |
 | Presidio Research | not run | 0.825 | **0.918 (tuned)** | 0.147 | 0.639 | 0.538 | 0.692 | 0.663 |
-| PIIBench-commercial | not run | pending | **0.665** | 0.183 | 0.522 | 0.441 | 0.532 | 0.400 |
+| PIIBench-commercial | not run | 0.627 | **0.665** | 0.183 | 0.522 | 0.441 | 0.532 | 0.400 |
 
 **Leaked PII bytes** (lower is better; best per row in bold):
 
@@ -427,7 +427,7 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Own corpus | 13,319 | 7,348 | **2,283 (tuned)** | 103,617 | 29,142 | 84,397 | 20,152 | 24,080 |
 | Presidio Research | not run | 7,984 | **2,857 (tuned)** | 34,810 | 15,769 | 20,226 | 13,326 | 15,305 |
-| PIIBench-commercial | not run | pending | **87,853** | 222,697 | 114,880 | 145,119 | 127,361 | 170,336 |
+| PIIBench-commercial | not run | 105,077 | **87,853** | 222,697 | 114,880 | 145,119 | 127,361 | 170,336 |
 
 **False-positive bytes per 1,000 bytes** (lower is better; best per row in bold):
 
@@ -435,15 +435,13 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Own corpus | 19.4 | 15.9 | 30.6 (tuned) | **6.1** | 255.6 | 12.5 | 54.0 | 28.9 |
 | Presidio Research | not run | 10.7 | 38.6 (tuned) | **0.0** | 31.5 | 14.6 | 38.3 | 5.2 |
-| PIIBench-commercial | not run | pending | 38.0 | **1.9** | 94.1 | 71.2 | 36.6 | 5.2 |
+| PIIBench-commercial | not run | 20.7 | 38.0 | **1.9** | 94.1 | 71.2 | 36.6 | 5.2 |
 
 A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.15 0, Gaze 0.16 0.
 
 Own corpus: Presidio tuned for this corpus on its validation half (highest F2), the best of three tuned Presidio rows by test-half F2; like every bar it shows all of layer C, validation half included; Presidio's defaults are in competitors.md.
 Presidio Research: Presidio tuned for this dataset by its authors (their published custom setup).
 PIIBench-commercial: PIIBench publishes no vendor-tuned Presidio, so Presidio is the declared best configuration.
-
-Gaze 0.16 on PIIBench-commercial: measurement pending; no untagged build is shown.
 
 - **Own corpus:** Kiji EN/DE holdout and A4 negatives, 2,910 documents, scored labels v3 (the labels Gaze commits to detect, protected repeats credited). Gaze from [`release-history.json`](release-history.json) (the shipped default of each tagged release); competitors from [`comparison.json`](comparison.json).
 - **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
@@ -814,6 +812,7 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 | Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | Own metric (span F1, exact span + type, PIIBench seqeval) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | gaze-v0.15.1 | 107,701 | 47,616 | 79.8% | held (typed-metric review) | held (typed-metric review) | 33,941 | held (typed-metric review) |
+| gaze-v0.16.0 | 105,077 | 48,309 | 79.5% | held (typed-metric review) | held (typed-metric review) | 32,190 | held (typed-metric review) |
 | datafog-core | 222,697 | 4,529 | 99.9% | 0.128 | 0.092 | 52,232 | 0.099 |
 | datafog-gliner | 112,941 | 71,574 | 75.6% | 0.315 | 0.308 | 25,463 | 0.200 |
 | datafog-regex | 223,137 | 4,926 | 99.9% | 0.128 | 0.092 | 51,108 | 0.097 |
@@ -833,6 +832,8 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 pii-tracer was measured separately on the same documents, with harness `bfd35ce6` (typed metrics rescored with `bfd35ce6`); it changes neither the other rows nor the common-intersection labels.
 
 Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `70679f36`, benchmark binary `923d5735`, reproduced by a second run) scored with harness `e66d3360`; no timing is published.
+
+Row gaze-v0.16.0: a clean checkout of tag `v0.16.0` (crates tree `276a8b2d`, benchmark binary `6369464a`, reproduced by a second run) scored with harness `b8cad035`; no timing is published.
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
