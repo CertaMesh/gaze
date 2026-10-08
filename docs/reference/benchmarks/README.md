@@ -786,7 +786,7 @@ Gold PII bytes: 55,580. Common-intersection labels: account_number, private_addr
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | pii-tracer | 1,083 | 1,871 | 8.7% | held (typed-metric review) | held (typed-metric review) | 702 | 0.974 |
 
-Gaze v0.15.1: not yet measured on this set, so no Gaze row is shown.
+Gaze v0.16.0: not yet measured on this set, so no Gaze row is shown.
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
