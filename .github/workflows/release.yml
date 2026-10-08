@@ -181,7 +181,8 @@ jobs:
           kind = "default"
           action = "preserve"
           POLICY
-          extended_json="$(printf 'host 192.0.2.1' | "$bin" clean --policy="$policy")"
+          # Not a documentation range (192.0.2.0/24 etc.): those are deliberately left raw.
+          extended_json="$(printf 'host 10.20.30.40' | "$bin" clean --policy="$policy")"
           extended_text="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["clean_text"])' <<< "$extended_json")"
           grep -q 'Custom:ip_address' <<< "$extended_text" || (echo "smoke failed: core-extended did not tokenize IP fixture"; exit 1)
 
