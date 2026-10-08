@@ -13,6 +13,7 @@ mod io;
 mod logger;
 mod pipeline;
 mod restore;
+#[cfg(feature = "mcp")]
 mod style;
 
 use clap::Parser;
