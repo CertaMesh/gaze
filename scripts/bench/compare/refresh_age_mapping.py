@@ -45,9 +45,10 @@ def audit() -> dict:
     old_map_raw = git_file(BASE, "scripts/bench/compare/label-map.json")
     old_map = json.loads(old_map_raw)
     current_map = json.loads(compare.MAP_PATH.read_bytes())
+    full_map = json.loads(compare.MAP_PATH.read_bytes())
     require(current_map['gaze'].pop('custom:age') == ['AGE'], 'benchmark mapping audit failed')
     require(current_map == old_map, 'an existing mapping changed')
-    require(compare.common_claimed_labels(current_map) == compare.common_claimed_labels(old_map), 'benchmark mapping audit failed')
+    require(compare.common_claimed_labels(full_map) == compare.common_claimed_labels(old_map), 'benchmark mapping audit failed')
     old_comparison = json.loads(git_file(BASE, "docs/reference/benchmarks/comparison.json"))
     comparison = json.loads((BENCH / "comparison.json").read_bytes())
     require(comparison['mapping_extension']['previous_sha256'] == digest(old_map_raw), 'benchmark mapping audit failed')
@@ -67,6 +68,12 @@ def audit() -> dict:
     for benchmark, original in old["benchmarks"].items():
         entry = data["benchmarks"][benchmark]
         verified = []
+        composed = {
+            family: loaders.compose_mapping(family, table, benchmark, current_native)
+            for family, table in {**full_map, "pii-tracer": pii_tracer.load_label_map()}.items()
+        }
+        require(sorted(theirbench.common_intersection(composed)) == original["common_intersection_labels"],
+                f"{benchmark} current common intersection changed")
         for row, metrics in original["rows"].items():
             require(entry['rows'][row] == metrics, f'{benchmark}/{row} metrics changed')
             require(entry['own_metric'][row] == original['own_metric'][row], 'benchmark mapping audit failed')
