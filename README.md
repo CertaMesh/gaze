@@ -18,7 +18,7 @@ The same boundary applies to tool-call arguments in agent frameworks: the JSON t
 
 ## How good is it
 
-How much PII does each tool keep from reaching the model? The [v0.15.1 benchmark](docs/reference/benchmarks/README.md#current-release) runs the exact policy `gaze setup` writes, next to Presidio, DataFog, scrubadub, GLiNER and OPF on their declared configurations. "Leaked" means PII bytes that would still reach the model; the goal is zero.
+How much PII does each tool keep from reaching the model? The [v0.16.0 benchmark](docs/reference/benchmarks/README.md#current-release) runs the exact policy `gaze setup` writes, next to Presidio, DataFog, scrubadub, GLiNER and OPF on their declared configurations. "Leaked" means PII bytes that would still reach the model; the goal is zero.
 
 <!-- BEGIN GENERATED: readme-chart -->
 

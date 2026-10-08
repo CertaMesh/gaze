@@ -5,9 +5,10 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.16.0] - <<DATE>>
+## [0.16.0] - 2026-10-08
 
-Release draft: date and benchmark claims await the release-commit measurement.
+v0.16.0 improves protection of repeated values, addresses and labelled identifiers.
+The release-candidate benchmark meets all three improvement targets versus v0.15.1.
 
 ### Security
 
@@ -97,25 +98,36 @@ Release draft: date and benchmark claims await the release-commit measurement.
 
 ### Benchmark
 
-- Layer C leaked bytes versus v0.15.1, contract v2: <<BENCH>>.
-- Layer C leaked bytes versus v0.15.1, contract v1: <<BENCH>>.
-- Layer C false-positive bytes versus v0.15.1, contracts v2/v1/v3: <<BENCH>>.
-- Layer C headline results, contract v3: <<BENCH>>.
-- Layers A/D/R leaked and false-positive bytes, refusals, restore and manifest
-  results versus v0.15.1: <<BENCH>>.
+Measured on the release candidate with its own `gaze setup` policy, compared
+with v0.15.1 on the same corpus and scored-label contracts:
 
-These placeholders will be filled from the release commit using
+| Layer C metric | v0.15.1 | v0.16.0 | Reduction |
+| --- | ---: | ---: | ---: |
+| Leaked bytes, v2/v3 | 13,319 | 7,348 | 44.8% |
+| Leaked bytes, v1 | 19,556 | 13,291 | 32.0% |
+| False-positive bytes, v2/v1 | 30,073 | 26,902 | 10.5% |
+| False-positive bytes, v3 after gold-gap credit | 18,488 | 15,141 | 18.1% |
+
+Across v2/v1/v3, layer A leaked bytes fell from 22,029 to 6,030 and
+false-positive bytes from 2,249 to 1,372. Layer D leaked bytes stayed at zero
+and false-positive bytes fell from 5,149 to 3,968. Layer R leaked bytes fell
+from 374 to 234; its false-positive regression is disclosed below.
+All 7,462 documents completed with exact restore, valid manifests and zero
+refusals, restore failures or manifest failures.
+
+See the [release scorecards and full results](docs/reference/benchmarks/README.md#current-release).
+The measurement uses
 [`run_no_opf_benchmark.py`](scripts/bench/run_no_opf_benchmark.py), seed 20260710,
-its own setup policy, and v1/v3 rescoring of the v2 observations on a MacBook
-Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71).
+with v1/v3 rescoring of the same v2 observations, on a MacBook Pro, Apple M5
+Max, 18 cores, 64 GB, macOS 26.5 (25F71).
 
 ### Disclosures
 
 - Preliminary PIIBench IPv6 leaked bytes rose by **220 B** versus v0.15.1,
   likely because loopback addresses intentionally remain raw. Tagged external
   results will be re-measured after the release.
-- Preliminary layer R false-positive bytes rose from **403 to 419** versus
-  v0.15.1. The release-commit run must confirm the final value.
+- Layer R false-positive bytes rose from **403 to 419** versus v0.15.1.
+  The release-candidate run confirms this regression.
 - **Latency.** The byte-metric benchmark may run
   on a shared host; its timings do not establish quiet-host latency. v0.16.0
   quiet-host latency has not yet been measured. See the
