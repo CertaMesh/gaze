@@ -2959,7 +2959,110 @@
         ],
         "test_5k_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad"
       },
-      "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+      "label_map_metadata_update": {
+        "current_sha256": "35a30b118c591963bce938f636e6d11504e6286782493e50a6aa0703c82fe6ca",
+        "metrics_changed": false,
+        "previous_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+        "reason": "Global label metadata gained PII-TRACE definitions. Each historical row's composed map on this benchmark is unchanged at its own committed harness revision; original metrics and per-row receipts are preserved.",
+        "verified_row_maps": [
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "datafog-core"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "datafog-gliner"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "datafog-regex"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "datafog-spacy"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "gaze-full"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "gaze-rules-ner"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "gaze-rules-only"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "gaze-v0.15.1"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "gliner"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "gliner-high-recall"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "opf"
+          },
+          {
+            "harness_revision": "bfd35ce60e23fc7adcdc51aa8623e97901d9169d",
+            "label_maps_sha256": "c004683e39f0c1a8a22720114ca9d8ef92b457f34fdde5fc89c91cd823badcc8",
+            "row": "pii-tracer"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "presidio-all"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "presidio-en"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "presidio-en-de"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "presidio-strong"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "presidio-strong-high-recall"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "scrubadub-base"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "scrubadub-spacy"
+          }
+        ]
+      },
+      "label_maps_sha256": "35a30b118c591963bce938f636e6d11504e6286782493e50a6aa0703c82fe6ca",
       "mapping_extension": {
         "added_labels": {
           "gaze": {
@@ -26260,7 +26363,115 @@
         "repository": "microsoft/presidio-research",
         "sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012"
       },
-      "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+      "label_map_metadata_update": {
+        "current_sha256": "35a30b118c591963bce938f636e6d11504e6286782493e50a6aa0703c82fe6ca",
+        "metrics_changed": false,
+        "previous_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+        "reason": "Global label metadata gained PII-TRACE definitions. Each historical row's composed map on this benchmark is unchanged at its own committed harness revision; original metrics and per-row receipts are preserved.",
+        "verified_row_maps": [
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "datafog-core"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "datafog-gliner"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "datafog-regex"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "datafog-spacy"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "gaze-full"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "gaze-rules-ner"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "gaze-rules-only"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "gaze-v0.15.1"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "gliner"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "gliner-high-recall"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "opf"
+          },
+          {
+            "harness_revision": "bfd35ce60e23fc7adcdc51aa8623e97901d9169d",
+            "label_maps_sha256": "c004683e39f0c1a8a22720114ca9d8ef92b457f34fdde5fc89c91cd823badcc8",
+            "row": "pii-tracer"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "presidio-all"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "presidio-en"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "presidio-en-de"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "presidio-strong"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "presidio-strong-high-recall"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "presidio-tuned-presidio-research"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "scrubadub-base"
+          },
+          {
+            "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931",
+            "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
+            "row": "scrubadub-spacy"
+          }
+        ]
+      },
+      "label_maps_sha256": "35a30b118c591963bce938f636e6d11504e6286782493e50a6aa0703c82fe6ca",
       "mapping_extension": {
         "added_labels": {
           "gaze": {
@@ -26335,6 +26546,13 @@
           "precision": 0.764,
           "predict_seconds": 0.1,
           "recall": 0.688
+        },
+        "gaze-v0.16.0": {
+          "documents": 1500,
+          "f2": 0.779,
+          "precision": 0.815,
+          "predict_seconds": 0.1,
+          "recall": 0.77
         },
         "gliner": {
           "documents": 1500,
@@ -26943,6 +27161,295 @@
               "prediction_sha256": "463fc3da7fd8ac7fd26e1063a581b0dc26b5112fadcc56e1ed1e8ae8aae63f1a"
             },
             "tag": "v0.15.1"
+          }
+        },
+        "gaze-v0.16.0": {
+          "cpu": {
+            "contended": true,
+            "foreign_cpu_samples": [
+              {
+                "elapsed_seconds": 0.0,
+                "foreign_busy_processes": 4,
+                "foreign_cpu_percent": 250.5,
+                "load1": 23.9
+              },
+              {
+                "elapsed_seconds": 5.0,
+                "foreign_busy_processes": 5,
+                "foreign_cpu_percent": 294.4,
+                "load1": 22.47
+              },
+              {
+                "elapsed_seconds": 10.1,
+                "foreign_busy_processes": 26,
+                "foreign_cpu_percent": 797.3,
+                "load1": 20.99
+              },
+              {
+                "elapsed_seconds": 15.1,
+                "foreign_busy_processes": 5,
+                "foreign_cpu_percent": 259.4,
+                "load1": 19.79
+              },
+              {
+                "elapsed_seconds": 20.1,
+                "foreign_busy_processes": 4,
+                "foreign_cpu_percent": 249.3,
+                "load1": 18.53
+              },
+              {
+                "elapsed_seconds": 25.2,
+                "foreign_busy_processes": 4,
+                "foreign_cpu_percent": 244.1,
+                "load1": 17.28
+              },
+              {
+                "elapsed_seconds": 30.2,
+                "foreign_busy_processes": 5,
+                "foreign_cpu_percent": 262.2,
+                "load1": 15.81
+              },
+              {
+                "elapsed_seconds": 35.2,
+                "foreign_busy_processes": 9,
+                "foreign_cpu_percent": 412.5,
+                "load1": 15.02
+              },
+              {
+                "elapsed_seconds": 40.2,
+                "foreign_busy_processes": 5,
+                "foreign_cpu_percent": 274.3,
+                "load1": 14.14
+              },
+              {
+                "elapsed_seconds": 45.3,
+                "foreign_busy_processes": 11,
+                "foreign_cpu_percent": 535.9,
+                "load1": 13.65
+              },
+              {
+                "elapsed_seconds": 50.3,
+                "foreign_busy_processes": 6,
+                "foreign_cpu_percent": 304.1,
+                "load1": 13.03
+              },
+              {
+                "elapsed_seconds": 55.3,
+                "foreign_busy_processes": 5,
+                "foreign_cpu_percent": 303.2,
+                "load1": 12.23
+              },
+              {
+                "elapsed_seconds": 60.4,
+                "foreign_busy_processes": 5,
+                "foreign_cpu_percent": 270.2,
+                "load1": 11.49
+              },
+              {
+                "elapsed_seconds": 65.4,
+                "foreign_busy_processes": 4,
+                "foreign_cpu_percent": 327.5,
+                "load1": 10.97
+              },
+              {
+                "elapsed_seconds": 70.4,
+                "foreign_busy_processes": 3,
+                "foreign_cpu_percent": 270.4,
+                "load1": 10.57
+              },
+              {
+                "elapsed_seconds": 75.5,
+                "foreign_busy_processes": 33,
+                "foreign_cpu_percent": 552.0,
+                "load1": 13.57
+              },
+              {
+                "elapsed_seconds": 80.5,
+                "foreign_busy_processes": 14,
+                "foreign_cpu_percent": 593.7,
+                "load1": 15.77
+              },
+              {
+                "elapsed_seconds": 85.6,
+                "foreign_busy_processes": 20,
+                "foreign_cpu_percent": 881.5,
+                "load1": 18.03
+              },
+              {
+                "elapsed_seconds": 90.7,
+                "foreign_busy_processes": 18,
+                "foreign_cpu_percent": 712.6,
+                "load1": 18.9
+              },
+              {
+                "elapsed_seconds": 95.7,
+                "foreign_busy_processes": 19,
+                "foreign_cpu_percent": 838.9,
+                "load1": 20.03
+              },
+              {
+                "elapsed_seconds": 100.8,
+                "foreign_busy_processes": 9,
+                "foreign_cpu_percent": 499.3,
+                "load1": 19.23
+              },
+              {
+                "elapsed_seconds": 105.8,
+                "foreign_busy_processes": 5,
+                "foreign_cpu_percent": 350.4,
+                "load1": 18.25
+              },
+              {
+                "elapsed_seconds": 110.8,
+                "foreign_busy_processes": 24,
+                "foreign_cpu_percent": 836.1,
+                "load1": 19.83
+              },
+              {
+                "elapsed_seconds": 115.9,
+                "foreign_busy_processes": 28,
+                "foreign_cpu_percent": 991.0,
+                "load1": 21.45
+              },
+              {
+                "elapsed_seconds": 121.0,
+                "foreign_busy_processes": 23,
+                "foreign_cpu_percent": 780.8,
+                "load1": 22.69
+              },
+              {
+                "elapsed_seconds": 126.0,
+                "foreign_busy_processes": 22,
+                "foreign_cpu_percent": 802.9,
+                "load1": 23.84
+              },
+              {
+                "elapsed_seconds": 131.1,
+                "foreign_busy_processes": 12,
+                "foreign_cpu_percent": 749.9,
+                "load1": 24.33
+              },
+              {
+                "elapsed_seconds": 136.3,
+                "foreign_busy_processes": 18,
+                "foreign_cpu_percent": 844.9,
+                "load1": 28.79
+              },
+              {
+                "elapsed_seconds": 141.3,
+                "foreign_busy_processes": 6,
+                "foreign_cpu_percent": 699.9,
+                "load1": 29.2
+              },
+              {
+                "elapsed_seconds": 146.3,
+                "foreign_busy_processes": 24,
+                "foreign_cpu_percent": 918.0,
+                "load1": 31.19
+              },
+              {
+                "elapsed_seconds": 151.4,
+                "foreign_busy_processes": 5,
+                "foreign_cpu_percent": 394.7,
+                "load1": 29.09
+              },
+              {
+                "elapsed_seconds": 156.4,
+                "foreign_busy_processes": 5,
+                "foreign_cpu_percent": 353.4,
+                "load1": 27.16
+              },
+              {
+                "elapsed_seconds": 161.4,
+                "foreign_busy_processes": 5,
+                "foreign_cpu_percent": 313.1,
+                "load1": 25.55
+              },
+              {
+                "elapsed_seconds": 166.5,
+                "foreign_busy_processes": 5,
+                "foreign_cpu_percent": 322.8,
+                "load1": 23.82
+              },
+              {
+                "elapsed_seconds": 171.5,
+                "foreign_busy_processes": 4,
+                "foreign_cpu_percent": 482.4,
+                "load1": 22.31
+              },
+              {
+                "elapsed_seconds": 176.5,
+                "foreign_busy_processes": 6,
+                "foreign_cpu_percent": 534.7,
+                "load1": 21.09
+              },
+              {
+                "elapsed_seconds": 181.6,
+                "foreign_busy_processes": 6,
+                "foreign_cpu_percent": 509.0,
+                "load1": 20.04
+              },
+              {
+                "elapsed_seconds": 186.6,
+                "foreign_busy_processes": 5,
+                "foreign_cpu_percent": 430.5,
+                "load1": 19.56
+              },
+              {
+                "elapsed_seconds": 191.6,
+                "foreign_busy_processes": 5,
+                "foreign_cpu_percent": 430.4,
+                "load1": 18.39
+              }
+            ],
+            "load1_before_after": [
+              23.9,
+              18.39
+            ],
+            "sample_errors": [],
+            "valid": true
+          },
+          "own_scorer_input": {
+            "beta": 2,
+            "counts": {
+              "annotated": 1850,
+              "predicted": 1748,
+              "true_positives": 1425
+            },
+            "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+            "digits": 3,
+            "documents": 1500,
+            "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077"
+          },
+          "policy_sha256_home_normalized": "71eae750bb1e9f7292666eaca33710c2abf7a34928ee1c822272123ab179b5e3",
+          "release": {
+            "build": {
+              "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
+              "cargo": "cargo 1.95.0 (f2d3ce0bd 2026-03-21) (Homebrew)",
+              "cargo_lock_sha256": "d96bc6b40837ef9382a29f52a2f17152b363165150aced47097a4958c153b0c7",
+              "command": "cargo build --locked -q -p gaze-recognizers --example clean_for_bench --features safety-net-nym --release",
+              "profile": "release",
+              "rust_toolchain_sha256": "e59c5da37d1f9f4e0f815bc188cb6056fc7410c9cdaa9673c2d44da557c75d12",
+              "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (Homebrew)\nbinary: rustc\ncommit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860\ncommit-date: 2026-04-14\nhost: aarch64-apple-darwin\nrelease: 1.95.0\nLLVM version: 22.1.3"
+            },
+            "commit": "5a7dac0fa198f20a628ed6b7fa2b5c9d41a91eb0",
+            "crates_tree": "276a8b2d7fcf3e5ef43d624307e175987131f9c7",
+            "measured_with": {
+              "harness_dirty": false,
+              "harness_revision": "900679c00970b6c5ddf3e0d0342d67e8e720b23c"
+            },
+            "ner_model_tree_sha256": "1196662dfcf78d3ef4a9fbbd474d5dd4ce9e656d5fdc38ec38eff3d3249ba1fe",
+            "nym_model_tree_sha256": "1878b4af812a531f5710692287e529106951d78e0e270820b05fa8e6ae082a2d",
+            "policy_home_normalized_sha256": "71eae750bb1e9f7292666eaca33710c2abf7a34928ee1c822272123ab179b5e3",
+            "policy_sha256": "65cd6aa588ce6923f9e2156699893fcffb9a870967d9a0db5018deaa0c22c8cc",
+            "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077",
+            "reproduces": {
+              "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
+              "harness_dirty": false,
+              "harness_revision": "cd93710f08cebeb708cfa1c74d4fd04c908e5c16",
+              "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077"
+            },
+            "tag": "v0.16.0"
           }
         },
         "gliner": {
@@ -29666,6 +30173,83 @@
             }
           }
         },
+        "gaze-v0.16.0": {
+          "common_intersection": {
+            "char_level": {
+              "f1": 0.7857443103344742,
+              "f2": 0.7072590670774552,
+              "f5": 0.6711606674321067,
+              "fn": 6648,
+              "fp": 488,
+              "precision": 0.9640462683268253,
+              "recall": 0.663102417270562,
+              "tp": 13085,
+              "unit": "unicode_code_point"
+            },
+            "document_leak_rate": 0.6776611694152923,
+            "documents": 1500,
+            "false_positive_bytes": 488,
+            "gold_entities": 1031,
+            "leaked_bytes": 6762,
+            "leaked_entity_rate": 0.5596508244422891,
+            "leaking_documents": 452,
+            "leaking_entities": 577,
+            "pii_documents": 667,
+            "predicted_bytes": 13740,
+            "redaction_load": 0.12724696468757815,
+            "total_bytes": 107979,
+            "true_positive_bytes": 13252,
+            "typed_entities": {
+              "f1": 0.3189393939393939,
+              "f2": 0.36717251002965284,
+              "fn": 610,
+              "fp": 1188,
+              "precision": 0.26165320074580484,
+              "recall": 0.40834141610087293,
+              "tp": 421
+            }
+          },
+          "latency": {
+            "p50_ms": 70.968,
+            "p95_ms": 214.859,
+            "samples": 1500
+          },
+          "product_coverage": {
+            "char_level": {
+              "f1": 0.8701790826924157,
+              "f2": 0.824876405570663,
+              "f5": 0.8023831803611604,
+              "fn": 7886,
+              "fp": 1364,
+              "precision": 0.9578557083268964,
+              "recall": 0.7972072929256564,
+              "tp": 31001,
+              "unit": "unicode_code_point"
+            },
+            "document_leak_rate": 0.41961067051189616,
+            "documents": 1500,
+            "false_positive_bytes": 1364,
+            "gold_entities": 2863,
+            "leaked_bytes": 7984,
+            "leaked_entity_rate": 0.3080684596577017,
+            "leaking_documents": 582,
+            "leaking_entities": 882,
+            "pii_documents": 1387,
+            "predicted_bytes": 32911,
+            "redaction_load": 0.2581335885047374,
+            "total_bytes": 127496,
+            "true_positive_bytes": 31547,
+            "typed_entities": {
+              "f1": 0.5566714490674318,
+              "f2": 0.5874041178845377,
+              "fn": 1117,
+              "fp": 1664,
+              "precision": 0.5120234604105571,
+              "recall": 0.6098498078938177,
+              "tp": 1746
+            }
+          }
+        },
         "gliner": {
           "common_intersection": {
             "char_level": {
@@ -30637,6 +31221,24 @@
               "binary_sha256": "0e665110500a1c096a2c5eec37cd737990dd1936fe40f8314caf40a76f32f30a",
               "harness_revision": "e66d33607bed9860906d4c5fcdd8b8c59df859ad",
               "prediction_sha256": "463fc3da7fd8ac7fd26e1063a581b0dc26b5112fadcc56e1ed1e8ae8aae63f1a"
+            }
+          ]
+        },
+        "gaze-v0.16.0": {
+          "generated_at": "2026-10-08T10:34:51.940982+00:00",
+          "hardware": "macOS-26.5-arm64-arm-64bit-Mach-O",
+          "harness_dirty": false,
+          "harness_revision": "900679c00970b6c5ddf3e0d0342d67e8e720b23c",
+          "runs": [
+            {
+              "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
+              "harness_revision": "cd93710f08cebeb708cfa1c74d4fd04c908e5c16",
+              "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077"
+            },
+            {
+              "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
+              "harness_revision": "900679c00970b6c5ddf3e0d0342d67e8e720b23c",
+              "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077"
             }
           ]
         }
