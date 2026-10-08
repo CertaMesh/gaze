@@ -53,7 +53,8 @@ def test_record_reproduces_the_committed_scores(tmp_path) -> None:
     assert rcl.load_evidence(Path(tmp_path) / "evidence.json.gz") == rcl.load_evidence(rcl.EVIDENCE)
 
 
-def test_a_corrupted_record_file_is_refused(tmp_path) -> None:
+@pytest.mark.parametrize("version", sorted(DATA["releases"]))
+def test_a_corrupted_record_file_is_refused(tmp_path, version) -> None:
     """`check` hashes the committed record itself, not just the hash the history states."""
     import shutil
 
@@ -63,7 +64,10 @@ def test_a_corrupted_record_file_is_refused(tmp_path) -> None:
         if observation:
             shutil.copy(rcl.BENCH_DIR / observation["file"], tmp_path / observation["file"])
     rcl.check(DATA, HISTORY, tmp_path)
-    victim = tmp_path / rcl.observation_of(HISTORY["releases"][-1])["file"]
+    # Corrupt a record the tagged-release checker owns, even when history ends
+    # with a provisional candidate excluded from the character-level scores.
+    entry = next(entry for entry in HISTORY["releases"] if entry["version"] == version)
+    victim = tmp_path / rcl.observation_of(entry)["file"]
     victim.write_bytes(victim.read_bytes() + b"x")
     with pytest.raises(ValueError, match="does not match its recorded hash"):
         rcl.check(DATA, HISTORY, tmp_path)

@@ -16,8 +16,8 @@
 
 ```toml
 [dependencies]
-gaze-mcp-core = "0.15.1"
-gaze-mcp-rmcp = "0.15.1"
+gaze-mcp-core = "0.16.0"
+gaze-mcp-rmcp = "0.16.0"
 ```
 
 ```rust

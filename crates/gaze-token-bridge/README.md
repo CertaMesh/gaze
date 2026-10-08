@@ -1,6 +1,6 @@
 # gaze-token-bridge
 
-> **Status:** experimental and published as `gaze-token-bridge = "0.15.1"`.
+> **Status:** experimental and published as `gaze-token-bridge = "0.16.0"`.
 > API is pre-1.0 and may change.
 
 The token bridge is the **owner-side authorization + translation layer** that lets an
@@ -22,7 +22,7 @@ For the architecture and the frozen data-model contract, see the crate docs
 
 ```toml
 [dependencies]
-gaze-token-bridge = "0.15.1"
+gaze-token-bridge = "0.16.0"
 ```
 
 ## Local demo (try it)

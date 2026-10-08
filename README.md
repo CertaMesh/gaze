@@ -20,7 +20,7 @@ The same boundary applies to tool-call arguments in agent frameworks: the JSON t
 
 ## How good is it
 
-How much PII does each tool keep from reaching the model? The [v0.15.1 benchmark](docs/reference/benchmarks/README.md#current-release) runs the exact policy `gaze setup` writes, next to Presidio, DataFog, scrubadub, GLiNER and OPF on their declared configurations. "Leaked" means PII bytes that would still reach the model; the goal is zero.
+How much PII does each tool keep from reaching the model? The [v0.16.0 benchmark](docs/reference/benchmarks/README.md#current-release) runs the exact policy `gaze setup` writes, next to Presidio, DataFog, scrubadub, GLiNER and OPF on their declared configurations. "Leaked" means PII bytes that would still reach the model; the goal is zero.
 
 <!-- BEGIN GENERATED: readme-chart -->
 
@@ -60,7 +60,7 @@ The full walkthrough, with a real support ticket and the safety-net modes: [How 
 Install the CLI, write the default policy, then clean and restore a synthetic contact:
 
 ```sh
-cargo install gaze-cli --version 0.15.1
+cargo install gaze-cli --version 0.16.0
 gaze setup
 printf 'From: %s %s <%s@%s>' Ada Example ada example.invalid | gaze clean --policy gaze.toml > clean.json
 jq -r .clean_text clean.json
@@ -109,7 +109,7 @@ the policy.
 Install the CLI from crates.io:
 
 ```sh
-cargo install gaze-cli --version 0.15.1
+cargo install gaze-cli --version 0.16.0
 ```
 
 Or build from source (latest `main`, or to enable extra features):
