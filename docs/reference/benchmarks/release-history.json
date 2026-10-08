@@ -8066,8 +8066,8 @@
         "sampling_seed": 20260710,
         "ner_threshold": 0.3
       },
-      "provisional": true,
-      "note": "Measured on signed release candidate; awaiting release tag. Byte metrics only; shared-host timings are not quiet-host latency. See [Latency](#latency).",
+      "provisional": false,
+      "note": "Measured on the signed release candidate whose crates tree is identical to tag v0.16.0. Byte metrics only; shared-host timings are not quiet-host latency. See [Latency](#latency).",
       "shipped_default_arm": "policy-file",
       "arms": {
         "policy-file": {

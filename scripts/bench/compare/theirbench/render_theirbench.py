@@ -551,8 +551,9 @@ def render(data: Mapping[str, Any]) -> str:
                   "", f"Hardware: {entry['hardware']}. Measured with comparison code `{entry['comparison_revision']}`, "
                   f"typed metrics rescored with `{rescored['comparison_revision']}`; harness "
                   f"`{rescored['harness_revision'][:8]}`."
-                  + ("".join(f" The {kind} harness commit is kept as signed tag `{tag}`."
-                             for kind, tag in sorted(entry.get("harness_tags", {}).items()))), ""]
+                  + ("".join(f" The {kind} harness commit `{commit[:8]}` is reachable from branch "
+                             f"`{entry['harness_archive_branch']}`."
+                             for kind, commit in sorted(entry.get("harness_commits", {}).items()))), ""]
     lines += ["Not run:", ""] + [f"- {name}: {reason}." for name, reason in data["not_run"].items()]
     return check_public("\n".join(lines), "their-benchmarks block")
 

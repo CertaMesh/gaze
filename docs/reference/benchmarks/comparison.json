@@ -18787,7 +18787,24 @@
     "scorecard_sha256": "350f10a0a7a02006f16d5aab69512c5f7f63e69f8f69e263f4ae5d4c0670a1c4",
     "version": "v0.15.1"
   },
-  "mapping_sha256": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e",
+  "mapping_extension": {
+    "added_labels": {
+      "gaze": {
+        "custom:age": [
+          "AGE"
+        ]
+      }
+    },
+    "current_sha256": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa",
+    "historical_gaze_commits_without_age": [
+      "4927f7c0a862ece2cdcd8c00df34538a510d008e",
+      "a2f6fefd33cebd040a4fc6e5a384f318807717af"
+    ],
+    "metrics_changed": false,
+    "previous_sha256": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e",
+    "reason": "The added native label is absent from the historical Gaze detection trees. All existing mappings and common-intersection labels are unchanged; existing numeric measurements are preserved, not presented as a prediction replay."
+  },
+  "mapping_sha256": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa",
   "model_pins_sha256": "37f35f4fc63952b486e463975836673e7e42f21030a1e725293d026076eb2645",
   "opf_adapter_sha256": "afb3eeae8d83732b44b25b17e748266b0d06380d878769149c2735ce65de5544",
   "policy_sha256_home_normalized": "481f5df7a9b0b562bf2c2db7274cfbf2ea701231c52f1287b27de00554453ff1",

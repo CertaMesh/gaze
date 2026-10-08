@@ -36,7 +36,24 @@
         "sha256": "1f37039ca2a9c7a93d7b755e1603d5192424c61e61fcbf2ce9405f26705fd670"
       },
       "label_maps_sha256": "35a30b118c591963bce938f636e6d11504e6286782493e50a6aa0703c82fe6ca",
-      "mapping_sha256": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e",
+      "mapping_extension": {
+        "added_labels": {
+          "gaze": {
+            "custom:age": [
+              "AGE"
+            ]
+          }
+        },
+        "current_sha256": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa",
+        "historical_gaze_commits_without_age": [
+          "4927f7c0a862ece2cdcd8c00df34538a510d008e",
+          "a2f6fefd33cebd040a4fc6e5a384f318807717af"
+        ],
+        "metrics_changed": false,
+        "previous_sha256": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e",
+        "reason": "The added native label is absent from the historical Gaze detection trees. All existing mappings and common-intersection labels are unchanged; existing numeric measurements are preserved, not presented as a prediction replay."
+      },
+      "mapping_sha256": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa",
       "own_metric": {
         "pii-tracer": {
           "char_f1": 0.9737,
@@ -2750,7 +2767,7 @@
           "compare.py": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
           "comparison_metrics.py": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
           "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
-          "label-map.json": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e"
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
         },
         "harness_dirty": false,
         "harness_revision": "abcfeafc5f62151fc827bb0ce1b84185b718b31a"
@@ -2883,11 +2900,12 @@
       },
       "gaze_crates_tree": "97e45cfe07d185efe1890c4c983b4971fc43cce8",
       "hardware": "macOS-26.5-arm64-arm-64bit",
-      "harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
-      "harness_tags": {
-        "measured": "bench/theirbench-measured-a8293dc0",
-        "rescored": "bench/theirbench-rescored-dab4a195"
+      "harness_archive_branch": "archive/bench-harness",
+      "harness_commits": {
+        "measured": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+        "rescored": "dab4a1956ad0b787ea8d135311648afb659e4931"
       },
+      "harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
       "identity": {
         "documents": 5000,
         "excluded": {
@@ -2942,7 +2960,24 @@
         "test_5k_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad"
       },
       "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
-      "mapping_sha256": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e",
+      "mapping_extension": {
+        "added_labels": {
+          "gaze": {
+            "custom:age": [
+              "AGE"
+            ]
+          }
+        },
+        "current_sha256": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa",
+        "historical_gaze_commits_without_age": [
+          "4927f7c0a862ece2cdcd8c00df34538a510d008e",
+          "a2f6fefd33cebd040a4fc6e5a384f318807717af"
+        ],
+        "metrics_changed": false,
+        "previous_sha256": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e",
+        "reason": "The added native label is absent from the historical Gaze detection trees. All existing mappings and common-intersection labels are unchanged; existing numeric measurements are preserved, not presented as a prediction replay."
+      },
+      "mapping_sha256": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa",
       "own_metric": {
         "datafog-core": {
           "f1": 0.0985,
@@ -24656,7 +24691,7 @@
           "compare.py": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
           "comparison_metrics.py": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
           "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
-          "label-map.json": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e"
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
         },
         "harness_dirty": false,
         "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931"
@@ -26211,11 +26246,12 @@
       },
       "gaze_crates_tree": "97e45cfe07d185efe1890c4c983b4971fc43cce8",
       "hardware": "macOS-26.5-arm64-arm-64bit",
-      "harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
-      "harness_tags": {
-        "measured": "bench/theirbench-measured-a8293dc0",
-        "rescored": "bench/theirbench-rescored-dab4a195"
+      "harness_archive_branch": "archive/bench-harness",
+      "harness_commits": {
+        "measured": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+        "rescored": "dab4a1956ad0b787ea8d135311648afb659e4931"
       },
+      "harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
       "identity": {
         "commit": "6db3769a3388b4075b93ab2229c5e0b9c30137f7",
         "documents": 1500,
@@ -26225,7 +26261,24 @@
         "sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012"
       },
       "label_maps_sha256": "73ad7183012fa1cae24f2c3e2ba38358f971cdc9da7e212cad4a8b214f1eb5ff",
-      "mapping_sha256": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e",
+      "mapping_extension": {
+        "added_labels": {
+          "gaze": {
+            "custom:age": [
+              "AGE"
+            ]
+          }
+        },
+        "current_sha256": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa",
+        "historical_gaze_commits_without_age": [
+          "4927f7c0a862ece2cdcd8c00df34538a510d008e",
+          "a2f6fefd33cebd040a4fc6e5a384f318807717af"
+        ],
+        "metrics_changed": false,
+        "previous_sha256": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e",
+        "reason": "The added native label is absent from the historical Gaze detection trees. All existing mappings and common-intersection labels are unchanged; existing numeric measurements are preserved, not presented as a prediction replay."
+      },
+      "mapping_sha256": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa",
       "own_metric": {
         "datafog-core": {
           "documents": 1500,
@@ -28991,7 +29044,7 @@
           "compare.py": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
           "comparison_metrics.py": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
           "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
-          "label-map.json": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e"
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
         },
         "harness_dirty": false,
         "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931"

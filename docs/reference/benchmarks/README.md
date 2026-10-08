@@ -331,9 +331,9 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: current-release -->
 
-**v0.16.0** **(provisional)** — *not* measured on the released tree.
+**v0.16.0** — measured on the released tree.
 
-> Measured on signed release candidate; awaiting release tag. Byte metrics only; shared-host timings are not quiet-host latency. See [Latency](#latency).
+> Measured on the signed release candidate whose crates tree is identical to tag v0.16.0. Byte metrics only; shared-host timings are not quiet-host latency. See [Latency](#latency).
 
 | Provenance | Value |
 | --- | --- |
@@ -406,33 +406,35 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 **Character-level F2 (β=2, label-agnostic, micro)** (higher is better; best per row in bold):
 
-| Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
+| Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 0.665 | 0.868 | **0.926 (tuned)** | 0.194 | 0.565 | 0.360 | 0.794 | 0.797 |
-| Presidio Research | not run | 0.785 | **0.918 (tuned)** | 0.147 | 0.639 | 0.538 | 0.692 | 0.663 |
-| PIIBench-commercial | not run | 0.618 | **0.665** | 0.183 | 0.522 | 0.441 | 0.532 | 0.400 |
+| Own corpus | 0.868 | 0.912 | **0.926 (tuned)** | 0.194 | 0.565 | 0.360 | 0.794 | 0.797 |
+| Presidio Research | not run | pending | **0.918 (tuned)** | 0.147 | 0.639 | 0.538 | 0.692 | 0.663 |
+| PIIBench-commercial | not run | pending | **0.665** | 0.183 | 0.522 | 0.441 | 0.532 | 0.400 |
 
 **Leaked PII bytes** (lower is better; best per row in bold):
 
-| Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
+| Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 22,144 | 13,319 | **2,283 (tuned)** | 103,617 | 29,142 | 84,397 | 20,152 | 24,080 |
-| Presidio Research | not run | 9,769 | **2,857 (tuned)** | 34,810 | 15,769 | 20,226 | 13,326 | 15,305 |
-| PIIBench-commercial | not run | 107,701 | **87,853** | 222,697 | 114,880 | 145,119 | 127,361 | 170,336 |
+| Own corpus | 13,319 | 7,348 | **2,283 (tuned)** | 103,617 | 29,142 | 84,397 | 20,152 | 24,080 |
+| Presidio Research | not run | pending | **2,857 (tuned)** | 34,810 | 15,769 | 20,226 | 13,326 | 15,305 |
+| PIIBench-commercial | not run | pending | **87,853** | 222,697 | 114,880 | 145,119 | 127,361 | 170,336 |
 
 **False-positive bytes per 1,000 bytes** (lower is better; best per row in bold):
 
-| Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
+| Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 164.9 | 19.4 | 30.6 (tuned) | **6.1** | 255.6 | 12.5 | 54.0 | 28.9 |
-| Presidio Research | not run | 10.6 | 38.6 (tuned) | **0.0** | 31.5 | 14.6 | 38.3 | 5.2 |
-| PIIBench-commercial | not run | 20.4 | 38.0 | **1.9** | 94.1 | 71.2 | 36.6 | 5.2 |
+| Own corpus | 19.4 | 15.9 | 30.6 (tuned) | **6.1** | 255.6 | 12.5 | 54.0 | 28.9 |
+| Presidio Research | not run | pending | 38.6 (tuned) | **0.0** | 31.5 | 14.6 | 38.3 | 5.2 |
+| PIIBench-commercial | not run | pending | 38.0 | **1.9** | 94.1 | 71.2 | 36.6 | 5.2 |
 
-A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.14 0, Gaze 0.15 0.
+A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.15 0, Gaze 0.16 0.
 
 Own corpus: Presidio tuned for this corpus on its validation half (highest F2), the best of three tuned Presidio rows by test-half F2; like every bar it shows all of layer C, validation half included; Presidio's defaults are in competitors.md.
 Presidio Research: Presidio tuned for this dataset by its authors (their published custom setup).
 PIIBench-commercial: PIIBench publishes no vendor-tuned Presidio, so Presidio is the declared best configuration.
+
+Gaze 0.16 on Presidio Research and PIIBench-commercial: measurement pending; no untagged build is shown.
 
 - **Own corpus:** Kiji EN/DE holdout and A4 negatives, 2,910 documents, scored labels v3 (the labels Gaze commits to detect, protected repeats credited). Gaze from [`release-history.json`](release-history.json) (the shipped default of each tagged release); competitors from [`comparison.json`](comparison.json).
 - **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
@@ -562,7 +564,7 @@ which stay committed as the machine-readable evidence.
 | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json), [`scorecard-v0.14.0-scored-labels-v2.json`](scorecard-v0.14.0-scored-labels-v2.json), [`scorecard-v0.14.0-scored-labels-v3.json`](scorecard-v0.14.0-scored-labels-v3.json) | `full-stack-kiji-resolve` | 0 | 22,144 | 22,144 | 157,048 | 22,144 | 22,144 | 168,259 | 25,179 | 25,179 | 168,276 | 78.4192% | 195.86 |
 | v0.15.0 – v0.15.1 | 2026-09-26 | `f769f82` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.0-scored-labels-v2.json`](scorecard-v0.15.0-scored-labels-v2.json), [`scorecard-v0.15.0-scored-labels-v3.json`](scorecard-v0.15.0-scored-labels-v3.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json), [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json), [`scorecard-v0.15.1-scored-labels-v3.json`](scorecard-v0.15.1-scored-labels-v3.json) | `policy-file` | 0 | 13,319 | 13,319 | 18,488 | 13,319 | 13,319 | 30,073 | 19,556 | 19,556 | 30,073 | 100.0000% | 138.72 |
-| v0.16.0 *(provisional)* | 2026-10-08 | `7779119` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.16.0.json`](scorecard-v0.16.0.json), [`scorecard-v0.16.0-scored-labels-v2.json`](scorecard-v0.16.0-scored-labels-v2.json), [`scorecard-v0.16.0-scored-labels-v3.json`](scorecard-v0.16.0-scored-labels-v3.json) | `policy-file` | 0 | 7,348 | 7,348 | 15,141 | 7,348 | 7,348 | 26,902 | 13,291 | 13,291 | 26,902 | 100.0000% | 390.59 |
+| v0.16.0 | 2026-10-08 | `7779119` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.16.0.json`](scorecard-v0.16.0.json), [`scorecard-v0.16.0-scored-labels-v2.json`](scorecard-v0.16.0-scored-labels-v2.json), [`scorecard-v0.16.0-scored-labels-v3.json`](scorecard-v0.16.0-scored-labels-v3.json) | `policy-file` | 0 | 7,348 | 7,348 | 15,141 | 7,348 | 7,348 | 26,902 | 13,291 | 13,291 | 26,902 | 100.0000% | 390.59 |
 
 - **v0.14.0, scored labels v2:** v0.14.0's own `clean_for_bench` (sha256 `fccad457ec06…`, built from `f66a3f2b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `c495a6f1`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
 - **v0.14.0, scored labels v3:** v0.14.0's own `clean_for_bench` (sha256 `9ef4ba9ef57f…`, built from `f66a3f2b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `9dc171b1`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
@@ -825,7 +827,7 @@ Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `70679f36`, ben
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
-Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `2571ac37`; harness `dab4a195`. The measured harness commit is kept as signed tag `bench/theirbench-measured-a8293dc0`. The rescored harness commit is kept as signed tag `bench/theirbench-rescored-dab4a195`.
+Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `2571ac37`; harness `dab4a195`. The measured harness commit `a8293dc0` is reachable from branch `archive/bench-harness`. The rescored harness commit `dab4a195` is reachable from branch `archive/bench-harness`.
 
 #### Presidio Research synthetic set (synth_dataset_v2, 1,500 documents)
 
@@ -862,7 +864,7 @@ Row presidio-tuned-presidio-research: Presidio tuned for this dataset by its aut
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
-Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `2571ac37`; harness `dab4a195`. The measured harness commit is kept as signed tag `bench/theirbench-measured-a8293dc0`. The rescored harness commit is kept as signed tag `bench/theirbench-rescored-dab4a195`.
+Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `2571ac37`; harness `dab4a195`. The measured harness commit `a8293dc0` is reachable from branch `archive/bench-harness`. The rescored harness commit `dab4a195` is reachable from branch `archive/bench-harness`.
 
 Not run:
 

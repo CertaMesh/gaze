@@ -43,8 +43,14 @@
     "ZIP"
   ],
   "compare_sha256": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
+  "comparison_metadata_update": {
+    "current_sha256": "b4e4afa171d7b80f88be654908976f73dc476e29c8e7bf103c70524090882453",
+    "metrics_changed": false,
+    "previous_sha256": "1c1060cec407ea2564824e91b2031febf72a7714d61389d33de3ce764708364f",
+    "reason": "Only the compatible age label-map extension and its receipt changed. Every original comparison field other than the mapping digest is byte-for-byte equal as JSON; the tuned selection, anchors, scores and input predictions are unchanged."
+  },
   "comparison_metrics_sha256": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
-  "comparison_sha256": "1c1060cec407ea2564824e91b2031febf72a7714d61389d33de3ce764708364f",
+  "comparison_sha256": "b4e4afa171d7b80f88be654908976f73dc476e29c8e7bf103c70524090882453",
   "contracts": {
     "agentic": "d30ee303effc9a0de004531d12e85deb530d5eb74a1298e5d4432da4cfd6fce0",
     "v1": null,
