@@ -8886,7 +8886,9 @@
               }
             }
           }
-        }
+        },
+        "source_file": "agentic-layers-v0.16.0.json.gz",
+        "source_sha256": "1569c4a27b51c1d469cfdda6da69d1702657d7aee4390e264e35290f309968dd"
       },
       "validator_recall": {
         "CREDITCARDNUMBER": {
@@ -9755,7 +9757,9 @@
                   }
                 }
               }
-            }
+            },
+            "source_file": "agentic-layers-v0.16.0.json.gz",
+            "source_sha256": "1569c4a27b51c1d469cfdda6da69d1702657d7aee4390e264e35290f309968dd"
           }
         },
         {
@@ -10589,7 +10593,9 @@
                   }
                 }
               }
-            }
+            },
+            "source_file": "agentic-layers-v0.16.0.json.gz",
+            "source_sha256": "1569c4a27b51c1d469cfdda6da69d1702657d7aee4390e264e35290f309968dd"
           }
         }
       ]
