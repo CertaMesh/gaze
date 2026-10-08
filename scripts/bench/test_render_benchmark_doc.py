@@ -1043,6 +1043,15 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         with self.assertRaisesRegex(render.RenderError, "does not match"):
             render.chart_panels(history, changed, self.their)
 
+    def test_comparison_keeps_its_original_release_when_a_new_release_shares_the_corpus(self):
+        self.assertEqual(self.comparison["latest_release_at_measurement"]["version"], "v0.15.1")
+        self.assertEqual(self.history["releases"][-1]["version"], "v0.16.0")
+        self.assertTrue(self.panels())
+        changed = copy.deepcopy(self.comparison)
+        changed["latest_release_at_measurement"]["scorecard_sha256"] = "a" * 64
+        with self.assertRaisesRegex(render.RenderError, "does not match"):
+            self.panels(changed)
+
     def test_comparison_panels_require_a_released_history_row(self):
         history = copy.deepcopy(self.history)
         for row in history["releases"]:

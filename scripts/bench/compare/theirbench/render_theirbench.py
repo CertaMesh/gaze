@@ -83,6 +83,33 @@ def checked_harness_tags(entry: Mapping[str, Any], tags: Mapping[str, str],
     return dict(tags)
 
 
+def archive_contains(commit: str, branch: str) -> bool:
+    return subprocess.run(
+        ["git", "merge-base", "--is-ancestor", commit, f"refs/remotes/origin/{branch}"],
+        cwd=REPO, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    ).returncode == 0
+
+
+def checked_harness_commits(
+    entry: Mapping[str, Any], contains: Callable[[str, str], bool] = archive_contains,
+) -> dict[str, str]:
+    """Archive citations must name the recorded commits and keep them reachable."""
+    commits = entry.get("harness_commits", {})
+    if not commits:
+        return {}
+    branch = entry.get("harness_archive_branch")
+    if branch != "archive/bench-harness":
+        raise ValueError("harness citations need branch archive/bench-harness")
+    expected = {"measured": entry["harness_revision"],
+                "rescored": entry["rescored_with"]["harness_revision"]}
+    for kind, commit in commits.items():
+        if kind not in expected or commit != expected[kind]:
+            raise ValueError(f"{kind} archive citation does not match its recorded harness commit")
+        if not contains(commit, branch):
+            raise ValueError(f"{kind} harness commit is not reachable from branch {branch}")
+    return dict(commits)
+
+
 def assemble(reports: list[Path], own: list[str], reproductions: list[str],
              historical: list[Path] = (), harness_tags: Mapping[str, str] | None = None) -> dict[str, Any]:
     benchmarks: dict[str, Any] = {}
@@ -480,6 +507,7 @@ def render(data: Mapping[str, Any]) -> str:
         "",
     ]
     for name, entry in data["benchmarks"].items():
+        checked_harness_commits(entry)
         rows, metric, metric_label = entry["rows"], *OWN_METRIC[name]
         gold = gold_bytes(rows[public_rows(rows)[0]]["product_coverage"])
         chart_rows(entry)  # every declared competitor configuration was measured
