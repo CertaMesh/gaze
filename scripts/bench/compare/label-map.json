@@ -317,6 +317,7 @@
       "COMPANYNAME",
       "ORGANIZATION"
     ],
+    "custom:age": ["AGE"],
     "custom:phone": [
       "PHONENUMBER"
     ],
