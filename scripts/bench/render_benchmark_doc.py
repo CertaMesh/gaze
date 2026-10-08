@@ -1549,7 +1549,10 @@ def chart_gaze_rows(history: Mapping[str, Any]) -> list[charts.GazeRow]:
 def chart_panels(
     history: Mapping[str, Any], comparison: Mapping[str, Any], their: Mapping[str, Any]
 ) -> list[charts.Panel]:
-    latest = history["releases"][-1]
+    released = [entry for entry in history["releases"] if not entry.get("provisional")]
+    if not released:
+        raise RenderError("comparison chart requires a released history row")
+    latest = released[-1]
     if comparison["latest_release_at_measurement"] != {
         "version": latest["version"],
         "scorecard_sha256": latest["scorecard_sha256"],

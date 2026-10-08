@@ -1022,10 +1022,33 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
 
     def test_a_provisional_release_row_is_not_charted(self):
         history = copy.deepcopy(self.history)
+        history["releases"] = [row for row in history["releases"] if not row.get("provisional")]
         history["releases"][-1]["provisional"] = True
         self.assertEqual(
             [r.version for r in render.chart_gaze_rows(history)], ["v0.14.0", "v0.15.0"]
         )
+
+    def test_provisional_candidate_keeps_the_released_comparison_panels(self):
+        history = copy.deepcopy(self.history)
+        history["releases"] = [row for row in history["releases"] if not row.get("provisional")]
+        before = render.chart_panels(history, self.comparison, self.their)
+        candidate = copy.deepcopy(history["releases"][-1])
+        candidate.update(version="v0.99.0", provisional=True, scorecard_sha256="a" * 64)
+        history["releases"].append(candidate)
+        self.assertEqual(render.chart_panels(history, self.comparison, self.their), before)
+        changed = copy.deepcopy(self.comparison)
+        changed["latest_release_at_measurement"] = {
+            "version": candidate["version"], "scorecard_sha256": candidate["scorecard_sha256"]
+        }
+        with self.assertRaisesRegex(render.RenderError, "does not match"):
+            render.chart_panels(history, changed, self.their)
+
+    def test_comparison_panels_require_a_released_history_row(self):
+        history = copy.deepcopy(self.history)
+        for row in history["releases"]:
+            row["provisional"] = True
+        with self.assertRaisesRegex(render.RenderError, "requires a released"):
+            render.chart_panels(history, self.comparison, self.their)
 
     def test_a_third_party_gaze_slot_is_the_committed_tagged_run_and_pending_without_one(self):
         # The committed gaze-v0.15.1 rows fill the slots with that run's own numbers, exactly.
@@ -1156,6 +1179,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
 
     def test_a_release_without_a_char_level_record_is_an_error_not_pending(self):
         history = copy.deepcopy(self.history)
+        history["releases"] = [row for row in history["releases"] if not row.get("provisional")]
         new = copy.deepcopy(history["releases"][-1])
         new["version"] = "v0.15.2"
         history["releases"].append(new)
@@ -1856,6 +1880,10 @@ class DistinctResultGroupTest(unittest.TestCase):
 
     def test_committed_history_displays_v0_14_0_and_the_v0_15_group(self):
         committed = render.load_history(render.DEFAULT_HISTORY)
+        committed["releases"] = [
+            row for row in committed["releases"]
+            if row["version"] in ("v0.14.0", "v0.15.0", "v0.15.1")
+        ]
         self.assertEqual(
             [render.group_label(g) for g in render.displayed_groups(committed)],
             ["v0.14.0", "v0.15.0 – v0.15.1"],
