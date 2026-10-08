@@ -408,6 +408,16 @@ def _derive_once(base: Path, candidate: Path, versions) -> dict:
 
 
 class CommittedLedgerTest(unittest.TestCase):
+    def test_shipped_release_columns_exclude_provisional_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "history.json"
+            path.write_text(json.dumps({"releases": [
+                {"version": "v0.15.0"},
+                {"version": "v0.16.0", "provisional": True},
+                {"version": "v0.15.1", "provisional": False},
+            ]}), encoding="utf-8")
+            self.assertEqual(mech._released_versions(path), ["v0.15.1", "v0.15.0"])
+
     def test_every_stored_field_is_checked_against_the_records(self) -> None:
         mutations = {
             "revision": lambda m: m.update(revision="0" * 40),

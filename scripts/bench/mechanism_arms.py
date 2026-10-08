@@ -569,7 +569,7 @@ def _signed(value: int) -> str:
 def _released_versions(history_path: Path) -> list[str]:
     history = json.loads(history_path.read_text(encoding="utf-8"))
     return sorted(
-        (release["version"] for release in history["releases"]),
+        (release["version"] for release in history["releases"] if not release.get("provisional")),
         key=version_sort_key, reverse=True,
     )
 
