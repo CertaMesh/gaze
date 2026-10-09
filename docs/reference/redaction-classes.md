@@ -287,7 +287,7 @@ which beats the vaguer national-ID cues (30).
 | `government-id` | `tax_number.cue_anchored` | `tax-number` | 20 | `none` | `crates/gaze-recognizers/embedded/core.toml:1024-1027` |
 | `government-id` | `tax_number.labelled` | `tax-number` | 20 | `none` | `crates/gaze-recognizers/embedded/core.toml` |
 | `government-id` | `national_id.cue_anchored` | `national-id` | 30 | `none` | `crates/gaze-recognizers/embedded/core.toml:1105-1108` |
-| `core, core-extended` | `id_card.labelled` | `regex` | Class-specific national-ID and identity-card labels with grouped or alphanumeric values; the complete-value scan extends a bounded capture through the adjacent value and audits length or field boundaries | `custom:national_id` | `global` | `none` | `none` | `safe_default` | yes | 0.84 | 84 |
+| `government-id` | `id_card.labelled` | `national-id` | 30 | `none` | `crates/gaze-recognizers/embedded/core.toml` |
 | `government-id` | `passport.cue_anchored` | `passport` | 15 | `none` | `crates/gaze-recognizers/embedded/core.toml` (`variant = "passport"`) |
 <!-- redaction-classes-gate:collisions:end -->
 
