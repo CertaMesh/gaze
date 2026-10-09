@@ -2143,6 +2143,7 @@ fn adjacent_phones_survive_sentence_punctuation_and_malformed_neighbours() {
 
 #[test]
 fn labelled_phone_pairs_and_triples_have_no_unprotected_digits() {
+    // drift-ack: core now records directly cued phone values even when parsing fails.
     let pipeline = pipeline_from_rulepack(&core_extended());
     for (locale, values) in [
         (
@@ -2155,7 +2156,7 @@ fn labelled_phone_pairs_and_triples_have_no_unprotected_digits() {
         ),
     ] {
         for count in [2, 3] {
-            for separator in [" ", " / ", "\t"] {
+            for separator in [" ", " / ", "\t", ",", " or ", " oder ", "\n", "\u{2028}"] {
                 let input = format!("Phone: {}.", values[..count].join(separator));
                 let session = Session::new(Scope::Ephemeral).expect("session");
                 let clean = clean_text(&pipeline, &session, &input, locale.clone());

@@ -464,6 +464,71 @@ impl RegexDetector {
         span: std::ops::Range<usize>,
         full_start: usize,
     ) -> Vec<std::ops::Range<usize>> {
+        let mut parts = self.phone_numeric_parts(input, span.clone(), full_start);
+        if self.validator_on_fail != ValidatorOnFail::Record || full_start == span.start {
+            return parts;
+        }
+        let prefix = &input[full_start..span.start];
+        // A cue licenses a list of independently valid phone values. Replay it across
+        // explicit list separators, never across an arbitrary word or numeric field.
+        while let Some(last) = parts.last() {
+            let tail = &input[last.end..];
+            let trimmed = tail.trim_start_matches(char::is_whitespace);
+            let separator_end = if trimmed.starts_with(',') {
+                tail.len() - trimmed.len() + 1
+            } else if let Some(rest) = trimmed
+                .strip_prefix("oder")
+                .or_else(|| trimmed.strip_prefix("or"))
+            {
+                if !rest.starts_with(char::is_whitespace) {
+                    break;
+                }
+                tail.len() - rest.len()
+            } else if tail[..tail.len() - trimmed.len()]
+                .chars()
+                .any(|ch| matches!(ch, '\n' | '\r' | '\u{2028}' | '\u{2029}'))
+            {
+                tail.len() - trimmed.len()
+            } else {
+                break;
+            };
+            let after = tail[separator_end..].trim_start_matches(char::is_whitespace);
+            let next_start = input.len() - after.len();
+            // The regex is bounded; a small cue-replayed window is sufficient to offer
+            // the next candidate. Its continuation is scanned on the original input.
+            let window: String = after.chars().take(128).collect();
+            let evidence = format!("{prefix}{window}");
+            let Some(next) = self
+                .regex
+                .captures(&evidence)
+                .and_then(|caps| self.span_from_captures(&caps))
+                .filter(|matched| matched.start == prefix.len())
+            else {
+                break;
+            };
+            let kind = self.validator_kind.expect("phone validator");
+            let next_parts = self.phone_numeric_parts(&evidence, next, 0);
+            if next_parts.is_empty()
+                || next_parts
+                    .iter()
+                    .any(|part| !kind.validates(&evidence[part.clone()]))
+            {
+                break;
+            }
+            parts.extend(next_parts.into_iter().map(|part| {
+                next_start + part.start - prefix.len()..next_start + part.end - prefix.len()
+            }));
+        }
+        parts
+    }
+
+    #[cfg(feature = "phone-parser")]
+    fn phone_numeric_parts(
+        &self,
+        input: &str,
+        span: std::ops::Range<usize>,
+        full_start: usize,
+    ) -> Vec<std::ops::Range<usize>> {
         let Some(
             kind @ (ValidatorKind::E164Phone
             | ValidatorKind::E164PhoneNational(_)
@@ -481,7 +546,8 @@ impl RegexDetector {
             .take_while(|(at, ch)| {
                 (records || *at < span.len().max(128))
                     && (ch.is_ascii_digit()
-                        || (ch.is_whitespace() && (!records || !matches!(ch, '\n' | '\r')))
+                        || (ch.is_whitespace()
+                            && (!records || !matches!(ch, '\n' | '\r' | '\u{2028}' | '\u{2029}')))
                         || matches!(ch, '+' | '-' | '/' | '.' | '(' | ')'))
             })
             .last()

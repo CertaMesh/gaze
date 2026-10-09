@@ -7,13 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- [bundle-tokenization-drift] `core`: directly labelled phone values now remain
+  protected when parsing fails; record their typed validation reason.
+
 ### Security
 
 - Split rejected adjacent phone runs when both values independently pass the
   recognizer and parser. Vetoed candidates no longer block valid locale fallbacks.
 - Protect international dialing prefixes, optional trunk-zero markers, French
   dotted phones and directly labelled national values. IPv4 matches refuse tails
-  inside longer dotted numeric runs. Parser failures remain auditable and cannot
+  inside complete French dotted phone shapes. Parser failures remain auditable and cannot
   seed repeat-value protection.
 
 ## [0.16.0] - 2026-10-08
