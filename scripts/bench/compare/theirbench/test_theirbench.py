@@ -106,6 +106,13 @@ def row(leaked: int) -> dict:
             "latency": {"p50_ms": 1.0}}
 
 
+def per_label_bytes() -> dict:
+    return {
+        "leaked_by_gold_label": {"EMAIL": 7, "FIRSTNAME": 5},
+        "false_positive_by_prediction_label": {"name": 6, "custom:phone": 4},
+    }
+
+
 def release_provenance() -> dict:
     """A complete tagged-row provenance block, as theirbench.py --gaze-release-tag writes it."""
     from tagged_gaze import RELEASE_PINS
@@ -415,6 +422,7 @@ class TaggedRowTest(unittest.TestCase):
             "rows": {"gaze-v0.15.1": {"test": row(12)}},
             "provenance": {"gaze-v0.15.1": {"release": release_provenance()}},
         }
+        report["rows"]["gaze-v0.15.1"]["test"]["product_coverage"]["per_label_bytes"] = per_label_bytes()
         own = own_result("gaze-v0.15.1")
         own["input"]["prediction_sha256"] = "9" * 64
         return data, entry, report, own
@@ -431,6 +439,23 @@ class TaggedRowTest(unittest.TestCase):
         self.assertNotIn("not yet measured", body)
         self.assertIn("Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `cccccccc`", body)
         self.assertIn("harness `dddddddd`", body)
+        self.assertIn("Top leaked labels for gaze-v0.15.1: `EMAIL` 7 B, `FIRSTNAME` 5 B.", body)
+        self.assertIn("False-positive bytes by emitted label: `name` 6 B, `custom:phone` 4 B.", body)
+
+    def test_a_tagged_report_requires_complete_per_label_byte_totals(self) -> None:
+        import render_theirbench as render
+
+        data, _entry, report, own = self.entry_and_report()
+        del report["rows"]["gaze-v0.15.1"]["test"]["product_coverage"]["per_label_bytes"]
+        with self.assertRaisesRegex(ValueError, "per-label byte totals"):
+            render.add_tagged(data, report, own, RESOLVE)
+
+        report["rows"]["gaze-v0.15.1"]["test"]["product_coverage"]["per_label_bytes"] = per_label_bytes()
+        report["rows"]["gaze-v0.15.1"]["test"]["product_coverage"]["per_label_bytes"][
+            "leaked_by_gold_label"
+        ]["EMAIL"] -= 1
+        with self.assertRaisesRegex(ValueError, "leaked bytes sum to 11, expected 12"):
+            render.add_tagged(data, report, own, RESOLVE)
 
     def test_each_mismatch_refuses_the_row(self) -> None:
         import render_theirbench as render

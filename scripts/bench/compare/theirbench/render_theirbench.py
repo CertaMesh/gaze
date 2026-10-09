@@ -264,6 +264,26 @@ def _crates_tree(commit: str) -> str:
     return subprocess.check_output(["git", "rev-parse", f"{commit}:crates"], cwd=REPO, text=True).strip()
 
 
+def check_per_label_bytes(row: str, cell: Mapping[str, Any]) -> None:
+    """A tagged row's aggregate label maps must account for its headline byte totals."""
+    per_label = cell.get("per_label_bytes")
+    if not isinstance(per_label, Mapping):
+        raise ValueError(f"{row}: no per-label byte totals")
+    for key, total_key, description in (
+        ("leaked_by_gold_label", "leaked_bytes", "leaked bytes"),
+        ("false_positive_by_prediction_label", "false_positive_bytes", "false-positive bytes"),
+    ):
+        values = per_label.get(key)
+        if not isinstance(values, Mapping) or any(
+            not isinstance(label, str) or not isinstance(value, int) or value < 0
+            for label, value in values.items()
+        ):
+            raise ValueError(f"{row}: invalid {key} per-label byte totals")
+        measured, expected = sum(values.values()), cell[total_key]
+        if measured != expected:
+            raise ValueError(f"{row}: per-label {description} sum to {measured}, expected {expected}")
+
+
 def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str, Any],
                resolve: Callable[[str], tuple[str, str]] | None = None) -> str:
     """Merge one tagged Gaze row (theirbench.py --gaze-release-tag) into the aggregate.
@@ -297,6 +317,7 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
         raise ValueError(f"{row} is already in {name}")
     if own["system"] != row:
         raise ValueError(f"own-scorer result is for {own['system']}, not {row}")
+    check_per_label_bytes(row, report["rows"][row]["test"]["product_coverage"])
     check_own_result(name, entry, row, own, release["prediction_sha256"])
     _check_release(row, release, resolve or (lambda tag: (tag_commit(tag, REPO), _crates_tree(tag_commit(tag, REPO)))))
     scored = own.get("scored") or own["overall"]
@@ -552,6 +573,18 @@ def render(data: Mapping[str, Any]) -> str:
         for tool in public_rows(rows):
             lines.append(f"| {tool} | " + " | ".join(cell(metric, name, entry, tool)
                                                     for metric in metrics(name)) + " |")
+        for tool in (tool for tool in public_rows(rows) if is_tagged_gaze_row(tool)):
+            per_label = rows[tool]["product_coverage"].get("per_label_bytes")
+            if per_label is None:
+                continue
+            leaked = sorted(per_label["leaked_by_gold_label"].items(), key=lambda item: (-item[1], item[0]))[:5]
+            false_positive = sorted(
+                per_label["false_positive_by_prediction_label"].items(), key=lambda item: (-item[1], item[0])
+            )[:5]
+            lines += ["", f"Top leaked labels for {tool}: "
+                      + ", ".join(f"`{label}` {value:,} B" for label, value in leaked) + ".",
+                      "False-positive bytes by emitted label: "
+                      + ", ".join(f"`{label}` {value:,} B" for label, value in false_positive) + "."]
         rescored = entry["rescored_with"]
         for tool, added in sorted(entry.get("rows_measured_separately", {}).items()):
             lines_after_table = [f"{tool} was measured separately on the same documents, with harness "
