@@ -533,9 +533,11 @@ class TaggedRowTest(unittest.TestCase):
         entry["rows"]["gaze-v0.15.1"] = previous
         entry["own_metric"]["gaze-v0.15.1"] = {**own["scored"], "predict_seconds": 0.1}
         own["scored"]["predict_seconds"] = 0.4
+        report["rows"]["gaze-v0.15.1"]["test"]["latency"]["p50_ms"] = 2.0
 
         self.assertEqual(render.add_tagged(data, report, own, RESOLVE, refresh=True), "gaze-v0.15.1")
         self.assertEqual(entry["rows"]["gaze-v0.15.1"]["product_coverage"]["leaked_bytes"], 12)
+        self.assertEqual(entry["rows"]["gaze-v0.15.1"]["latency"]["p50_ms"], 1.0)
         self.assertEqual(
             entry["rows"]["gaze-v0.15.1"]["product_coverage"]["per_label_bytes"], per_label_bytes()
         )

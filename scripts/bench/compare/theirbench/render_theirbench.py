@@ -314,6 +314,7 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
         raise ValueError(f"{row}: provenance does not name the release checkout it was measured from")
     if row in entry["rows"] and not refresh:
         raise ValueError(f"{row} is already in {name}")
+    published_row = report["rows"][row]["test"]
     if refresh:
         if row not in entry["rows"]:
             raise ValueError(f"{row} is not in {name}, so it cannot be refreshed")
@@ -327,6 +328,7 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
         }
         if measured != previous:
             raise ValueError(f"{row}: refreshed headline metrics differ from the committed row")
+        published_row = {**published_row, "latency": entry["rows"][row]["latency"]}
     if own["system"] != row:
         raise ValueError(f"own-scorer result is for {own['system']}, not {row}")
     check_per_label_bytes(row, report["rows"][row]["test"]["product_coverage"])
@@ -356,7 +358,7 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
         previous_cpu = entry.get("provenance", {}).get(row, {}).get("cpu")
         if previous_cpu is not None:
             published_provenance["cpu"] = previous_cpu
-    entry["rows"][row] = report["rows"][row]["test"]
+    entry["rows"][row] = published_row
     entry["own_metric"][row] = published_score
     entry["provenance"][row] = published_provenance
     reproduced = release["reproduces"]
