@@ -22,10 +22,12 @@ remain protected when a date-like group occurs inside them.
 Grouped numbers need at least three chunks, except fixed EIN (2–7 digits) and German slash tax-number layouts. A directly labelled nine-digit tax value also qualifies. These shapes keep ordinary decimal amounts out of the fallback.
 
 The rules do not infer a class from a bare value or a generic `id` or `number` field. A field
-name supplies the class, and the value must contain a digit. The tax fallback admits compact numeric values only in the nine-digit form under an explicit
-tax label. Eleven-digit German Steuer-ID values remain owned by the specific Steuer-ID rule
-and its auditable checksum-failure contract. The new compact nine-digit arm requires at least
-one nonzero digit; zero runs inside letter-bearing values remain protected. All three
+name supplies the class, and the value must contain a digit. The tax fallback admits compact
+nine-digit values under an explicit tax label and compact eleven-digit values under a full
+English tax identification number label. The latter remain generic tax numbers so their
+trusted manifest values also protect uncued repeated copies. Explicit German Steuer-ID values
+remain owned by the specific Steuer-ID rule and its auditable checksum-failure contract.
+Both compact numeric arms require at least one nonzero digit; zero runs inside letter-bearing values remain protected. All three
 fallbacks reject calendar dates that can resemble grouped identifiers. These are
 precision boundaries, not claims that every real identifier will fit the fallback. Benchmark
 evidence and hand-written shape probes are required before adding a new label or value shape.

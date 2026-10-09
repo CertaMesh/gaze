@@ -1672,7 +1672,7 @@ fn shared_connector_grammar_is_byte_identical_across_the_family() {
     // Then the count, so an EXTRA stray copy (or a sixth rule that forgot to join the array) is caught too.
     assert_eq!(
         core.matches(SHARED_CONNECTOR).count(),
-        CONNECTOR_FAMILY.len() + 1,
+        CONNECTOR_FAMILY.len() + 2,
         "each family uses the shared connector; the labelled tax rule has two cue/value arms",
     );
 }

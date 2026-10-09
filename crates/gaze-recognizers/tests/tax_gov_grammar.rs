@@ -86,7 +86,7 @@ fn tax_and_government_values_are_whole_tokens_under_direct_and_connector_cues() 
         (
             "taxpayer identification number: 00123456789",
             "00123456789",
-            "steuer_id",
+            "tax_number",
         ),
         ("SSN: 000 12 3456", "000 12 3456", "ssn"),
         ("SSN: 00012-3456", "00012-3456", "ssn"),
@@ -200,5 +200,19 @@ fn bare_nino_requires_the_constrained_uppercase_shape() {
         "AB\n00\n00\n00\nC",
     ] {
         assert_eq!(clean(&pipeline, input), input, "{input:?}");
+    }
+}
+
+#[test]
+fn generic_tax_identification_fields_protect_uncued_repeated_values() {
+    let pipeline = pipeline();
+    for (key, value) in [
+        ("taxIdentificationNumber", "00 000 000 001"),
+        ("taxpayer identification number", "00123456789"),
+    ] {
+        let input = format!("{key}: {value}; repeat: {value}");
+        let cleaned = clean(&pipeline, &input);
+        assert_eq!(without_tokens(&cleaned), input.replace(value, "\0"));
+        assert_eq!(cleaned.matches(":Custom:tax_number_1>").count(), 2);
     }
 }
