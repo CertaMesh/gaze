@@ -8,7 +8,7 @@
     "ZIP"
   ],
   "compare_sha256": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
-  "comparison_metrics_sha256": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
+  "comparison_metrics_sha256": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
   "contention_samples": {
     "datafog-core": {
       "contended": false,
