@@ -69,6 +69,9 @@ fn tax_and_government_values_are_whole_tokens_under_direct_and_connector_cues() 
             "tax_number",
         ),
         ("My TIN is 00-1234567.", "00-1234567", "tax_number"),
+        ("TIN: AB000000000", "AB000000000", "tax_number"),
+        ("tax number: AB 000000000", "AB 000000000", "tax_number"),
+        ("TIN: AB000000000CD", "AB000000000CD", "tax_number"),
         (
             "numéro fiscal numéro est AB000123",
             "AB000123",
@@ -161,6 +164,7 @@ fn nearby_government_cues_do_not_claim_dates_amounts_or_separate_fields() {
         "Steuer-ID verified; vehicle ID: 00123456789",
         "TIN checked; invoice amount: 001234567 EUR",
         "Tax number: 2026-10-09",
+        "TIN: 000000000",
         "Tax rate: 00.1234567%",
         "SKU: ZZ001234567",
         "national ID checked; batch reference: 000123Z4567",
