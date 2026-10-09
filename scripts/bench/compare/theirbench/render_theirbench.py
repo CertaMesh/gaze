@@ -334,7 +334,14 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
     _check_release(row, release, resolve or (lambda tag: (tag_commit(tag, REPO), _crates_tree(tag_commit(tag, REPO)))))
     scored = own.get("scored") or own["overall"]
     if refresh:
-        if entry["own_metric"].get(row) != scored:
+        previous_score = {
+            key: value for key, value in entry["own_metric"].get(row, {}).items()
+            if key != "predict_seconds"
+        }
+        refreshed_score = {
+            key: value for key, value in scored.items() if key != "predict_seconds"
+        }
+        if previous_score != refreshed_score:
             raise ValueError(f"{row}: refreshed own metric differs from the committed row")
         previous_prediction = entry.get("provenance", {}).get(row, {}).get("release", {}).get(
             "prediction_sha256"

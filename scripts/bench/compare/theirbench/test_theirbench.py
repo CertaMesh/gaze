@@ -531,7 +531,8 @@ class TaggedRowTest(unittest.TestCase):
         previous = copy.deepcopy(report["rows"]["gaze-v0.15.1"]["test"])
         del previous["product_coverage"]["per_label_bytes"]
         entry["rows"]["gaze-v0.15.1"] = previous
-        entry["own_metric"]["gaze-v0.15.1"] = copy.deepcopy(own["scored"])
+        entry["own_metric"]["gaze-v0.15.1"] = {**own["scored"], "predict_seconds": 0.1}
+        own["scored"]["predict_seconds"] = 0.4
 
         self.assertEqual(render.add_tagged(data, report, own, RESOLVE, refresh=True), "gaze-v0.15.1")
         self.assertEqual(entry["rows"]["gaze-v0.15.1"]["product_coverage"]["leaked_bytes"], 12)
