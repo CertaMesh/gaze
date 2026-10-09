@@ -23,6 +23,7 @@ from markdown_table import table_header  # noqa: E402
 from tagged_gaze import (  # noqa: E402
     RELEASE_PINS, TAG, check_model_receipt, check_own_input, check_own_score, check_public, tag_commit)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import backends  # noqa: E402
 import pii_trace_repro  # noqa: E402
 VENDOR_TUNED = Path(__file__).with_name("vendor-tuned.json")
 DATA = REPO / "docs/reference/benchmarks/their-benchmarks.json"
@@ -285,7 +286,7 @@ def check_per_label_bytes(row: str, cell: Mapping[str, Any]) -> None:
 
 
 def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str, Any],
-               resolve: Callable[[str], tuple[str, str]] | None = None) -> str:
+               resolve: Callable[[str], tuple[str, str]] | None = None, *, refresh: bool = False) -> str:
     """Merge one tagged Gaze row (theirbench.py --gaze-release-tag) into the aggregate.
 
     The row joins only if the report measured the same benchmark identity, roster labels,
@@ -302,9 +303,7 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
                 "mapping_sha256", "typed_hold"):
         if report[key] != entry[key]:
             raise ValueError(f"{name}: the report's {key} differs from the committed entry")
-    # The committed rows were rescored with today's pinned metric code; the new row was
-    # measured with it, so it must equal the rescore's pins, not the original measurement's.
-    if report["comparison_sha256"] != entry["rescored_with"]["comparison_sha256"]:
+    if report["comparison_sha256"] != backends.PINNED_SHA256:
         raise ValueError(f"{name}: the report used different pinned comparison code")
     rows = [tool for tool in report["rows"] if is_tagged_gaze_row(tool)]
     if len(rows) != 1 or len(report["rows"]) != 1:
@@ -313,8 +312,21 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
     release = report["provenance"][row].get("release")
     if not release or f"gaze-{release['tag']}" != row:
         raise ValueError(f"{row}: provenance does not name the release checkout it was measured from")
-    if row in entry["rows"]:
+    if row in entry["rows"] and not refresh:
         raise ValueError(f"{row} is already in {name}")
+    if refresh:
+        if row not in entry["rows"]:
+            raise ValueError(f"{row} is not in {name}, so it cannot be refreshed")
+        previous = {
+            view: {key: value for key, value in values.items() if key != "per_label_bytes"}
+            for view, values in entry["rows"][row].items() if view != "latency"
+        }
+        measured = {
+            view: {key: value for key, value in values.items() if key != "per_label_bytes"}
+            for view, values in report["rows"][row]["test"].items() if view != "latency"
+        }
+        if measured != previous:
+            raise ValueError(f"{row}: refreshed headline metrics differ from the committed row")
     if own["system"] != row:
         raise ValueError(f"own-scorer result is for {own['system']}, not {row}")
     check_per_label_bytes(row, report["rows"][row]["test"]["product_coverage"])
@@ -646,6 +658,8 @@ def main(argv: list[str] | None = None) -> int:
     tagged_cmd.add_argument("--report", type=Path, required=True)
     tagged_cmd.add_argument("--own", type=Path, required=True, help="the row's own-scorer result")
     tagged_cmd.add_argument("--data", type=Path, default=DATA)
+    tagged_cmd.add_argument("--refresh", action="store_true",
+                            help="replace an existing tagged row only when its headline metrics are identical")
     tuned_cmd = sub.add_parser("add-tuned", help="merge a vendor's own tuned setup into their-benchmarks.json")
     tuned_cmd.add_argument("--report", type=Path, required=True)
     tuned_cmd.add_argument("--own", type=Path, required=True, help="presidio_research_repro.py --tuned result")
@@ -677,7 +691,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "add-tagged":
         data = json.loads(args.data.read_text(encoding="utf-8"))
         row = add_tagged(data, json.loads(args.report.read_text(encoding="utf-8")),
-                         json.loads(args.own.read_text(encoding="utf-8")))
+                         json.loads(args.own.read_text(encoding="utf-8")), refresh=args.refresh)
         args.data.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(f"added {row}")
         return 0

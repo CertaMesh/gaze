@@ -405,6 +405,8 @@ class TaggedRowTest(unittest.TestCase):
     """A tagged Gaze release joins the aggregate only from a clean checkout of its tag."""
 
     def entry_and_report(self):
+        import backends
+
         data = synthetic()
         entry = data["benchmarks"]["presidio-research"]
         entry.update(identity={"documents": 1500, "sha256": "d" * 64}, splits={"test": {"documents": 1500}},
@@ -418,7 +420,7 @@ class TaggedRowTest(unittest.TestCase):
             "identity": entry["identity"], "splits": entry["splits"],
             "common_intersection_labels": entry["common_intersection_labels"],
             "label_maps_sha256": entry["label_maps_sha256"], "mapping_sha256": entry["mapping_sha256"],
-            "typed_hold": entry["typed_hold"], "comparison_sha256": {"compare.py": "c" * 64},
+            "typed_hold": entry["typed_hold"], "comparison_sha256": backends.PINNED_SHA256,
             "rows": {"gaze-v0.15.1": {"test": row(12)}},
             "provenance": {"gaze-v0.15.1": {"release": release_provenance()}},
         }
@@ -510,6 +512,29 @@ class TaggedRowTest(unittest.TestCase):
         entry["rows"]["gaze-v0.15.1"] = row(1)
         with self.assertRaisesRegex(ValueError, "already in"):
             render.add_tagged(data, report, own, RESOLVE)
+
+    def test_refresh_adds_label_totals_only_when_headline_metrics_match(self) -> None:
+        import copy
+        import render_theirbench as render
+
+        data, entry, report, own = self.entry_and_report()
+        previous = copy.deepcopy(report["rows"]["gaze-v0.15.1"]["test"])
+        del previous["product_coverage"]["per_label_bytes"]
+        entry["rows"]["gaze-v0.15.1"] = previous
+
+        self.assertEqual(render.add_tagged(data, report, own, RESOLVE, refresh=True), "gaze-v0.15.1")
+        self.assertEqual(entry["rows"]["gaze-v0.15.1"]["product_coverage"]["leaked_bytes"], 12)
+        self.assertEqual(
+            entry["rows"]["gaze-v0.15.1"]["product_coverage"]["per_label_bytes"], per_label_bytes()
+        )
+
+        data, entry, report, own = self.entry_and_report()
+        previous = copy.deepcopy(report["rows"]["gaze-v0.15.1"]["test"])
+        del previous["product_coverage"]["per_label_bytes"]
+        previous["product_coverage"]["leaked_bytes"] += 1
+        entry["rows"]["gaze-v0.15.1"] = previous
+        with self.assertRaisesRegex(ValueError, "headline metrics differ"):
+            render.add_tagged(data, report, own, RESOLVE, refresh=True)
 
     def _temp_repo(self, tmp: str):
         import subprocess
