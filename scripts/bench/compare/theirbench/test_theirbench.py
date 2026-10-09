@@ -539,6 +539,11 @@ class TaggedRowTest(unittest.TestCase):
         self.assertEqual(
             entry["rows"]["gaze-v0.15.1"]["product_coverage"]["per_label_bytes"], per_label_bytes()
         )
+        self.assertEqual(entry["own_metric"]["gaze-v0.15.1"]["predict_seconds"], 0.1)
+        self.assertEqual(
+            entry["provenance"]["gaze-v0.15.1"]["cpu"],
+            {"contended": False, "valid": True},
+        )
 
         data, entry, report, own = self.entry_and_report()
         previous = copy.deepcopy(report["rows"]["gaze-v0.15.1"]["test"])

@@ -333,24 +333,32 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
     check_own_result(name, entry, row, own, release["prediction_sha256"])
     _check_release(row, release, resolve or (lambda tag: (tag_commit(tag, REPO), _crates_tree(tag_commit(tag, REPO)))))
     scored = own.get("scored") or own["overall"]
+    published_score = scored
+    published_provenance = {**report["provenance"][row], "own_scorer_input": own["input"]}
     if refresh:
-        previous_score = {
-            key: value for key, value in entry["own_metric"].get(row, {}).items()
+        committed_score = entry["own_metric"].get(row, {})
+        previous_headline = {
+            key: value for key, value in committed_score.items()
             if key != "predict_seconds"
         }
-        refreshed_score = {
+        refreshed_headline = {
             key: value for key, value in scored.items() if key != "predict_seconds"
         }
-        if previous_score != refreshed_score:
+        if previous_headline != refreshed_headline:
             raise ValueError(f"{row}: refreshed own metric differs from the committed row")
         previous_prediction = entry.get("provenance", {}).get(row, {}).get("release", {}).get(
             "prediction_sha256"
         )
         if previous_prediction != release["prediction_sha256"]:
             raise ValueError(f"{row}: refreshed prediction digest differs from the committed row")
+        if "predict_seconds" in committed_score:
+            published_score = {**scored, "predict_seconds": committed_score["predict_seconds"]}
+        previous_cpu = entry.get("provenance", {}).get(row, {}).get("cpu")
+        if previous_cpu is not None:
+            published_provenance["cpu"] = previous_cpu
     entry["rows"][row] = report["rows"][row]["test"]
-    entry["own_metric"][row] = scored
-    entry["provenance"][row] = {**report["provenance"][row], "own_scorer_input": own["input"]}
+    entry["own_metric"][row] = published_score
+    entry["provenance"][row] = published_provenance
     reproduced = release["reproduces"]
     entry.setdefault("tagged_measurements", {})[row] = {
         "harness_revision": report["harness_revision"], "harness_dirty": False,
