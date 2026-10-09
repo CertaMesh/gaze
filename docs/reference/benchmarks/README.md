@@ -727,7 +727,7 @@ contract v1 scores; those have their own table in the rendered output.
 
 <!-- BEGIN GENERATED: leak-ledger -->
 
-The leak ledger classifies every leaked gold byte of an unreleased build by root cause. Public pages show tagged releases only, so its table is not shown here. The classified rows ([`leak-ledger.json`](leak-ledger.json) and [its row file](leak-ledger/ledger-74701b227385.jsonl.gz)) stay committed, and `python3 scripts/bench/leak_ledger.py check` re-derives their totals from the observation record under every scored-label contract.
+The leak ledger classifies every leaked gold byte of an unreleased build by root cause. Public pages show tagged releases only, so its table is not shown here. The classified rows ([`leak-ledger.json`](leak-ledger.json) and [its row file](leak-ledger/ledger-7779119128ce.jsonl.gz)) stay committed, and `python3 scripts/bench/leak_ledger.py check` re-derives their totals from the observation record under every scored-label contract.
 
 <!-- END GENERATED: leak-ledger -->
 
