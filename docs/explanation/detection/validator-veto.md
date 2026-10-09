@@ -26,7 +26,7 @@ For each candidate:
    emission.
 7. An explicit `on_fail = "record"` (`Recognizer::validator_on_fail`) keeps
    failures only for `iban_mod97`, `luhn`, `de_steuer_id_mod1110`, `bsn_mod11`,
-   `cpf_mod11`, `e164_phone`, or `e164_phone_national_us`. The last two require
+   `cpf_mod11`, `uk_nhs_mod11`, `e164_phone`, or `e164_phone_national_us`. The last two require
    the `phone-parser` feature. A kept candidate carries
    `validator_fail_reason = Some(reason)` and `EvidenceKind::Learned`.
 
@@ -43,9 +43,9 @@ precision; shape and context take its place:
 | `iban.cued` | A real ISO 3166-1 country code (or `UK`) outside the IBAN registry, two digits and a BBAN (up to four letters then 6 to 26 digits compact, or three to eight digit-bearing groups) within 32 characters after the word `IBAN` on the same line through the shared cue window (one `:`, `,` or `=` right after the cue, one nested JSON key such as `{"number": "`, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or `=` ends it). Registry countries stay with `iban.structural`, which knows their exact length, so a registry IBAN with a dropped digit is not covered |
 | `card.cued` | A card layout within 32 characters after a card cue (`card` family, German card compounds, a bare `Karte` only with `Nummer`/`Nr`, card brands) on the same line through the shared cue window (one `:`, `,` or `=` right after the cue, one nested JSON key such as `{"number": "`, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or `=` ends it): 4-4-4-4-3 (whole), 4-4-4-4, 4-6-5, 4-6-4, compact 16 to 19 digits starting 2-6, or compact 14 to 15 digits starting 3. Compact phone numbers and epoch-millisecond timestamps do not qualify. A span that holds a card stays whole, so a cued 4-4-4-4-3 number is one token even when its first 16 digits pass Luhn (without a cue `card.structural` still keeps a valid card's CVV outside). A Luhn-failing 13- or 15-digit compact card not starting with 3 stays raw (phone and timestamp tradeoff) |
 
-Steuer-ID, BSN, and CPF rules already require a class-specific label. Their
+Steuer-ID, BSN, CPF, and NHS rules require a class-specific label. Their
 checksum failures now stay as tokens with typed failure reasons; all-zero
-Steuer-ID and BSN placeholders are excluded. The `Fahrzeug-Identifikationsnummer`
+Steuer-ID, BSN, and NHS placeholders are excluded. The `Fahrzeug-Identifikationsnummer`
 vehicle label cannot trigger the Steuer-ID or national-ID rule. The two cued
 phone rules require a same-line phone label and capture only the number. They
 keep regional parser failures under English and loaded locale phone-label
