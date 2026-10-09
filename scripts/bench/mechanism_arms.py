@@ -227,12 +227,21 @@ def derive(
     layers: dict[str, Any] = {}
     gate: dict[str, Any] = {}
     identity: dict[str, Any] = {}
-    for version in versions or required_contracts():
-        contract = _contract(version)
-        cards = {
-            "base": record.rescore(base_record, contract),
-            "candidate": record.rescore(candidate_record, contract),
-        }
+    selected_versions = tuple(versions or required_contracts())
+    selected_contracts = {version: _contract(version) for version in selected_versions}
+    requests = [
+        (path, selected_contracts[version], None)
+        for version in selected_versions
+        for path in (base_record, candidate_record)
+    ]
+    rescored = iter(record.rescore_many(requests))
+    cards_by_version = {
+        version: {"base": next(rescored), "candidate": next(rescored)}
+        for version in selected_versions
+    }
+    for version in selected_versions:
+        contract = selected_contracts[version]
+        cards = cards_by_version[version]
         runs = {arm: _single_run(card) for arm, card in cards.items()}
         for arm, card in cards.items():
             if contract_version(card) != version:

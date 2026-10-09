@@ -949,6 +949,8 @@ def history_entry_from_scorecard(
     shipped_arm: str = SHIPPED_DEFAULT_ARM,
 ) -> dict[str, Any]:
     """Project one schema-v4 scorecard onto the fields the document prints."""
+    if scorecard.get("cache_replay") is True:
+        raise RenderError("release scorecards must be fresh: cache_replay is true")
     if not VERSION_RE.match(version):
         raise RenderError(f"--version must look like v1.2.3, got {version!r}")
     if scorecard.get("schema_version") != SCORECARD_SCHEMA_VERSION:

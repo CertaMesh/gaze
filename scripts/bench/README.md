@@ -27,11 +27,12 @@ uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py \
 
 Use `full` for a local release candidate. It evaluates every English/German
 document selected from the pinned Dataiku test split and all 1,024 committed A4
-negative fixtures:
+negative fixtures. `--release` builds both the detector and validator-recall
+probe with optimized release profiles:
 
 ```bash
 uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py \
-  full --seed 20260710 --no-download \
+  full --release --no-cache --seed 20260710 --no-download \
   --compare-baseline target/bench-data/no-opf/baseline.json
 ```
 
@@ -134,6 +135,30 @@ For v3, the response records which gold span matches a trimmed prediction and
 whether the word boundary passes. Neither header nor rows contain document or
 protected values. Rows omit run-dependent timing; the header keeps the original
 scorecard timing. A re-score needs no corpus, binary or model:
+
+The runner caches this value-free record under the shared checkout's
+`target/bench-data/cache/`, so linked worktrees can reuse the same base. An
+exact key binds the measured revision and crates tree, record schema, Cargo
+lockfile and repository/Cargo-home configuration contents, benchmark-harness tree, policy path and referenced dependencies,
+corpus and generated-layer identities, sampling seed, both scored-label
+contracts, model bundle manifests, observation-affecting environment, threshold,
+hardware, profile, build mode, repetitions, and sampled document IDs. A later
+run with the same key prints the cache key, verifies a private copy, marks its
+cache provenance, and re-scores it with the current harness without
+building or running the detector. Any changed field, malformed metadata,
+missing record, or record SHA-256 mismatch prints the miss reason and measures
+afresh. Dirty or untracked measured sources and `--skip-build` bypass the cache.
+Use `--no-cache` for release evidence or a deliberately fresh measurement, or `--cache-dir` to
+choose another local cache root.
+
+Release evidence must be measured with `--no-cache`. Cache replay records and
+scorecards carry `cache_replay: true` and `cache_key_sha256`; the release-history
+renderer refuses these scorecards. Fresh measurements carry `cache_replay: false`.
+
+Observation replay uses at most four workers by default while retaining the
+recorded layer/config order, so serialized scorecards remain byte-identical.
+Set `--score-jobs 1` on the runner or `--jobs 1` on `rescore.py` for the serial
+reference path; positive values set an explicit bound.
 
 ```bash
 uv run --project scripts/bench python scripts/bench/rescore.py \

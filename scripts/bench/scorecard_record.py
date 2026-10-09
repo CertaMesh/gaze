@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import copy
+from concurrent.futures import ProcessPoolExecutor
 import gzip
 import hashlib
 import json
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -484,6 +486,7 @@ class RecordWriter:
             "schema_version": self.schema_version,
             "corpus_sha256": self.corpus_sha256,
             "scorecard": scorecard,
+            "cache_replay": scorecard.get("cache_replay", False),
             "add_reference": add_reference,
             "validator": {
                 key: value for key, value in self.measurements.items() if key != "documents"
@@ -631,6 +634,16 @@ def _read(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
     return header, observations
 
 
+def mark_cache_replay(path: Path, key_sha256: str) -> None:
+    """Mark the copied record before rescoring so provenance survives all replays."""
+    header, observations = _read(path)
+    header["cache_replay"] = True
+    header["cache_key_sha256"] = key_sha256
+    header["scorecard"]["cache_replay"] = True
+    header["scorecard"]["cache_key_sha256"] = key_sha256
+    _write_rows(path, [header, *observations])
+
+
 def pin_template(
     source: Path, template: Path, output: Path, *, strip_layers: bool = False
 ) -> None:
@@ -662,10 +675,72 @@ def pin_template(
     _write_rows(output, [header, *observations])
 
 
+def _replay_group(request):
+    header, result, document_rows, rows, layer, index, config, selected_contract = request
+    raw_documents = [_document_from_row(document_rows[row["document_id"]]) for row in rows]
+    documents = score.apply_scored_label_contract(raw_documents, selected_contract)
+    if len({document.uid for document in documents}) != len(documents):
+        raise RecordError(f"{layer}/{config}: duplicate document ID")
+    responses: dict[str, dict[str, object]] = {}
+    with_evidence = []
+    for document, row in zip(documents, rows, strict=True):
+        recorded_response = row["response"]
+        response = {
+            **{key: value for key, value in recorded_response.items()
+               if key != "gold_gap_evidence"},
+            "timing": {"clean_ms": 0.0, "restore_ms": 0.0, "post_policy_scan_ms": None},
+        }
+        if response["fixture_id"] != document.uid:
+            raise RecordError(f"{document.uid}: response ID mismatch")
+        if response.get("refused") is not ("pipeline_error_code" in response):
+            raise RecordError(f"{document.uid}: refusal flag mismatch")
+        if "pipeline_error_code" not in response:
+            fallback = any(
+                item["provenance"]["decision"] == "fallback_redact"
+                for item in response["final_protection_trace"]
+            )
+            if response.get("fallback_redact") is not fallback:
+                raise RecordError(f"{document.uid}: fallback flag mismatch")
+            for item in response["final_protection_trace"]:
+                score.validate_prediction(document, item)
+                if item["action"] not in {"tokenize", "redact"}:
+                    raise RecordError("invalid protection action")
+        responses[document.uid] = response
+        with_evidence.append(score.Document(**{
+            **document.__dict__, "gap_evidence": _evidence(recorded_response, document, response)
+            if "pipeline_error_code" not in response else None,
+        }))
+    measured_rows = {document.uid: document_rows[document.uid] for document in documents}
+    validator = None
+    if all(measured_rows[document.uid].get("validator") is not None for document in documents):
+        validator = _filtered_measurements(header["validator"], measured_rows, documents)
+    run = score.run_config(
+        Path("."), Path("."), config, with_evidence, Path("."), None, None, None,
+        result["parameters"]["ner_threshold"], Path("."),
+        validator_measurements=validator, replay_responses=responses,
+    )
+    old = next(
+        (item for item in (result["runs"] if layer == "C" else result["layers"][layer]["runs"])
+         if item["config"] == config), None
+    )
+    if old is None:
+        raise RecordError(f"unexpected {layer}/{config} observation")
+    expected_ids = set(old["scored_population"]["document_ids"]) | set(
+        old["failed_closed_population"]["document_ids"]
+    )
+    if {document.uid for document in documents} != expected_ids:
+        raise RecordError(f"{layer}/{config}: observed document IDs differ from scorecard")
+    for timing_key in ("latency_ms", "warm_latency_ms", "process"):
+        run[timing_key] = old[timing_key]
+    return (layer, index), run
+
+
 def rescore(
     path: Path,
     contract: score.ScoredLabelContract,
     layer_contract: score.ScoredLabelContract | None = None,
+    *,
+    max_workers: int | None = None,
 ) -> dict[str, object]:
     header, observations = _read(path)
     result = copy.deepcopy(header["scorecard"])
@@ -697,68 +772,37 @@ def rescore(
         ]
         agentic.apply_contract(generated, layer_contract)
 
-    def replay(layer: str, config: str, selected_contract: score.ScoredLabelContract) -> dict[str, object]:
-        rows = groups[(layer, config)]
-        raw_documents = [_document_from_row(document_rows[row["document_id"]]) for row in rows]
-        documents = score.apply_scored_label_contract(raw_documents, selected_contract)
-        if len({document.uid for document in documents}) != len(documents):
-            raise RecordError(f"{layer}/{config}: duplicate document ID")
-        responses: dict[str, dict[str, object]] = {}
-        with_evidence = []
-        for document, row in zip(documents, rows, strict=True):
-            recorded_response = row["response"]
-            response = {
-                **{key: value for key, value in recorded_response.items()
-                   if key != "gold_gap_evidence"},
-                "timing": {"clean_ms": 0.0, "restore_ms": 0.0, "post_policy_scan_ms": None},
-            }
-            if response["fixture_id"] != document.uid:
-                raise RecordError(f"{document.uid}: response ID mismatch")
-            if response.get("refused") is not ("pipeline_error_code" in response):
-                raise RecordError(f"{document.uid}: refusal flag mismatch")
-            if "pipeline_error_code" not in response:
-                fallback = any(
-                    item["provenance"]["decision"] == "fallback_redact"
-                    for item in response["final_protection_trace"]
-                )
-                if response.get("fallback_redact") is not fallback:
-                    raise RecordError(f"{document.uid}: fallback flag mismatch")
-                for item in response["final_protection_trace"]:
-                    score.validate_prediction(document, item)
-                    if item["action"] not in {"tokenize", "redact"}:
-                        raise RecordError("invalid protection action")
-            responses[document.uid] = response
-            with_evidence.append(score.Document(**{
-                **document.__dict__, "gap_evidence": _evidence(recorded_response, document, response)
-                if "pipeline_error_code" not in response else None,
-            }))
-        measured_rows = {document.uid: document_rows[document.uid] for document in documents}
-        validator = None
-        if all(measured_rows[document.uid].get("validator") is not None for document in documents):
-            validator = _filtered_measurements(header["validator"], measured_rows, documents)
-        run = score.run_config(
-            Path("."), Path("."), config, with_evidence, Path("."), None, None, None,
-            result["parameters"]["ner_threshold"], Path("."),
-            validator_measurements=validator, replay_responses=responses,
+    replay_tasks = [
+        ("C", index, run["config"], contract)
+        for index, run in enumerate(result["runs"])
+    ]
+    if "layers" in result:
+        replay_layer_contract = layer_contract or _contract_from_row(header.get("layer_contract"))
+        replay_tasks.extend(
+            (layer, index, run["config"], replay_layer_contract)
+            for layer in ("A", "D", "R")
+            for index, run in enumerate(result["layers"][layer]["runs"])
         )
-        old = next(
-            (item for item in (result["runs"] if layer == "C" else result["layers"][layer]["runs"])
-             if item["config"] == config), None
+    workers = max_workers if max_workers is not None else min(4, os.cpu_count() or 1)
+    if workers < 1:
+        raise RecordError("max_workers must be positive")
+
+    def request(task):
+        layer, index, config, selected_contract = task
+        return (
+            header, result, document_rows, groups[(layer, config)],
+            layer, index, config, selected_contract,
         )
-        if old is None:
-            raise RecordError(f"unexpected {layer}/{config} observation")
-        expected_ids = set(old["scored_population"]["document_ids"]) | set(
-            old["failed_closed_population"]["document_ids"]
-        )
-        if {document.uid for document in documents} != expected_ids:
-            raise RecordError(f"{layer}/{config}: observed document IDs differ from scorecard")
-        for timing_key in ("latency_ms", "warm_latency_ms", "process"):
-            run[timing_key] = old[timing_key]
-        return run
+
+    if workers == 1 or len(replay_tasks) == 1:
+        replayed = dict(_replay_group(request(task)) for task in replay_tasks)
+    else:
+        with ProcessPoolExecutor(max_workers=min(workers, len(replay_tasks))) as executor:
+            replayed = dict(executor.map(_replay_group, map(request, replay_tasks)))
 
     selected: list[score.Document] = []
     if result["runs"]:
-        result["runs"] = [replay("C", run["config"], contract) for run in result["runs"]]
+        result["runs"] = [replayed[("C", index)] for index in range(len(result["runs"]))]
         result["dataset"]["validator_gold_census"] = score.validator_gold_census(
             available, _filtered_measurements(header["validator"], available_rows, available)
         )
@@ -770,8 +814,8 @@ def rescore(
         layer_contract = layer_contract or _contract_from_row(header.get("layer_contract"))
         for layer in ("A", "D", "R"):
             result["layers"][layer]["runs"] = [
-                replay(layer, run["config"], layer_contract)
-                for run in result["layers"][layer]["runs"]
+                replayed[(layer, index)]
+                for index in range(len(result["layers"][layer]["runs"]))
             ]
             first_config = result["layers"][layer]["runs"][0]["config"]
             layer_rows = groups[(layer, first_config)]
@@ -805,6 +849,30 @@ def rescore(
     return result
 
 
+def _rescore_one(request):
+    path, contract, layer_contract = request
+    return rescore(path, contract, layer_contract, max_workers=1)
+
+
+def rescore_many(
+    requests: Sequence[
+        tuple[Path, score.ScoredLabelContract, score.ScoredLabelContract | None]
+    ],
+    *,
+    max_workers: int | None = None,
+) -> list[dict[str, object]]:
+    """Replay independent contracts concurrently and retain request order."""
+    if not requests:
+        return []
+    workers = max_workers if max_workers is not None else min(4, os.cpu_count() or 1)
+    if workers < 1:
+        raise RecordError("max_workers must be positive")
+    if workers == 1 or len(requests) == 1:
+        return [_rescore_one(request) for request in requests]
+    with ProcessPoolExecutor(max_workers=min(workers, len(requests))) as executor:
+        return list(executor.map(_rescore_one, requests))
+
+
 def _gold_validity_digest(
     documents: Sequence[score.Document], rows: Mapping[str, Mapping[str, object]]
 ) -> dict[str, object]:
@@ -826,6 +894,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--agentic-scored-labels", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--expected-sha256", help="verify the published record digest")
+    parser.add_argument("--jobs", type=int, default=None, help="bounded replay worker count (default: 4)")
     args = parser.parse_args(argv)
     root = Path(__file__).resolve().parents[2]
     def load(path: Path) -> score.ScoredLabelContract:
@@ -843,7 +912,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             agentic.load_contract(root, args.agentic_scored_labels)
             if args.agentic_scored_labels else None
         )
-        card = rescore(args.record, contract, layer_contract)
+        card = rescore(args.record, contract, layer_contract, max_workers=args.jobs)
     except RecordError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
