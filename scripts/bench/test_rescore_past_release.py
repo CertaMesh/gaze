@@ -75,7 +75,7 @@ class ReleaseCheckoutTest(unittest.TestCase):
                 (rescore.runner, "load_negative_documents", ([], {})),
                 (rescore.score, "stratified_sample", ([], {})),
                 (rescore.score, "apply_scored_label_contract", []),
-                (rescore.score, "build_validator_probe", root / "probe"),
+                (rescore.runner, "build_validator_probe", root / "probe"),
                 (rescore.score, "collect_validator_measurements", {}),
                 (rescore.score, "validator_gold_census", {}),
                 (rescore.records, "filter_measurements", {}),
