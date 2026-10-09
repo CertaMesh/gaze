@@ -173,14 +173,16 @@ def tagged_trace() -> tuple[dict, dict, dict, dict]:
     """A committed PII-TRACE entry and a tagged Gaze report + own-scorer result that fit it."""
     import backends
     from test_add_tool import DATASET, PREDICTIONS, own_pii_trace
-    from test_theirbench import per_label_bytes, release_provenance, row, synthetic
+    from test_theirbench import (
+        per_label_bytes, release_provenance, row, synthetic, telemetry_compatible_comparison,
+    )
 
     data = synthetic()
     entry = data["benchmarks"].pop("presidio-research")
     data["benchmarks"]["pii-trace"] = entry
     entry.update(identity={"messages": 3, "sha256": DATASET}, splits={"test": {"documents": 3}},
                  label_maps_sha256="a" * 64, mapping_sha256="b" * 64, typed_hold=["gaze", "opf"])
-    entry["rescored_with"]["comparison_sha256"] = {"compare.py": "c" * 64}
+    entry["rescored_with"]["comparison_sha256"] = telemetry_compatible_comparison()
     del entry["rows"]["gaze-v0.15.1"]
     report = {
         "schema_version": 1, "benchmark": "pii-trace", "preflight": None, "harness_dirty": False,
