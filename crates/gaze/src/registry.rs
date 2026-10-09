@@ -1364,6 +1364,7 @@ impl RecognizerRegistry {
             .map(|candidate| {
                 (
                     candidate.span.start,
+                    candidate.span.end,
                     candidate.class.clone(),
                     candidate.checksum_validated(),
                 )
@@ -1398,7 +1399,7 @@ impl RecognizerRegistry {
             }
             let next = boundaries
                 .iter()
-                .filter_map(|(start, class, validated)| {
+                .filter_map(|(start, other_end, class, validated)| {
                     if *start <= candidate.span.start
                         || *start >= candidate.span.end
                         || class == &candidate.class
@@ -1421,6 +1422,12 @@ impl RecognizerRegistry {
                                         | "national_id.cue_anchored"
                                 ) || *label_start >= capture_end)
                         });
+                    // A validated substring is not a new field when this labelled value
+                    // continues beyond it. Retain its suffix unless an actual field label
+                    // licenses the split. A separate bare card at the end still owns itself.
+                    if label.is_none() && *validated && *other_end < candidate.span.end {
+                        return None;
+                    }
                     if *start < floor && label.is_none() {
                         return None;
                     }

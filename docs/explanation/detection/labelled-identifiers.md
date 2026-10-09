@@ -17,9 +17,9 @@ value, the prior token keeps the label and value covered. The shared connector s
 `|`, tab, comma, semicolon, and hyphen, with optional surrounding spaces. The
 audit reason records the boundary without recording value bytes. Letter-led and digit-led groups
 may use spaces, dots, slashes, or hyphens. A single ungrouped value still needs a matching regex
-shape. The three older `*.cue_anchored` rules also use this scan; their original regex captures
+shape; digit-bearing identity-card values have no upper length cutoff. The three older `*.cue_anchored` rules also use this scan; their original regex captures
 remain protected when a date-like group occurs inside them.
-Grouped numbers need at least three chunks, keeping ordinary decimal amounts out of this fallback.
+Grouped numbers need at least three chunks, except fixed EIN (2–7 digits) and German slash tax-number layouts. A directly labelled nine-digit tax value also qualifies. These shapes keep ordinary decimal amounts out of the fallback.
 
 The rules do not infer a class from a bare value or a generic `id` or `number` field. A field
 name supplies the class, and the value must contain a digit. The tax fallback excludes bare

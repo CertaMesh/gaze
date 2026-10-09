@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- Tax and government identifiers cover additional cue connectors and grouped
+  layouts, including slash Steuernummer, EIN, SSN, Swiss AHV and German VAT.
+  Digit-bearing ID-card values have no upper length cutoff, and a validated
+  inner card no longer exposes a following identifier suffix.
+- Constrained uppercase UK National Insurance numbers also tokenize without
+  an adjacent cue.
+
 ## [0.16.0] - 2026-10-08
 
 v0.16.0 improves protection of repeated values, addresses and labelled identifiers.
