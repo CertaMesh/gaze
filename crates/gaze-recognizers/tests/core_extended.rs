@@ -1969,3 +1969,30 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
         } if name == "postal_code"
     ));
 }
+
+// Ofcom, NANPA and BNetzA reserved drama ranges; never assigned to subscribers.
+#[test]
+fn adjacent_reserved_phones_are_independent_restorable_values() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    for (locale, values) in [
+        (LocaleTag::EnGb, ["+44 20 7946 0123", "+44 20 7946 0124"]),
+        (LocaleTag::EnUs, ["+1 202 555 0100", "+1 202 555 0101"]),
+        (LocaleTag::DeDe, ["+49 171 3920000", "+49 171 3920001"]),
+        (LocaleTag::DeDe, ["0171 3920000", "0171 3920001"]),
+    ] {
+        for separator in [" ", ",", "\t", "\u{a0}", "/", " / ", " or ", " oder ", "\n"] {
+            let input = values.join(separator);
+            let session = Session::new(Scope::Ephemeral).expect("session");
+            let clean = clean_text(&pipeline, &session, &input, locale.clone());
+            assert_eq!(
+                clean.matches(":Custom:phone_").count(),
+                2,
+                "{input:?}: {clean}"
+            );
+            for value in values {
+                assert!(!clean.contains(value), "{input:?}: {clean}");
+            }
+            assert_eq!(restore_tokens(&session, &clean), input);
+        }
+    }
+}

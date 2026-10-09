@@ -342,6 +342,7 @@ impl RegexDetector {
                 let caps = self.regex.captures_at(input, at)?;
                 let full = caps.get(0)?;
                 let captured = self.span_from_captures(&caps);
+                let captured = captured.map(|span| self.split_adjacent_phone(input, span));
                 let span = captured.clone().map(|span| {
                     if self.complete_labelled_value {
                         // Only these new fallbacks may trim a field cue inside their broad
@@ -410,6 +411,70 @@ impl RegexDetector {
                     .collect::<Vec<_>>()
             })
             .collect()
+    }
+
+    /// Recover a rejected run only when both pieces independently satisfy this rule and its
+    /// validator. A slash or whitespace inside one valid number is never an adjacency cue.
+    #[cfg(feature = "phone-parser")]
+    fn split_adjacent_phone(
+        &self,
+        input: &str,
+        span: std::ops::Range<usize>,
+    ) -> std::ops::Range<usize> {
+        let Some(kind @ (ValidatorKind::E164Phone | ValidatorKind::E164PhoneNational(_))) =
+            self.validator_kind
+        else {
+            return span;
+        };
+        if kind.validates(&input[span.clone()]) {
+            return span;
+        }
+        let tail = &input[span.start..];
+        let run_end = tail
+            .char_indices()
+            .take_while(|(at, ch)| {
+                *at < 128
+                    && (ch.is_ascii_digit()
+                        || ch.is_whitespace()
+                        || matches!(ch, '+' | '-' | '/' | '.' | '(' | ')'))
+            })
+            .last()
+            .map_or(span.end, |(at, ch)| span.start + at + ch.len_utf8());
+        let run =
+            input[span.start..run_end].trim_end_matches(|ch: char| ch.is_whitespace() || ch == '/');
+        for (at, ch) in run.char_indices() {
+            if !ch.is_whitespace() && ch != '/' {
+                continue;
+            }
+            let left = run[..at].trim_end_matches(|ch: char| ch.is_whitespace() || ch == '/');
+            let right = run[at..].trim_start_matches(|ch: char| ch.is_whitespace() || ch == '/');
+            if !kind.validates(left) || !kind.validates(right) {
+                continue;
+            }
+            let right_is_rule_value = self
+                .regex
+                .captures(right)
+                .and_then(|caps| self.span_from_captures(&caps))
+                .is_some_and(|matched| matched.start == 0 && matched.end == right.len());
+            let left_is_rule_value = self
+                .regex
+                .captures(left)
+                .and_then(|caps| self.span_from_captures(&caps))
+                .is_some_and(|matched| matched.start == 0 && matched.end == left.len());
+            if left_is_rule_value && right_is_rule_value {
+                return span.start..span.start + left.len();
+            }
+        }
+        span
+    }
+
+    #[cfg(not(feature = "phone-parser"))]
+    fn split_adjacent_phone(
+        &self,
+        _: &str,
+        span: std::ops::Range<usize>,
+    ) -> std::ops::Range<usize> {
+        span
     }
 
     fn is_excluded(&self, matched: &str) -> bool {
