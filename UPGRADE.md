@@ -42,6 +42,14 @@ re-tokenize stored manifests.
 
 ---
 
+## v0.16.x → v0.17.0
+
+### TL;DR
+
+Run `gaze setup --force` to regenerate an existing policy with credential
+protection, or add `"secrets"` to `[policy.rulepacks].bundled` in your policy.
+Existing policies keep their selected rulepacks until you update them.
+
 ## v0.15.x → v0.16.0
 
 ### TL;DR
