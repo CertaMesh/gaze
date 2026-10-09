@@ -236,7 +236,10 @@ mod tests {
     /// loader; veto still honours it only for the allowed validators.
     #[test]
     fn record_is_ignored_for_every_other_validator() {
-        for (kind, text) in [(ValidatorKind::EmailRfc, "alice@example")] {
+        for (kind, text) in [
+            (ValidatorKind::CnpjMod11, "11.222.333/0001-82"),
+            (ValidatorKind::EmailRfc, "alice@example"),
+        ] {
             let (kept, vetoed) = veto(kind, ValidatorOnFail::Record, text);
             assert!(kept.is_empty(), "{kind:?} must still veto");
             assert_eq!(vetoed.len(), 1, "{kind:?}");
