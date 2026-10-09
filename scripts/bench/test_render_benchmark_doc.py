@@ -2089,8 +2089,8 @@ class HeadlineContractTest(unittest.TestCase):
             with_v3(with_v2(release("v0.15.1"))),
         )
 
-    def test_the_headline_contract_is_v3(self):
-        self.assertEqual(render.HEADLINE_CONTRACT, 3)
+    def test_the_headline_contract_is_v4(self):
+        self.assertEqual(render.HEADLINE_CONTRACT, 4)
 
     def test_current_release_leads_with_v3(self):
         current = render.render_current_release(self.value())

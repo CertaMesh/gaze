@@ -66,7 +66,8 @@ const EMBEDDED_RULEPACKS: &[(&str, &str)] = &[
     ("locale-in", include_str!("../embedded/locale-in.toml")),
     ("locale-nl", include_str!("../embedded/locale-nl.toml")),
     ("locale-uk", include_str!("../embedded/locale-uk.toml")),
-    // Credentials are opt-in, never part of setup's default activation.
+    // Kept separate from `core` so library adopters can choose their packs;
+    // `gaze setup` includes this pack in its generated default policy.
     ("secrets", include_str!("../embedded/secrets.toml")),
 ];
 
