@@ -2084,6 +2084,7 @@ kind = "{kind}"
             "de_steuer_id_mod1110",
             "bsn_mod11",
             "cpf_mod11",
+            "uk_nhs_mod11",
             "e164_phone",
             "e164_phone_national_us",
         ] {
@@ -2093,7 +2094,6 @@ kind = "{kind}"
             assert_eq!(validator.on_fail, gaze_types::ValidatorOnFail::Record);
         }
         for kind in [
-            "uk_nhs_mod11",
             "cnpj_mod11",
             "e164_phone_national_de",
             "fr_nir_mod97",

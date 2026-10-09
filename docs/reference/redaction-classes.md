@@ -118,8 +118,16 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `bsn.nl` | `regex` | Cue-anchored Dutch nine-digit BSN values, excluding all-zero placeholders; 11-test failures retain a typed audit reason and never seed the repeat-value sweep | `custom:bsn` | `nl-NL` | `bsn_mod11` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `cpf.br` | `regex` | Cue-anchored Brazilian CPF values; MOD-11 failures retain a typed audit reason and never seed the repeat-value sweep | `custom:cpf` | `pt-BR` | `cpf_mod11` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `cnpj.br` | `regex` | Cue-anchored Brazilian CNPJ values passing both MOD-11 check digits | `custom:cnpj` | `pt-BR` | `cnpj_mod11` | `none` | `safe_default` | yes | 0.88 | 86 |
+<<<<<<< HEAD
 | `core, core-extended` | `nhs.uk` | `regex` | Cue-anchored UK NHS numbers containing 10 digits and passing MOD-11 | `custom:nhs_number` | `en-GB` | `uk_nhs_mod11` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `ssn.us` | `regex` | Cue-anchored US Social Security numbers in compact or separated three-two-four digit form | `custom:ssn` | `en-US` | `none` | `none` | `safe_default` | yes | 0.88 | 86 |
+||||||| 7f96e2c9
+| `core, core-extended` | `nhs.uk` | `regex` | Cue-anchored UK NHS numbers containing 10 digits and passing MOD-11 | `custom:nhs_number` | `en-GB` | `uk_nhs_mod11` | `none` | `safe_default` | yes | 0.88 | 86 |
+| `core, core-extended` | `ssn.us` | `regex` | Cue-anchored US Social Security numbers in dashed or nine-digit form | `custom:ssn` | `en-US` | `none` | `none` | `safe_default` | yes | 0.88 | 86 |
+=======
+| `core, core-extended` | `nhs.uk` | `regex` | Cue-anchored UK NHS numbers containing 10 digits, excluding all-zero placeholders; MOD-11 failures retain a typed audit reason and never seed the repeat-value sweep | `custom:nhs_number` | `en-GB` | `uk_nhs_mod11` | `none` | `safe_default` | yes | 0.88 | 86 |
+| `core, core-extended` | `ssn.us` | `regex` | Cue-anchored US Social Security numbers in dashed or nine-digit form | `custom:ssn` | `en-US` | `none` | `none` | `safe_default` | yes | 0.88 | 86 |
+>>>>>>> origin/main
 | `core, core-extended` | `nino.uk` | `regex` | Cue-anchored UK National Insurance numbers with allocation-constrained prefixes | `custom:nino` | `en-GB` | `none` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `pan.in` | `regex` | Cue-anchored Indian Permanent Account Numbers in the ten-character PAN shape | `custom:pan` | `en-IN, hi-IN` | `none` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `postal.de` | `regex` | Bare five-digit German postal-code shapes | `custom:postal_code` | `de-DE` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
@@ -219,7 +227,7 @@ available.
 
 A validator vetoes a failing candidate by default. `[recognizers.validator]`
 accepts `on_fail = "record"` only with `iban_mod97`, `luhn`,
-`de_steuer_id_mod1110`, `bsn_mod11`, `cpf_mod11`, `e164_phone`, or
+`de_steuer_id_mod1110`, `bsn_mod11`, `cpf_mod11`, `uk_nhs_mod11`, `e164_phone`, or
 `e164_phone_national_us`. The phone kinds require `phone-parser` when the
 recognizer is built. A kept candidate's audit row carries
 `validator_fail_reason`, and its value is never swept to other copies (see
