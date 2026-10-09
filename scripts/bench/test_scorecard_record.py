@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class RecordReplayTests(unittest.TestCase):
     def test_cached_parallel_record_and_scorecard_are_byte_identical(self):
         bench = ROOT / "docs/reference/benchmarks"
-        source = bench / "observations-v0.15.1.jsonl.gz"
+        source = bench / "observations-v0.15.1-agentic.jsonl.gz"
         contract = score.load_scored_label_contract(bench / "scored-labels-v2.json")
         key = {"synthetic_equivalence": "v1"}
 
@@ -42,9 +42,12 @@ class RecordReplayTests(unittest.TestCase):
             serial_card = json.dumps(
                 record.rescore(source, contract, max_workers=1), indent=2
             ).encode() + b"\n"
-            cached_card = json.dumps(
-                record.rescore(restored, contract, max_workers=4), indent=2
-            ).encode() + b"\n"
+            with mock.patch.object(record, "ProcessPoolExecutor", wraps=record.ProcessPoolExecutor) as pool:
+                cached_card = json.dumps(
+                    record.rescore(restored, contract, max_workers=4), indent=2
+                ).encode() + b"\n"
+                pool.assert_called_once()
+                self.assertGreater(pool.call_args.kwargs["max_workers"], 1)
 
             self.assertEqual(source.read_bytes(), restored.read_bytes())
             self.assertEqual(score.sha256_file(source), score.sha256_file(restored))
@@ -55,7 +58,7 @@ class RecordReplayTests(unittest.TestCase):
 
     def test_parallel_replay_is_byte_identical_to_serial_replay(self):
         bench = ROOT / "docs/reference/benchmarks"
-        source = bench / "observations-v0.15.1.jsonl.gz"
+        source = bench / "observations-v0.15.1-agentic.jsonl.gz"
         contract = score.load_scored_label_contract(bench / "scored-labels-v2.json")
 
         serial = json.dumps(

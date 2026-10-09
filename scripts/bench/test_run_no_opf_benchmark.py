@@ -697,6 +697,8 @@ class PolicyNerSettingsTests(unittest.TestCase):
             stack.enter_context(mock.patch.object(
                 runner.benchmark_cache, "lookup", return_value=(cached, "cache hit synthetic"),
             ))
+            stack.enter_context(mock.patch.object(runner.benchmark_cache, "copy_verified"))
+            stack.enter_context(mock.patch.object(runner.records, "mark_cache_replay"))
             stack.enter_context(mock.patch.object(
                 runner.records, "rescore", return_value={"cached": True},
             ))

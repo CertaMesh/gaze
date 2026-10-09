@@ -486,6 +486,7 @@ class RecordWriter:
             "schema_version": self.schema_version,
             "corpus_sha256": self.corpus_sha256,
             "scorecard": scorecard,
+            "cache_replay": scorecard.get("cache_replay", False),
             "add_reference": add_reference,
             "validator": {
                 key: value for key, value in self.measurements.items() if key != "documents"
@@ -631,6 +632,16 @@ def _read(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
     elif header.get("layer_identity") is not None:
         raise RecordError("layer identity without generated layers")
     return header, observations
+
+
+def mark_cache_replay(path: Path, key_sha256: str) -> None:
+    """Mark the copied record before rescoring so provenance survives all replays."""
+    header, observations = _read(path)
+    header["cache_replay"] = True
+    header["cache_key_sha256"] = key_sha256
+    header["scorecard"]["cache_replay"] = True
+    header["scorecard"]["cache_key_sha256"] = key_sha256
+    _write_rows(path, [header, *observations])
 
 
 def pin_template(

@@ -101,3 +101,14 @@ def store(root: Path, key: Mapping[str, object], source: Path) -> Path:
         )
         metadata_temporary.replace(metadata_path)
     return record
+
+
+def copy_verified(source: Path, destination: Path, key: Mapping[str, object]) -> None:
+    """Verify the private copy against metadata, including a changed lookup source."""
+    metadata = _read_metadata(source.with_name(METADATA))
+    if metadata["key"] != key:
+        raise ValueError("cache copy key mismatch")
+    shutil.copyfile(source, destination)
+    if _sha256(destination) != metadata["record_sha256"]:
+        destination.unlink(missing_ok=True)
+        raise ValueError("cache copy record sha256 mismatch")

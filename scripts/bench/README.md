@@ -32,7 +32,7 @@ probe with optimized release profiles:
 
 ```bash
 uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py \
-  full --release --seed 20260710 --no-download \
+  full --release --no-cache --seed 20260710 --no-download \
   --compare-baseline target/bench-data/no-opf/baseline.json
 ```
 
@@ -134,17 +134,21 @@ scorecard timing. A re-score needs no corpus, binary or model:
 The runner caches this value-free record under the shared checkout's
 `target/bench-data/cache/`, so linked worktrees can reuse the same base. An
 exact key binds the measured revision and crates tree, record schema, Cargo
-lockfile, benchmark-harness tree, policy path and referenced dependencies,
+lockfile and repository/Cargo-home configuration contents, benchmark-harness tree, policy path and referenced dependencies,
 corpus and generated-layer identities, sampling seed, both scored-label
 contracts, model bundle manifests, observation-affecting environment, threshold,
 hardware, profile, build mode, repetitions, and sampled document IDs. A later
-run with the same key prints the cache key, copies the
-byte-identical record, and re-scores it with the current harness without
+run with the same key prints the cache key, verifies a private copy, marks its
+cache provenance, and re-scores it with the current harness without
 building or running the detector. Any changed field, malformed metadata,
 missing record, or record SHA-256 mismatch prints the miss reason and measures
 afresh. Dirty or untracked measured sources and `--skip-build` bypass the cache.
-Use `--no-cache` for a deliberately fresh equivalence run, or `--cache-dir` to
+Use `--no-cache` for release evidence or a deliberately fresh measurement, or `--cache-dir` to
 choose another local cache root.
+
+Release evidence must be measured with `--no-cache`. Cache replay records and
+scorecards carry `cache_replay: true` and `cache_key_sha256`; the release-history
+renderer refuses these scorecards. Fresh measurements carry `cache_replay: false`.
 
 Observation replay uses at most four workers by default while retaining the
 recorded layer/config order, so serialized scorecards remain byte-identical.

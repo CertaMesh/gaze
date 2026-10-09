@@ -835,7 +835,7 @@ def write_json(path: Path, value: object) -> None:
 
 
 def source_tree_identity(repo_root: Path) -> tuple[dict[str, str] | None, str | None]:
-    paths = ("crates", "scripts/bench", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml")
+    paths = ("crates", "scripts/bench", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo/config.toml")
     dirty = subprocess.run(
         ["git", "status", "--porcelain", "--untracked-files=all", "--", *paths],
         cwd=repo_root, check=False, capture_output=True, text=True,
@@ -868,6 +868,21 @@ def observation_cache_dir(repo_root: Path, configured: Path | None) -> Path:
     return Path(common).parent / "target/bench-data/cache"
 
 
+def optional_file_sha256(path: Path) -> str | None:
+    return score.sha256_file(path) if path.is_file() else None
+
+
+def store_observations_if_unchanged(repo_root: Path, cache_dir: Path,
+                                    key: Mapping[str, object], record: Path) -> bool:
+    identity, reason = source_tree_identity(repo_root)
+    if identity is None or any(key.get(name) != value for name, value in identity.items()):
+        print(f"observation cache not stored: {reason or 'source identity changed during measurement'}")
+        return False
+    cached = benchmark_cache.store(cache_dir, key, record)
+    print(f"observation cache stored {benchmark_cache.key_digest(key)} at {cached}")
+    return True
+
+
 def observation_cache_key(
     *,
     repo_root: Path,
@@ -896,6 +911,12 @@ def observation_cache_key(
         "record_schema_version": records.SCHEMA_VERSION,
         **source_identity,
         "cargo_lock_sha256": score.sha256_file(repo_root / "Cargo.lock"),
+        "cargo_config_sha256": {
+            "repository": optional_file_sha256(repo_root / ".cargo/config.toml"),
+            "cargo_home": optional_file_sha256(
+                Path(source_environment.get("CARGO_HOME", str(Path.home() / ".cargo"))) / "config.toml"
+            ),
+        },
         "policy_sha256": policy_sha256,
         "policy_path": portable_repo_path(repo_root, policy_path) if policy_path else None,
         "policy_dependencies": policy_dependencies,
@@ -1402,15 +1423,16 @@ def run(args: argparse.Namespace) -> int:
             if cached_record is not None:
                 output_dir.mkdir(parents=True, exist_ok=True)
                 output_record = output_dir / "observations-v1.jsonl.gz"
-                shutil.copyfile(cached_record, output_record)
                 try:
+                    benchmark_cache.copy_verified(cached_record, output_record, cache_key)
+                    records.mark_cache_replay(output_record, benchmark_cache.key_digest(cache_key))
                     candidate = records.rescore(
                         output_record,
                         scored_label_contract,
                         agentic_prepared.contract if agentic_prepared else None,
                         max_workers=args.score_jobs,
                     )
-                except records.RecordError as error:
+                except (records.RecordError, OSError, ValueError) as error:
                     print(f"observation cache replay failed; measuring fresh: {error}")
                 else:
                     return finish_run(args, output_dir, candidate)
@@ -1531,13 +1553,13 @@ def run(args: argparse.Namespace) -> int:
             "C": agentic.gold_validity_digest(documents, validator_measurements)
         }
 
+    candidate["cache_replay"] = False
     output_record = output_dir / "observations-v1.jsonl.gz"
     candidate["observation_record"] = record_writer.write(
         output_record, candidate, add_reference=True
     )
     if not args.no_cache and cache_key is not None:
-        cached = benchmark_cache.store(cache_dir, cache_key, output_record)
-        print(f"observation cache stored {benchmark_cache.key_digest(cache_key)} at {cached}")
+        store_observations_if_unchanged(repo_root, cache_dir, cache_key, output_record)
     return finish_run(args, output_dir, candidate)
 
 
