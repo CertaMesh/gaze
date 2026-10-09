@@ -1069,6 +1069,9 @@ fn phone_number_check(input: &str) -> bool {
         return phonenumber::parse(None, value).is_ok_and(|phone| {
             phone.is_valid()
                 || (phone.country().code() == 44
+                    // The reserved-block exception must not bless a per-digit slash run
+                    // that the parser rejected; recorded failures cannot seed repeats.
+                    && value.bytes().filter(|byte| *byte == b'/').count() <= 1
                     && is_safe_fixture_phone(
                         Region::Gb,
                         &phone.format().mode(phonenumber::Mode::E164).to_string(),
@@ -1144,6 +1147,9 @@ fn is_safe_fixture_phone(region: Region, input: &str) -> bool {
         // excludes this allocation, but it remains the phone shape adopters use in tests.
         // https://www.ofcom.org.uk/phones-and-broadband/phone-numbers/numbers-for-drama
         Region::Gb => {
+            if input.bytes().filter(|byte| *byte == b'/').count() > 1 {
+                return false;
+            }
             let national = digits
                 .strip_prefix("44")
                 .or_else(|| digits.strip_prefix('0'))
