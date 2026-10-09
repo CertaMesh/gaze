@@ -140,6 +140,24 @@ fn english_house_number_is_tokenized_before_a_ner_street() {
 }
 
 #[test]
+fn english_house_number_is_tokenized_before_a_ner_organization_street() {
+    let pipeline = builder(
+        vec![Spans {
+            id: NER_RECOGNIZER_ID,
+            class: PiiClass::Organization,
+            words: vec!["Example Street"],
+        }],
+        &Rows::default(),
+    )
+    .build()
+    .unwrap();
+    assert_eq!(
+        tokenized(&pipeline, "Ship to 17 Example Street today"),
+        ["17", "Example Street"]
+    );
+}
+
+#[test]
 fn without_a_lexicon_the_number_is_left_alone() {
     let pipeline = Pipeline::builder()
         .recognizer(ner(&["Musterweg"]))
