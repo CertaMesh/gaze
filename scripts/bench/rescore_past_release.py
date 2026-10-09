@@ -195,7 +195,7 @@ def run(args: argparse.Namespace) -> Path:
     available = score.apply_scored_label_contract(available, contract)
     documents = score.apply_scored_label_contract(documents, contract)
 
-    probe = score.build_validator_probe(HARNESS_ROOT)
+    probe = runner.build_validator_probe(HARNESS_ROOT, release=True)
     complete_measurements = score.collect_validator_measurements(
         probe, original_available, (document.uid for document in documents)
     )

@@ -400,6 +400,10 @@ Validator-backed labels on `policy-file`, scored labels v1. Gold that fails its 
 
 <!-- END GENERATED: current-release -->
 
+## Known gaps
+
+**Known gaps:** house numbers and tenant-specific IDs such as order numbers pass through unless your policy adds a recognizer, and a CSV header does not yet mark the column under it (`name,bsn\nJan,111222333` leaves the BSN raw). Names and other values a recognizer found once are not carried to their other occurrences, so without NER a name repeated in prose can pass raw, and UK national-format phone numbers are not yet detected.
+
 ---
 
 ## Benchmark panels
@@ -1035,11 +1039,15 @@ Pull requests that change detection or the benchmark use these commands under th
 
 Each release measures its own tree. The three steps below are the whole contract:
 
+Release evidence must be measured with `--no-cache`. Cache replay records and
+scorecards carry `cache_replay: true` and `cache_key_sha256`; the release-history
+renderer refuses these scorecards. Fresh measurements carry `cache_replay: false`.
+
 ```bash
 # 1. Produce the scorecard on the release commit.
 uv sync --project scripts/bench --locked
 uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
-  --seed 20260710 --no-download
+  --seed 20260710 --no-download --no-cache
 
 # 2. Commit it under its release name and regenerate this document.
 cp target/bench-data/no-opf/full/scorecard-v4.json \
@@ -1059,7 +1067,7 @@ re-scores the observation record the v2 run wrote.
 ```bash
 # 3. Re-score under contract v2 and record it on the row.
 uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
-  --seed 20260710 --no-download \
+  --seed 20260710 --no-download --no-cache \
   --scored-labels docs/reference/benchmarks/scored-labels-v2.json
 cp target/bench-data/no-opf/full/scorecard-v4.json \
    docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json

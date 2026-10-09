@@ -948,6 +948,8 @@ def history_entry_from_scorecard(
     shipped_arm: str = SHIPPED_DEFAULT_ARM,
 ) -> dict[str, Any]:
     """Project one schema-v4 scorecard onto the fields the document prints."""
+    if scorecard.get("cache_replay") is True:
+        raise RenderError("release scorecards must be fresh: cache_replay is true")
     if not VERSION_RE.match(version):
         raise RenderError(f"--version must look like v1.2.3, got {version!r}")
     if scorecard.get("schema_version") != SCORECARD_SCHEMA_VERSION:
@@ -1677,17 +1679,12 @@ def render_readme_chart(
     gaze = [b for b in own.bars if b.gaze]
     newest = gaze[-1]
     caption = (
-        f"{newest.name} scores character-level F2 {newest.f2:.3f} on "
-        f"{own.dataset.split(' · ')[0]} (scored labels v3), leaking {newest.leaked:,} PII bytes. "
-        "Each panel names its dataset and split; competitors run the configurations "
-        "declared in [`chart-configs.json`](scripts/bench/compare/chart-configs.json). "
-        "Numbers, sources and the model-card tables: "
-        "[benchmarks](docs/reference/benchmarks/README.md#benchmark-panels)."
-        + "".join(f" {panel.caption}." for panel in panel_set if panel.caption)
+        f"{newest.name} leaks {newest.leaked:,} PII bytes on our holdout "
+        f"(character-level F2 {newest.f2:.3f}). Methods, competitor setups and how to "
+        "reproduce: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels)."
         + _pending_note(panel_set)
     )
-    definition = f"{charts.METRIC_DEFINITION} {charts.FP_NOTE}"
-    return "\n\n".join([_picture("", _PANEL_ALT), caption, definition])
+    return "\n\n".join([_picture("", _PANEL_ALT), caption])
 
 
 def _readme_contract_chart(history: Mapping[str, Any]) -> str:

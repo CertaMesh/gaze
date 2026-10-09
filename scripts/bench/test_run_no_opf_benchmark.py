@@ -603,6 +603,116 @@ class ModelValidationTests(unittest.TestCase):
 
 
 class PolicyNerSettingsTests(unittest.TestCase):
+    def test_cache_environment_binds_build_and_runtime_settings_without_values(self) -> None:
+        first = runner.observation_environment_identity({
+            "RUSTFLAGS": "-C target-cpu=generic",
+            "DYLD_LIBRARY_PATH": "/synthetic/one",
+            "UNRELATED_VALUE": "not measured",
+        })
+        second = runner.observation_environment_identity({
+            "RUSTFLAGS": "-C target-cpu=native",
+            "DYLD_LIBRARY_PATH": "/synthetic/one",
+            "UNRELATED_VALUE": "changed",
+        })
+
+        self.assertNotEqual(first["sha256"], second["sha256"])
+        self.assertEqual(first["variables"], ["DYLD_LIBRARY_PATH", "RUSTFLAGS"])
+        self.assertNotIn("target-cpu=generic", json.dumps(first))
+        for variable in ("PATH", "CARGO_HOME", "RUSTUP_TOOLCHAIN"):
+            with self.subTest(variable=variable):
+                changed = runner.observation_environment_identity({
+                    "RUSTFLAGS": "-C target-cpu=generic",
+                    "DYLD_LIBRARY_PATH": "/synthetic/one",
+                    variable: "/synthetic/toolchain",
+                })
+                self.assertNotEqual(first["sha256"], changed["sha256"])
+
+    def test_policy_path_inside_worktree_is_portable(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        self.assertEqual(
+            runner.portable_repo_path(repo_root, repo_root / "target/setup.toml"),
+            "target/setup.toml",
+        )
+
+    def test_release_validator_probe_uses_release_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def build(command, **_kwargs):
+                self.assertIn("--release", command)
+                binary = runner.validator_probe_binary(root, release=True)
+                binary.parent.mkdir(parents=True)
+                binary.write_bytes(b"synthetic release probe")
+
+            with mock.patch.object(runner.subprocess, "run", side_effect=build):
+                binary = runner.build_validator_probe(root, release=True)
+
+            self.assertEqual(binary.parent.name, "release")
+
+    def test_exact_cache_hit_skips_build_probe_and_detector_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            root = Path(directory)
+            dataset = root / "dataset.parquet"
+            dataset.write_bytes(b"synthetic dataset")
+            output = root / "output"
+            document = score.Document(
+                uid="synthetic-cache-1", text="safe synthetic text", language="en",
+                region="US", source_dataset="unit-test", spans=(),
+            )
+            cached = (
+                Path(__file__).resolve().parents[2]
+                / "docs/reference/benchmarks/observations-v0.15.1.jsonl.gz"
+            )
+            args = runner.parse_args([
+                "quick", "--dataset", str(dataset), "--output-dir", str(output),
+                "--no-agentic-layers", "--no-download",
+            ])
+            stack.enter_context(mock.patch.object(
+                runner, "load_scored_label_contract",
+                return_value=score.SCORED_LABEL_CONTRACT_V1,
+            ))
+            stack.enter_context(mock.patch.object(
+                runner, "policy_ner_provenance", return_value=(None, []),
+            ))
+            stack.enter_context(mock.patch.object(runner.dataiku, "verify_dataset"))
+            stack.enter_context(mock.patch.object(
+                runner.dataiku, "load_documents", return_value=([document], {}),
+            ))
+            stack.enter_context(mock.patch.object(
+                runner, "load_negative_documents", return_value=([], {}),
+            ))
+            stack.enter_context(mock.patch.object(
+                runner.score, "stratified_sample", return_value=([document], {}),
+            ))
+            stack.enter_context(mock.patch.object(
+                runner.score, "apply_scored_label_contract", side_effect=lambda docs, *_: docs,
+            ))
+            stack.enter_context(mock.patch.object(
+                runner, "composite_dataset_report",
+                return_value=({}, {"integrity": {"sha256": "0" * 64}}),
+            ))
+            stack.enter_context(mock.patch.object(
+                runner, "observation_cache_key", return_value=({"key": "exact"}, None),
+            ))
+            stack.enter_context(mock.patch.object(
+                runner.benchmark_cache, "lookup", return_value=(cached, "cache hit synthetic"),
+            ))
+            stack.enter_context(mock.patch.object(runner.benchmark_cache, "copy_verified"))
+            stack.enter_context(mock.patch.object(runner.records, "mark_cache_replay"))
+            stack.enter_context(mock.patch.object(
+                runner.records, "rescore", return_value={"cached": True},
+            ))
+            finish = stack.enter_context(mock.patch.object(runner, "finish_run", return_value=17))
+            build = stack.enter_context(mock.patch.object(runner.dataiku, "build_binary"))
+            probe = stack.enter_context(mock.patch.object(runner, "build_validator_probe"))
+            execute = stack.enter_context(mock.patch.object(runner, "execute_measurements"))
+
+            self.assertEqual(runner.run(args), 17)
+            build.assert_not_called()
+            probe.assert_not_called()
+            execute.assert_not_called()
+            finish.assert_called_once_with(args, output / "quick", {"cached": True})
+
     def test_run_records_absent_ner_and_portable_policy_path(self) -> None:
         class StopAfterProvenance(Exception):
             pass
@@ -622,7 +732,7 @@ class PolicyNerSettingsTests(unittest.TestCase):
             stack.enter_context(mock.patch.object(Path, "home", return_value=root))
             args = runner.parse_args([
                 "quick", "--policy", str(policy), "--dataset", str(dataset),
-                "--no-agentic-layers", "--no-download", "--skip-build",
+                "--no-agentic-layers", "--no-download", "--skip-build", "--no-cache",
             ])
             patches = (
                 (runner, "load_scored_label_contract", {"return_value": object()}),
@@ -631,7 +741,7 @@ class PolicyNerSettingsTests(unittest.TestCase):
                 (runner, "load_negative_documents", {"return_value": ([], {})}),
                 (runner.score, "stratified_sample", {"side_effect": lambda docs, *_args, **_kwargs: (docs, {})}),
                 (runner.score, "apply_scored_label_contract", {"side_effect": lambda docs, *_args: docs}),
-                (runner.score, "validator_probe_binary", {"return_value": binary}),
+                (runner, "validator_probe_binary", {"return_value": binary}),
                 (runner.score, "collect_validator_measurements", {
                     "return_value": {"schema_version": 1, "validator_recognizers": [], "documents": {}},
                 }),
