@@ -40,11 +40,14 @@ def test_per_label_bytes_separate_gold_leaks_from_emitted_false_positives() -> N
         score.Span(5, 8, "email"),
         score.Span(12, 15, "custom:phone"),
     ]
-    accumulator = metrics.ComparisonMetrics({
-        "name": ("FIRSTNAME",),
-        "email": ("EMAIL",),
-        "custom:phone": ("PHONE",),
-    })
+    accumulator = metrics.ComparisonMetrics(
+        {
+            "name": ("FIRSTNAME",),
+            "email": ("EMAIL",),
+            "custom:phone": ("PHONE",),
+        },
+        include_per_label_bytes=True,
+    )
 
     accumulator.add(document, predictions)
 
@@ -55,6 +58,16 @@ def test_per_label_bytes_separate_gold_leaks_from_emitted_false_positives() -> N
     }
     assert sum(result["per_label_bytes"]["leaked_by_gold_label"].values()) == result["leaked_bytes"]
     assert sum(result["per_label_bytes"]["false_positive_by_prediction_label"].values()) == result["false_positive_bytes"]
+
+
+def test_per_label_bytes_are_opt_in_report_telemetry() -> None:
+    document = score.Document(
+        "synthetic", "alice", "en", "", "synthetic", (score.Span(0, 5, "FIRSTNAME"),)
+    )
+    accumulator = metrics.ComparisonMetrics({"name": ("FIRSTNAME",)})
+    accumulator.add(document, [])
+
+    assert "per_label_bytes" not in accumulator.result()
 
 
 def test_family_mapping_keeps_bytes_but_gives_no_typed_credit() -> None:

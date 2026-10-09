@@ -59,6 +59,7 @@ class ComparisonMetrics:
     mapping: Mapping[str, Sequence[str]]
     included_labels: frozenset[str] | None = None
     typed_mapping: Mapping[str, Sequence[str]] | None = None
+    include_per_label_bytes: bool = False
     documents: int = 0
     pii_documents: int = 0
     leaking_documents: int = 0
@@ -192,12 +193,14 @@ class ComparisonMetrics:
             "true_positive_bytes": self.true_positive_bytes,
             "false_positive_bytes": self.false_positive_bytes,
             "leaked_bytes": self.leaked_bytes,
-            "per_label_bytes": {
-                "leaked_by_gold_label": dict(sorted(self.leaked_bytes_by_gold_label.items())),
-                "false_positive_by_prediction_label": dict(
-                    sorted(self.false_positive_bytes_by_prediction_label.items())
-                ),
-            },
+            **({
+                "per_label_bytes": {
+                    "leaked_by_gold_label": dict(sorted(self.leaked_bytes_by_gold_label.items())),
+                    "false_positive_by_prediction_label": dict(
+                        sorted(self.false_positive_bytes_by_prediction_label.items())
+                    ),
+                },
+            } if self.include_per_label_bytes else {}),
             "char_level": self.char_level(),
             "typed_entities": {
                 "tp": self.typed_tp, "fp": self.typed_fp, "fn": self.typed_fn,
