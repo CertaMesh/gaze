@@ -1,5 +1,5 @@
 {
-  "evidence_sha256": "1e9b37dbd6d666d4696d72454aec92abd61938a66bdc76b01d123cf6227cfc70",
+  "evidence_sha256": "57845cafaab21be3e4d86dd9eb11fc755c7f391b042eae86997aab61363f5a17",
   "metrics_sha256": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
   "note": "Character-level (Unicode code point), label-agnostic, micro P/R/F of each tagged release's shipped default on layer C under the v3 contract, scored by the same ComparisonMetrics as the competitors.",
   "releases": {
@@ -64,6 +64,27 @@
       "false_positive_bytes": 30073,
       "leaked_bytes": 13319,
       "record_sha256": "c2922a2c6cede4e4ad7ab261e3212234122d07f29506734cb62ed523699e5ca3",
+      "total_bytes": 952364
+    },
+    "v0.16.0": {
+      "arm": "policy-file",
+      "char_level": {
+        "f1": 0.8717411052233157,
+        "f2": 0.9115108551454686,
+        "f5": 0.934466189105309,
+        "fn": 7337,
+        "fp": 26549,
+        "precision": 0.8126473120404217,
+        "recall": 0.9401031887276111,
+        "tp": 115157,
+        "unit": "unicode_code_point"
+      },
+      "contract": "v3",
+      "crates_tree": "276a8b2d7fcf3e5ef43d624307e175987131f9c7",
+      "documents": 2910,
+      "false_positive_bytes": 26902,
+      "leaked_bytes": 7348,
+      "record_sha256": "da1ca7dc7e19999846d2f08427290c898ae2c4d70538aff8a88f1eea113ad7d1",
       "total_bytes": 952364
     }
   },

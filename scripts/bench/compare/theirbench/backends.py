@@ -34,7 +34,7 @@ BACKEND_CODE_PARTS = ("class Presidio", "class Gliner", "class DataFogCore", "cl
 PINNED_SHA256 = {
     "compare.py": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
     "comparison_metrics.py": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
-    "label-map.json": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e",
+    "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa",
     "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
     "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
 }

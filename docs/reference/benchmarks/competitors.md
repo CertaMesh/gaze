@@ -638,24 +638,24 @@ Test half (product coverage):
 | v1 | Repeated PII values with decoys | presidio-strong | 264 | 587 | 0.886 | 0.285 |
 | v1 | Repeated PII values with decoys | presidio-strong-high-recall | 264 | 587 | 0.886 | 0.285 |
 
-Against the latest Gaze release (v0.15.1) on all of Kiji EN/DE holdout and A4 negatives, the only layer that release was measured on in this corpus's form. The tuned-here rows include the validation half they were selected on, which can only flatter them. False positives are after v3's gold-gap credit.
+Against the latest Gaze release (v0.16.0) on all of Kiji EN/DE holdout and A4 negatives, the only layer that release was measured on in this corpus's form. The tuned-here rows include the validation half they were selected on, which can only flatter them. False positives are after v3's gold-gap credit.
 
 | Contract | Configuration | Leaked B | FP B | Char F2 |
 | --- | --- | ---: | ---: | ---: |
-| v3 | Gaze v0.15.1 | 13,319 | 18,488 | 0.868 |
+| v3 | Gaze v0.16.0 | 7,348 | 15,141 | 0.912 |
 | v3 | Presidio (tuned by its authors) | 4,752 | 74,113 | 0.856 |
 | v3 | Presidio (tuned here, leak-first) | 193 | 81,701 | 0.876 |
 | v3 | Presidio (tuned here, F2) | 2,283 | 29,158 | 0.926 |
-| v2 | Gaze v0.15.1 | 13,319 | 30,073 | n/a |
+| v2 | Gaze v0.16.0 | 7,348 | 26,902 | n/a |
 | v2 | Presidio (tuned by its authors) | 4,752 | 80,797 | n/a |
 | v2 | Presidio (tuned here, leak-first) | 193 | 86,590 | n/a |
 | v2 | Presidio (tuned here, F2) | 2,283 | 39,329 | n/a |
-| v1 | Gaze v0.15.1 | 19,556 | 30,073 | n/a |
+| v1 | Gaze v0.16.0 | 13,291 | 26,902 | n/a |
 | v1 | Presidio (tuned by its authors) | 6,748 | 80,797 | n/a |
 | v1 | Presidio (tuned here, leak-first) | 4,066 | 86,590 | n/a |
 | v1 | Presidio (tuned here, F2) | 8,261 | 39,329 | n/a |
 
-Where tuned Presidio beats Gaze v0.15.1 here: Presidio (tuned by its authors) leaks fewer v3 bytes; Presidio (tuned here, leak-first) leaks fewer v3 bytes; Presidio (tuned here, leak-first) has the higher v3 character F2; Presidio (tuned here, F2) leaks fewer v3 bytes; Presidio (tuned here, F2) has the higher v3 character F2; Presidio (tuned by its authors) leaks fewer v2 bytes; Presidio (tuned here, leak-first) leaks fewer v2 bytes; Presidio (tuned here, F2) leaks fewer v2 bytes; Presidio (tuned by its authors) leaks fewer v1 bytes; Presidio (tuned here, leak-first) leaks fewer v1 bytes; Presidio (tuned here, F2) leaks fewer v1 bytes.
+Where tuned Presidio beats Gaze v0.16.0 here: Presidio (tuned by its authors) leaks fewer v3 bytes; Presidio (tuned here, leak-first) leaks fewer v3 bytes; Presidio (tuned here, F2) leaks fewer v3 bytes; Presidio (tuned here, F2) has the higher v3 character F2; Presidio (tuned by its authors) leaks fewer v2 bytes; Presidio (tuned here, leak-first) leaks fewer v2 bytes; Presidio (tuned here, F2) leaks fewer v2 bytes; Presidio (tuned by its authors) leaks fewer v1 bytes; Presidio (tuned here, leak-first) leaks fewer v1 bytes; Presidio (tuned here, F2) leaks fewer v1 bytes.
 
 Live check: each chosen configuration also ran live on a fixed sample (about one document in eight, every layer, both halves); Presidio (tuned here, F2): 762 documents, 0 differed on the first run, 0 on every rerun; Presidio (tuned here, leak-first): 762 documents, 1 differed on the first run, 1 on every rerun (1 with identical bytes and a different entity label, from Presidio's tie-break between equal-score results on one span).
 

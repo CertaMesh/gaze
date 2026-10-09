@@ -896,3 +896,19 @@ class HarnessTagTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ArchiveCitationTest(unittest.TestCase):
+    def test_citations_bind_to_recorded_commits_and_archive_reachability(self):
+        import render_theirbench as render
+
+        entry = {"harness_revision": "a" * 40,
+                 "rescored_with": {"harness_revision": "b" * 40},
+                 "harness_commits": {"measured": "a" * 40, "rescored": "b" * 40},
+                 "harness_archive_branch": "archive/bench-harness"}
+        self.assertEqual(render.checked_harness_commits(entry, lambda *_: True), entry["harness_commits"])
+        with self.assertRaisesRegex(ValueError, "not reachable"):
+            render.checked_harness_commits(entry, lambda *_: False)
+        entry["harness_commits"]["rescored"] = "a" * 40
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            render.checked_harness_commits(entry, lambda *_: True)

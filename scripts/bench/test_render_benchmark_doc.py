@@ -977,15 +977,15 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
     def test_panels_hold_tagged_gaze_and_declared_competitors(self):
         own, *third = self.panels()
         gaze = [bar.name for bar in own.bars if bar.gaze]
-        self.assertEqual(gaze, ["Gaze 0.14", "Gaze 0.15"])
+        self.assertEqual(gaze, ["Gaze 0.15", "Gaze 0.16"])
         competitors = [bar.name for bar in own.bars if not bar.gaze]
         self.assertEqual(
             competitors, [charts.SHORT_NAMES[key] for key in self.declared]
         )
         for panel in third:
-            self.assertEqual([b.name for b in panel.bars if b.gaze], ["Gaze 0.15"])
-        # The committed tagged v0.15.1 runs fill the third-party slots with their own numbers.
-        for panel, (f2, leaked) in zip(third, ((0.7850906648757555, 9769), (0.6180332286160448, 107701))):
+            self.assertEqual([b.name for b in panel.bars if b.gaze], ["Gaze 0.16"])
+        # The committed tagged v0.16.0 runs fill the third-party slots with their own numbers.
+        for panel, (f2, leaked) in zip(third, ((0.824876405570663, 7984), (0.6268247149238055, 105077))):
             bar = next(b for b in panel.bars if b.gaze)
             self.assertEqual(bar.f2, f2)
             self.assertEqual(bar.leaked, leaked)
@@ -997,7 +997,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         )
         # Gaze's F2 is the released row's own recorded measurement, not the main run's.
         release = json.loads(render.RELEASE_CHAR_LEVEL.read_text(encoding="utf-8"))["releases"]
-        for bar, version in zip((b for b in own.bars if b.gaze), ("v0.14.0", "v0.15.1")):
+        for bar, version in zip((b for b in own.bars if b.gaze), ("v0.15.1", "v0.16.0")):
             self.assertEqual(bar.f2, release[version]["char_level"]["f2"])
             self.assertEqual(bar.leaked, release[version]["leaked_bytes"])
 
@@ -1025,7 +1025,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         history["releases"] = [row for row in history["releases"] if not row.get("provisional")]
         history["releases"][-1]["provisional"] = True
         self.assertEqual(
-            [r.version for r in render.chart_gaze_rows(history)], ["v0.14.0", "v0.15.0"]
+            [r.version for r in render.chart_gaze_rows(history)], ["v0.14.0", "v0.15.1"]
         )
 
     def test_provisional_candidate_keeps_the_released_comparison_panels(self):
@@ -1043,6 +1043,15 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         with self.assertRaisesRegex(render.RenderError, "does not match"):
             render.chart_panels(history, changed, self.their)
 
+    def test_comparison_keeps_its_original_release_when_a_new_release_shares_the_corpus(self):
+        self.assertEqual(self.comparison["latest_release_at_measurement"]["version"], "v0.15.1")
+        self.assertEqual(self.history["releases"][-1]["version"], "v0.16.0")
+        self.assertTrue(self.panels())
+        changed = copy.deepcopy(self.comparison)
+        changed["latest_release_at_measurement"]["scorecard_sha256"] = "a" * 64
+        with self.assertRaisesRegex(render.RenderError, "does not match"):
+            self.panels(changed)
+
     def test_comparison_panels_require_a_released_history_row(self):
         history = copy.deepcopy(self.history)
         for row in history["releases"]:
@@ -1051,11 +1060,11 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             render.chart_panels(history, self.comparison, self.their)
 
     def test_a_third_party_gaze_slot_is_the_committed_tagged_run_and_pending_without_one(self):
-        # The committed gaze-v0.15.1 rows fill the slots with that run's own numbers, exactly.
+        # The committed gaze-v0.16.0 rows fill the slots with that run's own numbers, exactly.
         for key, panel, (f2, leaked, fp) in zip(
                 ("presidio-research", "piibench-commercial"), self.panels()[1:],
-                ((0.7850906648757555, 9769, 1352), (0.6180332286160448, 107701, 47616))):
-            row = self.their[key]["rows"]["gaze-v0.15.1"]["product_coverage"]
+                ((0.824876405570663, 7984, 1364), (0.6268247149238055, 105077, 48309))):
+            row = self.their[key]["rows"]["gaze-v0.16.0"]["product_coverage"]
             self.assertEqual((row["char_level"]["f2"], row["leaked_bytes"], row["false_positive_bytes"]),
                              (f2, leaked, fp))
             bar = next(b for b in panel.bars if b.gaze)
@@ -1065,6 +1074,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         their = copy.deepcopy(self.their)
         for bench in their.values():
             bench["rows"].pop("gaze-v0.15.1", None)  # PII-TRACE has no Gaze row yet
+            bench["rows"].pop("gaze-v0.16.0", None)
         for panel in self.panels(their=their)[1:]:
             bar = next(b for b in panel.bars if b.gaze)
             self.assertIsNone(bar.f2)
@@ -1073,7 +1083,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
     def test_presidio_research_charts_presidios_own_tuned_setup_only(self):
         _, presidio, piibench = self.panels()
         names = [b.name for b in presidio.bars]
-        self.assertEqual(names[:2], ["Gaze 0.15", "Presidio (tuned)"])
+        self.assertEqual(names[:2], ["Gaze 0.16", "Presidio (tuned)"])
         self.assertNotIn("Presidio", names)  # default and strong live in the page table, not the panel
         tuned = presidio.bars[1]
         row = self.their["presidio-research"]["rows"]["presidio-tuned-presidio-research"]["product_coverage"]
@@ -1200,8 +1210,8 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         rows = [line for line in tables.splitlines() if line.startswith("| Own corpus")]
         self.assertEqual(len(rows), 3)
         self.assertEqual(rows[0].count("**"), 2)  # F2: one best, the highest
-        self.assertIn("**0.868**", rows[0])
-        self.assertIn("**13,319**", rows[1])  # leaked bytes: lowest wins
+        self.assertIn("**0.912**", rows[0])
+        self.assertIn("**7,348**", rows[1])  # leaked bytes: lowest wins
         self.assertIn("**6.1**", rows[2])  # false positives: lowest wins
 
     def test_comparison_mutation_fails_check(self):

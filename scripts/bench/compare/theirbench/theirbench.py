@@ -64,7 +64,7 @@ def _git(root: Path, *args: str) -> str:
 
 
 BUILD_COMMAND = ("cargo", "build", "--locked", "-q", "-p", "gaze-recognizers",
-                 "--example", "clean_for_bench", "--features", "safety-net-nym")
+                 "--example", "clean_for_bench", "--features", "safety-net-nym", "--release")
 
 
 def _tool_version(root: Path, *command: str) -> str:
@@ -96,13 +96,13 @@ def build_tagged_binary(tag: str, root: Path, build_dir: Path) -> tuple[Path, di
         raise SystemExit(f"{build_dir} already exists; a tagged row builds its binary in a fresh directory")
     env = {**os.environ, "CARGO_TARGET_DIR": str(build_dir)}
     subprocess.run(BUILD_COMMAND, cwd=root, env=env, check=True)
-    binary = build_dir / "debug" / "examples" / "clean_for_bench"
+    binary = build_dir / "release" / "examples" / "clean_for_bench"
     if not binary.is_file():
         raise SystemExit(f"the {tag} build produced no {binary}")
     if _git(root, "status", "--porcelain"):
         raise SystemExit(f"building {tag} changed the checkout")
     return binary, {
-        "command": " ".join(BUILD_COMMAND), "profile": "debug",
+        "command": " ".join(BUILD_COMMAND), "profile": "release",
         "rustc": _tool_version(root, "rustc", "-Vv"), "cargo": _tool_version(root, "cargo", "-V"),
         "cargo_lock_sha256": hashlib.sha256((root / "Cargo.lock").read_bytes()).hexdigest(),
         "rust_toolchain_sha256": hashlib.sha256((root / "rust-toolchain.toml").read_bytes()).hexdigest(),

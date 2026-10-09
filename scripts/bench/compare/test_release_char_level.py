@@ -19,7 +19,7 @@ CORPUS = rcl.REPO / "target/bench-data/dataiku-en-de/test.parquet"
 
 def test_committed_file_matches_history_and_metrics() -> None:
     rcl.check(DATA, HISTORY)
-    assert set(DATA["releases"]) == {"v0.14.0", "v0.15.0", "v0.15.1"}
+    assert set(DATA["releases"]) == {"v0.14.0", "v0.15.0", "v0.15.1", "v0.16.0"}
     for row in DATA["releases"].values():
         assert row["char_level"]["unit"] == "unicode_code_point"
         assert 0 < row["char_level"]["f2"] < 1

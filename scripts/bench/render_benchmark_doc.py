@@ -1553,11 +1553,14 @@ def chart_panels(
     if not released:
         raise RenderError("comparison chart requires a released history row")
     latest = released[-1]
-    if comparison["latest_release_at_measurement"] != {
-        "version": latest["version"],
-        "scorecard_sha256": latest["scorecard_sha256"],
-    }:
-        raise RenderError("comparison report does not match the latest release row")
+    measured = comparison["latest_release_at_measurement"]
+    if not any(
+        measured == {"version": entry["version"], "scorecard_sha256": entry["scorecard_sha256"]}
+        for entry in released
+    ):
+        raise RenderError("comparison report does not match a released history row")
+    # Competitor measurements remain attributable to their original release.
+    # New tagged Gaze rows are scored independently; the shared corpus must still match.
     components = latest["dataset"]["integrity"]["component_sha256"]
     corpus = comparison["corpus"]
     if (
