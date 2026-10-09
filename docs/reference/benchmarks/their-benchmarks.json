@@ -28869,7 +28869,7 @@
             "crates_tree": "276a8b2d7fcf3e5ef43d624307e175987131f9c7",
             "measured_with": {
               "harness_dirty": false,
-              "harness_revision": "900679c00970b6c5ddf3e0d0342d67e8e720b23c"
+              "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8"
             },
             "ner_model_tree_sha256": "1196662dfcf78d3ef4a9fbbd474d5dd4ce9e656d5fdc38ec38eff3d3249ba1fe",
             "nym_model_tree_sha256": "1878b4af812a531f5710692287e529106951d78e0e270820b05fa8e6ae082a2d",
@@ -28879,7 +28879,7 @@
             "reproduces": {
               "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
               "harness_dirty": false,
-              "harness_revision": "cd93710f08cebeb708cfa1c74d4fd04c908e5c16",
+              "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8",
               "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077"
             },
             "tag": "v0.16.0"
@@ -31667,6 +31667,29 @@
             "leaked_entity_rate": 0.3080684596577017,
             "leaking_documents": 582,
             "leaking_entities": 882,
+            "per_label_bytes": {
+              "false_positive_by_prediction_label": {
+                "custom:building_number": 2,
+                "custom:credit_card": 2,
+                "custom:license_plate": 1,
+                "location": 484,
+                "name": 232,
+                "organization": 643
+              },
+              "leaked_by_gold_label": {
+                "CREDIT_CARD": 24,
+                "DATE_TIME": 601,
+                "GPE": 469,
+                "IBAN_CODE": 22,
+                "NRP": 355,
+                "ORGANIZATION": 483,
+                "PERSON": 423,
+                "PHONE_NUMBER": 768,
+                "STREET_ADDRESS": 4032,
+                "TITLE": 750,
+                "ZIP_CODE": 57
+              }
+            },
             "pii_documents": 1387,
             "predicted_bytes": 32911,
             "redaction_load": 0.2581335885047374,
@@ -32658,19 +32681,27 @@
           ]
         },
         "gaze-v0.16.0": {
-          "generated_at": "2026-10-08T10:34:51.940982+00:00",
+          "comparison_revision": "6a7f1782",
+          "comparison_sha256": {
+            "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+            "compare.py": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
+            "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+            "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+            "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+          },
+          "generated_at": "2026-10-09T10:06:34.195010+00:00",
           "hardware": "macOS-26.5-arm64-arm-64bit-Mach-O",
           "harness_dirty": false,
-          "harness_revision": "900679c00970b6c5ddf3e0d0342d67e8e720b23c",
+          "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8",
           "runs": [
             {
               "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
-              "harness_revision": "cd93710f08cebeb708cfa1c74d4fd04c908e5c16",
+              "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8",
               "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077"
             },
             {
               "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
-              "harness_revision": "900679c00970b6c5ddf3e0d0342d67e8e720b23c",
+              "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8",
               "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077"
             }
           ]
