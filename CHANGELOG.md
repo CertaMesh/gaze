@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dotted phones and directly labelled national values. IPv4 matches refuse tails
   inside complete French dotted phone shapes. Parser failures remain auditable and cannot
   seed repeat-value protection.
+- Enforce the international E.164 digit limit before trusting expanded phone
+  forms, so long numeric prefixes cannot change a valid card's class to phone.
 
 ## [0.16.0] - 2026-10-08
 

@@ -1067,6 +1067,20 @@ fn phone_number_check(input: &str) -> bool {
     let value = normalized.as_deref().unwrap_or(input);
     if value.starts_with('+') {
         return phonenumber::parse(None, value).is_ok_and(|phone| {
+            // Some national plans accept longer subscriber numbers. They cannot be
+            // trusted as international values beyond E.164's 15-digit limit.
+            // ITU-T E.164 Annex A.3.1.1: https://www.itu.int/rec/T-REC-E.164-202602-I/en
+            if phone
+                .format()
+                .mode(phonenumber::Mode::E164)
+                .to_string()
+                .bytes()
+                .filter(u8::is_ascii_digit)
+                .count()
+                > 15
+            {
+                return false;
+            }
             phone.is_valid()
                 || (phone.country().code() == 44
                     // The reserved-block exception must not bless a per-digit slash run
