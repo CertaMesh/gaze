@@ -2264,6 +2264,20 @@ fn labelled_phone_tokens_never_cover_only_whitespace_or_trailing_whitespace() {
 }
 
 #[test]
+fn phone_card_overlap_keeps_the_international_plus_prefix_protected() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    // BNetzA reserved mobile number whose digits also pass Luhn. The card
+    // candidate starts after '+', so clipping must preserve that phone fragment.
+    for input in ["Phone: +49 176 040690 06", "+49 176 040690 06"] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
+        assert!(!clean.contains('+'), "exposed phone prefix: {clean}");
+        assert!(!clean.contains("040690"), "exposed phone digits: {clean}");
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}
+
+#[test]
 fn phone_number_validator_enforces_e164_fifteen_digit_cap() {
     // A German numbering plan may accept long subscriber values, but E.164
     // international form cannot exceed fifteen digits, including the country code.

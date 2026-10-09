@@ -1584,9 +1584,7 @@ impl RecognizerRegistry {
                 .recognizer(&candidate.recognizer_id)
                 .and_then(|recognizer| recognizer.validator_kind())
                 .is_some_and(gaze_types::ValidatorKind::is_phone)
-                || input[candidate.span.clone()]
-                    .bytes()
-                    .any(|byte| byte.is_ascii_digit())
+                || !input[candidate.span.clone()].trim().is_empty()
         });
         Ok((crate::resolver::CandidatePool::new(candidates), vetoed))
     }

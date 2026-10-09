@@ -34,6 +34,10 @@ def main():
     core = root / 'crates/gaze-recognizers/embedded/core.toml'
     common = ['-p', 'gaze-recognizers', '--test', 'core_extended']
     mutants = [
+        ('plus-prefix', registry, lambda s: s.replace(
+            '!input[candidate.span.clone()].trim().is_empty()',
+            'input[candidate.span.clone()].bytes().any(|byte| byte.is_ascii_digit())'),
+            common + ['phone_card_overlap_keeps_the_international_plus_prefix_protected']),
         ('adjacency', regex, lambda s: insert_function(s, 'phone_parts',
             '        if !input.is_empty() { return vec![span]; }'), common + ['adjacent_reserved_phones']),
         ('ipv4-tail', regex, lambda s: insert_function(s, 'ipv4_phone_tail',
