@@ -184,7 +184,7 @@ const FAMILIES: &[Family] = &[
             "taxId",
             "taxIdentNr",
             "tax_ident_nr",
-            "taxIdentificationNumber",
+            "taxIdentNumber",
             "customer_steuer_id",
         ],
     },
@@ -387,7 +387,7 @@ fn cued_nhs_and_tax_identification_values_have_no_raw_digit_suffix() {
         ("NHS_NO", "943-476-5918", "nhs_number"),
         ("taxIdentNr", "86 095 742 719", "steuer_id"),
         ("tax_ident_nr", "86-095-742-718", "steuer_id"),
-        ("taxIdentificationNumber", "86095742718", "steuer_id"),
+        ("taxIdentNumber", "86095742718", "steuer_id"),
     ] {
         for shape in SHAPES {
             let input = shape.replace("{k}", key).replace("{v}", value);
@@ -414,4 +414,14 @@ fn zero_nhs_and_tax_identification_non_cues_stay_raw() {
     ] {
         assert_eq!(clean_and_restore(&pipeline, input), input);
     }
+}
+
+#[test]
+fn full_generic_tax_identification_field_preserves_repeated_value_protection() {
+    let pipeline = pipeline();
+    let value = "00 000 000 001";
+    let input = format!("taxIdentificationNumber: {value}; repeat: {value}");
+    let cleaned = clean_and_restore(&pipeline, &input);
+    assert_eq!(without_tokens(&cleaned), input.replace(value, "\0"));
+    assert_eq!(cleaned.matches(":Custom:tax_number_1>").count(), 2);
 }
