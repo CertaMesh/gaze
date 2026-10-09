@@ -1054,14 +1054,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v2",
             "version": 2,
-            "file_sha256": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+            "file_sha256": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.14.0-scored-labels-v2.json",
-          "scorecard_sha256": "f813ef1d53986e9500679a0b7d90c2ebda9c4339a20c0e5a09cf58a618148933",
+          "scorecard_sha256": "8bf73701dc865ed8dd012a1dd21998ee3b1ccc0f2f1ce9b04872ac142c7c2ae2",
           "arms": {
             "rule-floor-extended": {
               "gold_pii_utf8_bytes": 123621,
@@ -2683,14 +2683,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v3",
             "version": 3,
-            "file_sha256": "d849109f57f0f04bfbf722c7e8679164de16d99bf5eeeaea83f2968c0877baad",
+            "file_sha256": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.14.0-scored-labels-v3.json",
-          "scorecard_sha256": "208c0353afd1718c4e7150d7ef80eaa82abaa83a3564de41afdc133b724d4735",
+          "scorecard_sha256": "ae634bf469d2c85c9549375426387ddff7036d2676f148f89dbddf3efd49868a",
           "arms": {
             "rule-floor-extended": {
               "gold_pii_utf8_bytes": 123621,
@@ -3668,6 +3668,1088 @@
                   "FIRSTNAME": 2931,
                   "NATIONALID": 12,
                   "PHONENUMBER": 15,
+                  "STATE": 340,
+                  "STREET": 1087,
+                  "SURNAME": 3492,
+                  "ZIP": 30
+                }
+              }
+            }
+          },
+          "observation_record": {
+            "file": "observations-v0.14.0.jsonl.gz",
+            "sha256": "8c40b8e293727f614fbcd8f2b5478bb199f94c298b5cafa9e83545bff6906305",
+            "format": "gzip-jsonl",
+            "schema_version": 1,
+            "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+            "observations": 8730,
+            "bytes": 1489648
+          },
+          "measurement": {
+            "method": "past release, today's harness",
+            "entry_point": "scripts/bench/rescore_past_release.py",
+            "harness_revision": "9dc171b1980612fe33481af49db308c88f091d28",
+            "binary_sha256": "9ef4ba9ef57f1052aa75bb2027f27df60b0275815f0baa8479234ac8c54d1c1e",
+            "manifest_replacing_actions": [
+              "tokenize"
+            ]
+          }
+        },
+        {
+          "scored_label_contract": {
+            "id": "scored-labels-v4",
+            "version": 4,
+            "file_sha256": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
+            "excluded_labels": []
+          },
+          "scorecard": "scorecard-v0.14.0-scored-labels-v4.json",
+          "scorecard_sha256": "3e2d95cd28b9b7312fe114bfd24e337c72b809c2db9d67209fe2af421bd8ee94",
+          "arms": {
+            "rule-floor-extended": {
+              "gold_pii_utf8_bytes": 130282,
+              "surviving_pii_utf8_bytes": 93850,
+              "leak_rate": 0.720360448872446,
+              "false_positive_utf8_bytes": 5423,
+              "byte_precision": 0.8704336399474376,
+              "zero_leak_document_rate": 0.35223367697594504,
+              "restore_exact_rate": 1.0,
+              "manifest_valid_document_rate": 1.0,
+              "availability_completion_rate": 1.0,
+              "failed_closed_documents": 0,
+              "clean_ms_p95": 4.504903949999998,
+              "per_label_recall": {
+                "AGE": {
+                  "entities": 210,
+                  "fully_covered": 2,
+                  "overlapped": 2,
+                  "full_coverage_recall": 0.009523809523809525,
+                  "overlap_recall": 0.009523809523809525,
+                  "utf8_bytes": 420,
+                  "covered_utf8_bytes": 4,
+                  "byte_recall": 0.009523809523809525,
+                  "leaked_utf8_bytes": 416
+                },
+                "BUILDINGNUM": {
+                  "entities": 1437,
+                  "fully_covered": 53,
+                  "overlapped": 53,
+                  "full_coverage_recall": 0.03688239387613083,
+                  "overlap_recall": 0.03688239387613083,
+                  "utf8_bytes": 3185,
+                  "covered_utf8_bytes": 78,
+                  "byte_recall": 0.024489795918367346,
+                  "leaked_utf8_bytes": 3107
+                },
+                "CITY": {
+                  "entities": 1571,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 11668,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 11668
+                },
+                "COMPANYNAME": {
+                  "entities": 419,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 5708,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 5708
+                },
+                "COUNTRY": {
+                  "entities": 365,
+                  "fully_covered": 3,
+                  "overlapped": 3,
+                  "full_coverage_recall": 0.00821917808219178,
+                  "overlap_recall": 0.00821917808219178,
+                  "utf8_bytes": 3353,
+                  "covered_utf8_bytes": 6,
+                  "byte_recall": 0.001789442290486132,
+                  "leaked_utf8_bytes": 3347
+                },
+                "CREDITCARDNUMBER": {
+                  "entities": 126,
+                  "fully_covered": 27,
+                  "overlapped": 32,
+                  "full_coverage_recall": 0.21428571428571427,
+                  "overlap_recall": 0.25396825396825395,
+                  "utf8_bytes": 1971,
+                  "covered_utf8_bytes": 531,
+                  "byte_recall": 0.2694063926940639,
+                  "leaked_utf8_bytes": 1440
+                },
+                "DATEOFBIRTH": {
+                  "entities": 280,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 2926,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 2926
+                },
+                "DRIVERLICENSENUM": {
+                  "entities": 216,
+                  "fully_covered": 133,
+                  "overlapped": 133,
+                  "full_coverage_recall": 0.6157407407407407,
+                  "overlap_recall": 0.6157407407407407,
+                  "utf8_bytes": 2160,
+                  "covered_utf8_bytes": 1276,
+                  "byte_recall": 0.5907407407407408,
+                  "leaked_utf8_bytes": 884
+                },
+                "EMAIL": {
+                  "entities": 375,
+                  "fully_covered": 373,
+                  "overlapped": 375,
+                  "full_coverage_recall": 0.9946666666666667,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 8806,
+                  "covered_utf8_bytes": 8787,
+                  "byte_recall": 0.9978423801953213,
+                  "leaked_utf8_bytes": 19
+                },
+                "FIRSTNAME": {
+                  "entities": 2001,
+                  "fully_covered": 2,
+                  "overlapped": 2,
+                  "full_coverage_recall": 0.0009995002498750624,
+                  "overlap_recall": 0.0009995002498750624,
+                  "utf8_bytes": 10071,
+                  "covered_utf8_bytes": 7,
+                  "byte_recall": 0.0006950650382285771,
+                  "leaked_utf8_bytes": 10064
+                },
+                "IBAN": {
+                  "entities": 207,
+                  "fully_covered": 140,
+                  "overlapped": 140,
+                  "full_coverage_recall": 0.6763285024154589,
+                  "overlap_recall": 0.6763285024154589,
+                  "utf8_bytes": 4789,
+                  "covered_utf8_bytes": 3194,
+                  "byte_recall": 0.6669450824806848,
+                  "leaked_utf8_bytes": 1595
+                },
+                "IDCARDNUM": {
+                  "entities": 188,
+                  "fully_covered": 142,
+                  "overlapped": 142,
+                  "full_coverage_recall": 0.7553191489361702,
+                  "overlap_recall": 0.7553191489361702,
+                  "utf8_bytes": 1946,
+                  "covered_utf8_bytes": 1447,
+                  "byte_recall": 0.7435765673175745,
+                  "leaked_utf8_bytes": 499
+                },
+                "LICENSEPLATENUM": {
+                  "entities": 215,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 1782,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 1782
+                },
+                "NATIONALID": {
+                  "entities": 200,
+                  "fully_covered": 148,
+                  "overlapped": 148,
+                  "full_coverage_recall": 0.74,
+                  "overlap_recall": 0.74,
+                  "utf8_bytes": 2315,
+                  "covered_utf8_bytes": 1725,
+                  "byte_recall": 0.7451403887688985,
+                  "leaked_utf8_bytes": 590
+                },
+                "ORGANIZATION": {
+                  "entities": 3,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 69,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 69
+                },
+                "PASSPORTID": {
+                  "entities": 224,
+                  "fully_covered": 211,
+                  "overlapped": 211,
+                  "full_coverage_recall": 0.9419642857142857,
+                  "overlap_recall": 0.9419642857142857,
+                  "utf8_bytes": 2013,
+                  "covered_utf8_bytes": 1895,
+                  "byte_recall": 0.9413810233482365,
+                  "leaked_utf8_bytes": 118
+                },
+                "PASSWORD": {
+                  "entities": 208,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 2322,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 2322
+                },
+                "PHONENUMBER": {
+                  "entities": 359,
+                  "fully_covered": 270,
+                  "overlapped": 270,
+                  "full_coverage_recall": 0.7520891364902507,
+                  "overlap_recall": 0.7520891364902507,
+                  "utf8_bytes": 4956,
+                  "covered_utf8_bytes": 3788,
+                  "byte_recall": 0.7643260694108152,
+                  "leaked_utf8_bytes": 1168
+                },
+                "REGION": {
+                  "entities": 1,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 10,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 10
+                },
+                "SECURITYTOKEN": {
+                  "entities": 219,
+                  "fully_covered": 150,
+                  "overlapped": 151,
+                  "full_coverage_recall": 0.684931506849315,
+                  "overlap_recall": 0.6894977168949772,
+                  "utf8_bytes": 4342,
+                  "covered_utf8_bytes": 3065,
+                  "byte_recall": 0.7058959005066789,
+                  "leaked_utf8_bytes": 1277
+                },
+                "SSN": {
+                  "entities": 217,
+                  "fully_covered": 173,
+                  "overlapped": 173,
+                  "full_coverage_recall": 0.7972350230414746,
+                  "overlap_recall": 0.7972350230414746,
+                  "utf8_bytes": 2513,
+                  "covered_utf8_bytes": 2040,
+                  "byte_recall": 0.8117787504974134,
+                  "leaked_utf8_bytes": 473
+                },
+                "STATE": {
+                  "entities": 913,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 7222,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 7222
+                },
+                "STREET": {
+                  "entities": 1384,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 18910,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 18910
+                },
+                "SURNAME": {
+                  "entities": 1697,
+                  "fully_covered": 2,
+                  "overlapped": 2,
+                  "full_coverage_recall": 0.0011785503830288745,
+                  "overlap_recall": 0.0011785503830288745,
+                  "utf8_bytes": 10831,
+                  "covered_utf8_bytes": 15,
+                  "byte_recall": 0.0013849136737143384,
+                  "leaked_utf8_bytes": 10816
+                },
+                "TAXNUM": {
+                  "entities": 212,
+                  "fully_covered": 46,
+                  "overlapped": 58,
+                  "full_coverage_recall": 0.2169811320754717,
+                  "overlap_recall": 0.27358490566037735,
+                  "utf8_bytes": 2495,
+                  "covered_utf8_bytes": 614,
+                  "byte_recall": 0.24609218436873748,
+                  "leaked_utf8_bytes": 1881
+                },
+                "TITLE": {
+                  "entities": 5,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 15,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 15
+                },
+                "URL": {
+                  "entities": 276,
+                  "fully_covered": 232,
+                  "overlapped": 232,
+                  "full_coverage_recall": 0.8405797101449275,
+                  "overlap_recall": 0.8405797101449275,
+                  "utf8_bytes": 7209,
+                  "covered_utf8_bytes": 6385,
+                  "byte_recall": 0.8856984325149119,
+                  "leaked_utf8_bytes": 824
+                },
+                "USERNAME": {
+                  "entities": 101,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 1034,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 1034
+                },
+                "ZIP": {
+                  "entities": 1090,
+                  "fully_covered": 334,
+                  "overlapped": 334,
+                  "full_coverage_recall": 0.30642201834862387,
+                  "overlap_recall": 0.30642201834862387,
+                  "utf8_bytes": 5423,
+                  "covered_utf8_bytes": 1670,
+                  "byte_recall": 0.30794763046284346,
+                  "leaked_utf8_bytes": 3753
+                }
+              },
+              "gold_gap": {
+                "gold_gap_protected_bytes": 149,
+                "false_positive_bytes_after_gold_gap": 5274,
+                "adjusted_precision": 0.8735433750539491,
+                "gold_gap_protected_bytes_by_label": {
+                  "EMAIL": 75,
+                  "NATIONALID": 12,
+                  "PHONENUMBER": 15,
+                  "SECURITYTOKEN": 17,
+                  "ZIP": 30
+                }
+              }
+            },
+            "pass2-ner": {
+              "gold_pii_utf8_bytes": 130282,
+              "surviving_pii_utf8_bytes": 27000,
+              "leak_rate": 0.2072427503415668,
+              "false_positive_utf8_bytes": 28030,
+              "byte_precision": 0.7865389301815523,
+              "zero_leak_document_rate": 0.40446735395189004,
+              "restore_exact_rate": 1.0,
+              "manifest_valid_document_rate": 1.0,
+              "availability_completion_rate": 1.0,
+              "failed_closed_documents": 0,
+              "clean_ms_p95": 202.1756815499997,
+              "per_label_recall": {
+                "AGE": {
+                  "entities": 210,
+                  "fully_covered": 2,
+                  "overlapped": 2,
+                  "full_coverage_recall": 0.009523809523809525,
+                  "overlap_recall": 0.009523809523809525,
+                  "utf8_bytes": 420,
+                  "covered_utf8_bytes": 4,
+                  "byte_recall": 0.009523809523809525,
+                  "leaked_utf8_bytes": 416
+                },
+                "BUILDINGNUM": {
+                  "entities": 1437,
+                  "fully_covered": 66,
+                  "overlapped": 68,
+                  "full_coverage_recall": 0.04592901878914405,
+                  "overlap_recall": 0.04732080723729993,
+                  "utf8_bytes": 3185,
+                  "covered_utf8_bytes": 122,
+                  "byte_recall": 0.038304552590266876,
+                  "leaked_utf8_bytes": 3063
+                },
+                "CITY": {
+                  "entities": 1571,
+                  "fully_covered": 1556,
+                  "overlapped": 1562,
+                  "full_coverage_recall": 0.9904519414385742,
+                  "overlap_recall": 0.9942711648631445,
+                  "utf8_bytes": 11668,
+                  "covered_utf8_bytes": 11591,
+                  "byte_recall": 0.99340075419952,
+                  "leaked_utf8_bytes": 77
+                },
+                "COMPANYNAME": {
+                  "entities": 419,
+                  "fully_covered": 406,
+                  "overlapped": 414,
+                  "full_coverage_recall": 0.9689737470167065,
+                  "overlap_recall": 0.9880668257756563,
+                  "utf8_bytes": 5708,
+                  "covered_utf8_bytes": 5586,
+                  "byte_recall": 0.9786264891380518,
+                  "leaked_utf8_bytes": 122
+                },
+                "COUNTRY": {
+                  "entities": 365,
+                  "fully_covered": 351,
+                  "overlapped": 353,
+                  "full_coverage_recall": 0.9616438356164384,
+                  "overlap_recall": 0.9671232876712329,
+                  "utf8_bytes": 3353,
+                  "covered_utf8_bytes": 3247,
+                  "byte_recall": 0.968386519534745,
+                  "leaked_utf8_bytes": 106
+                },
+                "CREDITCARDNUMBER": {
+                  "entities": 126,
+                  "fully_covered": 27,
+                  "overlapped": 32,
+                  "full_coverage_recall": 0.21428571428571427,
+                  "overlap_recall": 0.25396825396825395,
+                  "utf8_bytes": 1971,
+                  "covered_utf8_bytes": 531,
+                  "byte_recall": 0.2694063926940639,
+                  "leaked_utf8_bytes": 1440
+                },
+                "DATEOFBIRTH": {
+                  "entities": 280,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 2926,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 2926
+                },
+                "DRIVERLICENSENUM": {
+                  "entities": 216,
+                  "fully_covered": 133,
+                  "overlapped": 133,
+                  "full_coverage_recall": 0.6157407407407407,
+                  "overlap_recall": 0.6157407407407407,
+                  "utf8_bytes": 2160,
+                  "covered_utf8_bytes": 1276,
+                  "byte_recall": 0.5907407407407408,
+                  "leaked_utf8_bytes": 884
+                },
+                "EMAIL": {
+                  "entities": 375,
+                  "fully_covered": 373,
+                  "overlapped": 375,
+                  "full_coverage_recall": 0.9946666666666667,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 8806,
+                  "covered_utf8_bytes": 8787,
+                  "byte_recall": 0.9978423801953213,
+                  "leaked_utf8_bytes": 19
+                },
+                "FIRSTNAME": {
+                  "entities": 2001,
+                  "fully_covered": 1960,
+                  "overlapped": 1965,
+                  "full_coverage_recall": 0.9795102448775612,
+                  "overlap_recall": 0.9820089955022488,
+                  "utf8_bytes": 10071,
+                  "covered_utf8_bytes": 9914,
+                  "byte_recall": 0.9844106841425876,
+                  "leaked_utf8_bytes": 157
+                },
+                "IBAN": {
+                  "entities": 207,
+                  "fully_covered": 140,
+                  "overlapped": 140,
+                  "full_coverage_recall": 0.6763285024154589,
+                  "overlap_recall": 0.6763285024154589,
+                  "utf8_bytes": 4789,
+                  "covered_utf8_bytes": 3194,
+                  "byte_recall": 0.6669450824806848,
+                  "leaked_utf8_bytes": 1595
+                },
+                "IDCARDNUM": {
+                  "entities": 188,
+                  "fully_covered": 142,
+                  "overlapped": 143,
+                  "full_coverage_recall": 0.7553191489361702,
+                  "overlap_recall": 0.7606382978723404,
+                  "utf8_bytes": 1946,
+                  "covered_utf8_bytes": 1450,
+                  "byte_recall": 0.7451181911613566,
+                  "leaked_utf8_bytes": 496
+                },
+                "LICENSEPLATENUM": {
+                  "entities": 215,
+                  "fully_covered": 0,
+                  "overlapped": 5,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.023255813953488372,
+                  "utf8_bytes": 1782,
+                  "covered_utf8_bytes": 11,
+                  "byte_recall": 0.006172839506172839,
+                  "leaked_utf8_bytes": 1771
+                },
+                "NATIONALID": {
+                  "entities": 200,
+                  "fully_covered": 148,
+                  "overlapped": 148,
+                  "full_coverage_recall": 0.74,
+                  "overlap_recall": 0.74,
+                  "utf8_bytes": 2315,
+                  "covered_utf8_bytes": 1725,
+                  "byte_recall": 0.7451403887688985,
+                  "leaked_utf8_bytes": 590
+                },
+                "ORGANIZATION": {
+                  "entities": 3,
+                  "fully_covered": 3,
+                  "overlapped": 3,
+                  "full_coverage_recall": 1.0,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 69,
+                  "covered_utf8_bytes": 69,
+                  "byte_recall": 1.0,
+                  "leaked_utf8_bytes": 0
+                },
+                "PASSPORTID": {
+                  "entities": 224,
+                  "fully_covered": 211,
+                  "overlapped": 211,
+                  "full_coverage_recall": 0.9419642857142857,
+                  "overlap_recall": 0.9419642857142857,
+                  "utf8_bytes": 2013,
+                  "covered_utf8_bytes": 1895,
+                  "byte_recall": 0.9413810233482365,
+                  "leaked_utf8_bytes": 118
+                },
+                "PASSWORD": {
+                  "entities": 208,
+                  "fully_covered": 0,
+                  "overlapped": 5,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.02403846153846154,
+                  "utf8_bytes": 2322,
+                  "covered_utf8_bytes": 25,
+                  "byte_recall": 0.010766580534022395,
+                  "leaked_utf8_bytes": 2297
+                },
+                "PHONENUMBER": {
+                  "entities": 359,
+                  "fully_covered": 270,
+                  "overlapped": 270,
+                  "full_coverage_recall": 0.7520891364902507,
+                  "overlap_recall": 0.7520891364902507,
+                  "utf8_bytes": 4956,
+                  "covered_utf8_bytes": 3788,
+                  "byte_recall": 0.7643260694108152,
+                  "leaked_utf8_bytes": 1168
+                },
+                "REGION": {
+                  "entities": 1,
+                  "fully_covered": 1,
+                  "overlapped": 1,
+                  "full_coverage_recall": 1.0,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 10,
+                  "covered_utf8_bytes": 10,
+                  "byte_recall": 1.0,
+                  "leaked_utf8_bytes": 0
+                },
+                "SECURITYTOKEN": {
+                  "entities": 219,
+                  "fully_covered": 150,
+                  "overlapped": 151,
+                  "full_coverage_recall": 0.684931506849315,
+                  "overlap_recall": 0.6894977168949772,
+                  "utf8_bytes": 4342,
+                  "covered_utf8_bytes": 3065,
+                  "byte_recall": 0.7058959005066789,
+                  "leaked_utf8_bytes": 1277
+                },
+                "SSN": {
+                  "entities": 217,
+                  "fully_covered": 173,
+                  "overlapped": 173,
+                  "full_coverage_recall": 0.7972350230414746,
+                  "overlap_recall": 0.7972350230414746,
+                  "utf8_bytes": 2513,
+                  "covered_utf8_bytes": 2040,
+                  "byte_recall": 0.8117787504974134,
+                  "leaked_utf8_bytes": 473
+                },
+                "STATE": {
+                  "entities": 913,
+                  "fully_covered": 827,
+                  "overlapped": 843,
+                  "full_coverage_recall": 0.9058050383351588,
+                  "overlap_recall": 0.9233296823658269,
+                  "utf8_bytes": 7222,
+                  "covered_utf8_bytes": 7034,
+                  "byte_recall": 0.9739684297978399,
+                  "leaked_utf8_bytes": 188
+                },
+                "STREET": {
+                  "entities": 1384,
+                  "fully_covered": 1329,
+                  "overlapped": 1370,
+                  "full_coverage_recall": 0.9602601156069365,
+                  "overlap_recall": 0.9898843930635838,
+                  "utf8_bytes": 18910,
+                  "covered_utf8_bytes": 18582,
+                  "byte_recall": 0.9826546800634585,
+                  "leaked_utf8_bytes": 328
+                },
+                "SURNAME": {
+                  "entities": 1697,
+                  "fully_covered": 1667,
+                  "overlapped": 1670,
+                  "full_coverage_recall": 0.9823217442545669,
+                  "overlap_recall": 0.9840895698291102,
+                  "utf8_bytes": 10831,
+                  "covered_utf8_bytes": 10700,
+                  "byte_recall": 0.9879050872495615,
+                  "leaked_utf8_bytes": 131
+                },
+                "TAXNUM": {
+                  "entities": 212,
+                  "fully_covered": 46,
+                  "overlapped": 58,
+                  "full_coverage_recall": 0.2169811320754717,
+                  "overlap_recall": 0.27358490566037735,
+                  "utf8_bytes": 2495,
+                  "covered_utf8_bytes": 614,
+                  "byte_recall": 0.24609218436873748,
+                  "leaked_utf8_bytes": 1881
+                },
+                "TITLE": {
+                  "entities": 5,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 15,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 15
+                },
+                "URL": {
+                  "entities": 276,
+                  "fully_covered": 229,
+                  "overlapped": 242,
+                  "full_coverage_recall": 0.8297101449275363,
+                  "overlap_recall": 0.8768115942028986,
+                  "utf8_bytes": 7209,
+                  "covered_utf8_bytes": 6362,
+                  "byte_recall": 0.8825079761409349,
+                  "leaked_utf8_bytes": 847
+                },
+                "USERNAME": {
+                  "entities": 101,
+                  "fully_covered": 3,
+                  "overlapped": 13,
+                  "full_coverage_recall": 0.0297029702970297,
+                  "overlap_recall": 0.12871287128712872,
+                  "utf8_bytes": 1034,
+                  "covered_utf8_bytes": 85,
+                  "byte_recall": 0.08220502901353965,
+                  "leaked_utf8_bytes": 949
+                },
+                "ZIP": {
+                  "entities": 1090,
+                  "fully_covered": 334,
+                  "overlapped": 344,
+                  "full_coverage_recall": 0.30642201834862387,
+                  "overlap_recall": 0.3155963302752294,
+                  "utf8_bytes": 5423,
+                  "covered_utf8_bytes": 1700,
+                  "byte_recall": 0.31347962382445144,
+                  "leaked_utf8_bytes": 3723
+                }
+              },
+              "gold_gap": {
+                "gold_gap_protected_bytes": 11188,
+                "false_positive_bytes_after_gold_gap": 16842,
+                "adjusted_precision": 0.8597948786254204,
+                "gold_gap_protected_bytes_by_label": {
+                  "CITY": 2586,
+                  "COMPANYNAME": 469,
+                  "COUNTRY": 174,
+                  "EMAIL": 75,
+                  "FIRSTNAME": 2914,
+                  "NATIONALID": 12,
+                  "PHONENUMBER": 15,
+                  "SECURITYTOKEN": 17,
+                  "STATE": 340,
+                  "STREET": 1087,
+                  "SURNAME": 3469,
+                  "ZIP": 30
+                }
+              }
+            },
+            "full-stack-kiji-resolve": {
+              "gold_pii_utf8_bytes": 130282,
+              "surviving_pii_utf8_bytes": 25179,
+              "leak_rate": 0.19326537817964107,
+              "false_positive_utf8_bytes": 168276,
+              "byte_precision": 0.3844589379579265,
+              "zero_leak_document_rate": 0.4061855670103093,
+              "restore_exact_rate": 0.784192439862543,
+              "manifest_valid_document_rate": 1.0,
+              "availability_completion_rate": 1.0,
+              "failed_closed_documents": 0,
+              "clean_ms_p95": 499.8953062499996,
+              "per_label_recall": {
+                "AGE": {
+                  "entities": 210,
+                  "fully_covered": 2,
+                  "overlapped": 2,
+                  "full_coverage_recall": 0.009523809523809525,
+                  "overlap_recall": 0.009523809523809525,
+                  "utf8_bytes": 420,
+                  "covered_utf8_bytes": 4,
+                  "byte_recall": 0.009523809523809525,
+                  "leaked_utf8_bytes": 416
+                },
+                "BUILDINGNUM": {
+                  "entities": 1437,
+                  "fully_covered": 66,
+                  "overlapped": 70,
+                  "full_coverage_recall": 0.04592901878914405,
+                  "overlap_recall": 0.04871259568545581,
+                  "utf8_bytes": 3185,
+                  "covered_utf8_bytes": 131,
+                  "byte_recall": 0.04113029827315542,
+                  "leaked_utf8_bytes": 3054
+                },
+                "CITY": {
+                  "entities": 1571,
+                  "fully_covered": 1565,
+                  "overlapped": 1571,
+                  "full_coverage_recall": 0.9961807765754297,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 11668,
+                  "covered_utf8_bytes": 11647,
+                  "byte_recall": 0.9982002056907782,
+                  "leaked_utf8_bytes": 21
+                },
+                "COMPANYNAME": {
+                  "entities": 419,
+                  "fully_covered": 409,
+                  "overlapped": 419,
+                  "full_coverage_recall": 0.9761336515513126,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 5708,
+                  "covered_utf8_bytes": 5653,
+                  "byte_recall": 0.990364400840925,
+                  "leaked_utf8_bytes": 55
+                },
+                "COUNTRY": {
+                  "entities": 365,
+                  "fully_covered": 357,
+                  "overlapped": 363,
+                  "full_coverage_recall": 0.9780821917808219,
+                  "overlap_recall": 0.9945205479452055,
+                  "utf8_bytes": 3353,
+                  "covered_utf8_bytes": 3301,
+                  "byte_recall": 0.9844915001491202,
+                  "leaked_utf8_bytes": 52
+                },
+                "CREDITCARDNUMBER": {
+                  "entities": 126,
+                  "fully_covered": 27,
+                  "overlapped": 32,
+                  "full_coverage_recall": 0.21428571428571427,
+                  "overlap_recall": 0.25396825396825395,
+                  "utf8_bytes": 1971,
+                  "covered_utf8_bytes": 531,
+                  "byte_recall": 0.2694063926940639,
+                  "leaked_utf8_bytes": 1440
+                },
+                "DATEOFBIRTH": {
+                  "entities": 280,
+                  "fully_covered": 0,
+                  "overlapped": 10,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.03571428571428571,
+                  "utf8_bytes": 2926,
+                  "covered_utf8_bytes": 49,
+                  "byte_recall": 0.01674641148325359,
+                  "leaked_utf8_bytes": 2877
+                },
+                "DRIVERLICENSENUM": {
+                  "entities": 216,
+                  "fully_covered": 134,
+                  "overlapped": 137,
+                  "full_coverage_recall": 0.6203703703703703,
+                  "overlap_recall": 0.6342592592592593,
+                  "utf8_bytes": 2160,
+                  "covered_utf8_bytes": 1295,
+                  "byte_recall": 0.5995370370370371,
+                  "leaked_utf8_bytes": 865
+                },
+                "EMAIL": {
+                  "entities": 375,
+                  "fully_covered": 373,
+                  "overlapped": 375,
+                  "full_coverage_recall": 0.9946666666666667,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 8806,
+                  "covered_utf8_bytes": 8787,
+                  "byte_recall": 0.9978423801953213,
+                  "leaked_utf8_bytes": 19
+                },
+                "FIRSTNAME": {
+                  "entities": 2001,
+                  "fully_covered": 1981,
+                  "overlapped": 1986,
+                  "full_coverage_recall": 0.9900049975012494,
+                  "overlap_recall": 0.992503748125937,
+                  "utf8_bytes": 10071,
+                  "covered_utf8_bytes": 10003,
+                  "byte_recall": 0.9932479396286367,
+                  "leaked_utf8_bytes": 68
+                },
+                "IBAN": {
+                  "entities": 207,
+                  "fully_covered": 142,
+                  "overlapped": 177,
+                  "full_coverage_recall": 0.6859903381642513,
+                  "overlap_recall": 0.855072463768116,
+                  "utf8_bytes": 4789,
+                  "covered_utf8_bytes": 3366,
+                  "byte_recall": 0.7028607224890374,
+                  "leaked_utf8_bytes": 1423
+                },
+                "IDCARDNUM": {
+                  "entities": 188,
+                  "fully_covered": 142,
+                  "overlapped": 147,
+                  "full_coverage_recall": 0.7553191489361702,
+                  "overlap_recall": 0.7819148936170213,
+                  "utf8_bytes": 1946,
+                  "covered_utf8_bytes": 1460,
+                  "byte_recall": 0.750256937307297,
+                  "leaked_utf8_bytes": 486
+                },
+                "LICENSEPLATENUM": {
+                  "entities": 215,
+                  "fully_covered": 0,
+                  "overlapped": 84,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.39069767441860465,
+                  "utf8_bytes": 1782,
+                  "covered_utf8_bytes": 171,
+                  "byte_recall": 0.09595959595959595,
+                  "leaked_utf8_bytes": 1611
+                },
+                "NATIONALID": {
+                  "entities": 200,
+                  "fully_covered": 151,
+                  "overlapped": 152,
+                  "full_coverage_recall": 0.755,
+                  "overlap_recall": 0.76,
+                  "utf8_bytes": 2315,
+                  "covered_utf8_bytes": 1759,
+                  "byte_recall": 0.7598272138228942,
+                  "leaked_utf8_bytes": 556
+                },
+                "ORGANIZATION": {
+                  "entities": 3,
+                  "fully_covered": 3,
+                  "overlapped": 3,
+                  "full_coverage_recall": 1.0,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 69,
+                  "covered_utf8_bytes": 69,
+                  "byte_recall": 1.0,
+                  "leaked_utf8_bytes": 0
+                },
+                "PASSPORTID": {
+                  "entities": 224,
+                  "fully_covered": 211,
+                  "overlapped": 211,
+                  "full_coverage_recall": 0.9419642857142857,
+                  "overlap_recall": 0.9419642857142857,
+                  "utf8_bytes": 2013,
+                  "covered_utf8_bytes": 1895,
+                  "byte_recall": 0.9413810233482365,
+                  "leaked_utf8_bytes": 118
+                },
+                "PASSWORD": {
+                  "entities": 208,
+                  "fully_covered": 5,
+                  "overlapped": 85,
+                  "full_coverage_recall": 0.02403846153846154,
+                  "overlap_recall": 0.40865384615384615,
+                  "utf8_bytes": 2322,
+                  "covered_utf8_bytes": 509,
+                  "byte_recall": 0.21920757967269594,
+                  "leaked_utf8_bytes": 1813
+                },
+                "PHONENUMBER": {
+                  "entities": 359,
+                  "fully_covered": 270,
+                  "overlapped": 270,
+                  "full_coverage_recall": 0.7520891364902507,
+                  "overlap_recall": 0.7520891364902507,
+                  "utf8_bytes": 4956,
+                  "covered_utf8_bytes": 3788,
+                  "byte_recall": 0.7643260694108152,
+                  "leaked_utf8_bytes": 1168
+                },
+                "REGION": {
+                  "entities": 1,
+                  "fully_covered": 1,
+                  "overlapped": 1,
+                  "full_coverage_recall": 1.0,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 10,
+                  "covered_utf8_bytes": 10,
+                  "byte_recall": 1.0,
+                  "leaked_utf8_bytes": 0
+                },
+                "SECURITYTOKEN": {
+                  "entities": 219,
+                  "fully_covered": 151,
+                  "overlapped": 165,
+                  "full_coverage_recall": 0.6894977168949772,
+                  "overlap_recall": 0.7534246575342466,
+                  "utf8_bytes": 4342,
+                  "covered_utf8_bytes": 3118,
+                  "byte_recall": 0.7181022570244127,
+                  "leaked_utf8_bytes": 1224
+                },
+                "SSN": {
+                  "entities": 217,
+                  "fully_covered": 175,
+                  "overlapped": 175,
+                  "full_coverage_recall": 0.8064516129032258,
+                  "overlap_recall": 0.8064516129032258,
+                  "utf8_bytes": 2513,
+                  "covered_utf8_bytes": 2068,
+                  "byte_recall": 0.8229208117787505,
+                  "leaked_utf8_bytes": 445
+                },
+                "STATE": {
+                  "entities": 913,
+                  "fully_covered": 837,
+                  "overlapped": 853,
+                  "full_coverage_recall": 0.9167579408543264,
+                  "overlap_recall": 0.9342825848849945,
+                  "utf8_bytes": 7222,
+                  "covered_utf8_bytes": 7064,
+                  "byte_recall": 0.9781224037662697,
+                  "leaked_utf8_bytes": 158
+                },
+                "STREET": {
+                  "entities": 1384,
+                  "fully_covered": 1341,
+                  "overlapped": 1384,
+                  "full_coverage_recall": 0.9689306358381503,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 18910,
+                  "covered_utf8_bytes": 18743,
+                  "byte_recall": 0.9911686938127975,
+                  "leaked_utf8_bytes": 167
+                },
+                "SURNAME": {
+                  "entities": 1697,
+                  "fully_covered": 1688,
+                  "overlapped": 1692,
+                  "full_coverage_recall": 0.99469652327637,
+                  "overlap_recall": 0.9970536240424278,
+                  "utf8_bytes": 10831,
+                  "covered_utf8_bytes": 10803,
+                  "byte_recall": 0.9974148278090665,
+                  "leaked_utf8_bytes": 28
+                },
+                "TAXNUM": {
+                  "entities": 212,
+                  "fully_covered": 46,
+                  "overlapped": 62,
+                  "full_coverage_recall": 0.2169811320754717,
+                  "overlap_recall": 0.29245283018867924,
+                  "utf8_bytes": 2495,
+                  "covered_utf8_bytes": 624,
+                  "byte_recall": 0.2501002004008016,
+                  "leaked_utf8_bytes": 1871
+                },
+                "TITLE": {
+                  "entities": 5,
+                  "fully_covered": 1,
+                  "overlapped": 1,
+                  "full_coverage_recall": 0.2,
+                  "overlap_recall": 0.2,
+                  "utf8_bytes": 15,
+                  "covered_utf8_bytes": 3,
+                  "byte_recall": 0.2,
+                  "leaked_utf8_bytes": 12
+                },
+                "URL": {
+                  "entities": 276,
+                  "fully_covered": 229,
+                  "overlapped": 251,
+                  "full_coverage_recall": 0.8297101449275363,
+                  "overlap_recall": 0.9094202898550725,
+                  "utf8_bytes": 7209,
+                  "covered_utf8_bytes": 6407,
+                  "byte_recall": 0.8887501733943681,
+                  "leaked_utf8_bytes": 802
+                },
+                "USERNAME": {
+                  "entities": 101,
+                  "fully_covered": 6,
+                  "overlapped": 35,
+                  "full_coverage_recall": 0.0594059405940594,
+                  "overlap_recall": 0.3465346534653465,
+                  "utf8_bytes": 1034,
+                  "covered_utf8_bytes": 236,
+                  "byte_recall": 0.22823984526112184,
+                  "leaked_utf8_bytes": 798
+                },
+                "ZIP": {
+                  "entities": 1090,
+                  "fully_covered": 337,
+                  "overlapped": 359,
+                  "full_coverage_recall": 0.3091743119266055,
+                  "overlap_recall": 0.3293577981651376,
+                  "utf8_bytes": 5423,
+                  "covered_utf8_bytes": 1747,
+                  "byte_recall": 0.3221464134243039,
+                  "leaked_utf8_bytes": 3676
+                }
+              },
+              "gold_gap": {
+                "gold_gap_protected_bytes": 11228,
+                "false_positive_bytes_after_gold_gap": 157048,
+                "adjusted_precision": 0.400925420845238,
+                "gold_gap_protected_bytes_by_label": {
+                  "CITY": 2586,
+                  "COMPANYNAME": 469,
+                  "COUNTRY": 174,
+                  "EMAIL": 75,
+                  "FIRSTNAME": 2931,
+                  "NATIONALID": 12,
+                  "PHONENUMBER": 15,
+                  "SECURITYTOKEN": 17,
                   "STATE": 340,
                   "STREET": 1087,
                   "SURNAME": 3492,
@@ -4809,14 +5891,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v2",
             "version": 2,
-            "file_sha256": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+            "file_sha256": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.15.0-scored-labels-v2.json",
-          "scorecard_sha256": "cb6ac99aa6fa5d145fd77433514361dc385212b52c958c70caf2696c517eca80",
+          "scorecard_sha256": "da30ac1989a3e7437885e3a27c6b749526ae2205be922b5bd5005ff42d086f7a",
           "arms": {
             "policy-file": {
               "gold_pii_utf8_bytes": 123621,
@@ -5481,14 +6563,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v3",
             "version": 3,
-            "file_sha256": "d849109f57f0f04bfbf722c7e8679164de16d99bf5eeeaea83f2968c0877baad",
+            "file_sha256": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.15.0-scored-labels-v3.json",
-          "scorecard_sha256": "f36189ff79782e2faa7839eb8312415e98d0b308ea483e48239cdc52b1a9acf2",
+          "scorecard_sha256": "da1056cd23b440ac4fa0b990bcc984866fbc6248ebc2e5a73f8b010907b4961e",
           "arms": {
             "policy-file": {
               "gold_pii_utf8_bytes": 123621,
@@ -5805,6 +6887,393 @@
                 "gold_gap_protected_bytes": 11585,
                 "false_positive_bytes_after_gold_gap": 18488,
                 "adjusted_precision": 0.8564484820250019,
+                "gold_gap_protected_bytes_by_label": {
+                  "BUILDINGNUM": 239,
+                  "CITY": 2586,
+                  "COMPANYNAME": 469,
+                  "COUNTRY": 174,
+                  "DATEOFBIRTH": 10,
+                  "EMAIL": 75,
+                  "FIRSTNAME": 2908,
+                  "LICENSEPLATENUM": 53,
+                  "NATIONALID": 12,
+                  "PHONENUMBER": 27,
+                  "STATE": 340,
+                  "STREET": 1087,
+                  "SURNAME": 3464,
+                  "USERNAME": 24,
+                  "ZIP": 117
+                }
+              }
+            }
+          },
+          "observation_record": {
+            "file": "observations-v0.15.0.jsonl.gz",
+            "sha256": "561d618d2d964217d7d17f24e829abd55e85f73c4bd2d1e51869a0fcf0f1a105",
+            "format": "gzip-jsonl",
+            "schema_version": 1,
+            "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+            "observations": 2910,
+            "bytes": 676070
+          },
+          "measurement": {
+            "method": "past release, today's harness",
+            "entry_point": "scripts/bench/rescore_past_release.py",
+            "harness_revision": "9dc171b1980612fe33481af49db308c88f091d28",
+            "binary_sha256": "2b4f5df0ba3b7abfc3cfb1b245d4a3b64d3b36b2dfaab34e4c23e99bfb4c9ae0",
+            "manifest_replacing_actions": [
+              "redact",
+              "tokenize"
+            ]
+          }
+        },
+        {
+          "scored_label_contract": {
+            "id": "scored-labels-v4",
+            "version": 4,
+            "file_sha256": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
+            "excluded_labels": []
+          },
+          "scorecard": "scorecard-v0.15.0-scored-labels-v4.json",
+          "scorecard_sha256": "3be5ac332508222b839937698cc028c25a57bec7c24309a525119521f30cfdd1",
+          "arms": {
+            "policy-file": {
+              "gold_pii_utf8_bytes": 130282,
+              "surviving_pii_utf8_bytes": 19556,
+              "leak_rate": 0.1501051565066548,
+              "false_positive_utf8_bytes": 30073,
+              "byte_precision": 0.7864118353113303,
+              "zero_leak_document_rate": 0.5041237113402062,
+              "restore_exact_rate": 1.0,
+              "manifest_valid_document_rate": 1.0,
+              "availability_completion_rate": 1.0,
+              "failed_closed_documents": 0,
+              "clean_ms_p95": 167.71735855,
+              "per_label_recall": {
+                "AGE": {
+                  "entities": 210,
+                  "fully_covered": 2,
+                  "overlapped": 2,
+                  "full_coverage_recall": 0.009523809523809525,
+                  "overlap_recall": 0.009523809523809525,
+                  "utf8_bytes": 420,
+                  "covered_utf8_bytes": 4,
+                  "byte_recall": 0.009523809523809525,
+                  "leaked_utf8_bytes": 416
+                },
+                "BUILDINGNUM": {
+                  "entities": 1437,
+                  "fully_covered": 827,
+                  "overlapped": 830,
+                  "full_coverage_recall": 0.5755045233124565,
+                  "overlap_recall": 0.5775922059846903,
+                  "utf8_bytes": 3185,
+                  "covered_utf8_bytes": 1926,
+                  "byte_recall": 0.6047095761381476,
+                  "leaked_utf8_bytes": 1259
+                },
+                "CITY": {
+                  "entities": 1571,
+                  "fully_covered": 1556,
+                  "overlapped": 1562,
+                  "full_coverage_recall": 0.9904519414385742,
+                  "overlap_recall": 0.9942711648631445,
+                  "utf8_bytes": 11668,
+                  "covered_utf8_bytes": 11591,
+                  "byte_recall": 0.99340075419952,
+                  "leaked_utf8_bytes": 77
+                },
+                "COMPANYNAME": {
+                  "entities": 419,
+                  "fully_covered": 407,
+                  "overlapped": 414,
+                  "full_coverage_recall": 0.9713603818615751,
+                  "overlap_recall": 0.9880668257756563,
+                  "utf8_bytes": 5708,
+                  "covered_utf8_bytes": 5595,
+                  "byte_recall": 0.9802032235459005,
+                  "leaked_utf8_bytes": 113
+                },
+                "COUNTRY": {
+                  "entities": 365,
+                  "fully_covered": 351,
+                  "overlapped": 353,
+                  "full_coverage_recall": 0.9616438356164384,
+                  "overlap_recall": 0.9671232876712329,
+                  "utf8_bytes": 3353,
+                  "covered_utf8_bytes": 3247,
+                  "byte_recall": 0.968386519534745,
+                  "leaked_utf8_bytes": 106
+                },
+                "CREDITCARDNUMBER": {
+                  "entities": 126,
+                  "fully_covered": 32,
+                  "overlapped": 33,
+                  "full_coverage_recall": 0.25396825396825395,
+                  "overlap_recall": 0.2619047619047619,
+                  "utf8_bytes": 1971,
+                  "covered_utf8_bytes": 575,
+                  "byte_recall": 0.2917300862506342,
+                  "leaked_utf8_bytes": 1396
+                },
+                "DATEOFBIRTH": {
+                  "entities": 280,
+                  "fully_covered": 174,
+                  "overlapped": 188,
+                  "full_coverage_recall": 0.6214285714285714,
+                  "overlap_recall": 0.6714285714285714,
+                  "utf8_bytes": 2926,
+                  "covered_utf8_bytes": 1835,
+                  "byte_recall": 0.627136021872864,
+                  "leaked_utf8_bytes": 1091
+                },
+                "DRIVERLICENSENUM": {
+                  "entities": 216,
+                  "fully_covered": 140,
+                  "overlapped": 143,
+                  "full_coverage_recall": 0.6481481481481481,
+                  "overlap_recall": 0.6620370370370371,
+                  "utf8_bytes": 2160,
+                  "covered_utf8_bytes": 1360,
+                  "byte_recall": 0.6296296296296297,
+                  "leaked_utf8_bytes": 800
+                },
+                "EMAIL": {
+                  "entities": 375,
+                  "fully_covered": 373,
+                  "overlapped": 375,
+                  "full_coverage_recall": 0.9946666666666667,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 8806,
+                  "covered_utf8_bytes": 8787,
+                  "byte_recall": 0.9978423801953213,
+                  "leaked_utf8_bytes": 19
+                },
+                "FIRSTNAME": {
+                  "entities": 2001,
+                  "fully_covered": 1965,
+                  "overlapped": 1968,
+                  "full_coverage_recall": 0.9820089955022488,
+                  "overlap_recall": 0.9835082458770614,
+                  "utf8_bytes": 10071,
+                  "covered_utf8_bytes": 9938,
+                  "byte_recall": 0.9867937642736571,
+                  "leaked_utf8_bytes": 133
+                },
+                "IBAN": {
+                  "entities": 207,
+                  "fully_covered": 140,
+                  "overlapped": 141,
+                  "full_coverage_recall": 0.6763285024154589,
+                  "overlap_recall": 0.6811594202898551,
+                  "utf8_bytes": 4789,
+                  "covered_utf8_bytes": 3209,
+                  "byte_recall": 0.6700772603883901,
+                  "leaked_utf8_bytes": 1580
+                },
+                "IDCARDNUM": {
+                  "entities": 188,
+                  "fully_covered": 142,
+                  "overlapped": 144,
+                  "full_coverage_recall": 0.7553191489361702,
+                  "overlap_recall": 0.7659574468085106,
+                  "utf8_bytes": 1946,
+                  "covered_utf8_bytes": 1456,
+                  "byte_recall": 0.7482014388489209,
+                  "leaked_utf8_bytes": 490
+                },
+                "LICENSEPLATENUM": {
+                  "entities": 215,
+                  "fully_covered": 173,
+                  "overlapped": 210,
+                  "full_coverage_recall": 0.8046511627906977,
+                  "overlap_recall": 0.9767441860465116,
+                  "utf8_bytes": 1782,
+                  "covered_utf8_bytes": 1660,
+                  "byte_recall": 0.9315375982042648,
+                  "leaked_utf8_bytes": 122
+                },
+                "NATIONALID": {
+                  "entities": 200,
+                  "fully_covered": 149,
+                  "overlapped": 149,
+                  "full_coverage_recall": 0.745,
+                  "overlap_recall": 0.745,
+                  "utf8_bytes": 2315,
+                  "covered_utf8_bytes": 1733,
+                  "byte_recall": 0.7485961123110151,
+                  "leaked_utf8_bytes": 582
+                },
+                "ORGANIZATION": {
+                  "entities": 3,
+                  "fully_covered": 3,
+                  "overlapped": 3,
+                  "full_coverage_recall": 1.0,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 69,
+                  "covered_utf8_bytes": 69,
+                  "byte_recall": 1.0,
+                  "leaked_utf8_bytes": 0
+                },
+                "PASSPORTID": {
+                  "entities": 224,
+                  "fully_covered": 211,
+                  "overlapped": 211,
+                  "full_coverage_recall": 0.9419642857142857,
+                  "overlap_recall": 0.9419642857142857,
+                  "utf8_bytes": 2013,
+                  "covered_utf8_bytes": 1895,
+                  "byte_recall": 0.9413810233482365,
+                  "leaked_utf8_bytes": 118
+                },
+                "PASSWORD": {
+                  "entities": 208,
+                  "fully_covered": 11,
+                  "overlapped": 30,
+                  "full_coverage_recall": 0.052884615384615384,
+                  "overlap_recall": 0.14423076923076922,
+                  "utf8_bytes": 2322,
+                  "covered_utf8_bytes": 302,
+                  "byte_recall": 0.13006029285099052,
+                  "leaked_utf8_bytes": 2020
+                },
+                "PHONENUMBER": {
+                  "entities": 359,
+                  "fully_covered": 284,
+                  "overlapped": 287,
+                  "full_coverage_recall": 0.7910863509749304,
+                  "overlap_recall": 0.7994428969359332,
+                  "utf8_bytes": 4956,
+                  "covered_utf8_bytes": 3976,
+                  "byte_recall": 0.8022598870056498,
+                  "leaked_utf8_bytes": 980
+                },
+                "REGION": {
+                  "entities": 1,
+                  "fully_covered": 1,
+                  "overlapped": 1,
+                  "full_coverage_recall": 1.0,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 10,
+                  "covered_utf8_bytes": 10,
+                  "byte_recall": 1.0,
+                  "leaked_utf8_bytes": 0
+                },
+                "SECURITYTOKEN": {
+                  "entities": 219,
+                  "fully_covered": 4,
+                  "overlapped": 14,
+                  "full_coverage_recall": 0.0182648401826484,
+                  "overlap_recall": 0.0639269406392694,
+                  "utf8_bytes": 4342,
+                  "covered_utf8_bytes": 122,
+                  "byte_recall": 0.02809765085214187,
+                  "leaked_utf8_bytes": 4220
+                },
+                "SSN": {
+                  "entities": 217,
+                  "fully_covered": 173,
+                  "overlapped": 173,
+                  "full_coverage_recall": 0.7972350230414746,
+                  "overlap_recall": 0.7972350230414746,
+                  "utf8_bytes": 2513,
+                  "covered_utf8_bytes": 2040,
+                  "byte_recall": 0.8117787504974134,
+                  "leaked_utf8_bytes": 473
+                },
+                "STATE": {
+                  "entities": 913,
+                  "fully_covered": 832,
+                  "overlapped": 848,
+                  "full_coverage_recall": 0.9112814895947426,
+                  "overlap_recall": 0.9288061336254108,
+                  "utf8_bytes": 7222,
+                  "covered_utf8_bytes": 7047,
+                  "byte_recall": 0.9757684851841595,
+                  "leaked_utf8_bytes": 175
+                },
+                "STREET": {
+                  "entities": 1384,
+                  "fully_covered": 1329,
+                  "overlapped": 1370,
+                  "full_coverage_recall": 0.9602601156069365,
+                  "overlap_recall": 0.9898843930635838,
+                  "utf8_bytes": 18910,
+                  "covered_utf8_bytes": 18593,
+                  "byte_recall": 0.9832363828662084,
+                  "leaked_utf8_bytes": 317
+                },
+                "SURNAME": {
+                  "entities": 1697,
+                  "fully_covered": 1670,
+                  "overlapped": 1672,
+                  "full_coverage_recall": 0.9840895698291102,
+                  "overlap_recall": 0.985268120212139,
+                  "utf8_bytes": 10831,
+                  "covered_utf8_bytes": 10716,
+                  "byte_recall": 0.9893823285015234,
+                  "leaked_utf8_bytes": 115
+                },
+                "TAXNUM": {
+                  "entities": 212,
+                  "fully_covered": 47,
+                  "overlapped": 62,
+                  "full_coverage_recall": 0.22169811320754718,
+                  "overlap_recall": 0.29245283018867924,
+                  "utf8_bytes": 2495,
+                  "covered_utf8_bytes": 645,
+                  "byte_recall": 0.25851703406813625,
+                  "leaked_utf8_bytes": 1850
+                },
+                "TITLE": {
+                  "entities": 5,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 15,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 15
+                },
+                "URL": {
+                  "entities": 276,
+                  "fully_covered": 233,
+                  "overlapped": 258,
+                  "full_coverage_recall": 0.8442028985507246,
+                  "overlap_recall": 0.9347826086956522,
+                  "utf8_bytes": 7209,
+                  "covered_utf8_bytes": 6720,
+                  "byte_recall": 0.9321681231793592,
+                  "leaked_utf8_bytes": 489
+                },
+                "USERNAME": {
+                  "entities": 101,
+                  "fully_covered": 89,
+                  "overlapped": 97,
+                  "full_coverage_recall": 0.8811881188118812,
+                  "overlap_recall": 0.9603960396039604,
+                  "utf8_bytes": 1034,
+                  "covered_utf8_bytes": 962,
+                  "byte_recall": 0.9303675048355899,
+                  "leaked_utf8_bytes": 72
+                },
+                "ZIP": {
+                  "entities": 1090,
+                  "fully_covered": 946,
+                  "overlapped": 949,
+                  "full_coverage_recall": 0.8678899082568807,
+                  "overlap_recall": 0.8706422018348624,
+                  "utf8_bytes": 5423,
+                  "covered_utf8_bytes": 4862,
+                  "byte_recall": 0.896551724137931,
+                  "leaked_utf8_bytes": 561
+                }
+              },
+              "gold_gap": {
+                "gold_gap_protected_bytes": 11585,
+                "false_positive_bytes_after_gold_gap": 18488,
+                "adjusted_precision": 0.8569195288436238,
                 "gold_gap_protected_bytes_by_label": {
                   "BUILDINGNUM": 239,
                   "CITY": 2586,
@@ -6635,14 +8104,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v2",
             "version": 2,
-            "file_sha256": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+            "file_sha256": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.15.1-scored-labels-v2.json",
-          "scorecard_sha256": "e20a8fb6b1f6f4d3098b93f3e77d62d73c7cc4c34c96aff527bbbb072931de55",
+          "scorecard_sha256": "c858a6ce01d96adb94247d4456a30be39872cbd051ddd698f5b1ad1f92cd9c1e",
           "arms": {
             "policy-file": {
               "gold_pii_utf8_bytes": 123621,
@@ -7316,14 +8785,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v3",
             "version": 3,
-            "file_sha256": "d849109f57f0f04bfbf722c7e8679164de16d99bf5eeeaea83f2968c0877baad",
+            "file_sha256": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.15.1-scored-labels-v3.json",
-          "scorecard_sha256": "63f7a276ede374f71f21bf34ddd735cdbc4065373b2739a47f68b31b78b7663f",
+          "scorecard_sha256": "6029de53164a530c44b9a2ec1ffbe4ff16291ae10b0beb2a20394b124e274480",
           "arms": {
             "policy-file": {
               "gold_pii_utf8_bytes": 123621,
@@ -7640,6 +9109,374 @@
                 "gold_gap_protected_bytes": 11585,
                 "false_positive_bytes_after_gold_gap": 18488,
                 "adjusted_precision": 0.8564484820250019,
+                "gold_gap_protected_bytes_by_label": {
+                  "BUILDINGNUM": 239,
+                  "CITY": 2586,
+                  "COMPANYNAME": 469,
+                  "COUNTRY": 174,
+                  "DATEOFBIRTH": 10,
+                  "EMAIL": 75,
+                  "FIRSTNAME": 2908,
+                  "LICENSEPLATENUM": 53,
+                  "NATIONALID": 12,
+                  "PHONENUMBER": 27,
+                  "STATE": 340,
+                  "STREET": 1087,
+                  "SURNAME": 3464,
+                  "USERNAME": 24,
+                  "ZIP": 117
+                }
+              }
+            }
+          }
+        },
+        {
+          "scored_label_contract": {
+            "id": "scored-labels-v4",
+            "version": 4,
+            "file_sha256": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
+            "excluded_labels": []
+          },
+          "scorecard": "scorecard-v0.15.1-scored-labels-v4.json",
+          "scorecard_sha256": "2ea260f6d2913f1e434f6f594fa7cc8b41c6341820771b277400ad3d73ff9660",
+          "arms": {
+            "policy-file": {
+              "gold_pii_utf8_bytes": 130282,
+              "surviving_pii_utf8_bytes": 19556,
+              "leak_rate": 0.1501051565066548,
+              "false_positive_utf8_bytes": 30073,
+              "byte_precision": 0.7864118353113303,
+              "zero_leak_document_rate": 0.5041237113402062,
+              "restore_exact_rate": 1.0,
+              "manifest_valid_document_rate": 1.0,
+              "availability_completion_rate": 1.0,
+              "failed_closed_documents": 0,
+              "clean_ms_p95": 138.71747119999998,
+              "per_label_recall": {
+                "AGE": {
+                  "entities": 210,
+                  "fully_covered": 2,
+                  "overlapped": 2,
+                  "full_coverage_recall": 0.009523809523809525,
+                  "overlap_recall": 0.009523809523809525,
+                  "utf8_bytes": 420,
+                  "covered_utf8_bytes": 4,
+                  "byte_recall": 0.009523809523809525,
+                  "leaked_utf8_bytes": 416
+                },
+                "BUILDINGNUM": {
+                  "entities": 1437,
+                  "fully_covered": 827,
+                  "overlapped": 830,
+                  "full_coverage_recall": 0.5755045233124565,
+                  "overlap_recall": 0.5775922059846903,
+                  "utf8_bytes": 3185,
+                  "covered_utf8_bytes": 1926,
+                  "byte_recall": 0.6047095761381476,
+                  "leaked_utf8_bytes": 1259
+                },
+                "CITY": {
+                  "entities": 1571,
+                  "fully_covered": 1556,
+                  "overlapped": 1562,
+                  "full_coverage_recall": 0.9904519414385742,
+                  "overlap_recall": 0.9942711648631445,
+                  "utf8_bytes": 11668,
+                  "covered_utf8_bytes": 11591,
+                  "byte_recall": 0.99340075419952,
+                  "leaked_utf8_bytes": 77
+                },
+                "COMPANYNAME": {
+                  "entities": 419,
+                  "fully_covered": 407,
+                  "overlapped": 414,
+                  "full_coverage_recall": 0.9713603818615751,
+                  "overlap_recall": 0.9880668257756563,
+                  "utf8_bytes": 5708,
+                  "covered_utf8_bytes": 5595,
+                  "byte_recall": 0.9802032235459005,
+                  "leaked_utf8_bytes": 113
+                },
+                "COUNTRY": {
+                  "entities": 365,
+                  "fully_covered": 351,
+                  "overlapped": 353,
+                  "full_coverage_recall": 0.9616438356164384,
+                  "overlap_recall": 0.9671232876712329,
+                  "utf8_bytes": 3353,
+                  "covered_utf8_bytes": 3247,
+                  "byte_recall": 0.968386519534745,
+                  "leaked_utf8_bytes": 106
+                },
+                "CREDITCARDNUMBER": {
+                  "entities": 126,
+                  "fully_covered": 32,
+                  "overlapped": 33,
+                  "full_coverage_recall": 0.25396825396825395,
+                  "overlap_recall": 0.2619047619047619,
+                  "utf8_bytes": 1971,
+                  "covered_utf8_bytes": 575,
+                  "byte_recall": 0.2917300862506342,
+                  "leaked_utf8_bytes": 1396
+                },
+                "DATEOFBIRTH": {
+                  "entities": 280,
+                  "fully_covered": 174,
+                  "overlapped": 188,
+                  "full_coverage_recall": 0.6214285714285714,
+                  "overlap_recall": 0.6714285714285714,
+                  "utf8_bytes": 2926,
+                  "covered_utf8_bytes": 1835,
+                  "byte_recall": 0.627136021872864,
+                  "leaked_utf8_bytes": 1091
+                },
+                "DRIVERLICENSENUM": {
+                  "entities": 216,
+                  "fully_covered": 140,
+                  "overlapped": 143,
+                  "full_coverage_recall": 0.6481481481481481,
+                  "overlap_recall": 0.6620370370370371,
+                  "utf8_bytes": 2160,
+                  "covered_utf8_bytes": 1360,
+                  "byte_recall": 0.6296296296296297,
+                  "leaked_utf8_bytes": 800
+                },
+                "EMAIL": {
+                  "entities": 375,
+                  "fully_covered": 373,
+                  "overlapped": 375,
+                  "full_coverage_recall": 0.9946666666666667,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 8806,
+                  "covered_utf8_bytes": 8787,
+                  "byte_recall": 0.9978423801953213,
+                  "leaked_utf8_bytes": 19
+                },
+                "FIRSTNAME": {
+                  "entities": 2001,
+                  "fully_covered": 1965,
+                  "overlapped": 1968,
+                  "full_coverage_recall": 0.9820089955022488,
+                  "overlap_recall": 0.9835082458770614,
+                  "utf8_bytes": 10071,
+                  "covered_utf8_bytes": 9938,
+                  "byte_recall": 0.9867937642736571,
+                  "leaked_utf8_bytes": 133
+                },
+                "IBAN": {
+                  "entities": 207,
+                  "fully_covered": 140,
+                  "overlapped": 141,
+                  "full_coverage_recall": 0.6763285024154589,
+                  "overlap_recall": 0.6811594202898551,
+                  "utf8_bytes": 4789,
+                  "covered_utf8_bytes": 3209,
+                  "byte_recall": 0.6700772603883901,
+                  "leaked_utf8_bytes": 1580
+                },
+                "IDCARDNUM": {
+                  "entities": 188,
+                  "fully_covered": 142,
+                  "overlapped": 144,
+                  "full_coverage_recall": 0.7553191489361702,
+                  "overlap_recall": 0.7659574468085106,
+                  "utf8_bytes": 1946,
+                  "covered_utf8_bytes": 1456,
+                  "byte_recall": 0.7482014388489209,
+                  "leaked_utf8_bytes": 490
+                },
+                "LICENSEPLATENUM": {
+                  "entities": 215,
+                  "fully_covered": 173,
+                  "overlapped": 210,
+                  "full_coverage_recall": 0.8046511627906977,
+                  "overlap_recall": 0.9767441860465116,
+                  "utf8_bytes": 1782,
+                  "covered_utf8_bytes": 1660,
+                  "byte_recall": 0.9315375982042648,
+                  "leaked_utf8_bytes": 122
+                },
+                "NATIONALID": {
+                  "entities": 200,
+                  "fully_covered": 149,
+                  "overlapped": 149,
+                  "full_coverage_recall": 0.745,
+                  "overlap_recall": 0.745,
+                  "utf8_bytes": 2315,
+                  "covered_utf8_bytes": 1733,
+                  "byte_recall": 0.7485961123110151,
+                  "leaked_utf8_bytes": 582
+                },
+                "ORGANIZATION": {
+                  "entities": 3,
+                  "fully_covered": 3,
+                  "overlapped": 3,
+                  "full_coverage_recall": 1.0,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 69,
+                  "covered_utf8_bytes": 69,
+                  "byte_recall": 1.0,
+                  "leaked_utf8_bytes": 0
+                },
+                "PASSPORTID": {
+                  "entities": 224,
+                  "fully_covered": 211,
+                  "overlapped": 211,
+                  "full_coverage_recall": 0.9419642857142857,
+                  "overlap_recall": 0.9419642857142857,
+                  "utf8_bytes": 2013,
+                  "covered_utf8_bytes": 1895,
+                  "byte_recall": 0.9413810233482365,
+                  "leaked_utf8_bytes": 118
+                },
+                "PASSWORD": {
+                  "entities": 208,
+                  "fully_covered": 11,
+                  "overlapped": 30,
+                  "full_coverage_recall": 0.052884615384615384,
+                  "overlap_recall": 0.14423076923076922,
+                  "utf8_bytes": 2322,
+                  "covered_utf8_bytes": 302,
+                  "byte_recall": 0.13006029285099052,
+                  "leaked_utf8_bytes": 2020
+                },
+                "PHONENUMBER": {
+                  "entities": 359,
+                  "fully_covered": 284,
+                  "overlapped": 287,
+                  "full_coverage_recall": 0.7910863509749304,
+                  "overlap_recall": 0.7994428969359332,
+                  "utf8_bytes": 4956,
+                  "covered_utf8_bytes": 3976,
+                  "byte_recall": 0.8022598870056498,
+                  "leaked_utf8_bytes": 980
+                },
+                "REGION": {
+                  "entities": 1,
+                  "fully_covered": 1,
+                  "overlapped": 1,
+                  "full_coverage_recall": 1.0,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 10,
+                  "covered_utf8_bytes": 10,
+                  "byte_recall": 1.0,
+                  "leaked_utf8_bytes": 0
+                },
+                "SECURITYTOKEN": {
+                  "entities": 219,
+                  "fully_covered": 4,
+                  "overlapped": 14,
+                  "full_coverage_recall": 0.0182648401826484,
+                  "overlap_recall": 0.0639269406392694,
+                  "utf8_bytes": 4342,
+                  "covered_utf8_bytes": 122,
+                  "byte_recall": 0.02809765085214187,
+                  "leaked_utf8_bytes": 4220
+                },
+                "SSN": {
+                  "entities": 217,
+                  "fully_covered": 173,
+                  "overlapped": 173,
+                  "full_coverage_recall": 0.7972350230414746,
+                  "overlap_recall": 0.7972350230414746,
+                  "utf8_bytes": 2513,
+                  "covered_utf8_bytes": 2040,
+                  "byte_recall": 0.8117787504974134,
+                  "leaked_utf8_bytes": 473
+                },
+                "STATE": {
+                  "entities": 913,
+                  "fully_covered": 832,
+                  "overlapped": 848,
+                  "full_coverage_recall": 0.9112814895947426,
+                  "overlap_recall": 0.9288061336254108,
+                  "utf8_bytes": 7222,
+                  "covered_utf8_bytes": 7047,
+                  "byte_recall": 0.9757684851841595,
+                  "leaked_utf8_bytes": 175
+                },
+                "STREET": {
+                  "entities": 1384,
+                  "fully_covered": 1329,
+                  "overlapped": 1370,
+                  "full_coverage_recall": 0.9602601156069365,
+                  "overlap_recall": 0.9898843930635838,
+                  "utf8_bytes": 18910,
+                  "covered_utf8_bytes": 18593,
+                  "byte_recall": 0.9832363828662084,
+                  "leaked_utf8_bytes": 317
+                },
+                "SURNAME": {
+                  "entities": 1697,
+                  "fully_covered": 1670,
+                  "overlapped": 1672,
+                  "full_coverage_recall": 0.9840895698291102,
+                  "overlap_recall": 0.985268120212139,
+                  "utf8_bytes": 10831,
+                  "covered_utf8_bytes": 10716,
+                  "byte_recall": 0.9893823285015234,
+                  "leaked_utf8_bytes": 115
+                },
+                "TAXNUM": {
+                  "entities": 212,
+                  "fully_covered": 47,
+                  "overlapped": 62,
+                  "full_coverage_recall": 0.22169811320754718,
+                  "overlap_recall": 0.29245283018867924,
+                  "utf8_bytes": 2495,
+                  "covered_utf8_bytes": 645,
+                  "byte_recall": 0.25851703406813625,
+                  "leaked_utf8_bytes": 1850
+                },
+                "TITLE": {
+                  "entities": 5,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 15,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 15
+                },
+                "URL": {
+                  "entities": 276,
+                  "fully_covered": 233,
+                  "overlapped": 258,
+                  "full_coverage_recall": 0.8442028985507246,
+                  "overlap_recall": 0.9347826086956522,
+                  "utf8_bytes": 7209,
+                  "covered_utf8_bytes": 6720,
+                  "byte_recall": 0.9321681231793592,
+                  "leaked_utf8_bytes": 489
+                },
+                "USERNAME": {
+                  "entities": 101,
+                  "fully_covered": 89,
+                  "overlapped": 97,
+                  "full_coverage_recall": 0.8811881188118812,
+                  "overlap_recall": 0.9603960396039604,
+                  "utf8_bytes": 1034,
+                  "covered_utf8_bytes": 962,
+                  "byte_recall": 0.9303675048355899,
+                  "leaked_utf8_bytes": 72
+                },
+                "ZIP": {
+                  "entities": 1090,
+                  "fully_covered": 946,
+                  "overlapped": 949,
+                  "full_coverage_recall": 0.8678899082568807,
+                  "overlap_recall": 0.8706422018348624,
+                  "utf8_bytes": 5423,
+                  "covered_utf8_bytes": 4862,
+                  "byte_recall": 0.896551724137931,
+                  "leaked_utf8_bytes": 561
+                }
+              },
+              "gold_gap": {
+                "gold_gap_protected_bytes": 11585,
+                "false_positive_bytes_after_gold_gap": 18488,
+                "adjusted_precision": 0.8569195288436238,
                 "gold_gap_protected_bytes_by_label": {
                   "BUILDINGNUM": 239,
                   "CITY": 2586,
@@ -8954,14 +10791,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v2",
             "version": 2,
-            "file_sha256": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+            "file_sha256": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.16.0-scored-labels-v2.json",
-          "scorecard_sha256": "752c75cb094a950f5dda8d23be35facc5dec7f29e1a7b1a99dc4076b14fbb2c0",
+          "scorecard_sha256": "12a36ced8b8f6ea3404a29cb2a45426b07ba833a4648530cb133b0f22c325391",
           "arms": {
             "policy-file": {
               "gold_pii_utf8_bytes": 123621,
@@ -9766,14 +11603,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v3",
             "version": 3,
-            "file_sha256": "d849109f57f0f04bfbf722c7e8679164de16d99bf5eeeaea83f2968c0877baad",
+            "file_sha256": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.16.0-scored-labels-v3.json",
-          "scorecard_sha256": "d8eb05e7480aef7ee78a59008322ef89844e4c677648e82d0a29f49ac41c215a",
+          "scorecard_sha256": "3c0300867421f8b1e6dc2713982862fbd0155d93e2d7a1658f17e2892ace39f8",
           "arms": {
             "policy-file": {
               "gold_pii_utf8_bytes": 123621,
@@ -10596,6 +12433,859 @@
             },
             "source_file": "agentic-layers-v0.16.0.json.gz",
             "source_sha256": "1569c4a27b51c1d469cfdda6da69d1702657d7aee4390e264e35290f309968dd"
+          }
+        },
+        {
+          "scored_label_contract": {
+            "id": "scored-labels-v4",
+            "version": 4,
+            "file_sha256": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
+            "excluded_labels": []
+          },
+          "scorecard": "scorecard-v0.16.0-scored-labels-v4.json",
+          "scorecard_sha256": "70c7881b8043660e47b5b0e49e912ee6944f51aad1c9d95209d2bdfca296c3df",
+          "arms": {
+            "policy-file": {
+              "gold_pii_utf8_bytes": 130282,
+              "surviving_pii_utf8_bytes": 13291,
+              "leak_rate": 0.10201716276999129,
+              "false_positive_utf8_bytes": 26902,
+              "byte_precision": 0.8130416351038618,
+              "zero_leak_document_rate": 0.6285223367697594,
+              "restore_exact_rate": 1.0,
+              "manifest_valid_document_rate": 1.0,
+              "availability_completion_rate": 1.0,
+              "failed_closed_documents": 0,
+              "clean_ms_p95": 390.5937713499998,
+              "per_label_recall": {
+                "AGE": {
+                  "entities": 210,
+                  "fully_covered": 44,
+                  "overlapped": 44,
+                  "full_coverage_recall": 0.20952380952380953,
+                  "overlap_recall": 0.20952380952380953,
+                  "utf8_bytes": 420,
+                  "covered_utf8_bytes": 88,
+                  "byte_recall": 0.20952380952380953,
+                  "leaked_utf8_bytes": 332
+                },
+                "BUILDINGNUM": {
+                  "entities": 1437,
+                  "fully_covered": 1332,
+                  "overlapped": 1334,
+                  "full_coverage_recall": 0.9269311064718163,
+                  "overlap_recall": 0.9283228949199722,
+                  "utf8_bytes": 3185,
+                  "covered_utf8_bytes": 2974,
+                  "byte_recall": 0.9337519623233909,
+                  "leaked_utf8_bytes": 211
+                },
+                "CITY": {
+                  "entities": 1571,
+                  "fully_covered": 1557,
+                  "overlapped": 1562,
+                  "full_coverage_recall": 0.9910884786760026,
+                  "overlap_recall": 0.9942711648631445,
+                  "utf8_bytes": 11668,
+                  "covered_utf8_bytes": 11595,
+                  "byte_recall": 0.9937435721631813,
+                  "leaked_utf8_bytes": 73
+                },
+                "COMPANYNAME": {
+                  "entities": 419,
+                  "fully_covered": 408,
+                  "overlapped": 414,
+                  "full_coverage_recall": 0.9737470167064439,
+                  "overlap_recall": 0.9880668257756563,
+                  "utf8_bytes": 5708,
+                  "covered_utf8_bytes": 5599,
+                  "byte_recall": 0.9809039943938332,
+                  "leaked_utf8_bytes": 109
+                },
+                "COUNTRY": {
+                  "entities": 365,
+                  "fully_covered": 351,
+                  "overlapped": 353,
+                  "full_coverage_recall": 0.9616438356164384,
+                  "overlap_recall": 0.9671232876712329,
+                  "utf8_bytes": 3353,
+                  "covered_utf8_bytes": 3258,
+                  "byte_recall": 0.9716671637339696,
+                  "leaked_utf8_bytes": 95
+                },
+                "CREDITCARDNUMBER": {
+                  "entities": 126,
+                  "fully_covered": 94,
+                  "overlapped": 94,
+                  "full_coverage_recall": 0.746031746031746,
+                  "overlap_recall": 0.746031746031746,
+                  "utf8_bytes": 1971,
+                  "covered_utf8_bytes": 1723,
+                  "byte_recall": 0.8741755454084221,
+                  "leaked_utf8_bytes": 248
+                },
+                "DATEOFBIRTH": {
+                  "entities": 280,
+                  "fully_covered": 214,
+                  "overlapped": 218,
+                  "full_coverage_recall": 0.7642857142857142,
+                  "overlap_recall": 0.7785714285714286,
+                  "utf8_bytes": 2926,
+                  "covered_utf8_bytes": 2208,
+                  "byte_recall": 0.7546138072453862,
+                  "leaked_utf8_bytes": 718
+                },
+                "DRIVERLICENSENUM": {
+                  "entities": 216,
+                  "fully_covered": 165,
+                  "overlapped": 166,
+                  "full_coverage_recall": 0.7638888888888888,
+                  "overlap_recall": 0.7685185185185185,
+                  "utf8_bytes": 2160,
+                  "covered_utf8_bytes": 1624,
+                  "byte_recall": 0.7518518518518519,
+                  "leaked_utf8_bytes": 536
+                },
+                "EMAIL": {
+                  "entities": 375,
+                  "fully_covered": 373,
+                  "overlapped": 375,
+                  "full_coverage_recall": 0.9946666666666667,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 8806,
+                  "covered_utf8_bytes": 8787,
+                  "byte_recall": 0.9978423801953213,
+                  "leaked_utf8_bytes": 19
+                },
+                "FIRSTNAME": {
+                  "entities": 2001,
+                  "fully_covered": 1968,
+                  "overlapped": 1968,
+                  "full_coverage_recall": 0.9835082458770614,
+                  "overlap_recall": 0.9835082458770614,
+                  "utf8_bytes": 10071,
+                  "covered_utf8_bytes": 9944,
+                  "byte_recall": 0.9873895343064244,
+                  "leaked_utf8_bytes": 127
+                },
+                "IBAN": {
+                  "entities": 207,
+                  "fully_covered": 194,
+                  "overlapped": 195,
+                  "full_coverage_recall": 0.9371980676328503,
+                  "overlap_recall": 0.9420289855072463,
+                  "utf8_bytes": 4789,
+                  "covered_utf8_bytes": 4575,
+                  "byte_recall": 0.9553142618500731,
+                  "leaked_utf8_bytes": 214
+                },
+                "IDCARDNUM": {
+                  "entities": 188,
+                  "fully_covered": 154,
+                  "overlapped": 156,
+                  "full_coverage_recall": 0.8191489361702128,
+                  "overlap_recall": 0.8297872340425532,
+                  "utf8_bytes": 1946,
+                  "covered_utf8_bytes": 1591,
+                  "byte_recall": 0.8175745118191161,
+                  "leaked_utf8_bytes": 355
+                },
+                "LICENSEPLATENUM": {
+                  "entities": 215,
+                  "fully_covered": 176,
+                  "overlapped": 210,
+                  "full_coverage_recall": 0.8186046511627907,
+                  "overlap_recall": 0.9767441860465116,
+                  "utf8_bytes": 1782,
+                  "covered_utf8_bytes": 1673,
+                  "byte_recall": 0.9388327721661055,
+                  "leaked_utf8_bytes": 109
+                },
+                "NATIONALID": {
+                  "entities": 200,
+                  "fully_covered": 165,
+                  "overlapped": 165,
+                  "full_coverage_recall": 0.825,
+                  "overlap_recall": 0.825,
+                  "utf8_bytes": 2315,
+                  "covered_utf8_bytes": 1898,
+                  "byte_recall": 0.8198704103671707,
+                  "leaked_utf8_bytes": 417
+                },
+                "ORGANIZATION": {
+                  "entities": 3,
+                  "fully_covered": 3,
+                  "overlapped": 3,
+                  "full_coverage_recall": 1.0,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 69,
+                  "covered_utf8_bytes": 69,
+                  "byte_recall": 1.0,
+                  "leaked_utf8_bytes": 0
+                },
+                "PASSPORTID": {
+                  "entities": 224,
+                  "fully_covered": 211,
+                  "overlapped": 211,
+                  "full_coverage_recall": 0.9419642857142857,
+                  "overlap_recall": 0.9419642857142857,
+                  "utf8_bytes": 2013,
+                  "covered_utf8_bytes": 1895,
+                  "byte_recall": 0.9413810233482365,
+                  "leaked_utf8_bytes": 118
+                },
+                "PASSWORD": {
+                  "entities": 208,
+                  "fully_covered": 13,
+                  "overlapped": 46,
+                  "full_coverage_recall": 0.0625,
+                  "overlap_recall": 0.22115384615384615,
+                  "utf8_bytes": 2322,
+                  "covered_utf8_bytes": 463,
+                  "byte_recall": 0.19939707149009475,
+                  "leaked_utf8_bytes": 1859
+                },
+                "PHONENUMBER": {
+                  "entities": 359,
+                  "fully_covered": 308,
+                  "overlapped": 311,
+                  "full_coverage_recall": 0.8579387186629527,
+                  "overlap_recall": 0.8662952646239555,
+                  "utf8_bytes": 4956,
+                  "covered_utf8_bytes": 4298,
+                  "byte_recall": 0.867231638418079,
+                  "leaked_utf8_bytes": 658
+                },
+                "REGION": {
+                  "entities": 1,
+                  "fully_covered": 1,
+                  "overlapped": 1,
+                  "full_coverage_recall": 1.0,
+                  "overlap_recall": 1.0,
+                  "utf8_bytes": 10,
+                  "covered_utf8_bytes": 10,
+                  "byte_recall": 1.0,
+                  "leaked_utf8_bytes": 0
+                },
+                "SECURITYTOKEN": {
+                  "entities": 219,
+                  "fully_covered": 9,
+                  "overlapped": 17,
+                  "full_coverage_recall": 0.0410958904109589,
+                  "overlap_recall": 0.0776255707762557,
+                  "utf8_bytes": 4342,
+                  "covered_utf8_bytes": 255,
+                  "byte_recall": 0.05872869645324735,
+                  "leaked_utf8_bytes": 4087
+                },
+                "SSN": {
+                  "entities": 217,
+                  "fully_covered": 173,
+                  "overlapped": 173,
+                  "full_coverage_recall": 0.7972350230414746,
+                  "overlap_recall": 0.7972350230414746,
+                  "utf8_bytes": 2513,
+                  "covered_utf8_bytes": 2040,
+                  "byte_recall": 0.8117787504974134,
+                  "leaked_utf8_bytes": 473
+                },
+                "STATE": {
+                  "entities": 913,
+                  "fully_covered": 891,
+                  "overlapped": 892,
+                  "full_coverage_recall": 0.9759036144578314,
+                  "overlap_recall": 0.976998904709748,
+                  "utf8_bytes": 7222,
+                  "covered_utf8_bytes": 7164,
+                  "byte_recall": 0.9919689836610357,
+                  "leaked_utf8_bytes": 58
+                },
+                "STREET": {
+                  "entities": 1384,
+                  "fully_covered": 1340,
+                  "overlapped": 1370,
+                  "full_coverage_recall": 0.9682080924855492,
+                  "overlap_recall": 0.9898843930635838,
+                  "utf8_bytes": 18910,
+                  "covered_utf8_bytes": 18644,
+                  "byte_recall": 0.9859333685880487,
+                  "leaked_utf8_bytes": 266
+                },
+                "SURNAME": {
+                  "entities": 1697,
+                  "fully_covered": 1672,
+                  "overlapped": 1672,
+                  "full_coverage_recall": 0.985268120212139,
+                  "overlap_recall": 0.985268120212139,
+                  "utf8_bytes": 10831,
+                  "covered_utf8_bytes": 10721,
+                  "byte_recall": 0.9898439663927615,
+                  "leaked_utf8_bytes": 110
+                },
+                "TAXNUM": {
+                  "entities": 212,
+                  "fully_covered": 105,
+                  "overlapped": 119,
+                  "full_coverage_recall": 0.49528301886792453,
+                  "overlap_recall": 0.5613207547169812,
+                  "utf8_bytes": 2495,
+                  "covered_utf8_bytes": 1310,
+                  "byte_recall": 0.5250501002004008,
+                  "leaked_utf8_bytes": 1185
+                },
+                "TITLE": {
+                  "entities": 5,
+                  "fully_covered": 0,
+                  "overlapped": 0,
+                  "full_coverage_recall": 0.0,
+                  "overlap_recall": 0.0,
+                  "utf8_bytes": 15,
+                  "covered_utf8_bytes": 0,
+                  "byte_recall": 0.0,
+                  "leaked_utf8_bytes": 15
+                },
+                "URL": {
+                  "entities": 276,
+                  "fully_covered": 233,
+                  "overlapped": 260,
+                  "full_coverage_recall": 0.8442028985507246,
+                  "overlap_recall": 0.9420289855072463,
+                  "utf8_bytes": 7209,
+                  "covered_utf8_bytes": 6749,
+                  "byte_recall": 0.9361908725204605,
+                  "leaked_utf8_bytes": 460
+                },
+                "USERNAME": {
+                  "entities": 101,
+                  "fully_covered": 92,
+                  "overlapped": 97,
+                  "full_coverage_recall": 0.9108910891089109,
+                  "overlap_recall": 0.9603960396039604,
+                  "utf8_bytes": 1034,
+                  "covered_utf8_bytes": 974,
+                  "byte_recall": 0.941972920696325,
+                  "leaked_utf8_bytes": 60
+                },
+                "ZIP": {
+                  "entities": 1090,
+                  "fully_covered": 986,
+                  "overlapped": 988,
+                  "full_coverage_recall": 0.9045871559633027,
+                  "overlap_recall": 0.9064220183486239,
+                  "utf8_bytes": 5423,
+                  "covered_utf8_bytes": 5019,
+                  "byte_recall": 0.9255024893970127,
+                  "leaked_utf8_bytes": 404
+                }
+              },
+              "gold_gap": {
+                "gold_gap_protected_bytes": 11761,
+                "false_positive_bytes_after_gold_gap": 15141,
+                "adjusted_precision": 0.8854100445009536,
+                "gold_gap_protected_bytes_by_label": {
+                  "BUILDINGNUM": 352,
+                  "CITY": 2586,
+                  "COMPANYNAME": 469,
+                  "COUNTRY": 174,
+                  "DATEOFBIRTH": 10,
+                  "DRIVERLICENSENUM": 38,
+                  "EMAIL": 75,
+                  "FIRSTNAME": 2907,
+                  "LICENSEPLATENUM": 53,
+                  "NATIONALID": 12,
+                  "PASSPORTID": 9,
+                  "PHONENUMBER": 27,
+                  "STATE": 340,
+                  "STREET": 1087,
+                  "SURNAME": 3469,
+                  "USERNAME": 24,
+                  "ZIP": 129
+                }
+              }
+            }
+          },
+          "observation_record": {
+            "file": "observations-v0.16.0.jsonl.gz",
+            "sha256": "da1ca7dc7e19999846d2f08427290c898ae2c4d70538aff8a88f1eea113ad7d1",
+            "format": "gzip-jsonl",
+            "schema_version": 2,
+            "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+            "observations": 7462,
+            "bytes": 1410786
+          },
+          "agentic_layers": {
+            "generator_corpus_sha256": "0748ced886e365873a928601d44029d5c7952f1845c5f29705c56a67fa53de84",
+            "scored_label_contract": {
+              "id": "scored-labels-agentic",
+              "version": 2,
+              "file_sha256": "5f7cbc905bba352a40a984638766b870ebf5fc5b61478258d293a0fcc6343189"
+            },
+            "binary_commit": {
+              "revision": "7779119128ce4b5fdee6674f40937fb770264610",
+              "dirty": false
+            },
+            "binary_sha256": null,
+            "harness_commit": {
+              "revision": "7779119128ce4b5fdee6674f40937fb770264610",
+              "dirty": false
+            },
+            "arms": {
+              "policy-file": {
+                "A": {
+                  "metrics": {
+                    "documents": 3088,
+                    "zero_leak_document_rate": 0.8409974093264249,
+                    "documents_without_leaks": 2597,
+                    "documents_with_false_positives": 298,
+                    "utf8_bytes": {
+                      "pii": 62109,
+                      "predicted": 57451,
+                      "true_positive": 56079,
+                      "false_positive": 1372,
+                      "leaked": 6030,
+                      "precision": 0.9761187794816453,
+                      "recall": 0.9029126213592233,
+                      "leak_rate": 0.09708737864077666,
+                      "f1": 0.938089662094346,
+                      "f2": 0.916662035326771,
+                      "false_positive_rate": 0.00865260303345631
+                    },
+                    "entities": {
+                      "gold": 4154,
+                      "fully_covered": 3588,
+                      "overlapped": 3713,
+                      "exact_boundary": 3389,
+                      "full_coverage_recall": 0.8637457871930669,
+                      "overlap_recall": 0.8938372652864709,
+                      "exact_boundary_recall": 0.8158401540683679
+                    },
+                    "prediction_spans": {
+                      "total": 3960,
+                      "overlapped_gold": 3708,
+                      "overlap_precision": 0.9363636363636364
+                    }
+                  },
+                  "per_label_recall": {
+                    "AGE": {
+                      "entities": 90,
+                      "fully_covered": 90,
+                      "overlapped": 90,
+                      "full_coverage_recall": 1.0,
+                      "overlap_recall": 1.0,
+                      "utf8_bytes": 174,
+                      "covered_utf8_bytes": 174,
+                      "byte_recall": 1.0,
+                      "leaked_utf8_bytes": 0
+                    },
+                    "BSN": {
+                      "entities": 140,
+                      "fully_covered": 100,
+                      "overlapped": 100,
+                      "full_coverage_recall": 0.7142857142857143,
+                      "overlap_recall": 0.7142857142857143,
+                      "utf8_bytes": 1260,
+                      "covered_utf8_bytes": 900,
+                      "byte_recall": 0.7142857142857143,
+                      "leaked_utf8_bytes": 360
+                    },
+                    "BUILDINGNUM": {
+                      "entities": 210,
+                      "fully_covered": 148,
+                      "overlapped": 192,
+                      "full_coverage_recall": 0.7047619047619048,
+                      "overlap_recall": 0.9142857142857143,
+                      "utf8_bytes": 1322,
+                      "covered_utf8_bytes": 957,
+                      "byte_recall": 0.7239031770045385,
+                      "leaked_utf8_bytes": 365
+                    },
+                    "CITY": {
+                      "entities": 132,
+                      "fully_covered": 129,
+                      "overlapped": 130,
+                      "full_coverage_recall": 0.9772727272727273,
+                      "overlap_recall": 0.9848484848484849,
+                      "utf8_bytes": 1317,
+                      "covered_utf8_bytes": 1296,
+                      "byte_recall": 0.9840546697038725,
+                      "leaked_utf8_bytes": 21
+                    },
+                    "CPF": {
+                      "entities": 140,
+                      "fully_covered": 104,
+                      "overlapped": 108,
+                      "full_coverage_recall": 0.7428571428571429,
+                      "overlap_recall": 0.7714285714285715,
+                      "utf8_bytes": 1960,
+                      "covered_utf8_bytes": 1502,
+                      "byte_recall": 0.7663265306122449,
+                      "leaked_utf8_bytes": 458
+                    },
+                    "CREDITCARDNUMBER": {
+                      "entities": 176,
+                      "fully_covered": 150,
+                      "overlapped": 152,
+                      "full_coverage_recall": 0.8522727272727273,
+                      "overlap_recall": 0.8636363636363636,
+                      "utf8_bytes": 3332,
+                      "covered_utf8_bytes": 2896,
+                      "byte_recall": 0.8691476590636255,
+                      "leaked_utf8_bytes": 436
+                    },
+                    "DATEOFBIRTH": {
+                      "entities": 148,
+                      "fully_covered": 138,
+                      "overlapped": 138,
+                      "full_coverage_recall": 0.9324324324324325,
+                      "overlap_recall": 0.9324324324324325,
+                      "utf8_bytes": 1475,
+                      "covered_utf8_bytes": 1375,
+                      "byte_recall": 0.9322033898305084,
+                      "leaked_utf8_bytes": 100
+                    },
+                    "EMAIL": {
+                      "entities": 100,
+                      "fully_covered": 100,
+                      "overlapped": 100,
+                      "full_coverage_recall": 1.0,
+                      "overlap_recall": 1.0,
+                      "utf8_bytes": 2539,
+                      "covered_utf8_bytes": 2539,
+                      "byte_recall": 1.0,
+                      "leaked_utf8_bytes": 0
+                    },
+                    "GIVENNAME": {
+                      "entities": 70,
+                      "fully_covered": 70,
+                      "overlapped": 70,
+                      "full_coverage_recall": 1.0,
+                      "overlap_recall": 1.0,
+                      "utf8_bytes": 385,
+                      "covered_utf8_bytes": 385,
+                      "byte_recall": 1.0,
+                      "leaked_utf8_bytes": 0
+                    },
+                    "IBAN": {
+                      "entities": 840,
+                      "fully_covered": 840,
+                      "overlapped": 840,
+                      "full_coverage_recall": 1.0,
+                      "overlap_recall": 1.0,
+                      "utf8_bytes": 23140,
+                      "covered_utf8_bytes": 23140,
+                      "byte_recall": 1.0,
+                      "leaked_utf8_bytes": 0
+                    },
+                    "IDCARDNUM": {
+                      "entities": 12,
+                      "fully_covered": 8,
+                      "overlapped": 8,
+                      "full_coverage_recall": 0.6666666666666666,
+                      "overlap_recall": 0.6666666666666666,
+                      "utf8_bytes": 124,
+                      "covered_utf8_bytes": 68,
+                      "byte_recall": 0.5483870967741935,
+                      "leaked_utf8_bytes": 56
+                    },
+                    "IPADDRESS": {
+                      "entities": 360,
+                      "fully_covered": 360,
+                      "overlapped": 360,
+                      "full_coverage_recall": 1.0,
+                      "overlap_recall": 1.0,
+                      "utf8_bytes": 3690,
+                      "covered_utf8_bytes": 3690,
+                      "byte_recall": 1.0,
+                      "leaked_utf8_bytes": 0
+                    },
+                    "LICENSEPLATE": {
+                      "entities": 18,
+                      "fully_covered": 12,
+                      "overlapped": 18,
+                      "full_coverage_recall": 0.6666666666666666,
+                      "overlap_recall": 1.0,
+                      "utf8_bytes": 178,
+                      "covered_utf8_bytes": 142,
+                      "byte_recall": 0.797752808988764,
+                      "leaked_utf8_bytes": 36
+                    },
+                    "NATIONALID": {
+                      "entities": 12,
+                      "fully_covered": 4,
+                      "overlapped": 4,
+                      "full_coverage_recall": 0.3333333333333333,
+                      "overlap_recall": 0.3333333333333333,
+                      "utf8_bytes": 134,
+                      "covered_utf8_bytes": 48,
+                      "byte_recall": 0.3582089552238806,
+                      "leaked_utf8_bytes": 86
+                    },
+                    "NHSNUMBER": {
+                      "entities": 140,
+                      "fully_covered": 95,
+                      "overlapped": 95,
+                      "full_coverage_recall": 0.6785714285714286,
+                      "overlap_recall": 0.6785714285714286,
+                      "utf8_bytes": 1800,
+                      "covered_utf8_bytes": 1230,
+                      "byte_recall": 0.6833333333333333,
+                      "leaked_utf8_bytes": 570
+                    },
+                    "SSN": {
+                      "entities": 24,
+                      "fully_covered": 4,
+                      "overlapped": 4,
+                      "full_coverage_recall": 0.16666666666666666,
+                      "overlap_recall": 0.16666666666666666,
+                      "utf8_bytes": 268,
+                      "covered_utf8_bytes": 64,
+                      "byte_recall": 0.23880597014925373,
+                      "leaked_utf8_bytes": 204
+                    },
+                    "STATE": {
+                      "entities": 84,
+                      "fully_covered": 78,
+                      "overlapped": 78,
+                      "full_coverage_recall": 0.9285714285714286,
+                      "overlap_recall": 0.9285714285714286,
+                      "utf8_bytes": 168,
+                      "covered_utf8_bytes": 156,
+                      "byte_recall": 0.9285714285714286,
+                      "leaked_utf8_bytes": 12
+                    },
+                    "STREET": {
+                      "entities": 120,
+                      "fully_covered": 112,
+                      "overlapped": 116,
+                      "full_coverage_recall": 0.9333333333333333,
+                      "overlap_recall": 0.9666666666666667,
+                      "utf8_bytes": 1470,
+                      "covered_utf8_bytes": 1410,
+                      "byte_recall": 0.9591836734693877,
+                      "leaked_utf8_bytes": 60
+                    },
+                    "SURNAME": {
+                      "entities": 70,
+                      "fully_covered": 70,
+                      "overlapped": 70,
+                      "full_coverage_recall": 1.0,
+                      "overlap_recall": 1.0,
+                      "utf8_bytes": 714,
+                      "covered_utf8_bytes": 714,
+                      "byte_recall": 1.0,
+                      "leaked_utf8_bytes": 0
+                    },
+                    "TAXNUM": {
+                      "entities": 172,
+                      "fully_covered": 84,
+                      "overlapped": 102,
+                      "full_coverage_recall": 0.4883720930232558,
+                      "overlap_recall": 0.5930232558139535,
+                      "utf8_bytes": 2516,
+                      "covered_utf8_bytes": 1517,
+                      "byte_recall": 0.6029411764705882,
+                      "leaked_utf8_bytes": 999
+                    },
+                    "TELEPHONENUM": {
+                      "entities": 560,
+                      "fully_covered": 362,
+                      "overlapped": 408,
+                      "full_coverage_recall": 0.6464285714285715,
+                      "overlap_recall": 0.7285714285714285,
+                      "utf8_bytes": 8030,
+                      "covered_utf8_bytes": 5799,
+                      "byte_recall": 0.7221668742216687,
+                      "leaked_utf8_bytes": 2231
+                    },
+                    "URL": {
+                      "entities": 66,
+                      "fully_covered": 66,
+                      "overlapped": 66,
+                      "full_coverage_recall": 1.0,
+                      "overlap_recall": 1.0,
+                      "utf8_bytes": 3527,
+                      "covered_utf8_bytes": 3527,
+                      "byte_recall": 1.0,
+                      "leaked_utf8_bytes": 0
+                    },
+                    "ZIPCODE": {
+                      "entities": 470,
+                      "fully_covered": 464,
+                      "overlapped": 464,
+                      "full_coverage_recall": 0.9872340425531915,
+                      "overlap_recall": 0.9872340425531915,
+                      "utf8_bytes": 2586,
+                      "covered_utf8_bytes": 2550,
+                      "byte_recall": 0.9860788863109049,
+                      "leaked_utf8_bytes": 36
+                    }
+                  },
+                  "pipeline_availability": {
+                    "attempted_documents": 3088,
+                    "completed_documents": 3088,
+                    "completion_rate": 1.0,
+                    "failed_closed_documents": 0,
+                    "errors": {},
+                    "error_stages": {}
+                  }
+                },
+                "D": {
+                  "metrics": {
+                    "documents": 1364,
+                    "zero_leak_document_rate": 1.0,
+                    "documents_without_leaks": 1364,
+                    "documents_with_false_positives": 461,
+                    "utf8_bytes": {
+                      "pii": 0,
+                      "predicted": 3968,
+                      "true_positive": 0,
+                      "false_positive": 3968,
+                      "leaked": 0,
+                      "precision": 0.0,
+                      "recall": 1.0,
+                      "leak_rate": 0.0,
+                      "f1": 0.0,
+                      "f2": 0.0,
+                      "false_positive_rate": 0.04898523529702237
+                    },
+                    "entities": {
+                      "gold": 0,
+                      "fully_covered": 0,
+                      "overlapped": 0,
+                      "exact_boundary": 0,
+                      "full_coverage_recall": 1.0,
+                      "overlap_recall": 1.0,
+                      "exact_boundary_recall": 1.0
+                    },
+                    "prediction_spans": {
+                      "total": 603,
+                      "overlapped_gold": 0,
+                      "overlap_precision": 0.0
+                    }
+                  },
+                  "per_label_recall": {},
+                  "pipeline_availability": {
+                    "attempted_documents": 1364,
+                    "completed_documents": 1364,
+                    "completion_rate": 1.0,
+                    "failed_closed_documents": 0,
+                    "errors": {},
+                    "error_stages": {}
+                  }
+                },
+                "R": {
+                  "metrics": {
+                    "documents": 100,
+                    "zero_leak_document_rate": 0.88,
+                    "documents_without_leaks": 88,
+                    "documents_with_false_positives": 90,
+                    "utf8_bytes": {
+                      "pii": 5142,
+                      "predicted": 5327,
+                      "true_positive": 4908,
+                      "false_positive": 419,
+                      "leaked": 234,
+                      "precision": 0.9213440961141356,
+                      "recall": 0.9544924154025671,
+                      "leak_rate": 0.04550758459743287,
+                      "f1": 0.9376253701404146,
+                      "f2": 0.9476732960030894,
+                      "false_positive_rate": 0.03889714073523951
+                    },
+                    "entities": {
+                      "gold": 440,
+                      "fully_covered": 420,
+                      "overlapped": 420,
+                      "exact_boundary": 200,
+                      "full_coverage_recall": 0.9545454545454546,
+                      "overlap_recall": 0.9545454545454546,
+                      "exact_boundary_recall": 0.45454545454545453
+                    },
+                    "prediction_spans": {
+                      "total": 337,
+                      "overlapped_gold": 310,
+                      "overlap_precision": 0.9198813056379822
+                    }
+                  },
+                  "per_label_recall": {
+                    "EMAIL": {
+                      "entities": 70,
+                      "fully_covered": 70,
+                      "overlapped": 70,
+                      "full_coverage_recall": 1.0,
+                      "overlap_recall": 1.0,
+                      "utf8_bytes": 1700,
+                      "covered_utf8_bytes": 1700,
+                      "byte_recall": 1.0,
+                      "leaked_utf8_bytes": 0
+                    },
+                    "GIVENNAME": {
+                      "entities": 140,
+                      "fully_covered": 138,
+                      "overlapped": 138,
+                      "full_coverage_recall": 0.9857142857142858,
+                      "overlap_recall": 0.9857142857142858,
+                      "utf8_bytes": 724,
+                      "covered_utf8_bytes": 718,
+                      "byte_recall": 0.9917127071823204,
+                      "leaked_utf8_bytes": 6
+                    },
+                    "IBAN": {
+                      "entities": 30,
+                      "fully_covered": 30,
+                      "overlapped": 30,
+                      "full_coverage_recall": 1.0,
+                      "overlap_recall": 1.0,
+                      "utf8_bytes": 710,
+                      "covered_utf8_bytes": 710,
+                      "byte_recall": 1.0,
+                      "leaked_utf8_bytes": 0
+                    },
+                    "SURNAME": {
+                      "entities": 140,
+                      "fully_covered": 140,
+                      "overlapped": 140,
+                      "full_coverage_recall": 1.0,
+                      "overlap_recall": 1.0,
+                      "utf8_bytes": 1198,
+                      "covered_utf8_bytes": 1198,
+                      "byte_recall": 1.0,
+                      "leaked_utf8_bytes": 0
+                    },
+                    "TAXNUM": {
+                      "entities": 30,
+                      "fully_covered": 12,
+                      "overlapped": 12,
+                      "full_coverage_recall": 0.4,
+                      "overlap_recall": 0.4,
+                      "utf8_bytes": 360,
+                      "covered_utf8_bytes": 132,
+                      "byte_recall": 0.36666666666666664,
+                      "leaked_utf8_bytes": 228
+                    },
+                    "TELEPHONENUM": {
+                      "entities": 30,
+                      "fully_covered": 30,
+                      "overlapped": 30,
+                      "full_coverage_recall": 1.0,
+                      "overlap_recall": 1.0,
+                      "utf8_bytes": 450,
+                      "covered_utf8_bytes": 450,
+                      "byte_recall": 1.0,
+                      "leaked_utf8_bytes": 0
+                    }
+                  },
+                  "pipeline_availability": {
+                    "attempted_documents": 100,
+                    "completed_documents": 100,
+                    "completion_rate": 1.0,
+                    "failed_closed_documents": 0,
+                    "errors": {},
+                    "error_stages": {}
+                  }
+                }
+              }
+            }
           }
         }
       ]

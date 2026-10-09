@@ -42,7 +42,7 @@
     "PHONENUMBER",
     "ZIP"
   ],
-  "compare_sha256": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
+  "compare_sha256": "5ddedb6cab9bb15957803a79d2e7ea6b8f2848a04229b062ffbaea783892f38e",
   "comparison_metadata_update": {
     "current_sha256": "b4e4afa171d7b80f88be654908976f73dc476e29c8e7bf103c70524090882453",
     "metrics_changed": false,
@@ -50,12 +50,18 @@
     "reason": "Only the compatible age label-map extension and its receipt changed. Every original comparison field other than the mapping digest is byte-for-byte equal as JSON; the tuned selection, anchors, scores and input predictions are unchanged."
   },
   "comparison_metrics_sha256": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
-  "comparison_sha256": "b4e4afa171d7b80f88be654908976f73dc476e29c8e7bf103c70524090882453",
+  "comparison_sha256": "4914f8d8387c7454e66ea8659c2b8e91a2ea6d18cc2e2f682752281e94f94f5c",
+  "contract_v4_derivation": {
+    "credential_prediction_classes": false,
+    "method": "v1 aggregates plus v3 gold-gap credit",
+    "prediction_replay": false
+  },
   "contracts": {
     "agentic": "d30ee303effc9a0de004531d12e85deb530d5eb74a1298e5d4432da4cfd6fce0",
     "v1": null,
-    "v2": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
-    "v3": "d849109f57f0f04bfbf722c7e8679164de16d99bf5eeeaea83f2968c0877baad"
+    "v2": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
+    "v3": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
+    "v4": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632"
   },
   "corpus": {
     "agentic": {
@@ -4562,6 +4568,936 @@
             "skipped_documents": 0,
             "skipped_gold_bytes": 0
           }
+        },
+        "v4": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 771,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": null,
+              "p95_ms": null,
+              "samples": 0,
+              "status": "not measured: scored from recorded findings"
+            },
+            "leaked_bytes": 4,
+            "metrics": {
+              "common_intersection": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.9860415718403884,
+                    "f2": 0.9943694727500842,
+                    "f5": 0.9989122595443314,
+                    "fn": 0,
+                    "fp": 184,
+                    "precision": 0.972467454735897,
+                    "recall": 1.0,
+                    "tp": 6499,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 2310,
+                  "false_positive_bytes": 184,
+                  "gold_entities": 370,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 340,
+                  "predicted_bytes": 6863,
+                  "redaction_load": 0.059364403847484606,
+                  "total_bytes": 115608,
+                  "true_positive_bytes": 6679,
+                  "typed_entities": {
+                    "f1": 0.6818757921419518,
+                    "f2": 0.7082675092153765,
+                    "fn": 101,
+                    "fp": 150,
+                    "precision": 0.6420047732696897,
+                    "recall": 0.727027027027027,
+                    "tp": 269
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.9837522992029429,
+                    "f2": 0.9934369388892327,
+                    "f5": 0.998731146756045,
+                    "fn": 0,
+                    "fp": 106,
+                    "precision": 0.9680241327300151,
+                    "recall": 1.0,
+                    "tp": 3209,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 1119,
+                  "false_positive_bytes": 106,
+                  "gold_entities": 178,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 166,
+                  "predicted_bytes": 3372,
+                  "redaction_load": 0.06015413158270301,
+                  "total_bytes": 56056,
+                  "true_positive_bytes": 3266,
+                  "typed_entities": {
+                    "f1": 0.7034120734908136,
+                    "f2": 0.7322404371584699,
+                    "fn": 44,
+                    "fp": 69,
+                    "precision": 0.6600985221674877,
+                    "recall": 0.7528089887640449,
+                    "tp": 134
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.9882847702012616,
+                    "f2": 0.9952807357212005,
+                    "f5": 0.9990889766170665,
+                    "fn": 0,
+                    "fp": 78,
+                    "precision": 0.9768408551068883,
+                    "recall": 1.0,
+                    "tp": 3290,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 1191,
+                  "false_positive_bytes": 78,
+                  "gold_entities": 192,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 174,
+                  "predicted_bytes": 3491,
+                  "redaction_load": 0.05862103707684041,
+                  "total_bytes": 59552,
+                  "true_positive_bytes": 3413,
+                  "typed_entities": {
+                    "f1": 0.6617647058823529,
+                    "f2": 0.6859756097560976,
+                    "fn": 57,
+                    "fp": 81,
+                    "precision": 0.625,
+                    "recall": 0.703125,
+                    "tp": 135
+                  }
+                }
+              },
+              "product_coverage": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.9921638639740862,
+                    "f2": 0.9967993469808605,
+                    "f5": 0.9993133625934187,
+                    "fn": 4,
+                    "fp": 729,
+                    "precision": 0.9845331296543823,
+                    "recall": 0.9999138079641441,
+                    "tp": 46404,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0017316017316017316,
+                  "documents": 2310,
+                  "false_positive_bytes": 771,
+                  "gold_entities": 2830,
+                  "leaked_bytes": 4,
+                  "leaked_entity_rate": 0.0014134275618374558,
+                  "leaking_documents": 4,
+                  "leaking_entities": 4,
+                  "pii_documents": 2310,
+                  "predicted_bytes": 49275,
+                  "redaction_load": 0.31298233579145945,
+                  "total_bytes": 157437,
+                  "true_positive_bytes": 48504,
+                  "typed_entities": {
+                    "f1": 0.39613872005720413,
+                    "f2": 0.393354160749787,
+                    "fn": 1722,
+                    "fp": 1656,
+                    "precision": 0.40086830680173663,
+                    "recall": 0.39151943462897526,
+                    "tp": 1108
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.9904288157047368,
+                    "f2": 0.9960960182960058,
+                    "f5": 0.9991745350081598,
+                    "fn": 2,
+                    "fp": 429,
+                    "precision": 0.9811254344669805,
+                    "recall": 0.9999103219442202,
+                    "tp": 22300,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0017873100983020554,
+                  "documents": 1119,
+                  "false_positive_bytes": 453,
+                  "gold_entities": 1372,
+                  "leaked_bytes": 2,
+                  "leaked_entity_rate": 0.0014577259475218659,
+                  "leaking_documents": 2,
+                  "leaking_entities": 2,
+                  "pii_documents": 1119,
+                  "predicted_bytes": 23661,
+                  "redaction_load": 0.31132894736842104,
+                  "total_bytes": 76000,
+                  "true_positive_bytes": 23208,
+                  "typed_entities": {
+                    "f1": 0.3897058823529411,
+                    "f2": 0.38765359859567,
+                    "fn": 842,
+                    "fp": 818,
+                    "precision": 0.39317507418397624,
+                    "recall": 0.38629737609329445,
+                    "tp": 530
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.9937744794887652,
+                    "f2": 0.9974509219717282,
+                    "f5": 0.9994418343555739,
+                    "fn": 2,
+                    "fp": 300,
+                    "precision": 0.9877069332896247,
+                    "recall": 0.9999170331037915,
+                    "tp": 24104,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0016792611251049538,
+                  "documents": 1191,
+                  "false_positive_bytes": 318,
+                  "gold_entities": 1458,
+                  "leaked_bytes": 2,
+                  "leaked_entity_rate": 0.0013717421124828531,
+                  "leaking_documents": 2,
+                  "leaking_entities": 2,
+                  "pii_documents": 1191,
+                  "predicted_bytes": 25614,
+                  "redaction_load": 0.31452533860530224,
+                  "total_bytes": 81437,
+                  "true_positive_bytes": 25296,
+                  "typed_entities": {
+                    "f1": 0.40222686151704934,
+                    "f2": 0.39873068432671077,
+                    "fn": 880,
+                    "fp": 838,
+                    "precision": 0.4081920903954802,
+                    "recall": 0.39643347050754457,
+                    "tp": 578
+                  }
+                }
+              }
+            },
+            "processed_documents": 2310,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 39329,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": null,
+              "p95_ms": null,
+              "samples": 0,
+              "status": "not measured: scored from recorded findings"
+            },
+            "leaked_bytes": 8261,
+            "metrics": {
+              "common_intersection": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.7728390205526601,
+                    "f2": 0.8848033144941568,
+                    "f5": 0.9596659809695569,
+                    "fn": 496,
+                    "fp": 13364,
+                    "precision": 0.6382339406079965,
+                    "recall": 0.979396003821709,
+                    "tp": 23577,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.053727333781061114,
+                  "documents": 2910,
+                  "false_positive_bytes": 13523,
+                  "gold_entities": 2230,
+                  "leaked_bytes": 499,
+                  "leaked_entity_rate": 0.037219730941704034,
+                  "leaking_documents": 80,
+                  "leaking_entities": 83,
+                  "pii_documents": 1489,
+                  "predicted_bytes": 37106,
+                  "redaction_load": 0.043509512502565004,
+                  "total_bytes": 852825,
+                  "true_positive_bytes": 23583,
+                  "typed_entities": {
+                    "f1": 0.39855197379762103,
+                    "f2": 0.4627331678808742,
+                    "fn": 1074,
+                    "fp": 2415,
+                    "precision": 0.3237188462615514,
+                    "recall": 0.5183856502242152,
+                    "tp": 1156
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.7766120697754534,
+                    "f2": 0.8888299473827581,
+                    "f5": 0.9638209133717018,
+                    "fn": 207,
+                    "fp": 6926,
+                    "precision": 0.6416041397153945,
+                    "recall": 0.9835792479771537,
+                    "tp": 12399,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.046094750320102434,
+                  "documents": 1480,
+                  "false_positive_bytes": 7015,
+                  "gold_entities": 1166,
+                  "leaked_bytes": 208,
+                  "leaked_entity_rate": 0.03173241852487135,
+                  "leaking_documents": 36,
+                  "leaking_entities": 37,
+                  "pii_documents": 781,
+                  "predicted_bytes": 19415,
+                  "redaction_load": 0.044151992922946075,
+                  "total_bytes": 439731,
+                  "true_positive_bytes": 12400,
+                  "typed_entities": {
+                    "f1": 0.39960435212660733,
+                    "f2": 0.4639412034910427,
+                    "fn": 560,
+                    "fp": 1261,
+                    "precision": 0.3245848955543653,
+                    "recall": 0.5197255574614065,
+                    "tp": 606
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.7686964893580442,
+                    "f2": 0.8803793081721378,
+                    "f5": 0.9550989020378519,
+                    "fn": 289,
+                    "fp": 6438,
+                    "precision": 0.6345367847411444,
+                    "recall": 0.9747972442661551,
+                    "tp": 11178,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.062146892655367235,
+                  "documents": 1430,
+                  "false_positive_bytes": 6508,
+                  "gold_entities": 1064,
+                  "leaked_bytes": 291,
+                  "leaked_entity_rate": 0.043233082706766915,
+                  "leaking_documents": 44,
+                  "leaking_entities": 46,
+                  "pii_documents": 708,
+                  "predicted_bytes": 17691,
+                  "redaction_load": 0.042825603857717616,
+                  "total_bytes": 413094,
+                  "true_positive_bytes": 11183,
+                  "typed_entities": {
+                    "f1": 0.39739884393063585,
+                    "f2": 0.46140939597315433,
+                    "fn": 514,
+                    "fp": 1154,
+                    "precision": 0.3227699530516432,
+                    "recall": 0.5169172932330827,
+                    "tp": 550
+                  }
+                }
+              },
+              "product_coverage": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.8366671164765355,
+                    "f2": 0.8936474991795499,
+                    "f5": 0.9276663104710017,
+                    "fn": 8246,
+                    "fp": 38959,
+                    "precision": 0.7562960553477375,
+                    "recall": 0.9361512671410541,
+                    "tp": 120903,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.3621420996818664,
+                  "documents": 2910,
+                  "false_positive_bytes": 39329,
+                  "gold_entities": 14719,
+                  "leaked_bytes": 8261,
+                  "leaked_entity_rate": 0.05638970038725457,
+                  "leaking_documents": 683,
+                  "leaking_entities": 830,
+                  "pii_documents": 1886,
+                  "predicted_bytes": 161350,
+                  "redaction_load": 0.16824378926513908,
+                  "total_bytes": 959025,
+                  "true_positive_bytes": 122021,
+                  "typed_entities": {
+                    "f1": 0.39490271307207453,
+                    "f2": 0.39291605884197467,
+                    "fn": 8955,
+                    "fp": 8709,
+                    "precision": 0.39825882678090235,
+                    "recall": 0.39160269040016304,
+                    "tp": 5764
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.8365690453879555,
+                    "f2": 0.894163518534715,
+                    "f5": 0.9285871246995397,
+                    "fn": 4249,
+                    "fp": 20517,
+                    "precision": 0.7554676233269371,
+                    "recall": 0.9371774968581356,
+                    "tp": 63386,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.3558467741935484,
+                  "documents": 1480,
+                  "false_positive_bytes": 20727,
+                  "gold_entities": 7731,
+                  "leaked_bytes": 4254,
+                  "leaked_entity_rate": 0.05600827835984996,
+                  "leaking_documents": 353,
+                  "leaking_entities": 433,
+                  "pii_documents": 992,
+                  "predicted_bytes": 84693,
+                  "redaction_load": 0.1709784936902308,
+                  "total_bytes": 495343,
+                  "true_positive_bytes": 63966,
+                  "typed_entities": {
+                    "f1": 0.3898050974512744,
+                    "f2": 0.38796906627913014,
+                    "fn": 4741,
+                    "fp": 4620,
+                    "precision": 0.392904073587385,
+                    "recall": 0.38675462424007245,
+                    "tp": 2990
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.8367752213161856,
+                    "f2": 0.8930795149294287,
+                    "f5": 0.9266536498433209,
+                    "fn": 3997,
+                    "fp": 18442,
+                    "precision": 0.7572111270553852,
+                    "recall": 0.9350229216113405,
+                    "tp": 57517,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.3691275167785235,
+                  "documents": 1430,
+                  "false_positive_bytes": 18602,
+                  "gold_entities": 6988,
+                  "leaked_bytes": 4007,
+                  "leaked_entity_rate": 0.05681167716084717,
+                  "leaking_documents": 330,
+                  "leaking_entities": 397,
+                  "pii_documents": 894,
+                  "predicted_bytes": 76657,
+                  "redaction_load": 0.16532235454470953,
+                  "total_bytes": 463682,
+                  "true_positive_bytes": 58055,
+                  "typed_entities": {
+                    "f1": 0.40054869684499317,
+                    "f2": 0.39839149791756423,
+                    "fn": 4214,
+                    "fp": 4089,
+                    "precision": 0.4041964155617077,
+                    "recall": 0.3969662278191185,
+                    "tp": 2774
+                  }
+                }
+              }
+            },
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 2345,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": null,
+              "p95_ms": null,
+              "samples": 0,
+              "status": "not measured: scored from recorded findings"
+            },
+            "leaked_bytes": 0,
+            "metrics": {
+              "common_intersection": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 1926,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 840,
+                  "false_positive_bytes": 1926,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 1926,
+                  "redaction_load": 0.04010995876546295,
+                  "total_bytes": 48018,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 192,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 1359,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 415,
+                  "false_positive_bytes": 1359,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 1359,
+                  "redaction_load": 0.05736113456018909,
+                  "total_bytes": 23692,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 132,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 567,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 425,
+                  "false_positive_bytes": 567,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 567,
+                  "redaction_load": 0.02330839431061416,
+                  "total_bytes": 24326,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 60,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                }
+              },
+              "product_coverage": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 2345,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 840,
+                  "false_positive_bytes": 2345,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 2345,
+                  "redaction_load": 0.048835853221708525,
+                  "total_bytes": 48018,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 296,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 1596,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 415,
+                  "false_positive_bytes": 1596,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 1596,
+                  "redaction_load": 0.06736451122741854,
+                  "total_bytes": 23692,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 180,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 749,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 425,
+                  "false_positive_bytes": 749,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 749,
+                  "redaction_load": 0.03079010112636685,
+                  "total_bytes": 24326,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 116,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                }
+              }
+            },
+            "processed_documents": 840,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 200,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": null,
+              "p95_ms": null,
+              "samples": 0,
+              "status": "not measured: scored from recorded findings"
+            },
+            "leaked_bytes": 192,
+            "metrics": {
+              "common_intersection": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.99241097489784,
+                    "f2": 0.9969505043396668,
+                    "f5": 0.9994121105232217,
+                    "fn": 0,
+                    "fp": 26,
+                    "precision": 0.984936268829664,
+                    "recall": 1.0,
+                    "tp": 1700,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 100,
+                  "false_positive_bytes": 26,
+                  "gold_entities": 70,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 70,
+                  "predicted_bytes": 1726,
+                  "redaction_load": 0.1383899935856318,
+                  "total_bytes": 12472,
+                  "true_positive_bytes": 1700,
+                  "typed_entities": {
+                    "f1": 0.9722222222222222,
+                    "f2": 0.9887005649717513,
+                    "fn": 0,
+                    "fp": 4,
+                    "precision": 0.9459459459459459,
+                    "recall": 1.0,
+                    "tp": 70
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.9964699949571356,
+                    "f2": 0.9985850010107137,
+                    "f5": 0.9997275734578712,
+                    "fn": 0,
+                    "fp": 7,
+                    "precision": 0.992964824120603,
+                    "recall": 1.0,
+                    "tp": 988,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 53,
+                  "false_positive_bytes": 7,
+                  "gold_entities": 40,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 40,
+                  "predicted_bytes": 995,
+                  "redaction_load": 0.1556633291614518,
+                  "total_bytes": 6392,
+                  "true_positive_bytes": 988,
+                  "typed_entities": {
+                    "f1": 0.9876543209876543,
+                    "f2": 0.9950248756218906,
+                    "fn": 0,
+                    "fp": 1,
+                    "precision": 0.975609756097561,
+                    "recall": 1.0,
+                    "tp": 40
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.9868329868329869,
+                    "f2": 0.9946912545403744,
+                    "f5": 0.9989746910582268,
+                    "fn": 0,
+                    "fp": 19,
+                    "precision": 0.9740082079343365,
+                    "recall": 1.0,
+                    "tp": 712,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 47,
+                  "false_positive_bytes": 19,
+                  "gold_entities": 30,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 30,
+                  "predicted_bytes": 731,
+                  "redaction_load": 0.12023026315789474,
+                  "total_bytes": 6080,
+                  "true_positive_bytes": 712,
+                  "typed_entities": {
+                    "f1": 0.9523809523809523,
+                    "f2": 0.980392156862745,
+                    "fn": 0,
+                    "fp": 3,
+                    "precision": 0.9090909090909091,
+                    "recall": 1.0,
+                    "tp": 30
+                  }
+                }
+              },
+              "product_coverage": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.9627462453676614,
+                    "f2": 0.9626335907637101,
+                    "f5": 0.9625729415117833,
+                    "fn": 192,
+                    "fp": 190,
+                    "precision": 0.962934061646508,
+                    "recall": 0.9625585023400937,
+                    "tp": 4936,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.18,
+                  "documents": 100,
+                  "false_positive_bytes": 200,
+                  "gold_entities": 440,
+                  "leaked_bytes": 192,
+                  "leaked_entity_rate": 0.07272727272727272,
+                  "leaking_documents": 18,
+                  "leaking_entities": 32,
+                  "pii_documents": 100,
+                  "predicted_bytes": 5150,
+                  "redaction_load": 0.3236144275480709,
+                  "total_bytes": 15914,
+                  "true_positive_bytes": 4950,
+                  "typed_entities": {
+                    "f1": 0.38303341902313626,
+                    "f2": 0.35510009532888465,
+                    "fn": 291,
+                    "fp": 189,
+                    "precision": 0.4408284023668639,
+                    "recall": 0.3386363636363636,
+                    "tp": 149
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.9674883887102537,
+                    "f2": 0.9693585337915235,
+                    "f5": 0.9703685327599989,
+                    "fn": 82,
+                    "fp": 100,
+                    "precision": 0.9643874643874644,
+                    "recall": 0.9706093189964158,
+                    "tp": 2708,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.16981132075471697,
+                  "documents": 53,
+                  "false_positive_bytes": 108,
+                  "gold_entities": 239,
+                  "leaked_bytes": 82,
+                  "leaked_entity_rate": 0.06276150627615062,
+                  "leaking_documents": 9,
+                  "leaking_entities": 15,
+                  "pii_documents": 53,
+                  "predicted_bytes": 2824,
+                  "redaction_load": 0.34430626676420384,
+                  "total_bytes": 8202,
+                  "true_positive_bytes": 2716,
+                  "typed_entities": {
+                    "f1": 0.3492822966507177,
+                    "f2": 0.32158590308370044,
+                    "fn": 166,
+                    "fp": 106,
+                    "precision": 0.40782122905027934,
+                    "recall": 0.3054393305439331,
+                    "tp": 73
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.9570446735395188,
+                    "f2": 0.9545844044558697,
+                    "f5": 0.9532648762506583,
+                    "fn": 110,
+                    "fp": 90,
+                    "precision": 0.9611734253666955,
+                    "recall": 0.9529512403763901,
+                    "tp": 2228,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.19148936170212766,
+                  "documents": 47,
+                  "false_positive_bytes": 92,
+                  "gold_entities": 201,
+                  "leaked_bytes": 110,
+                  "leaked_entity_rate": 0.0845771144278607,
+                  "leaking_documents": 9,
+                  "leaking_entities": 17,
+                  "pii_documents": 47,
+                  "predicted_bytes": 2326,
+                  "redaction_load": 0.30160788381742737,
+                  "total_bytes": 7712,
+                  "true_positive_bytes": 2234,
+                  "typed_entities": {
+                    "f1": 0.4222222222222222,
+                    "f2": 0.3946002076843198,
+                    "fn": 125,
+                    "fp": 83,
+                    "precision": 0.4779874213836478,
+                    "recall": 0.3781094527363184,
+                    "tp": 76
+                  }
+                }
+              }
+            },
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
         }
       },
       "tool": "presidio-tuned-own-f2"
@@ -6884,6 +7820,936 @@
                     "fp": 9274,
                     "precision": 0.07036888532477947,
                     "recall": 0.1034635224760501,
+                    "tp": 702
+                  }
+                }
+              }
+            },
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 4451,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": null,
+              "p95_ms": null,
+              "samples": 0,
+              "status": "not measured: scored from recorded findings"
+            },
+            "leaked_bytes": 0,
+            "metrics": {
+              "common_intersection": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 2757,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 840,
+                  "false_positive_bytes": 2767,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 2767,
+                  "redaction_load": 0.057624224249239867,
+                  "total_bytes": 48018,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 452,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 1719,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 415,
+                  "false_positive_bytes": 1727,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 1727,
+                  "redaction_load": 0.07289380381563397,
+                  "total_bytes": 23692,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 240,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 1038,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 425,
+                  "false_positive_bytes": 1040,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 1040,
+                  "redaction_load": 0.04275261037572967,
+                  "total_bytes": 24326,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 212,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                }
+              },
+              "product_coverage": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 4441,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 840,
+                  "false_positive_bytes": 4451,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 4451,
+                  "redaction_load": 0.09269440626431755,
+                  "total_bytes": 48018,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 612,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 2866,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 415,
+                  "false_positive_bytes": 2874,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 2874,
+                  "redaction_load": 0.12130677021779504,
+                  "total_bytes": 23692,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 343,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 1575,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 425,
+                  "false_positive_bytes": 1577,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 1577,
+                  "redaction_load": 0.06482775631012086,
+                  "total_bytes": 24326,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 269,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                }
+              }
+            },
+            "processed_documents": 840,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 871,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": null,
+              "p95_ms": null,
+              "samples": 0,
+              "status": "not measured: scored from recorded findings"
+            },
+            "leaked_bytes": 15,
+            "metrics": {
+              "common_intersection": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.910934502603453,
+                    "f2": 0.9498228368956453,
+                    "f5": 0.9721703525388647,
+                    "fn": 38,
+                    "fp": 287,
+                    "precision": 0.8527449974345819,
+                    "recall": 0.9776470588235294,
+                    "tp": 1662,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.02857142857142857,
+                  "documents": 100,
+                  "false_positive_bytes": 287,
+                  "gold_entities": 70,
+                  "leaked_bytes": 38,
+                  "leaked_entity_rate": 0.02857142857142857,
+                  "leaking_documents": 2,
+                  "leaking_entities": 2,
+                  "pii_documents": 70,
+                  "predicted_bytes": 1949,
+                  "redaction_load": 0.1562700449005773,
+                  "total_bytes": 12472,
+                  "true_positive_bytes": 1662,
+                  "typed_entities": {
+                    "f1": 0.5089285714285714,
+                    "f2": 0.6566820276497696,
+                    "fn": 13,
+                    "fp": 97,
+                    "precision": 0.37012987012987014,
+                    "recall": 0.8142857142857143,
+                    "tp": 57
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.9134615384615384,
+                    "f2": 0.9417129262490088,
+                    "f5": 0.9576612903225808,
+                    "fn": 38,
+                    "fp": 142,
+                    "precision": 0.86996336996337,
+                    "recall": 0.9615384615384616,
+                    "tp": 950,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.05,
+                  "documents": 53,
+                  "false_positive_bytes": 142,
+                  "gold_entities": 40,
+                  "leaked_bytes": 38,
+                  "leaked_entity_rate": 0.05,
+                  "leaking_documents": 2,
+                  "leaking_entities": 2,
+                  "pii_documents": 40,
+                  "predicted_bytes": 1092,
+                  "redaction_load": 0.17083854818523153,
+                  "total_bytes": 6392,
+                  "true_positive_bytes": 950,
+                  "typed_entities": {
+                    "f1": 0.5423728813559321,
+                    "f2": 0.6722689075630252,
+                    "fn": 8,
+                    "fp": 46,
+                    "precision": 0.41025641025641024,
+                    "recall": 0.8,
+                    "tp": 32
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.9075844486934352,
+                    "f2": 0.9608636977058029,
+                    "f5": 0.9922281181326044,
+                    "fn": 0,
+                    "fp": 145,
+                    "precision": 0.8308051341890315,
+                    "recall": 1.0,
+                    "tp": 712,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 47,
+                  "false_positive_bytes": 145,
+                  "gold_entities": 30,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 30,
+                  "predicted_bytes": 857,
+                  "redaction_load": 0.14095394736842104,
+                  "total_bytes": 6080,
+                  "true_positive_bytes": 712,
+                  "typed_entities": {
+                    "f1": 0.4716981132075471,
+                    "f2": 0.6377551020408163,
+                    "fn": 5,
+                    "fp": 51,
+                    "precision": 0.32894736842105265,
+                    "recall": 0.8333333333333334,
+                    "tp": 25
+                  }
+                }
+              },
+              "product_coverage": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.9210952981444784,
+                    "f2": 0.9652269123310427,
+                    "f5": 0.9907880811483596,
+                    "fn": 15,
+                    "fp": 861,
+                    "precision": 0.8558754603280884,
+                    "recall": 0.9970748829953198,
+                    "tp": 5113,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.01,
+                  "documents": 100,
+                  "false_positive_bytes": 871,
+                  "gold_entities": 440,
+                  "leaked_bytes": 15,
+                  "leaked_entity_rate": 0.0022727272727272726,
+                  "leaking_documents": 1,
+                  "leaking_entities": 1,
+                  "pii_documents": 100,
+                  "predicted_bytes": 5998,
+                  "redaction_load": 0.37690084202588914,
+                  "total_bytes": 15914,
+                  "true_positive_bytes": 5127,
+                  "typed_entities": {
+                    "f1": 0.22880490296220635,
+                    "f2": 0.2435841670291431,
+                    "fn": 328,
+                    "fp": 427,
+                    "precision": 0.2077922077922078,
+                    "recall": 0.2545454545454545,
+                    "tp": 112
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.9257714762301918,
+                    "f2": 0.9658893143056039,
+                    "f5": 0.9889658008361318,
+                    "fn": 15,
+                    "fp": 430,
+                    "precision": 0.8658346333853354,
+                    "recall": 0.9946236559139785,
+                    "tp": 2775,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.018867924528301886,
+                  "documents": 53,
+                  "false_positive_bytes": 438,
+                  "gold_entities": 239,
+                  "leaked_bytes": 15,
+                  "leaked_entity_rate": 0.0041841004184100415,
+                  "leaking_documents": 1,
+                  "leaking_entities": 1,
+                  "pii_documents": 53,
+                  "predicted_bytes": 3221,
+                  "redaction_load": 0.39270909534259935,
+                  "total_bytes": 8202,
+                  "true_positive_bytes": 2783,
+                  "typed_entities": {
+                    "f1": 0.1937984496124031,
+                    "f2": 0.20275750202757503,
+                    "fn": 189,
+                    "fp": 227,
+                    "precision": 0.18050541516245489,
+                    "recall": 0.20920502092050208,
+                    "tp": 50
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.9156060309379283,
+                    "f2": 0.9644418777328602,
+                    "f5": 0.992959702053284,
+                    "fn": 0,
+                    "fp": 431,
+                    "precision": 0.844348140122788,
+                    "recall": 1.0,
+                    "tp": 2338,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 47,
+                  "false_positive_bytes": 433,
+                  "gold_entities": 201,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 47,
+                  "predicted_bytes": 2777,
+                  "redaction_load": 0.3600881742738589,
+                  "total_bytes": 7712,
+                  "true_positive_bytes": 2344,
+                  "typed_entities": {
+                    "f1": 0.2678185745140389,
+                    "f2": 0.2908067542213884,
+                    "fn": 139,
+                    "fp": 200,
+                    "precision": 0.2366412213740458,
+                    "recall": 0.30845771144278605,
+                    "tp": 62
+                  }
+                }
+              }
+            },
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
+        },
+        "v4": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 2318,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": null,
+              "p95_ms": null,
+              "samples": 0,
+              "status": "not measured: scored from recorded findings"
+            },
+            "leaked_bytes": 4,
+            "metrics": {
+              "common_intersection": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.9152199074074074,
+                    "f2": 0.9492512229524923,
+                    "f5": 0.9686454652532391,
+                    "fn": 173,
+                    "fp": 999,
+                    "precision": 0.8636177474402731,
+                    "recall": 0.9733805200800123,
+                    "tp": 6326,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.023529411764705882,
+                  "documents": 2310,
+                  "false_positive_bytes": 1037,
+                  "gold_entities": 370,
+                  "leaked_bytes": 173,
+                  "leaked_entity_rate": 0.021621621621621623,
+                  "leaking_documents": 8,
+                  "leaking_entities": 8,
+                  "pii_documents": 340,
+                  "predicted_bytes": 7543,
+                  "redaction_load": 0.06524634973358245,
+                  "total_bytes": 115608,
+                  "true_positive_bytes": 6506,
+                  "typed_entities": {
+                    "f1": 0.5032863849765258,
+                    "f2": 0.6160919540229884,
+                    "fn": 102,
+                    "fp": 427,
+                    "precision": 0.3856115107913669,
+                    "recall": 0.7243243243243244,
+                    "tp": 268
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.9169230769230771,
+                    "f2": 0.9509482129832239,
+                    "f5": 0.970336708770172,
+                    "fn": 80,
+                    "fp": 487,
+                    "precision": 0.865320796460177,
+                    "recall": 0.9750701153007167,
+                    "tp": 3129,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.024096385542168676,
+                  "documents": 1119,
+                  "false_positive_bytes": 504,
+                  "gold_entities": 178,
+                  "leaked_bytes": 80,
+                  "leaked_entity_rate": 0.02247191011235955,
+                  "leaking_documents": 4,
+                  "leaking_entities": 4,
+                  "pii_documents": 166,
+                  "predicted_bytes": 3690,
+                  "redaction_load": 0.06582703011274439,
+                  "total_bytes": 56056,
+                  "true_positive_bytes": 3186,
+                  "typed_entities": {
+                    "f1": 0.5134099616858238,
+                    "f2": 0.634469696969697,
+                    "fn": 44,
+                    "fp": 210,
+                    "precision": 0.38953488372093026,
+                    "recall": 0.7528089887640449,
+                    "tp": 134
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.9135590798685527,
+                    "f2": 0.9475961823463157,
+                    "f5": 0.9669958933910353,
+                    "fn": 93,
+                    "fp": 512,
+                    "precision": 0.8619574009166892,
+                    "recall": 0.9717325227963526,
+                    "tp": 3197,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.022988505747126436,
+                  "documents": 1191,
+                  "false_positive_bytes": 533,
+                  "gold_entities": 192,
+                  "leaked_bytes": 93,
+                  "leaked_entity_rate": 0.020833333333333332,
+                  "leaking_documents": 4,
+                  "leaking_entities": 4,
+                  "pii_documents": 174,
+                  "predicted_bytes": 3853,
+                  "redaction_load": 0.06469975819451908,
+                  "total_bytes": 59552,
+                  "true_positive_bytes": 3320,
+                  "typed_entities": {
+                    "f1": 0.4935543278084715,
+                    "f2": 0.5987488829311887,
+                    "fn": 58,
+                    "fp": 217,
+                    "precision": 0.3817663817663818,
+                    "recall": 0.6979166666666666,
+                    "tp": 134
+                  }
+                }
+              },
+              "product_coverage": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.9771114526963002,
+                    "f2": 0.9906663364730194,
+                    "f5": 0.9981220641741134,
+                    "fn": 4,
+                    "fp": 2170,
+                    "precision": 0.955325894511467,
+                    "recall": 0.9999138079641441,
+                    "tp": 46404,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0004329004329004329,
+                  "documents": 2310,
+                  "false_positive_bytes": 2318,
+                  "gold_entities": 2830,
+                  "leaked_bytes": 4,
+                  "leaked_entity_rate": 0.00035335689045936394,
+                  "leaking_documents": 1,
+                  "leaking_entities": 1,
+                  "pii_documents": 2310,
+                  "predicted_bytes": 50822,
+                  "redaction_load": 0.32280848847475496,
+                  "total_bytes": 157437,
+                  "true_positive_bytes": 48504,
+                  "typed_entities": {
+                    "f1": 0.4068643785404865,
+                    "f2": 0.4212669058791057,
+                    "fn": 1609,
+                    "fp": 1951,
+                    "precision": 0.3849306431273644,
+                    "recall": 0.4314487632508834,
+                    "tp": 1221
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.9753942389711511,
+                    "f2": 0.9899047297717244,
+                    "f5": 0.997898338809816,
+                    "fn": 4,
+                    "fp": 1121,
+                    "precision": 0.9521328835560869,
+                    "recall": 0.9998206438884405,
+                    "tp": 22298,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0008936550491510277,
+                  "documents": 1119,
+                  "false_positive_bytes": 1190,
+                  "gold_entities": 1372,
+                  "leaked_bytes": 4,
+                  "leaked_entity_rate": 0.0007288629737609329,
+                  "leaking_documents": 1,
+                  "leaking_entities": 1,
+                  "pii_documents": 1119,
+                  "predicted_bytes": 24396,
+                  "redaction_load": 0.321,
+                  "total_bytes": 76000,
+                  "true_positive_bytes": 23206,
+                  "typed_entities": {
+                    "f1": 0.3968739381583418,
+                    "f2": 0.41365632525853524,
+                    "fn": 788,
+                    "fp": 987,
+                    "precision": 0.3717377466581795,
+                    "recall": 0.42565597667638483,
+                    "tp": 584
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.9787052637989485,
+                    "f2": 0.9913718652069848,
+                    "f5": 0.9983290990036715,
+                    "fn": 0,
+                    "fp": 1049,
+                    "precision": 0.9582985489962235,
+                    "recall": 1.0,
+                    "tp": 24106,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 1191,
+                  "false_positive_bytes": 1128,
+                  "gold_entities": 1458,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 1191,
+                  "predicted_bytes": 26426,
+                  "redaction_load": 0.3244962363544826,
+                  "total_bytes": 81437,
+                  "true_positive_bytes": 25298,
+                  "typed_entities": {
+                    "f1": 0.41647597254004576,
+                    "f2": 0.42849455132517156,
+                    "fn": 821,
+                    "fp": 964,
+                    "precision": 0.39787632729544037,
+                    "recall": 0.43689986282578874,
+                    "tp": 637
+                  }
+                }
+              }
+            },
+            "processed_documents": 2310,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 86590,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": null,
+              "p95_ms": null,
+              "samples": 0,
+              "status": "not measured: scored from recorded findings"
+            },
+            "leaked_bytes": 4066,
+            "metrics": {
+              "common_intersection": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.5947626098904764,
+                    "f2": 0.7573039815192281,
+                    "f5": 0.8879737342446068,
+                    "fn": 1781,
+                    "fp": 28596,
+                    "precision": 0.4380600534507153,
+                    "recall": 0.92601669920658,
+                    "tp": 22292,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.08999328408327736,
+                  "documents": 2910,
+                  "false_positive_bytes": 28693,
+                  "gold_entities": 2230,
+                  "leaked_bytes": 1781,
+                  "leaked_entity_rate": 0.06547085201793722,
+                  "leaking_documents": 134,
+                  "leaking_entities": 146,
+                  "pii_documents": 1489,
+                  "predicted_bytes": 50994,
+                  "redaction_load": 0.05979421334974936,
+                  "total_bytes": 852825,
+                  "true_positive_bytes": 22301,
+                  "typed_entities": {
+                    "f1": 0.13277539018321646,
+                    "f2": 0.1889647180015452,
+                    "fn": 1643,
+                    "fp": 6025,
+                    "precision": 0.08877797943133696,
+                    "recall": 0.2632286995515695,
+                    "tp": 587
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.6042264814671116,
+                    "f2": 0.7636083107781222,
+                    "f5": 0.8900221274600313,
+                    "fn": 926,
+                    "fp": 14375,
+                    "precision": 0.44828247937056226,
+                    "recall": 0.9265429160717119,
+                    "tp": 11680,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.08706786171574904,
+                  "documents": 1480,
+                  "false_positive_bytes": 14424,
+                  "gold_entities": 1166,
+                  "leaked_bytes": 926,
+                  "leaked_entity_rate": 0.06518010291595197,
+                  "leaking_documents": 68,
+                  "leaking_entities": 76,
+                  "pii_documents": 781,
+                  "predicted_bytes": 26106,
+                  "redaction_load": 0.05936811368768634,
+                  "total_bytes": 439731,
+                  "true_positive_bytes": 11682,
+                  "typed_entities": {
+                    "f1": 0.13434501227404597,
+                    "f2": 0.1886201278355684,
+                    "fn": 865,
+                    "fp": 3014,
+                    "precision": 0.09079939668174962,
+                    "recall": 0.258147512864494,
+                    "tp": 301
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.5846831955922865,
+                    "f2": 0.7504844344493006,
+                    "f5": 0.8857300615072485,
+                    "fn": 855,
+                    "fp": 14221,
+                    "precision": 0.4273345950952362,
+                    "recall": 0.9254382140054068,
+                    "tp": 10612,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.09322033898305085,
+                  "documents": 1430,
+                  "false_positive_bytes": 14269,
+                  "gold_entities": 1064,
+                  "leaked_bytes": 855,
+                  "leaked_entity_rate": 0.06578947368421052,
+                  "leaking_documents": 66,
+                  "leaking_entities": 70,
+                  "pii_documents": 708,
+                  "predicted_bytes": 24888,
+                  "redaction_load": 0.06024778863890543,
+                  "total_bytes": 413094,
+                  "true_positive_bytes": 10619,
+                  "typed_entities": {
+                    "f1": 0.13116257739050677,
+                    "f2": 0.18932874354561102,
+                    "fn": 778,
+                    "fp": 3011,
+                    "precision": 0.08674552623597209,
+                    "recall": 0.26879699248120303,
+                    "tp": 286
+                  }
+                }
+              },
+              "product_coverage": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.7350847243483702,
+                    "f2": 0.859380367305774,
+                    "f5": 0.945463478021986,
+                    "fn": 4060,
+                    "fp": 86101,
+                    "precision": 0.5923055068895308,
+                    "recall": 0.9685634422256464,
+                    "tp": 125089,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.1818663838812301,
+                  "documents": 2910,
+                  "false_positive_bytes": 86590,
+                  "gold_entities": 14719,
+                  "leaked_bytes": 4066,
+                  "leaked_entity_rate": 0.024458183300495956,
+                  "leaking_documents": 343,
+                  "leaking_entities": 360,
+                  "pii_documents": 1886,
+                  "predicted_bytes": 212806,
+                  "redaction_load": 0.22189828210943405,
+                  "total_bytes": 959025,
+                  "true_positive_bytes": 126216,
+                  "typed_entities": {
+                    "f1": 0.07962201906678969,
+                    "f2": 0.08908240122112955,
+                    "fn": 13295,
+                    "fp": 19626,
+                    "precision": 0.06764845605700713,
+                    "recall": 0.0967457028330729,
+                    "tp": 1424
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.7343171156831646,
+                    "f2": 0.8589759055101591,
+                    "f5": 0.9453944596865014,
+                    "fn": 2124,
+                    "fp": 45281,
+                    "precision": 0.5912972055744097,
+                    "recall": 0.9685961410512308,
+                    "tp": 65511,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.19455645161290322,
+                  "documents": 1480,
+                  "false_positive_bytes": 45546,
+                  "gold_entities": 7731,
+                  "leaked_bytes": 2127,
+                  "leaked_entity_rate": 0.025999223903764065,
+                  "leaking_documents": 193,
+                  "leaking_entities": 201,
+                  "pii_documents": 992,
+                  "predicted_bytes": 111639,
+                  "redaction_load": 0.22537716289520596,
+                  "total_bytes": 495343,
+                  "true_positive_bytes": 66093,
+                  "typed_entities": {
+                    "f1": 0.07738892759526234,
+                    "f2": 0.0862563318359935,
+                    "fn": 7009,
+                    "fp": 10206,
+                    "precision": 0.0660688140556369,
+                    "recall": 0.09339024705730177,
+                    "tp": 722
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.7359306289836455,
+                    "f2": 0.8598255468258412,
+                    "f5": 0.9455393810949257,
+                    "fn": 1936,
+                    "fp": 40820,
+                    "precision": 0.5934181955815853,
+                    "recall": 0.9685274896771466,
+                    "tp": 59578,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.16778523489932887,
+                  "documents": 1430,
+                  "false_positive_bytes": 41044,
+                  "gold_entities": 6988,
+                  "leaked_bytes": 1939,
+                  "leaked_entity_rate": 0.022753291356611333,
+                  "leaking_documents": 150,
+                  "leaking_entities": 159,
+                  "pii_documents": 894,
+                  "predicted_bytes": 101167,
+                  "redaction_load": 0.2181818573936448,
+                  "total_bytes": 463682,
+                  "true_positive_bytes": 60123,
+                  "typed_entities": {
+                    "f1": 0.08205727644652251,
+                    "f2": 0.09218889530913484,
+                    "fn": 6286,
+                    "fp": 9420,
+                    "precision": 0.06935388263189093,
+                    "recall": 0.10045792787635947,
                     "tp": 702
                   }
                 }
@@ -10152,12 +12018,942 @@
             "skipped_documents": 0,
             "skipped_gold_bytes": 0
           }
+        },
+        "v4": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 10526,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": null,
+              "p95_ms": null,
+              "samples": 0,
+              "status": "not measured: scored from recorded findings"
+            },
+            "leaked_bytes": 6050,
+            "metrics": {
+              "common_intersection": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.6811085972850679,
+                    "f2": 0.8097748608010329,
+                    "f5": 0.9014718754318883,
+                    "fn": 478,
+                    "fp": 5160,
+                    "precision": 0.5385028172793132,
+                    "recall": 0.9264502231112479,
+                    "tp": 6021,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.17058823529411765,
+                  "documents": 2310,
+                  "false_positive_bytes": 5244,
+                  "gold_entities": 370,
+                  "leaked_bytes": 571,
+                  "leaked_entity_rate": 0.15675675675675677,
+                  "leaking_documents": 58,
+                  "leaking_entities": 58,
+                  "pii_documents": 340,
+                  "predicted_bytes": 11352,
+                  "redaction_load": 0.09819389661615113,
+                  "total_bytes": 115608,
+                  "true_positive_bytes": 6108,
+                  "typed_entities": {
+                    "f1": 0.16982687551525144,
+                    "f2": 0.22169608265174337,
+                    "fn": 267,
+                    "fp": 740,
+                    "precision": 0.1221826809015421,
+                    "recall": 0.27837837837837837,
+                    "tp": 103
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.6869831199728108,
+                    "f2": 0.8215021133629565,
+                    "f5": 0.9183276446536118,
+                    "fn": 177,
+                    "fp": 2586,
+                    "precision": 0.5396938412246352,
+                    "recall": 0.9448426301028358,
+                    "tp": 3032,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.13855421686746988,
+                  "documents": 1119,
+                  "false_positive_bytes": 2619,
+                  "gold_entities": 178,
+                  "leaked_bytes": 206,
+                  "leaked_entity_rate": 0.12921348314606743,
+                  "leaking_documents": 23,
+                  "leaking_entities": 23,
+                  "pii_documents": 166,
+                  "predicted_bytes": 5679,
+                  "redaction_load": 0.10130940488083345,
+                  "total_bytes": 56056,
+                  "true_positive_bytes": 3060,
+                  "typed_entities": {
+                    "f1": 0.1846153846153846,
+                    "f2": 0.24128686327077747,
+                    "fn": 124,
+                    "fp": 353,
+                    "precision": 0.13267813267813267,
+                    "recall": 0.30337078651685395,
+                    "tp": 54
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.6752513272337062,
+                    "f2": 0.7982160978475672,
+                    "f5": 0.8849942491430653,
+                    "fn": 301,
+                    "fp": 2574,
+                    "precision": 0.5373000179759123,
+                    "recall": 0.9085106382978724,
+                    "tp": 2989,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.20114942528735633,
+                  "documents": 1191,
+                  "false_positive_bytes": 2625,
+                  "gold_entities": 192,
+                  "leaked_bytes": 365,
+                  "leaked_entity_rate": 0.18229166666666666,
+                  "leaking_documents": 35,
+                  "leaking_entities": 35,
+                  "pii_documents": 174,
+                  "predicted_bytes": 5673,
+                  "redaction_load": 0.09526128425577647,
+                  "total_bytes": 59552,
+                  "true_positive_bytes": 3048,
+                  "typed_entities": {
+                    "f1": 0.15605095541401276,
+                    "f2": 0.20348837209302326,
+                    "fn": 143,
+                    "fp": 387,
+                    "precision": 0.11238532110091744,
+                    "recall": 0.2552083333333333,
+                    "tp": 49
+                  }
+                }
+              },
+              "product_coverage": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.8356707411739135,
+                    "f2": 0.8558732366297632,
+                    "f5": 0.8671614305577702,
+                    "fn": 6038,
+                    "fp": 9839,
+                    "precision": 0.804039116493059,
+                    "recall": 0.8698931218755387,
+                    "tp": 40370,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.2792207792207792,
+                  "documents": 2310,
+                  "false_positive_bytes": 10526,
+                  "gold_entities": 2830,
+                  "leaked_bytes": 6050,
+                  "leaked_entity_rate": 0.2745583038869258,
+                  "leaking_documents": 645,
+                  "leaking_entities": 777,
+                  "pii_documents": 2310,
+                  "predicted_bytes": 52984,
+                  "redaction_load": 0.3365409655925862,
+                  "total_bytes": 157437,
+                  "true_positive_bytes": 42458,
+                  "typed_entities": {
+                    "f1": 0.10332950631458095,
+                    "f2": 0.1079728525399328,
+                    "fn": 2515,
+                    "fp": 2952,
+                    "precision": 0.09641873278236915,
+                    "recall": 0.11130742049469965,
+                    "tp": 315
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.8315631691648822,
+                    "f2": 0.8545763427987958,
+                    "f5": 0.8675036257535036,
+                    "fn": 2885,
+                    "fp": 4981,
+                    "precision": 0.7958439216329207,
+                    "recall": 0.8706394045377096,
+                    "tp": 19417,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.2743521000893655,
+                  "documents": 1119,
+                  "false_positive_bytes": 5291,
+                  "gold_entities": 1372,
+                  "leaked_bytes": 2887,
+                  "leaked_entity_rate": 0.271865889212828,
+                  "leaking_documents": 307,
+                  "leaking_entities": 373,
+                  "pii_documents": 1119,
+                  "predicted_bytes": 25614,
+                  "redaction_load": 0.3370263157894737,
+                  "total_bytes": 76000,
+                  "true_positive_bytes": 20323,
+                  "typed_entities": {
+                    "f1": 0.10752688172043011,
+                    "f2": 0.11280315848843768,
+                    "fn": 1212,
+                    "fp": 1444,
+                    "precision": 0.09975062344139651,
+                    "recall": 0.11661807580174927,
+                    "tp": 160
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.8395135925636555,
+                    "f2": 0.8570785781486481,
+                    "f5": 0.8668445615559279,
+                    "fn": 3153,
+                    "fp": 4858,
+                    "precision": 0.8117856727751733,
+                    "recall": 0.8692026881274372,
+                    "tp": 20953,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.2837951301427372,
+                  "documents": 1191,
+                  "false_positive_bytes": 5235,
+                  "gold_entities": 1458,
+                  "leaked_bytes": 3163,
+                  "leaked_entity_rate": 0.27709190672153633,
+                  "leaking_documents": 338,
+                  "leaking_entities": 404,
+                  "pii_documents": 1191,
+                  "predicted_bytes": 27370,
+                  "redaction_load": 0.336088018959441,
+                  "total_bytes": 81437,
+                  "true_positive_bytes": 22135,
+                  "typed_entities": {
+                    "f1": 0.0993271387375841,
+                    "f2": 0.10340226817878585,
+                    "fn": 1303,
+                    "fp": 1508,
+                    "precision": 0.09320505111244738,
+                    "recall": 0.10631001371742113,
+                    "tp": 155
+                  }
+                }
+              }
+            },
+            "processed_documents": 2310,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 80797,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": null,
+              "p95_ms": null,
+              "samples": 0,
+              "status": "not measured: scored from recorded findings"
+            },
+            "leaked_bytes": 6748,
+            "metrics": {
+              "common_intersection": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.6959131690380778,
+                    "f2": 0.8011221013626585,
+                    "f5": 0.8721169741737815,
+                    "fn": 2626,
+                    "fp": 16117,
+                    "precision": 0.5709455861995527,
+                    "recall": 0.8909151331367092,
+                    "tp": 21447,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.20349227669576897,
+                  "documents": 2910,
+                  "false_positive_bytes": 16140,
+                  "gold_entities": 2230,
+                  "leaked_bytes": 2626,
+                  "leaked_entity_rate": 0.14663677130044844,
+                  "leaking_documents": 303,
+                  "leaking_entities": 327,
+                  "pii_documents": 1489,
+                  "predicted_bytes": 37596,
+                  "redaction_load": 0.044084073520358806,
+                  "total_bytes": 852825,
+                  "true_positive_bytes": 21456,
+                  "typed_entities": {
+                    "f1": 0.011791555724610119,
+                    "f2": 0.012972882490793437,
+                    "fn": 2199,
+                    "fp": 2997,
+                    "precision": 0.01023778071334214,
+                    "recall": 0.01390134529147982,
+                    "tp": 31
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.7113629209946492,
+                    "f2": 0.8119215956774156,
+                    "f5": 0.8788145276596253,
+                    "fn": 1306,
+                    "fp": 7864,
+                    "precision": 0.5896472552702985,
+                    "recall": 0.8963985403775979,
+                    "tp": 11300,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.18437900128040974,
+                  "documents": 1480,
+                  "false_positive_bytes": 7877,
+                  "gold_entities": 1166,
+                  "leaked_bytes": 1306,
+                  "leaked_entity_rate": 0.13550600343053174,
+                  "leaking_documents": 144,
+                  "leaking_entities": 158,
+                  "pii_documents": 781,
+                  "predicted_bytes": 19179,
+                  "redaction_load": 0.04361530117276244,
+                  "total_bytes": 439731,
+                  "true_positive_bytes": 11302,
+                  "typed_entities": {
+                    "f1": 0.009513355287230149,
+                    "f2": 0.010431712405713368,
+                    "fn": 1153,
+                    "fp": 1554,
+                    "precision": 0.008296107211231652,
+                    "recall": 0.011149228130360206,
+                    "tp": 13
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.6794790236716107,
+                    "f2": 0.7894286425592829,
+                    "f5": 0.8647775137261329,
+                    "fn": 1320,
+                    "fp": 8253,
+                    "precision": 0.5514673913043479,
+                    "recall": 0.8848870672364175,
+                    "tp": 10147,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.2245762711864407,
+                  "documents": 1430,
+                  "false_positive_bytes": 8263,
+                  "gold_entities": 1064,
+                  "leaked_bytes": 1320,
+                  "leaked_entity_rate": 0.1588345864661654,
+                  "leaking_documents": 159,
+                  "leaking_entities": 169,
+                  "pii_documents": 708,
+                  "predicted_bytes": 18417,
+                  "redaction_load": 0.04458307310200584,
+                  "total_bytes": 413094,
+                  "true_positive_bytes": 10154,
+                  "typed_entities": {
+                    "f1": 0.014257425742574256,
+                    "f2": 0.015742522301906595,
+                    "fn": 1046,
+                    "fp": 1443,
+                    "precision": 0.012320328542094456,
+                    "recall": 0.016917293233082706,
+                    "tp": 18
+                  }
+                }
+              },
+              "product_coverage": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.7377441379767508,
+                    "f2": 0.8509458119997944,
+                    "f5": 0.927585883318403,
+                    "fn": 6727,
+                    "fp": 80311,
+                    "precision": 0.6038582766495835,
+                    "recall": 0.9479128758255968,
+                    "tp": 122422,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.3488865323435843,
+                  "documents": 2910,
+                  "false_positive_bytes": 80797,
+                  "gold_entities": 14719,
+                  "leaked_bytes": 6748,
+                  "leaked_entity_rate": 0.05632176098919764,
+                  "leaking_documents": 658,
+                  "leaking_entities": 829,
+                  "pii_documents": 1886,
+                  "predicted_bytes": 204331,
+                  "redaction_load": 0.2130611819295639,
+                  "total_bytes": 959025,
+                  "true_positive_bytes": 123534,
+                  "typed_entities": {
+                    "f1": 0.015220428669104313,
+                    "f2": 0.01645328808679109,
+                    "fn": 14463,
+                    "fp": 18664,
+                    "precision": 0.013530655391120507,
+                    "recall": 0.017392485902574903,
+                    "tp": 256
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.7424273085217712,
+                    "f2": 0.8540900649706542,
+                    "f5": 0.9293546309230001,
+                    "fn": 3431,
+                    "fp": 41118,
+                    "precision": 0.6095972351455536,
+                    "recall": 0.9492718267169366,
+                    "tp": 64204,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.3407258064516129,
+                  "documents": 1480,
+                  "false_positive_bytes": 41396,
+                  "gold_entities": 7731,
+                  "leaked_bytes": 3443,
+                  "leaked_entity_rate": 0.05484413400595007,
+                  "leaking_documents": 338,
+                  "leaking_entities": 424,
+                  "pii_documents": 992,
+                  "predicted_bytes": 106173,
+                  "redaction_load": 0.21434238497364452,
+                  "total_bytes": 495343,
+                  "true_positive_bytes": 64777,
+                  "typed_entities": {
+                    "f1": 0.014100523083920853,
+                    "f2": 0.015203158333537675,
+                    "fn": 7607,
+                    "fp": 9733,
+                    "precision": 0.012579892462209597,
+                    "recall": 0.016039322209287284,
+                    "tp": 124
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.7326474752241623,
+                    "f2": 0.8475050004803955,
+                    "f5": 0.9256430624836034,
+                    "fn": 3296,
+                    "fp": 39193,
+                    "precision": 0.5976532424469516,
+                    "recall": 0.9464187014338199,
+                    "tp": 58218,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.3579418344519016,
+                  "documents": 1430,
+                  "false_positive_bytes": 39401,
+                  "gold_entities": 6988,
+                  "leaked_bytes": 3305,
+                  "leaked_entity_rate": 0.05795649685174585,
+                  "leaking_documents": 320,
+                  "leaking_entities": 405,
+                  "pii_documents": 894,
+                  "predicted_bytes": 98158,
+                  "redaction_load": 0.2116924961503789,
+                  "total_bytes": 463682,
+                  "true_positive_bytes": 58757,
+                  "typed_entities": {
+                    "f1": 0.016447573359915268,
+                    "f2": 0.017830609212481422,
+                    "fn": 6856,
+                    "fp": 8931,
+                    "precision": 0.014564713670969877,
+                    "recall": 0.018889524899828276,
+                    "tp": 132
+                  }
+                }
+              }
+            },
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 7957,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": null,
+              "p95_ms": null,
+              "samples": 0,
+              "status": "not measured: scored from recorded findings"
+            },
+            "leaked_bytes": 0,
+            "metrics": {
+              "common_intersection": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 3686,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 840,
+                  "false_positive_bytes": 3694,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 3694,
+                  "redaction_load": 0.07692948477654213,
+                  "total_bytes": 48018,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 280,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 1690,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 415,
+                  "false_positive_bytes": 1694,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 1694,
+                  "redaction_load": 0.0715009285834881,
+                  "total_bytes": 23692,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 130,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 1996,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 425,
+                  "false_positive_bytes": 2000,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 2000,
+                  "redaction_load": 0.08221655841486475,
+                  "total_bytes": 24326,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 150,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                }
+              },
+              "product_coverage": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 7936,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 840,
+                  "false_positive_bytes": 7957,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 7957,
+                  "redaction_load": 0.16570869257361823,
+                  "total_bytes": 48018,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 872,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 3747,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 415,
+                  "false_positive_bytes": 3761,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 3761,
+                  "redaction_load": 0.15874556812426135,
+                  "total_bytes": 23692,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 420,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "f5": 0.0,
+                    "fn": 0,
+                    "fp": 4189,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 425,
+                  "false_positive_bytes": 4196,
+                  "gold_entities": 0,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 0,
+                  "predicted_bytes": 4196,
+                  "redaction_load": 0.17249033955438625,
+                  "total_bytes": 24326,
+                  "true_positive_bytes": 0,
+                  "typed_entities": {
+                    "f1": 0.0,
+                    "f2": 0.0,
+                    "fn": 0,
+                    "fp": 452,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "tp": 0
+                  }
+                }
+              }
+            },
+            "processed_documents": 840,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 1110,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": null,
+              "p95_ms": null,
+              "samples": 0,
+              "status": "not measured: scored from recorded findings"
+            },
+            "leaked_bytes": 355,
+            "metrics": {
+              "common_intersection": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.8422095615556106,
+                    "f2": 0.9302834628433839,
+                    "f5": 0.9857929834734706,
+                    "fn": 0,
+                    "fp": 637,
+                    "precision": 0.727428326914848,
+                    "recall": 1.0,
+                    "tp": 1700,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 100,
+                  "false_positive_bytes": 637,
+                  "gold_entities": 70,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 70,
+                  "predicted_bytes": 2337,
+                  "redaction_load": 0.18737973059653623,
+                  "total_bytes": 12472,
+                  "true_positive_bytes": 1700,
+                  "typed_entities": {
+                    "f1": 0.7608695652173912,
+                    "f2": 0.8883248730964467,
+                    "fn": 0,
+                    "fp": 44,
+                    "precision": 0.6140350877192983,
+                    "recall": 1.0,
+                    "tp": 70
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.8786127167630058,
+                    "f2": 0.9476309226932669,
+                    "f5": 0.9894842263395092,
+                    "fn": 0,
+                    "fp": 273,
+                    "precision": 0.7835051546391752,
+                    "recall": 1.0,
+                    "tp": 988,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 53,
+                  "false_positive_bytes": 273,
+                  "gold_entities": 40,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 40,
+                  "predicted_bytes": 1261,
+                  "redaction_load": 0.19727784730913642,
+                  "total_bytes": 6392,
+                  "true_positive_bytes": 988,
+                  "typed_entities": {
+                    "f1": 0.7920792079207921,
+                    "f2": 0.9049773755656109,
+                    "fn": 0,
+                    "fp": 21,
+                    "precision": 0.6557377049180327,
+                    "recall": 1.0,
+                    "tp": 40
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.7964205816554809,
+                    "f2": 0.9072375127421,
+                    "f5": 0.9807162534435262,
+                    "fn": 0,
+                    "fp": 364,
+                    "precision": 0.6617100371747212,
+                    "recall": 1.0,
+                    "tp": 712,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.0,
+                  "documents": 47,
+                  "false_positive_bytes": 364,
+                  "gold_entities": 30,
+                  "leaked_bytes": 0,
+                  "leaked_entity_rate": 0.0,
+                  "leaking_documents": 0,
+                  "leaking_entities": 0,
+                  "pii_documents": 30,
+                  "predicted_bytes": 1076,
+                  "redaction_load": 0.1769736842105263,
+                  "total_bytes": 6080,
+                  "true_positive_bytes": 712,
+                  "typed_entities": {
+                    "f1": 0.7228915662650602,
+                    "f2": 0.8670520231213873,
+                    "fn": 0,
+                    "fp": 23,
+                    "precision": 0.5660377358490566,
+                    "recall": 1.0,
+                    "tp": 30
+                  }
+                }
+              },
+              "product_coverage": {
+                "full": {
+                  "char_level": {
+                    "f1": 0.8675268035616935,
+                    "f2": 0.9045092838196286,
+                    "f5": 0.9257596324527514,
+                    "fn": 354,
+                    "fp": 1104,
+                    "precision": 0.8121810139503233,
+                    "recall": 0.9309672386895476,
+                    "tp": 4774,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.22,
+                  "documents": 100,
+                  "false_positive_bytes": 1110,
+                  "gold_entities": 440,
+                  "leaked_bytes": 355,
+                  "leaked_entity_rate": 0.09545454545454546,
+                  "leaking_documents": 22,
+                  "leaking_entities": 42,
+                  "pii_documents": 100,
+                  "predicted_bytes": 5897,
+                  "redaction_load": 0.37055422898077167,
+                  "total_bytes": 15914,
+                  "true_positive_bytes": 4787,
+                  "typed_entities": {
+                    "f1": 0.20507166482910694,
+                    "f2": 0.20880107768298156,
+                    "fn": 347,
+                    "fp": 374,
+                    "precision": 0.19914346895074947,
+                    "recall": 0.21136363636363636,
+                    "tp": 93
+                  }
+                },
+                "test": {
+                  "char_level": {
+                    "f1": 0.8981030720161155,
+                    "f2": 0.9335520346199483,
+                    "f5": 0.9538242110893208,
+                    "fn": 115,
+                    "fp": 492,
+                    "precision": 0.844647931796653,
+                    "recall": 0.9587813620071685,
+                    "tp": 2675,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.16981132075471697,
+                  "documents": 53,
+                  "false_positive_bytes": 497,
+                  "gold_entities": 239,
+                  "leaked_bytes": 115,
+                  "leaked_entity_rate": 0.06276150627615062,
+                  "leaking_documents": 9,
+                  "leaking_entities": 15,
+                  "pii_documents": 53,
+                  "predicted_bytes": 3180,
+                  "redaction_load": 0.387710314557425,
+                  "total_bytes": 8202,
+                  "true_positive_bytes": 2683,
+                  "typed_entities": {
+                    "f1": 0.2113821138211382,
+                    "f2": 0.21505376344086025,
+                    "fn": 187,
+                    "fp": 201,
+                    "precision": 0.20553359683794467,
+                    "recall": 0.2175732217573222,
+                    "tp": 52
+                  }
+                },
+                "validation": {
+                  "char_level": {
+                    "f1": 0.8314517726282432,
+                    "f2": 0.8700157506424603,
+                    "f5": 0.8923006491064568,
+                    "fn": 239,
+                    "fp": 612,
+                    "precision": 0.7742530431575064,
+                    "recall": 0.897775876817793,
+                    "tp": 2099,
+                    "unit": "unicode_code_point"
+                  },
+                  "document_leak_rate": 0.2765957446808511,
+                  "documents": 47,
+                  "false_positive_bytes": 613,
+                  "gold_entities": 201,
+                  "leaked_bytes": 240,
+                  "leaked_entity_rate": 0.13432835820895522,
+                  "leaking_documents": 13,
+                  "leaking_entities": 27,
+                  "pii_documents": 47,
+                  "predicted_bytes": 2717,
+                  "redaction_load": 0.3523080912863071,
+                  "total_bytes": 7712,
+                  "true_positive_bytes": 2104,
+                  "typed_entities": {
+                    "f1": 0.19759036144578312,
+                    "f2": 0.2013752455795678,
+                    "fn": 160,
+                    "fp": 173,
+                    "precision": 0.19158878504672897,
+                    "recall": 0.20398009950248755,
+                    "tp": 41
+                  }
+                }
+              }
+            },
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
         }
       },
       "tool": "presidio-tuned-presidio-research"
     }
   },
   "schema_version": 1,
-  "scorer_sha256": "0777d5d314340ac305bfe492dc546f1ae9326ce14bb300e87be6368aa9ec8816",
+  "scorer_sha256": "27bf262c5382e3d80adc8204357fb3939c4d634261d294ac1650b26ca22c2403",
   "selection_sha256": "8cb727bd82e441bd8683bb4ea55f923eefba4c37cfeaab0518429590970fb522"
 }

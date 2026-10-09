@@ -1,7 +1,7 @@
 # Redaction classes and recognizers
 
 This is the canonical inventory of what Gaze can detect through the embedded
-`core` and `core-extended` names and the opt-in `secrets` bundle. It covers the emitted classes, every bundled
+`core` and `core-extended` names and the separate `secrets` bundle. It covers the emitted classes, every bundled
 recognizer, validator and normalizer support, collision precedence, conflict
 resolution, deterministic gaps, and no-policy activation.
 
@@ -22,11 +22,12 @@ policy, described under [Shipped default activation](#shipped-default-activation
 The shared payload currently contains exactly 54 recognizer specs
 (`crates/gaze-recognizers/src/lib.rs`, `embedded()`).
 
-The opt-in `secrets` bundle (`crates/gaze-recognizers/embedded/secrets.toml`)
+The separate `secrets` bundle (`crates/gaze-recognizers/embedded/secrets.toml`)
 carries the two credential recognizers, `security_token.anchored` and
-`password.field`. Credentials are not PII, so `secrets` is never part of a
-default activation: its rows below are inert until a caller loads it by name
-with `[policy.rulepacks] bundled = ["core", "secrets"]` or
+`password.field`. `gaze setup` includes it in newly generated policies so
+credentials are protected by default on the CLI setup path. Direct library
+callers and hand-authored policies still choose bundles explicitly; load it by
+name with `[policy.rulepacks] bundled = ["core", "secrets"]` or
 `--rulepack-bundled core,secrets`. The former `username.field` recognizer was
 removed in core 0.6.0; no rulepack emits `custom:username`. The opt-in Nym
 safety net emits `custom:username`, `custom:license_plate`,
@@ -395,7 +396,8 @@ no policy or explicit locale. It describes which recognizers are registered and
 eligible to match; whether a particular input produces a candidate still
 depends on its shape, cues, and validator outcome.
 
-With no policy, no safety net runs. The `gaze setup` policy activates Nym-small
+With no policy, no safety net runs and the library still loads only `core`.
+The `gaze setup` policy activates `secrets`, Nym-small
 alongside the pinned Davlan mBERT NER model; the OpenAI Privacy Filter remains
 opt-in (`--safety-net openai-filter`).
 
@@ -572,7 +574,7 @@ its resolved action is protective (`Action::is_protective`: anything but
   The closing quote at byte 21 sits outside the union and stays in the clear.
   See
   [`crates/gaze-recognizers/tests/explicit_field_collision_control.rs`](../../crates/gaze-recognizers/tests/explicit_field_collision_control.rs),
-  which pins exactly that geometry on the real `core` and opt-in `secrets` rulepacks.
+  which pins exactly that geometry on the real `core` and separate `secrets` rulepacks.
 
 Rules with no static preview (an adopter `Rule` impl that answers at runtime
 only) stay on the legacy path: such a selection blocks the sweep and its

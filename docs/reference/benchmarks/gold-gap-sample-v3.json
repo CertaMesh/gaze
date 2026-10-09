@@ -7,7 +7,8 @@
     "trace": "trace-pass2-ner.jsonl",
     "trace_sha256": "e715a7e92eb8ccd98ed6628528eb86b66c6fea5b0e837f87ac58c50af722dc09",
     "contract_file": "docs/reference/benchmarks/scored-labels-v3.json",
-    "contract_sha256": "d849109f57f0f04bfbf722c7e8679164de16d99bf5eeeaea83f2968c0877baad",
+    "contract_sha256": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
+    "contract_metadata_update": "The historical credential exclusion now identifies v4 as its superseding contract; the v3 scored labels and this audit population are unchanged.",
     "generator": "scripts/bench/gold_gap_evidence.py sample"
   },
   "no_document_text": "Entries carry document IDs and byte offsets only. Render values and context locally with `gold_gap_evidence.py sheet`.",

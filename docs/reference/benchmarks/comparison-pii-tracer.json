@@ -4032,8 +4032,8 @@
   "contracts": {
     "agentic": "d30ee303effc9a0de004531d12e85deb530d5eb74a1298e5d4432da4cfd6fce0",
     "v1": null,
-    "v2": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
-    "v3": "d849109f57f0f04bfbf722c7e8679164de16d99bf5eeeaea83f2968c0877baad"
+    "v2": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
+    "v3": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf"
   },
   "corpus": {
     "agentic": {
@@ -4101,7 +4101,17 @@
   "hardware": "macOS-26.5-arm64-arm-64bit",
   "harness_dirty": false,
   "harness_revision": "7b09e385229fe21b15ef2d9be0400569c43bb1e4",
-  "mapping_sha256": "76cdc87ca96c04b7cbf52794d22ee3e50fabfe802a5f9c8b3b453c054f63e0a6",
+  "contract_metadata_update": {
+    "metrics_changed": false,
+    "reason": "The historical v2 and v3 credential exclusions now identify v4 as their superseding contract; scored labels and measured metrics are unchanged."
+  },
+  "mapping_metadata_update": {
+    "current_sha256": "3b0037eac0b8209181083277e48129bc1b46bff71d2cc1982fda7a4b260024c5",
+    "metrics_changed": false,
+    "previous_sha256": "76cdc87ca96c04b7cbf52794d22ee3e50fabfe802a5f9c8b3b453c054f63e0a6",
+    "reason": "The comment now names credential typed credit under immutable v1 and headline v4; mapping entries and measured metrics are unchanged."
+  },
+  "mapping_sha256": "3b0037eac0b8209181083277e48129bc1b46bff71d2cc1982fda7a4b260024c5",
   "schema_version": 2,
   "tool": "pii-tracer",
   "tools": {

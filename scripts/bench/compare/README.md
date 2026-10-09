@@ -8,14 +8,14 @@ text, outside the repository for exact offline `--rescore-predictions` runs.
 Product coverage scores unsupported gold as leaked. Common
 intersection scores only canonical labels claimed by every configuration; the
 intersection and each native-to-canonical mapping are in the report. The full
-product score has the existing v1/v2/v3 byte semantics, including v3 gold-gap
+product score has v1/v2/v3/v4 byte semantics, including v3/v4 gold-gap
 credit. Additional metrics are document leak rate (PII-bearing documents with
 at least one leaked byte), leaked-entity rate (gold entities with at least one
 uncovered byte), redaction load (predicted bytes / scored document bytes), and
 exact typed-span precision/recall/F1/F2 with raw TP/FP/FN.
 The byte scorer keeps the reviewed native mapping. Exact typed scoring gives
 ambiguous `custom:family:*` labels no typed credit; Gaze password/token and
-OPF secret labels can match PASSWORD/SECURITYTOKEN only under v1. The public
+OPF secret labels can match PASSWORD/SECURITYTOKEN under v1 and v4. The public
 page lists every metric cell where a competitor scores better than Gaze, with
 overlapping views and splits identified as such.
 

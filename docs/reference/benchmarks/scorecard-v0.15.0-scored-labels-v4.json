@@ -1,8 +1,8 @@
 {
   "schema_version": 4,
-  "generated_at": "2026-09-26T00:47:09.282468+00:00",
+  "generated_at": "2026-09-27T11:08:49.186971+00:00",
   "gaze": {
-    "revision": "f769f823b281022a080725faef4f61ae2561d975",
+    "revision": "6fcba31a63ec240e6c22e82a21c3fe41fc0f6b2f",
     "dirty": false
   },
   "dataset": {
@@ -231,6 +231,13 @@
         "validator_passed_gold_spans": null,
         "validator_failed_gold_spans": null
       },
+      "PASSWORD": {
+        "applicability": "not_applicable",
+        "validator_kinds": [],
+        "gold_spans": 208,
+        "validator_passed_gold_spans": null,
+        "validator_failed_gold_spans": null
+      },
       "PHONENUMBER": {
         "applicability": "applicable",
         "validator_kinds": [
@@ -246,6 +253,13 @@
         "applicability": "not_applicable",
         "validator_kinds": [],
         "gold_spans": 1,
+        "validator_passed_gold_spans": null,
+        "validator_failed_gold_spans": null
+      },
+      "SECURITYTOKEN": {
+        "applicability": "not_applicable",
+        "validator_kinds": [],
+        "gold_spans": 219,
         "validator_passed_gold_spans": null,
         "validator_failed_gold_spans": null
       },
@@ -3459,26 +3473,19 @@
       "performance": "clean_ms p95 uses a separately configured tolerance and is informational by default"
     },
     "scored_label_contract": {
-      "id": "scored-labels-v3",
-      "version": 3,
-      "file": "docs/reference/benchmarks/scored-labels-v3.json",
-      "file_sha256": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
-      "excluded_labels": [
-        "PASSWORD",
-        "SECURITYTOKEN"
-      ],
-      "neutral_prediction_classes": [
-        "custom:password",
-        "custom:secret",
-        "custom:security_token"
-      ],
-      "scored_gold_entities": 14292,
-      "scored_gold_utf8_bytes": 123800,
-      "excluded_gold_entities": 427,
-      "excluded_gold_utf8_bytes": 6664,
+      "id": "scored-labels-v4",
+      "version": 4,
+      "file": "docs/reference/benchmarks/scored-labels-v4.json",
+      "file_sha256": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
+      "excluded_labels": [],
+      "neutral_prediction_classes": [],
+      "scored_gold_entities": 14719,
+      "scored_gold_utf8_bytes": 130464,
+      "excluded_gold_entities": 0,
+      "excluded_gold_utf8_bytes": 0,
       "scored_gold_digest": {
         "algorithm": "sha256",
-        "value": "cbbb8338d805c5107a0ed185028efade14d78b3b783b8d5813388978ba4905d4"
+        "value": "5f163b008e3fbe3dcd392942bc0de4ac782cae80724eaf8b51159906642bd0aa"
       },
       "gold_gap": {
         "status": "diagnostic"
@@ -3490,8 +3497,8 @@
     "configs": [
       "policy-file"
     ],
-    "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
     "binary_profile": "release",
+    "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
     "max_documents": null,
     "sampling_seed": 20260710,
     "ner_threshold": 0.3,
@@ -6434,35 +6441,35 @@
       },
       "metrics": {
         "documents": 2910,
-        "zero_leak_document_rate": 0.5577319587628866,
-        "documents_without_leaks": 1623,
+        "zero_leak_document_rate": 0.5041237113402062,
+        "documents_without_leaks": 1467,
         "documents_with_false_positives": 2085,
         "utf8_bytes": {
-          "pii": 123621,
-          "predicted": 140375,
-          "true_positive": 110302,
+          "pii": 130282,
+          "predicted": 140799,
+          "true_positive": 110726,
           "false_positive": 30073,
-          "leaked": 13319,
-          "precision": 0.785766696349065,
-          "recall": 0.8922594057643928,
-          "leak_rate": 0.10774059423560722,
-          "f1": 0.8356338732405036,
-          "f2": 0.8687125802737301,
+          "leaked": 19556,
+          "precision": 0.7864118353113303,
+          "recall": 0.8498948434933452,
+          "leak_rate": 0.1501051565066548,
+          "f1": 0.8169218794382491,
+          "f2": 0.8363913241188229,
           "false_positive_rate": 0.03628748598781528
         },
         "entities": {
-          "gold": 14292,
-          "fully_covered": 12249,
-          "overlapped": 12443,
-          "exact_boundary": 9241,
-          "full_coverage_recall": 0.8570528967254408,
-          "overlap_recall": 0.8706269241533725,
-          "exact_boundary_recall": 0.6465855023789533
+          "gold": 14719,
+          "fully_covered": 12264,
+          "overlapped": 12487,
+          "exact_boundary": 9255,
+          "full_coverage_recall": 0.833208777770229,
+          "overlap_recall": 0.848359263536925,
+          "exact_boundary_recall": 0.6287791290169169
         },
         "prediction_spans": {
-          "total": 14529,
-          "overlapped_gold": 11083,
-          "overlap_precision": 0.7628191892077913
+          "total": 14575,
+          "overlapped_gold": 11130,
+          "overlap_precision": 0.7636363636363637
         },
         "gold_gap": {
           "status": "diagnostic",
@@ -6503,7 +6510,7 @@
             "ZIP": 27
           },
           "false_positive_bytes_after_gold_gap": 18488,
-          "adjusted_precision": 0.8564484820250019
+          "adjusted_precision": 0.8569195288436238
         }
       },
       "direct_identifier_recall": {
@@ -6518,15 +6525,15 @@
         "leaked_utf8_bytes": 6812
       },
       "contextual_pii_recall": {
-        "entities": 6810,
-        "fully_covered": 5900,
-        "overlapped": 5994,
-        "full_coverage_recall": 0.8663729809104258,
-        "overlap_recall": 0.8801762114537445,
-        "utf8_bytes": 54619,
-        "covered_utf8_bytes": 48082,
-        "byte_recall": 0.8803163734231677,
-        "leaked_utf8_bytes": 6537
+        "entities": 7237,
+        "fully_covered": 5915,
+        "overlapped": 6038,
+        "full_coverage_recall": 0.817327621942794,
+        "overlap_recall": 0.8343236147574962,
+        "utf8_bytes": 61283,
+        "covered_utf8_bytes": 48506,
+        "byte_recall": 0.7915082486170716,
+        "leaked_utf8_bytes": 12777
       },
       "pipeline_contract": {
         "documents": 2910,
@@ -6570,35 +6577,35 @@
       "per_language": {
         "de": {
           "documents": 1365,
-          "zero_leak_document_rate": 0.6007326007326007,
-          "documents_without_leaks": 820,
+          "zero_leak_document_rate": 0.5384615384615384,
+          "documents_without_leaks": 735,
           "documents_with_false_positives": 993,
           "utf8_bytes": {
-            "pii": 54629,
-            "predicted": 64255,
-            "true_positive": 49523,
+            "pii": 57835,
+            "predicted": 64449,
+            "true_positive": 49717,
             "false_positive": 14732,
-            "leaked": 5106,
-            "precision": 0.7707260135398023,
-            "recall": 0.9065331600432005,
-            "leak_rate": 0.0934668399567995,
-            "f1": 0.8331314558729517,
-            "f2": 0.8756732479639001,
+            "leaked": 8118,
+            "precision": 0.7714161585129327,
+            "recall": 0.8596351690153021,
+            "leak_rate": 0.14036483098469787,
+            "f1": 0.8131399038304274,
+            "f2": 0.840413267565731,
             "false_positive_rate": 0.03499919225323336
           },
           "entities": {
-            "gold": 6486,
-            "fully_covered": 5669,
-            "overlapped": 5734,
-            "exact_boundary": 4291,
-            "full_coverage_recall": 0.874036386062288,
-            "overlap_recall": 0.8840579710144928,
-            "exact_boundary_recall": 0.6615787850755473
+            "gold": 6693,
+            "fully_covered": 5671,
+            "overlapped": 5754,
+            "exact_boundary": 4292,
+            "full_coverage_recall": 0.8473031525474376,
+            "overlap_recall": 0.8597041685342895,
+            "exact_boundary_recall": 0.6412669953682952
           },
           "prediction_spans": {
-            "total": 6799,
-            "overlapped_gold": 5111,
-            "overlap_precision": 0.7517281953228416
+            "total": 6822,
+            "overlapped_gold": 5134,
+            "overlap_precision": 0.7525652301377895
           },
           "gold_gap": {
             "status": "diagnostic",
@@ -6633,40 +6640,40 @@
               "ZIP": 25
             },
             "false_positive_bytes_after_gold_gap": 9090,
-            "adjusted_precision": 0.8449149506082269
+            "adjusted_precision": 0.845426564864727
           }
         },
         "en": {
           "documents": 1545,
-          "zero_leak_document_rate": 0.5197411003236246,
-          "documents_without_leaks": 803,
+          "zero_leak_document_rate": 0.47378640776699027,
+          "documents_without_leaks": 732,
           "documents_with_false_positives": 1092,
           "utf8_bytes": {
-            "pii": 68992,
-            "predicted": 76120,
-            "true_positive": 60779,
+            "pii": 72447,
+            "predicted": 76350,
+            "true_positive": 61009,
             "false_positive": 15341,
-            "leaked": 8213,
-            "precision": 0.7984629532317393,
-            "recall": 0.8809572124304267,
-            "leak_rate": 0.11904278756957332,
-            "f1": 0.8376839958101329,
-            "f2": 0.8631222876099157,
+            "leaked": 11438,
+            "precision": 0.7990700720366732,
+            "recall": 0.8421190663519539,
+            "leak_rate": 0.15788093364804612,
+            "f1": 0.8200299737225886,
+            "f2": 0.8331421485887835,
             "false_positive_rate": 0.03761717820896035
           },
           "entities": {
-            "gold": 7806,
-            "fully_covered": 6580,
-            "overlapped": 6709,
-            "exact_boundary": 4950,
-            "full_coverage_recall": 0.8429413271842172,
-            "overlap_recall": 0.8594670766077377,
-            "exact_boundary_recall": 0.6341275941583397
+            "gold": 8026,
+            "fully_covered": 6593,
+            "overlapped": 6733,
+            "exact_boundary": 4963,
+            "full_coverage_recall": 0.8214552703712933,
+            "overlap_recall": 0.8388985796162471,
+            "exact_boundary_recall": 0.6183653127336157
           },
           "prediction_spans": {
-            "total": 7730,
-            "overlapped_gold": 5972,
-            "overlap_precision": 0.7725743855109961
+            "total": 7753,
+            "overlapped_gold": 5996,
+            "overlap_precision": 0.7733780472075326
           },
           "gold_gap": {
             "status": "diagnostic",
@@ -6705,7 +6712,7 @@
               "ZIP": 2
             },
             "false_positive_bytes_after_gold_gap": 9398,
-            "adjusted_precision": 0.8660814796870769
+            "adjusted_precision": 0.8665189540812703
           }
         }
       },
@@ -6886,6 +6893,17 @@
           "byte_recall": 0.9413810233482365,
           "leaked_utf8_bytes": 118
         },
+        "PASSWORD": {
+          "entities": 208,
+          "fully_covered": 11,
+          "overlapped": 30,
+          "full_coverage_recall": 0.052884615384615384,
+          "overlap_recall": 0.14423076923076922,
+          "utf8_bytes": 2322,
+          "covered_utf8_bytes": 302,
+          "byte_recall": 0.13006029285099052,
+          "leaked_utf8_bytes": 2020
+        },
         "PHONENUMBER": {
           "entities": 359,
           "fully_covered": 284,
@@ -6907,6 +6925,17 @@
           "covered_utf8_bytes": 10,
           "byte_recall": 1.0,
           "leaked_utf8_bytes": 0
+        },
+        "SECURITYTOKEN": {
+          "entities": 219,
+          "fully_covered": 4,
+          "overlapped": 14,
+          "full_coverage_recall": 0.0182648401826484,
+          "overlap_recall": 0.0639269406392694,
+          "utf8_bytes": 4342,
+          "covered_utf8_bytes": 122,
+          "byte_recall": 0.02809765085214187,
+          "leaked_utf8_bytes": 4220
         },
         "SSN": {
           "entities": 217,
@@ -7007,35 +7036,6 @@
           "byte_recall": 0.896551724137931,
           "leaked_utf8_bytes": 561
         }
-      },
-      "excluded_label_coverage": {
-        "PASSWORD": {
-          "entities": 208,
-          "fully_covered": 11,
-          "overlapped": 30,
-          "full_coverage_recall": 0.052884615384615384,
-          "overlap_recall": 0.14423076923076922,
-          "utf8_bytes": 2322,
-          "covered_utf8_bytes": 302,
-          "byte_recall": 0.13006029285099052,
-          "leaked_utf8_bytes": 2020
-        },
-        "SECURITYTOKEN": {
-          "entities": 219,
-          "fully_covered": 4,
-          "overlapped": 14,
-          "full_coverage_recall": 0.0182648401826484,
-          "overlap_recall": 0.0639269406392694,
-          "utf8_bytes": 4342,
-          "covered_utf8_bytes": 122,
-          "byte_recall": 0.02809765085214187,
-          "leaked_utf8_bytes": 4220
-        }
-      },
-      "neutral_prediction_utf8_bytes_outside_scored_gold": {
-        "custom:password": 0,
-        "custom:secret": 0,
-        "custom:security_token": 0
       },
       "validator_recall_by_label": {
         "AGE": {
@@ -7333,6 +7333,16 @@
           "shape_only_recall": null,
           "production_recall_by_gold_validity": null
         },
+        "PASSWORD": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 208,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null,
+          "production_recall_by_gold_validity": null
+        },
         "PHONENUMBER": {
           "applicability": "applicable",
           "validator_kinds": [
@@ -7394,6 +7404,16 @@
           "applicability": "not_applicable",
           "validator_kinds": [],
           "gold_spans": 1,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null,
+          "production_recall_by_gold_validity": null
+        },
+        "SECURITYTOKEN": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 219,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -7876,63 +7896,63 @@
       },
       "latency_ms": {
         "clean_ms": {
-          "mean": 69.36229080927835,
-          "median": 61.151021,
-          "p95": 138.71747119999998,
-          "p99": 219.62237993999966,
-          "max": 480.340667
+          "mean": 79.73624945532646,
+          "median": 69.102125,
+          "p95": 167.71735855,
+          "p99": 278.70502946999966,
+          "max": 620.661458
         },
         "post_policy_scan_ms": {
-          "mean": 25.450434806185566,
-          "median": 22.6115835,
-          "p95": 54.31656859999999,
-          "p99": 79.6489700299998,
-          "max": 162.22325
+          "mean": 28.399890452233677,
+          "median": 24.4706665,
+          "p95": 61.72437759999998,
+          "p99": 103.8241094399999,
+          "max": 247.548375
         },
         "restore_ms": {
-          "mean": 0.0806053821305842,
-          "median": 0.0781665,
-          "p95": 0.19082484999999982,
-          "p99": 0.27593608999999863,
-          "max": 1.5022499999999999
+          "mean": 0.09157577869415809,
+          "median": 0.089646,
+          "p95": 0.21825419999999998,
+          "p99": 0.2983645299999999,
+          "max": 2.921
         }
       },
       "warm_latency_ms": {
         "clean_ms": {
-          "mean": 69.37216739910622,
-          "median": 61.152625,
-          "p95": 138.72090039999998,
-          "p99": 219.6468932800002,
-          "max": 480.340667
+          "mean": 79.7464703214163,
+          "median": 69.147959,
+          "p95": 167.7178836,
+          "p99": 278.7268086400001,
+          "max": 620.661458
         },
         "post_policy_scan_ms": {
-          "mean": 25.454753621863187,
-          "median": 22.626707999999997,
-          "p95": 54.3192832,
-          "p99": 79.66209836000009,
-          "max": 162.22325
+          "mean": 28.404257794431075,
+          "median": 24.478625,
+          "p95": 61.728192199999995,
+          "p99": 103.83093528000005,
+          "max": 247.548375
         },
         "restore_ms": {
-          "mean": 0.08060506015812995,
-          "median": 0.078125,
-          "p95": 0.19085819999999995,
-          "p99": 0.2760310800000007,
-          "max": 1.5022499999999999
+          "mean": 0.0915751746304572,
+          "median": 0.089625,
+          "p95": 0.21825840000000002,
+          "p99": 0.29837036000000006,
+          "max": 2.921
         }
       },
       "process": {
-        "wall_seconds": 281.6999296670547,
-        "documents_per_second": 14.417055554719848,
-        "start_to_first_response_ms": 2866.3805840769783,
-        "cold_start_to_first_validated_response_ms": 2866.3805840769783,
+        "wall_seconds": 320.2495979999658,
+        "documents_per_second": 12.541347339897976,
+        "start_to_first_response_ms": 2193.565708817914,
+        "cold_start_to_first_validated_response_ms": 2193.565708817914,
         "warmup_count": 1,
         "discarded_warmup_samples": [
           {
             "sample": 1,
-            "round_trip_ms": 2861.0675840172917,
-            "clean_ms": 43.067125,
-            "restore_ms": 0.103,
-            "post_policy_scan_ms": 12.808208,
+            "round_trip_ms": 2185.850374866277,
+            "clean_ms": 50.039166,
+            "restore_ms": 0.115042,
+            "post_policy_scan_ms": 14.495707999999999,
             "correctness": {
               "leaked_labeled_utf8_bytes": 0,
               "uncovered_entities": 0,
@@ -7948,7 +7968,18 @@
     }
   ],
   "runner_provenance": {
-    "entry_point": "scripts/bench/run_no_opf_benchmark.py",
+    "entry_point": "scripts/bench/rescore_past_release.py",
+    "method": "release detection code, today's harness: the release's own clean_for_bench (built from the measured commit) scored by the harness commit below",
+    "harness_revision": "9dc171b1980612fe33481af49db308c88f091d28",
+    "manifest_replacing_actions": [
+      "redact",
+      "tokenize"
+    ],
+    "binary_sha256": "2b4f5df0ba3b7abfc3cfb1b245d4a3b64d3b36b2dfaab34e4c23e99bfb4c9ae0",
+    "policy": {
+      "path": "/Users/Shared/gaze-bench/gaze-setup-policy.toml",
+      "sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"
+    },
     "profile": "full",
     "model_bundles": [
       {
@@ -7963,148 +7994,45 @@
         "verified_artifacts": 7
       },
       {
+        "model_id": "davlan-mbert-ner-hrl-onnx",
+        "digest_kind": "SHA256SUMS",
+        "expected_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "observed_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16"
+      },
+      {
         "model_id": "nym-small-int8",
         "digest_kind": "SHA256SUMS",
         "expected_sha256": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767",
         "observed_sha256": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767"
       }
     ],
-    "policy": {
-      "path": "/Users/Shared/gaze-bench/gaze-setup-policy.toml",
-      "sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"
+    "policy_dependencies": {
+      "files": {
+        "ner.model_dir/SHA256SUMS": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "ner.model_dir/config.json": "8e5caefadaf9923a9e7d3de42ca97780c68fc4d83519d333f141b299e40af638",
+        "ner.model_dir/labels.json": "8498e2bafc017a793571c3c2f7092390a93a757f5ca45004f21db2560a8c6fdb",
+        "ner.model_dir/model.onnx": "1213fdd405d295768b0d41d8214062f2f278f0e3acff6af67d8fd47360d2be0f",
+        "ner.model_dir/special_tokens_map.json": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+        "ner.model_dir/tokenizer.json": "bf1b59b7b11c95f194f51708d918eea378e09d05f84c0e1656dc5180e8117088",
+        "ner.model_dir/tokenizer_config.json": "470cff6e0353b08e2a6e9b4f61729ecdc47ccb3ced335fa5520e9ce334572d59",
+        "ner.model_dir/vocab.txt": "fe0fda7c425b48c516fc8f160d594c8022a0808447475c1a7c6d6479763f310c",
+        "safety_net.nym.model_dir/SHA256SUMS": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767",
+        "safety_net.nym.model_dir/config.json": "3f07065571e22bb73eba28ddb1fae4509c0cf703762e3bfa7a6ab2111cf7cb88",
+        "safety_net.nym.model_dir/model_int8.onnx": "139006aea2cbd8e709d322f056232570de54661f624143be4893aaa387190286",
+        "safety_net.nym.model_dir/tokenizer.json": "c299144e68dfec1dc536204a7ae3712710c5c6cade9269a83f5042250d47d8de"
+      }
     },
     "hardware": "macOS-26.5-arm64-arm-64bit-Mach-O; arm",
     "warmup_count": 1,
-    "measured_repetitions": 1,
-    "repetitions": [
-      {
-        "repetition": 1,
-        "runs": [
-          {
-            "config": "policy-file",
-            "cold_start_to_first_validated_response_ms": 2866.3805840769783,
-            "warmup_count": 1,
-            "discarded_warmup_samples": [
-              {
-                "sample": 1,
-                "round_trip_ms": 2861.0675840172917,
-                "clean_ms": 43.067125,
-                "restore_ms": 0.103,
-                "post_policy_scan_ms": 12.808208,
-                "correctness": {
-                  "leaked_labeled_utf8_bytes": 0,
-                  "uncovered_entities": 0,
-                  "restore_failures": 0,
-                  "manifest_invalid_documents": 0,
-                  "strict_rejections": 0,
-                  "residual_suspects": 0,
-                  "redact_actions": 0
-                }
-              }
-            ],
-            "clean_ms": {
-              "mean": 69.36229080927835,
-              "median": 61.151021,
-              "p95": 138.71747119999998,
-              "p99": 219.62237993999966,
-              "max": 480.340667
-            }
-          }
-        ]
-      }
-    ],
-    "latency_source": "validated response timing.clean_ms",
-    "cold_start_metric": "external process start to first validated response",
-    "validator_recall_probe": {
-      "protocol_schema_version": 1,
-      "manifest": "scripts/bench/validator_recall_probe/Cargo.toml",
-      "validator_recognizers": [
-        {
-          "id": "aadhaar.in",
-          "class": "custom:aadhaar",
-          "validator_kind": "aadhaar_verhoeff"
-        },
-        {
-          "id": "bsn.nl",
-          "class": "custom:bsn",
-          "validator_kind": "bsn_mod11"
-        },
-        {
-          "id": "card.structural",
-          "class": "custom:credit_card",
-          "validator_kind": "luhn"
-        },
-        {
-          "id": "cnpj.br",
-          "class": "custom:cnpj",
-          "validator_kind": "cnpj_mod11"
-        },
-        {
-          "id": "cpf.br",
-          "class": "custom:cpf",
-          "validator_kind": "cpf_mod11"
-        },
-        {
-          "id": "email.global",
-          "class": "email",
-          "validator_kind": "email_rfc"
-        },
-        {
-          "id": "eth.address",
-          "class": "custom:eth_address",
-          "validator_kind": "eth_eip55"
-        },
-        {
-          "id": "iban.structural",
-          "class": "custom:iban",
-          "validator_kind": "iban_mod97"
-        },
-        {
-          "id": "ip.v4",
-          "class": "custom:ip_address",
-          "validator_kind": "ipv4_parse"
-        },
-        {
-          "id": "ip.v6",
-          "class": "custom:ip_address",
-          "validator_kind": "ipv6_parse"
-        },
-        {
-          "id": "nhs.uk",
-          "class": "custom:nhs_number",
-          "validator_kind": "uk_nhs_mod11"
-        },
-        {
-          "id": "nir.fr",
-          "class": "custom:nir",
-          "validator_kind": "fr_nir_mod97"
-        },
-        {
-          "id": "phone.e164.spaced",
-          "class": "custom:phone",
-          "validator_kind": "e164_phone"
-        },
-        {
-          "id": "phone.national.de",
-          "class": "custom:phone",
-          "validator_kind": "e164_phone_national_de"
-        },
-        {
-          "id": "phone.national.us",
-          "class": "custom:phone",
-          "validator_kind": "e164_phone_national_us"
-        },
-        {
-          "id": "phone.structural",
-          "class": "custom:phone",
-          "validator_kind": "e164_phone"
-        },
-        {
-          "id": "steuer_id.de",
-          "class": "custom:steuer_id",
-          "validator_kind": "de_steuer_id_mod1110"
-        }
-      ]
-    }
+    "measured_repetitions": 1
+  },
+  "observation_record": {
+    "file": "observations-v0.15.0.jsonl.gz",
+    "sha256": "561d618d2d964217d7d17f24e829abd55e85f73c4bd2d1e51869a0fcf0f1a105",
+    "format": "gzip-jsonl",
+    "schema_version": 1,
+    "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+    "observations": 2910,
+    "bytes": 676070
   }
 }

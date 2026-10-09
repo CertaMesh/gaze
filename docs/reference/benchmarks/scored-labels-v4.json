@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "contract": "scored-labels-v3",
-  "contract_version": 3,
+  "contract": "scored-labels-v4",
+  "contract_version": 4,
   "corpus": {
     "repository": "DataikuNLP/kiji-pii-training-data",
     "revision": "0275550f0b1f1b8f2dc9356fd31ac1c788b8228b",
@@ -124,10 +124,10 @@
     },
     {
       "label": "PASSWORD",
-      "scored": false,
+      "scored": true,
       "category": "credential",
       "ruling": "settled",
-      "reason": "Historical exclusion retained only for reproducibility; superseded by contract v4, which scores credentials under the 2026-10-09 ruling."
+      "reason": "Credential in scope for protection. User ruling 2026-10-09: passwords, API keys, access tokens, session tokens and secrets count in every benchmark contract."
     },
     {
       "label": "PHONENUMBER",
@@ -145,10 +145,10 @@
     },
     {
       "label": "SECURITYTOKEN",
-      "scored": false,
+      "scored": true,
       "category": "credential",
       "ruling": "settled",
-      "reason": "Historical exclusion retained only for reproducibility; superseded by contract v4, which scores credentials under the 2026-10-09 ruling."
+      "reason": "Credential in scope for protection. User ruling 2026-10-09: passwords, API keys, access tokens, session tokens and secrets count in every benchmark contract."
     },
     {
       "label": "SSN",
@@ -214,20 +214,7 @@
       "reason": "Address constituent; scored per label until a composite ADDRESS entity exists."
     }
   ],
-  "neutral_prediction_classes": [
-    {
-      "class": "custom:password",
-      "reason": "Credential, not PII: emitted by the password.field recognizer."
-    },
-    {
-      "class": "custom:security_token",
-      "reason": "Credential, not PII: emitted by the security_token.anchored recognizer."
-    },
-    {
-      "class": "custom:secret",
-      "reason": "Credential, not PII: the OpenAI Privacy Filter secret label."
-    }
-  ],
+  "neutral_prediction_classes": [],
   "gold_gap": {
     "status": "diagnostic",
     "semantics": "Gold-gap protection. The corpus labels a PII value where it is introduced and not always where it recurs. A predicted span is credited as gold-gap protection when (1) it overlaps no scored gold byte and no byte this contract ignores (excluded-label gold, neutral prediction classes); (2) after trimming ASCII whitespace at both ends its bytes are byte-identical to the value of a scored gold span in the same document, with no case folding, substring or lemmatisation; (3) its predicted class is listed against that gold label in compatible_labels; (4) neither neighbour of the trimmed span is a word character: a Unicode letter, digit or combining mark, a symbol Unicode names as a letter (circled A), or an unassigned code point. That set contains every code point Rust's char::is_alphanumeric accepts, so no credited edge is one Gaze's is_inside_word treats as inside a word. Only the trimmed bytes are credited; padding stays false positive. Credited bytes are reported in gold_gap_protected_bytes with a per-label breakdown, attributed to the first compatible gold span in document order, each byte once. This is a diagnostic beside the v2 numbers: leaked, true-positive and false-positive bytes and precision under utf8_bytes are computed exactly as in v2, and gold is never edited.",
@@ -319,6 +306,16 @@
       ],
       "custom:license_plate": [
         "LICENSEPLATENUM"
+      ],
+      "custom:password": [
+        "PASSWORD"
+      ],
+      "custom:security_token": [
+        "SECURITYTOKEN"
+      ],
+      "custom:secret": [
+        "PASSWORD",
+        "SECURITYTOKEN"
       ]
     },
     "not_creditable": [

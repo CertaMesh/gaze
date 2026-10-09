@@ -350,7 +350,7 @@ def load_scored_label_contract(
         raise ScoredLabelContractError(
             "scored-label contract_version must be an integer >= 2; v1 is implicit"
         )
-    if version > 3:
+    if version > 4:
         raise ScoredLabelContractError(
             f"scored-label contract_version {version} is not supported by this scorer"
         )

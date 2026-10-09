@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 import compare
+import derive_contract_v4
 import render
 import layer_display
 from layer_display import layer_display_name
@@ -189,10 +190,10 @@ def test_v3_layer_without_gold_gap_uses_raw_false_positives() -> None:
         "harness_dirty": False,
         "latest_release_at_measurement": {"version": "v0.0.0"},
         "gaze": {version: {"layers": {"A": copy.deepcopy(row)}, "gaze_revision": "synthetic",
-                           "policy_sha256": "synthetic"} for version in ("v1", "v2", "v3")},
+                           "policy_sha256": "synthetic"} for version in ("v1", "v2", "v3", "v4")},
         "tools": {
             name: {
-                "contracts": {version: {"A": copy.deepcopy(row)} for version in ("v1", "v2", "v3")},
+                "contracts": {version: {"A": copy.deepcopy(row)} for version in ("v1", "v2", "v3", "v4")},
                 "provenance": {"analyzer_version": "test", "spacy_version": "test",
                                "gliner_version": "test", "model_snapshot": "test",
                                "models": {"en": {"sha256": "test", "wheel_sha256": "test"}},
@@ -399,7 +400,7 @@ def test_older_generator_comparison_binds_to_its_rebuilt_corpus_and_committed_co
 def test_public_page_rejects_partial_competitor_run() -> None:
     with pytest.raises(ValueError, match="every configured competitor"):
         render.render({"harness_dirty": False,
-                       "gaze": {version: {} for version in ("v1", "v2", "v3")},
+                       "gaze": {version: {} for version in ("v1", "v2", "v3", "v4")},
                        "tools": {}, "corpus": {"layers": {}}}, "comparison.json")
 
 
@@ -413,3 +414,34 @@ def test_timeout_reports_layer_position_without_document_text() -> None:
 
     with pytest.raises(RuntimeError, match=r"opf timed out in layer C at document 1/1"):
         compare.measure("opf", timeout, {"C": [document]}, compare.load_mapping()["opf"])
+
+
+def test_contracts_include_credential_scoring_headline() -> None:
+    assert tuple(compare.CONTRACTS) == ("v1", "v2", "v3", "v4")
+
+
+def test_contract_v4_derivation_uses_v1_scope_and_v3_gold_gap() -> None:
+    report = {
+        "contracts": {"v1": "one", "v2": "two", "v3": "three"},
+        "row": {
+            "v1": {"leaked_bytes": 40, "false_positive_bytes": 100,
+                   "gold_gap_protected_bytes": 0, "false_positive_bytes_after_gold_gap": None,
+                   "metrics": {"typed_entities": {"tp": 7}}},
+            "v2": {},
+            "v3": {"leaked_bytes": 30, "false_positive_bytes": 80,
+                   "gold_gap_protected_bytes": 12, "false_positive_bytes_after_gold_gap": 68},
+        },
+    }
+    derive_contract_v4.add_v4_contracts(report)
+    assert report["row"]["v4"] == {
+        "leaked_bytes": 40,
+        "false_positive_bytes": 100,
+        "gold_gap_protected_bytes": 12,
+        "false_positive_bytes_after_gold_gap": 88,
+        "metrics": {"typed_entities": {"tp": 7}},
+    }
+
+
+def test_contract_v4_restores_typed_credential_credit() -> None:
+    mapping = compare.load_mapping()["gaze"]
+    assert compare.typed_mapping_for_contract(mapping, "v4")["custom:password"] == ("PASSWORD",)

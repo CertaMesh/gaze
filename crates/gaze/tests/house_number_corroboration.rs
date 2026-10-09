@@ -71,7 +71,7 @@ fn builder(recognizers: Vec<Spans>, rows: &Rows) -> PipelineBuilder {
         .register_street_lexicon(
             LocaleTag::DeDe,
             StreetNumberOrder::NumberAfter,
-            vec!["weg".into(), "straße".into()],
+            vec!["weg".into(), "straße".into(), "ring".into()],
         )
         .register_street_lexicon(
             LocaleTag::EnUs,
@@ -133,6 +133,24 @@ fn english_house_number_is_tokenized_before_a_ner_street() {
     let pipeline = builder(vec![ner(&["Example Street"])], &Rows::default())
         .build()
         .unwrap();
+    assert_eq!(
+        tokenized(&pipeline, "Ship to 17 Example Street today"),
+        ["17", "Example Street"]
+    );
+}
+
+#[test]
+fn english_house_number_is_tokenized_before_a_ner_organization_street() {
+    let pipeline = builder(
+        vec![Spans {
+            id: NER_RECOGNIZER_ID,
+            class: PiiClass::Organization,
+            words: vec!["Example Street"],
+        }],
+        &Rows::default(),
+    )
+    .build()
+    .unwrap();
     assert_eq!(
         tokenized(&pipeline, "Ship to 17 Example Street today"),
         ["17", "Example Street"]
@@ -272,5 +290,54 @@ fn a_house_number_is_never_swept_to_other_copies() {
             .map(|span| raw[span.raw_span].to_string())
             .collect::<Vec<_>>();
         assert_eq!(tokenized, expected, "{text}");
+    }
+}
+
+#[test]
+fn organization_ing_words_do_not_license_counts() {
+    for (organization, tail) in [
+        ("Example Engineering", "2 Teams"),
+        ("Example Catering", "3 Standorte"),
+        ("Example Clearing", "4 Mitarbeiter"),
+        ("Example Monitoring", "3 Jahre"),
+        ("Example Manufacturing", "5 Produkte"),
+    ] {
+        let pipeline = builder(
+            vec![Spans {
+                id: NER_RECOGNIZER_ID,
+                class: PiiClass::Organization,
+                words: vec![organization],
+            }],
+            &Rows::default(),
+        )
+        .build()
+        .unwrap();
+        assert_eq!(
+            tokenized(&pipeline, &format!("{organization} {tail}")),
+            [organization]
+        );
+    }
+}
+
+#[test]
+fn organization_street_endings_license_house_numbers() {
+    for street in [
+        "Example Ring",
+        "Example-Ring",
+        "ExampleRing",
+        "Musterstraße",
+        "Musterweg",
+    ] {
+        let pipeline = builder(
+            vec![Spans {
+                id: NER_RECOGNIZER_ID,
+                class: PiiClass::Organization,
+                words: vec![street],
+            }],
+            &Rows::default(),
+        )
+        .build()
+        .unwrap();
+        assert_eq!(tokenized(&pipeline, &format!("{street} 2")), [street, "2"]);
     }
 }

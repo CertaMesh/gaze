@@ -633,7 +633,7 @@ def render(ledger: Mapping[str, Any], releases: Sequence[str], root: Path = ROOT
     lines = [
         "Each row runs the same binary, corpus and seed twice: once with the base policy, "
         "once with the base policy plus one mechanism's policy delta. Nothing else differs, "
-        "so the change is that mechanism's own effect. Layer C bytes; the contract v3 "
+        f"so the change is that mechanism's own effect. Layer C bytes; the contract v{HEADLINE_CONTRACT} "
         "headline counts false-positive bytes after gold-gap credit.",
         "",
     ]
@@ -674,7 +674,7 @@ def render(ledger: Mapping[str, Any], releases: Sequence[str], root: Path = ROOT
                 f"({_signed(candidate['false_positive'] - base['false_positive'])}) | {gate} |"
             )
     if shown:
-        lines += ["", "What moved, per label (contract v2; v1 adds only the credential labels):", ""]
+        lines += ["", "What moved, per label (contract v2; v4 and v1 add the credential labels):", ""]
     for entry, measurement in shown:
         row = measurement["contracts"]["2"]
         leaked = ", ".join(

@@ -42,6 +42,14 @@ re-tokenize stored manifests.
 
 ---
 
+## v0.16.x → v0.17.0
+
+### TL;DR
+
+Run `gaze setup --force` to regenerate an existing policy with credential
+protection, or add `"secrets"` to `[policy.rulepacks].bundled` in your policy.
+Existing policies keep their selected rulepacks until you update them.
+
 ## v0.15.x → v0.16.0
 
 ### TL;DR
@@ -178,8 +186,9 @@ Upgrade readers first. See
 1. **Regenerate your `gaze setup` policy.** Policies written by v0.11.2
    through v0.14.0 preserve detected phone numbers, IBANs, payment cards and
    IP addresses raw. Back up any custom rules, run `gaze setup --force`, then
-   re-add them. The new policy tokenizes by default, loads every bundled PII
-   rulepack except `secrets`, uses the Davlan NER model, and turns Nym on.
+   re-add them. The v0.15 policy tokenized by default, loaded every bundled PII
+   rulepack except `secrets`, used the Davlan NER model, and turned Nym on.
+   Current `gaze setup` policies also load `secrets`.
 2. **Re-ingest every `gaze index`** and pass it the NER model
    (`--ner-model-dir` or `GAZE_NER_MODEL_DIR`).
 3. **Load `secrets`** if you relied on Gaze to tokenize API keys, tokens or
@@ -517,19 +526,18 @@ inputs and update audit consumers to expect actual recognizer/rule rows instead
 of `prefix_cache` provenance. Token mappings and manifest restoration retain their
 normal behavior. See [the safety rationale](docs/explanation/pipeline/tier4-pipeline-gating.md).
 
-### Credential recognizers move to the opt-in `secrets` rulepack
+### Credential recognizers moved to the separate `secrets` rulepack
 
-**Action required if you rely on Gaze to tokenize credentials.** Credentials
-are not PII, so the `core` rulepack (0.6.0) no longer detects them:
+In v0.15, the `core` rulepack (0.6.0) stopped detecting credentials:
 
 - `security_token.anchored` (`custom:security_token`: AWS access keys, JWTs,
   cue-anchored API keys and tokens) and `password.field` (`custom:password`:
   `password:` / `passwort:` records) moved unchanged into the bundled `secrets`
-  rulepack. It is opt-in and never loaded by default.
+  rulepack. It was opt-in in v0.15; current `gaze setup` policies include it.
 - `username.field` (`custom:username`) is removed. No bundled recognizer emits
   `custom:username` any more; keep a custom recognizer if you need it.
 
-To keep the previous credential protection, load `secrets` next to `core`:
+Hand-authored policies and direct library callers load `secrets` next to `core`:
 
 ```toml
 [policy.rulepacks]

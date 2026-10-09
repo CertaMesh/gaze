@@ -1,8 +1,8 @@
-# Inactive JWT payload supplemental oracle
+# JWT payload supplemental oracle
 
-This is source preparation for opt-in secrets protection, not an activated
-benchmark layer or an accepted gate. The supplemental acceptance contract is
-**UNDECIDED**. Nothing imports this module into the canonical runner or changes
+This remains a supplemental recognizer oracle, not an activated benchmark
+layer. `gaze setup` now enables secrets protection and contract v4 scores
+credentials on layer C, but nothing imports this module into the canonical runner or changes
 its generator version, shipping policy, scored labels, scoring mechanics or
 historical tables.
 
@@ -27,19 +27,13 @@ controls stay unchanged. These credentials are not FP merely because they lack
 PII. A cued nonpersonal JWT would exercise the same whole-token defect, so the
 unchanged JWT control deliberately uses the existing bare arm.
 
-## Why the default gate cannot establish this gain
+## Why this fixture remains supplemental
 
-The setup policy excludes secrets. PII contract v2 excludes SECURITYTOKEN gold
-and treats `custom:security_token` outside scored gold as neutral. The source
-fix changes the existing opt-in recognizer, not that ruling. Default v1 also
-cannot establish the gain when the secrets detector is absent. Identical fresh
-setup-policy scorecards are necessary no-regression evidence but are blind to
-this opt-in fix. AGENTS requires a demonstrated gain and says a blind benchmark
-is not a pass. This separate payload oracle makes the defect visible without
-relabeling transport bytes, changing contract credit or activating credentials.
-Its existence does **not** resolve whether supplemental evidence satisfies that
-requirement. Root and independent review own that decision and must escalate to
-the user if applying it requires a substantive exception.
+The canonical generated layer A has no credential family and layer C does not
+systematically cover JWT payload boundaries. Contract v4 makes existing
+credential gold count, while this fixture isolates the whole-JWT behavior and
+its matched benign counterweights. It does not change the canonical corpus or
+gate by itself.
 
 ## Proposed supplemental criteria, awaiting decision
 
