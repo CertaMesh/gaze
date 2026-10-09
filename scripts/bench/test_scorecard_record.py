@@ -1,10 +1,12 @@
 """Contract replay must depend on observations and retain no document values."""
 
 import gzip
+import hashlib
 import io
 import contextlib
 import copy
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -15,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import gaze_bench_score as score
 import agentic_layers as agentic
+import benchmark_cache as cache
 import scorecard_record as record
 import verify_record_scorecards as proof
 
@@ -23,6 +26,66 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class RecordReplayTests(unittest.TestCase):
+    def test_cached_parallel_record_and_scorecard_are_byte_identical(self):
+        bench = ROOT / "docs/reference/benchmarks"
+        source = bench / "observations-v0.15.1.jsonl.gz"
+        contract = score.load_scored_label_contract(bench / "scored-labels-v2.json")
+        key = {"synthetic_equivalence": "v1"}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cache.store(root / "cache", key, source)
+            cached, _ = cache.lookup(root / "cache", key)
+            restored = root / source.name
+            shutil.copyfile(cached, restored)
+
+            serial_card = json.dumps(
+                record.rescore(source, contract, max_workers=1), indent=2
+            ).encode() + b"\n"
+            cached_card = json.dumps(
+                record.rescore(restored, contract, max_workers=4), indent=2
+            ).encode() + b"\n"
+
+            self.assertEqual(source.read_bytes(), restored.read_bytes())
+            self.assertEqual(score.sha256_file(source), score.sha256_file(restored))
+            self.assertEqual(serial_card, cached_card)
+            self.assertEqual(
+                hashlib.sha256(serial_card).digest(), hashlib.sha256(cached_card).digest()
+            )
+
+    def test_parallel_replay_is_byte_identical_to_serial_replay(self):
+        bench = ROOT / "docs/reference/benchmarks"
+        source = bench / "observations-v0.15.1.jsonl.gz"
+        contract = score.load_scored_label_contract(bench / "scored-labels-v2.json")
+
+        serial = json.dumps(
+            record.rescore(source, contract, max_workers=1), indent=2
+        ).encode() + b"\n"
+        parallel = json.dumps(
+            record.rescore(source, contract, max_workers=4), indent=2
+        ).encode() + b"\n"
+
+        self.assertEqual(hashlib.sha256(parallel).digest(), hashlib.sha256(serial).digest())
+        self.assertEqual(parallel, serial)
+
+    def test_contract_batch_is_byte_identical_to_individual_rescores(self):
+        bench = ROOT / "docs/reference/benchmarks"
+        source = bench / "observations-v0.15.1.jsonl.gz"
+        contracts = [
+            score.SCORED_LABEL_CONTRACT_V1,
+            score.load_scored_label_contract(bench / "scored-labels-v2.json"),
+            score.load_scored_label_contract(bench / "scored-labels-v3.json"),
+        ]
+        serial = [record.rescore(source, contract, max_workers=1) for contract in contracts]
+        parallel = record.rescore_many(
+            [(source, contract, None) for contract in contracts], max_workers=3
+        )
+
+        self.assertEqual(
+            [json.dumps(card, indent=2) for card in parallel],
+            [json.dumps(card, indent=2) for card in serial],
+        )
+
     def test_committed_v0151_record_replays_all_contracts(self):
         bench = ROOT / "docs/reference/benchmarks"
         release = next(item for item in json.loads(

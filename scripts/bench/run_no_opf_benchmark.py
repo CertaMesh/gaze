@@ -10,6 +10,8 @@ import json
 import os
 import platform
 import re
+import shutil
+import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -17,6 +19,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import agentic_layers as agentic
+import benchmark_cache
 import dataiku_en_de_gaze_bench as dataiku
 import gaze_bench_score as score
 import scorecard_record as records
@@ -42,6 +45,19 @@ DAVLAN_RUNTIME_ARTIFACTS = frozenset(
     }
 )
 DAVLAN_BUNDLE_SURFACE = DAVLAN_RUNTIME_ARTIFACTS | {"SHA256SUMS"}
+OBSERVATION_ENVIRONMENT_KEYS = frozenset(
+    {
+        "CARGO_ENCODED_RUSTFLAGS", "CARGO_HOME", "CC", "CFLAGS", "CPPFLAGS",
+        "CXX", "CXXFLAGS", "HOME", "LDFLAGS", "MACOSX_DEPLOYMENT_TARGET",
+        "PATH", "RUSTC", "RUSTC_WRAPPER", "RUSTFLAGS", "RUSTUP_HOME",
+        "RUSTUP_TOOLCHAIN", "SDKROOT",
+    }
+)
+OBSERVATION_ENVIRONMENT_PREFIXES = (
+    "CARGO_BUILD_", "CARGO_PROFILE_", "CARGO_TARGET_", "DYLD_", "GAZE_",
+    "JEMALLOC_", "LD_", "MALLOC_", "MIMALLOC_", "MKL_", "OMP_", "ORT_",
+    "RAYON_", "TOKENIZERS_",
+)
 
 
 class RunnerError(RuntimeError):
@@ -66,6 +82,40 @@ class BaselineAcceptanceError(RunnerError):
 
 class RepetitionMismatchError(RunnerError):
     code = "repetition_mismatch"
+
+
+def validator_probe_binary(repo_root: Path, *, release: bool) -> Path:
+    if not release:
+        return score.validator_probe_binary(repo_root)
+    return repo_root / score.VALIDATOR_PROBE_TARGET / "release" / "validator-recall-probe"
+
+
+def build_validator_probe(repo_root: Path, *, release: bool) -> Path:
+    if not release:
+        return score.build_validator_probe(repo_root)
+    manifest = repo_root / score.VALIDATOR_PROBE_MANIFEST
+    target_dir = repo_root / score.VALIDATOR_PROBE_TARGET
+    subprocess.run(
+        [
+            "rustup",
+            "run",
+            "1.96.0",
+            "cargo",
+            "build",
+            "--locked",
+            "--release",
+            "--manifest-path",
+            str(manifest),
+            "--target-dir",
+            str(target_dir),
+        ],
+        cwd=repo_root,
+        check=True,
+    )
+    binary = validator_probe_binary(repo_root, release=True)
+    if not binary.is_file():
+        raise FileNotFoundError(f"validator recall probe is missing: {binary}")
+    return binary
 
 
 @dataclass(frozen=True)
@@ -147,11 +197,37 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--no-download", action="store_true")
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--release", action="store_true", help="use the optimized benchmark binary")
+    parser.add_argument(
+        "--cache-dir", type=Path,
+        help="exact-key observation cache (default: shared checkout target/bench-data/cache)",
+    )
+    parser.add_argument("--no-cache", action="store_true", help="measure without reading or writing the observation cache")
+    parser.add_argument("--score-jobs", type=int, default=None, help="bounded observation replay workers (default: 4)")
     return parser.parse_args(argv)
 
 
 def repo_path(repo_root: Path, path: Path) -> Path:
     return path if path.is_absolute() else repo_root / path
+
+
+def portable_repo_path(repo_root: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        return agentic.normalize_home_path(str(path))
+
+
+def observation_environment_identity(source: Mapping[str, str]) -> dict[str, object]:
+    selected = {
+        key: value for key, value in sorted(build_no_opf_environment(source).items())
+        if key in OBSERVATION_ENVIRONMENT_KEYS
+        or key.startswith(OBSERVATION_ENVIRONMENT_PREFIXES)
+    }
+    payload = json.dumps(selected, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return {
+        "variables": sorted(selected),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+    }
 
 
 def load_model_pins(repo_root: Path, davlan_path: Path) -> tuple[ModelPin]:
@@ -636,6 +712,7 @@ def measure_agentic_layers(
     warmup_count: int,
     measured_repetitions: int,
     policy_path: Path | None,
+    source_environment: Mapping[str, str] | None = None,
     configs: Sequence[str] | None = None,
     replacing_actions: frozenset[str] = score.MANIFEST_REPLACING_ACTIONS,
     split_composite_source_ids: bool = False,
@@ -716,6 +793,7 @@ def measure_agentic_layers(
             warmup_count=warmup_count,
             measured_repetitions=measured_repetitions,
             validator_measurements=measurements,
+            source_environment=source_environment,
             policy_path=policy_path,
             configs=configs,
             replacing_actions=replacing_actions,
@@ -754,6 +832,90 @@ def write_json(path: Path, value: object) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
     temporary.replace(path)
+
+
+def source_tree_identity(repo_root: Path) -> tuple[dict[str, str] | None, str | None]:
+    paths = ("crates", "scripts/bench", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml")
+    dirty = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all", "--", *paths],
+        cwd=repo_root, check=False, capture_output=True, text=True,
+    )
+    if dirty.returncode != 0:
+        return None, "cannot inspect measured source inputs"
+    if dirty.stdout.strip():
+        return None, "measured source inputs are dirty or untracked"
+    try:
+        values = subprocess.run(
+            ["git", "rev-parse", "HEAD", "HEAD:crates", "HEAD:scripts/bench"],
+            cwd=repo_root, check=True, capture_output=True, text=True,
+        ).stdout.splitlines()
+    except subprocess.CalledProcessError as error:
+        return None, f"cannot resolve measured source trees ({error})"
+    names = ("revision", "crates_tree_hash", "harness_tree_hash")
+    return dict(zip(names, values, strict=True)), None
+
+
+def observation_cache_dir(repo_root: Path, configured: Path | None) -> Path:
+    if configured is not None:
+        return repo_path(repo_root, configured)
+    try:
+        common = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=repo_root, check=True, capture_output=True, text=True,
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        return repo_root / "target/bench-data/cache"
+    return Path(common).parent / "target/bench-data/cache"
+
+
+def observation_cache_key(
+    *,
+    repo_root: Path,
+    args: argparse.Namespace,
+    policy_path: Path | None,
+    policy_sha256: str | None,
+    corpus_sha256: str,
+    contract: score.ScoredLabelContract,
+    model_provenance: Sequence[Mapping[str, object]],
+    policy_dependencies: Mapping[str, object] | None,
+    agentic_prepared: agentic.PreparedLayers | None,
+    document_ids: Sequence[str],
+    threshold: float,
+    source_environment: Mapping[str, str],
+) -> tuple[dict[str, object] | None, str | None]:
+    source_identity, reason = source_tree_identity(repo_root)
+    if source_identity is None:
+        return None, reason
+    model_shas = {
+        str(item["model_id"]): str(item["observed_sha256"])
+        for item in model_provenance
+    }
+    agentic_contract = agentic_prepared.contract.sha256 if agentic_prepared else None
+    return {
+        "schema_version": 1,
+        "record_schema_version": records.SCHEMA_VERSION,
+        **source_identity,
+        "cargo_lock_sha256": score.sha256_file(repo_root / "Cargo.lock"),
+        "policy_sha256": policy_sha256,
+        "policy_path": portable_repo_path(repo_root, policy_path) if policy_path else None,
+        "policy_dependencies": policy_dependencies,
+        "corpus_sha256": corpus_sha256,
+        "seed": args.seed,
+        "scored_labels_sha256": contract.sha256 or contract.contract_id,
+        "agentic_scored_labels_sha256": agentic_contract,
+        "agentic_corpus_sha256": agentic_prepared.manifest["corpus_sha256"] if agentic_prepared else None,
+        "model_bundle_sha256": model_shas,
+        "environment": observation_environment_identity(source_environment),
+        "ner_threshold": threshold,
+        "profile": args.profile,
+        "release": args.release,
+        "warmups": args.warmups,
+        "measured_repetitions": args.measured_repetitions,
+        "hardware": platform.platform() + "; " + platform.processor(),
+        "document_ids_sha256": hashlib.sha256(
+            json.dumps(list(document_ids), separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
+    }, None
 
 
 def diagnostics(scorecard: Mapping[str, object]) -> dict[str, object]:
@@ -1010,8 +1172,88 @@ def policy_ner_provenance(
     return threshold, validate_required_models(repo_root, model)
 
 
+def finish_run(
+    args: argparse.Namespace,
+    output_dir: Path,
+    candidate: dict[str, object],
+) -> int:
+    readiness_result = score.evaluate_release_readiness(
+        candidate,
+        expected_configs=("policy-file",) if args.policy else score.DEFAULT_CONFIGS,
+        production_config="policy-file" if args.policy else score.PRODUCTION_CONFIG,
+    )
+    readiness_correctness_failed = not readiness_result["passed"]
+    if args.profile != "full":
+        readiness_result = copy.deepcopy(readiness_result)
+        readiness_result["passed"] = False
+        readiness_result["failures"].append(
+            {
+                "gate": "full_profile_required",
+                "reason": "a sampled quick run cannot establish release readiness",
+            }
+        )
+    readiness = _status_document("release_readiness", readiness_result)
+    if args.compare_baseline is None:
+        regression: dict[str, object] = {
+            "schema_version": 1,
+            "kind": "regression",
+            "status": "not_compared",
+            "passed": None,
+            "failures": [],
+        }
+        performance: dict[str, object] = {
+            "schema_version": 1,
+            "kind": "performance",
+            "status": "not_compared",
+            "passed": None,
+            "gating": args.performance_gating,
+            "disposition": "gating" if args.performance_gating else "informational",
+            "tolerance_percent": args.performance_tolerance_percent,
+            "comparisons": [],
+            "failures": [],
+        }
+    else:
+        baseline = load_scorecard(args.compare_baseline, "baseline")
+        comparison = score.compare_scorecards(candidate, baseline)
+        regression = _status_document("regression", comparison["regression"])
+        performance_result = score.compare_performance(
+            candidate,
+            baseline,
+            tolerance_percent=args.performance_tolerance_percent,
+            gating=args.performance_gating,
+        )
+        performance = {
+            "schema_version": 1,
+            "kind": "performance",
+            "status": "passed" if performance_result["passed"] else "failed",
+            **performance_result,
+        }
+
+    write_json(output_dir / "scorecard-v4.json", candidate)
+    write_json(output_dir / "diagnostics.json", diagnostics(candidate))
+    write_json(output_dir / "regression-status.json", regression)
+    write_json(output_dir / "release-readiness-status.json", readiness)
+    write_json(output_dir / "performance-status.json", performance)
+    (output_dir / "summary.md").write_text(
+        markdown_summary(candidate, regression, readiness, performance),
+        encoding="utf-8",
+    )
+
+    accept_baseline(args, candidate, regression, readiness)
+    if regression["passed"] is False:
+        return 3
+    if args.profile == "full" and readiness["passed"] is False:
+        return 4
+    if args.profile == "quick" and readiness_correctness_failed:
+        return 4
+    if args.performance_gating and performance["passed"] is False:
+        return 5
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
     repo_root = Path(__file__).resolve().parents[2]
+    source_environment = dict(os.environ)
     if args.compare_baseline is not None:
         args.compare_baseline = repo_path(repo_root, args.compare_baseline)
     if args.accept_baseline is not None:
@@ -1130,6 +1372,49 @@ def run(args: argparse.Namespace) -> int:
     except score.ScoredLabelContractError as error:
         raise CandidateError(str(error)) from error
 
+    metadata, dataset_report = composite_dataset_report(dataiku_report, negative_report)
+    cache_dir = observation_cache_dir(repo_root, args.cache_dir)
+    cache_key = None
+    if args.no_cache:
+        print("observation cache bypassed: --no-cache")
+    elif args.skip_build:
+        print("observation cache bypassed: --skip-build does not bind a measured binary")
+    else:
+        cache_key, cache_bypass = observation_cache_key(
+            repo_root=repo_root,
+            args=args,
+            policy_path=policy_path,
+            policy_sha256=policy_sha,
+            corpus_sha256=dataset_report["integrity"]["sha256"],
+            contract=scored_label_contract,
+            model_provenance=model_provenance,
+            policy_dependencies=policy_dependencies,
+            agentic_prepared=agentic_prepared,
+            document_ids=[document.uid for document in documents],
+            threshold=effective_threshold,
+            source_environment=source_environment,
+        )
+        if cache_key is None:
+            print(f"observation cache bypassed: {cache_bypass}")
+        else:
+            cached_record, cache_status = benchmark_cache.lookup(cache_dir, cache_key)
+            print(f"observation {cache_status}")
+            if cached_record is not None:
+                output_dir.mkdir(parents=True, exist_ok=True)
+                output_record = output_dir / "observations-v1.jsonl.gz"
+                shutil.copyfile(cached_record, output_record)
+                try:
+                    candidate = records.rescore(
+                        output_record,
+                        scored_label_contract,
+                        agentic_prepared.contract if agentic_prepared else None,
+                        max_workers=args.score_jobs,
+                    )
+                except records.RecordError as error:
+                    print(f"observation cache replay failed; measuring fresh: {error}")
+                else:
+                    return finish_run(args, output_dir, candidate)
+
     profile = "release" if args.release else "debug"
     binary = (
         Path(os.environ.get("CARGO_TARGET_DIR", str(repo_root / "target")))
@@ -1144,9 +1429,9 @@ def run(args: argparse.Namespace) -> int:
     if not binary.is_file():
         raise CandidateError(f"benchmark binary is missing: {binary}")
     validator_probe = (
-        score.validator_probe_binary(repo_root)
+        validator_probe_binary(repo_root, release=args.release)
         if args.skip_build
-        else score.build_validator_probe(repo_root)
+        else build_validator_probe(repo_root, release=args.release)
     )
     if not validator_probe.is_file():
         raise CandidateError(f"validator recall probe is missing: {validator_probe}")
@@ -1158,7 +1443,6 @@ def run(args: argparse.Namespace) -> int:
     validator_measurements = records.filter_measurements(
         complete_validator_measurements, available_documents
     )
-    metadata, dataset_report = composite_dataset_report(dataiku_report, negative_report)
     extra_documents = (
         [record.to_document() for record in agentic.generate(agentic.PUBLISHED_PARTITION)]
         if agentic_prepared is not None else []
@@ -1180,6 +1464,7 @@ def run(args: argparse.Namespace) -> int:
         measured_repetitions=args.measured_repetitions,
         validator_measurements=validator_measurements,
         policy_path=policy_path,
+        source_environment=source_environment,
         record_writer=record_writer,
     )
     dataset_report["validator_gold_census"] = score.validator_gold_census(
@@ -1212,7 +1497,7 @@ def run(args: argparse.Namespace) -> int:
         "profile": args.profile,
         "model_bundles": model_provenance,
         "policy_dependencies": policy_dependencies,
-        "policy": {"path": agentic.normalize_home_path(str(policy_path)), "sha256": policy_sha}
+        "policy": {"path": portable_repo_path(repo_root, policy_path), "sha256": policy_sha}
         if policy_path else None,
         "hardware": platform.platform() + "; " + platform.processor(),
         "warmup_count": args.warmups,
@@ -1239,87 +1524,21 @@ def run(args: argparse.Namespace) -> int:
             warmup_count=args.warmups,
             measured_repetitions=args.measured_repetitions,
             policy_path=policy_path,
+            source_environment=source_environment,
             record_writer=record_writer,
         )
         candidate["layers"]["gold_validity"] = {
             "C": agentic.gold_validity_digest(documents, validator_measurements)
         }
 
-    readiness_result = score.evaluate_release_readiness(
-        candidate,
-        expected_configs=("policy-file",) if policy_path else score.DEFAULT_CONFIGS,
-        production_config="policy-file" if policy_path else score.PRODUCTION_CONFIG,
-    )
-    readiness_correctness_failed = not readiness_result["passed"]
-    if args.profile != "full":
-        readiness_result = copy.deepcopy(readiness_result)
-        readiness_result["passed"] = False
-        readiness_result["failures"].append(
-            {
-                "gate": "full_profile_required",
-                "reason": "a sampled quick run cannot establish release readiness",
-            }
-        )
-    readiness = _status_document("release_readiness", readiness_result)
-    if args.compare_baseline is None:
-        regression: dict[str, object] = {
-            "schema_version": 1,
-            "kind": "regression",
-            "status": "not_compared",
-            "passed": None,
-            "failures": [],
-        }
-        performance: dict[str, object] = {
-            "schema_version": 1,
-            "kind": "performance",
-            "status": "not_compared",
-            "passed": None,
-            "gating": args.performance_gating,
-            "disposition": "gating" if args.performance_gating else "informational",
-            "tolerance_percent": args.performance_tolerance_percent,
-            "comparisons": [],
-            "failures": [],
-        }
-    else:
-        baseline = load_scorecard(args.compare_baseline, "baseline")
-        comparison = score.compare_scorecards(candidate, baseline)
-        regression = _status_document("regression", comparison["regression"])
-        performance_result = score.compare_performance(
-            candidate,
-            baseline,
-            tolerance_percent=args.performance_tolerance_percent,
-            gating=args.performance_gating,
-        )
-        performance = {
-            "schema_version": 1,
-            "kind": "performance",
-            "status": "passed" if performance_result["passed"] else "failed",
-            **performance_result,
-        }
-
+    output_record = output_dir / "observations-v1.jsonl.gz"
     candidate["observation_record"] = record_writer.write(
-        output_dir / "observations-v1.jsonl.gz", candidate, add_reference=True
+        output_record, candidate, add_reference=True
     )
-    write_json(output_dir / "scorecard-v4.json", candidate)
-    write_json(output_dir / "diagnostics.json", diagnostics(candidate))
-    write_json(output_dir / "regression-status.json", regression)
-    write_json(output_dir / "release-readiness-status.json", readiness)
-    write_json(output_dir / "performance-status.json", performance)
-    (output_dir / "summary.md").write_text(
-        markdown_summary(candidate, regression, readiness, performance),
-        encoding="utf-8",
-    )
-
-    accept_baseline(args, candidate, regression, readiness)
-    if regression["passed"] is False:
-        return 3
-    if args.profile == "full" and readiness["passed"] is False:
-        return 4
-    if args.profile == "quick" and readiness_correctness_failed:
-        return 4
-    if args.performance_gating and performance["passed"] is False:
-        return 5
-    return 0
+    if not args.no_cache and cache_key is not None:
+        cached = benchmark_cache.store(cache_dir, cache_key, output_record)
+        print(f"observation cache stored {benchmark_cache.key_digest(cache_key)} at {cached}")
+    return finish_run(args, output_dir, candidate)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
