@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tax and government identifiers cover additional cue connectors and grouped
   layouts, including slash Steuernummer, separated SSN, Swiss AHV and national
   identity values. Full English tax-identification fields preserve trusted
-  repeated-value protection.
+  repeated-value protection. Generic national-ID cues reject short grouped
+  order/invoice references, dates and triangle dimensions, and preserve IP ownership.
 - Cued NHS numbers remain protected whole when MOD-11 fails, with a typed audit
   reason and no repeat-value sweep. Tax-identification key abbreviations also
   protect the full Steuer-ID value in tool-call JSON and logs.

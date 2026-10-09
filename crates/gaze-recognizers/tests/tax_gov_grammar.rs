@@ -174,3 +174,23 @@ fn compact_german_identifiers_keep_trusted_repeat_ownership() {
         assert_eq!(cleaned.matches(":Custom:national_id_1>").count(), 2);
     }
 }
+
+#[test]
+fn generic_id_cues_do_not_turn_short_numeric_groups_into_national_ids() {
+    let pipeline = pipeline();
+    for input in [
+        "Order ID number 12 345 678",
+        "Order ID number 1 2 3",
+        "Customer ID number 2024 10 15",
+        "Product ID number 12.345.678 EUR",
+        "ID card 1/2/3",
+        "Invoice id number 4711/2024/03",
+        "ID number 3-4-5 triangle",
+    ] {
+        assert_eq!(clean(&pipeline, input), input, "{input:?}");
+    }
+    // The IP recognizer retains ownership instead of a generic ID cue.
+    let cleaned = clean(&pipeline, "ID number 10.0.0.1");
+    assert!(cleaned.contains(":Custom:ip_address_1>"), "{cleaned:?}");
+    assert!(!cleaned.contains(":Custom:national_id_"), "{cleaned:?}");
+}

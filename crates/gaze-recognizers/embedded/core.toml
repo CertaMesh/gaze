@@ -1683,6 +1683,8 @@ origin = "project-authored"
 license = "Apache-2.0"
 
 # NATIONALID. The weakest of the four, and shipped with a KNOWN, BOUNDED, DISCLOSED GAP.
+# Generic numeric grouping is not evidence of a national ID: short groups overlap order
+# references, dates, dimensions, and IPv4. Retain the bounded value alternatives below.
 #
 # Cue adjacency is only 60.0% overall and badly asymmetric: 89 of 92 English spans (96.7%) carry a
 # cue but only 31 of 108 German spans (28.7%) do. The 77 bare German spans are structurally
@@ -1711,7 +1713,7 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:national[ \t_-]?id(?:entity|entification)?(?:[ \t_-]?(?:number|nummer))?|nationalid|nationale[nr]?[ \t_-]+(?:id(?:-?nummer)?|identifikationsnummer|identit[äa]tsnummer|id-nummer)|national(?:-?ausweis(?:es)?|er[ \t_-]+identit[äa]tsausweis)(?:nummer)?|identity[ \t_-]?(?:card|number)|id[ \t_-]?(?:card|number|nummer|karte)(?:n?nummer)?|idcard|id-kartennummer|identit[äa]tskarte(?:n?nummer)?|personalausweis(?:es|nummer)?|ausweis(?:es)?(?:nummer)?|national[ \t_-]?insurance(?:[ \t_-]?number)?|(?:fahrzeug[ \t_-]*)?identifikationsnummer|personalnummer|staatsb[üu]rgerschaftsnummer|b[üu]rgerschaftsnummer|ahv(?:-?nummer)?)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|num[eé]ro|n[uú]mero|no|nr|num|id|code|ident|identification|is|was|ist|est|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|hinterlegt|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?([A-Z]{2}-?756\.\d{4}\.\d{4}\.\d{1,2}|[A-Z]{1,3}-?\d{6,12}[A-Z]{0,2}|\d{3}[.-]\d{2,4}[.-]\d{2,4}(?:[.-]\d{2,4})?|\d{3,}[A-Z][A-Z0-9]{3,}|\d{1,4}(?:[ ./-]\d{1,6}){2,3}|\d{9,13}|\d{6}-\d{4}|\d\.\d{2}\.\d{6}\.\d)\b'''
+pattern = '''(?i)(?:\b|_)(?:national[ \t_-]?id(?:entity|entification)?(?:[ \t_-]?(?:number|nummer))?|nationalid|nationale[nr]?[ \t_-]+(?:id(?:-?nummer)?|identifikationsnummer|identit[äa]tsnummer|id-nummer)|national(?:-?ausweis(?:es)?|er[ \t_-]+identit[äa]tsausweis)(?:nummer)?|identity[ \t_-]?(?:card|number)|id[ \t_-]?(?:card|number|nummer|karte)(?:n?nummer)?|idcard|id-kartennummer|identit[äa]tskarte(?:n?nummer)?|personalausweis(?:es|nummer)?|ausweis(?:es)?(?:nummer)?|national[ \t_-]?insurance(?:[ \t_-]?number)?|(?:fahrzeug[ \t_-]*)?identifikationsnummer|personalnummer|staatsb[üu]rgerschaftsnummer|b[üu]rgerschaftsnummer|ahv(?:-?nummer)?)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|num[eé]ro|n[uú]mero|no|nr|num|id|code|ident|identification|is|was|ist|est|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|hinterlegt|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?([A-Z]{2}-?756\.\d{4}\.\d{4}\.\d{1,2}|[A-Z]{1,3}-?\d{6,12}[A-Z]{0,2}|\d{3}[.-]\d{2,4}[.-]\d{2,4}(?:[.-]\d{2,4})?|\d{3,}[A-Z][A-Z0-9]{3,}|\d{9,13}|\d{6}-\d{4}|\d\.\d{2}\.\d{6}\.\d)\b'''
 capture_groups = [1]
 complete_labelled_value = true
 
