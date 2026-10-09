@@ -3462,7 +3462,7 @@
       "id": "scored-labels-v2",
       "version": 2,
       "file": "docs/reference/benchmarks/scored-labels-v2.json",
-      "file_sha256": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+      "file_sha256": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
       "excluded_labels": [
         "PASSWORD",
         "SECURITYTOKEN"

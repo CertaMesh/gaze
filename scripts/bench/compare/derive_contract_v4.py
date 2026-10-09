@@ -44,6 +44,12 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def sync_contract_hashes(report: dict) -> None:
+    """Record the current immutable contract files, including metadata-only edits."""
+    for version, path in compare.CONTRACTS.items():
+        report["contracts"][version] = digest(REPO / path) if path is not None else None
+
+
 def derive_cell(v1: dict, v3: dict) -> dict:
     """v4 is v1 accounting plus the pre-existing non-credential v3 credit."""
     result = copy.deepcopy(v1)
@@ -80,9 +86,10 @@ def derive_tuned(report: dict) -> dict:
                 f"{name}/{layer}: credential-neutral predictions prevent aggregate derivation",
             )
     add_v4_contracts(report)
-    report["contracts"]["v4"] = digest(REPO / compare.CONTRACTS["v4"])
+    sync_contract_hashes(report)
     report["comparison_sha256"] = digest(REPORT)
     report["compare_sha256"] = digest(Path(compare.__file__))
+    report["scorer_sha256"] = digest(BENCH / "gaze_bench_score.py")
     report["contract_v4_derivation"] = {
         "method": "v1 aggregates plus v3 gold-gap credit",
         "prediction_replay": False,
@@ -184,7 +191,6 @@ def derive(
 ) -> dict:
     original = copy.deepcopy(report)
     report = copy.deepcopy(report)
-    contract_path = REPO / compare.CONTRACTS["v4"]
     receipt = report.get("contract_v4_derivation")
     if dataset is not None:
         documents = comparison_documents(dataset, original)
@@ -207,8 +213,9 @@ def derive(
     require(receipt.get("agentic_corpus_sha256") == original["corpus"]["agentic"]["corpus_sha256"], "v4 derivation agentic corpus changed")
     require(receipt.get("variant_packs") == original["corpus"]["packs"], "v4 derivation variant packs changed")
     add_v4_contracts(report)
-    report["contracts"]["v4"] = digest(contract_path)
+    sync_contract_hashes(report)
     report["compare_sha256"] = digest(Path(compare.__file__))
+    report["scorer_sha256"] = digest(BENCH / "gaze_bench_score.py")
     report["contract_v4_derivation"] = receipt
     return report
 

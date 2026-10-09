@@ -50,7 +50,7 @@
     "reason": "Only the compatible age label-map extension and its receipt changed. Every original comparison field other than the mapping digest is byte-for-byte equal as JSON; the tuned selection, anchors, scores and input predictions are unchanged."
   },
   "comparison_metrics_sha256": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
-  "comparison_sha256": "13e4153ede71157a3f1d34b6836dfab1b8ea6eceda3018163b9bf1a4dfd0f8a8",
+  "comparison_sha256": "4914f8d8387c7454e66ea8659c2b8e91a2ea6d18cc2e2f682752281e94f94f5c",
   "contract_v4_derivation": {
     "credential_prediction_classes": false,
     "method": "v1 aggregates plus v3 gold-gap credit",
@@ -59,8 +59,8 @@
   "contracts": {
     "agentic": "d30ee303effc9a0de004531d12e85deb530d5eb74a1298e5d4432da4cfd6fce0",
     "v1": null,
-    "v2": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
-    "v3": "d849109f57f0f04bfbf722c7e8679164de16d99bf5eeeaea83f2968c0877baad",
+    "v2": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
+    "v3": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
     "v4": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632"
   },
   "corpus": {
@@ -12954,6 +12954,6 @@
     }
   },
   "schema_version": 1,
-  "scorer_sha256": "0777d5d314340ac305bfe492dc546f1ae9326ce14bb300e87be6368aa9ec8816",
+  "scorer_sha256": "27bf262c5382e3d80adc8204357fb3939c4d634261d294ac1650b26ca22c2403",
   "selection_sha256": "8cb727bd82e441bd8683bb4ea55f923eefba4c37cfeaab0518429590970fb522"
 }

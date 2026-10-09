@@ -1054,14 +1054,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v2",
             "version": 2,
-            "file_sha256": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+            "file_sha256": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.14.0-scored-labels-v2.json",
-          "scorecard_sha256": "f813ef1d53986e9500679a0b7d90c2ebda9c4339a20c0e5a09cf58a618148933",
+          "scorecard_sha256": "8bf73701dc865ed8dd012a1dd21998ee3b1ccc0f2f1ce9b04872ac142c7c2ae2",
           "arms": {
             "rule-floor-extended": {
               "gold_pii_utf8_bytes": 123621,
@@ -2683,14 +2683,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v3",
             "version": 3,
-            "file_sha256": "d849109f57f0f04bfbf722c7e8679164de16d99bf5eeeaea83f2968c0877baad",
+            "file_sha256": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.14.0-scored-labels-v3.json",
-          "scorecard_sha256": "208c0353afd1718c4e7150d7ef80eaa82abaa83a3564de41afdc133b724d4735",
+          "scorecard_sha256": "ae634bf469d2c85c9549375426387ddff7036d2676f148f89dbddf3efd49868a",
           "arms": {
             "rule-floor-extended": {
               "gold_pii_utf8_bytes": 123621,
@@ -5891,14 +5891,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v2",
             "version": 2,
-            "file_sha256": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+            "file_sha256": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.15.0-scored-labels-v2.json",
-          "scorecard_sha256": "cb6ac99aa6fa5d145fd77433514361dc385212b52c958c70caf2696c517eca80",
+          "scorecard_sha256": "da30ac1989a3e7437885e3a27c6b749526ae2205be922b5bd5005ff42d086f7a",
           "arms": {
             "policy-file": {
               "gold_pii_utf8_bytes": 123621,
@@ -6563,14 +6563,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v3",
             "version": 3,
-            "file_sha256": "d849109f57f0f04bfbf722c7e8679164de16d99bf5eeeaea83f2968c0877baad",
+            "file_sha256": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.15.0-scored-labels-v3.json",
-          "scorecard_sha256": "f36189ff79782e2faa7839eb8312415e98d0b308ea483e48239cdc52b1a9acf2",
+          "scorecard_sha256": "da1056cd23b440ac4fa0b990bcc984866fbc6248ebc2e5a73f8b010907b4961e",
           "arms": {
             "policy-file": {
               "gold_pii_utf8_bytes": 123621,
@@ -8104,14 +8104,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v2",
             "version": 2,
-            "file_sha256": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+            "file_sha256": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.15.1-scored-labels-v2.json",
-          "scorecard_sha256": "e20a8fb6b1f6f4d3098b93f3e77d62d73c7cc4c34c96aff527bbbb072931de55",
+          "scorecard_sha256": "c858a6ce01d96adb94247d4456a30be39872cbd051ddd698f5b1ad1f92cd9c1e",
           "arms": {
             "policy-file": {
               "gold_pii_utf8_bytes": 123621,
@@ -8785,14 +8785,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v3",
             "version": 3,
-            "file_sha256": "d849109f57f0f04bfbf722c7e8679164de16d99bf5eeeaea83f2968c0877baad",
+            "file_sha256": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.15.1-scored-labels-v3.json",
-          "scorecard_sha256": "63f7a276ede374f71f21bf34ddd735cdbc4065373b2739a47f68b31b78b7663f",
+          "scorecard_sha256": "6029de53164a530c44b9a2ec1ffbe4ff16291ae10b0beb2a20394b124e274480",
           "arms": {
             "policy-file": {
               "gold_pii_utf8_bytes": 123621,
@@ -10791,14 +10791,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v2",
             "version": 2,
-            "file_sha256": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+            "file_sha256": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.16.0-scored-labels-v2.json",
-          "scorecard_sha256": "752c75cb094a950f5dda8d23be35facc5dec7f29e1a7b1a99dc4076b14fbb2c0",
+          "scorecard_sha256": "12a36ced8b8f6ea3404a29cb2a45426b07ba833a4648530cb133b0f22c325391",
           "arms": {
             "policy-file": {
               "gold_pii_utf8_bytes": 123621,
@@ -11603,14 +11603,14 @@
           "scored_label_contract": {
             "id": "scored-labels-v3",
             "version": 3,
-            "file_sha256": "d849109f57f0f04bfbf722c7e8679164de16d99bf5eeeaea83f2968c0877baad",
+            "file_sha256": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
             "excluded_labels": [
               "PASSWORD",
               "SECURITYTOKEN"
             ]
           },
           "scorecard": "scorecard-v0.16.0-scored-labels-v3.json",
-          "scorecard_sha256": "d8eb05e7480aef7ee78a59008322ef89844e4c677648e82d0a29f49ac41c215a",
+          "scorecard_sha256": "3c0300867421f8b1e6dc2713982862fbd0155d93e2d7a1658f17e2892ace39f8",
           "arms": {
             "policy-file": {
               "gold_pii_utf8_bytes": 123621,

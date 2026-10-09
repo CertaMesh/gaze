@@ -381,7 +381,7 @@ loaded rulepack rather than a separate hand-maintained list.
 |--------|-------------|---------|-------|
 | `core` | `email.global`, `email.header.name`, `email.header.name.paren`, `name.*`, `phone.*`, `iban.structural`, `card.structural`, `ip.*`, `eth.address`, `postal.*` | `email`, `name`, `custom:phone`, `custom:iban`, `custom:credit_card`, `custom:ip_address`, `custom:eth_address`, `custom:postal_code` | Default bundle when `[policy.rulepacks]` is omitted. Recognizers declare `safety_tier` and `locale_basis`; format-basis identifiers run independently of the document locale, while linguistic names and quarantined national shapes remain document-gated. |
 | `core-extended` | alias of `core` | same as `core` | Deprecated since v0.8.0; scheduled for removal in v0.10.0. The CLI alias emits a warning and auto-activates locale-gated recognizers for v0.8.x compatibility. |
-| `secrets` | `security_token.anchored`, `password.field` | `custom:security_token`, `custom:password` | Opt-in only. Credentials are not PII, so this bundle is never loaded by default, not even when `[policy.rulepacks]` is omitted. Load it next to `core`. |
+| `secrets` | `security_token.anchored`, `password.field` | `custom:security_token`, `custom:password` | Included by newly generated `gaze setup` policies. Direct library callers and hand-authored policies load it next to `core` explicitly. |
 
 Use `core` with an explicit locale when you want document-basis,
 locale-shaped recognizers:
@@ -394,9 +394,9 @@ bundled = ["core"]
 active = ["en-US"]
 ```
 
-Credentials (API keys, access tokens, JWTs, `password:` records) are not PII
-and are not detected by `core`. To tokenize them too, add the opt-in `secrets`
-bundle:
+Credentials (API keys, access tokens, JWTs, `password:` records) are not
+detected by `core`. `gaze setup` includes the separate `secrets` bundle; add it
+explicitly in a hand-authored policy:
 
 ```toml
 [policy.rulepacks]

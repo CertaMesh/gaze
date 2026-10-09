@@ -665,7 +665,7 @@ def render(ledger: Mapping[str, Any], releases: Sequence[str], root: Path = ROOT
                 f"({_signed(candidate['false_positive'] - base['false_positive'])}) | {gate} |"
             )
     if shown:
-        lines += ["", "What moved, per label (contract v2; v1 adds only the credential labels):", ""]
+        lines += ["", "What moved, per label (contract v2; v4 and v1 add the credential labels):", ""]
     for entry, measurement in shown:
         row = measurement["contracts"]["2"]
         leaked = ", ".join(

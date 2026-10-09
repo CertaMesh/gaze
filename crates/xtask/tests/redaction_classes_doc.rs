@@ -9,7 +9,7 @@ use syn::{Expr, Item, Lit, Meta, Pat, Stmt};
 const DOC_PATH: &str = "docs/reference/redaction-classes.md";
 const CORE_RULEPACK: &str = "core";
 const CORE_EXTENDED_RULEPACK: &str = "core-extended";
-/// Opt-in credential bundle; its rows are documented but it never joins a default activation.
+/// Separate credential bundle; setup enables it while library callers choose it explicitly.
 const SECRETS_RULEPACK: &str = "secrets";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

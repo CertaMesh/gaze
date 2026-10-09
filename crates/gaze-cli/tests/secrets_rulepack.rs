@@ -1,10 +1,10 @@
-//! The bundled `secrets` rulepack is opt-in. Credentials are not PII,
-//! so `security_token.anchored` and `password.field` must stay inert under every
-//! default activation and fire only when `secrets` is loaded by name.
+//! The bundled `secrets` rulepack remains explicit for hand-authored policies.
+//! `gaze setup` tests separately prove generated policies include it; these
+//! tests prove an explicit core-only selection remains core-only.
 //!
 //! Mutation this file must catch: re-adding `password.field` (or
-//! `security_token.anchored`) to `embedded/core.toml` turns the default-activation
-//! tests RED, because the credential would be tokenized without an opt-in.
+//! `security_token.anchored`) to `embedded/core.toml` turns the core-only tests
+//! RED, because that explicit selection would tokenize a credential.
 
 use std::fs;
 
@@ -70,7 +70,7 @@ fn assert_credentials_untouched(clean: &str) {
     assert_eq!(
         clean,
         input(),
-        "no credential may be tokenized without the secrets opt-in"
+        "an explicit core-only policy must not tokenize credentials"
     );
     assert!(!clean.contains(":security_token_") && !clean.contains(":password_"));
 }

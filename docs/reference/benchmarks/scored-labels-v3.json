@@ -127,7 +127,7 @@
       "scored": false,
       "category": "credential",
       "ruling": "settled",
-      "reason": "Out of contract: credential, not PII. A password is an authentication secret, not personal data. User ruling 2026-09-16: credentials are not PII and Gaze should not interfere with them."
+      "reason": "Historical exclusion retained only for reproducibility; superseded by contract v4, which scores credentials under the 2026-10-09 ruling."
     },
     {
       "label": "PHONENUMBER",
@@ -148,7 +148,7 @@
       "scored": false,
       "category": "credential",
       "ruling": "settled",
-      "reason": "Out of contract: credential, not PII. API keys, access tokens and session secrets authenticate a system, not a person. User ruling 2026-09-16: token detection does not belong in a PII detection library."
+      "reason": "Historical exclusion retained only for reproducibility; superseded by contract v4, which scores credentials under the 2026-10-09 ruling."
     },
     {
       "label": "SSN",

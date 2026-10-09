@@ -1175,7 +1175,7 @@ def _lookalike_records(partition: str, seed: int) -> list[Record]:
 
 # A consuming regex guard can eat the only separator before its neighbour.
 # These cases extend the published split without changing any v3 document.
-# The setup policy excludes `secrets`, so `password.field` has no gold here.
+# This generated layer has no credential family; layer C carries credential gold.
 @dataclass(frozen=True)
 class AdjacentValue:
     value: str

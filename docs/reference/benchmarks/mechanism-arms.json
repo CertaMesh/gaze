@@ -34,6 +34,23 @@
           "base_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
           "candidate_policy_sha256": "343cf1cceb38d0b8210bbca01130ca07b06d564b2dad94a31d04b06598129cab",
           "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 18155,
+                "false_positive": 13768,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 18070,
+                "false_positive": 13768,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "DATEOFBIRTH": -85
+              }
+            },
             "3": {
               "base": {
                 "gold": 123621,
@@ -172,6 +189,37 @@
           "base_policy_sha256": "a07d691e8f76ba339fbe6af599fb19ed12c54bd64718fbf82e9ccca563115a07",
           "candidate_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
           "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 21425,
+                "false_positive": 13770,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 17991,
+                "false_positive": 13832,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -241,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -174,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -17,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1484,
+                "NATIONALID": -8,
+                "PASSWORD": -268,
+                "SECURITYTOKEN": -68,
+                "STATE": -8,
+                "SURNAME": -6,
+                "URL": -226,
+                "USERNAME": -846,
+                "ZIP": -48
+              }
+            },
             "3": {
               "base": {
                 "gold": 123621,
@@ -347,6 +395,37 @@
           "base_policy_sha256": "a07d691e8f76ba339fbe6af599fb19ed12c54bd64718fbf82e9ccca563115a07",
           "candidate_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
           "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 18877,
+                "false_positive": 15498,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 15443,
+                "false_positive": 15560,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -241,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -174,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -17,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1484,
+                "NATIONALID": -8,
+                "PASSWORD": -268,
+                "SECURITYTOKEN": -68,
+                "STATE": -8,
+                "SURNAME": -6,
+                "URL": -226,
+                "USERNAME": -846,
+                "ZIP": -48
+              }
+            },
             "3": {
               "base": {
                 "gold": 123621,
@@ -522,6 +601,37 @@
           "base_policy_sha256": "a07d691e8f76ba339fbe6af599fb19ed12c54bd64718fbf82e9ccca563115a07",
           "candidate_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
           "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 18643,
+                "false_positive": 15522,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 15239,
+                "false_positive": 15584,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -240,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -148,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -17,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1484,
+                "NATIONALID": -8,
+                "PASSWORD": -268,
+                "SECURITYTOKEN": -68,
+                "STATE": -8,
+                "SURNAME": -6,
+                "URL": -226,
+                "USERNAME": -846,
+                "ZIP": -44
+              }
+            },
             "3": {
               "base": {
                 "gold": 123621,
@@ -710,6 +820,40 @@
           "base_policy_sha256": "ba04fec2128509362e7f4b57546d61426a3011badd6730188547043a5f9a054e",
           "candidate_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
           "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 86119,
+                "false_positive": 2191,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 17991,
+                "false_positive": 13832,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "AGE": 2,
+                "BUILDINGNUM": -1331,
+                "CITY": -11595,
+                "COMPANYNAME": -5580,
+                "COUNTRY": -3252,
+                "DATEOFBIRTH": 11,
+                "FIRSTNAME": -9904,
+                "IDCARDNUM": -3,
+                "LICENSEPLATENUM": 11,
+                "ORGANIZATION": -69,
+                "PASSWORD": -43,
+                "REGION": -10,
+                "STATE": -7004,
+                "STREET": -18637,
+                "SURNAME": -10664,
+                "URL": -43,
+                "USERNAME": -7,
+                "ZIP": -40
+              }
+            },
             "3": {
               "base": {
                 "gold": 123621,
@@ -914,6 +1058,24 @@
           "base_policy_sha256": "e3b3a2abe9e2fc7825fb27b8453cb7a898db581442ac279a1b380cd411084ace",
           "candidate_policy_sha256": "65cd6aa588ce6923f9e2156699893fcffb9a870967d9a0db5018deaa0c22c8cc",
           "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 13423,
+                "false_positive": 15684,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 13312,
+                "false_positive": 15767,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -53,
+                "STATE": -58
+              }
+            },
             "3": {
               "base": {
                 "gold": 123621,

@@ -1679,7 +1679,8 @@ def render_readme_chart(
     newest = gaze[-1]
     caption = (
         f"{newest.name} scores character-level F2 {newest.f2:.3f} on "
-        f"{own.dataset.split(' · ')[0]} (scored labels v3), leaking {newest.leaked:,} PII bytes. "
+        f"{own.dataset.split(' · ')[0]} (scored labels v4; credentials counted), "
+        f"leaking {newest.leaked:,} PII bytes. "
         "Each panel names its dataset and split; competitors run the configurations "
         "declared in [`chart-configs.json`](scripts/bench/compare/chart-configs.json). "
         "Numbers, sources and the model-card tables: "
@@ -1712,8 +1713,9 @@ def _source_lines(
     dataset = latest["dataset"]
     lines = [
         f"- **Own corpus:** {layer_display_name('C')}, "
-        f"{dataset['evaluated_population']['documents']:,} documents, scored labels v3 (the labels Gaze commits to detect, protected repeats "
-        "credited). Gaze from [`release-history.json`](release-history.json) "
+        f"{dataset['evaluated_population']['documents']:,} documents, scored labels v4 "
+        "(credentials counted; protected repeats credited). Gaze from "
+        "[`release-history.json`](release-history.json) "
         "(the shipped default of each tagged release); competitors from "
         "[`comparison.json`](comparison.json)."
     ]
