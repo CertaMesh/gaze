@@ -400,6 +400,10 @@ Validator-backed labels on `policy-file`, scored labels v1. Gold that fails its 
 
 <!-- END GENERATED: current-release -->
 
+## Known gaps
+
+**Known gaps:** house numbers and tenant-specific IDs such as order numbers pass through unless your policy adds a recognizer, and a CSV header does not yet mark the column under it (`name,bsn\nJan,111222333` leaves the BSN raw). Names and other values a recognizer found once are not carried to their other occurrences, so without NER a name repeated in prose can pass raw, and UK national-format phone numbers are not yet detected.
+
 ---
 
 ## Benchmark panels
