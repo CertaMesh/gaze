@@ -111,7 +111,7 @@ def main():
         s['base_fp_bytes'] += len(pb - gold)
         s['candidate_fp_bytes'] += len(pc - gold)
         if ((digits & pb) - pc or digits - pc or not c['restore']['exact']
-                or not c['manifest_integrity']['valid']):
+                or any(value != 0 for key, value in c['manifest_integrity'].items() if key != 'spans')):
             failures.append({'case': i, 'reason': 'digit_coverage_or_restore_or_manifest'})
     report = {'cases': len(rows), 'families': {k: dict(v) for k, v in sorted(totals.items())},
               'failures': failures, 'pass': not failures}

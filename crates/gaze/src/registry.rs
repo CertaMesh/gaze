@@ -1456,9 +1456,6 @@ impl RecognizerRegistry {
             })
             .collect::<Vec<_>>();
         for candidate in &mut candidates {
-            let Some(capture_end) = candidate.labelled_value_capture_end else {
-                continue;
-            };
             // A labelled phone run can include an adjacent IP or card. Preserve the phone
             // separately before resolution, even when that tail has a higher rule priority.
             // Only an independently validated other class can cut the labelled value.
@@ -1478,11 +1475,12 @@ impl RecognizerRegistry {
                     .map(|(start, _, _)| *start)
                     .min()
                 {
-                    candidate.span.end = input[..boundary]
-                        .trim_end_matches(|ch: char| {
-                            ch.is_whitespace() || matches!(ch, '-' | '/' | '.' | ':')
-                        })
-                        .len();
+                    candidate.span.end = candidate.span.start
+                        + input[candidate.span.start..boundary]
+                            .trim_end_matches(|ch: char| {
+                                ch.is_whitespace() || matches!(ch, '-' | '/' | '.' | ':')
+                            })
+                            .len();
                     candidate.labelled_value_scan_reason =
                         Some(LabelledValueScanReason::OtherClassBoundary);
                     let recognizer = self
@@ -1503,8 +1501,17 @@ impl RecognizerRegistry {
                         _ => {}
                     }
                 }
+                // Splitting or cutting a recorded phone must leave separators outside
+                // tokens. Keep the trim local so an empty prefix cannot move backwards.
+                candidate.span.end = candidate.span.start
+                    + input[candidate.span.clone()]
+                        .trim_end_matches(char::is_whitespace)
+                        .len();
                 continue;
             }
+            let Some(capture_end) = candidate.labelled_value_capture_end else {
+                continue;
+            };
             let prefix_start = candidate.span.start
                 + input[candidate.span.start..]
                     .bytes()
@@ -1572,6 +1579,15 @@ impl RecognizerRegistry {
             }
         }
 
+        candidates.retain(|candidate| {
+            !self
+                .recognizer(&candidate.recognizer_id)
+                .and_then(|recognizer| recognizer.validator_kind())
+                .is_some_and(gaze_types::ValidatorKind::is_phone)
+                || input[candidate.span.clone()]
+                    .bytes()
+                    .any(|byte| byte.is_ascii_digit())
+        });
         Ok((crate::resolver::CandidatePool::new(candidates), vetoed))
     }
 

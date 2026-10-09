@@ -2232,3 +2232,91 @@ fn a_labelled_phone_keeps_its_span_beside_other_validated_classes() {
     );
     assert!(!clean.contains(":Custom:ip_address_"), "{clean}");
 }
+
+#[test]
+fn labelled_phone_tokens_never_cover_only_whitespace_or_trailing_whitespace() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    // Standard Luhn test card, preceded by an international dialing prefix.
+    for input in [
+        "Phone: 0049 4000 0566 5566 5556",
+        "card 0049 4000 0566 5566 5556",
+        "Phone: 0049\t4000 0566 5566 5556",
+        "Phone: 0049 \u{2003}4000 0566 5566 5556",
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, manifest, _) = pipeline
+            .clean_with_safety_net(
+                &session,
+                RawDocument::Text(input.into()),
+                &[LocaleTag::DeDe],
+            )
+            .expect("clean");
+        let CleanDocument::Text(clean) = clean else {
+            panic!("text")
+        };
+        for entry in &manifest {
+            let raw = &input[entry.raw_span.clone()];
+            assert!(!raw.trim().is_empty(), "whitespace token: {entry:?}");
+            assert_eq!(raw, raw.trim_end(), "trailing whitespace token: {entry:?}");
+        }
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}
+
+#[test]
+fn phone_number_validator_enforces_e164_fifteen_digit_cap() {
+    // A German numbering plan may accept long subscriber values, but E.164
+    // international form cannot exceed fifteen digits, including the country code.
+    // Extend a fictional Hamburg drama prefix beyond the global digit cap.
+    // It is not a reachable E.164 value, even if national metadata accepts it.
+    let overlong = "+49 40 66969 0000000";
+    let parsed = phonenumber::parse(None, overlong).expect("national metadata parses");
+    assert!(
+        parsed.is_valid(),
+        "fixture must exercise the E.164 cap, not a parser refusal"
+    );
+    assert!(
+        parsed
+            .format()
+            .mode(phonenumber::Mode::E164)
+            .to_string()
+            .bytes()
+            .filter(u8::is_ascii_digit)
+            .count()
+            > 15
+    );
+    for value in [overlong, "0049 40 66969 0000000"] {
+        assert!(matches!(
+            ValidatorKind::PhoneNumber.validate(value),
+            ValidatorOutcome::Fail { .. }
+        ));
+    }
+    // BNetzA reserved drama range still passes, with original spelling restorable.
+    assert!(matches!(
+        ValidatorKind::PhoneNumber.validate("0049 171 3920000"),
+        ValidatorOutcome::Pass { .. }
+    ));
+}
+
+#[test]
+fn directly_cued_dates_and_ssn_shapes_document_recorded_over_protection() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    // These are benign dates and an unassignable SSN shape (000 area).
+    // drift-ack: a direct phone cue records parser failures rather than risking a leak.
+    for input in [
+        "Tel: 2026 10 09",
+        "Tel. 1985-2024",
+        "Phone: 20261009",
+        "Phone: 000-12-3456",
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
+        assert!(clean.contains(":Custom:phone_"), "{input}: {clean}");
+        let outside = gaze::token_shape::pattern().replace_all(&clean, "");
+        assert!(
+            !outside.bytes().any(|byte| byte.is_ascii_digit()),
+            "{input}: {clean}"
+        );
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}

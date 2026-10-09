@@ -22,6 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seed repeat-value protection.
 - Enforce the international E.164 digit limit before trusting expanded phone
   forms, so long numeric prefixes cannot change a valid card's class to phone.
+- Keep whitespace outside phone tokens after an overlap with a validated card or IP,
+  including residual fragments; restore remains exact.
+
+### Known limitations
+
+- Direct phone labels intentionally record failed parses. An 8–15 digit date,
+  grouped calendar date, year range, or SSN-shaped value following such a label
+  can therefore become a phone token. A newline continuation can also protect
+  a parser-valid date. This is known over-protection: refusing those numeric
+  shapes would also risk refusing genuine phone values.
 
 ## [0.16.0] - 2026-10-08
 
