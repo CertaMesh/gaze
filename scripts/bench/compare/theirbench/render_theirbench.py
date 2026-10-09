@@ -285,6 +285,22 @@ def check_per_label_bytes(row: str, cell: Mapping[str, Any]) -> None:
             raise ValueError(f"{row}: per-label {description} sum to {measured}, expected {expected}")
 
 
+def check_comparison_compatibility(name: str, entry: Mapping[str, Any], report: Mapping[str, Any]) -> None:
+    """Accept only the pinned metrics or the one audited telemetry-only transition."""
+    current = report["comparison_sha256"]
+    if current != backends.PINNED_SHA256:
+        raise ValueError(f"{name}: the report used different pinned comparison code")
+    previous = entry["rescored_with"]["comparison_sha256"]
+    if previous == current:
+        return
+    changed = {key for key in previous.keys() | current.keys() if previous.get(key) != current.get(key)}
+    if changed != {"comparison_metrics.py"} or (
+        previous.get("comparison_metrics.py") != backends.TELEMETRY_ONLY_PREVIOUS_METRICS_SHA256
+        or current["comparison_metrics.py"] != backends.PINNED_SHA256["comparison_metrics.py"]
+    ):
+        raise ValueError(f"{name}: report comparison metrics are incompatible with the committed aggregate")
+
+
 def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str, Any],
                resolve: Callable[[str], tuple[str, str]] | None = None, *, refresh: bool = False) -> str:
     """Merge one tagged Gaze row (theirbench.py --gaze-release-tag) into the aggregate.
@@ -303,8 +319,7 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
                 "mapping_sha256", "typed_hold"):
         if report[key] != entry[key]:
             raise ValueError(f"{name}: the report's {key} differs from the committed entry")
-    if report["comparison_sha256"] != backends.PINNED_SHA256:
-        raise ValueError(f"{name}: the report used different pinned comparison code")
+    check_comparison_compatibility(name, entry, report)
     rows = [tool for tool in report["rows"] if is_tagged_gaze_row(tool)]
     if len(rows) != 1 or len(report["rows"]) != 1:
         raise ValueError("the report must hold exactly one gaze-vX.Y.Z row and nothing else")
@@ -328,7 +343,11 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
         }
         if measured != previous:
             raise ValueError(f"{row}: refreshed headline metrics differ from the committed row")
-        published_row = {**published_row, "latency": entry["rows"][row]["latency"]}
+        previous_latency = entry["rows"][row].get("latency")
+        if previous_latency is None:
+            published_row = {key: value for key, value in published_row.items() if key != "latency"}
+        else:
+            published_row = {**published_row, "latency": previous_latency}
     if own["system"] != row:
         raise ValueError(f"own-scorer result is for {own['system']}, not {row}")
     check_per_label_bytes(row, report["rows"][row]["test"]["product_coverage"])
@@ -405,8 +424,7 @@ def add_tuned(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str,
                 "mapping_sha256", "typed_hold"):
         if report[key] != entry[key]:
             raise ValueError(f"{name}: the report's {key} differs from the committed entry")
-    if report["comparison_sha256"] != backends.PINNED_SHA256:
-        raise ValueError(f"{name}: the report used different pinned comparison code")
+    check_comparison_compatibility(name, entry, report)
     row = declaration["row"]
     if list(report["rows"]) != [row]:
         raise ValueError(f"the report must hold exactly the vendor-tuned row {row} and nothing else")
@@ -620,10 +638,12 @@ def render(data: Mapping[str, Any]) -> str:
             false_positive = sorted(
                 per_label["false_positive_by_prediction_label"].items(), key=lambda item: (-item[1], item[0])
             )[:5]
-            lines += ["", f"Top leaked labels for {tool}: "
-                      + ", ".join(f"`{label}` {value:,} B" for label, value in leaked) + ".",
-                      "False-positive bytes by emitted label: "
-                      + ", ".join(f"`{label}` {value:,} B" for label, value in false_positive) + "."]
+            leaked_text = ", ".join(f"`{label}` {value:,} B" for label, value in leaked) or "none"
+            false_positive_text = (
+                ", ".join(f"`{label}` {value:,} B" for label, value in false_positive) or "none"
+            )
+            lines += ["", f"Top leaked labels for {tool}: {leaked_text}.",
+                      f"False-positive bytes for {tool} by emitted label: {false_positive_text}."]
         rescored = entry["rescored_with"]
         for tool, added in sorted(entry.get("rows_measured_separately", {}).items()):
             lines_after_table = [f"{tool} was measured separately on the same documents, with harness "

@@ -38,6 +38,9 @@ PINNED_SHA256 = {
     "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
     "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
 }
+# The aggregate rows predate opt-in per-label telemetry. Their default metrics
+# are byte-identical, but no other old-to-current metrics transition is compatible.
+TELEMETRY_ONLY_PREVIOUS_METRICS_SHA256 = "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f"
 COMPARE_DIR = Path(compare.__file__).resolve().parent
 
 
