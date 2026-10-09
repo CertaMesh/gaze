@@ -22,7 +22,7 @@ if getattr(sys.modules.get("compare"), "__file__", "") is None:
 import compare  # noqa: E402
 import pii_tracer  # noqa: E402
 
-COMPARISON_REVISION = "fafeb1d8"
+COMPARISON_REVISION = "6a7f1782"
 # The rows were measured with compare.py at 154f3da6. Its backend construction
 # and tool adapters are byte-identical at COMPARISON_REVISION (the later
 # commits changed typed and character-level scoring and reporting only); BACKEND_CODE_SHA256 pins
@@ -33,7 +33,7 @@ BACKEND_CODE_PARTS = ("class Presidio", "class Gliner", "class DataFogCore", "cl
                       "class Scrubadub", "class Opf", "def resolved_presidio_spans", "def byte_spans")
 PINNED_SHA256 = {
     "compare.py": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
-    "comparison_metrics.py": "44b43caec3cb1e2b91ed0b2b66d5ed7b1de4d3358c7d580d319a2948300a32e6",
+    "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
     "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa",
     "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
     "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
