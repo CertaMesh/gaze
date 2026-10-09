@@ -19,9 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Credentials now count in the headline benchmark.** Scored-label contract
   v4 adds `PASSWORD` and `SECURITYTOKEN` while preserving v1–v3 as historical
   views. On the unchanged v0.16.0 observation record, this scope change raises
-  the layer C headline from 7,348 leaked bytes under v3 to 13,291 under v4; it
-  is not a detection regression. Enabling `secrets` protects 2,879 previously
-  leaked `SECURITYTOKEN` bytes in the fresh candidate measurement.
+  the layer C headline from 7,348 leaked bytes under v2 to 13,291 under v4; it
+  is not a detection regression. The isolated `secrets` arm protects 2,879
+  previously leaked `SECURITYTOKEN` bytes; the complete candidate reduces
+  layer C's v4 total to 10,405 leaked bytes.
 
 ## [0.16.0] - 2026-10-08
 

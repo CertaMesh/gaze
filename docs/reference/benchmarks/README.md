@@ -700,7 +700,7 @@ v1) and refuses them unless the candidate policy is exactly base plus delta,
 every run shares one commit, clean tree, corpus, seed and scored population,
 and each v1 run equals the v1 re-score of its v2 run's observation record.
 It commits both v2 observation records under
-[`mechanisms/`](mechanisms/); v3 is re-scored from them. `check` re-derives
+[`mechanisms/`](mechanisms/); later contracts are re-scored from them. `check` re-derives
 every number below from those records and runs on every pull request. Every
 row must carry every scored-label contract the repository has; after a new
 `scored-labels-v<N>.json` lands, `refresh` re-derives all rows from the same
@@ -723,9 +723,9 @@ guard version.
 
 <!-- BEGIN GENERATED: mechanism-arms -->
 
-Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v3 headline counts false-positive bytes after gold-gap credit.
+Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v4 headline counts false-positive bytes after gold-gap credit.
 
-6 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
+7 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
 
 Shipped releases, one column per release:
 
@@ -735,6 +735,7 @@ Shipped releases, one column per release:
 | Nym safety net | not measured for this release | not measured for this release | not measured for this release | not available: mechanism added in v0.15 |
 | Davlan NER | not measured for this release | not measured for this release | not measured for this release | not available: setup default added in v0.15 |
 | Address-block growth | not measured for this release | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
+| Credential rulepack | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
 
 <!-- END GENERATED: mechanism-arms -->
 
