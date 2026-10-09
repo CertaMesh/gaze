@@ -810,16 +810,8 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-<<<<<<< HEAD
-pattern = '''(?i)(?:\b|_)(?:(?:steuer[\s_-]?id(?:[_-]?(?:nr|nummer|number|no))?|steuer[_-]?identifikationsnummer|idnr\.?|steuerliche[\s_-]+identifikationsnummer|(?:fahrzeug[\s_-]*)?identifikationsnummer|tax[_-]?id(?:[_-]?(?:number|no))?)\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{2}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})\b|(?:steuer[\s_-]?id(?:[_-]?(?:nr|nummer|number|no))?|steuer[_-]?identifikationsnummer|idnr\.?|steuerliche[\s_-]+identifikationsnummer|(?:fahrzeug[\s_-]*)?identifikationsnummer)(?:\s*\((?:SSN|AHV|TIN|ID|NID|identifier)\))?\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|num[eé]ro|n[uú]mero|no|nr|num|id|code|ident|identification|is|was|ist|est|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|hinterlegt|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?((?:\d{2}[ -]\d{3}[ -]?\d{3}[ -]?\d{3}|\d{2}[ -]?\d{3}[ -]\d{3}[ -]?\d{3}|\d{2}[ -]?\d{3}[ -]?\d{3}[ -]\d{3}))\b)'''
+pattern = '''(?i)(?:\b|_)(?:(?:steuer[\s_-]?id(?:[_-]?(?:nr|nummer|number|no))?|steuer[_-]?identifikationsnummer|idnr\.?|steuerliche[\s_-]+identifikationsnummer|(?:fahrzeug[\s_-]*)?identifikationsnummer|tax[_-]?(?:id(?:[_-]?(?:number|no))?|ident[_-]?(?:nr|number|no)))\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{2}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})\b|(?:steuer[\s_-]?id(?:[_-]?(?:nr|nummer|number|no))?|steuer[_-]?identifikationsnummer|idnr\.?|steuerliche[\s_-]+identifikationsnummer|(?:fahrzeug[\s_-]*)?identifikationsnummer)(?:\s*\((?:SSN|AHV|TIN|ID|NID|identifier)\))?\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|num[eé]ro|n[uú]mero|no|nr|num|id|code|ident|identification|is|was|ist|est|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|hinterlegt|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?((?:\d{2}[ -]\d{3}[ -]?\d{3}[ -]?\d{3}|\d{2}[ -]?\d{3}[ -]\d{3}[ -]?\d{3}|\d{2}[ -]?\d{3}[ -]?\d{3}[ -]\d{3}))\b)'''
 capture_groups = [1, 2]
-||||||| 7f96e2c9
-pattern = '''(?i)(?:\b|_)(?:steuer[\s_-]?id(?:[_-]?(?:nr|nummer|number|no))?|steuer[_-]?identifikationsnummer|idnr\.?|steuerliche[\s_-]+identifikationsnummer|(?:fahrzeug[\s_-]*)?identifikationsnummer|tax[_-]?id(?:[_-]?(?:number|no))?)\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{2}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})\b'''
-capture_groups = [1]
-=======
-pattern = '''(?i)(?:\b|_)(?:steuer[\s_-]?id(?:[_-]?(?:nr|nummer|number|no))?|steuer[_-]?identifikationsnummer|idnr\.?|steuerliche[\s_-]+identifikationsnummer|(?:fahrzeug[\s_-]*)?identifikationsnummer|tax[_-]?(?:id(?:[_-]?(?:number|no))?|ident[_-]?(?:nr|number|no)))\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{2}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})\b'''
-capture_groups = [1]
->>>>>>> origin/main
 
 [recognizers.context]
 # A vehicle-identification label can contain the generic ID cue. Consuming
