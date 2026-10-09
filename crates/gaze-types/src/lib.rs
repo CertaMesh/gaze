@@ -879,6 +879,7 @@ impl ValidatorKind {
                 | Self::DeSteuerIdMod1110
                 | Self::BsnMod11
                 | Self::CpfMod11
+                | Self::UkNhsMod11
         ) || {
             #[cfg(feature = "phone-parser")]
             {

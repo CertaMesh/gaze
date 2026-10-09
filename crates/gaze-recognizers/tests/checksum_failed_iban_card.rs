@@ -774,7 +774,7 @@ fn record_on_fail_is_refused_for_broad_card_runs_and_unlisted_validators() {
         .with_validator_on_fail(ValidatorOnFail::Record)
         .is_err());
     // Validators outside the allowlist, or none.
-    for kind in [ValidatorKind::UkNhsMod11, ValidatorKind::EmailRfc] {
+    for kind in [ValidatorKind::CnpjMod11, ValidatorKind::EmailRfc] {
         assert!(
             detector(r"\d+", Some(kind))
                 .with_validator_on_fail(ValidatorOnFail::Record)
@@ -792,6 +792,7 @@ fn record_on_fail_is_refused_for_broad_card_runs_and_unlisted_validators() {
         ValidatorKind::DeSteuerIdMod1110,
         ValidatorKind::BsnMod11,
         ValidatorKind::CpfMod11,
+        ValidatorKind::UkNhsMod11,
     ] {
         assert!(detector(r"card (\d{16})", Some(kind))
             .with_validator_on_fail(ValidatorOnFail::Record)

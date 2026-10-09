@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Cued NHS numbers remain protected whole when MOD-11 fails, with a typed audit
+  reason and no repeat-value sweep. Tax-identification key abbreviations also
+  protect the full Steuer-ID value in tool-call JSON and logs.
 - Split rejected adjacent phone runs when both values independently pass the
   recognizer and parser. Vetoed candidates no longer block valid locale fallbacks.
 - Protect international dialing prefixes, optional trunk-zero markers, French
