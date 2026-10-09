@@ -9,9 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Credentials are protected by default.** Newly generated `gaze setup`
+  policies include the bundled `secrets` rulepack, protecting supported API
+  keys, access and session tokens, JWTs, and password fields. Direct library
+  callers and hand-authored policies still select rulepacks explicitly.
+
 - Cued NHS numbers remain protected whole when MOD-11 fails, with a typed audit
   reason and no repeat-value sweep. Tax-identification key abbreviations also
   protect the full Steuer-ID value in tool-call JSON and logs.
+
+### Benchmark
+
+- **Credentials now count in the headline benchmark.** Scored-label contract
+  v4 adds `PASSWORD` and `SECURITYTOKEN` while preserving v1–v3 as historical
+  views. On the unchanged v0.16.0 observation record, this scope change raises
+  the layer C headline from 7,348 leaked bytes under v2 to 13,291 under v4; it
+  is not a detection regression. The isolated `secrets` arm protects 2,879
+  previously leaked `SECURITYTOKEN` bytes; the complete candidate reduces
+  layer C's v4 total to 10,405 leaked bytes.
 
 ## [0.16.0] - 2026-10-08
 
@@ -456,9 +471,9 @@ non-breaking spaces, in every release through v0.14.0 (PR #647).
   `[safety_net.nym] model_dir` locates the bundle. `--safety-net` is
   repeatable, so nets stack for one run and replace the policy's selection;
   `--safety-net none` disables them for one run with a notice.
-- **The setup policy loads every bundled PII rulepack except `secrets`**, plus
-  the locales those packs declare, with `en-US` first (PR #635). API keys and
-  tokens stay opt-in through `secrets`.
+- **The v0.15 setup policy loaded every bundled PII rulepack except `secrets`**, plus
+  the locales those packs declare, with `en-US` first (PR #635). This historical
+  setup behavior was reversed after v0.16; current setup policies include `secrets`.
 - **The benchmark scores the exact setup policy** (PR #643). The scorecard
   harness builds its pipeline through the same policy resolution as
   `gaze clean --policy`, and an equivalence check proves the two agree.
@@ -478,8 +493,8 @@ non-breaking spaces, in every release through v0.14.0 (PR #647).
 - `gaze setup` installs the pinned Davlan mBERT NER model; re-run it (PR #612).
 - `gaze index ingest` requires the pinned NER model through `--ner-model-dir`
   or `GAZE_NER_MODEL_DIR` (PR #612).
-- Credential recognizers moved from `core` to the opt-in `secrets` rulepack;
-  `username.field` is removed (PR #607).
+- Credential recognizers moved from `core` to the separate `secrets` rulepack;
+  v0.15 required explicit activation, and `username.field` was removed (PR #607).
 - The Kiji safety net, its flags, features, environment variables and API are
   removed (PR #612).
 - Custom rulepack paths keep the `core` floor unless `bundled = []` or
@@ -631,8 +646,8 @@ committed; the v1 row stays the version's benchmark figure.
 - **`gaze setup` policies now tokenize every detected class.** Generated policies
   in v0.11.2–v0.14.0 preserved unmatched classes, allowing detected phone,
   IBAN, payment card, and IP address values to pass through raw. The generated
-  policy now loads every bundled PII pack and its locales while keeping
-  `secrets` opt-in. Back up custom rules, then run `gaze setup --force` to
+  v0.15 policy loaded every bundled PII pack and its locales while keeping
+  `secrets` explicit. Current setup policies include it. Back up custom rules, then run `gaze setup --force` to
   regenerate an existing policy. For a manual repair, set the `[[rule]]`
   default action to `"tokenize"`, delete the old per-class rules (the
   `location = generalize` rule emits a one-way marker), and enable the
@@ -1082,13 +1097,13 @@ committed; the v1 row stays the version's benchmark figure.
   `--nym-model-dir` (or `GAZE_NYM_MODEL_DIR`) and `--safety-net-timeout-ms`.
   When configured it checks ingest output and search snippets, and residual
   suspects still redact or fail closed per `--on-residual {redact,strict}`.
-- **BREAKING: credentials are no longer detected by default.** Credentials are
-  not PII, so the two credential recognizers leave the `core` rulepack (now
-  version 0.6.0) for a new opt-in bundled rulepack, `secrets`:
+- **BREAKING in v0.15: credentials stopped being detected by setup defaults.**
+  The two credential recognizers left the `core` rulepack (now version 0.6.0)
+  for a new separate bundled rulepack, `secrets`:
   `security_token.anchored` (`custom:security_token`) and `password.field`
   (`custom:password`) moved verbatim, with the same ids, classes, patterns,
-  scoring and sources. `secrets` is never part of a default activation, not even
-  when `[policy.rulepacks]` is omitted. To keep tokenizing API keys, access
+  scoring and sources. v0.15 did not include `secrets` in setup-generated
+  policies; this was reversed after v0.16. To keep tokenizing API keys, access
   tokens, JWTs and `password:` records, load it next to `core` with
   `[policy.rulepacks] bundled = ["core", "secrets"]` or
   `--rulepack-bundled core,secrets`. `username.field` (`custom:username`) is
@@ -1096,8 +1111,8 @@ committed; the v1 row stays the version's benchmark figure.
   its measured rule-floor byte recall was 0.9 % of 1,034 gold bytes. Nothing
   emits `custom:username` any more. See UPGRADE.md.
 
-  The v0.15.0 release benchmark shows what that means for a setup policy,
-  which does not load `secrets` (`scorecard-v0.15.0.json`,
+  The v0.15.0 release benchmark shows what that meant for its setup policy,
+  which did not load `secrets` (`scorecard-v0.15.0.json`,
   `per_label_recall`, scored-label contract v1): 2,020 of 2,322 `PASSWORD`
   gold bytes, 4,220 of 4,342 `SECURITYTOKEN` bytes and 72 of 1,034 `USERNAME`
   bytes stay raw. Load `secrets` when credentials must be tokenized.

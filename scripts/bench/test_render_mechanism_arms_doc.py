@@ -179,7 +179,7 @@ class MechanismArmsTest(unittest.TestCase):
         return self.pristine.clone(Path(tmp.name).resolve())
 
     def test_a_second_mechanism_needs_only_a_delta_and_a_record_run(self) -> None:
-        for version in ("3", "2", "1"):
+        for version in ("4", "3", "2", "1"):
             row = self.measurement["contracts"][version]
             self.assertEqual(row["candidate"]["leaked"] - row["base"]["leaked"], self.fixture.dropped)
             self.assertEqual(row["leaked_by_label_delta"], {self.fixture.label: self.fixture.dropped})
@@ -191,7 +191,7 @@ class MechanismArmsTest(unittest.TestCase):
 
     def test_render_names_every_contract_and_marks_older_releases(self) -> None:
         body = mech.render(_released(self.ledger), ["v0.16.0", "v0.15.1"])
-        for version in ("v3", "v2", "v1"):
+        for version in ("v4", "v3", "v2", "v1"):
             self.assertIn("| Synthetic drop | v0.15.0 |", body)
             self.assertIn(f"| {version} |", body)
         self.assertIn("not available: mechanism added in v0.16", body)
@@ -202,7 +202,7 @@ class MechanismArmsTest(unittest.TestCase):
         entry = copy.deepcopy(self.ledger["mechanisms"][0])
         entry["measurements"][0]["release"] = "v0.16.0"
         self.assertEqual(
-            mech.release_cell(entry, "v0.16.0"), f"v3: leaked +{self.fixture.dropped} B, FP 0 B"
+            mech.release_cell(entry, "v0.16.0"), f"v4: leaked +{self.fixture.dropped} B, FP 0 B"
         )
         self.assertTrue(mech.release_cell(entry, "v0.15.1").startswith("not available"))
 
@@ -305,25 +305,25 @@ class MechanismArmsTest(unittest.TestCase):
             mech.headline(run, 3)
 
     def test_a_contract_without_a_file_is_a_typed_error(self) -> None:
-        with self.assertRaisesRegex(mech.MechanismError, "contract v4 has no file"):
-            mech._contract(4)
+        with self.assertRaisesRegex(mech.MechanismError, "contract v5 has no file"):
+            mech._contract(5)
 
     def test_a_newer_contract_needs_refresh_not_a_new_run(self) -> None:
-        # A v4 file makes check refuse v3-only rows by name; validate and render
+        # A v5 file makes check refuse v4-only rows by name; validate and render
         # still work, and refresh re-derives the row from the same records.
         ledger = copy.deepcopy(self.ledger)
-        with mock.patch.object(mech, "required_contracts", lambda: (4, 3, 2, 1)):
+        with mock.patch.object(mech, "required_contracts", lambda: (5, 4, 3, 2, 1)):
             mech.validate(ledger, self.fixture.root)
-            self.assertIn("| v3 |", mech.render(_released(ledger), ["v0.16.0"]))
-            with self.assertRaisesRegex(mech.MechanismError, "requires \\[4, 3, 2, 1\\]; run .*refresh"):
+            self.assertIn("| v4 |", mech.render(_released(ledger), ["v0.16.0"]))
+            with self.assertRaisesRegex(mech.MechanismError, "requires \\[5, 4, 3, 2, 1\\]; run .*refresh"):
                 mech.check_evidence(ledger, self.fixture.root)
         row = ledger["mechanisms"][0]["measurements"][0]
         stub = {key: copy.deepcopy(value) for key, value in row.items()
                 if key not in mech.NON_DERIVED_FIELDS}
-        stub["contracts"]["4"] = stub["contracts"]["3"]
+        stub["contracts"]["5"] = stub["contracts"]["4"]
         with mock.patch.object(mech, "derive", lambda *_args, **_kwargs: copy.deepcopy(stub)):
             mech.refresh(ledger, self.fixture.root)
-        self.assertEqual(mech.measured_contracts(ledger["mechanisms"][0]["measurements"][0]), [4, 3, 2, 1])
+        self.assertEqual(mech.measured_contracts(ledger["mechanisms"][0]["measurements"][0]), [5, 4, 3, 2, 1])
 
     def test_refresh_preserves_delta_pin_after_file_changes(self) -> None:
         ledger = copy.deepcopy(self.ledger)
@@ -341,15 +341,15 @@ class MechanismArmsTest(unittest.TestCase):
             mech.validate(ledger, root)
 
     def test_required_contracts_come_from_the_repository(self) -> None:
-        self.assertEqual(mech.required_contracts(), (3, 2, 1))
+        self.assertEqual(mech.required_contracts(), (4, 3, 2, 1))
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         bench = Path(tmp.name)
-        for name in ("scored-labels-v2.json", "scored-labels-v3.json", "scored-labels-agentic.json"):
+        for name in ("scored-labels-v2.json", "scored-labels-v3.json", "scored-labels-v4.json", "scored-labels-agentic.json"):
             (bench / name).write_text("{}", encoding="utf-8")
-        self.assertEqual(mech.required_contracts(bench), (3, 2, 1))
-        (bench / "scored-labels-v3.json").unlink()
-        with self.assertRaisesRegex(mech.MechanismError, "disagree with headline v3"):
+        self.assertEqual(mech.required_contracts(bench), (4, 3, 2, 1))
+        (bench / "scored-labels-v4.json").unlink()
+        with self.assertRaisesRegex(mech.MechanismError, "disagree with headline v4"):
             mech.required_contracts(bench)
 
     def test_two_mechanisms_render_side_by_side(self) -> None:
@@ -366,7 +366,7 @@ class MechanismArmsTest(unittest.TestCase):
             title = entry["title"]
             self.assertEqual(
                 body.count(f"| {title} | v0.15.0 |"),
-                3 * len(entry["measurements"]),
+                4 * len(entry["measurements"]),
                 title,
             )
             self.assertIn(f"- **{title}** ships ", body)

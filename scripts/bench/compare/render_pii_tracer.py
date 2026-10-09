@@ -4,7 +4,7 @@
 Reads docs/reference/benchmarks/comparison-pii-tracer.json (written by pii_tracer.py) and
 comparison.json, and writes docs/reference/benchmarks/competitors-pii-tracer.md. The page is
 generated: `--check` fails when it drifts. The two reports must describe the same corpus and the
-same scored-label contracts or rendering refuses, so every row is comparable to the others.
+same v1-v3 scored-label contracts or rendering refuses, so every row is comparable to the others.
 Gaze rows are not shown here: only tagged releases are published, on competitors.md.
 """
 
@@ -29,9 +29,16 @@ LAYER_NAMES = {"C": "C (prose holdout)", "A": "A (generated identifiers)", "D": 
 
 
 def check_comparable(report: Mapping[str, Any], committed: Mapping[str, Any]) -> None:
-    for key in ("corpus", "contracts", "common_intersection_labels"):
+    for key in ("corpus", "common_intersection_labels"):
         if report[key] != committed[key]:
             raise ValueError(f"{key} differs from comparison.json; the rows are not comparable")
+    if any(
+        version not in report["contracts"]
+        or version not in committed["contracts"]
+        or report["contracts"][version] != committed["contracts"][version]
+        for version in CONTRACTS
+    ):
+        raise ValueError("v1-v3 contracts differ from comparison.json; the rows are not comparable")
     if report["harness_dirty"] or set(report["tools"]) != {TOOL}:
         raise ValueError("the PII-Tracer report must be a clean single-tool measurement")
 

@@ -26,6 +26,7 @@ is synthetic.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import sys
@@ -1174,7 +1175,7 @@ def _lookalike_records(partition: str, seed: int) -> list[Record]:
 
 # A consuming regex guard can eat the only separator before its neighbour.
 # These cases extend the published split without changing any v3 document.
-# The setup policy excludes `secrets`, so `password.field` has no gold here.
+# This generated layer has no credential family; layer C carries credential gold.
 @dataclass(frozen=True)
 class AdjacentValue:
     value: str
@@ -4876,6 +4877,29 @@ def _policy_delta_comparison(
         raise LayerError(f"invalid declared policy delta TOML: {error}") from error
     if not delta or any(not isinstance(section, dict) for section in delta.values()):
         return False, "policy delta must declare at least one TOML section", digests, set()
+    if set(delta) == {"mechanism_delta"}:
+        descriptor = delta["mechanism_delta"]
+        if set(descriptor) != {"append_bundled_rulepacks"}:
+            return False, "mechanism_delta has unsupported operations", digests, set()
+        appended = descriptor["append_bundled_rulepacks"]
+        if (
+            not isinstance(appended, list)
+            or not appended
+            or any(not isinstance(name, str) or not name for name in appended)
+            or len(set(appended)) != len(appended)
+        ):
+            return False, "append_bundled_rulepacks must be a non-empty unique string list", digests, set()
+        expected = copy.deepcopy(base_policy)
+        try:
+            bundled = expected["policy"]["rulepacks"]["bundled"]
+        except (KeyError, TypeError):
+            return False, "base policy has no policy.rulepacks.bundled list", digests, set()
+        if not isinstance(bundled, list) or any(name in bundled for name in appended):
+            return False, "appended bundled rulepacks must be absent from the base list", digests, set()
+        bundled.extend(appended)
+        if not _toml_equal(candidate_policy, expected):
+            return False, "candidate policy differs beyond the declared bundled-rulepack append", digests, set()
+        return True, "candidate policy equals base plus appended bundled rulepacks", digests, set()
     existing = sorted(base_policy.keys() & delta.keys())
     if existing:
         return False, f"policy delta changes existing base sections: {existing}", digests, set()

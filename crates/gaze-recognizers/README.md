@@ -142,7 +142,7 @@ Loading failures are policy configuration failures in the CLI path.
 |------|------|---------|
 | `core` | [`embedded/core.toml`](embedded/core.toml) | Unified bundled recognizer set. Email/name, parser-backed phone, IBAN, payment-card, IP, ETH, and postal recognizers now live in one bundle. Each recognizer declares `safety_tier = "safe_default"`, `"locale_gated"`, or `"opt_in"` and `locale_basis = "document"` or `"format"`. Format-basis recognizers ignore the document locale for eligibility. |
 | `core-extended` | alias of `core` | Deprecated since v0.8.0 and still accepted. CLI use emits a warning and preserves v0.8.x compatibility by auto-activating locale-gated recognizers. |
-| `secrets` | [`embedded/secrets.toml`](embedded/secrets.toml) | Opt-in credential recognizers (`security_token.anchored`, `password.field`). Credentials are not PII, so this bundle is never part of a default activation; load it by name next to `core`. |
+| `secrets` | [`embedded/secrets.toml`](embedded/secrets.toml) | Credential recognizers (`security_token.anchored`, `password.field`). `gaze setup` includes this bundle; direct library callers load it by name next to `core`. |
 | `locale-de` | [`embedded/locale-de.toml`](embedded/locale-de.toml) | DACH locale metadata such as German email headers. |
 | `locale-en` | [`embedded/locale-en.toml`](embedded/locale-en.toml) | English locale metadata such as English email headers. |
 
@@ -227,8 +227,8 @@ Full contract:
 The embedded `gaze-core` rulepack version **0.6.0** contains 50 recognizers.
 `birth_date.cue` and `age.cue` are global `safe_default` rules in `core`.
 `postal.cued_four_digit` is a global `safe_default` rule that needs an explicit postal label.
-`password.field` ships in the opt-in
-`secrets` bundle, because credentials are not PII; load it with
+`password.field` ships in the separate
+`secrets` bundle; `gaze setup` includes it, while hand-authored policies load it with
 `bundled = ["core", "secrets"]`. The former `username.field` rule was removed
 in core 0.6.0.
 
@@ -236,7 +236,7 @@ in core 0.6.0.
 | --- | --- | --- |
 | `birth_date.cue` / `custom:birth_date` | `core` | en `DOB`, `D.O.B.`, `date of birth`, `birth date`, `birthday`, `born`; de `Geburtsdatum`, `Geb.-Datum`, `geb.`, `Geburtstag`, `geboren`, trailing `am <date> geboren`; fr `né`/`née`, `date de naissance`; nl `geboortedatum`; pt `data de nascimento`; da `fødselsdato`, `fødselsdag`, `født`; es `fecha de nacimiento`, `nacido`/`nacida`, `nació` |
 | `age.cue` / `custom:age` | `core` | Structured `age`, `Alter`/`alter`, `âge`, `idade`, `leeftijd` fields, person-framed `aged N`, `N years old`, `N-year-old person`, `N Jahre alt`, `âgé de N`, or a complete Portuguese `tem N anos` line; only the number is tokenized |
-| `password.field` / `custom:password` | `secrets` (opt-in) | `password`, `passphrase`, `passwort`, `kennwort` |
+| `password.field` / `custom:password` | `secrets` | `password`, `passphrase`, `passwort`, `kennwort` |
 
 Bare `aged N`, bare `N-year-old`, and mid-line `age Ny` without a person cue
 remain raw because objects and durations use those shapes too. Lowercase

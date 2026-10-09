@@ -48,7 +48,7 @@ BENCH_DIR = REPO / "docs/reference/benchmarks"
 OUTPUT = BENCH_DIR / "release-char-level.json"
 EVIDENCE = BENCH_DIR / "release-char-level-evidence.json.gz"
 METRICS = Path(__file__).with_name("comparison_metrics.py")
-CONTRACT = "v3"
+CONTRACT = "v4"
 SCHEMA_VERSION = 1
 
 
@@ -232,7 +232,7 @@ def load_evidence(path: Path) -> dict:
 
 def measure_release(entry: dict, layer_c: list[score.Document], mapping: dict,
                     typed_mapping: dict, evidence: dict) -> dict:
-    """Character-level metrics of the release's default arm on layer C under v3."""
+    """Character-level metrics of the release's default arm on layer C under v4."""
     import compare  # noqa: E402  (imports the corpus stack lazily)
 
     contract = compare.runner.load_scored_label_contract(REPO, compare.CONTRACTS[CONTRACT])
@@ -305,7 +305,7 @@ def build(dataset: Path) -> tuple[dict, dict]:
         "schema_version": SCHEMA_VERSION,
         "note": (
             "Character-level (Unicode code point), label-agnostic, micro P/R/F of each tagged "
-            "release's shipped default on layer C under the v3 contract, scored by the same "
+            "release's shipped default on layer C under the v4 contract, scored by the same "
             "ComparisonMetrics as the competitors."
         ),
         "metrics_sha256": _sha256(METRICS),
@@ -363,7 +363,9 @@ def check(data: dict, history: dict, bench_dir: Path = BENCH_DIR) -> None:
                 f"{version}: leaked bytes {row['leaked_bytes']} differ from the history's "
                 f"{arm['surviving_pii_utf8_bytes']}"
             )
-        raw = history_doc.contract_view(entry, 2)  # v2 counts raw false positives, as ComparisonMetrics does
+        # v4 scores credential predictions, so its raw FP scope matches v1.
+        # v3 excludes credential classes and therefore matches v2's raw scope.
+        raw = history_doc.contract_view(entry, 1 if CONTRACT == "v4" else 2)
         if raw is not None:
             expected = raw["arms"][history_doc.shipped_default_arm(entry)]["false_positive_utf8_bytes"]
             if row["false_positive_bytes"] != expected:

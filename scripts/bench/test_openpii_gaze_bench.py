@@ -137,7 +137,7 @@ class ValidatorRecallTests(unittest.TestCase):
     def document(self) -> benchmark.Document:
         return benchmark.Document(
             uid="validator-synthetic",
-            text="Card 4111111111111112 belongs to Schmidt",
+            text="Text 4111111111111112 belongs to Schmidt",
             language="en",
             region="US",
             source_dataset="synthetic",

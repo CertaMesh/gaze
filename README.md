@@ -29,7 +29,7 @@ How much PII does each tool keep from reaching the model? The [v0.16.0 benchmark
   <img alt="Bar panels of character-level F2 and false-positive bytes per 1,000 bytes for Gaze releases and competitors on three benchmarks; the values are printed on the bars." src="docs/assets/benchmarks/benchmark-panels-light.svg">
 </picture>
 
-Gaze 0.16 leaks 7,348 PII bytes on our holdout (character-level F2 0.912). Methods, competitor setups and how to reproduce: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels).
+Gaze 0.16 leaks 13,291 PII bytes on our holdout (character-level F2 0.879; credentials counted since contract v4). Methods, competitor setups and how to reproduce: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels).
 
 <!-- END GENERATED: readme-chart -->
 

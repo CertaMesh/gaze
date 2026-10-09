@@ -142,8 +142,8 @@ directory is `$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl`, else
 `~/.local/share/gaze/models/davlan-mbert-ner-hrl`. The written policy's `[ner]`
 section points at it, and setup prints `For gaze index: export
 GAZE_NER_MODEL_DIR=<dir>`.
-The generated policy enables every bundled PII rulepack and its declared locales,
-tokenizes every detected class, and leaves the `secrets` pack opt-in.
+The generated policy enables every bundled rulepack, including `secrets`, and
+its declared locales, and tokenizes every detected class.
 For a hand-authored policy, pinned NER fetch script, OPF build steps, and safety-net
 modes, see [Manual policy setup](../../docs/how-to/manual-policy.md).
 

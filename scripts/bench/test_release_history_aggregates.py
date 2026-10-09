@@ -31,6 +31,20 @@ class ReleaseHistoryAggregateTests(unittest.TestCase):
                 if "agentic_layers" not in row:
                     continue
                 layers = row["agentic_layers"]
+                if "source_file" not in layers:
+                    source_backed = [
+                        candidate["agentic_layers"]
+                        for candidate in rows
+                        if "source_file" in candidate.get("agentic_layers", {})
+                    ]
+                    self.assertTrue(
+                        any(
+                            all(layers[key] == candidate[key] for key in layers)
+                            for candidate in source_backed
+                        ),
+                        release["version"],
+                    )
+                    continue
                 artifact_path = ROOT / layers["source_file"]
                 self.assertEqual(
                     hashlib.sha256(artifact_path.read_bytes()).hexdigest(),

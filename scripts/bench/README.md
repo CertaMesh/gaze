@@ -78,9 +78,9 @@ uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py \
 
 [`scored-labels-v2.json`](../../docs/reference/benchmarks/scored-labels-v2.json)
 rules on every corpus label with a reason and a `settled`/`pending` ruling. v2
-puts the credential labels `PASSWORD` and `SECURITYTOKEN` out of contract:
-credentials authenticate a system, they are not personal data (user ruling
-2026-09-16). An
+historically put the credential labels `PASSWORD` and `SECURITYTOKEN` out of
+contract. That scope is immutable for reproducibility but was superseded by
+v4 on 2026-10-09. An
 out-of-contract span is removed from gold, and the bytes only it covers are
 ignored, so they count as neither leaked nor false positive. Whether the
 pipeline still protected them is reported per run under
@@ -103,6 +103,11 @@ python scripts/bench/gold_gap_evidence.py sample --trace <trace.jsonl>
 python scripts/bench/gold_gap_evidence.py sheet  --trace <trace.jsonl>  # local only
 python scripts/bench/gold_gap_evidence.py accept  # exits 1 if the audit fails
 ```
+
+[`scored-labels-v4.json`](../../docs/reference/benchmarks/scored-labels-v4.json)
+is the headline contract. It keeps v3's gold-gap semantics, scores `PASSWORD`
+and `SECURITYTOKEN`, and gives credential prediction classes ordinary
+false-positive accounting. v3, v2 and v1 remain unchanged historical views.
 
 `accept` first checks every verdict against the judges recorded in the sample
 and the tiebreak results in `fixtures/gold-gap-tiebreak-v3.json`, written by
