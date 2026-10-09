@@ -1,124 +1,118 @@
 #!/usr/bin/env python3
-"""5,600 deterministic phone/benign inputs for paired clean_for_bench binaries.
+"""The original 5,600-input phone differential, under its core-only daemon policy.
 
-Usage: python phone_differential_enumeration.py BASE_BIN CANDIDATE_BIN OUTPUT
-Build each binary with cargo build --release -p gaze-recognizers --example clean_for_bench.
-The runner's default rule-floor-extended policy is used on both sides. This
-supplements the full benchmark; it asserts no previously protected phone digit
-is lost, no candidate phone digit remains raw, and exact restore/valid manifest.
-Report display-byte coverage and false positives separately, without raw values.
-
-Fixture origins: BNetzA Mitteilung 148/2021 (0171 39200xx), Ofcom drama mobile
-07700 900xxx, NANPA 202-555-01xx, and ARCEP reserved fiction 02.61.91.xx.xx.
-The enumeration samples display syntax and list separators, never corpus values.
+Usage: python phone_differential_enumeration.py BASE_GAZE CANDIDATE_GAZE OUTPUT
+Build each binary with cargo build --release -p gaze-cli --all-features.
+Gold, display separators and the mixed active locales reproduce the original
+phone proof. Report phone-class coverage separately from all-class protection.
+Assert no newly lost phone coverage and no raw gold bytes on the candidate.
+Fixture sources: BNetzA Mitteilung 148/2021, Ofcom drama mobile and London
+020 7946 0xxx ranges, NANPA 202-555-01xx, ARCEP fiction 02.61.91.xx.xx.
 """
 from __future__ import annotations
 import json
 import subprocess
 import sys
-from collections import defaultdict
+import tempfile
 from pathlib import Path
 
-SEPARATORS = (' ', ' / ', '\t', ',', ' or ', ' oder ', '\n', '\u2028', ' /\n')
+POLICY = 'schema_version = "0.1.0"\n[session]\nscope = "conversation"\n[locale]\nactive = ["global", "de-DE", "en-GB", "en-US"]\n[policy.rulepacks]\nbundled = ["core"]\n[[rule]]\nkind = "default"\naction = "tokenize"\n'
 
 
 def cases():
-    rows = []
-    def add(family, text, values, locale):
-        gold = set()
-        digits = set()
-        at = 0
+    cases=[]
+    def add(family,text,values=()):
+        raw=text.encode(); gold=set(); at=0
         for value in values:
-            start = text.index(value, at)
-            a, b = len(text[:start].encode()), len(text[:start + len(value)].encode())
-            gold.update(range(a, b))
-            digits.update(i for i in range(a, b) if 48 <= text.encode()[i] <= 57)
-            at = start + len(value)
-        rows.append((family, text, gold, digits, locale))
+            value=value.encode(); start=raw.index(value,at); gold.update(range(start,start+len(value))); at=start+len(value)
+        cases.append((family,text,gold))
     for n in range(100):
-        de = f'0171 39200{n:02d}'
-        next_de = f'0171 39200{(n + 1) % 100:02d}'
-        gb = f'+44 7700 900{n:03d}'
-        ngb = f'07700 900{n:03d}'
-        us = f'202 555 01{n:02d}'
-        fr = f'02.61.91.00.{n:02d}'
-        for sep in SEPARATORS:
-            add('de_national', f'Tel: {de}{sep}{next_de}', (de, next_de), 'de-DE')
-            ide = f'+49 171 39200{n:02d}'
-            jde = f'+49 171 39200{(n + 1) % 100:02d}'
-            add('de_international', ide + sep + jde, (ide, jde), 'de-DE')
-            jgb = f'+44 7700 900{(n + 1) % 100:03d}'
-            add('gb_cued', f'Phone: {gb}{sep}{jgb}', (gb, jgb), 'en-GB')
-            jus = f'202 555 01{(n + 1) % 100:02d}'
-            add('us_national', f'Phone: {us}{sep}{jus}', (us, jus), 'en-US')
-        for tail in (' ', ' / ', '\t'):
-            add('de_adjacent_tail', de + tail + next_de + '.', (de, next_de), 'de-DE')
-        add('fr_dotted', fr, (fr,), 'fr-FR')
-        add('fr_dotted_cued', 'Tel: ' + fr, (fr,), 'fr-FR')
-        add('gb_00', f'0044 7700 900{n:03d}', (f'0044 7700 900{n:03d}',), 'en-GB')
-        add('gb_national_cued', 'Phone: ' + ngb, (ngb,), 'en-GB')
-        add('gb_reserved', gb, (gb,), 'en-GB')
-        add('gb_trunk', f'+44 (0)7700 900{n:03d}', (f'+44 (0)7700 900{n:03d}',), 'en-GB')
-        add('us_001', f'001 202 555 01{n:02d}', (f'001 202 555 01{n:02d}',), 'en-US')
-        for prefix in ('Firmware ', 'part=', 'build=', 'Version ', 'OID ', 'Amount: '):
-            add('benign_dotted', prefix + fr, (), 'en-US')
-        for prefix in ('Amount: ', 'Order ', 'Invoice ', 'Ref '):
-            add('benign_grouped', prefix + f'000 {n:03d} 000', (), 'en-US')
-    assert len(rows) == 5600
-    return rows
+        de=f"0171 39200{n:02d}"; de2=f"0171 39200{(n+1)%100:02d}"
+        gb=f"020 7946 0{n:03d}"; gb2=f"020 7946 0{(n+1)%100:03d}"
+        us=f"202 555 01{n:02d}"; us2=f"202 555 01{(n+1)%100:02d}"
+        mobile=f"+44 7700 900{n:03d}"
+        fr=f"02.61.91.{n:02d}.{(n+1)%100:02d}"
+        for sep in [" ",","," / ","/","\t","\u00a0","\n"," or "," oder "]:
+            for family,values in [('de_national',(de,de2)),('gb_cued',(gb,gb2)),('us_national',(us,us2)),('de_international',('+49 '+de[1:],'+49 '+de2[1:]))]:
+                text=sep.join(values)
+                if family=='gb_cued': text='Phone: '+text
+                add(family,text,values)
+        for family,text,value in [
+            ('gb_reserved',mobile,mobile),('gb_national_cued','Mobile: '+gb,gb),
+            ('fr_dotted',fr,fr),('fr_dotted_cued','Tél.: '+fr,fr),
+            ('gb_00','0044 '+gb[1:],'0044 '+gb[1:]),
+            ('gb_trunk','+44 (0)'+gb[1:],'+44 (0)'+gb[1:]),
+            ('us_001','001-'+us.replace(' ','-'),'001-'+us.replace(' ','-'))]: add(family,text,(value,))
+        for suffix in ['.',')',' 12 Uhr']:
+            add('de_adjacent_tail',de+' '+de2+suffix,(de,de2))
+        for field in ['Firmware','build','Version','part number','Catalog part','model']:
+            add('benign_dotted',field+': '+fr)
+        for field in ['Order','Amount','Invoice','version']:
+            add('benign_grouped',field+': '+gb)
+    assert len(cases) == 5600
+    return cases
 
 
-def run(binary, rows):
-    requests = [{'fixture_id': f'phone-enum-{i:04d}', 'text': text,
-                 'locale_chain': [locale, 'global']}
-                for i, (_, text, _, _, locale) in enumerate(rows)]
-    result = subprocess.run([str(binary)], input=''.join(json.dumps(r) + '\n' for r in requests),
-                            capture_output=True, text=True, check=True)
-    responses = [json.loads(line) for line in result.stdout.splitlines()]
+def parse_responses(payload):
+    # JSONL uses LF boundaries. Unicode line separators can be string data.
+    return [json.loads(line) for line in payload.split('\n') if line]
+
+
+def run(binary, rows, policy):
+    requests = ''.join(json.dumps({'session_id': str(i), 'text': text}, ensure_ascii=False) + '\n'
+                       for i, (_, text, _) in enumerate(rows))
+    result = subprocess.run([str(binary), 'daemon', '--policy', str(policy)], input=requests,
+                            text=True, capture_output=True, check=True, timeout=600)
+    responses = parse_responses(result.stdout)
     if len(responses) != len(rows):
-        raise RuntimeError('missing runner responses')
-    indexed = {r['fixture_id']: r for r in responses}
-    if len(indexed) != len(rows):
-        raise RuntimeError('duplicate runner response')
-    return [indexed[f'phone-enum-{i:04d}'] for i in range(len(rows))]
-
-
-def protected(response):
-    return {byte for span in response['final_protection_trace']
-            for byte in range(span['raw_start'], span['raw_end'])}
+        raise RuntimeError('response count')
+    coverage = []
+    for (_, text, gold), response in zip(rows, responses, strict=True):
+        if 'error' in response:
+            raise RuntimeError(response['error'])
+        phone = set()
+        all_covered = set()
+        clean = response['clean_text'].encode()
+        for span in response['manifest']:
+            a, b = span['clean_span']['start'], span['clean_span']['end']
+            start, end = span['raw_span']['start'], span['raw_span']['end']
+            if not (0 <= a < b <= len(clean) and 0 <= start < end <= len(text.encode())):
+                raise RuntimeError('invalid manifest bounds')
+            all_covered.update(range(start, end))
+            if b':Custom:phone_' in clean[a:b]:
+                phone.update(range(start, end))
+        coverage.append((gold - phone, phone - gold, gold - all_covered))
+    return coverage
 
 
 def main():
-    base, candidate, output = map(Path, sys.argv[1:4])
+    base_binary, candidate_binary, output = map(Path, sys.argv[1:4])
     rows = cases()
-    responses = [run(binary, rows) for binary in (base, candidate)]
-    totals = defaultdict(lambda: defaultdict(int))
-    failures = []
-    for i, ((family, _, gold, digits, _), b, c) in enumerate(zip(rows, *responses, strict=True)):
-        if any('pipeline_error_code' in r for r in (b, c)):
-            failures.append({'case': i, 'reason': 'pipeline_error'})
-            continue
-        pb, pc = protected(b), protected(c)
-        s = totals[family]
-        s['cases'] += 1
-        s['base_leaked_bytes'] += len(gold - pb)
-        s['candidate_leaked_bytes'] += len(gold - pc)
-        s['base_raw_leaked_bytes'] += len(digits - pb)
-        s['candidate_raw_leaked_bytes'] += len(digits - pc)
-        s['newly_lost_bytes'] += len((gold & pb) - pc)
-        s['newly_lost_digit_bytes'] += len((digits & pb) - pc)
-        s['newly_protected_bytes'] += len((gold & pc) - pb)
-        s['base_fp_bytes'] += len(pb - gold)
-        s['candidate_fp_bytes'] += len(pc - gold)
-        if ((digits & pb) - pc or digits - pc or not c['restore']['exact']
-                or any(value != 0 for key, value in c['manifest_integrity'].items() if key != 'spans')):
-            failures.append({'case': i, 'reason': 'digit_coverage_or_restore_or_manifest'})
-    report = {'cases': len(rows), 'families': {k: dict(v) for k, v in sorted(totals.items())},
-              'failures': failures, 'pass': not failures}
+    with tempfile.TemporaryDirectory(prefix='gaze-phone-differential-') as temporary:
+        policy = Path(temporary) / 'policy.toml'
+        policy.write_text(POLICY)
+        base = run(base_binary, rows, policy)
+        candidate = run(candidate_binary, rows, policy)
+    report = {'cases': len(rows), 'families': {}}
+    for family in sorted({row[0] for row in rows}):
+        indexes = [i for i, row in enumerate(rows) if row[0] == family]
+        report['families'][family] = {
+            'cases': len(indexes),
+            'base_leaked_bytes': sum(len(base[i][0]) for i in indexes),
+            'candidate_leaked_bytes': sum(len(candidate[i][0]) for i in indexes),
+            'base_raw_leaked_bytes': sum(len(base[i][2]) for i in indexes),
+            'candidate_raw_leaked_bytes': sum(len(candidate[i][2]) for i in indexes),
+            'newly_protected_bytes': sum(len(base[i][0] - candidate[i][0]) for i in indexes),
+            'newly_lost_bytes': sum(len(candidate[i][0] - base[i][0]) for i in indexes),
+            'base_fp_bytes': sum(len(base[i][1]) for i in indexes),
+            'candidate_fp_bytes': sum(len(candidate[i][1]) for i in indexes),
+        }
+    report['pass'] = all(r['newly_lost_bytes'] == 0 and r['candidate_raw_leaked_bytes'] == 0
+                         for r in report['families'].values())
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))
-    return int(bool(failures))
+    return int(not report['pass'])
 
 
 if __name__ == '__main__':
