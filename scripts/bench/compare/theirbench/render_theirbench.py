@@ -296,7 +296,7 @@ def check_comparison_compatibility(name: str, entry: Mapping[str, Any], report: 
     changed = {key for key in previous.keys() | current.keys() if previous.get(key) != current.get(key)}
     if changed != {"comparison_metrics.py"} or (
         previous.get("comparison_metrics.py") != backends.TELEMETRY_ONLY_PREVIOUS_METRICS_SHA256
-        or current["comparison_metrics.py"] != backends.PINNED_SHA256["comparison_metrics.py"]
+        or current["comparison_metrics.py"] != backends.TELEMETRY_ONLY_CURRENT_METRICS_SHA256
     ):
         raise ValueError(f"{name}: report comparison metrics are incompatible with the committed aggregate")
 

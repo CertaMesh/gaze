@@ -41,6 +41,7 @@ PINNED_SHA256 = {
 # The aggregate rows predate opt-in per-label telemetry. Their default metrics
 # are byte-identical, but no other old-to-current metrics transition is compatible.
 TELEMETRY_ONLY_PREVIOUS_METRICS_SHA256 = "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f"
+TELEMETRY_ONLY_CURRENT_METRICS_SHA256 = "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c"
 COMPARE_DIR = Path(compare.__file__).resolve().parent
 
 

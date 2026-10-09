@@ -553,6 +553,21 @@ class TaggedRowTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "incompatible with the committed aggregate"):
             render.add_tagged(data, report, own, RESOLVE)
 
+    def test_telemetry_compatibility_does_not_follow_a_future_repin(self) -> None:
+        import backends
+        import render_theirbench as render
+
+        data, _entry, report, own = self.entry_and_report()
+        original = backends.PINNED_SHA256["comparison_metrics.py"]
+        try:
+            future = "f" * 64
+            backends.PINNED_SHA256["comparison_metrics.py"] = future
+            report["comparison_sha256"] = {**report["comparison_sha256"], "comparison_metrics.py": future}
+            with self.assertRaisesRegex(ValueError, "incompatible with the committed aggregate"):
+                render.add_tagged(data, report, own, RESOLVE)
+        finally:
+            backends.PINNED_SHA256["comparison_metrics.py"] = original
+
     def test_a_row_already_present_is_refused(self) -> None:
         import render_theirbench as render
 
