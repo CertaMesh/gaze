@@ -258,8 +258,10 @@ impl RegexDetector {
                     Vec::new(),
                 );
                 candidate.labelled_value_scan_reason = scan.reason;
-                candidate.labelled_value_capture_end =
-                    self.complete_labelled_value.then_some(scan.extension.start);
+                candidate.labelled_value_capture_end = (self.complete_labelled_value
+                    || (self.phone_validator_enabled()
+                        && self.validator_on_fail == ValidatorOnFail::Record))
+                    .then_some(scan.extension.start);
                 candidate.regex_guard_rejected = scan.rejected;
                 candidate
             })
@@ -476,10 +478,11 @@ impl RegexDetector {
         }
         let run_end = input[span.start..]
             .char_indices()
-            .take_while(|(_, ch)| {
-                ch.is_ascii_digit()
-                    || ch.is_whitespace()
-                    || matches!(ch, '+' | '-' | '/' | '.' | '(' | ')')
+            .take_while(|(at, ch)| {
+                (records || *at < span.len().max(128))
+                    && (ch.is_ascii_digit()
+                        || (ch.is_whitespace() && (!records || !matches!(ch, '\n' | '\r')))
+                        || matches!(ch, '+' | '-' | '/' | '.' | '(' | ')'))
             })
             .last()
             .map_or(span.end, |(at, ch)| span.start + at + ch.len_utf8());
@@ -487,13 +490,13 @@ impl RegexDetector {
             ch.is_whitespace() || matches!(ch, '/' | '.' | '-' | '(' | ')')
         });
         if records && kind.validates(run) {
-            return vec![span.start..span.start + run.len()];
+            return std::iter::once(span.start..span.start + run.len()).collect();
         }
         // Recorded runs of any size stay protected. Partition work itself is bounded;
         // veto rules resume after a complete validated prefix of the bounded window.
         let run = if run.len() > 128 {
             if records {
-                return vec![span.start..span.start + run.len()];
+                return std::iter::once(span.start..span.start + run.len()).collect();
             }
             let end = run
                 .char_indices()
@@ -546,7 +549,8 @@ impl RegexDetector {
                         .trim_start_matches(|ch: char| ch.is_whitespace() || ch == '/')
                         .len();
                 let part_start = span.start + boundaries[start] + leading;
-                let mut path = vec![part_start..part_start + piece.len()];
+                let mut path: Vec<_> =
+                    std::iter::once(part_start..part_start + piece.len()).collect();
                 path.extend(suffix.iter().cloned());
                 paths[start] = Some(path);
                 break;
@@ -556,13 +560,13 @@ impl RegexDetector {
             return path;
         }
         if records {
-            return vec![span.start..span.start + run.len()];
+            return std::iter::once(span.start..span.start + run.len()).collect();
         }
         // The extension can be malformed without invalidating a complete preceding number.
         for &end in boundaries.iter().rev() {
             let piece = run[..end].trim_end_matches(|ch: char| ch.is_whitespace() || ch == '/');
             if is_value(piece) {
-                return vec![span.start..span.start + piece.len()];
+                return std::iter::once(span.start..span.start + piece.len()).collect();
             }
         }
         vec![span]
@@ -597,6 +601,7 @@ impl RegexDetector {
             .take_while(|ch| ch.is_ascii_digit() || *ch == b'.')
             .count();
         let groups = input[span.start - start..span.end + end]
+            .trim_matches('.')
             .split('.')
             .collect::<Vec<_>>();
         groups.len() == 5

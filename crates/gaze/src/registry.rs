@@ -1459,6 +1459,52 @@ impl RecognizerRegistry {
             let Some(capture_end) = candidate.labelled_value_capture_end else {
                 continue;
             };
+            // A labelled phone run can include an adjacent IP or card. Preserve the phone
+            // separately before resolution, even when that tail has a higher rule priority.
+            // Only an independently validated other class can cut the labelled value.
+            if self
+                .recognizer(&candidate.recognizer_id)
+                .and_then(|recognizer| recognizer.validator_kind())
+                .is_some_and(gaze_types::ValidatorKind::is_phone)
+            {
+                if let Some(boundary) = boundaries
+                    .iter()
+                    .filter(|(start, class, validated)| {
+                        *validated
+                            && class != &candidate.class
+                            && *start > candidate.span.start
+                            && *start < candidate.span.end
+                    })
+                    .map(|(start, _, _)| *start)
+                    .min()
+                {
+                    candidate.span.end = input[..boundary]
+                        .trim_end_matches(|ch: char| {
+                            ch.is_whitespace() || matches!(ch, '-' | '/' | '.' | ':')
+                        })
+                        .len();
+                    candidate.labelled_value_scan_reason =
+                        Some(LabelledValueScanReason::OtherClassBoundary);
+                    let recognizer = self
+                        .recognizer(&candidate.recognizer_id)
+                        .expect("declared recognizer");
+                    let kind = recognizer.validator_kind().expect("phone validator");
+                    match kind.validate(&input[candidate.span.clone()]) {
+                        gaze_types::ValidatorOutcome::Pass { canonical_form } => {
+                            candidate.canonical_form = canonical_form;
+                            candidate.validator_fail_reason = None;
+                            candidate.evidence = recognizer.evidence();
+                        }
+                        gaze_types::ValidatorOutcome::Fail { reason } => {
+                            candidate.canonical_form = None;
+                            candidate.validator_fail_reason = Some(reason);
+                            candidate.evidence = gaze_types::EvidenceKind::Learned;
+                        }
+                        _ => {}
+                    }
+                }
+                continue;
+            }
             let prefix_start = candidate.span.start
                 + input[candidate.span.start..]
                     .bytes()

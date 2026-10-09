@@ -854,6 +854,21 @@ impl ValidatorOnFail {
 }
 
 impl ValidatorKind {
+    /// Whether this validator checks phone values, including regional national forms.
+    pub fn is_phone(self) -> bool {
+        #[cfg(feature = "phone-parser")]
+        {
+            matches!(
+                self,
+                Self::E164Phone | Self::E164PhoneNational(_) | Self::PhoneNumber
+            )
+        }
+        #[cfg(not(feature = "phone-parser"))]
+        {
+            false
+        }
+    }
+
     /// Whether a failed validation may keep a candidate with its failure reason.
     /// Rulepacks opt in per recognizer; broad scanners must still veto.
     pub fn allows_recorded_failure(self) -> bool {

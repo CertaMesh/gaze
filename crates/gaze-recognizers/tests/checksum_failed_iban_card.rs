@@ -684,7 +684,8 @@ fn a_kept_checksum_failure_is_written_on_the_winner_audit_row() {
     assert_eq!(cards, vec![None, Some(ValidatorFailReason::LuhnFailed)]);
     // `card.structural` still vetoes the Luhn-failing runs (the card, and the digit run inside the
     // invalid IBAN) and logs them as losers; `card.cued` and `iban.*` keep theirs. No IBAN
-    // recognizer vetoes anything.
+    // recognizer vetoes anything. International-prefix phone candidates inside the IBAN
+    // grouping are also vetoed, with their own typed parser reason.
     let vetoed: Vec<_> = entries
         .iter()
         .filter(|entry| entry.decided_by == gaze::ConflictTier::ValidatorVeto)
@@ -692,11 +693,16 @@ fn a_kept_checksum_failure_is_written_on_the_winner_audit_row() {
         .collect();
     assert!(!vetoed.is_empty(), "{entries:?}");
     assert!(
-        vetoed.iter().all(|row| *row
-            == (
-                Some("card.structural".to_string()),
+        vetoed.iter().all(|row| matches!(
+            (row.0.as_deref(), row.1),
+            (
+                Some("card.structural"),
                 Some(ValidatorFailReason::LuhnFailed)
-            )),
+            ) | (
+                Some("phone.e164.spaced"),
+                Some(ValidatorFailReason::PhoneE164Rejected)
+            )
+        )),
         "{entries:?}"
     );
 }

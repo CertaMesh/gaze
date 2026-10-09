@@ -2201,3 +2201,33 @@ fn phone_and_ipv4_suppressions_are_audited_and_oid_ips_remain_eligible() {
     let clean = clean_text(&pipeline, &session, oid, LocaleTag::EnUs);
     assert!(clean.contains(":Custom:ip_address_"), "{clean}");
 }
+
+#[test]
+fn a_labelled_phone_keeps_its_span_beside_other_validated_classes() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    // Ofcom drama range, a standard Luhn fixture, and RFC 1918 addresses.
+    for input in [
+        "Phone: 020 7946 0123\n4111 1111 1111 1111",
+        "phone 020 7946 0123 - 10.42.0.1",
+        "Phone: 020 7946 0123 / 4111 1111 1111 1111",
+        "Mobile: 07700 900123 - 10.42.0.1",
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, LocaleTag::EnGb);
+        assert!(
+            !clean.contains("7946") && !clean.contains("900123"),
+            "{input}: {clean}"
+        );
+        assert!(clean.contains(":Custom:phone_"), "{input}: {clean}");
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+    // ARCEP's reserved drama range, followed by a sentence period.
+    let input = "Appelez le 02.61.91.10.11.";
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::Other("fr-FR".into()));
+    assert_eq!(
+        gaze::token_shape::pattern().replace_all(&clean, "02.61.91.10.11"),
+        input
+    );
+    assert!(!clean.contains(":Custom:ip_address_"), "{clean}");
+}
