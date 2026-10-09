@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- Cued NHS numbers remain protected whole when MOD-11 fails, with a typed audit
+  reason and no repeat-value sweep. Tax-identification key abbreviations also
+  protect the full Steuer-ID value in tool-call JSON and logs.
+
 ## [0.16.0] - 2026-10-08
 
 v0.16.0 improves protection of repeated values, addresses and labelled identifiers.

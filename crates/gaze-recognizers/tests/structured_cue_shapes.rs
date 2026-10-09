@@ -182,6 +182,9 @@ const FAMILIES: &[Family] = &[
             "steuerid",
             "tax_id",
             "taxId",
+            "taxIdentNr",
+            "tax_ident_nr",
+            "taxIdentificationNumber",
             "customer_steuer_id",
         ],
     },
@@ -334,7 +337,9 @@ fn checksum_invalid_values_under_a_cue_key_follow_each_rule_policy() {
         assert!(!cleaned.contains(value), "{cleaned:?}");
     }
     let nhs = r#"{"nhs_number": "9434765918"}"#;
-    assert_eq!(clean_and_restore(&pipeline, nhs), nhs);
+    let cleaned = clean_and_restore(&pipeline, nhs);
+    assert!(cleaned.contains(":Custom:nhs_number_1>"), "{cleaned:?}");
+    assert!(!without_tokens(&cleaned).chars().any(|c| c.is_ascii_digit()));
 }
 
 #[test]
@@ -371,5 +376,42 @@ fn prose_cue_shapes_still_match() {
     ] {
         let cleaned = clean_and_restore(&pipeline, text);
         assert!(!without_tokens(&cleaned).contains(value), "{cleaned:?}");
+    }
+}
+
+#[test]
+fn cued_nhs_and_tax_identification_values_have_no_raw_digit_suffix() {
+    let pipeline = pipeline();
+    for (key, value, class) in [
+        ("nhsNumber", "943 476 5918", "nhs_number"),
+        ("NHS_NO", "943-476-5918", "nhs_number"),
+        ("taxIdentNr", "86 095 742 719", "steuer_id"),
+        ("tax_ident_nr", "86-095-742-718", "steuer_id"),
+        ("taxIdentificationNumber", "86095742718", "steuer_id"),
+    ] {
+        for shape in SHAPES {
+            let input = shape.replace("{k}", key).replace("{v}", value);
+            let cleaned = clean_and_restore(&pipeline, &input);
+            let expected = format!(":Custom:{class}_1>");
+            assert!(cleaned.contains(&expected), "{input:?} -> {cleaned:?}");
+            assert_eq!(cleaned.matches(&expected).count(), 1);
+            // Digits in unrelated fields are allowed; none from the value may remain.
+            let raw = without_tokens(&cleaned);
+            assert_eq!(raw, input.replace(value, "\0"), "{input:?} -> {cleaned:?}");
+        }
+    }
+}
+
+#[test]
+fn zero_nhs_and_tax_identification_non_cues_stay_raw() {
+    let pipeline = pipeline();
+    for input in [
+        "NHS number: 0000000000",
+        "NHS no: 000 000 0000",
+        "taxIdentifierProduct: 86095742719",
+        "taxIdentificationModel: 86095742719",
+        "taxIdentNrSuffix: 86095742719",
+    ] {
+        assert_eq!(clean_and_restore(&pipeline, input), input);
     }
 }
