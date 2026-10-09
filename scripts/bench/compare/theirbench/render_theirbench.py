@@ -333,12 +333,22 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
     check_own_result(name, entry, row, own, release["prediction_sha256"])
     _check_release(row, release, resolve or (lambda tag: (tag_commit(tag, REPO), _crates_tree(tag_commit(tag, REPO)))))
     scored = own.get("scored") or own["overall"]
+    if refresh:
+        if entry["own_metric"].get(row) != scored:
+            raise ValueError(f"{row}: refreshed own metric differs from the committed row")
+        previous_prediction = entry.get("provenance", {}).get(row, {}).get("release", {}).get(
+            "prediction_sha256"
+        )
+        if previous_prediction != release["prediction_sha256"]:
+            raise ValueError(f"{row}: refreshed prediction digest differs from the committed row")
     entry["rows"][row] = report["rows"][row]["test"]
     entry["own_metric"][row] = scored
     entry["provenance"][row] = {**report["provenance"][row], "own_scorer_input": own["input"]}
     reproduced = release["reproduces"]
     entry.setdefault("tagged_measurements", {})[row] = {
         "harness_revision": report["harness_revision"], "harness_dirty": False,
+        "comparison_revision": report["comparison_revision"],
+        "comparison_sha256": report["comparison_sha256"],
         "hardware": report["hardware"], "generated_at": report["generated_at"],
         "runs": [
             {"prediction_sha256": reproduced["prediction_sha256"], "binary_sha256": reproduced["binary_sha256"],
@@ -378,7 +388,7 @@ def add_tuned(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str,
                 "mapping_sha256", "typed_hold"):
         if report[key] != entry[key]:
             raise ValueError(f"{name}: the report's {key} differs from the committed entry")
-    if report["comparison_sha256"] != entry["rescored_with"]["comparison_sha256"]:
+    if report["comparison_sha256"] != backends.PINNED_SHA256:
         raise ValueError(f"{name}: the report used different pinned comparison code")
     row = declaration["row"]
     if list(report["rows"]) != [row]:
@@ -607,9 +617,13 @@ def render(data: Mapping[str, Any]) -> str:
         for tool in (t for t in public_rows(rows) if is_tagged_gaze_row(t)):
             measured = entry["tagged_measurements"][tool]
             release = entry["provenance"][tool]["release"]
+            comparison = measured.get("comparison_revision")
+            scored_with = (
+                f"comparison code `{comparison}` and harness " if comparison else "harness "
+            )
             lines += ["", f"Row {tool}: a clean checkout of tag `{release['tag']}` (crates tree "
                           f"`{release['crates_tree'][:8]}`, benchmark binary `{release['build']['binary_sha256'][:8]}`, reproduced by a second run) "
-                          f"scored with harness `{measured['harness_revision'][:8]}`; no timing is published."]
+                          f"scored with {scored_with}`{measured['harness_revision'][:8]}`; no timing is published."]
         for family_name, choice in entry.get("vendor_tuned", {}).items():
             lines += ["", f"Row {choice['row']}: {choice['caption']}. Setup: {choice['setup']} "
                           f"(source {source_text(choice['source'])}, commit `{choice['commit'][:8]}`). "
