@@ -84,19 +84,20 @@ class RecordReplayTests(unittest.TestCase):
 
         Every run field matches the committed v1 and v2 scorecards except
         `validator_recall_by_label`, which the harness's probe computes, not the
-        release, and which grew since those runs: v0.15.0 differs only in
-        credit-card shape-only recall (99 -> 124 of 126); v0.14.0's original v1
-        run also lacks the `production_recall_by_gold_validity` sub-blocks and
-        differs in shape-only recall for cards (94 -> 124), IBAN, phone and tax
-        numbers and in card validator-backed recall. Against v0.14.0's v2 run
-        and its v1 calibration, captured with a later harness, the block
-        matches. The document renders validator recall only from the current
-        release's own scorecard, so no displayed number depends on it.
+        release, and which grew since those runs: v0.15.0's original v1 differs
+        only in credit-card shape-only recall (99 -> 124 of 126); v0.14.0's
+        original v1 run also lacks the `production_recall_by_gold_validity`
+        sub-blocks and differs in shape-only recall for cards (94 -> 124), IBAN,
+        phone and tax numbers and in card validator-backed recall. Against
+        v0.14.0's v2 run and its v1 calibration, and the regenerated v0.15.0 v2
+        scorecard, the block matches. The document renders validator recall only
+        from the current release's own scorecard, so no displayed number depends
+        on it.
         """
         bench = ROOT / "docs/reference/benchmarks"
         contracts = (bench / "scored-labels-v2.json", bench / "scored-labels-v3.json")
         for version, v1, probe_differs in (
-            ("v0.15.0", "scorecard-v0.15.0.json", {"v1": True, "v2": True}),
+            ("v0.15.0", "scorecard-v0.15.0.json", {"v1": True, "v2": False}),
             ("v0.14.0", "scorecard-v0.14.0.json", {"v1": True, "v2": False}),
             ("v0.14.0", "scorecard-v0.14.0-rescore-calibration-v1.json", {"v1": False, "v2": False}),
         ):
