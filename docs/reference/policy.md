@@ -521,7 +521,7 @@ The bundled format-basis set is `aadhaar.in`, `bsn.nl`, `cnpj.br`, `cpf.br`,
 recognizers, `phone.national.de`, `postal.de`, and `postal.us` remain
 document-basis, as do the bilingual cue-anchored `global` recognizers
 (`tax_number.cue_anchored`, `driver_license.cue_anchored`,
-`national_id.cue_anchored`, and the opt-in `secrets` bundle's
+`national_id.cue_anchored`, and the separate `secrets` bundle's
 `security_token.anchored`), which are eligible under every chain because
 `global` matches every document locale.
 

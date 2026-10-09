@@ -1,7 +1,7 @@
 # Redaction classes and recognizers
 
 This is the canonical inventory of what Gaze can detect through the embedded
-`core` and `core-extended` names and the opt-in `secrets` bundle. It covers the emitted classes, every bundled
+`core` and `core-extended` names and the separate `secrets` bundle. It covers the emitted classes, every bundled
 recognizer, validator and normalizer support, collision precedence, conflict
 resolution, deterministic gaps, and no-policy activation.
 
@@ -574,7 +574,7 @@ its resolved action is protective (`Action::is_protective`: anything but
   The closing quote at byte 21 sits outside the union and stays in the clear.
   See
   [`crates/gaze-recognizers/tests/explicit_field_collision_control.rs`](../../crates/gaze-recognizers/tests/explicit_field_collision_control.rs),
-  which pins exactly that geometry on the real `core` and opt-in `secrets` rulepacks.
+  which pins exactly that geometry on the real `core` and separate `secrets` rulepacks.
 
 Rules with no static preview (an adopter `Rule` impl that answers at runtime
 only) stay on the legacy path: such a selection blocks the sweep and its

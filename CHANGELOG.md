@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **Credentials are protected by default.** Newly generated `gaze setup`
+  policies include the bundled `secrets` rulepack, protecting supported API
+  keys, access and session tokens, JWTs, and password fields. Direct library
+  callers and hand-authored policies still select rulepacks explicitly.
+
+### Benchmark
+
+- **Credentials now count in the headline benchmark.** Scored-label contract
+  v4 adds `PASSWORD` and `SECURITYTOKEN` while preserving v1–v3 as historical
+  views. On the unchanged v0.16.0 observation record, this scope change raises
+  the layer C headline from 7,348 leaked bytes under v3 to 13,291 under v4; it
+  is not a detection regression. Enabling `secrets` protects 2,879 previously
+  leaked `SECURITYTOKEN` bytes in the fresh candidate measurement.
+
 ## [0.16.0] - 2026-10-08
 
 v0.16.0 improves protection of repeated values, addresses and labelled identifiers.
