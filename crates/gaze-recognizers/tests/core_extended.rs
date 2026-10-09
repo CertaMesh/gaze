@@ -679,11 +679,11 @@ fn cued_e164_rejection_is_tokenized_with_audit_reason_and_restores() {
         entries: Arc::clone(&entries),
     });
     let session = Session::new(Scope::Ephemeral).expect("session");
-    // Reserved Ofcom digits with punctuation that the regional parser rejects.
-    let input = "Phone: +44 7/7/0/0/9/0/0/1/2/3";
+    // Synthetic unassigned country code, unreachable even when parsed permissively.
+    let input = "Phone: +999 0/0/0/0/0/0/0/0/0/0";
 
     let clean = clean_text(&pipeline, &session, input, LocaleTag::EnGb);
-    assert!(!clean.contains("+44 7/7/0/0/9/0/0/1/2/3"), "{clean}");
+    assert!(!clean.contains("+999 0/0/0/0/0/0/0/0/0/0"), "{clean}");
     assert_eq!(restore_tokens(&session, &clean), input);
     let entries = entries.lock().unwrap();
     assert!(entries.iter().any(|entry| {
@@ -1994,5 +1994,82 @@ fn adjacent_reserved_phones_are_independent_restorable_values() {
             }
             assert_eq!(restore_tokens(&session, &clean), input);
         }
+    }
+}
+
+#[test]
+fn expanded_phone_formats_preserve_full_values_and_restore() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    // BNetzA, Ofcom and ARCEP drama blocks, and NANPA's 555-01xx block.
+    for (input, raw, locale) in [
+        (
+            "Tél.: 02.61.91.00.01",
+            "02.61.91.00.01",
+            LocaleTag::Other("fr-FR".into()),
+        ),
+        (
+            "Service client\n04.65.71.00.02",
+            "04.65.71.00.02",
+            LocaleTag::Other("fr-FR".into()),
+        ),
+        (
+            "Call +49 (0)30 23125 123",
+            "+49 (0)30 23125 123",
+            LocaleTag::DeDe,
+        ),
+        (
+            "Call +44 (0)20 7946 0123",
+            "+44 (0)20 7946 0123",
+            LocaleTag::EnGb,
+        ),
+        (
+            "Dial 0044 20 7946 0123",
+            "0044 20 7946 0123",
+            LocaleTag::EnGb,
+        ),
+        (
+            "Phone: 001-202-555-0100",
+            "001-202-555-0100",
+            LocaleTag::EnUs,
+        ),
+        ("Phone: 020 7946 0123", "020 7946 0123", LocaleTag::EnGb),
+        ("Mobile: 07700 900123", "07700 900123", LocaleTag::EnGb),
+        ("+44 7700 900123", "+44 7700 900123", LocaleTag::EnGb),
+        // Deliberately unassignable, labelled national values: record the failed parse.
+        ("Phone: 000 000 000", "000 000 000", LocaleTag::EnUs),
+        ("Mobile: 00 00 00 00", "00 00 00 00", LocaleTag::EnUs),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, locale);
+        assert!(!clean.contains(raw), "{input}: {clean}");
+        assert_eq!(
+            clean.matches(":Custom:phone_").count(),
+            1,
+            "{input}: {clean}"
+        );
+        assert!(!clean.contains(":Custom:ip_address_"), "{input}: {clean}");
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}
+
+#[test]
+fn phone_and_ip_guards_preserve_numeric_identifiers() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    for input in [
+        "Firmware 02.61.91.00.01 fixes boot.",
+        "part=04.65.71.00.02",
+        "build=\"02.61.91.00.01\"",
+        "000 000 000",
+        "00 00 00 00",
+        "020",
+        "Amount: 000 000 000",
+        "OID: 2.61.91.2.3",
+        "Version: 2.3.4.5.6",
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        assert_eq!(
+            clean_text(&pipeline, &session, input, LocaleTag::EnUs),
+            input
+        );
     }
 }

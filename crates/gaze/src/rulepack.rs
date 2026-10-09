@@ -670,7 +670,12 @@ fn parse_validator_spec(
     // must still load. Detector construction resolves them for its feature graph.
     let recordable = gaze_types::ValidatorKind::parse(&raw.kind)
         .map(gaze_types::ValidatorKind::allows_recorded_failure)
-        .unwrap_or_else(|_| matches!(raw.kind.as_str(), "e164_phone" | "e164_phone_national_us"));
+        .unwrap_or_else(|_| {
+            matches!(
+                raw.kind.as_str(),
+                "e164_phone" | "e164_phone_national_us" | "phone_number"
+            )
+        });
     if on_fail == gaze_types::ValidatorOnFail::Record && !recordable {
         return Err(refuse("record"));
     }

@@ -421,8 +421,11 @@ impl RegexDetector {
         input: &str,
         span: std::ops::Range<usize>,
     ) -> std::ops::Range<usize> {
-        let Some(kind @ (ValidatorKind::E164Phone | ValidatorKind::E164PhoneNational(_))) =
-            self.validator_kind
+        let Some(
+            kind @ (ValidatorKind::E164Phone
+            | ValidatorKind::E164PhoneNational(_)
+            | ValidatorKind::PhoneNumber),
+        ) = self.validator_kind
         else {
             return span;
         };
@@ -521,6 +524,26 @@ impl RegexDetector {
             && has_sku_identifier_prefix(input, span.start)
         {
             return false;
+        }
+        if matches!(
+            self.validator_kind,
+            Some(ValidatorKind::Ipv4Parse | ValidatorKind::Ipv4ParseNonDocumentation)
+        ) {
+            let prefix = &input[..span.start];
+            let suffix = &input[span.end..];
+            if (prefix.ends_with('.')
+                && prefix[..prefix.len() - 1]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|ch| ch.is_ascii_digit()))
+                || (suffix.starts_with('.')
+                    && suffix[1..]
+                        .chars()
+                        .next()
+                        .is_some_and(|ch| ch.is_ascii_digit()))
+            {
+                return false;
+            }
         }
         if self.identifier_run_boundary && gaze_types::word_run_extends_identifier(input, span.end)
         {

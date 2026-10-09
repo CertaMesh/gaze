@@ -200,6 +200,7 @@ available.
 |---|---|---|---|---|
 | `EmailRfc` | `email_rfc` | `always` | Basic email local-part and dotted-domain shape | `crates/gaze-types/src/lib.rs:520-522,566-593` |
 | `E164Phone` | `e164_phone` | `phone-parser` | Parser-backed international E.164 validity | `crates/gaze-types/src/lib.rs:523-525,566-593` |
+| `PhoneNumber` | `phone_number` | `phone-parser` | Parser-backed international dialing syntax and national validity across DE, US, AT, CH, GB, IE, AU, CA, NZ, ZA and FR; ambiguous national values preserve their original form | `crates/gaze-types/src/lib.rs` |
 | `E164PhoneNational` | `e164_phone_national_de, e164_phone_national_us` | `phone-parser` | Parser-backed national validity for `Region::De` or `Region::Us` | `crates/gaze-types/src/lib.rs:526-528,555-593` |
 | `Luhn` | `luhn` | `always` | Luhn checksum, excluding all-zero candidates | `crates/gaze-types/src/lib.rs:529-530,566-593` |
 | `IbanMod97` | `iban_mod97` | `always` | IBAN MOD-97 checksum | `crates/gaze-types/src/lib.rs:531-532,566-593` |
