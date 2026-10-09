@@ -810,7 +810,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:steuer[\s_-]?id(?:[_-]?(?:nr|nummer|number|no))?|steuer[_-]?identifikationsnummer|idnr\.?|steuerliche[\s_-]+identifikationsnummer|(?:fahrzeug[\s_-]*)?identifikationsnummer|tax[_-]?id(?:[_-]?(?:number|no))?)\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{2}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})\b'''
+pattern = '''(?i)(?:\b|_)(?:steuer[\s_-]?id(?:[_-]?(?:nr|nummer|number|no))?|steuer[_-]?identifikationsnummer|idnr\.?|steuerliche[\s_-]+identifikationsnummer|(?:fahrzeug[\s_-]*)?identifikationsnummer|tax[_-]?(?:id(?:[_-]?(?:number|no))?|ident[_-]?(?:nr|number|no)))\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{2}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})\b'''
 capture_groups = [1]
 
 [recognizers.context]
@@ -956,8 +956,13 @@ kind = "regex"
 pattern = '''(?i)(?:\b|_)nhs[\s_-]*(?:number|num|no\.?|id)?\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{3}[ -]?\d{3}[ -]?\d{4})\b'''
 capture_groups = [1]
 
+[recognizers.context]
+# All-zero placeholders are not patient identifiers, even under a direct NHS cue.
+reject_match_regex = '''0(?:[ -]?0){9}\b'''
+
 [recognizers.validator]
 kind = "uk_nhs_mod11"
+on_fail = "record"
 
 [recognizers.scoring]
 base = 0.88

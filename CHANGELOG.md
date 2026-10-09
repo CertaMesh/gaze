@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keys, access and session tokens, JWTs, and password fields. Direct library
   callers and hand-authored policies still select rulepacks explicitly.
 
+- Cued NHS numbers remain protected whole when MOD-11 fails, with a typed audit
+  reason and no repeat-value sweep. Tax-identification key abbreviations also
+  protect the full Steuer-ID value in tool-call JSON and logs.
+
 ### Benchmark
 
 - **Credentials now count in the headline benchmark.** Scored-label contract
