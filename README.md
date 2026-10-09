@@ -29,15 +29,9 @@ How much PII does each tool keep from reaching the model? The [v0.16.0 benchmark
   <img alt="Bar panels of character-level F2 and false-positive bytes per 1,000 bytes for Gaze releases and competitors on three benchmarks; the values are printed on the bars." src="docs/assets/benchmarks/benchmark-panels-light.svg">
 </picture>
 
-Gaze 0.16 scores character-level F2 0.879 on Kiji EN/DE holdout and A4 negatives (scored labels v4; credentials counted), leaking 13,291 PII bytes. Each panel names its dataset and split; competitors run the configurations declared in [`chart-configs.json`](scripts/bench/compare/chart-configs.json). Numbers, sources and the model-card tables: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels). Own corpus: Presidio tuned for this corpus on its validation half (highest F2), the best of three tuned Presidio rows by test-half F2; like every bar it shows all of layer C, validation half included; Presidio's defaults are in competitors.md. Presidio Research: Presidio tuned for this dataset by its authors (their published custom setup). PIIBench-commercial: PIIBench publishes no vendor-tuned Presidio, so Presidio is the declared best configuration.
-
-F2 counts Unicode code points (not grapheme clusters) inside the merged byte spans of each document, ignores labels, pools every document (micro), weights recall four times precision, scores 0 when precision and recall are both 0 (0/0 = 0), and counts all of a skipped document's gold characters as missed. F2 counts every false-positive character for every tool; the false-positive row (bytes redacted that are not PII, per 1,000 bytes of the scored documents) also credits a protected repeat of a labelled value on the own corpus (contract v4). Every tool is treated identically within each row, and the third-party sets have no such credit.
+Gaze 0.16 leaks 13,291 PII bytes on our holdout (character-level F2 0.879; credentials counted since contract v4). Methods, competitor setups and how to reproduce: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels).
 
 <!-- END GENERATED: readme-chart -->
-
-**Known gaps:** house numbers and tenant-specific IDs such as order numbers pass through unless your policy adds a recognizer, and a CSV header does not yet mark the column under it (`name,bsn\nJan,111222333` leaves the BSN raw). Names and other values a recognizer found once are not carried to their other occurrences, so without NER a name repeated in prose can pass raw, and UK national-format phone numbers are not yet detected.
-
-Methods, the full scorecard, and how to reproduce every number: [benchmarks](docs/reference/benchmarks/README.md).
 
 ## How does it work
 

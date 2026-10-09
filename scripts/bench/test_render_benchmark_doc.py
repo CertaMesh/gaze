@@ -1196,8 +1196,8 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         with self.assertRaisesRegex(render.RenderError, "no character-level measurement"):
             render.chart_gaze_rows(history)
 
-    def test_metric_definition_is_stated_in_both_readmes(self):
-        for path in (render.DEFAULT_README, render.DEFAULT_DOC):
+    def test_metric_definition_is_stated_in_the_benchmark_readme(self):
+        for path in (render.DEFAULT_DOC,):
             text = path.read_text(encoding="utf-8")
             for phrase in ("Unicode code points (not grapheme clusters)", "ignores labels",
                            "micro", "0/0 = 0", "skipped document's gold characters as missed",
