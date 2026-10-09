@@ -1993,6 +1993,10 @@ fn adjacent_reserved_phones_are_independent_restorable_values() {
                 assert!(!clean.contains(value), "{input:?}: {clean}");
             }
             assert_eq!(restore_tokens(&session, &clean), input);
+            assert_eq!(
+                gaze::token_shape::pattern().replace_all(&clean, ""),
+                separator
+            );
         }
     }
 }
@@ -2049,6 +2053,11 @@ fn expanded_phone_formats_preserve_full_values_and_restore() {
         );
         assert!(!clean.contains(":Custom:ip_address_"), "{input}: {clean}");
         assert_eq!(restore_tokens(&session, &clean), input);
+        assert_eq!(
+            gaze::token_shape::pattern().replace_all(&clean, raw),
+            input,
+            "every phone byte must be inside the token: {clean}"
+        );
     }
 }
 

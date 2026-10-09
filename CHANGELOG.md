@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- Split rejected adjacent phone runs when both values independently pass the
+  recognizer and parser. Vetoed candidates no longer block valid locale fallbacks.
+- Protect international dialing prefixes, optional trunk-zero markers, French
+  dotted phones and directly labelled national values. IPv4 matches refuse tails
+  inside longer dotted numeric runs. Parser failures remain auditable and cannot
+  seed repeat-value protection.
+
 ## [0.16.0] - 2026-10-08
 
 v0.16.0 improves protection of repeated values, addresses and labelled identifiers.
