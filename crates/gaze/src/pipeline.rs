@@ -5393,13 +5393,16 @@ fn translate_vetoed_candidate(
     })
 }
 
-/// House-number candidates licensed by winning NER location spans.
+/// House-number candidates licensed by winning NER street spans.
 ///
 /// Reads the settled selections in normalized coordinates. A selection licenses
-/// a number only when a NER `Location` candidate is one of its members. Members
-/// are the winner's own evidence, never the losers it beat, so a street that
-/// lost to or sits inside another class licenses nothing. The number becomes its
-/// own candidate with its own recognizer id, tracing `ner` as its evidence.
+/// a number only when a NER `Location` or `Organization` candidate is one of its
+/// members and the locale lexicon confirms the whole span is a street. Organization
+/// spans additionally require an unambiguous ending, so English `-ing` words do
+/// not qualify as German `Ring` streets. Members are
+/// the winner's own evidence, never the losers it beat, so a street that lost to
+/// or sits inside another class licenses nothing. The number becomes its own
+/// candidate with its own recognizer id, tracing `ner` as its evidence.
 fn street_corroborated_house_numbers(
     evidence: &occurrence::Segment,
     text: &str,
@@ -5431,7 +5434,11 @@ fn street_corroborated_house_numbers(
             .iter()
             .map(|&id| &evidence.originals[id])
             .find(|c| {
-                c.recognizer_id == crate::NER_RECOGNIZER_ID && c.class == crate::PiiClass::Location
+                c.recognizer_id == crate::NER_RECOGNIZER_ID
+                    && matches!(
+                        c.class,
+                        crate::PiiClass::Location | crate::PiiClass::Organization
+                    )
             })
         else {
             continue;
@@ -5439,6 +5446,11 @@ fn street_corroborated_house_numbers(
         let Some(street) = selection_span(selection) else {
             continue;
         };
+        if ner.class == crate::PiiClass::Organization
+            && !lexicon.organization_street(&text[street.clone()], locale_chain)
+        {
+            continue;
+        }
         for number in lexicon.house_numbers(text, street, locale_chain) {
             let overlaps = |span: &Range<usize>| span.start < number.end && number.start < span.end;
             if claimed.iter().any(overlaps) || found.iter().any(|c| overlaps(&c.span)) {

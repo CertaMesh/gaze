@@ -1059,6 +1059,24 @@ if __name__ == "__main__":
 
 
 class ArchiveCitationTest(unittest.TestCase):
+    def test_tagged_citations_bind_both_code_revisions_and_archive_reachability(self):
+        import render_theirbench as render
+
+        measured = {"comparison_revision": "a" * 8, "harness_revision": "b" * 40,
+                    "harness_commits": {"comparison": "a" * 40, "measured": "b" * 40},
+                    "harness_archive_branch": "archive/bench-harness"}
+        self.assertEqual(render.checked_tagged_harness_commits(measured, lambda *_: True),
+                         measured["harness_commits"])
+        with self.assertRaisesRegex(ValueError, "not reachable"):
+            render.checked_tagged_harness_commits(measured, lambda *_: False)
+        for bad in ("c" * 40, "a" * 8):
+            measured["harness_commits"]["comparison"] = bad
+            with self.assertRaisesRegex(ValueError, "differs"):
+                render.checked_tagged_harness_commits(measured, lambda *_: True)
+        del measured["harness_commits"]["comparison"]
+        with self.assertRaisesRegex(ValueError, "need comparison and measured"):
+            render.checked_tagged_harness_commits(measured, lambda *_: True)
+
     def test_citations_bind_to_recorded_commits_and_archive_reachability(self):
         import render_theirbench as render
 

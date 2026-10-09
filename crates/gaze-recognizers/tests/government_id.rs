@@ -43,9 +43,10 @@ fn empty_context() -> Context {
     }
 }
 
-const CLASSES: [&str; 6] = [
+const CLASSES: [&str; 7] = [
     "ssn",
     "steuer_id",
+    "nhs_number",
     "tax_number",
     "driver_license",
     "national_id",
@@ -1917,5 +1918,26 @@ fn passport_class_wins_over_national_id_for_a_passport_cue() {
     assert!(
         cleaned.contains(":passport_"),
         "expected a passport-class token, got {cleaned}"
+    );
+}
+
+#[test]
+fn failed_cued_nhs_keeps_a_typed_reason_without_seeding_repeat_protection() {
+    let input = "NHS number: 943 476 5918; note 943 476 5918";
+    let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], input);
+    let winners: Vec<_> = entries
+        .iter()
+        .filter(|entry| !entry.conflict_loser && entry.recognizer_id.as_deref() == Some("nhs.uk"))
+        .collect();
+    assert_eq!(winners.len(), 1);
+    assert_eq!(winners[0].recognizer_id.as_deref(), Some("nhs.uk"));
+    assert_eq!(
+        winners[0].validator_fail_reason,
+        Some(ValidatorFailReason::UkNhsMod11Failed)
+    );
+    assert_eq!(cleaned.matches("943 476 5918").count(), 1);
+    assert_eq!(
+        without_gaze_tokens(&cleaned),
+        "NHS number: ; note 943 476 5918"
     );
 }

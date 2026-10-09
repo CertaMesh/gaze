@@ -77,6 +77,31 @@ impl StreetLexicon {
         self.by_locale.is_empty()
     }
 
+    /// Organization evidence needs an unambiguous street ending. In particular,
+    /// an English `-ing` word must not become a German `Ring` street by suffix.
+    pub(crate) fn organization_street(&self, text: &str, locales: &[LocaleTag]) -> bool {
+        let Some(last) = text.split_whitespace().next_back() else {
+            return false;
+        };
+        let last = last.trim_end_matches('.');
+        let word = last.to_lowercase();
+        let multi_word = text.split_whitespace().nth(1).is_some();
+        locales
+            .iter()
+            .filter_map(|locale| self.by_locale.get(locale))
+            .flat_map(|orders| orders.iter())
+            .any(|(&order, entries)| {
+                entries.iter().any(|entry| {
+                    entry_matches(entry, order, &word, multi_word)
+                        && (word == entry.stem
+                            || !word.ends_with("ing")
+                            || last.ends_with("-Ring")
+                            || last.ends_with("-ring")
+                            || last.ends_with("Ring"))
+                })
+            })
+    }
+
     /// House-number spans licensed by `street`, in `text` byte offsets.
     pub(crate) fn house_numbers(
         &self,

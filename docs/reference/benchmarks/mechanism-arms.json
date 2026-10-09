@@ -34,6 +34,23 @@
           "base_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
           "candidate_policy_sha256": "343cf1cceb38d0b8210bbca01130ca07b06d564b2dad94a31d04b06598129cab",
           "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 18155,
+                "false_positive": 13768,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 18070,
+                "false_positive": 13768,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "DATEOFBIRTH": -85
+              }
+            },
             "3": {
               "base": {
                 "gold": 123621,
@@ -172,6 +189,37 @@
           "base_policy_sha256": "a07d691e8f76ba339fbe6af599fb19ed12c54bd64718fbf82e9ccca563115a07",
           "candidate_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
           "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 21425,
+                "false_positive": 13770,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 17991,
+                "false_positive": 13832,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -241,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -174,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -17,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1484,
+                "NATIONALID": -8,
+                "PASSWORD": -268,
+                "SECURITYTOKEN": -68,
+                "STATE": -8,
+                "SURNAME": -6,
+                "URL": -226,
+                "USERNAME": -846,
+                "ZIP": -48
+              }
+            },
             "3": {
               "base": {
                 "gold": 123621,
@@ -347,6 +395,37 @@
           "base_policy_sha256": "a07d691e8f76ba339fbe6af599fb19ed12c54bd64718fbf82e9ccca563115a07",
           "candidate_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
           "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 18877,
+                "false_positive": 15498,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 15443,
+                "false_positive": 15560,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -241,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -174,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -17,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1484,
+                "NATIONALID": -8,
+                "PASSWORD": -268,
+                "SECURITYTOKEN": -68,
+                "STATE": -8,
+                "SURNAME": -6,
+                "URL": -226,
+                "USERNAME": -846,
+                "ZIP": -48
+              }
+            },
             "3": {
               "base": {
                 "gold": 123621,
@@ -522,6 +601,37 @@
           "base_policy_sha256": "a07d691e8f76ba339fbe6af599fb19ed12c54bd64718fbf82e9ccca563115a07",
           "candidate_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
           "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 18643,
+                "false_positive": 15522,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 15239,
+                "false_positive": 15584,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -240,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -148,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -17,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1484,
+                "NATIONALID": -8,
+                "PASSWORD": -268,
+                "SECURITYTOKEN": -68,
+                "STATE": -8,
+                "SURNAME": -6,
+                "URL": -226,
+                "USERNAME": -846,
+                "ZIP": -44
+              }
+            },
             "3": {
               "base": {
                 "gold": 123621,
@@ -710,6 +820,40 @@
           "base_policy_sha256": "ba04fec2128509362e7f4b57546d61426a3011badd6730188547043a5f9a054e",
           "candidate_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
           "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 86119,
+                "false_positive": 2191,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 17991,
+                "false_positive": 13832,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "AGE": 2,
+                "BUILDINGNUM": -1331,
+                "CITY": -11595,
+                "COMPANYNAME": -5580,
+                "COUNTRY": -3252,
+                "DATEOFBIRTH": 11,
+                "FIRSTNAME": -9904,
+                "IDCARDNUM": -3,
+                "LICENSEPLATENUM": 11,
+                "ORGANIZATION": -69,
+                "PASSWORD": -43,
+                "REGION": -10,
+                "STATE": -7004,
+                "STREET": -18637,
+                "SURNAME": -10664,
+                "URL": -43,
+                "USERNAME": -7,
+                "ZIP": -40
+              }
+            },
             "3": {
               "base": {
                 "gold": 123621,
@@ -914,6 +1058,24 @@
           "base_policy_sha256": "e3b3a2abe9e2fc7825fb27b8453cb7a898db581442ac279a1b380cd411084ace",
           "candidate_policy_sha256": "65cd6aa588ce6923f9e2156699893fcffb9a870967d9a0db5018deaa0c22c8cc",
           "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 13423,
+                "false_positive": 15684,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 13312,
+                "false_positive": 15767,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -53,
+                "STATE": -58
+              }
+            },
             "3": {
               "base": {
                 "gold": 123621,
@@ -1032,6 +1194,166 @@
         }
       ],
       "shipped": "default-on (gaze setup)"
+    },
+    {
+      "id": "secrets-rulepack",
+      "title": "Credential rulepack",
+      "added_in": "v0.17",
+      "policy_delta": {
+        "file": "scripts/bench/mechanisms/secrets-rulepack.toml",
+        "sha256": "ae6e0d70e1634492b94a5bc8c27f4d2f06302d8b5a0007a67893ec54cd968787"
+      },
+      "measurements": [
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/secrets-rulepack-409f428e1c1b-base.jsonl.gz",
+              "sha256": "c685dd8e323841a979390e7de0d4cd8bfd791c0942b3c01533ae9e6bfcf7eae4"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/secrets-rulepack-409f428e1c1b-candidate.jsonl.gz",
+              "sha256": "239c15073e857f6225922c1a649dbcf6e375aa0606a720bd9b6d37d407e106a5"
+            }
+          },
+          "revision": "409f428e1c1b7222ca371095cd830f6b81245204",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "65cd6aa588ce6923f9e2156699893fcffb9a870967d9a0db5018deaa0c22c8cc",
+          "candidate_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+          "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 13284,
+                "false_positive": 15141,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 10405,
+                "false_positive": 15141,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -1,
+                "SECURITYTOKEN": -2879
+              }
+            },
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 7341,
+                "false_positive": 15141,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 7340,
+                "false_positive": 15141,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -1
+              }
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 7341,
+                "false_positive": 26902,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 7340,
+                "false_positive": 26902,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -1
+              },
+              "false_positive_by_class_delta": {}
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 13284,
+                "false_positive": 26902,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 10405,
+                "false_positive": 26919,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -1,
+                "SECURITYTOKEN": -2879
+              },
+              "false_positive_by_class_delta": {
+                "custom:security_token": 17
+              }
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 5630,
+                "false_positive": 1372,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 5630,
+                "false_positive": 1372,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 3968,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 3968,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 234,
+                "false_positive": 419,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 234,
+                "false_positive": 419,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 1, FP bytes changed by +0"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 2879, FP bytes changed by +17"
+            }
+          },
+          "attested": {
+            "binary_sha256": "f8cbfd624a70dcabea253ad2888bee6c22f46c4e03314bbedff7cadd65fa068e",
+            "crates_tree": "42fd8a0cacbef68d29172d036979a3b869a133b8",
+            "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
+          }
+        }
+      ],
+      "shipped": "default-on in newly generated gaze setup policies; explicit in hand-authored policies"
     }
   ]
 }

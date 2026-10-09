@@ -210,7 +210,7 @@ class CheckTests(unittest.TestCase):
 
     def test_committed_ledger_checks(self):
         totals, body = ledger.derive()
-        self.assertEqual(set(totals), {"1", "2", "3"})
+        self.assertEqual(set(totals), {"1", "2", "3", "4"})
         original = ledger.DOC.read_text(encoding="utf-8")
         self.assertEqual(ledger.apply(original, ledger.public_body(self.index)), original)
         # The full table still renders and re-derives; it is just not published.

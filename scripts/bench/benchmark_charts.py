@@ -57,7 +57,7 @@ METRIC_DEFINITION = (
 FP_NOTE = (
     "F2 counts every false-positive character for every tool; the false-positive row "
     "(bytes redacted that are not PII, per 1,000 bytes of the scored documents) also credits "
-    "a protected repeat of a labelled value on the own corpus (contract v3). Every tool is "
+    "a protected repeat of a labelled value on the own corpus (contract v4). Every tool is "
     "treated identically within each row, and the third-party sets have no such credit."
 )
 
@@ -165,7 +165,7 @@ class View:
     @classmethod
     def of(cls, block: Mapping[str, Any], fp: int | None = None) -> "View":
         """`fp` overrides the block's false positives with a same-view adjusted count
-        (the v3 gold-gap credit lives on the layer cell, not in the block)."""
+        (the gold-gap credit lives on the layer cell, not in the block)."""
         return cls(
             block["char_level"]["f2"], block["leaked_bytes"],
             block["false_positive_bytes"] if fp is None else fp, block["total_bytes"],
@@ -193,12 +193,12 @@ def own_panel(
         if key == "presidio" and tuned is not None:
             # The declared default moves to competitors.md; the bar is the better tuned row.
             row = tuned["chart"]["row"]
-            cell = tuned["rows"][row]["contracts"]["v3"]["C"]
+            cell = tuned["rows"][row]["contracts"]["v4"]["C"]
             column, bar_name = SHORT_NAMES[key], TUNED_BAR_NAME
             notes.append(f"{SHORT_NAMES[key]}: tuned")
             captions.append(f"Own corpus: {TUNED_CAPTIONS[row]}")
         else:
-            cell = comparison["tools"][name]["contracts"]["v3"]["C"]
+            cell = comparison["tools"][name]["contracts"]["v4"]["C"]
             column, bar_name = "", SHORT_NAMES[key]
         fp = cell["false_positive_bytes_after_gold_gap"]
         fp = cell["false_positive_bytes"] if fp is None else fp
@@ -207,7 +207,7 @@ def own_panel(
         bars.append(Bar(bar_name, view.f2, view.leaked, view.fp_per_1k, column=column))
     return Panel(
         "Own corpus", f"{corpus_name} · {layer:,} docs, {splits}",
-        "Scored labels v3: the labels Gaze commits to detect", tuple(bars),
+        "Scored labels v4: credentials counted", tuple(bars),
         skipped=skipped, refused=tuple((row.name, row.refused) for row in gaze),
         documents=layer, note="; ".join(notes), caption="; ".join(captions),
     )

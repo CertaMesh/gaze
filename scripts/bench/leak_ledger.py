@@ -813,14 +813,27 @@ def load(root: Path = ROOT) -> tuple[dict[str, Any], Path, list[dict[str, Any]]]
 def public_body(index: Mapping[str, Any]) -> str:
     """What the benchmark page shows: a pointer, never the ledger's numbers.
 
-    The ledger classifies the leaked bytes of an unreleased main build. Public
+    The ledger classifies the leaked bytes of a recorded build. Public
     pages show tagged releases only (`tagged_gaze.py`), so the table stays out of
     the page; the rows, the record and every total remain committed evidence and
     `check` still re-derives all of them.
     """
+    provenance = index.get("release_provenance")
+    if provenance:
+        description = (
+            "The leak ledger classifies every leaked gold byte by root cause. "
+            f"It was recorded at `{provenance['recorded_at'][:7]}`, an ancestor of "
+            f"`{provenance['tag']}` with the identical crates tree "
+            f"`{provenance['crates_tree'][:8]}`; its observations are byte-identical to "
+            f"`{Path(provenance['observations_file']).name}`. Its table is not shown here. "
+        )
+    else:
+        description = (
+            "The leak ledger classifies every leaked gold byte of an unreleased build by root "
+            "cause. Public pages show tagged releases only, so its table is not shown here. "
+        )
     return check_public(
-        "The leak ledger classifies every leaked gold byte of an unreleased build by root "
-        "cause. Public pages show tagged releases only, so its table is not shown here. "
+        description +
         f"The classified rows ([`leak-ledger.json`]({INDEX.name}) and "
         f"[its row file]({index['rows']['file'].split('benchmarks/', 1)[-1]})) stay committed, and "
         "`python3 scripts/bench/leak_ledger.py check` re-derives their totals from the "

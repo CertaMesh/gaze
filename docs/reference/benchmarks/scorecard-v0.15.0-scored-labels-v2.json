@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "generated_at": "2026-09-26T07:30:34.259294+00:00",
+  "generated_at": "2026-09-27T11:08:49.186971+00:00",
   "gaze": {
     "revision": "6fcba31a63ec240e6c22e82a21c3fe41fc0f6b2f",
     "dirty": false
@@ -3462,7 +3462,7 @@
       "id": "scored-labels-v2",
       "version": 2,
       "file": "docs/reference/benchmarks/scored-labels-v2.json",
-      "file_sha256": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+      "file_sha256": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
       "excluded_labels": [
         "PASSWORD",
         "SECURITYTOKEN"
@@ -3487,8 +3487,8 @@
     "configs": [
       "policy-file"
     ],
-    "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
     "binary_profile": "release",
+    "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
     "max_documents": null,
     "sampling_seed": 20260710,
     "ner_threshold": 0.3,
@@ -6991,14 +6991,14 @@
           },
           "shape_only_recall": {
             "entities": 126,
-            "fully_covered": 99,
-            "overlapped": 99,
-            "full_coverage_recall": 0.7857142857142857,
-            "overlap_recall": 0.7857142857142857,
+            "fully_covered": 124,
+            "overlapped": 124,
+            "full_coverage_recall": 0.9841269841269841,
+            "overlap_recall": 0.9841269841269841,
             "utf8_bytes": 1971,
-            "covered_utf8_bytes": 1863,
-            "byte_recall": 0.9452054794520548,
-            "leaked_utf8_bytes": 108
+            "covered_utf8_bytes": 1963,
+            "byte_recall": 0.9959411466260781,
+            "leaked_utf8_bytes": 8
           },
           "production_recall_by_gold_validity": {
             "validator_passed_gold": {
@@ -7686,63 +7686,63 @@
       },
       "latency_ms": {
         "clean_ms": {
-          "mean": 104.66618170137457,
-          "median": 83.3490835,
-          "p95": 249.21323329999998,
-          "p99": 389.9767512199998,
-          "max": 716.61175
+          "mean": 79.73624945532646,
+          "median": 69.102125,
+          "p95": 167.71735855,
+          "p99": 278.70502946999966,
+          "max": 620.661458
         },
         "post_policy_scan_ms": {
-          "mean": 37.73334799072165,
-          "median": 30.300520999999996,
-          "p95": 91.67934984999994,
-          "p99": 141.8650520299998,
-          "max": 279.928709
+          "mean": 28.399890452233677,
+          "median": 24.4706665,
+          "p95": 61.72437759999998,
+          "p99": 103.8241094399999,
+          "max": 247.548375
         },
         "restore_ms": {
-          "mean": 0.10218070206185567,
-          "median": 0.0906245,
-          "p95": 0.24817119999999995,
-          "p99": 0.5141693099999948,
-          "max": 2.966917
+          "mean": 0.09157577869415809,
+          "median": 0.089646,
+          "p95": 0.21825419999999998,
+          "p99": 0.2983645299999999,
+          "max": 2.921
         }
       },
       "warm_latency_ms": {
         "clean_ms": {
-          "mean": 104.6832568755586,
-          "median": 83.39325000000001,
-          "p95": 249.2137166,
-          "p99": 389.99293164000017,
-          "max": 716.61175
+          "mean": 79.7464703214163,
+          "median": 69.147959,
+          "p95": 167.7178836,
+          "p99": 278.7268086400001,
+          "max": 620.661458
         },
         "post_policy_scan_ms": {
-          "mean": 37.739865169474044,
-          "median": 30.308374999999998,
-          "p95": 91.69003319999997,
-          "p99": 141.8787453600001,
-          "max": 279.928709
+          "mean": 28.404257794431075,
+          "median": 24.478625,
+          "p95": 61.728192199999995,
+          "p99": 103.83093528000005,
+          "max": 247.548375
         },
         "restore_ms": {
-          "mean": 0.10218196734272945,
-          "median": 0.090583,
-          "p95": 0.2481754,
-          "p99": 0.5145347200000028,
-          "max": 2.966917
+          "mean": 0.0915751746304572,
+          "median": 0.089625,
+          "p95": 0.21825840000000002,
+          "p99": 0.29837036000000006,
+          "max": 2.921
         }
       },
       "process": {
-        "wall_seconds": 422.2194291249616,
-        "documents_per_second": 9.554184395998341,
-        "start_to_first_response_ms": 3446.7559999320656,
-        "cold_start_to_first_validated_response_ms": 3446.7559999320656,
+        "wall_seconds": 320.2495979999658,
+        "documents_per_second": 12.541347339897976,
+        "start_to_first_response_ms": 2193.565708817914,
+        "cold_start_to_first_validated_response_ms": 2193.565708817914,
         "warmup_count": 1,
         "discarded_warmup_samples": [
           {
             "sample": 1,
-            "round_trip_ms": 3441.8852910166606,
-            "clean_ms": 58.966708,
-            "restore_ms": 0.102875,
-            "post_policy_scan_ms": 20.104292,
+            "round_trip_ms": 2185.850374866277,
+            "clean_ms": 50.039166,
+            "restore_ms": 0.115042,
+            "post_policy_scan_ms": 14.495707999999999,
             "correctness": {
               "leaked_labeled_utf8_bytes": 0,
               "uncovered_entities": 0,
@@ -7758,7 +7758,18 @@
     }
   ],
   "runner_provenance": {
-    "entry_point": "scripts/bench/run_no_opf_benchmark.py",
+    "entry_point": "scripts/bench/rescore_past_release.py",
+    "method": "release detection code, today's harness: the release's own clean_for_bench (built from the measured commit) scored by the harness commit below",
+    "harness_revision": "9dc171b1980612fe33481af49db308c88f091d28",
+    "manifest_replacing_actions": [
+      "redact",
+      "tokenize"
+    ],
+    "binary_sha256": "2b4f5df0ba3b7abfc3cfb1b245d4a3b64d3b36b2dfaab34e4c23e99bfb4c9ae0",
+    "policy": {
+      "path": "/Users/Shared/gaze-bench/gaze-setup-policy.toml",
+      "sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"
+    },
     "profile": "full",
     "model_bundles": [
       {
@@ -7773,148 +7784,45 @@
         "verified_artifacts": 7
       },
       {
+        "model_id": "davlan-mbert-ner-hrl-onnx",
+        "digest_kind": "SHA256SUMS",
+        "expected_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "observed_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16"
+      },
+      {
         "model_id": "nym-small-int8",
         "digest_kind": "SHA256SUMS",
         "expected_sha256": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767",
         "observed_sha256": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767"
       }
     ],
-    "policy": {
-      "path": "/Users/Shared/gaze-bench/gaze-setup-policy.toml",
-      "sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"
+    "policy_dependencies": {
+      "files": {
+        "ner.model_dir/SHA256SUMS": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "ner.model_dir/config.json": "8e5caefadaf9923a9e7d3de42ca97780c68fc4d83519d333f141b299e40af638",
+        "ner.model_dir/labels.json": "8498e2bafc017a793571c3c2f7092390a93a757f5ca45004f21db2560a8c6fdb",
+        "ner.model_dir/model.onnx": "1213fdd405d295768b0d41d8214062f2f278f0e3acff6af67d8fd47360d2be0f",
+        "ner.model_dir/special_tokens_map.json": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+        "ner.model_dir/tokenizer.json": "bf1b59b7b11c95f194f51708d918eea378e09d05f84c0e1656dc5180e8117088",
+        "ner.model_dir/tokenizer_config.json": "470cff6e0353b08e2a6e9b4f61729ecdc47ccb3ced335fa5520e9ce334572d59",
+        "ner.model_dir/vocab.txt": "fe0fda7c425b48c516fc8f160d594c8022a0808447475c1a7c6d6479763f310c",
+        "safety_net.nym.model_dir/SHA256SUMS": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767",
+        "safety_net.nym.model_dir/config.json": "3f07065571e22bb73eba28ddb1fae4509c0cf703762e3bfa7a6ab2111cf7cb88",
+        "safety_net.nym.model_dir/model_int8.onnx": "139006aea2cbd8e709d322f056232570de54661f624143be4893aaa387190286",
+        "safety_net.nym.model_dir/tokenizer.json": "c299144e68dfec1dc536204a7ae3712710c5c6cade9269a83f5042250d47d8de"
+      }
     },
     "hardware": "macOS-26.5-arm64-arm-64bit-Mach-O; arm",
     "warmup_count": 1,
-    "measured_repetitions": 1,
-    "repetitions": [
-      {
-        "repetition": 1,
-        "runs": [
-          {
-            "config": "policy-file",
-            "cold_start_to_first_validated_response_ms": 3446.7559999320656,
-            "warmup_count": 1,
-            "discarded_warmup_samples": [
-              {
-                "sample": 1,
-                "round_trip_ms": 3441.8852910166606,
-                "clean_ms": 58.966708,
-                "restore_ms": 0.102875,
-                "post_policy_scan_ms": 20.104292,
-                "correctness": {
-                  "leaked_labeled_utf8_bytes": 0,
-                  "uncovered_entities": 0,
-                  "restore_failures": 0,
-                  "manifest_invalid_documents": 0,
-                  "strict_rejections": 0,
-                  "residual_suspects": 0,
-                  "redact_actions": 0
-                }
-              }
-            ],
-            "clean_ms": {
-              "mean": 104.66618170137457,
-              "median": 83.3490835,
-              "p95": 249.21323329999998,
-              "p99": 389.9767512199998,
-              "max": 716.61175
-            }
-          }
-        ]
-      }
-    ],
-    "latency_source": "validated response timing.clean_ms",
-    "cold_start_metric": "external process start to first validated response",
-    "validator_recall_probe": {
-      "protocol_schema_version": 1,
-      "manifest": "scripts/bench/validator_recall_probe/Cargo.toml",
-      "validator_recognizers": [
-        {
-          "id": "aadhaar.in",
-          "class": "custom:aadhaar",
-          "validator_kind": "aadhaar_verhoeff"
-        },
-        {
-          "id": "bsn.nl",
-          "class": "custom:bsn",
-          "validator_kind": "bsn_mod11"
-        },
-        {
-          "id": "card.structural",
-          "class": "custom:credit_card",
-          "validator_kind": "luhn"
-        },
-        {
-          "id": "cnpj.br",
-          "class": "custom:cnpj",
-          "validator_kind": "cnpj_mod11"
-        },
-        {
-          "id": "cpf.br",
-          "class": "custom:cpf",
-          "validator_kind": "cpf_mod11"
-        },
-        {
-          "id": "email.global",
-          "class": "email",
-          "validator_kind": "email_rfc"
-        },
-        {
-          "id": "eth.address",
-          "class": "custom:eth_address",
-          "validator_kind": "eth_eip55"
-        },
-        {
-          "id": "iban.structural",
-          "class": "custom:iban",
-          "validator_kind": "iban_mod97"
-        },
-        {
-          "id": "ip.v4",
-          "class": "custom:ip_address",
-          "validator_kind": "ipv4_parse"
-        },
-        {
-          "id": "ip.v6",
-          "class": "custom:ip_address",
-          "validator_kind": "ipv6_parse"
-        },
-        {
-          "id": "nhs.uk",
-          "class": "custom:nhs_number",
-          "validator_kind": "uk_nhs_mod11"
-        },
-        {
-          "id": "nir.fr",
-          "class": "custom:nir",
-          "validator_kind": "fr_nir_mod97"
-        },
-        {
-          "id": "phone.e164.spaced",
-          "class": "custom:phone",
-          "validator_kind": "e164_phone"
-        },
-        {
-          "id": "phone.national.de",
-          "class": "custom:phone",
-          "validator_kind": "e164_phone_national_de"
-        },
-        {
-          "id": "phone.national.us",
-          "class": "custom:phone",
-          "validator_kind": "e164_phone_national_us"
-        },
-        {
-          "id": "phone.structural",
-          "class": "custom:phone",
-          "validator_kind": "e164_phone"
-        },
-        {
-          "id": "steuer_id.de",
-          "class": "custom:steuer_id",
-          "validator_kind": "de_steuer_id_mod1110"
-        }
-      ]
-    }
+    "measured_repetitions": 1
+  },
+  "observation_record": {
+    "file": "observations-v0.15.0.jsonl.gz",
+    "sha256": "561d618d2d964217d7d17f24e829abd55e85f73c4bd2d1e51869a0fcf0f1a105",
+    "format": "gzip-jsonl",
+    "schema_version": 1,
+    "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+    "observations": 2910,
+    "bytes": 676070
   }
 }

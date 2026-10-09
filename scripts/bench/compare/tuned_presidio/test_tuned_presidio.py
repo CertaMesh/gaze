@@ -344,10 +344,10 @@ class ChartBarTest(unittest.TestCase):
         comparison = {
             "corpus": {"layers": {"C": {"documents": 4}}},
             "heldout_split": {"layers": {"C": {"validation": {}, "test": {}}}},
-            "tools": {"presidio-strong": {"contracts": {"v3": {"C": cell(0.5, 90)}}},
-                      "gliner": {"contracts": {"v3": {"C": cell(0.6, 80)}}}},
+            "tools": {"presidio-strong": {"contracts": {"v4": {"C": cell(0.5, 90)}}},
+                      "gliner": {"contracts": {"v4": {"C": cell(0.6, 80)}}}},
             "presidio_tuned": {"chart": {"row": "presidio-tuned-own-f2"},
-                               "rows": {"presidio-tuned-own-f2": {"contracts": {"v3": {"C": cell(0.7, 40)}}}}},
+                               "rows": {"presidio-tuned-own-f2": {"contracts": {"v4": {"C": cell(0.7, 40)}}}}},
         }
         panel = charts.own_panel([], comparison, {"presidio": "presidio-strong", "gliner": "gliner"}, "C")
         presidio, gliner = panel.bars

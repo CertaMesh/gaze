@@ -2666,6 +2666,23 @@ class PolicyDeltaGateTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "not_comparable")
         self.assertIn("existing base sections", result["policy_delta_reason"])
 
+    def test_declared_rulepack_append_changes_only_the_bundled_list(self) -> None:
+        base = '[policy.rulepacks]\nbundled = ["core", "locale-en"]\npaths = []\n'
+        delta = '[mechanism_delta]\nappend_bundled_rulepacks = ["secrets"]\n'
+        result = self.compare(
+            base,
+            '[policy.rulepacks]\nbundled = ["core", "locale-en", "secrets"]\npaths = []\n',
+            delta,
+        )
+        self.assertEqual(result["verdict"], "pass")
+        self.assertIn("appended bundled rulepacks", result["policy_delta_reason"])
+        result = self.compare(
+            base,
+            '[policy.rulepacks]\nbundled = ["core", "secrets", "locale-en"]\npaths = []\n',
+            delta,
+        )
+        self.assertEqual(result["verdict"], "not_comparable")
+
     def test_missing_policy_identity_on_both_sides_is_refused(self) -> None:
         for field in (
             "scorecard_sha256", "scorecard_sha256_none",

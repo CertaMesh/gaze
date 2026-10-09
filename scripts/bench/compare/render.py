@@ -153,9 +153,9 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
            history_path: Path | None = None) -> str:
     gaze = report["gaze"]
     tools = report["tools"]
-    versions = ("v3", "v2", "v1")
+    versions = ("v4", "v3", "v2", "v1")
     if set(gaze) != set(versions):
-        raise ValueError("public comparison needs a Gaze scorecard for v3, v2, and v1")
+        raise ValueError("public comparison needs a Gaze scorecard for v4, v3, v2, and v1")
     if report.get("harness_dirty") is not False:
         raise ValueError("public comparison needs a clean harness")
     required = {"presidio-all", "presidio-en", "presidio-en-de", "gliner"}
@@ -218,9 +218,9 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
         "" if latency_publishable
         else "Latency was not measured under a quiet machine; timing comparisons are withheld. "
     )
-    skipped_example = tools["presidio-en"]["contracts"]["v3"].get("A")
+    skipped_example = tools["presidio-en"]["contracts"]["v4"].get("A")
     skipped_example_note = (
-        f"For example, Presidio English-only v3 {layer_display_name('A')} leaks "
+        f"For example, Presidio English-only v4 {layer_display_name('A')} leaks "
         f"{skipped_example['leaked_bytes']:,} B, "
         f"including {skipped_example['skipped_gold_bytes']:,} B of scored gold from "
         f"{skipped_example['skipped_documents']:,} skipped non-English documents. "
@@ -239,7 +239,7 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
         "# Competitor comparison",
         "",
         "Same corpus and scorer; tools run with documented configurations. "
-        "UTF-8 byte counts use the Gaze scorer. For v3, FP is the scorer's "
+        "UTF-8 byte counts use the Gaze scorer. For v4 and v3, FP is the scorer's "
         "false-positive count after its audited gold-gap credit. "
         + ("CPU-host p50/p95 is warm per-document wall-clock inference/clean time on the same machine. "
            if latency_publishable else "") +
@@ -252,7 +252,7 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
         "Leaked and false-positive byte counts are class-agnostic. A skipped document's "
         "scored gold counts in full as leaked. Subtract Skipped gold B from Leaked B to "
         "get leakage on processed documents. " + skipped_example_note +
-        "The reviewed label map controls v3's repeated-gold credit and the exact typed-span metrics below.",
+        "The reviewed label map controls repeated-gold credit and the exact typed-span metrics below.",
         "",
         "Gaze is not listed: the comparison run measured an unreleased build, and this page "
         "shows tagged Gaze releases only. Released Gaze numbers are in the "
@@ -280,7 +280,7 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
                     continue
                 row = tools[name]["contracts"][version][layer]
                 fp = row["false_positive_bytes"]
-                if version == "v3" and row["false_positive_bytes_after_gold_gap"] is not None:
+                if version in {"v4", "v3"} and row["false_positive_bytes_after_gold_gap"] is not None:
                     fp = row["false_positive_bytes_after_gold_gap"]
                 latency = row["latency"]
                 if latency_publishable:
@@ -376,20 +376,20 @@ def validate_tuned(tuned: dict[str, object], report_path: Path) -> None:
 
 
 def _gaze_release_c(history_path: Path) -> tuple[str, dict[str, dict[str, float]]]:
-    """Latest tagged Gaze release on layer C: leaked and false-positive bytes per contract, v3 F2."""
+    """Latest tagged Gaze release on layer C: leaked and false-positive bytes per contract, v4 F2."""
     import render_benchmark_doc as history_doc
 
     history = history_doc.load_history(history_path)
     entry = [e for e in history["releases"] if not e.get("provisional")][-1]
     arm = history_doc.shipped_default_arm(entry)
     cells = {}
-    for version in (3, 2, 1):
+    for version in (4, 3, 2, 1):
         view = history_doc.contract_view(entry, version)
         if view is not None:
             cells[f"v{version}"] = {"leaked": view["arms"][arm]["surviving_pii_utf8_bytes"],
                                     "fp": view["arms"][arm]["false_positive_utf8_bytes"]}
     char = json.loads((history_path.parent / "release-char-level.json").read_text(encoding="utf-8"))
-    cells["v3"]["f2"] = char["releases"][entry["version"]]["char_level"]["f2"]
+    cells["v4"]["f2"] = char["releases"][entry["version"]]["char_level"]["f2"]
     return entry["version"], cells
 
 
@@ -521,7 +521,7 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
                        ("FP B", True), ("Char F2", True), ("Entity F2", True)]),
     ])
     names = [*TUNED_LABELS, *TUNED_BASELINES]
-    for version in ("v3", "v2", "v1"):
+    for version in ("v4", "v3", "v2", "v1"):
         for layer in report["corpus"]["layers"]:
             for name in names:
                 source = rows[name] if name in rows else report["tools"][name]
@@ -534,7 +534,7 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
     lines.extend([
         "", f"Against the latest Gaze release ({version}) on all of {layer_display_name('C')}, the only layer "
         "that release was measured on in this corpus's form. The tuned-here rows include the validation half "
-        "they were selected on, which can only flatter them. False positives are after v3's gold-gap credit.", "",
+        "they were selected on, which can only flatter them. False positives are after v4's gold-gap credit.", "",
         *table_header([("Contract", False), ("Configuration", False), ("Leaked B", True), ("FP B", True),
                        ("Char F2", True)]),
     ])
@@ -546,13 +546,13 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
             full = rows[name]["contracts"][contract]["C"]
             f2 = full["metrics"]["product_coverage"]["full"]["char_level"]["f2"]
             lines.append(f"| {contract} | {label} | {full['leaked_bytes']:,} | {_fp(full):,} | "
-                         + (f"{f2:.3f} |" if contract == "v3" else "n/a |"))
+                         + (f"{f2:.3f} |" if contract == "v4" else "n/a |"))
             if full["leaked_bytes"] < cell["leaked"]:
                 wins.append(f"{label} leaks fewer {contract} bytes")
             if _fp(full) < cell["fp"]:
                 wins.append(f"{label} has fewer {contract} false-positive bytes")
-            if contract == "v3" and f2 > cell["f2"]:
-                wins.append(f"{label} has the higher v3 character F2")
+            if contract == "v4" and f2 > cell["f2"]:
+                wins.append(f"{label} has the higher v4 character F2")
     lines.extend(["", "Where tuned Presidio beats Gaze " + version + " here: "
                   + ("; ".join(wins) if wins else "nowhere") + ".", "",
                   "Live check: each chosen configuration also ran live on a fixed sample (about one document "

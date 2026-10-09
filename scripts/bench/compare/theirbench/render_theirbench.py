@@ -111,6 +111,29 @@ def checked_harness_commits(
     return dict(commits)
 
 
+def checked_tagged_harness_commits(
+    measured: Mapping[str, Any], contains: Callable[[str, str], bool] = archive_contains,
+) -> dict[str, str]:
+    """Keep separately measured release-row code reachable after a squash merge."""
+    commits = measured.get("harness_commits", {})
+    if not commits:
+        return {}
+    branch = measured.get("harness_archive_branch")
+    if branch != "archive/bench-harness":
+        raise ValueError("tagged harness citations need branch archive/bench-harness")
+    expected = {"comparison": measured["comparison_revision"],
+                "measured": measured["harness_revision"]}
+    if set(commits) != set(expected):
+        raise ValueError("tagged harness citations need comparison and measured commits")
+    for kind, commit in commits.items():
+        if (len(commit) != 40 or any(char not in "0123456789abcdef" for char in commit)
+                or not commit.startswith(expected[kind])):
+            raise ValueError(f"{kind} archive citation differs from the tagged measurement")
+        if not contains(commit, branch):
+            raise ValueError(f"{kind} tagged harness commit is not reachable from branch {branch}")
+    return dict(commits)
+
+
 def assemble(reports: list[Path], own: list[str], reproductions: list[str],
              historical: list[Path] = (), harness_tags: Mapping[str, str] | None = None) -> dict[str, Any]:
     benchmarks: dict[str, Any] = {}
@@ -653,6 +676,7 @@ def render(data: Mapping[str, Any]) -> str:
             lines += ["", *lines_after_table]
         for tool in (t for t in public_rows(rows) if is_tagged_gaze_row(t)):
             measured = entry["tagged_measurements"][tool]
+            commits = checked_tagged_harness_commits(measured)
             release = entry["provenance"][tool]["release"]
             comparison = measured.get("comparison_revision")
             scored_with = (
@@ -660,7 +684,10 @@ def render(data: Mapping[str, Any]) -> str:
             )
             lines += ["", f"Row {tool}: a clean checkout of tag `{release['tag']}` (crates tree "
                           f"`{release['crates_tree'][:8]}`, benchmark binary `{release['build']['binary_sha256'][:8]}`, reproduced by a second run) "
-                          f"scored with {scored_with}`{measured['harness_revision'][:8]}`; no timing is published."]
+                          f"scored with {scored_with}`{measured['harness_revision'][:8]}`; no timing is published."
+                          + ("".join(f" The {kind} commit `{commit[:8]}` is reachable from branch "
+                                     f"`{measured['harness_archive_branch']}`."
+                                     for kind, commit in sorted(commits.items())))]
         for family_name, choice in entry.get("vendor_tuned", {}).items():
             lines += ["", f"Row {choice['row']}: {choice['caption']}. Setup: {choice['setup']} "
                           f"(source {source_text(choice['source'])}, commit `{choice['commit'][:8]}`). "

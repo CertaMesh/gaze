@@ -27848,7 +27848,12 @@
               "harness_revision": "9b91f140fb4ec740d618be437c2176542f3c7fd4",
               "prediction_sha256": "219f6b974706dff07ea57685ff27e20b48d660ee3b766feb4b9ae27e2de75064"
             }
-          ]
+          ],
+          "harness_archive_branch": "archive/bench-harness",
+          "harness_commits": {
+            "comparison": "6a7f1782f314fefacb5d89fb6148c15bad9adc75",
+            "measured": "9b91f140fb4ec740d618be437c2176542f3c7fd4"
+          }
         }
       },
       "typed_hold": [
@@ -32808,7 +32813,12 @@
               "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8",
               "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077"
             }
-          ]
+          ],
+          "harness_archive_branch": "archive/bench-harness",
+          "harness_commits": {
+            "comparison": "6a7f1782f314fefacb5d89fb6148c15bad9adc75",
+            "measured": "8e34c8eee0ec91ce54a86148f952168ea0763fb8"
+          }
         }
       },
       "tuned_measurement": {
@@ -32841,5 +32851,6 @@
     "ai4privacy/pii-masking-300k (OPF's published set)": "custom licence; commercial use requires a licence from ai4privacy; not downloaded or run"
   },
   "report_only": "never used to design or tune Gaze rules",
-  "schema_version": 1
+  "schema_version": 1,
+  "per_label_data": "Report-only label-to-count maps; never fixture input and never used to design or tune Gaze rules."
 }

@@ -20,5 +20,13 @@
     "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
     "documents_trace_checked": 7462,
     "note": "The probe binary is the bench producer with the candidate-pool dump; every document's final trace equalled the record's."
+  },
+  "release_provenance": {
+    "tag": "v0.16.0",
+    "recorded_at": "7779119128ce4b5fdee6674f40937fb770264610",
+    "crates_tree": "276a8b2d7fcf3e5ef43d624307e175987131f9c7",
+    "observations_file": "docs/reference/benchmarks/observations-v0.16.0.jsonl.gz",
+    "observations_byte_identical": true,
+    "note": "Recorded at 7779119, an ancestor of v0.16.0 with identical crates tree 276a8b2d; observations are byte-identical to observations-v0.16.0.jsonl.gz."
   }
 }

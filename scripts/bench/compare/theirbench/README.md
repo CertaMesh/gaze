@@ -99,6 +99,11 @@ or document text enter the report. To backfill these totals for a tagged row
 already in `their-benchmarks.json`, pass `--refresh` to `add-tagged`. A refresh
 is refused unless every previously committed headline metric is identical.
 
+These per-label maps are report-only and never fixture input. They must never
+be used to design or tune Gaze rules. The v0.16.0 rows' comparison commit
+`6a7f1782` and measurement harness commits `9b91f140` and `8e34c8ee` are
+reachable from branch `archive/bench-harness`.
+
 ## A vendor's own tuned setup as its row
 
 On a vendor's own benchmark the chart compares Gaze with that vendor's best published setup, not its defaults (user ruling 2026-09-29). [`vendor-tuned.json`](vendor-tuned.json) declares it per benchmark: the setup, its source and pinned commit, and the panel caption. Presidio Research publishes one, notebook 5 (custom analyzer, OpenMed NER, extra recognizers, context enhancement; F2 0.91 with the evaluator that produced it, reproduced here). PIIBench-commercial has none, so Presidio keeps its declared best configuration there and the panel caption says so. The declaration lives beside the harness, not in `../chart-configs.json`, whose bytes `comparison.json` pins.

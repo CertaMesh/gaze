@@ -63,6 +63,16 @@ const CASES: &[(&str, &str, &str)] = &[
     ("national_id", "National ID number AB123456", "AB123456"),
     ("passport", "Passport ID A1234567", "A1234567"),
     ("birth_date", "DOB: 1990-02-03", "1990-02-03"),
+    (
+        "password",
+        "password: synthetic-password-fixture",
+        "synthetic-password-fixture",
+    ),
+    (
+        "security_token",
+        "API key: synthetic_token_fixture_1234",
+        "synthetic_token_fixture_1234",
+    ),
 ];
 
 #[test]
