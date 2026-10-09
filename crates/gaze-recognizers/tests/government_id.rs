@@ -595,6 +595,7 @@ fn labelled_identifier_field_boundaries_reject_lookalikes() {
         "international_id: NL12345678",
         "invoice_number: 67-853-422",
         "invoice_number: 12AB-3456",
+        "Identification card: A12345678901234567890",
         "Permis de conduire:\nnotes\n987654321",
         "Tax Number: 12345678901",
         "Permis de conduire: 2024-09-28",
@@ -1673,7 +1674,7 @@ fn shared_connector_grammar_is_byte_identical_across_the_family() {
     assert_eq!(
         core.matches(SHARED_CONNECTOR).count(),
         CONNECTOR_FAMILY.len() + 2,
-        "each family uses the shared connector; the labelled tax rule has two cue/value arms",
+        "each family uses the shared connector; the labelled tax rule has three cue/value arms",
     );
 }
 

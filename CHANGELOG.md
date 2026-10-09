@@ -10,11 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Tax and government identifiers cover additional cue connectors and grouped
-  layouts, including slash Steuernummer, EIN, SSN, Swiss AHV and German VAT.
-  Digit-bearing ID-card values have no upper length cutoff, and a validated
-  inner card no longer exposes a following identifier suffix.
-- Constrained uppercase UK National Insurance numbers also tokenize without
-  an adjacent cue.
+  layouts, including slash Steuernummer, separated SSN, Swiss AHV and national
+  identity values. Full English tax-identification fields preserve trusted
+  repeated-value protection.
 
 ## [0.16.0] - 2026-10-08
 

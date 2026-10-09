@@ -961,12 +961,6 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
             "AB 12 34 56 C",
         ),
         (
-            "nino.uk",
-            LocaleTag::EnGb,
-            "Reference AB000000C",
-            "AB000000C",
-        ),
-        (
             "pan.in",
             LocaleTag::Other("en-IN".to_string()),
             "PAN card ABCPA1234F",
@@ -988,7 +982,7 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
 
     for (recognizer_id, locale, input) in [
         ("ssn.us", LocaleTag::EnUs, "Reference 123-45-6789"),
-        ("nino.uk", LocaleTag::EnGb, "Reference BG000000C"),
+        ("nino.uk", LocaleTag::EnGb, "Reference AB123456C"),
         ("nino.uk", LocaleTag::EnGb, "NINO GB123456C"),
         (
             "pan.in",

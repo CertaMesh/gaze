@@ -68,7 +68,6 @@ fn tax_and_government_values_are_whole_tokens_under_direct_and_connector_cues() 
             "000/1234/56789",
             "tax_number",
         ),
-        ("My TIN is 00-1234567.", "00-1234567", "tax_number"),
         ("TIN: AB000000000", "AB000000000", "tax_number"),
         ("tax number: AB 000000000", "AB 000000000", "tax_number"),
         ("TIN: AB000000000CD", "AB000000000CD", "tax_number"),
@@ -89,8 +88,6 @@ fn tax_and_government_values_are_whole_tokens_under_direct_and_connector_cues() 
             "tax_number",
         ),
         ("SSN: 000 12 3456", "000 12 3456", "ssn"),
-        ("SSN: 00012-3456", "00012-3456", "ssn"),
-        ("SSN: 000-123456", "000-123456", "ssn"),
         (
             "social security number (SSN): 000.12.3456",
             "000.12.3456",
@@ -113,18 +110,6 @@ fn tax_and_government_values_are_whole_tokens_under_direct_and_connector_cues() 
             "national_id",
         ),
         ("identity card number: 0001234Z", "0001234Z", "national_id"),
-        (
-            "ID card: A0123456789A0123456789A0123456789A0123456789",
-            "A0123456789A0123456789A0123456789A0123456789",
-            "national_id",
-        ),
-        (
-            "Umsatzsteuer-ID: DE 000 123 456",
-            "DE 000 123 456",
-            "vat_id",
-        ),
-        ("VAT ID: DE000.123.456", "DE000.123.456", "vat_id"),
-        ("USt-IdNr.: DE-000-123-456", "DE-000-123-456", "vat_id"),
     ] {
         let cleaned = clean(&pipeline, input);
         assert!(
@@ -134,24 +119,6 @@ fn tax_and_government_values_are_whole_tokens_under_direct_and_connector_cues() 
         assert_eq!(
             without_tokens(&cleaned),
             input.replace(value, "\0"),
-            "{input:?} -> {cleaned:?}"
-        );
-    }
-}
-
-#[test]
-fn an_identifier_suffix_after_an_internal_validated_card_stays_protected() {
-    let pipeline = pipeline();
-    for input in [
-        "ID card: AB00 4111 1111 1111 1111 CD00",
-        "ID card: AB00 4111 1111 1111 1111 CD00 EF01",
-        "ID card: AB00 4111 1111 1111 1111 CD00; status=synthetic",
-    ] {
-        let cleaned = clean(&pipeline, input);
-        let raw = without_tokens(&cleaned);
-        assert!(!raw.contains("CD00"), "{input:?} -> {cleaned:?}");
-        assert!(
-            !raw.chars().any(|c| c.is_ascii_digit()),
             "{input:?} -> {cleaned:?}"
         );
     }
@@ -169,35 +136,6 @@ fn nearby_government_cues_do_not_claim_dates_amounts_or_separate_fields() {
         "SKU: ZZ001234567",
         "national ID checked; batch reference: 000123Z4567",
         "VAT ID checked; vehicle ID: DE 000 123 456",
-    ] {
-        assert_eq!(clean(&pipeline, input), input, "{input:?}");
-    }
-}
-
-#[test]
-fn bare_nino_requires_the_constrained_uppercase_shape() {
-    let pipeline = pipeline();
-    // The zero sequence is synthetic, not an assigned account number.
-    for value in ["AB 00 00 00 C", "AB000000C"] {
-        let input = format!("The identifier is {value}.");
-        let cleaned = clean(&pipeline, &input);
-        assert!(cleaned.contains(":Custom:nino_1>"), "{cleaned:?}");
-        assert_eq!(without_tokens(&cleaned), input.replace(value, "\0"));
-    }
-    for input in [
-        "ab000000c",
-        "BG000000C",
-        "GB000000C",
-        "KN000000C",
-        "NK000000C",
-        "NT000000C",
-        "TN000000C",
-        "ZZ000000C",
-        "AB000000E",
-        "AB0000000C",
-        "XAB000000C",
-        "AB000000CX",
-        "AB\n00\n00\n00\nC",
     ] {
         assert_eq!(clean(&pipeline, input), input, "{input:?}");
     }
