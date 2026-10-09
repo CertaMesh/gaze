@@ -146,11 +146,31 @@ fn generic_tax_identification_fields_protect_uncued_repeated_values() {
     let pipeline = pipeline();
     for (key, value) in [
         ("taxIdentificationNumber", "00 000 000 001"),
+        ("taxpayer ID", "00 000 000 001"),
+        ("taxpayer_id", "00 000 000 001"),
+        ("tax payer ID", "00 000 000 001"),
+        ("tax ID", "00 000 000 001"),
         ("taxpayer identification number", "00123456789"),
     ] {
-        let input = format!("{key}: {value}; repeat: {value}");
-        let cleaned = clean(&pipeline, &input);
-        assert_eq!(without_tokens(&cleaned), input.replace(value, "\0"));
-        assert_eq!(cleaned.matches(":Custom:tax_number_1>").count(), 2);
+        for connector in [": ", " is ", " lautet ", " est "] {
+            let input = format!("{key}{connector}{value}; repeat: {value}");
+            let cleaned = clean(&pipeline, &input);
+            assert_eq!(without_tokens(&cleaned), input.replace(value, "\0"));
+            assert_eq!(cleaned.matches(":Custom:tax_number_1>").count(), 2);
+        }
+    }
+}
+
+#[test]
+fn compact_german_identifiers_keep_trusted_repeat_ownership() {
+    let pipeline = pipeline();
+    for input in [
+        "Steuer-ID number 00123456789; repeat: 00123456789",
+        "steuerliche Identifikationsnummer lautet 00123456789; repeat: 00123456789",
+        "Identifikationsnummer is 00123456789; repeat: 00123456789",
+    ] {
+        let cleaned = clean(&pipeline, input);
+        assert_eq!(without_tokens(&cleaned), input.replace("00123456789", "\0"));
+        assert_eq!(cleaned.matches(":Custom:national_id_1>").count(), 2);
     }
 }
