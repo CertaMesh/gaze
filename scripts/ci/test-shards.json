@@ -16,6 +16,7 @@
     "gaze-cli::nym_no_feature",
     "gaze-cli::policy_preserve_warning",
     "gaze-cli::proxy_dashboard",
+    "gaze-cli::record_ids",
     "gaze-cli::safety_net_cli",
     "gaze-cli::secrets_rulepack",
     "gaze-cli::setup_policy"
@@ -141,6 +142,7 @@
     "gaze-recognizers::postal_at_ch",
     "gaze-recognizers::postal_au",
     "gaze-recognizers::postal_international",
+    "gaze-recognizers::record_ids",
     "gaze-recognizers::review580_diagnostics",
     "gaze-recognizers::rulepack_lint",
     "gaze-recognizers::secrets_opt_in",
