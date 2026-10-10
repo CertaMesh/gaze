@@ -2178,6 +2178,11 @@ pattern = '''(?i)\b(?:customer[ _-]?(?:record[ _-]?)?(?:id|number|no\.?|nr\.?)|k
 capture_groups = [1]
 complete_labelled_value = true
 
+[recognizers.context]
+# An unquoted prose word is a schema placeholder, not identifier evidence.
+# Quoted field scalars may be opaque alphabetic application keys.
+reject_match_regex = '''^[^"'\\]*[ \t:=][\p{L}\p{M}]+$'''
+
 [recognizers.scoring]
 base = 0.90
 priority = 100
@@ -2202,6 +2207,11 @@ pattern = '''(?i)\b(?:employee[ _-]?(?:record[ _-]?)?(?:id|number|no\.?)|personn
 capture_groups = [1]
 complete_labelled_value = true
 
+[recognizers.context]
+# An unquoted prose word is a schema placeholder, not identifier evidence.
+# Quoted field scalars may be opaque alphabetic application keys.
+reject_match_regex = '''^[^"'\\]*[ \t:=][\p{L}\p{M}]+$'''
+
 [recognizers.scoring]
 base = 0.90
 priority = 100
@@ -2225,6 +2235,11 @@ kind = "regex"
 pattern = '''(?i)\b(?:(?:person|contact|member)[ _-]?(?:id|number|no\.?)|membership[ _-]?number|(?:person|contact)[ _-]?record[ _-]?id|mitglieds[ _-]?(?:nummer|nr\.?)|personen[ _-]?id|kontakt[ _-]?id)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)\\?["']?((?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+(?:[-_./:](?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+)*)'''
 capture_groups = [1]
 complete_labelled_value = true
+
+[recognizers.context]
+# An unquoted prose word is a schema placeholder, not identifier evidence.
+# Quoted field scalars may be opaque alphabetic application keys.
+reject_match_regex = '''^[^"'\\]*[ \t:=][\p{L}\p{M}]+$'''
 
 [recognizers.scoring]
 base = 0.90

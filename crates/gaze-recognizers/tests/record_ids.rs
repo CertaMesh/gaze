@@ -142,6 +142,13 @@ fn public_identifiers_lookalike_keys_and_cross_line_cues_stay_raw() {
         "member id:\n123",
         "CUST-000123",
         "EMP-000123",
+        "[session A customer ID token]",
+        "customer ID placeholder",
+        "customer number: example",
+        "employee ID value",
+        "Personalnummer: Platzhalter",
+        "member ID token",
+        "contact record ID identifier",
     ] {
         let session = Session::new(Scope::Ephemeral).unwrap();
         let CleanDocument::Text(clean) = core.pseudonymize_text(&session, input).unwrap() else {

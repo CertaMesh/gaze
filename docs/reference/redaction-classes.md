@@ -148,11 +148,10 @@ matchers: serialized JSON retains the semantic key beside the value.
 `RawDocument::Structured` walks scalar strings individually, so this route does
 not classify an otherwise unlabelled scalar from its structured field name.
 
-The label conventions reflect [Microsoft Graph employeeId](https://learn.microsoft.com/en-us/graph/api/resources/user?view=graph-rest-1.0),
-[SAP personnel identifiers](https://help.sap.com/docs/ERP_HCM/d3bc4479e3344626be836c03a5c6962f/4fc7599929c05df3e10000000a42189b.html),
-and [membershipNumber](https://schema.org/membershipNumber). Generic
-[identifier](https://schema.org/identifier) covers any kind of object, so it is
-insufficient by itself. Nym `CUSTOMER_ID` and `EMPLOYEE_ID` remain unsupported by
+Labels must identify a customer, employee or person/contact/member record.
+Generic identifier fields can refer to any kind of object and are insufficient
+by themselves. Unquoted alphabetic prose words are treated as placeholders;
+quoted field scalars can hold opaque alphabetic identifiers. Nym `CUSTOMER_ID` and `EMPLOYEE_ID` remain unsupported by
 the closed safety-net class mapping: enabling them needs a class-contract change
 and separate measured evidence, rather than only an allowlist edit.
 
