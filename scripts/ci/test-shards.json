@@ -146,6 +146,7 @@
     "gaze-recognizers::secrets_opt_in",
     "gaze-recognizers::security_token",
     "gaze-recognizers::structured_cue_shapes",
+    "gaze-recognizers::tax_gov_grammar",
     "gaze-recognizers::subprocess_cancellation",
     "gaze-recognizers::unicode_group_separators",
     "gaze-recognizers::url_anchored",
