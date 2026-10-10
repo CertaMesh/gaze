@@ -1,83 +1,64 @@
 # Locale chain
 
-The locale chain decides which document locales Gaze assumes, and so which
-recognizers run.
+The locale chain selects document-basis recognizers; format-basis recognizers
+run independently of the document language.
 
 ## Resolution order
 
-Locale chain precedence: CLI > policy > rulepack default > system default.
+Use the first active source:
 
-Gaze resolves the document locale from left to right. The CLI `--locale` value
-is the highest-precedence operator override. If it is absent, the policy locale
-chain applies. If policy has no active locale, the rulepack `default_locales`
-apply. If no earlier layer supplies a locale, Gaze uses the system default
-`global`.
+```mermaid
+flowchart LR
+    A[CLI --locale] -->|absent| B[Policy chain]
+    B -->|no active locale| C[Rulepack default_locales]
+    C -->|absent| D[global]
+```
 
 ## Document and format basis
 
-Recognizer eligibility then depends on `locale_basis`:
+| `locale_basis` | Eligibility |
+|---|---|
+| `document` (external-pack default) | Matching locale; `global` or an empty locale list matches all documents |
+| `format` | Runs once for every document; locales record format provenance |
 
-- `document` (the default when an external rulepack omits the field) treats
-  `locales` as an eligibility gate. A recognizer tagged `global` is eligible for
-  every document locale. Other locale tags are strict:
-  `LocaleTag::Other(_)` matches only the same opaque tag. A recognizer whose
-  locale list is empty (an external pack that omits both `default_locales` and
-  per-recognizer `locales`) is eligible for every document locale; assembly
-  (`gaze_assembly::build_pipeline`) and detection (`LocaleChain::intersects`)
-  share this one predicate.
-- `format` treats `locales` as format provenance, not a document-language gate.
-  The recognizer runs once regardless of the document locale and its candidates
-  join the document-basis candidates before the normal conflict resolver runs.
-  `enabled` and `safety_tier` still apply.
+`LocaleTag::Other(_)` matches only the same opaque tag. Assembly
+(`gaze_assembly::build_pipeline`) and detection (`LocaleChain::intersects`)
+share eligibility. `enabled` and `safety_tier` apply to both bases; candidates
+join before normal conflict resolution.
 
 ## Several locales in one chain
 
-Document-basis recognizers run class by class, one chain locale at a time, in
-chain order. An earlier locale wins partial and exact overlaps per span,
-not per document. Strict same-class containment admits both candidates; the
-resolver prefers the containing span and audits the enclosed loser when that
-selection preserves all bytes covered by prior arbitration. Under
-`[de-AT, de-DE]`, a de-AT match
-on one number therefore does not switch `de-DE` rules off for a German postal
-code elsewhere in the same document. A `global` recognizer is eligible at every
-step and finds the same spans each time, so its repeats drop out. The overlap
-check uses candidates before validator veto, so an earlier-locale candidate
-that the veto later rejects still claims its span
-(`RecognizerRegistry::detect_candidate_pool` in `crates/gaze/src/registry.rs`).
+Document-basis recognizers run class by class in chain order. Earlier locales
+win exact/partial overlap per span, not per document. Strict same-class
+containment admits both; the resolver chooses the containing span and audits
+the loser when earlier coverage is preserved. `[de-AT, de-DE]` may therefore
+use both locales on different values. Repeated global spans drop out.
+
+Arbitration precedes validator veto: an earlier candidate still claims its span
+if later vetoed. See `RecognizerRegistry::detect_candidate_pool` in
+`crates/gaze/src/registry.rs`.
 
 ## Bundled format-basis identifiers
 
-Bundled rulepacks declare the basis explicitly for every recognizer. External
-and adopter rulepacks retain the legacy `document` behavior unless they opt in
-to `locale_basis = "format"`.
-
-This is a deliberate breaking behavior change for the bundled format-basis
-identifiers. `--locale=global` and narrow locale chains no longer suppress
-them. To restore the old output, disable the recognizer itself (for example,
-select an adopter rulepack copy with `enabled = false`); changing the locale is
-no longer a suppression mechanism.
+Bundled packs declare every basis. External packs retain `document` unless
+opting into `locale_basis = "format"`. `--locale=global` and narrow chains no
+longer suppress bundled format identifiers. To recover old output, disable the
+recognizer itself, for example with an adopter pack using `enabled = false`.
 
 ## Known gap: a synthetic global chain
 
-The mixed-basis implementation does not resolve that gap. A synthetic
-`[LocaleTag::Global]` chain is now correct for format-basis recognizers only; it
-still suppresses document-basis `name.*`, `phone.national.de`, both postal
-recognizers, and legacy/custom rulepacks. Direct/codec primary and residual
-passes therefore still need the shared `ProxyConfig::locale_chain`.
+A synthetic `[LocaleTag::Global]` still suppresses document-basis `name.*`,
+`phone.national.de`, both postal recognizers, and legacy/custom packs. Direct
+and codec primary/residual passes must use shared `ProxyConfig::locale_chain`.
 
 ## Anchors and collision families (v0.7.x)
 
-Locale packs can also provide mandatory-anchor cue buckets under
-`[locale.cues.<key>]`. Collision-family recognizers declare
-`mandatory_anchor = "<key>"`; during resolution, the active locale chain selects
-which cue bundles are available for that key.
-
-If no active locale supplies the required anchor, Gaze fails closed to a
-family-level token with `ConflictTier::AnchoredContext` and
-`AmbiguityReason::NoAnchor`. The
-`locale-cue-bundle-coherence` xtask gate keeps mandatory-anchor declarations in
-the bundled core rulepacks aligned with the embedded `locale-de` and
-`locale-en` cue bundles.
+Packs define cue buckets at `[locale.cues.<key>]`; collision recognizers name
+`mandatory_anchor = "<key>"`. The active chain supplies cues. No available
+anchor produces a fail-closed family token with
+`ConflictTier::AnchoredContext` and `AmbiguityReason::NoAnchor`.
+`locale-cue-bundle-coherence` checks bundled core declarations against
+embedded `locale-de` / `locale-en` cues.
 
 ## Coverage matrix
 

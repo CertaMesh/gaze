@@ -1,8 +1,7 @@
 # GLiNER DOB judge memory feasibility
 
-The GLiNER DOB judge stays opt-in. The tested pruning recipes did not establish
-both unchanged decisions and at most 400 MiB of added peak RSS. `gaze setup`
-and its bundle pin are unchanged.
+The GLiNER DOB judge remains opt-in: no tested pruning recipe preserved
+decisions while adding at most 400 MiB peak RSS. Setup and bundle pins are unchanged.
 
 ## Structural attribution
 
@@ -17,14 +16,12 @@ Single-threaded ONNX Runtime 1.24.2 load probes on this Apple M5 Max measured
 diagnostic model with only one embedding row. Thus the embedding accounts for
 about 511 MiB of load RSS in this probe, while the rest of the model and
 runtime account for about 493 MiB. The one-row model is load-only and cannot
-run valid inputs. RSS attribution ran on a busy host, because peak RSS does not depend on CPU
-load; the recorded `uptime` load average was 11.25/9.77/9.28.
+run valid inputs. The RSS probe used a busy host (load average 11.25/9.77/9.28), not a latency test.
 
 ## Tested candidates
 
 All load probes used ONNX Runtime 1.24.2 with one intra-op thread and graph
-optimization enabled. These are process load deltas, not the Gaze pipeline's
-peak RSS. The [shipped Gaze mechanism test](../../reference/benchmarks/mechanisms/gliner-dob-judge-latency.json)
+optimization enabled. These are process load deltas, not pipeline peak RSS. The [shipped Gaze mechanism test](../../reference/benchmarks/mechanisms/gliner-dob-judge-latency.json)
 measured 1,076 → 1,740 MiB, an added 664 MiB, on a host that was quiet when the run started.
 
 | Model | Load RSS added | Decision evidence |
@@ -50,9 +47,7 @@ emissions to zero. Loading that ORT file by path also changed the decisions
 and added 985 MiB of RSS. Loading the judge on demand would defer allocation
 but cannot reduce peak RSS once a date-bearing document requires the model.
 
-The existing quiet-host latency evidence remains the only valid latency
-measurement: p95 +22.5 ms and cold first document +1.6 s. No candidate
-latency number was taken. A direct Gaze runtime RSS comparison and full
+Quiet-host latency evidence remains p95 +22.5 ms and cold first document +1.6 s. Candidate latency was not measured. A direct Gaze runtime RSS comparison and full
 benchmark observation comparison remain necessary before any bundle or
 default-policy change.
 
