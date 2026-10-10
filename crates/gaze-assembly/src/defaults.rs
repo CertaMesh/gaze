@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use gaze::{
     Action, CleanDocument, Context, DictionaryBundle, LocaleChain, LocaleTag, PiiClass, Pipeline,
-    Policy, RawDocument, RuleSpec, Rulepack, Session,
+    Policy, PolicyError, RawDocument, RawMatch, RuleSpec, Rulepack, Session,
 };
 
 use crate::{build_pipeline, resolve_policy_inputs, BuildError};
@@ -59,6 +59,9 @@ impl CorePipelineConfig {
     ///
     /// An unreadable dictionary `terms_file` fails with
     /// [`BuildError::Policy`] wrapping [`gaze::PolicyError::BadDictionary`].
+    /// Enabled context dictionaries fail with the same typed error because this
+    /// API cannot accept caller context. Conflicting dictionary sources fail in
+    /// shared rulepack validation with [`gaze::RulepackError::DictionarySourceConflict`].
     pub fn build(self) -> Result<CorePipeline, BuildError> {
         let mut policy = default_policy(self.locale.clone(), Vec::new());
         policy.rulepacks.bundled = self
@@ -72,6 +75,17 @@ impl CorePipelineConfig {
             .iter()
             .any(|bundle| bundle == "core-extended");
         let inputs = resolve_policy_inputs(&policy, None, None, None)?;
+        // This convenience API has no caller context to populate context dictionaries.
+        for recognizer in inputs.rulepacks.iter().flat_map(|pack| &pack.recognizers) {
+            if recognizer.enabled
+                && matches!(recognizer.matcher, RawMatch::Dictionary { terms_from_context: Some(_), .. })
+            {
+                return Err(PolicyError::BadDictionary {
+                    name: recognizer.id.clone(),
+                    reason: "CorePipeline cannot populate terms_from_context; use policy assembly with context or inline/file terms".into(),
+                }.into());
+            }
+        }
         policy.rules = class_rules_from_rulepacks(&inputs.rulepacks);
         let context = Context {
             dictionaries: std::collections::HashMap::new(),

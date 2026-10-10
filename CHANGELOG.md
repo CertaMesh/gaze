@@ -13,7 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   policy input loader, and `CorePipeline::pseudonymize_text` passes their terms
   on every call. Unreadable `terms_file` inputs fail with a typed
   `BuildError::Policy(PolicyError::BadDictionary)` error. `dictionaries()` and
-  `into_parts()` retain all inputs for low-level callers.
+  `into_parts()` retain all inputs for low-level callers. Enabled context-backed
+  dictionaries fail with `BuildError::Policy(PolicyError::BadDictionary)` because
+  CorePipeline cannot accept context. Shared rulepack loading rejects context
+  combined with inline/file terms as `RulepackError::DictionarySourceConflict`.
+  The getting-started tutorial uses the dictionary-preserving wrapper.
 
 - [bundle-tokenization-drift] `core`: directly labelled phone values now remain
   protected when parsing fails; record their typed validation reason.

@@ -312,7 +312,7 @@ fn core_pipeline_context_dictionary_is_a_typed_error() {
 fn core_pipeline_mixed_dictionary_sources_are_a_typed_error() {
     for extra_source in [r#"terms = ["tenant-song-xyz"]"#, r#"terms_file = "unused-terms.txt""#] {
         let built = build_context_dictionary(extra_source);
-        assert!(matches!(built, Err(BuildError::Rulepack(_))),
+        assert!(matches!(built, Err(BuildError::Rulepack(gaze::RulepackError::DictionarySourceConflict { ref id })) if id == "tenant.song"),
             "rulepack validation must reject context combined with {extra_source}");
     }
 }

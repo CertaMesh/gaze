@@ -45,6 +45,14 @@ with `BuildError::Policy(PolicyError::BadDictionary)`; make them readable by the
 process before constructing the pipeline. Term paths keep the policy resolver's
 semantics: relative paths resolve against the process working directory.
 
+Enabled `terms_from_context` dictionaries now fail CorePipeline construction
+with `BuildError::Policy(PolicyError::BadDictionary)`: this convenience API has
+no context input. Supply inline/file terms, or use policy assembly with caller
+context. All rulepack loading paths now reject `terms_from_context` combined
+with nonempty `terms` or `terms_file` as
+`BuildError::Rulepack(RulepackError::DictionarySourceConflict)` during assembly.
+Choose one source; inline terms may still accompany `terms_file`.
+
 Use `CorePipeline::pseudonymize_text` to pass the resolved dictionaries and
 locales automatically. Low-level callers can use `dictionaries()` or
 `into_parts()` to retain these inputs and pass them to
