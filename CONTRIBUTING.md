@@ -212,7 +212,7 @@ Use neutral test/benchmark classes (`class_alpha`, `tenant_class_a`,
 `User_7`. Core has no tenant knowledge.
 
 `cargo run -p xtask -- no-tenant-knowledge` scans production
-`crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src//*.rs`.
+`crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/**/*.rs`.
 It excludes tests, benches, docs, this file and `crates/xtask/`.
 
 `// allow(tenant-fixture)` is allowed only in tests, benches and docs when
