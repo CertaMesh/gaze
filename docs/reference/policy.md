@@ -412,7 +412,8 @@ Regex rulepacks may set `reject_unquoted_capture_regex` in the same context.
 This guard checks the original captured value, before scanner extensions,
 only when its first character is not immediately preceded by a single or double
 quote. Quotes on a field name or prose label do not exempt the value. It uses
-the same audit veto path and assembly-time regex validation. The person-linked
+the same audit veto path and assembly-time regex validation. Setting it on a
+non-regex matcher produces a typed rulepack error. The person-linked
 ID rules use it to reject unquoted alphabetic placeholders and JSON keywords,
 while retaining numeric scalars and quoted opaque alphabetic identifiers.
 

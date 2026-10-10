@@ -254,6 +254,10 @@ pub enum RulepackError {
     },
     #[error("regex recognizer '{id}' must define exactly one of pattern or pattern_template")]
     RegexPatternChoice { id: String },
+    #[error(
+        "recognizer '{recognizer_id}': reject_unquoted_capture_regex requires a regex matcher"
+    )]
+    UnquotedCaptureGuardRequiresRegex { recognizer_id: String },
     #[error("invalid regex for recognizer '{id}': {source}")]
     RegexCompile {
         id: String,
@@ -897,6 +901,16 @@ fn apply_collision_family_cooperation(recognizers: &mut [RecognizerSpec]) {
 }
 
 fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
+    if !matches!(&raw.matcher, RawMatch::Regex { .. })
+        && raw
+            .context
+            .as_ref()
+            .is_some_and(|context| context.reject_unquoted_capture_regex.is_some())
+    {
+        return Err(RulepackError::UnquotedCaptureGuardRequiresRegex {
+            recognizer_id: raw.id.clone(),
+        });
+    }
     match &raw.matcher {
         RawMatch::Regex {
             pattern,
@@ -1418,6 +1432,24 @@ license = "Apache-2.0"
             Some("^letters$")
         );
         assert_eq!(context.reject_match_regex.as_deref(), Some("^whole$"));
+    }
+
+    #[test]
+    fn unquoted_capture_guard_refuses_non_regex_matchers() {
+        for matcher in [
+            "kind = \"dictionary\"\nterms = [\"SYN-BENIGN\"]",
+            "kind = \"ner\"\nmodel_ref = \"synthetic-local\"",
+        ] {
+            let source = unsupported_field_rulepack(
+                "[recognizers.context]\nreject_unquoted_capture_regex = '^letters$'",
+            )
+            .replace("kind = \"regex\"\npattern = \"BAD_EMAIL_FIXTURE\"", matcher);
+            assert!(matches!(
+                Rulepack::parse(&source),
+                Err(RulepackError::UnquotedCaptureGuardRequiresRegex { recognizer_id })
+                    if recognizer_id == "bad.email"
+            ));
+        }
     }
 
     #[test]
