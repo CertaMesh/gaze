@@ -4151,6 +4151,9 @@ def _coverage_records(partition: str) -> list[Record]:
         cue = dev_cue if partition == "dev" else test_cue
         for index in range(DOCS_PER_FAMILY):
             value = _coverage_identifier(family, rng, partition, index)
+            cell_cue = ("Cadastro Nacional da Pessoa Jurídica"
+                        if family == "cnpj" and partition == "test" and index % 2 == 0
+                        else cue)
             templates = (
                 (
                     ("coverage_prose", "{C}: {V}."),
@@ -4173,7 +4176,7 @@ def _coverage_records(partition: str) -> list[Record]:
                         surface,
                         index,
                         template,
-                        {"C": (cue, None), "V": (value, label)},
+                        {"C": (cell_cue, None), "V": (value, label)},
                         language,
                         region,
                         VALID if family in COVERAGE_CHECKSUM_FAMILIES else UNCHECKED,
@@ -4213,7 +4216,7 @@ def _coverage_records(partition: str) -> list[Record]:
                             index,
                             template,
                             {
-                                "C": (cue, None),
+                                "C": (cell_cue, None),
                                 "V": (
                                     _coverage_invalid(family, value),
                                     DECOY_PREFIX + family,

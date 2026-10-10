@@ -30,7 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
     "dev": "8024bbdda92507bd866a784b6ae8ac7299bcd0b9f0f81a1ee1d767ff60a4a152",
-    "test": "ff5c3db7fc58ab068a54e0a8543727df529d99aa3f2ffdd097c34eab9c0644b8",
+    "test": "f88429400f79d639aa422e93bea77d3c619f4195cf4ed0d333a3f0d5a9dbd48e",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {

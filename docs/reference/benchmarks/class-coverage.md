@@ -37,7 +37,7 @@ Values are derived from public definitions, not production recognizer regexes.
 Exact citation URLs are pinned in [class-coverage-sources.json](class-coverage-sources.json):
 
 - Aadhaar: UIDAI authentication specification, twelve digits with Verhoeff error detection. The arithmetic implementation includes the independent `2363` checksum example.
-- Numeric CNPJ: Receita Federal MOD-11 specification, twelve payload digits and two check digits, in bare and conventional `XX.XXX.XXX/XXXX-XX` presentations (the latter also specified by ANVISA public form inputs). This family covers the shipped numeric class; the newer alphanumeric CNPJ format is a separate coverage extension.
+- Numeric CNPJ: cues include the official Portuguese name and an English description, exposing differences in cue support. Receita Federal MOD-11 specification, twelve payload digits and two check digits, in bare and conventional `XX.XXX.XXX/XXXX-XX` presentations (the latter also specified by ANVISA public form inputs). This family covers the shipped numeric class; the newer alphanumeric CNPJ format is a separate coverage extension.
 - Ethereum: ERC-55, twenty bytes rendered as forty hexadecimal characters, with Keccak-256 case checksum. Seeded addresses include mixed, all-lower and all-upper case. They are invented test-network addresses, never copied account addresses. Tests verify the arithmetic against ERC-55's published vectors.
 - NIR: Service Public's field definition and the government's MOD-97 key specification. The fictional foreign birthplace `99000` avoids copying an allocated person record.
 - PAN: Income Tax Department's ten-character format. These are generated layout examples, not claims of issuer-valid PAN checksums.
