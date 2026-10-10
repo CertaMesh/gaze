@@ -1,79 +1,69 @@
 # Explanation
 
-Understanding-oriented. These pages explain *why* Gaze works the way it does — the contracts
-behind the never-leak and reversibility guarantees, the conflict-resolution model, and the
-runtime designs. They are for when you want the reasoning, not a recipe. For step-by-step
-tasks see the [how-to guides](../how-to/README.md); for exact surfaces see the
-[reference](../reference/README.md). The repo-root [ARCHITECTURE](../../ARCHITECTURE.md) gives
-the crate-level overview these deep-dives sit under.
+These pages explain Gaze's contracts and runtime designs.
+For tasks, use the [how-to guides](../how-to/README.md); for exact APIs and flags,
+use the [reference](../reference/README.md). [Architecture](../../ARCHITECTURE.md)
+maps the crates.
 
 ## Core
 
-The redact ↔ restore contract that everything else protects.
-
-- **[How Gaze works](how-gaze-works.md)** — start here: one document from input to restore, the seven steps, the modes, and a glossary.
-- **[Feature comparison](feature-comparison.md)** — sourced capabilities and limits alongside other PII tools.
-- **[AI support drafts in production](support-drafts-in-production.md)** — how an app, Gaze,
-  and the LLM split a support reply so the model never sees the customer.
-- **[Restore boundary](core/restore-boundary.md)** — what the manifest-first restore path
-  guarantees and where reversibility ends.
-- **[Session contract](core/session-contract.md)** — the isolation boundary a `Session`
-  owns, snapshot/import rules, and the common pitfalls.
+- [How Gaze works](how-gaze-works.md)
+- [Feature comparison](feature-comparison.md)
+- [AI support drafts in production](support-drafts-in-production.md)
+- [Restore boundary](core/restore-boundary.md)
+- [Session contract](core/session-contract.md)
 
 ## Detection and conflict resolution
 
-How Gaze decides what is PII and what wins when recognizers disagree — the trust-by-evidence
-axis in practice.
-
-- **[Feedback loop](detection/feedback-loop.md)** — the coverage feedback loop behind detection completeness.
-- **[Validator veto](detection/validator-veto.md)** — how validator-backed recognizer failures are rejected before conflict resolution.
-- **[Repeat-value sweep](detection/manifest-sweep.md)** — how every copy of a rule-found value is tokenized across a document and session.
-- **[Caller-known record context](detection/known-record-context.md)** — how an app supplies typed values it already knows for reversible protection.
-- **[Collision family](detection/collision-family.md)** — cross-class recognizer rivalries and how family policy resolves them.
-- **[Anchor resolution](detection/anchor-resolution.md)** — mandatory-anchor resolution and the fail-closed family token.
-- **[Ambiguity side-channel](detection/ambiguity-side-channel.md)** — the optional validator/ambiguity metadata carried into the audit log.
-- **[NER fail-closed](detection/ner-failclosed.md)** — why a missing or failed NER recognizer fails closed rather than silently degrading.
-- **[Recognizer normalizer spans](detection/recognizer-normalizer-spans.md)** — why a normalizer must preserve the original byte span so restore stays exact (an axis-2 reversibility invariant).
+- [Feedback loop](detection/feedback-loop.md)
+- [Validator veto](detection/validator-veto.md)
+- [Repeat-value sweep](detection/manifest-sweep.md)
+- [Caller-known record context](detection/known-record-context.md)
+- [Collision family](detection/collision-family.md)
+- [Anchor resolution](detection/anchor-resolution.md)
+- [Ambiguity side-channel](detection/ambiguity-side-channel.md)
+- [NER fail-closed](detection/ner-failclosed.md)
+- [Recognizer normalizer spans](detection/recognizer-normalizer-spans.md)
 
 ## Policy
 
-- **[Locale chain](policy/locale-chain.md)** — the four-tier locale resolution that gates recognizers.
+- [Locale chain](policy/locale-chain.md)
 
 ## Safety nets
 
-- **[Safety nets](safety-net/safety-nets.md)** — the Pass-3 observer-only check that runs against already-tokenized output without touching the manifest, and the Nym-small backend.
-- **[Safety-net modes](safety-net/safety-net-modes.md)** — resolve, redact, and fallback modes and their typed fallback reasons.
-- **[OpenAI Privacy Filter adapter](safety-net/opf-adapter.md)** — the opt-in `opf` subprocess backend.
-- **[Windows subprocess pipe ownership](safety-net/windows-subprocess-io.md)** — how the subprocess adapter owns its pipes on Windows.
-- **[Safety-net modes: v0.8 design record](safety-net/safety-net-modes-design.md)** — the historical proposal behind the modes, kept for its reasoning.
+- [Safety nets](safety-net/safety-nets.md)
+- [Safety-net modes](safety-net/safety-net-modes.md)
+- [OpenAI Privacy Filter adapter](safety-net/opf-adapter.md)
+- [Windows subprocess pipe ownership](safety-net/windows-subprocess-io.md)
+- [Safety-net modes: v0.8 design record](safety-net/safety-net-modes-design.md)
 
 ## Pipeline
 
-- **[Tier-4 pipeline gating](pipeline/tier4-pipeline-gating.md)** — the opt-in skip-gating, capitals heuristic, prefix cache, and length-bucketing optimizations.
+- [Tier-4 pipeline gating](pipeline/tier4-pipeline-gating.md)
 
 ## Proxy
 
-- **[Proxy runtime](proxy/proxy-runtime.md)** — the API-key chokepoint design for the OpenAI, Anthropic, and Gemini base-URL paths.
-- **[Strict Anthropic Messages contract](proxy/anthropic-messages-contract.md)** — the exact direct route, headers, admitted JSON/SSE surfaces, proof boundary, inspection trust model, migration, and retained official-SDK gate.
+- [Proxy runtime](proxy/proxy-runtime.md)
+- [Strict Anthropic Messages contract](proxy/anthropic-messages-contract.md)
 
 ## Dashboard
 
-- **[Dashboard trust boundary](dashboard/trust-boundary.md)** — the opt-in, default-off inspection dashboard's process isolation, capture-domain acknowledgements, pairing protocol, and fail-closed activation contract.
+- [Dashboard trust boundary](dashboard/trust-boundary.md)
 
 ## MCP
 
-- **[MCP runtime](mcp/mcp-runtime.md)** — the transport-free MCP-shaped chokepoint runtime.
-- **[MCP bridge](mcp/mcp-bridge.md)** — the optional, policy-gated MCP bridge and its trust-inversion model.
+- [MCP runtime](mcp/mcp-runtime.md)
+- [MCP bridge](mcp/mcp-bridge.md)
 
 ## Daemon
 
-- **[Daemon mode](daemon/daemon-mode.md)** — the JSONL/stdio protocol, per-session manifest registry, and eviction model.
+- [Daemon mode](daemon/daemon-mode.md)
 
 ## Document
 
-- **[Document extension](document/document-extension.md)** — the document-ingestion design: OCR → redact → `SafeBundle`.
+- [Document extension](document/document-extension.md)
 
 ## Project
 
-- **[Governance](governance.md)** — who decides what, the DCO-without-CLA model, and the open-detection commitment.
-- **[xtask gates](contributing/xtask-gates.md)** — the gate runner and the audit-sink protected-path enforcement design.
+- [Governance](governance.md)
+- [xtask gates](contributing/xtask-gates.md)

@@ -1,36 +1,27 @@
 # Nym's neutral token view
 
-Nym scans text after Gaze has already replaced some PII with manifest tokens.
-Those tokens change the words around an uncovered value, so a model decision
-can change when a nearby deterministic recognizer begins tokenizing. Gaze
-therefore gives Nym two views of the same clean text and joins their findings.
+Nym scans two views because nearby Gaze tokens can change a model's decision
+about an uncovered value. Neither view changes observable output or restore.
 
-The existing **stable view** replaces each verified token's session hex with a
-deterministic digest of its shape. The **neutral view** replaces each verified
-ASCII token with `[PII]` followed by spaces to the token's original byte
-length. Both views preserve every UTF-8 byte boundary outside and inside the
-replaced token, so a finding's byte span still refers to the observable clean
-text. Unowned token-shaped input stays literal. Tokens with non-ASCII bytes are
-left out of the neutral view because replacing them with ASCII would change
+| View | Verified-token replacement |
+|---|---|
+| Stable | Session hex becomes a deterministic digest of token shape |
+| Neutral | ASCII token becomes `[PII]` plus spaces to its original byte length |
+
+Both preserve UTF-8 boundaries and offsets. Unowned token-shaped input stays
+literal. Non-ASCII tokens are excluded from neutral masking to avoid changing
 character boundaries.
 
-Nym checks both views on the initial safety-net pass and every follow-up pass.
-The stable findings keep their spans and scores. A neutral finding is mapped
-to the exposed gaps in the observable text; bytes inside manifest tokens or
-already covered by a stable finding are omitted. Its remaining gaps become
-separate findings. This avoids handing the resolver two overlapping actions
-when the views disagree about a finding's edges or class. An exact same-class
-action records `view=stable+neutral`; otherwise audit labels record
-`view=stable` or `view=neutral`. The observable clean text, manifest, and
-restore path never use the neutral view.
+Every initial/follow-up pass checks both views. Stable findings keep scores
+and spans. Neutral findings are split into exposed gaps, excluding manifest
+tokens and bytes already covered by stable findings. This prevents overlapping
+actions when views disagree. Exact same-class actions record
+`view=stable+neutral`; others record `view=stable` or `view=neutral`.
 
-Neutral-only findings also keep the class's meaning: a room, suite, unit,
-apartment, office, floor, or desk number is not a building's street number,
-and one bare character is not a complete date. These checks do not remove findings
-from the stable view. They are separate from the pagination-key guard.
+Neutral-only checks reject room/suite/unit/apartment/office/floor/desk numbers
+as street-building numbers and a bare character as a complete date. Stable
+findings remain unchanged; the pagination-key guard is separate.
 
-Only Nym opts into this second scan. Other safety nets still receive the stable
-view once. Nym inference may run twice per pass when verified tokens are
-present. Failure in either view fails the scan closed. The benchmark gain gate
-and per-label review decide whether the added findings are safe to adopt;
-direct model replays alone cannot establish that.
+Only Nym uses the second view. With verified tokens, it may infer twice per
+pass; either failure fails closed. Other nets receive one stable scan.
+Adoption requires benchmark gain and per-label review, not only model replays.

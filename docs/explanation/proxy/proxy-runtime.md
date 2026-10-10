@@ -25,33 +25,22 @@ Adapters implement `ProviderAdapter`:
 Adapters do not decide what is PII. They only describe where strings live; the
 configured `gaze::Pipeline` and recognizer registry make detection decisions.
 
-Each surface also declares its `SurfaceSyntax`, which decides how restore
-writes a raw value back:
+Each surface declares restore syntax. Protection scans its text as supplied.
 
-- `Text`: the raw value is written byte for byte.
-- `Json`: the surface is a serialized JSON document, such as
-  `tool_calls[].function.arguments` or a Responses `function_call` or
-  `mcp_call` item's `arguments`. A token can only stand inside one of its
-  string literals, so restore JSON-escapes the raw value. A verbatim `"`, `\`, or control character
-  would break the document or change the value the agent parses. The escape
-  does not depend on where the literal's quotes are, so it stays correct when a
-  streamed fragment carries the token and a neighbouring SSE event carries the
-  quotes. The one exception is a value the request carried inside a JSON string
-  literal, such as a field of a JSON tool result. The manifest stores that value
-  in its escaped spelling (`\"`, `\u00fc`), so restore writes it into a JSON
-  document as it is. The legacy session records which tokens those are.
-  Known limit: the manifest keeps only that escaped spelling, so the same value
-  restores into a `Text` destination with its escapes (`\"`, `\u00fc`), not
-  decoded. Recording the spelling per token is planned for v0.16.
-- `ModelOutput`: answer text. It restores as `Json` when
-  `requests_json_output` is true and as `Text` otherwise. OpenAI reads
-  `response_format.type` (Chat Completions) or `text.format.type` (Responses)
-  for `json_object` or `json_schema`. Gemini reads
-  `generationConfig.responseMimeType` for `application/json`; thought summaries
-  stay `Text`.
+| `SurfaceSyntax` | Restore |
+|---|---|
+| `Text` | Original bytes |
+| `Json` | Escape values inside serialized JSON string literals, including tool/function/MCP arguments; works across SSE fragment boundaries |
+| `ModelOutput` | `Json` when JSON output was requested, otherwise `Text` |
 
-Only restore reads the syntax. Request protection scans each surface's text as
-it stands.
+A value received inside a JSON string is stored in escaped spelling and written
+as-is into JSON. Legacy sessions record these tokens; restoring the same value
+into `Text` retains its escapes (`\"`, `\u00fc`) rather than decoding them.
+
+OpenAI detects `json_object` / `json_schema` in `response_format.type`
+(Chat Completions) or `text.format.type` (Responses). Gemini detects
+`generationConfig.responseMimeType = application/json`; thought summaries stay
+`Text`.
 
 ## Provider surface matrix
 
@@ -68,36 +57,28 @@ opaque media surfaces, and proves the complete transformed request or response.
 
 ## Safety nets and refusals
 
-With a safety net configured, such as Nym in the policy `gaze setup` writes,
-each surfaced request string goes through three steps before provider I/O:
+Configured nets, including setup-policy Nym, enforce this request path before
+provider I/O:
 
-1. The primary pipeline tokenizes what the rules detect.
-2. The nets scan the result, and every span they flag becomes a restorable
-   token. This is the Resolve step that
-   `gaze clean --safety-net-fallback strict` runs, through the same library
-   function, so the proxy forwards what that command prints for the same text
-   and policy. A date that Nym flags as `DATE_OF_BIRTH` is forwarded as
-   `<…:Custom:date_1>` and restored in the response.
-3. Admission scans the final text once more and refuses any raw span a net
-   still flags.
+```mermaid
+flowchart LR
+    A[Primary tokenization] --> B[Resolve with strict fallback]
+    B --> C[Final admission scan]
+    C -->|no flagged raw span| D[Provider I/O]
+    B -->|cannot tokenize| E[Refuse]
+    C -->|residual or failure| E
+```
 
-The proxy never deletes flagged bytes one way. Whatever step 2 cannot turn into
-a token, and whatever step 3 still flags, is refused before anything reaches
-the provider.
+This shares the library path used by `gaze clean --safety-net-fallback strict`.
+The proxy never deletes flagged bytes one way or performs clean's extra
+redact-fallback batch. A Nym `DATE_OF_BIRTH` may become
+`<…:Custom:date_1>`. A `user <handle> born <ISO date>` case that clean's default
+handles with username/birth-date tokens can still be refused as
+`residual_suspect` for `custom:date` / `custom:username`.
 
-This is where the proxy differs from plain `gaze clean`. Clean's default
-`redact` fallback goes further when the nets' re-run flags something new: it
-runs a second reversible tokenize batch and deletes what is still left one way
-as `[REDACTED:<class>]`. A network boundary never does either. For example,
-under the `gaze setup` policy, `user <handle> born <ISO date>` (an
-alphanumeric handle and a `YYYY-MM-DD` date) comes out of `gaze clean` as
-three tokens: two `custom:username` tokens, one for the handle and one for the
-word `born`, and one `custom:birth_date` token, while the proxy refuses it with
-`residual_suspect` for `custom:date` and `custom:username`.
-
-The nets only find what they flag. A span no net flags and no rule detects,
-such as a `DD.MM.YYYY` date without a cue Nym scores high enough, is forwarded
-raw, exactly as `gaze clean` prints it.
+Undetected PII still passes, for example an uncued `DD.MM.YYYY` date below
+Nym's threshold. With no configured net, resolution/admission do nothing and
+only primary protection runs.
 
 A refusal carries its reason, never the text:
 

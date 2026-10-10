@@ -2,18 +2,13 @@
 
 ## Scope
 
-`gaze-mcp` enforces the chokepoint on the **data-source ↔ model** path. Any data flowing **from a source through an agent-tier MCP tool to the model** passes through `PiiEnvelope::dispatch` and is protected before the model sees it. Authorized operator-tier tools can explicitly bypass response protection for restore/export semantics; their raw responses must stay on the operator surface.
+`gaze-mcp-core` protects source data passing through agent-tier MCP tools.
+Every call uses `PiiEnvelope::dispatch`. Authorized operator tools may bypass
+response protection for restore/export; raw responses must stay owner-side.
 
-`gaze-mcp` **does not** cover the **user ↔ model** path. Pasted text, uploaded files, and screenshots in the agent host's chat UI reach the model unredacted. For that axis, see `gaze-proxy` (shipped in v0.8.0 — multi-vendor reverse proxy supporting Anthropic, OpenAI, Gemini; [proxy runtime](../proxy/proxy-runtime.md)).
-
----
-
-This document specifies the runtime contract `gaze-mcp-core` has shipped since v0.7 and
-the threat model adopters can rely on. It is the source of truth for the
-type-level chokepoint guarantees. The architectural rationale, per-axis
-trade-offs, and scope split between `gaze-mcp` (model↔source) and `gaze-proxy`
-(user↔model) are summarized in the boundary statement above and in the v0.7.0
-CHANGELOG entry.
+Chat paste, uploads, and screenshots bypass MCP and reach the model without
+this protection. Use a host preprocessor or the API-key
+[proxy](../proxy/proxy-runtime.md) on that path.
 
 ## The chokepoint
 
@@ -23,116 +18,69 @@ Every tool call traverses this sequence in order:
 
 | Step | Action | Failure mode |
 |---|---|---|
-| 1 | Validate transport-supplied session id via `SessionIdPolicy` | `DispatchError::SessionId`; **no manifest row** |
-| 2 | Look up tool in `ToolRegistry` | `DispatchError::UnknownTool`; **no manifest row** |
-| 3 | Authorize via `AuthHook::authorize_agent` or `_operator` (driven by `ToolDescriptor::tier`) | `DispatchError::Auth`; **no manifest row** |
-| 4 | Preflight argument carriers, then protect raw args via `gaze::Pipeline::protect_text_transaction` (the staged args transaction commits after `begin_call`) | `DispatchError::Carrier` / `DispatchError::Protection` for preflight and protect — **no manifest row**; `DispatchError::Transaction` for the post-begin commit — **fail_call written first** |
-| 5 | `ManifestStore::begin_call(BeginCallContext)` | `DispatchError::Manifest`; **no manifest row written** |
+| 1 | Validate transport-supplied session id via `SessionIdPolicy` | `DispatchError::SessionId`; no manifest row |
+| 2 | Look up tool in `ToolRegistry` | `DispatchError::UnknownTool`; no manifest row |
+| 3 | Authorize via `AuthHook::authorize_agent` or `_operator` (driven by `ToolDescriptor::tier`) | `DispatchError::Auth`; no manifest row |
+| 4 | Preflight argument carriers, then protect raw args via `gaze::Pipeline::protect_text_transaction` (the staged args transaction commits after `begin_call`) | `DispatchError::Carrier` / `DispatchError::Protection` for preflight and protect — no manifest row; `DispatchError::Transaction` for the post-begin commit — fail_call written first |
+| 5 | `ManifestStore::begin_call(BeginCallContext)` | `DispatchError::Manifest`; no manifest row written |
 | 6 | Build the sealed `ToolCtx` (only construction site in the crate) | — |
-| 7 | `Tool::invoke(&ctx).await` | `DispatchError::ToolError`; **fail_call written first** |
-| 8 | For `ResponseRedaction::Apply`, preflight response carriers, then stage response protection via `gaze::Pipeline::protect_text_transaction`. Operator-tier `BypassByOperator` uses the raw payload with no preflight, protection, or response transaction; agent-tier bypass is rejected | `DispatchError::Carrier` / `DispatchError::Protection`, or `DispatchError::Redaction` for the agent-bypass rejection; **fail_call written first** |
-| 9 | Compute out-of-row `SnapshotRef` over the response payload (protected for `Apply`, raw for operator bypass) | `DispatchError::ResponseSerialization`; **fail_call written first** |
-| 10 | Commit the staged response transaction, if present, after snapshot computation | `DispatchError::Transaction`; **fail_call written first** |
+| 7 | `Tool::invoke(&ctx).await` | `DispatchError::ToolError`; fail_call written first |
+| 8 | For `ResponseRedaction::Apply`, preflight response carriers, then stage response protection via `gaze::Pipeline::protect_text_transaction`. Operator-tier `BypassByOperator` uses the raw payload with no preflight, protection, or response transaction; agent-tier bypass is rejected | `DispatchError::Carrier` / `DispatchError::Protection`, or `DispatchError::Redaction` for the agent-bypass rejection; fail_call written first |
+| 9 | Compute out-of-row `SnapshotRef` over the response payload (protected for `Apply`, raw for operator bypass) | `DispatchError::ResponseSerialization`; fail_call written first |
+| 10 | Commit the staged response transaction, if present, after snapshot computation | `DispatchError::Transaction`; fail_call written first |
 | 11 | `ManifestStore::finish_call(handle, snapshot)` | `DispatchError::Manifest` |
 | — | Return the response payload (protected for `Apply`, raw for operator bypass) | — |
 
-The first three steps are pre-manifest by design: a denied request leaves
-no audit-log noise. Once `begin_call` returns Ok, the dispatcher
-guarantees one of `finish_call` or `fail_call` runs before the function
-returns. There is no third path. The `tests/chokepoint_ordering.rs`
-golden tests assert the contract.
+Validation, lookup, auth, and argument preflight happen before the manifest.
+After `begin_call` succeeds, dispatch runs either `finish_call` or `fail_call`
+before returning. `tests/chokepoint_ordering.rs` pins the order.
 
 ## Type-level seal
 
-The chokepoint guarantee depends on tools being unable to fabricate or
-reuse a `ToolCtx` outside `dispatch`. The seal has four layers:
+| Seal | Effect |
+|---|---|
+| `pub(crate) ToolCtx::new` | No external constructor |
+| Private fields + `#[non_exhaustive]` | No external struct literal |
+| `ToolCtx<'a>` borrows dispatch-owned context | Cannot retain context beyond the call |
+| `ToolRegistry::register<T: Tool + 'static>` | No raw closure registration; tools implement `descriptor` and `invoke` |
 
-1. **`pub(crate) fn ToolCtx::new`.** External crates cannot call the
-   constructor. Verified at compile time by
-   `crates/gaze-mcp-core/tests/ui/tool_ctx_no_external_constructor.rs`.
-2. **`pub(crate)` fields + `#[non_exhaustive]`.** External crates cannot
-   build one via struct literal either. Verified by
-   `tests/ui/tool_ctx_no_struct_literal.rs`.
-3. **Lifetime binding `ToolCtx<'a>`.** The dispatcher's stack frame owns
-   the borrowed pieces (`&'a str` for tool name, principal id, audit
-   session id; `serde_json::Value` for redacted args). Tools cannot
-   stash the context across the call boundary.
-4. **`ToolRegistry::register<T: Tool + 'static>(t)`.** Closures cannot
-   masquerade as tools — registration only accepts types that implement
-   the `Tool` trait. The trait's only methods (`descriptor`, `invoke`)
-   take a `&ToolCtx<'_>` they can't recreate.
+Compile-fail fixtures in `crates/gaze-mcp-core/tests/ui` verify construction
+is unavailable. Tools receive `&ToolCtx<'_>`.
 
 ## Agent vs operator tier
 
-Tools carry a `ToolDescriptor::tier` enum (`Agent` | `Operator`). The
-dispatcher reads this per call:
+`ToolDescriptor::tier` chooses `AuthHook::authorize_agent` or
+`authorize_operator`. Default `DenyAllAuthHook` denies missing authorization.
 
-- `ToolTier::Agent` → `AuthHook::authorize_agent(principal, tool_name)`
-- `ToolTier::Operator` → `AuthHook::authorize_operator(principal, tool_name)`
-
-The `operator-tier` Cargo feature controls whether the built-in
-operator-tier tools (`RestoreTool`, `RestoreStrictTool`,
-`ExportManifestTool`) are linked at all. Default builds expose only the
-agent surface: `tools::{export, restore, restore_strict}` and the
-`operator_tools` re-export module are each behind
-`#[cfg(feature = "operator-tier")]`, so rustc excludes them from an
-agent-tier build.
-
-The `mcp-tier-isolation` xtask gate
-([`crates/xtask/src/mcp_tier_isolation.rs`](../../../crates/xtask/src/mcp_tier_isolation.rs))
-is the check that those gates stay in place. It runs the `tier_isolation`
-integration test under four feature graphs. In the agent-tier graphs that
-test drives `trybuild` compile-fail fixtures
-([`crates/gaze-mcp-core/tests/ui/tier`](../../../crates/gaze-mcp-core/tests/ui/tier)),
-one per gated surface: each is built as an external crate against the same
-feature graph and must fail to resolve the operator path it names. Remove a
-`cfg` gate and the corresponding fixture compiles, which fails the gate and
-names the surface. Each graph also declares the tests it must observe
-passing, because `cargo test` exits 0 for zero tests.
-
-The `gaze_dylint` protected-path lint
-([`lint/dylint`](../../../lint/dylint)) lists `crates/gaze-mcp-core/src` so
-any future change attempting to pull `gaze_audit::*` (or other
-`forbidden_items`) into the chokepoint runtime is rejected at build time.
+The default-off `operator-tier` feature gates `RestoreTool`,
+`RestoreStrictTool`, `ExportManifestTool`, `tools::{export, restore,
+restore_strict}`, and `operator_tools`. Default agent builds cannot link them.
+`mcp-tier-isolation` runs four core feature graphs with external `trybuild`
+fixtures, and requires named tests so zero tests cannot pass the gate.
+The [Dylint protected paths](../../../lint/dylint) also reject forbidden
+`gaze_audit::*` imports in the core.
 
 ## rmcp transport sink
 
-`gaze-mcp-rmcp` is the rmcp-backed transport adapter for this runtime. It
-implements `Frontend` as `RmcpFrontend` and translates only wire-level objects:
+`gaze-mcp-rmcp::RmcpFrontend` maps descriptors to rmcp tools, call requests to
+`(tool_name, raw_args, external_session_id)`, and responses to rmcp results.
+It sees only `Arc<dyn DispatchHost>`; with the core wrapper every call traverses
+`PiiEnvelope::dispatch`. A failed `ManifestStore::finish_call` returns an error,
+never the tool payload.
 
-- `ToolDescriptor` -> rmcp `Tool` for `tools/list`.
-- rmcp `CallToolRequestParam` -> `(tool_name, raw_args, external_session_id)`.
-- `ToolResponse` -> rmcp `CallToolResult`.
+| Feature | Transport |
+|---|---|
+| `transport-stdio` (default) | Process stdio |
+| `transport-http` | Axum streamable HTTP at `/mcp` |
 
-The adapter never receives `PiiEnvelope` internals. It sees only
-`Arc<dyn DispatchHost>`, so every `tools/call` request still returns through
-`PiiEnvelope::dispatch` when adopters use the core host wrapper. The rmcp smoke
-tests exercise this via an in-process rmcp client/server transport, and the
-manifest-persistence test routes through a real `PiiEnvelope` with a failing
-`ManifestStore::finish_call`; the client receives an error result instead of
-the tool payload.
+Adopters supply `PrincipalResolver`; `FixedPrincipalResolver` serves local
+stdio/tests. Listing hides operator tools from non-operator principals, but
+authorization still happens in dispatch.
 
-Transports:
-
-- `transport-stdio` (default): process stdio, standard for local agent hosts.
-- `transport-http`: rmcp streamable HTTP served via axum at `/mcp`.
-
-`PrincipalResolver` is adopter-supplied and maps rmcp request context to
-`Principal`. `FixedPrincipalResolver` exists for local stdio servers and tests.
-The adapter filters operator-tier tool descriptors from `tools/list` unless the
-resolved principal has the `operator` role, but this is not the authorization
-boundary. Authorization still happens inside `PiiEnvelope::dispatch` through
-`AuthHook`.
-
-rmcp 0.2 has no dedicated Gaze session-id carrier, so the adapter reserves a
-top-level `_session_id` argument key. It removes that key before dispatch and
-passes the value as `external_session_id`; `SessionIdPolicy` validates it before
-the manifest opens.
-
-The `mcp-tier-isolation` xtask gate covers `gaze-mcp-rmcp` under
-`transport-stdio`, `transport-stdio,transport-http`, and `--no-default-features`
-graphs so transport feature changes do not accidentally pull in an operator
-surface by default.
+rmcp 0.2 reserves top-level `_session_id`; the adapter removes it before
+calling dispatch, which validates it through `SessionIdPolicy` before opening
+the manifest. Isolation tests cover stdio, stdio+HTTP, and no-default-feature
+graphs to keep operator surfaces out of default transport builds.
 
 ## Manifest contract
 
@@ -143,17 +91,10 @@ is async + Send + Sync and has three methods:
 - `finish_call(handle, snapshot: SnapshotRef) -> Result<(), ManifestError>`
 - `fail_call(handle, reason: FailureReason) -> Result<(), ManifestError>`
 
-`SnapshotRef` is intentionally **out-of-row metadata only**: locator
-string, sha256 hex, byte length. The dispatcher never writes response
-bytes to a side store. Adopters who want byte-level persistence wrap
-their `ManifestStore` impl with their own snapshot store and persist
-before calling `finish_call`. Inline blobs were rejected during design
-review because they would defeat encrypted-volume threat models that
-keep response payloads on adopter-controlled storage.
-
-External session id binding (lens's
-`lens_session_id`/`gaze_audit_session_id` pair, gaze-cli's audit ulid)
-lives in the `ManifestStore` impl constructor — the trait is generic.
+`SnapshotRef` stores only locator, SHA-256 hex, and byte length, not response
+bytes. Adopters needing payload persistence must wrap their store and persist
+before `finish_call`, using owner-controlled storage. External session binding
+belongs in the `ManifestStore` implementation constructor.
 
 ### Audit row fields the dispatcher provides
 
@@ -178,31 +119,19 @@ On the success path, the adopter additionally records the
 
 ## Threat model
 
-| Threat | Mitigation |
+| Threat | Boundary |
 |---|---|
-| Tool reads PII from data source and returns it raw | Step 8 redacts response before `finish_call`; response cannot escape until persisted |
-| Adopter forgets to wire auth | `DenyAllAuthHook` is the default fail-closed policy; `MissingHook` lands in the audit log |
-| Tool fabricates a `ToolCtx` to bypass the redaction step | Type-level seal (4 layers above) makes construction unrepresentable |
-| Tool stashes a `ToolCtx` across calls | Borrow checker rejects: lifetime `'a` is the dispatcher frame |
-| Closure registers as a tool to skip the trait | `ToolRegistry::register<T: Tool>` only — no `register_raw` |
-| Restore exposed by default | `operator-tier` Cargo feature is opt-in; default builds don't link the symbols |
-| Operator surface lit up without auth | `authorize_operator` is the only path; `DenyAllAuthHook` returns `MissingHook` |
-| Audit-sink coupling drift in chokepoint | `cargo-metadata-audit-isolation` xtask + dylint protected-path lint both reject `gaze_audit::*` from gaze-mcp-core |
-| **User pastes PII into chat UI** | **Out of scope** — `gaze-proxy` (shipped in v0.8.0) covers user→model axis. See top-of-doc boundary statement. |
+| Raw source result | Protect response and persist completion before return |
+| Missing auth | `DenyAllAuthHook`; no authorized tool invocation |
+| Fabricated/reused context | Constructor, fields, and lifetime seal |
+| Raw closure bypass | Trait-only registration |
+| Restore accidentally exposed | Default-off feature plus operator auth |
+| Audit dependency drift | Metadata isolation gate plus Dylint |
+| Chat paste/uploads/screenshots | Outside MCP; protect before provider receives input |
 
 ## Out of scope
 
-The boundary statement at the top of this document is mandatory in every
-README + architecture doc the gaze-mcp project ships. The user-input axis
-(paste-into-chat, multimodal uploads, screenshots) is **not** covered by
-gaze-mcp because:
-
-- MCP tools are **model-callable**, not pre-input filters. The user's
-  bytes reach the LLM service before the model decides to call any tool.
-- Under GDPR Art. 4(2), receipt by the LLM service is processing.
-- Pre-input filtering needs a different mechanism (host-side
-  preprocessor, vendor-agnostic API reverse proxy, or workflow
-  discipline) — `gaze-proxy`, shipped in v0.8.0.
-
-The v0.7.0 CHANGELOG entry captures the model↔source vs user↔model
-split; the v0.8.0 entry records the `gaze-proxy` release.
+MCP tools run after user input reaches the model service; receipt already
+constitutes processing. Every MCP README and architecture page must state this
+source-tool versus user-input boundary. A proxy, host preprocessor, or workflow
+that filters before submission is needed for user input.

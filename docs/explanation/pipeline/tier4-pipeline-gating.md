@@ -25,21 +25,14 @@ recognizer floor, do not change token shapes, and are default-off through
 
 ## Invariants
 
-- Prefix reuse is disabled even when explicitly enabled; the other flags retain
-  their existing behavior.
-- Gates only reduce observer-only Pass-3 calls. They never suppress a
-  resolve/redact SafetyNet pass.
-- No cached decision is trusted across fields, pipelines, locales, dictionaries,
-  or calls. Immutable configuration identity cannot certify stateful custom
-  recognizers/rules, and an appended suffix can complete an entity across a
-  cached boundary (for example, `alice@` followed by `example.invalid`).
-- Both `PrefixCacheWriteMode::Allow` and `Suppress` perform full scans without
-  prefix storage. Token mappings, manifest offsets, transaction commit/drop and
-  logger error propagation retain the normal full-scan behavior.
-- Disabling prefix reuse intentionally trades opted-in prefix-cache throughput
-  for detection correctness. Repeated growing inputs scan all bytes each time,
-  as with the default configuration; token mappings remain reusable and
-  restorable.
+Observer gates never suppress `Resolve` or `Redact`. Prefix reuse is disabled
+under both `PrefixCacheWriteMode::Allow` and `Suppress`: every call scans all
+bytes and stores no raw prefix. This trades opted-in throughput for correctness.
+
+Configuration identity cannot certify stateful custom detectors. An appended
+suffix can complete `alice@` into an email, so no cached decision crosses
+fields, pipelines, locales, dictionaries, or calls. Token reuse, manifest
+offsets, transaction commit/drop, and logger errors retain full-scan behavior.
 
 ## Bench snapshot
 

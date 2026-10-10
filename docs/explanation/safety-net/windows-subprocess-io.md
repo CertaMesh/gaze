@@ -1,40 +1,32 @@
 # Windows subprocess pipe ownership
 
-OPF, the only subprocess safety net, retains inference with diagnostics enabled
-or disabled. It uses the same existing deadline, bounded stdout, finite-memory stderr drain, and joined
-worker lifecycle as Unix. No parser, detector, or registry behavior changes.
+OPF uses the same deadline, bounded stdout, finite-memory stderr drain, and
+joined worker lifecycle on Windows with diagnostics enabled or disabled.
 
 ## Adapter and ownership
 
-Only freshly spawned `ChildStdin`, `ChildStdout`, and `ChildStderr` enter the
-private Windows adapter. Their handles are moved into one worker each, never
-cloned or exposed to another reader. All configuration completes before workers
-start; a setup error kills/reaps the direct child and drops all pipe owners.
+Freshly spawned stdin/stdout/stderr handles each move into one private worker.
+They are never cloned or shared with another reader. Configure before starting
+workers; setup failure kills/reaps the direct child and drops all pipe owners.
 
-For stdin, `SetNamedPipeHandleState(PIPE_NOWAIT)` makes writes return without
-waiting for the reader. Partial writes advance normally; a successful zero-byte
-write of nonempty input means backpressure and retries after a cancellation
-check. Other write errors remain errors. Flush checks cancellation only because
-`ChildStdin` has no userspace buffer; `FlushFileBuffers` would wait for the peer.
+| Pipe | Nonblocking operation |
+|---|---|
+| stdin | `SetNamedPipeHandleState(PIPE_NOWAIT)`; advance partial writes, retry zero-byte nonempty writes after cancellation check, preserve other errors |
+| stdout/stderr | `PeekNamedPipe`; retry empty-connected pipes, treat broken pipe as EOF, read at most available bytes, preserve other errors |
 
-For stdout/stderr, `PeekNamedPipe` queries available bytes. Empty but connected
-means retry, not EOF. Broken pipe means EOF; other errors remain errors. Each read
-consumes at most the available count. Exclusive ownership is essential: a writer
-may append or close but cannot consume the bytes between peek and read. Windows
-read-only std child handles do not have the `FILE_WRITE_ATTRIBUTES` access needed
-to set their wait mode, so reads use availability instead.
+Exclusive readers prevent consumption between peek and read. Read-only std
+handles lack `FILE_WRITE_ATTRIBUTES`, so they cannot set wait mode. Stdin flush
+only checks cancellation: `ChildStdin` has no userspace buffer and
+`FlushFileBuffers` would wait for the peer.
 
-Rust 1.96 creates overlapped parent handles for `Stdio::piped()`, which matters
-because Microsoft warns that peeking a synchronous handle in a multithreaded application
-can block. This adapter must not be generalized to arbitrary files, borrowed
-handles, or second consumers. Native CI exercises the actual Rust-created pipes.
+Rust 1.96 creates overlapped parent `Stdio::piped()` handles. Synchronous
+handles can block while peeking in multithreaded code; do not generalize this
+adapter to arbitrary files, borrowed handles, or second consumers.
 
-There is no custom pending overlapped request, cancellation callback, duplicated
-thread handle, or cancellation helper thread. The existing cancellation flag is
-checked before every operation, including continuous progress. Cancellation
-between a check and an operation permits at most that bounded operation before
-the next check. All workers join and close their handles before the caller
-returns. Unix's `O_NONBLOCK` implementation is unchanged.
+No custom pending request, callback, duplicate thread handle, or helper thread
+is used. Cancellation is checked before every operation, including continuous
+progress; a race permits at most one bounded operation before the next check.
+All workers join and close handles before return. Unix `O_NONBLOCK` is unchanged.
 
 ## Evidence and limits
 

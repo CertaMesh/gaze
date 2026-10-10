@@ -1,26 +1,20 @@
 # Safety-net modes
 
-A safety net rereads Gaze's clean output and reports suspects: bytes that look
-like PII the deterministic pipeline did not tokenize. The net itself never
-edits anything ([observer-only contract](safety-nets.md#observer-only-contract)).
-The safety-net **mode** decides what the pipeline does with those suspects, and
-the **fallback** decides what happens when the chosen mode cannot finish the
-job.
-
-The default is `resolve` with a `redact` fallback. Set the mode and fallback
-with `--safety-net-mode` and `--safety-net-fallback`; `gaze clean` and
-`gaze daemon` share the same two flags. In Rust, pass a `SafetyNetPolicy` to
-`Pipeline::clean_with_safety_net_policy_detect_context`;
-`SafetyNetPolicy::default()` is the same `resolve` + `redact` pair.
+A safety net reports suspect PII in clean output; only the core acts on it.
+The default is `resolve` with `redact` fallback.
+`gaze clean` and `gaze daemon` use `--safety-net-mode` /
+`--safety-net-fallback`. Rust callers pass `SafetyNetPolicy` to
+`Pipeline::clean_with_safety_net_policy_detect_context`; its default is the
+same pair. See the [observer contract](safety-nets.md#observer-only-contract).
 
 ## The four modes
 
 | Mode | What happens to a suspect | Reversible? | Production use |
 |---|---|---|---|
-| `resolve` **(default)** | The suspect span is tokenized directly as a normal, restorable token of the suspect's class (family `safety_net`); the nets then run once more. What resolve cannot handle goes to the fallback. | Yes, for every resolved suspect | Default |
-| `redact` | The suspect span is replaced with a one-way `[REDACTED:<class>]` marker, and an audit row is written. There is no fallback. | No, for that span | Opt-in, when you want to skip the resolve pass |
-| `strict` | Nothing is changed; the report is returned. The CLI refuses the document (exit code `3`, empty stdout) when an `Uncovered` or `PartialBleed` suspect remains; a `ClassMismatch`-only report gets the stderr warning and ships. | Nothing was sent | Opt-in, when an uncovered suspect must stop the run |
-| `tolerant` | Nothing is changed; the CLI prints a warning and ships the document. **The suspect reaches the model.** | Yes | Never. Development only |
+| `resolve` (default) | Tokenize directly in family `safety_net`, scan again, then fallback on residuals. | Yes, for every resolved suspect | Default |
+| `redact` | Write `[REDACTED:<class>]` and audit; no fallback. | No, for that span | Opt-in, when you want to skip the resolve pass |
+| `strict` | Return report unchanged; CLI exits `3` with empty stdout for `Uncovered` / `PartialBleed`. `ClassMismatch`-only warns and ships. | Nothing was sent | Opt-in, when an uncovered suspect must stop the run |
+| `tolerant` | Warn and ship unchanged suspect bytes. | Yes | Never. Development only |
 
 Two kinds of finding are never acted on in any mode:
 
@@ -38,7 +32,7 @@ Two kinds of finding are never acted on in any mode:
 |---|---|---|---|
 | `strict` | any | `Observe { strict: true }` | report only; the CLI boundary exits `3` |
 | `tolerant` | any | `Observe { strict: false }` | report only; the CLI boundary warns and ships |
-| `redact` | any | `Redact` | replace every suspect span with a marker; **no fallback** |
+| `redact` | any | `Redact` | replace every suspect span with a marker; no fallback |
 | `resolve` | `f` | `Resolve { on_residual: f }` | tokenize, re-run the nets, apply `f` to the residual |
 
 The test `safety_net_policy_lowering_covers_all_twelve_representable_pairs` in
@@ -46,11 +40,11 @@ The test `safety_net_policy_lowering_covers_all_twelve_representable_pairs` in
 
 Under `resolve`, a suspect goes to the fallback for one of two reasons:
 
-- **`OverlapConflict`**: the suspect is a `ClassMismatch` that does not lie
+- `OverlapConflict`: the suspect is a `ClassMismatch` that does not lie
   wholly inside one live token or redaction marker, so tokenizing it would
   re-tokenize a token; or its span does not match the manifest and no complete
   multi-gap plan covers it; or two planned spans overlap.
-- **`ResidualSuspect`**: after the one resolve pass, the re-run still reports a
+- `ResidualSuspect`: after the one resolve pass, the re-run still reports a
   suspect; or the suspect span splits a UTF-8 character.
 
 `ValidatorVeto` and `AnchorMissing` exist in the closed `FallbackReason` enum
@@ -64,7 +58,7 @@ The three fallbacks:
 
 | `--safety-net-fallback` | What happens to a residual suspect |
 |---|---|
-| `redact` **(default)** | Tokenized when every residual the post-resolve re-run found can be tokenized reversibly; otherwise all of them are replaced with a one-way `[REDACTED:<class>]` marker. A first-pass refusal is always replaced with the marker. |
+| `redact` (default) | Tokenized when every residual the post-resolve re-run found can be tokenized reversibly; otherwise all of them are replaced with a one-way `[REDACTED:<class>]` marker. A first-pass refusal is always replaced with the marker. |
 | `strict` | The document is rejected with `Error::SafetyNetFallback(reason)`; the CLI exits `3`. |
 | `tolerant` | The residual bytes ship. Development only. |
 
@@ -79,42 +73,32 @@ the document.
 
 ## Choosing a mode
 
-- **Agent loops and batch pseudonymization:** keep the default. The reversible
-  path runs first, only what it cannot handle is replaced with a marker, and the
-  agent never meets a hard failure.
-- **Latency-sensitive loops:** `redact` skips the extra resolve pass. The cost
-  is that every suspect span is one-way.
-- **Hard stop for a human or CI to investigate:** `strict`, or `resolve` with
-  `--safety-net-fallback strict` to resolve first and stop only on what is
-  left.
-- **Measuring a net's false positives on a known-clean corpus:** `tolerant`,
-  never in production.
+| Need | Choice |
+|---|---|
+| Try reversible handling first | Default `resolve` + `redact` |
+| Skip the extra resolve scan | `redact`, accepting one-way loss |
+| Stop on uncovered suspects | `strict`, or `resolve` + `strict` fallback |
+| Measure false positives on known-clean input | Development-only `tolerant` |
 
 ## Why resolve is the default
 
-Under `resolve` with the `redact` fallback, no suspect reaches the model: each
-one either becomes a manifest token or is replaced with a marker before the
-clean text leaves Gaze. Compared with `strict`, agent loops no longer stall on
-exit `3`. Compared with `redact` alone, every suspect that resolve can handle
-stays restorable. The price is one more pipeline pass when a suspect is found.
+Resolve preserves more originals than direct redaction and avoids strict-mode
+stalls for handled suspects. It costs an extra scan when suspects appear.
+Sub-word and terminal-admission exceptions may remain raw with an honest
+report; [safety nets](safety-nets.md#sub-word-suspects-are-never-acted-on)
+defines them. Detection gaps can still leak in every mode.
 
 ## Why tolerant is not a production mode
 
-`tolerant` ships bytes that the safety net flagged. Any byte of PII that
-reaches a model outside the manifest contract is a critical defect, so the mode
-exists only for development work where you own both the input and the output
-and send neither to a model.
-
-The CLI guards it. `--safety-net-mode tolerant` and
-`--safety-net-fallback tolerant` both require the environment variable
-`GAZE_ALLOW_TOLERANT=1`;
-without it the CLI fails with the `TolerantModeDisabled` safety-net variant.
-When a tolerant path is reachable and the run has a suspect, the CLI
-prints to stderr:
+Tolerant sends flagged bytes unchanged. Both tolerant flags require
+`GAZE_ALLOW_TOLERANT=1`; otherwise the CLI returns `TolerantModeDisabled`.
+When reachable with a suspect, it warns on stderr:
 
 ```text
 warning: tolerant mode downgrades suspect leaks; deprecated v0.9, removal candidate v0.10.
 ```
+
+Use only where you own input/output and send neither to a model.
 
 ## Audit rows
 
@@ -137,8 +121,7 @@ database is configured.
 ## Restore and the redaction marker
 
 The marker is not a token. `gaze restore` returns it unchanged, and those bytes
-cannot be recovered. This is the one place where Gaze gives up reversibility,
-and the marker records the class of what was removed. Every token Gaze emitted still restores. Marker format
+cannot be recovered. The marker records the removed class; surviving tokens still restore. Marker format
 and rules: [the redaction marker](safety-nets.md#the-redaction-marker).
 
 ## Structured documents
