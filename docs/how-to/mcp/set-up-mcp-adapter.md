@@ -1,16 +1,13 @@
 # Set up the MCP adapter
 
-This page is an adopter setup guide for `gaze mcp`, the stdio MCP surface that
-routes supported tool reads through the Gaze chokepoint. For the full runtime
-contract, see [`docs/explanation/mcp/mcp-runtime.md`](../../explanation/mcp/mcp-runtime.md).
+Expose Gaze's tools over stdio MCP. See the
+[runtime contract](../../explanation/mcp/mcp-runtime.md).
 
 ## When to use the MCP adapter
 
-Use `gaze mcp` when your agent host already speaks MCP and you want Gaze to
-provide a chokepoint tool surface for potentially sensitive file or text reads.
-The client calls `gaze_read_file` or `gaze_read_text`; the server redacts tool
-inputs and outputs through `PiiEnvelope::dispatch` before content reaches the
-model-facing side of the MCP response.
+Use `gaze_read_file` or `gaze_read_text` for sensitive reads from an MCP agent
+host. `PiiEnvelope::dispatch` redacts inputs and outputs before model-facing
+responses.
 
 ## Prerequisites
 
@@ -28,25 +25,21 @@ cargo install --path crates/gaze-cli --features mcp,document
 
 ## Install into an MCP client
 
-Install into Claude Code project config:
+Choose a client (Claude Code and Cursor use project config):
 
 ```sh
 gaze mcp install --client=claude-code
 ```
 
-Install into Claude Desktop config:
-
 ```sh
 gaze mcp install --client=claude-desktop
 ```
-
-Install into Cursor project config:
 
 ```sh
 gaze mcp install --client=cursor
 ```
 
-Install into every supported client target:
+All supported targets:
 
 ```sh
 gaze mcp install --client=all
@@ -67,19 +60,10 @@ and these server arguments:
 }
 ```
 
-It also creates or updates a marker-fenced AGENTS.md section:
-
-```md
-<!-- BEGIN GAZE MCP -->
-# Gaze MCP
-
-When Gaze MCP is available, route potentially sensitive file or text reads through `gaze_read_file` or `gaze_read_text` before using the content in an LLM response.
-
-Gaze output contains pseudonymous tokens such as `:Email_`, `:Name_`, and `:Custom:phone_`. Treat these as placeholders, not missing data. Do not invent originals. Preserve the `manifest_id` returned by Gaze so authorized restore flows can round-trip values later.
-
-This section is agent guidance, not a security boundary. The MCP chokepoint is the server-side `PiiEnvelope::dispatch` path.
-<!-- END GAZE MCP -->
-```
+The installer also updates a marker-fenced AGENTS.md section: route sensitive
+reads through Gaze, treat tokens as placeholders, never invent originals, and
+retain `manifest_id` for restore. This guidance is not a security boundary;
+server-side `PiiEnvelope::dispatch` enforces it.
 
 Use `--dry-run` to inspect the install summary without writing:
 
@@ -174,19 +158,6 @@ and returns the same safe response shape:
 The response includes `{ clean_markdown, manifest_id, file_metadata }`. Preserve
 `manifest_id` for authorized restore flows; do not ask the model to infer the
 original values from tokens.
-
-## How the MCP adapter meets the five axes
-
-- Reliability: tool calls pass through `PiiEnvelope::dispatch` before content
-  reaches the model-facing response.
-- Reversibility: the returned `manifest_id` points at owner-retained restore
-  material.
-- Agentic-first: supported agent hosts can install the stdio server with one
-  command.
-- Trust: tool registration is explicit, and manifest records are written for
-  MCP calls.
-- Adopter ergonomics: `install`, `doctor`, and `serve` cover setup,
-  diagnostics, and standalone operation.
 
 ## Next steps
 

@@ -1,9 +1,15 @@
 # Set up the MCP bridge
 
-Use the MCP bridge when an agent should call downstream MCP servers without
-receiving raw PII. The agent connects only to `gaze mcp bridge`; the bridge
-restores Gaze tokens for explicitly allowed tool arguments, forwards the call to
-the downstream MCP server, and redacts text results before returning them.
+Connect the agent only to `gaze mcp bridge`.
+
+```mermaid
+flowchart LR
+    A[Agent tokens] --> B[Policy checks]
+    B --> C[Restore allowed arguments]
+    C --> D[Downstream MCP server]
+    D --> E[Redact text results]
+    E --> A
+```
 
 For the trust model and fail-closed dispatch order, see the
 [MCP bridge architecture](../../explanation/mcp/mcp-bridge.md).
@@ -23,7 +29,7 @@ cargo install --path crates/gaze-cli --features mcp
 
 ## Start from a config
 
-Copy the starter that most closely matches your downstream server:
+Copy a starter:
 
 ```sh
 cp docs/how-to/mcp/bridge-configs/safe-defaults.toml gaze.mcp.toml
@@ -69,8 +75,7 @@ log_raw = false
 mode = "process"
 ```
 
-Then open only the top-level argument fields that are expected to receive Gaze
-tokens:
+Allow only top-level fields that need restored values:
 
 ```toml
 [policy.tools."email.send".arguments.to]
@@ -110,13 +115,11 @@ Provide a 32-byte key through the named environment variable:
 export GAZE_BRIDGE_SESSION_KEY="$(openssl rand -base64 32)"
 ```
 
-Treat the key as restore material. Store it in a secret manager for shared or
-long-lived deployments, and rotate it deliberately.
+Keep the key in a secret manager for shared or long-lived deployments; plan rotation.
 
 ## Verify the tool surface
 
-Load the config and discover the downstream tool surface before serving it to an
-agent:
+Check discovery before connecting an agent:
 
 ```sh
 gaze mcp bridge --config gaze.mcp.toml --dry-run --print-tools
@@ -149,8 +152,7 @@ Point your MCP client at the bridge command instead of the downstream servers:
 }
 ```
 
-The downstream MCP servers stay private to the bridge process. Do not also
-register them directly with the agent host.
+Keep downstream servers private to the bridge; never register them directly with the agent.
 
 ## Run the bridge
 

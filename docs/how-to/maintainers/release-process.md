@@ -1,6 +1,6 @@
 # Release Process
 
-`CertaMesh/gaze` is a public repository. Two release channels are live for adopters; Homebrew remains repo-local pending a public tap.
+Tag pushes publish GitHub Releases and crates.io packages. Homebrew is repo-local.
 
 ## Public release channels (live)
 
@@ -10,9 +10,15 @@ Source: [`.github/workflows/release.yml`](../../../.github/workflows/release.yml
 
 - Triggered on `v*` tag pushes.
 - Builds and uploads platform binary artifacts plus a source tarball to the GitHub Releases page.
-- The GitHub Release body uses GitHub-generated release notes from the tag history.
-- `CHANGELOG.md` remains the curated human source for release highlights and is scrubbed before publication; committed `dist/release-notes/` files are intentionally not maintained.
-- `cargo run -p xtask -- scrub-public-text --published` uses one file set in PR tests and release preflights: the complete `CHANGELOG.md`, `UPGRADE.md`, root `README.md`, each crate's explicit or conventional README, and existing Markdown under `docs/` cited by those files. It follows one link hop. Tag jobs also scrub the version's changelog section; the `workflow_dispatch` release preflight adds supplied notes or a PR body. The workspace test `scrub_public_text_passes_published_and_linked_docs` runs the shared set on every PR. The gate masks only fixed public URL shapes in `crates/xtask/src/scrub_public_text.rs`; exact hosts and bounded paths keep lookalikes and free text visible to detection.
+- GitHub generates release notes from tag history. Keep curated highlights in
+  `CHANGELOG.md`; do not maintain `dist/release-notes/` files.
+- `cargo run -p xtask -- scrub-public-text --published` checks all of `CHANGELOG.md`,
+  `UPGRADE.md`, root/crate READMEs, and one hop of linked Markdown under `docs/`.
+  PR tests and release preflights share this set. Tag jobs also scrub that
+  version's changelog section; dispatch preflights add supplied notes/PR text.
+  `scrub_public_text_passes_published_and_linked_docs` runs on every PR.
+  Only fixed public URL hosts/paths are masked by
+  `crates/xtask/src/scrub_public_text.rs`; lookalikes remain detectable.
 - Browse releases at <https://github.com/CertaMesh/gaze/releases>.
 
 ### crates.io
@@ -22,7 +28,9 @@ Source: [`.github/workflows/publish-crates.yml`](../../../.github/workflows/publ
 - Triggered on `v*` tag pushes (with `workflow_dispatch` dry-run available).
 - Authenticates to crates.io via OIDC trusted-publisher (`rust-lang/crates-io-auth-action`); no long-lived `CARGO_REGISTRY_TOKEN` secret.
 - Derives the publish set and topological order from `cargo metadata` with `cargo run -p xtask -- publish-plan`. Every workspace member with `publish != false` is included automatically, including new crates. The core crate is published as `gaze-pii` while its library target remains `gaze`.
-- Runs a manifest pre-flight before any real publish: `cargo package --no-verify --workspace --exclude xtask` for the workspace. Workspace packaging resolves coordinated, not-yet-published dependency versions together. Per-crate packaging would resolve those versions against crates.io before they exist. This catches unpublishable manifests before OIDC auth or partial publishing.
+- Before OIDC authentication or publishing, run
+  `cargo package --no-verify --workspace --exclude xtask`. Workspace packaging
+  resolves coordinated, unpublished versions together; per-crate packaging cannot.
 - Checks crates.io for every planned crate before publishing. If any crate is absent, the workflow fails up front because OIDC trusted publishing cannot first-publish a new crate.
 - Skips crates already at the published version (idempotent re-runs) and retries on index-propagation lag.
 - New crates require a one-time manual seed publish with a crates.io token, followed by trusted-publisher linking, before a tag publish can proceed:
@@ -34,54 +42,46 @@ cargo publish -p <crate>
 After the seed publish, add the crate's Trusted Publisher on crates.io for `CertaMesh/gaze` and `.github/workflows/publish-crates.yml`, then re-run the publish workflow. `workflow_dispatch` has a `check_new_crates` input for exceptional dry-run diagnostics, but tag releases keep the guard on.
 - Browse crates at <https://crates.io/crates/gaze-pii> (and sibling crate pages).
 
-Cutting a release: tag the merge commit on `main` with `vX.Y.Z` and push the tag. Both workflows fire from the same tag push; no manual crates.io step is needed for crates already in the OIDC publish loop.
+After gates pass, create a signed `vX.Y.Z` tag on the merge commit on `main`
+and push it. Both workflows fire; seeded, linked crates need no manual publish.
 
 ## Pre-tag model-setup ownership gate
 
-Before the first `gaze-model-setup` publication, run `release.yml` with
-`workflow_dispatch` on the reviewed preparation branch. This path scrubs the
-release text and runs `scripts/gate/model-setup-ownership.sh` on hosted Linux;
-it does not build release assets, create a release, or publish crates.
+Before the first `gaze-model-setup` publication, dispatch `release.yml` on the
+reviewed preparation branch:
 
-The ownership gate uses the shipped installer to fetch and strictly verify
-the source-pinned real Davlan mBERT NER bundle. It checks identical artifact hashes
-before testing a copy owned by a distinct user, uses a foreign-owned working
-directory, and explicitly runs the ignored cross-directory effective-user test.
-It also verifies loose-mode repair with an independent bundle check and
-exact effective-user ownership, 0700 directory modes, and 0600 file modes.
-A separately hashed, readable foreign-owned copy proves setup rejects the
-owner mismatch specifically; the verifier keeps its separate private copy.
-Post-repair hashes and owner/mode inventory are retained in the receipts. Exact test names must report a passing test;
-a zero-test cargo result cannot pass the gate.
+```sh
+gh workflow run release.yml --ref <preparation-branch> -f version=<X.Y.Z> -f pr_number=<release-pr>
+```
 
-After review, dispatch with `gh workflow run release.yml --ref <preparation-branch>
--f version=<X.Y.Z> -f pr_number=<release-pr>`. Require successful
-`scrub-public-text-preflight` and `model-setup-ownership-preflight` jobs for
-that exact preparation head before tagging. The ownership job's
-`model-setup-ownership-<commit>` artifact
-records the commit, commands, toolchain, model hashes, owner/mode inventory,
-and test results. It contains receipts only; model files are temporary and
-are removed when the gate exits. The script requires an unprivileged Linux
-user with passwordless sudo so real foreign ownership can be constructed.
-The publish plan orders `gaze-recognizers` before `gaze-model-setup` at the
-coordinated release version.
+Require `scrub-public-text-preflight` and `model-setup-ownership-preflight` to
+pass on that exact head before tagging. Dispatch creates no release assets,
+release, or crate publications.
+
+`scripts/gate/model-setup-ownership.sh` uses hosted Linux with an unprivileged
+user and passwordless sudo. It fetches and verifies the source-pinned Davlan
+mBERT bundle through the shipped installer, then checks:
+
+- Identical hashes before testing a distinct user's copy and foreign-owned cwd.
+- The ignored cross-directory effective-user test actually runs and passes.
+- A hashed readable foreign-owned copy is rejected specifically for ownership;
+  the verifier uses a separate private copy.
+- Loose-mode repair passes independent verification: effective-user ownership,
+  `0700` directories, `0600` files, and unchanged hashes.
+
+Zero-test results fail. The `model-setup-ownership-<commit>` artifact retains
+commit, commands, toolchain, hashes, owner/mode inventory, and test receipts.
+Temporary models are deleted on exit. Publish order places `gaze-recognizers`
+before `gaze-model-setup` at the coordinated version.
 
 ## Homebrew Tap Location
 
-Decision for v0.4.6 S6 (#184), reaffirmed post repo-public flip: keep Homebrew repo-local until the organization creates an explicit public tap and release publication target.
+The formula is `dist/homebrew/gaze.rb`. No public `CertaMesh/tap` or
+`CertaMesh/homebrew-tap` exists; use `cargo install gaze-cli` for supported CLI
+installation. The release workflow uploads binaries, checksums, and generated
+notes but does not update an external tap or read committed release notes.
 
-Current state:
-
-- The formula source lives in this repository at `dist/homebrew/gaze.rb`.
-- No public `CertaMesh/tap` or `CertaMesh/homebrew-tap` repository exists yet.
-- Repo-public status alone does not enable `brew install` — adopters still need a tap that serves the formula. Until that tap exists, `cargo install gaze-cli` (from crates.io) is the supported install path for the CLI.
-- `.github/workflows/release.yml` intentionally remains artifact-only for Homebrew: it builds and uploads GitHub release assets, but does not push formula updates to an external tap.
-- The release workflow uploads generated GitHub release notes and binary/checksum artifacts; it does not read a committed release-notes file.
-- Modern Homebrew rejects direct install/info commands for formula files outside a tap, so local smoke means staging the formula into a scratch tap rather than installing `./dist/homebrew/gaze.rb` directly.
-
-Axis-5 rationale: documenting the repo-local formula is more ergonomic than advertising a tap that adopters cannot use. It gives collaborators a concrete smoke path while keeping public install instructions honest and reversible when a public tap is created.
-
-Local smoke for maintainers:
+Homebrew requires a tap, even for a local formula smoke check:
 
 ```bash
 brew tap-new CertaMesh/gaze-smoke
@@ -90,4 +90,5 @@ brew info CertaMesh/gaze-smoke/gaze
 brew untap CertaMesh/gaze-smoke
 ```
 
-Future public tap work is an org-level operation outside this repository. When a public tap exists, update this document, the README install section, and `.github/workflows/release.yml` together so the formula location, adopter instructions, and release automation agree.
+When the organization creates a public tap, update this guide, README install
+instructions, and `.github/workflows/release.yml` together.

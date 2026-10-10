@@ -1,25 +1,29 @@
 # Set up the proxy
 
-This page is an adopter setup guide for `gaze proxy`, the HTTP chokepoint for
-API-key-authenticated SDK traffic. For the full runtime contract, see
-[`docs/explanation/proxy/proxy-runtime.md`](../../explanation/proxy/proxy-runtime.md).
+`gaze proxy` protects API-key HTTP traffic. See the
+[runtime contract](../../explanation/proxy/proxy-runtime.md).
 Anthropic adopters must also follow the
 [strict Anthropic Messages contract](../../explanation/proxy/anthropic-messages-contract.md).
 
 ## When to use the proxy
 
-Use `gaze proxy` when an application, worker, or agent already calls OpenAI,
-Anthropic, or Gemini through provider SDKs and you want a drop-in PII
-pseudonymization boundary without changing application code.
+Route API-key SDK traffic for OpenAI, Anthropic, or Gemini through Gaze. Keep
+the provider key and change the SDK base URL.
 
-The application keeps using its provider API key. The only SDK-side change is
-the base URL. Requests flow through the local proxy, Gaze tokenizes PII before
-the upstream call, and Gaze restores owner-visible response text on the way back.
+```mermaid
+flowchart LR
+    A[Owner application] --> B[Gaze tokenizes request]
+    B --> C[Provider sees tokens]
+    C --> D[Gaze restores response]
+    D --> A
+```
+
+The pipeline covers SSE deltas and tool-call JSON. Provider adapters select
+text surfaces; detection uses your configured policy.
 
 ## Prerequisites
 
-- A `gaze` binary on PATH. The default release binary includes proxy support as
-  of v0.8.1.
+- A `gaze` binary on PATH; default releases include proxy support.
 - A policy TOML file on disk. See [`docs/reference/policy.md`](../../reference/policy.md) for policy
   authoring.
 - An application or SDK that can override provider base URLs with environment
@@ -100,9 +104,7 @@ export GOOGLE_API_KEY=test-google-api-key
 export GEMINI_BASE_URL=http://127.0.0.1:8787
 ```
 
-Now run the application the same way you did before. Text such as
-`alice@example.invalid` is tokenized before the upstream provider sees it, then
-restored for the owner-visible response path.
+Run your application; the proxy cleans requests and restores owner-visible responses.
 
 ## Verify the proxy is running
 
@@ -167,31 +169,9 @@ typed message directing you to `gaze proxy start` and `gaze proxy stop`.
 
 ## What the proxy does not cover
 
-`gaze proxy` covers provider API traffic authenticated by API keys, such as
-`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GOOGLE_API_KEY`.
-
-Consumer subscription tiers are not part of this surface:
-
-- ChatGPT Plus
-- Claude.ai
-- Gemini Advanced
-
-Those products use browser sessions, cookie auth, and web endpoints instead of
-provider SDK base URLs. They are outside the public proxy contract documented
-here.
-
-## How the proxy meets the five axes
-
-- Reliability: request text is tokenized before provider transit, including
-  SSE deltas and tool-call JSON surfaces.
-- Reversibility: responses restore through the active Gaze session manifest,
-  not ad hoc string replacement.
-- Agentic-first: base-URL swaps fit SDK agents, workers, and local automation
-  without rewriting call sites.
-- Trust: provider adapters only identify text surfaces; detection remains in
-  the configured Gaze pipeline.
-- Adopter ergonomics: one local daemon plus provider base URL overrides is
-  enough for the common API-key path.
+The proxy supports provider API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+`GOOGLE_API_KEY`). ChatGPT Plus, Claude.ai, and Gemini Advanced use browser
+sessions/cookies and web endpoints; those are outside this contract.
 
 ## Next steps
 

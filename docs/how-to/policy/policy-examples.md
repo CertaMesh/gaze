@@ -1,8 +1,7 @@
 # Write a policy: worked examples
 
-Each example below is a complete `policy.toml` you can copy. Examples A to C
-also show an input and the output `gaze clean` produces. For every field and
-action, see the [policy reference](../../reference/policy.md).
+Copy these complete policies; A–C include sample results. See the
+[policy reference](../../reference/policy.md) for fields and actions.
 
 ## Example A — Tokenize emails, redact phone numbers
 
@@ -38,7 +37,7 @@ kind = "default"
 action = "tokenize"
 ```
 
-Input `Reach Alice at alice@example.invalid or +49 30 0000 0000` produces
+Input `Reach Alice at alice@example.invalid or +49 171 3920010` produces
 `Reach Alice at <{session_hex}:Email_1> or [REDACTED]`.
 
 ## Example B — Custom class for tenant order IDs
@@ -68,8 +67,7 @@ action = "tokenize"
 
 ## Example C — Format-preserving emails for downstream parsers
 
-When a downstream LLM or parser expects emails to look like emails, use
-`format_preserve` so the surface shape survives redaction.
+`format_preserve` keeps email syntax for downstream parsers.
 
 ```toml
 [session]
@@ -151,9 +149,7 @@ kind = "default"
 action = "preserve"
 ```
 
-NER provides `name`, `location`, `organization` detections; regex
-detectors provide `email` and `custom:order_id`. Each class maps to a
-different action. Note that `organization = preserve` lets brand names
-through while `name = tokenize` swaps person names for restorable tokens.
-The `preserve` default sends every detected class without its own rule to the
-model raw.
+NER detects names, locations, and organizations; regex detects emails and
+order IDs. `tokenize` is reversible; `redact` and `generalize` are one-way.
+`preserve` sends raw values, including organizations and any detected class
+without its own rule. Review this exposure before production use.
