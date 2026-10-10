@@ -1,14 +1,10 @@
 # Audit and restore
 
-This guide covers the optional metadata audit log and how restore resolves tokens.
-
 ## How restore resolves tokens
 
-Restore is manifest-first. Tokens are session-scoped, counted by class, and only resolvable through a signed `SensitiveSnapshot`. There is no string-map fallback.
+Restore uses a signed `SensitiveSnapshot`. Tokens belong to one session and have class counters. There is no string-map fallback.
 
 ## Write, query, export, and purge the audit log
-
-Optional metadata audit log:
 
 ```sh
 gaze clean --policy policy.toml --audit-db audit.sqlite < input.txt
@@ -17,7 +13,7 @@ gaze audit export --audit-db audit.sqlite --format jsonl --output redactions.jso
 gaze audit purge --audit-db audit.sqlite --before 2026-01-01T00:00:00Z
 ```
 
-The audit DB is opened read-only by `query` and `export`. The exported column set excludes raw PII payloads. Every row carries `recognizer_id` plus `recognizer_version_id` for lineage; pre-v0.8 rows carry a `legacy_unversioned` marker. There is no policy-level retention default and no background auto-purge — adopters drive retention explicitly.
+`query` and `export` open the DB read-only and exclude raw PII. Rows carry `recognizer_id` and `recognizer_version_id`; pre-v0.8 rows use `legacy_unversioned`. Set retention yourself: there is no policy default or automatic purge.
 
 ## Command reference
 

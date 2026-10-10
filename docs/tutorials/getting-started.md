@@ -1,12 +1,17 @@
 # Getting Started with Gaze
 
-Working PII pseudonymization in about 10 minutes. You will clean a document, store the
-restore key, send only safe text to an LLM, and restore original values from the response.
+Clean a document, keep its restore key private, send safe text to an LLM, then
+restore the response. Allow about ten minutes.
 
-By the end you will have a complete redact → send → restore round trip running locally, and
-you will know where the restore key lives and why it must never travel with the clean text.
-You need a working Rust toolchain and no prior PII-domain knowledge. When you want to
-go deeper, each step links to the reference page or the design contract behind it.
+```mermaid
+flowchart LR
+    A[Owner raw text] --> B[Gaze session]
+    B --> C[Clean text to LLM]
+    B --> D[Owner stores snapshot]
+    C --> E[Tokenized response]
+    E --> F[Owner strict restore]
+    D --> F
+```
 
 ## Prerequisites
 
@@ -21,9 +26,8 @@ cargo add gaze-pii gaze-assembly
 
 The crate is published as `gaze-pii`. Import path remains `use gaze::...`.
 
-`gaze-assembly` provides `CorePipelineConfig`: bundled defaults (core rulepack:
-emails, names, locations, organizations, plus optional locale-aware recognizers)
-without manually wiring recognizers.
+`CorePipelineConfig` builds bundled defaults: emails, names, locations,
+organizations, and optional locale-aware recognizers.
 
 ## 2. Clean a document
 
@@ -63,62 +67,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 `<hex:Email_N>` is display notation. Use the exact token returned by `redact`;
 its session prefix and numeric ordinal change on each run.
 
-> Use one `Session` per logical isolation boundary; share across calls within a boundary only. See [Session Contract](../explanation/core/session-contract.md) for the full contract and common pitfalls.
+Share sessions only within one logical boundary. See the
+[session contract](../explanation/core/session-contract.md).
 
 ## 3. Export the restore key before calling the LLM
 
-```rust
-use gaze::{Scope, Session};
+Add this after cleaning in step 2, using that same `session`:
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let session = Session::new(Scope::Conversation("conv-abc".into()))?;
-    let clean_text = "Hi, <hex:Email_N> called about ORD-789012.";
-
-    // Do this BEFORE sending clean text to the LLM.
-    let snapshot = session.export()?;
-    let blob: Vec<u8> = snapshot.into_bytes();
-
-    // Store `blob` encrypted at rest, bound to this conversation/user.
-    // NEVER send `blob` to the LLM, analytics, or logs.
-    // Send only `clean_text` to the LLM.
-    let _ = (blob, clean_text);
-
-    Ok(())
-}
+```rust,ignore
+let blob = session.export()?.into_bytes();
+// Store blob encrypted at rest, bound to this conversation/user.
+// Send only clean_text to the LLM; never send blob to models, analytics, or logs.
 ```
+
+A new session's snapshot cannot restore tokens from the cleaning session.
 
 ## 4. Restore after the LLM responds
 
-Call `Session::restore_strict_text` on the complete LLM response and keep its
-restored output on the owner side:
+Load the encrypted snapshot from storage, then restore the complete response
+on the owner side:
 
-```rust,no_run
+```rust,ignore
 use gaze::{SensitiveSnapshot, Session};
 
-fn restore_text(session: &Session, text: &str) -> Result<String, gaze::Error> {
-    session.restore_strict_text(text)
-}
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let blob: Vec<u8> = load_encrypted_snapshot_from_storage();
-
-    let snapshot = SensitiveSnapshot::from(blob);
-    let restored_session = Session::import(snapshot)?;
-    let llm_response = "Thanks <hex:Email_N>, I have updated your record.";
-    let restored = restore_text(&restored_session, llm_response)?;
-    println!("{restored}");
-    // The synthetic email is restored on the owner side.
-
-    Ok(())
-}
-
-fn load_encrypted_snapshot_from_storage() -> Vec<u8> {
-    Vec::new()
-}
+let session = Session::import(SensitiveSnapshot::from(blob))?;
+let restored = session.restore_strict_text(&llm_response)?;
 ```
 
-For a tolerant variant that leaves unknown tokens in place, use `Session::restore`
-(returns `Option<String>`) or catch the error from `restore_strict`.
+Use the actual response tokens; `<hex:Email_N>` is display notation.
+`Session::restore` looks up one exact token and returns `Option<String>`
+(`None` when unknown). Use `restore_strict_text` when unresolved tokens must
+fail the whole response.
 
 ## 5. Add a policy for tenant-specific PII
 
@@ -168,9 +147,8 @@ let pipeline = gaze_assembly::build_pipeline(
 )?;
 ```
 
-Use the static policy recognizer when the shape is stable across tenants. For
-per-request tenant data, the CLI can also take a context dictionary without a
-full recognizer block:
+Use policy regex for stable shapes. For per-request tenant values, pass a
+context dictionary:
 
 ```json
 {
@@ -182,10 +160,9 @@ full recognizer block:
 }
 ```
 
-Pass it with `gaze clean --context-json context.json`; Gaze builds a call-scoped
-dictionary recognizer and tokenizes `ORD-789012` as `Custom:order_id`. See the
-[policy reference](../reference/policy.md#policycustom_recognizers) for
-`terms_from_context`, standalone context dictionaries, and the full schema.
+Pass `gaze clean --context-json context.json`. Its call-scoped dictionary
+tokenizes `ORD-789012` as `Custom:order_id`. See the
+[context schema and `terms_from_context`](../reference/policy.md#policycustom_recognizers).
 
 ## Troubleshooting common errors
 
@@ -199,8 +176,8 @@ dictionary recognizer and tokenizes `ORD-789012` as `Custom:order_id`. See the
 
 ## Next steps
 
-- [Policy reference](../reference/policy.md) -- full TOML schema, all recognizers, locale chain
-- [CLI adapter contract](../../crates/gaze-cli/README.md) -- canonical shell-out protocol (stdin/stdout/stderr) for framework adapters; see [Subcommands](../../crates/gaze-cli/README.md#subcommands) for the `clean` / `restore` / `audit` surface as of v0.7.2
-- [Security review](../reference/security-review.md) -- invariants, threat boundaries, audit isolation
-- [Exit codes](../../crates/gaze-cli/README.md#exit-codes) -- canonical exit code reference
-- `cargo doc --open -p gaze-pii` -- full API reference (the crate is published as `gaze-pii`; the import path stays `use gaze::...`)
+- [Policy reference](../reference/policy.md)
+- [CLI adapter contract](../../crates/gaze-cli/README.md)
+- [Security review](../reference/security-review.md)
+- [Exit codes](../../crates/gaze-cli/README.md#exit-codes)
+- `cargo doc --open -p gaze-pii`

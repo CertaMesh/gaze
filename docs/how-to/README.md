@@ -1,62 +1,46 @@
 # How-to guides
 
-Task-oriented recipes. Each guide assumes you already know what you want to achieve and
-walks you to that goal. If Gaze is new to you, start with the
-[Getting Started tutorial](../tutorials/getting-started.md) first. For exact behavior and
-schemas, see the [reference](../reference/README.md).
+Start with [Getting Started](../tutorials/getting-started.md) if Gaze is new to you.
+Use the [reference](../reference/README.md) for exact behavior and schemas.
 
 ## Library and audit
 
-- **[Evaluate annotated data](evaluate-annotated-data.md)** — score protected UTF-8 bytes,
-  leaks, and false positives on an owner-side JSONL corpus.
-- **[Use the `gaze setup` policy from Rust](rust-library.md)** — build the Nym-enabled
-  pipeline from the policy `gaze setup` writes, and keep the restore snapshot owner-side.
-- **[Audit and restore](audit-and-restore.md)** — write, query, export, and purge the
-  metadata audit log, and how manifest-first restore works.
+- [Evaluate annotated data](evaluate-annotated-data.md): measure leaks and false positives on owner-side JSONL.
+- [Use the setup policy from Rust](rust-library.md): build a Nym-enabled pipeline.
+- [Audit and restore](audit-and-restore.md): query, export, purge, and restore.
 
 ## Policy
 
-- **[Write custom recognizers](policy/custom-recognizers.md)** — add tenant-specific PII
-  classes (order IDs, song names, artist names) with policy rules and recognizers.
-- **[Set up a policy by hand](manual-policy.md)** — go from zero configuration to a working
-  `gaze clean` run without `gaze setup`, then add NER and a safety net.
-- **[Write a policy: worked examples](policy/policy-examples.md)** — four complete
-  `policy.toml` files to copy, three with sample input and output.
+- [Custom recognizers](policy/custom-recognizers.md): detect tenant-specific PII.
+- [Manual setup](manual-policy.md): add rules, NER, and safety nets.
+- [Policy examples](policy/policy-examples.md): four complete TOML files.
 
 ## Proxy
 
-- **[Set up the proxy](proxy/set-up-proxy.md)** — route OpenAI, Anthropic, or Gemini SDK
-  traffic through Gaze's API-key HTTP chokepoint so PII is tokenized in flight.
+[Set up the proxy](proxy/set-up-proxy.md) for OpenAI, Anthropic, or Gemini API-key traffic.
 
 ## MCP
 
-- **[Set up the MCP adapter](mcp/set-up-mcp-adapter.md)** — expose Gaze's document tools to
-  an MCP client and serve the stdio chokepoint.
-- **[Set up the MCP bridge](mcp/set-up-mcp-bridge.md)** — route an agent through Gaze before
-  forwarding approved tool calls to downstream MCP servers.
+- [MCP adapter](mcp/set-up-mcp-adapter.md): expose Gaze document tools over stdio.
+- [MCP bridge](mcp/set-up-mcp-bridge.md): protect calls to downstream servers.
 
 ## Daemon
 
-- **[Run the daemon](daemon/run-daemon.md)** — start the long-lived JSONL/stdio daemon for
-  multi-session redaction with a per-session manifest registry.
+[Run the daemon](daemon/run-daemon.md) for multi-session JSONL/stdio cleaning.
 
 ## Document ingestion
 
-- **[Ingest documents](document/ingest-documents.md)** — turn PNG/JPG/PDF input into a
-  redacted `SafeBundle` (clean Markdown + manifest + report) via OCR.
+[Ingest documents](document/ingest-documents.md) from PNG/JPG/PDF into a split SafeBundle.
 
 ## Dashboard
 
-- **[Run the local dashboard](dashboard/run-local-dashboard.md)** — embed the opt-in,
-  memory-only inspection dashboard in a Rust proxy host. From the CLI, use
-  `gaze proxy serve --dashboard`.
+[Run the local dashboard](dashboard/run-local-dashboard.md) in a Rust proxy host.
+CLI: `gaze proxy serve --dashboard`.
 
 ## Compliance
 
-- **[GDPR adopter guidance](compliance/gdpr-adopter-guidance.md)** — how Gaze maps onto
-  GDPR pseudonymization obligations, and what stays the adopter's responsibility.
+[GDPR guidance](compliance/gdpr-adopter-guidance.md): Gaze controls and adopter duties.
 
 ## Maintainers
 
-- **[Release process](maintainers/release-process.md)** — the gate sequence and tagging
-  workflow for cutting a Gaze release.
+[Release process](maintainers/release-process.md): gates, publishing, and tags.

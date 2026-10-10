@@ -1,15 +1,12 @@
 # Add a custom recognizer for tenant-specific PII
 
-Gaze's bundled rulepacks cover common PII (emails, names, locations, organizations). For
-data specific to your tenant — order IDs, song names, artist names, internal account
-numbers — you add a **custom recognizer** in `policy.toml`. This guide shows the smallest
-working example. For the complete schema see the [policy reference](../../reference/policy.md);
-for an end-to-end run see the [Getting Started tutorial](../../tutorials/getting-started.md).
+Add a recognizer for tenant data such as order IDs, song names, or account
+numbers. A recognizer finds spans; a rule chooses the action. See the
+[policy schema](../../reference/policy.md) and [tutorial](../../tutorials/getting-started.md).
 
 ## 1. Declare the recognizer and a rule
 
-A recognizer finds the spans; a rule says what to do with the class it emits. Add both to
-your `policy.toml`:
+Add both to `policy.toml`:
 
 ```toml
 [[policy.custom_recognizers]]
@@ -24,11 +21,9 @@ class = "custom:order_id"
 action = "tokenize"              # tokenize keeps it restorable
 ```
 
-Notes:
-
-- The class name is a lowercase `custom:<name>` string — not the Rust `Custom(...)` form.
+- Use lowercase `custom:<name>`; Rust `Custom(...)` syntax is invalid.
 - `action = "tokenize"` emits a restorable token. Use `redact` or `generalize` only when you
-  do *not* need to restore the value — those are one-way (see the
+  need no restore; both are one-way (see the
   [restore boundary](../../explanation/core/restore-boundary.md)).
 
 ## 2. Load the policy and build the pipeline
@@ -59,20 +54,20 @@ let pipeline = gaze_assembly::build_pipeline(
 )?;
 ```
 
-Now `pipeline.redact(...)` tokenizes `ORD-789012` alongside the bundled classes, and
-`Session` restore reconstructs the original value byte-for-byte.
+`pipeline.redact(...)` tokenizes `ORD-789012`; `Session` restores its original bytes.
+This example loads custom recognizers only; load rulepacks too if you need bundled classes.
 
 ## Go beyond regex
 
-For a regex recognizer in a **rulepack**, `reject_match_regex` under
+For a regex recognizer in a rulepack, `reject_match_regex` under
 `[recognizers.context]` can refuse a shape based on the complete regex match,
 including text outside `capture_groups`. This is a rulepack field, not a
 `[[policy.custom_recognizers]]` field. An invalid guard regex fails pipeline
 assembly. See the [rulepack reference](../../reference/policy.md#rulepack-recognizers).
 
-- **Validators and normalizers** — constrain or canonicalize a match (for example, checksum a
+- Validators and normalizers: constrain or canonicalize a match (for example, checksum a
   number) without breaking restore. A normalizer must preserve the original byte span; see
   [recognizer normalizers preserve the original span](../../explanation/detection/recognizer-normalizer-spans.md).
-- **Dictionaries and locale gating** — match against a tenant word list, or restrict a
+- Dictionaries and locale gating: match against a tenant word list, or restrict a
   recognizer to specific locales. See the [policy reference](../../reference/policy.md) and
   the [locale chain](../../explanation/policy/locale-chain.md).

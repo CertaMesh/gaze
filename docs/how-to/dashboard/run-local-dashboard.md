@@ -1,79 +1,81 @@
 # Run the local dashboard
 
-This guide is for Rust adopters who embed the opt-in inspection dashboard in their own proxy
-host. The dashboard is an explicit adopter composition. Do not construct any dashboard object on the
-default/off path.
-
-The `gaze` CLI runs this whole sequence for you with `gaze proxy serve --dashboard` (see the
-[dashboard flags](../../reference/cli.md#dashboard-flags-opt-in-dashboard-cargo-feature)).
+Rust hosts must opt in explicitly; construct no dashboard object on the off
+path. The CLI handles this flow with `gaze proxy serve --dashboard`; see
+[dashboard flags](../../reference/cli.md#dashboard-flags-opt-in-dashboard-cargo-feature).
 
 ## Prerequisites
 
-The current child implementation requires Unix-domain sockets and a reviewed Unix resource-limit
-API that can set and verify both core-dump limits at zero. Darwin is explicitly unsupported and
-returns `NoDumpUnavailable` before binding, token generation, or sensitive IPC acceptance. No
-macOS crash-artifact suppression is claimed. There is no in-process or thread-only fallback.
+Requires Unix-domain sockets and a reviewed API that sets and verifies both
+core-dump limits at zero. Darwin returns `NoDumpUnavailable` before binding,
+token generation, or sensitive IPC. There is no in-process/thread fallback
+and no claim of macOS crash-artifact suppression.
 
 ## 1. Select immutable startup capture
 
-Create DashboardPayloadAcceptance::provider_visible() for the baseline. Add OwnerRaw only with
-OwnerRawRiskAcknowledgement::acknowledge_pii_risk(). Add OwnerRestored only with
-OwnerRestoredRiskAcknowledgement::acknowledge_reidentification_risk().
+Start with `DashboardPayloadAcceptance::provider_visible()`. Adding `OwnerRaw`
+requires `OwnerRawRiskAcknowledgement::acknowledge_pii_risk()`; `OwnerRestored`
+requires `OwnerRestoredRiskAcknowledgement::acknowledge_reidentification_risk()`.
+Capture is fixed at launch; browser requests cannot widen it.
 
-These selections are immutable for the launch. A browser request cannot add a domain later.
-
-Use LoopbackBind::fresh_ephemeral_v4() for a fresh literal address in the IPv4 loopback range and operating
-system port zero. A configured literal loopback address must still use port zero and should display
-an origin-reuse warning.
+Use `LoopbackBind::fresh_ephemeral_v4()` for a fresh literal IPv4 loopback address
+and port zero. Configured literal loopback addresses also require port zero;
+display an origin-reuse warning.
 
 ## 2. Spawn the sensitive child
 
-Pass the hidden child command to `SpawnedDashboardChild::spawn`. The crate creates a private 0700
-socket directory, owns both control/inspection listeners, injects only their paths into the exact
-child launch, and validates peer PID credentials where the operating system exposes them. There is
-no public constructor accepting a loose child and unrelated channel pair.
+Pass the hidden child command to `SpawnedDashboardChild::spawn`. It owns both
+listeners, creates a private `0700` socket directory, passes only socket paths
+to that child, and checks peer PID credentials where available. No constructor
+accepts an unrelated child/channel pair.
 
-The hidden child calls `ChildInheritedHandles::connect_from_environment`, then
-`DashboardChildEntrypoint::run`. The entrypoint rejects non-socket handles and verifies no-dump
-readiness before binding or generating sensitive state.
+The child calls `ChildInheritedHandles::connect_from_environment`, then
+`DashboardChildEntrypoint::run`. It rejects non-socket handles and verifies
+no-dump readiness before binding or creating sensitive state.
 
 ## 3. Complete pairing
 
-Pass the returned `SpawnedDashboardChild` to `DashboardSupervisor::prepare`. Supply a
-`PairingDelivery` implementation that writes the canonical
-43-byte credential only to a controlling terminal or another reviewed acknowledged local channel.
-Never place it in arguments, environment variables, stdout/stderr logs, files, URLs, cookies,
-HTML, browser storage, or telemetry.
+Pass the child to `DashboardSupervisor::prepare`. Your `PairingDelivery` must
+send the canonical 43-byte credential only through a controlling terminal or a
+reviewed, acknowledged local channel. Never put it in arguments, environment,
+logs, files, URLs, cookies, HTML, browser storage, or telemetry.
 
-Preparation returns PairedDashboard only after the child frame and nonce-bound delivery
-acknowledgement complete.
+`PairedDashboard` is returned only after the child frame and nonce-bound
+delivery acknowledgement complete.
 
 ## 4. Atomically install inspection
 
-Consume PairedDashboard::into_pending_activation() to receive:
+```mermaid
+flowchart TD
+    A[PairedDashboard] --> B[into_pending_activation]
+    B --> C[Atomic inspection install]
+    C --> D[commit activated consumer]
+    D -->|Success| E[Start provider traffic]
+    D -->|Failure| F[Disable consumer; terminate and reap child]
+```
 
-- one PendingDashboardActivation;
-- one provider-neutral PendingInspectionConsumerV1;
-- the exact immutable DashboardCaptureDescriptorV1.
+`into_pending_activation()` returns `PendingDashboardActivation`,
+`PendingInspectionConsumerV1`, and the immutable `DashboardCaptureDescriptorV1`.
+Pass the consumer and descriptor to the atomic gaze-inspection installer
+(`gaze_proxy::install_proxy_inspection_v1` for proxies). It returns the proxy
+producer and `ActivatedInspectionConsumerV1`.
 
-Pass the pending consumer and the `DashboardCaptureDescriptorV1` to the one atomic
-gaze-inspection installation operation (`gaze_proxy::install_proxy_inspection_v1` for the
-proxy). It returns the proxy producer and the `ActivatedInspectionConsumerV1`. Pass the
-activated consumer to `PendingDashboardActivation::commit`, which
-binds it against the one-shot binding retained by `into_pending_activation` before any socket,
-writer, runtime, or admission side effect. A consumer from any other registration fails with
-`ActivationFailed`. Do not substitute descriptor equality, a caller assertion, a generic
-closure, or a wrapper created after installation.
+Pass that activated consumer to `PendingDashboardActivation::commit`. Commit
+checks the one-shot binding before socket, writer, runtime, or admission side
+effects; a foreign registration returns `ActivationFailed`. Descriptor equality,
+caller assertions, generic closures, or post-install wrappers cannot replace
+this binding.
 
-Do not expose or retain another sink, choose an epoch, inject a loose control object, or start
-provider traffic before commit succeeds. If any post-install step fails, disable the activated
-consumer and fully terminate/reap the dashboard child before continuing provider operation.
+Retain no extra sink, choose no epoch, inject no loose control object, and start
+no provider traffic before commit. Any post-install failure requires disabling
+the consumer and fully terminating/reaping the child before provider operation.
 
 ## 5. Operate and stop
 
-Use `DashboardControl::purge` for reusable registration-bound purge. `rotate_pairing_secret` requires a
-fresh acknowledged delivery and invalidates the previous authentication generation. The shutdown operation is
-one-way and returns only after disable, zeroization, termination, and reap.
+`DashboardControl::purge` permits reuse within the registration.
+`rotate_pairing_secret` requires a fresh acknowledged delivery and invalidates
+the old authentication generation. Shutdown is one-way and completes only after
+disable, zeroization, termination, and reap.
 
-Treat DashboardStatus::Disabled as a dashboard-only failure. Do not retry capture in the same
-launch and do not alter the provider enforcement result.
+`DashboardStatus::Disabled` is a dashboard-only failure. Do not retry capture
+in that launch or change the provider enforcement result.
