@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import re
@@ -91,7 +92,8 @@ def _metric(run: dict, field: str) -> int:
 
 
 def rows_from_scorecard(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> list[dict]:
-    scorecard = json.loads(path.read_text(encoding="utf-8"))
+    payload = path.read_bytes()
+    scorecard = json.loads(gzip.decompress(payload) if path.suffix == '.gz' else payload)
     version = scorecard.get("measured")
     if version not in {release for release, _ in expected_rows(inputs)}:
         raise HistoryError(f"unsupported measured release {version!r}")
@@ -134,7 +136,8 @@ def rows_from_scorecard(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> 
             "manifest_actions": parameters.get("manifest_replacing_actions"),
             "split_composite_source_ids": parameters.get("split_composite_source_ids"),
             "layers": layers,
-            **({'policy_sha256': parameters['policy_sha256'],
+            **({'scorecard_file': path.name,
+                'policy_sha256': parameters['policy_sha256'],
                 'refused': {name: next(run for run in scorecard['layers'][name]['runs']
                                       if run['config'] == config)['pipeline_availability']['failed_closed_documents']
                             for name in ('A', 'D', 'R')}} if inputs.version >= 13 else {}),

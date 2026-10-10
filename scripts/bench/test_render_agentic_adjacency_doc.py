@@ -1,5 +1,6 @@
 """The release table must come from matching measured layer scorecards."""
 
+import gzip
 import json
 import tempfile
 import unittest
@@ -35,6 +36,14 @@ def scorecard(corpus_sha256: str = render.CORPUS_SHA256) -> dict:
 
 
 class AdjacencyHistoryTests(unittest.TestCase):
+    def test_compressed_scorecard_digest_matches_the_committed_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'scorecard.json.gz'
+            path.write_bytes(gzip.compress(json.dumps(scorecard()).encode(), mtime=0))
+            row, = render.rows_from_scorecard(path)
+            self.assertEqual(row['scorecard_sha256'], render.sha256(path))
+            self.assertEqual(row['layers']['A']['leaked'], 20)
+
     def test_new_history_preserves_each_releases_own_policy(self) -> None:
         current = render.HistoryInputs.for_version(13)
         value = scorecard(current.corpus_sha256)
