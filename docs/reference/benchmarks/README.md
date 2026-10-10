@@ -2009,6 +2009,10 @@ All v3–v14 corpora and their contracts remain frozen. The full test partition
 now has 3,728 A, 2,144 D and 280 R documents; layer C inputs and scoring stay
 unchanged. The added numeric IDs also have six digits, so the short-repeat
 limitation above remains.
+Generator v15 has no curly or typographic value-quote cases and no cases where
+a rejected unquoted placeholder precedes a valid labelled-ID cue. These results
+do not establish coverage for either behavior. Independent positive, repeat and
+benign counterweight cells for both boundaries are deferred.
 
 <!-- BEGIN GENERATED: agentic-adjacency -->
 

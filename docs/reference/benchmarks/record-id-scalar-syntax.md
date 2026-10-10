@@ -27,3 +27,7 @@ the primary corpus, contracts and gate-credit exceptions are unchanged.
 Known limitations: numeric identifiers still have six digits. Shorter unlabelled
 repeats remain unmeasured and below the existing deterministic sweep floor.
 Separate positive, repeat and benign coverage is required before changing it.
+Generator v15 has no curly or typographic value-quote cases and no cases where
+a rejected unquoted placeholder precedes a valid labelled-ID cue. These results
+do not establish coverage for either behavior. Independent positive, repeat and
+benign counterweight cells for both boundaries are deferred.
