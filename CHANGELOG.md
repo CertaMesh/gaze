@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Tax and government identifiers cover additional cue connectors and grouped
+  layouts, including slash Steuernummer, separated SSN, Swiss AHV and national
+  identity values. Full English tax-identification fields preserve trusted
+  repeated-value protection. Generic national-ID cues reject short grouped
+  order/invoice references, dates and triangle dimensions, and preserve IP ownership.
 - **Credentials are protected by default.** Newly generated `gaze setup`
   policies include the bundled `secrets` rulepack, protecting supported API
   keys, access and session tokens, JWTs, and password fields. Direct library
