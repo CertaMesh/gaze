@@ -55,6 +55,7 @@ pub struct RegexDetector {
     complete_labelled_value: bool,
     exclusions: Vec<String>,
     reject_match_regex: Option<Regex>,
+    reject_unquoted_capture_regex: Option<Regex>,
     validator_kind: Option<ValidatorKind>,
     validator_on_fail: ValidatorOnFail,
     normalizer_kind: Option<NormalizerKind>,
@@ -127,6 +128,7 @@ impl RegexDetector {
                 .map(|value| value.to_ascii_lowercase())
                 .collect(),
             reject_match_regex: None,
+            reject_unquoted_capture_regex: None,
             validator_kind,
             validator_on_fail: ValidatorOnFail::Veto,
             normalizer_kind,
@@ -311,6 +313,16 @@ impl RegexDetector {
         Ok(self)
     }
 
+    /// Refuse matching capture text when the value itself has no opening quote. Quotes on
+    /// a JSON key or prose label cannot exempt an unquoted value from this guard.
+    pub fn with_unquoted_capture_rejection(mut self, pattern: Option<&str>) -> Result<Self> {
+        self.reject_unquoted_capture_regex = pattern
+            .map(Regex::new)
+            .transpose()
+            .map_err(RecognizerError::InvalidRegex)?;
+        Ok(self)
+    }
+
     /// Extend the captured value through adjacent identifier-like groups. This closes the gap
     /// where a bounded regex can otherwise emit only a prefix of a labelled value.
     pub fn with_complete_labelled_value(mut self, enabled: bool) -> Self {
@@ -394,6 +406,16 @@ impl RegexDetector {
                         };
                         guard.is_match(checked)
                     });
+                    span.rejected |=
+                        self.reject_unquoted_capture_regex
+                            .as_ref()
+                            .is_some_and(|guard| {
+                                let value_quoted = input[..span.capture.start]
+                                    .chars()
+                                    .next_back()
+                                    .is_some_and(|ch| matches!(ch, '\"' | '\''));
+                                !value_quoted && guard.is_match(&input[span.capture.clone()])
+                            });
                     span.rejected |= self.ipv4_phone_tail(input, &span.span);
                     return Some(match phone_parts {
                         None => vec![span],
@@ -1098,6 +1120,46 @@ mod tests {
         assert_eq!(&input[scans[0].capture.clone()], "AB12 CD3456");
         assert_eq!(&input[scans[0].span.clone()], "AB12 CD3456 XYZ123456");
         assert!(!scans[0].rejected, "guard must not inspect the extension");
+    }
+
+    #[test]
+    fn unquoted_capture_guard_owns_only_the_value_quote_and_preserves_audit_vetoes() {
+        let detector = RegexDetector::with_rulepack_fields(
+            r#"(?:"field"|field)[: ]+["']?([A-Za-z0-9]+)"#,
+            PiiClass::custom("synthetic").unwrap(),
+            "synthetic.labelled",
+            vec![LocaleTag::Global],
+            0.9,
+            100,
+            "counter",
+            Some(vec![1]),
+            Vec::new(),
+            None,
+            None,
+        )
+        .unwrap()
+        .with_unquoted_capture_rejection(Some(r"^[\p{L}\p{M}]+$"))
+        .unwrap();
+        for (input, rejected) in [
+            (r#""field":null"#, true),
+            (r#""field":true"#, true),
+            (r#""field":false"#, true),
+            (r#""field" placeholder"#, true),
+            (r#""field":"opaque""#, false),
+            ("field: 'opaque'", false),
+            (r#""field":600123"#, false),
+        ] {
+            let scans = detector.scanned_spans(input, None);
+            assert_eq!(scans.len(), 1, "{input}");
+            assert_eq!(scans[0].rejected, rejected, "{input}");
+            let dictionaries = gaze_types::DictionaryBundle::default();
+            let locales = [LocaleTag::Global];
+            let ctx = DetectContext::new(&locales, &dictionaries);
+            let audit = Recognizer::detect_for_registry(&detector, input, &ctx).unwrap();
+            assert_eq!(audit.len(), 1, "{input}");
+            assert_eq!(audit[0].regex_guard_rejected, rejected, "{input}");
+        }
+        assert!(detector.with_unquoted_capture_rejection(Some("[")).is_err());
     }
 
     #[test]
