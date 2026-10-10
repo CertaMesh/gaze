@@ -61,14 +61,18 @@ restore_sources() {
     MUTATED_FILES=()
 }
 
+ensure_snapshot_dir() {
+    if [ -z "$SNAPSHOT_DIR" ]; then
+        SNAPSHOT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/gaze-tier-probe.XXXXXX")" || return 1
+    fi
+}
+
 snapshot_source() {
     local file="$1" owned
     for owned in ${MUTATED_FILES[@]+"${MUTATED_FILES[@]}"}; do
         [ "$owned" != "$file" ] || return 0
     done
-    if [ -z "$SNAPSHOT_DIR" ]; then
-        SNAPSHOT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/gaze-tier-probe.XXXXXX")" || return 1
-    fi
+    ensure_snapshot_dir || return 1
     mkdir -p "$SNAPSHOT_DIR/$(dirname "$file")" || return 1
     cp "$file" "$SNAPSHOT_DIR/$file" || return 1
     MUTATED_FILES+=("$file")
@@ -128,7 +132,10 @@ ungate() {
         exit 2
     fi
     local temporary
-    temporary="$(mktemp "$file.probe-tmp.XXXXXX")" || exit 2
+    # Own the directory before allocating intermediates so EXIT cleanup also
+    # removes them when interrupted during preparation or the source write.
+    ensure_snapshot_dir || exit 2
+    temporary="$(mktemp "$SNAPSHOT_DIR/${file##*/}.probe-tmp.XXXXXX")" || exit 2
     # grep exits 1 when all lines were removed; that is a valid mutation.
     grep -v '#\[cfg(feature = "operator-tier")\]' "$file" >"$temporary"
     local code=$?

@@ -117,6 +117,58 @@ raise SystemExit(1 if mutated else 0)
 
     def assert_snapshots_removed(self):
         self.assertEqual(list(self.root.glob("gaze-tier-probe.*")), [])
+        self.assertEqual(list(self.root.rglob("*.probe-tmp.*")), [])
+
+    def test_preparation_and_write_interrupts_preserve_exact_bytes(self):
+        self.assert_preparation_and_write_interrupts()
+
+    def test_clean_crlf_preparation_and_write_interrupts_preserve_exact_bytes(self):
+        self.make_clean_crlf_checkout()
+        self.assert_preparation_and_write_interrupts()
+
+    def assert_preparation_and_write_interrupts(self):
+        # Signal the shell itself after grep prepares the intermediate or cat
+        # writes the source, before the shell can remove the intermediate.
+        for command in ("grep", "cat"):
+            real_command = shutil.which(command)
+            wrapper = self.root / "bin" / command
+            wrapper.write_text(f'#!{sys.executable}\n' + f'''
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+args = sys.argv[1:]
+result = subprocess.run([{real_command!r}, *args])
+target = os.environ.get("SIGNAL_TARGET", "")
+preparation = {command!r} == "grep" and "-v" in args and target in args
+write = ({command!r} == "cat" and args
+         and Path(args[0]).name.startswith(Path(target).name + ".probe-tmp."))
+if os.environ.get("SIGNAL_STAGE") == {command!r} and (preparation or write):
+    os.kill(os.getppid(), int(os.environ["SIGNAL_NUMBER"]))
+raise SystemExit(result.returncode)
+''')
+            wrapper.chmod(0o755)
+        with tempfile.TemporaryDirectory() as logs:
+            untracked = self.git("ls-files", "--others", "-z")
+            for stage in ("grep", "cat"):
+                for target in TARGETS:
+                    for sig in (signal.SIGINT, signal.SIGTERM):
+                        with self.subTest(stage=stage, target=target, signal=sig):
+                            before = self.snapshot()
+                            result = self.run_probe(
+                                "full-surface", SIGNAL_STAGE=stage,
+                                SIGNAL_TARGET=str(target), SIGNAL_NUMBER=str(int(sig)),
+                                TIER_PROBE_LOG_DIR=logs,
+                            )
+                            self.assertEqual(result.returncode, 128 + sig,
+                                             result.stdout + result.stderr)
+                            self.assertEqual(self.snapshot(), before)
+                            self.assert_snapshots_removed()
+                            self.assertEqual(
+                                self.git("ls-files", "--others", "-z"),
+                                untracked,
+                            )
 
     def test_clean_crlf_normal_run_preserves_exact_bytes(self):
         self.make_clean_crlf_checkout()
