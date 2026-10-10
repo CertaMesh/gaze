@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "2daab095ca7be277ae16bbc75f30b86767a1bb6d8042ecc138652b156d8edf34",
-    "test": "db3c3f3612aac6d0072b2dbfdc837495498f7b2b506af2bd9b6a15ffdaab9c4e",
+    "dev": "fa9df2412b489d2c94981f145e09666a0ff6009130597bd8022cba80b2415380",
+    "test": "1e07150bb9ba391488355b5212f0797bfd511b8095c8e3e2ebd6936627e26bec",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -468,7 +468,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -1696,7 +1696,7 @@ class ContractTests(unittest.TestCase):
         for version in (8, 9):
             self.assertNotIn("URL", agentic.load_contract(REPO_ROOT, version=version).scored_labels)
         self.assertIn("URL", agentic.load_contract(REPO_ROOT).scored_labels)
-        with self.assertRaisesRegex(agentic.LayerError, "generator_version 13"):
+        with self.assertRaisesRegex(agentic.LayerError, f"generator_version {agentic.GENERATOR_VERSION}"):
             agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=9)
 
     def test_generator_version_mismatch_fails_closed(self) -> None:
@@ -3006,3 +3006,85 @@ class ShippedClassCoverageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PersonLinkedRecordIdTests(unittest.TestCase):
+    def test_v13_is_byte_identical_in_both_partitions(self):
+        hashes = {
+            "dev": "2daab095ca7be277ae16bbc75f30b86767a1bb6d8042ecc138652b156d8edf34",
+            "test": "db3c3f3612aac6d0072b2dbfdc837495498f7b2b506af2bd9b6a15ffdaab9c4e",
+        }
+        for partition in agentic.PARTITIONS:
+            records = agentic.records_as_of(13, agentic.generate(partition))
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(records)).hexdigest(), hashes[partition])
+
+    def test_exact_gold_repeats_and_benign_ownership(self):
+        for partition in agentic.PARTITIONS:
+            records = agentic.record_ids.records(agentic, partition)
+            self.assertEqual(len(records), 745)
+            self.assertEqual({r.layer for r in records}, {"A", "D", "R"})
+            self.assertEqual({g.label for r in records for g in r.gold}, {"CUSTOMER_ID", "EMPLOYEE_ID", "RECORD_ID"})
+            self.assertEqual(sum(r.layer == "A" for r in records), 360)
+            self.assertEqual(sum(r.layer == "D" for r in records), 265)
+            self.assertEqual(sum(r.layer == "R" for r in records), 120)
+            for record in records:
+                self.assertEqual(bool(record.gold), record.layer != "D")
+                self.assertEqual(bool(record.decoys), record.layer == "D")
+                self.assertEqual(len(record.gold), 3 if record.layer == "R" else 0 if record.layer == "D" else 1)
+                for span in (*record.gold, *record.decoys):
+                    self.assertEqual(record.text.encode()[span.start:span.end].decode(), span.value)
+            self.assertTrue(any(r.text == "[session A customer ID token]" and not r.gold for r in records))
+            for shape in agentic.record_ids.SHAPES:
+                positives = {g.value for r in records if r.layer == "A" and r.surface.endswith("_" + shape) for g in r.gold}
+                decoys = {g.value for r in records if r.layer == "D" and r.surface.endswith("_" + shape) for g in r.decoys}
+                self.assertEqual(positives, decoys)
+                for key in agentic.record_ids.PUBLIC_FIELDS[partition]:
+                    self.assertTrue(any(key in r.text for r in records if r.layer == "D" and r.surface.endswith("_" + shape)))
+
+    def test_gold_value_pools_are_partition_disjoint(self):
+        pools = [{g.value for r in agentic.record_ids.records(agentic, part) for g in r.gold} for part in agentic.PARTITIONS]
+        self.assertFalse(pools[0] & pools[1])
+
+
+class RulepackPathDeltaTests(unittest.TestCase):
+    def pair(self, folder):
+        root = Path(folder)
+        texts = {
+            "base": '[policy.rulepacks]\nbundled=["secrets"]\npaths=["base-core.toml"]\n',
+            "candidate": '[policy.rulepacks]\nbundled=["secrets"]\npaths=["base-core.toml", "record-ids.toml"]\n',
+            "delta": '[mechanism_delta]\nappend_rulepack_paths=["record-ids.toml"]\n',
+        }
+        cards = {"base": _scorecard({"C": 100, "A": 50, "D": 0, "R": 30}),
+                 "candidate": _scorecard({"C": 100, "A": 40, "D": 0, "R": 30})}
+        for name, text in texts.items():
+            path = root / (name + ".toml")
+            path.write_text(text)
+            if name != "delta":
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                cards[name]["parameters"]["policy_sha256"] = digest
+                cards[name]["runner_provenance"]["policy"] = {"path": str(path), "sha256": digest}
+                cards[name]["runner_provenance"]["policy_dependencies"]["files"] = {"policy.rulepacks.paths[0]": "a" * 64}
+        cards["candidate"]["runner_provenance"]["policy_dependencies"]["files"]["policy.rulepacks.paths[1]"] = "b" * 64
+        return cards, root / "delta.toml"
+
+    def test_append_allows_only_new_slot_and_requires_its_digest(self):
+        with tempfile.TemporaryDirectory() as folder:
+            cards, delta = self.pair(folder)
+            self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "pass")
+            files = cards["candidate"]["runner_provenance"]["policy_dependencies"]["files"]
+            for reference in ("policy.rulepacks.paths[0]", "ner.model_dir/model.onnx"):
+                with self.subTest(reference=reference):
+                    original = dict(files)
+                    files[reference] = "c" * 64
+                    self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "not_comparable")
+                    files.clear(); files.update(original)
+            del files["policy.rulepacks.paths[1]"]
+            self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "not_comparable")
+
+    def test_duplicate_paths_and_undeclared_policy_edits_fail(self):
+        with tempfile.TemporaryDirectory() as folder:
+            cards, delta = self.pair(folder)
+            delta.write_text('[mechanism_delta]\nappend_rulepack_paths=["record-ids.toml", "record-ids.toml"]\n')
+            self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "not_comparable")
+            delta.write_text('[mechanism_delta]\nappend_rulepack_paths=["base-core.toml"]\n')
+            self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "not_comparable")
