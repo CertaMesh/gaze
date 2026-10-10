@@ -41,23 +41,56 @@ if [ "${#CASES[@]}" -eq 0 ]; then
     CASES=("${ALL_CASES[@]}")
 fi
 
-mkdir -p "$LOG_DIR"
-
+MUTATED_FILES=()
 restore_sources() {
-    git checkout -- "$TOOLS_MOD" "$LIB_RS" 2>/dev/null || true
+    local file temporary failed=0
+    for file in "${MUTATED_FILES[@]}"; do
+        # Read the clean index without rewriting its metadata. Only this run's
+        # mutated paths belong to cleanup.
+        temporary="$(mktemp "$file.probe-tmp.XXXXXX")" || return 1
+        if ! git show ":$file" >"$temporary" || ! cat "$temporary" >"$file"; then
+            echo "FATAL: failed to restore $file" >&2
+            failed=1
+        fi
+        rm -f "$temporary"
+    done
+    [ "$failed" -eq 0 ] || return 1
+    MUTATED_FILES=()
 }
-trap restore_sources EXIT
+
+cleanup() {
+    local code=$?
+    trap - EXIT INT TERM
+    restore_sources || code=1
+    exit "$code"
+}
 
 require_clean() {
     local dirty
-    dirty="$(git status --porcelain -- "$TOOLS_MOD" "$LIB_RS")"
+    dirty="$(GIT_OPTIONAL_LOCKS=0 git status --porcelain -- "$TOOLS_MOD" "$LIB_RS")" || exit 2
     if [ -n "$dirty" ]; then
         echo "FATAL: refusing to run — these sources already have uncommitted changes:"
         echo "$dirty"
-        echo "The probe rewrites and then reverts them via 'git checkout --'."
+        echo "The probe rewrites and then restores its mutations from the clean index."
         exit 2
     fi
 }
+
+# Refusals must not arm restoration or even start a valid earlier case.
+for case_name in "${CASES[@]}"; do
+    case "$case_name" in
+        deep-path|full-surface) ;;
+        *)
+            echo "FATAL: unknown case '$case_name' (known: ${ALL_CASES[*]})" >&2
+            exit 2
+            ;;
+    esac
+done
+require_clean
+mkdir -p "$LOG_DIR" || exit 2
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Runs the gate, echoes its exit code, keeps the full log.
 run_gate() {
@@ -78,8 +111,21 @@ ungate() {
         echo "FATAL: no operator-tier cfg gate found in $file — the probe is stale." >&2
         exit 2
     fi
-    grep -v '#\[cfg(feature = "operator-tier")\]' "$file" >"$file.probe-tmp"
-    mv "$file.probe-tmp" "$file"
+    local temporary
+    temporary="$(mktemp "$file.probe-tmp.XXXXXX")" || exit 2
+    # grep exits 1 when all lines were removed; that is a valid mutation.
+    grep -v '#\[cfg(feature = "operator-tier")\]' "$file" >"$temporary"
+    local code=$?
+    if [ "$code" -gt 1 ]; then
+        rm -f "$temporary"
+        exit 2
+    fi
+    MUTATED_FILES+=("$file")
+    if ! cat "$temporary" >"$file"; then
+        rm -f "$temporary"
+        exit 2
+    fi
+    rm -f "$temporary"
     after="$(grep -c '#\[cfg(feature = "operator-tier")\]' "$file" || true)"
     echo "  un-gated $file: removed $before cfg attribute(s), $after remain"
 }
@@ -120,7 +166,7 @@ for case_name in "${CASES[@]}"; do
     echo "      exit=$mutated (expected non-zero)"
 
     echo "[4/4] reverting, rebuilding, re-running"
-    restore_sources
+    restore_sources || exit 1
     # Force a rebuild rather than trusting a cached test binary.
     touch "$TOOLS_MOD" "$LIB_RS"
     reverted=$(run_gate "$case_name-4-reverted")
