@@ -4,14 +4,7 @@
 [![docs.rs](https://docs.rs/gaze-recognizers/badge.svg)](https://docs.rs/gaze-recognizers)
 [![License](https://img.shields.io/crates/l/gaze-recognizers.svg)](https://github.com/CertaMesh/gaze#license)
 
-Built-in recognizers for Gaze
-
-Part of the [Gaze](https://github.com/CertaMesh/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
-
-This crate depends on `gaze` and implements concrete `gaze::Recognizer`
-backends. Keeping it separate lets the core crate expose a small, stable
-contract without forcing every adopter to compile regex, dictionary, ONNX, and
-tokenizer dependencies.
+Built-in `gaze::Recognizer` backends: regex, dictionary, anchored names, and ONNX NER.
 
 ## Cargo
 
@@ -33,14 +26,6 @@ gaze-recognizers = { version = "0.16.0", features = ["phone-parser"] }
 rulepack loader rejects `e164_phone` at load time with
 `RulepackError::UnsupportedValidator`, preserving the axis-1 fail-closed
 posture rather than silently degrading to shape-only matching.
-
-Inside the workspace:
-
-```toml
-[dependencies]
-gaze = { path = "../gaze" }
-gaze-recognizers = { path = "../gaze-recognizers" }
-```
 
 ## Public entry points
 
@@ -86,7 +71,7 @@ Examples: `ValidatorKind::Luhn` (Mod 10 checksum, used by `card.structural`),
 `ValidatorKind::E164Phone` (requires the `phone-parser` feature).
 
 `E164Phone` is implemented via the `phonenumber` crate. It preserves valid E.164
-matches such as synthetic non-reachable `+49-30-0000-0000` (not a real number)
+matches such as the fictional UK `+44 7700 900123`
 while rejecting regex-passing but unassigned shapes such as `+99999999`.
 
 ## Anchored match backend
@@ -118,21 +103,7 @@ as a built-in backend.
 
 ## NER backend
 
-The NER backend is optional at runtime. `NerRecognizer` loads a verified ONNX
-model bundle with `NerOptions`; `NerDetector` is part of the public surface for
-the backend implementation.
-
-Current dependencies include:
-
-- `ort` for ONNX Runtime
-- `tokenizers` for tokenizer execution
-- `ndarray` for model tensors
-- `phonenumber` (gated behind the `phone-parser` Cargo feature) for the
-  parser-backed `E164Phone` validator
-
-The expected production model family is Davlan mBERT NER, configured through
-policy `[ner]` and loaded by `gaze-assembly` when `model_dir` is present.
-Loading failures are policy configuration failures in the CLI path.
+`NerRecognizer` loads a verified ONNX bundle with `NerOptions`; `NerDetector` exposes the backend. Dependencies are `ort`, `tokenizers`, and `ndarray`. Policy `[ner].model_dir` enables loading through `gaze-assembly`; loading failures are CLI policy errors. The production model family is Davlan mBERT NER.
 
 ## Embedded rulepacks
 
@@ -156,53 +127,20 @@ Disable a format-basis recognizer itself when suppression is intentional.
 
 ## Recognizer-level metadata (v0.7.2)
 
-Rulepacks loaded into this crate can carry two cross-cutting metadata blocks
-that change conflict-resolution behavior without changing the underlying
-backend implementation. Both are designed to fail closed: when adopters
-under-specify them, Gaze emits a coarser family-level token rather than a
-guess.
-
 ### Collision-family policy
 
-Cross-class recognizer rivalries (PAN vs IBAN, postal vs phone, …) declare
-collision metadata beside the recognizer definition:
-
 ```toml
-[[recognizers]]
-id = "iban.structural"
-class = "custom:iban"
-
 [recognizers.collision]
 family = "payment-card-or-iban"
 variant = "iban"
 precedence = 10
 ```
 
-Adopter policy uses the same shape under `[[policy.custom_recognizers]]` with
-a `[policy.custom_recognizers.collision]` table. The runtime compiles these
-into a `FamilyPolicyTable` queried by stable recognizer id. Validator-veto
-runs first; family policy then arbitrates same-family different-variant
-overlaps with `ConflictTier::CollisionPolicy`. Equal precedence between
-variants emits a family-level `PiiClass::Custom("family:<name>")` token plus
-`AmbiguityRecord::PrecedenceTie`. Reserved bundled family names cannot be
-claimed by adopter policy. Full contract:
-[`docs/explanation/detection/collision-family.md`](../../docs/explanation/detection/collision-family.md).
+Adopter custom recognizers use `[policy.custom_recognizers.collision]`. `FamilyPolicyTable` keys entries by stable recognizer id. Validator veto runs first; `ConflictTier::CollisionPolicy` resolves same-family, different-variant overlaps. Equal precedence emits `PiiClass::Custom("family:<name>")` with `AmbiguityRecord::PrecedenceTie`. Adopters cannot claim reserved bundled family names. [Contract](../../docs/explanation/detection/collision-family.md).
 
 ### Mandatory-anchor resolution
 
-A collision-family recognizer can require a deterministic cue before emitting
-its narrower variant:
-
-```toml
-[recognizers.collision]
-family = "payment-card-or-iban"
-variant = "iban"
-precedence = 10
-mandatory_anchor = "iban"
-```
-
-Locale rulepacks (e.g. `locale-en`, `locale-de`) supply the matching cue
-bundle:
+Add `mandatory_anchor = "iban"` to the collision table. Locale bundles supply:
 
 ```toml
 [locale.cues.iban]
@@ -210,21 +148,11 @@ names = ["IBAN", "IBAN:", "Account No."]
 window_chars = 64
 ```
 
-When the anchor cue is found in a bounded window around the candidate span,
-the variant class flows normally. When the anchor is missing — or the locale
-bundle does not provide that cue key — Gaze emits one family-level
-`PiiClass::Custom("family:<name>")` token, sets the decision to
-`ConflictTier::AnchoredContext`, and attaches an `AmbiguityRecord` with
-`AmbiguityReason::NoAnchor`. The cleaned text receives one token and the
-manifest stores one restore mapping. The bundled
-`cargo run -p xtask -- locale-cue-bundle-coherence` gate fails if a bundled
-recognizer declares `mandatory_anchor` without a matching bundled cue block.
-Full contract:
-[`docs/explanation/detection/anchor-resolution.md`](../../docs/explanation/detection/anchor-resolution.md).
+A bounded cue permits the precise variant. Missing cue or cue key emits one family token and restore mapping, `ConflictTier::AnchoredContext`, and `AmbiguityReason::NoAnchor`. `cargo run -p xtask -- locale-cue-bundle-coherence` checks bundled cue completeness. [Contract](../../docs/explanation/detection/anchor-resolution.md).
 
 ## Explicit birth-date, age, postcode and credential fields
 
-The embedded `gaze-core` rulepack version **0.6.0** contains 50 recognizers.
+The embedded `gaze-core` rulepack version 0.6.0 contains 50 recognizers.
 `birth_date.cue` and `age.cue` are global `safe_default` rules in `core`.
 `postal.cued_four_digit` is a global `safe_default` rule that needs an explicit postal label.
 `password.field` ships in the separate
@@ -264,9 +192,9 @@ belongs to an unquoted value. Empty, malformed, multiline and overbound records
 produce no candidate from these rules, never a partial value prefix. Other
 recognizers can still detect content in an unsupported record.
 
-Credential values are bounded to **1–256 normalized grammar units**. A unit is
+Credential values are bounded to 1–256 normalized grammar units. A unit is
 one permitted plain Unicode scalar or one supported two-scalar escape. Quoted
-values can therefore contain up to **512 normalized scalars**. This is neither
+values can therefore contain up to 512 normalized scalars. This is neither
 a raw-source size bound nor a bound on the cost of scanning a document.
 
 `birth_date.cue` is cue-anchored, not line-anchored: a date is captured only
@@ -339,45 +267,16 @@ latency nonregression. Additional regex work has not been benchmarked here.
 
 ## Adding recognizers here
 
-Add a recognizer to this crate when it is a built-in backend Gaze should ship
-for many adopters. The recognizer should implement `gaze::Recognizer` and
-provide deterministic metadata:
-
-- stable `id`
-- supported `PiiClass`
-- locale eligibility
-- score and priority
-- token family
-- canonical form when a validator proves one
-- source labels suitable for audit logs
-
-The detection entry point is **fallible** (P0 #908):
+Built-in recognizers implement `gaze::Recognizer` with stable id, class, locale eligibility, score/priority, token family, validated canonical form, and audit source labels. Tenant/private-schema recognizers belong outside this crate.
 
 ```rust
 fn detect(&self, input: &str, ctx: &DetectContext<'_>)
     -> Result<Vec<Candidate>, gaze_types::DetectError>;
 ```
 
-A backend failure MUST surface as `DetectError::backend(self.id(), <message>)`,
-never as an empty `Vec`. Returning an empty candidate list means "no PII here",
-and the pipeline trusts it — so a backend that fails silently is an axis-1 leak.
-The registry short-circuits on `Err` and the pipeline aborts outbound redaction
-(`gaze::pipeline::Error::RecognizerDetect`) rather than emitting partially
-cleaned output. Recognizers whose logic cannot fail simply return
-`Ok(candidates)`. Full contract:
-[`docs/explanation/detection/ner-failclosed.md`](../../docs/explanation/detection/ner-failclosed.md).
+Return `DetectError::backend(self.id(), message)` on failure, never an empty candidate list. The registry stops on error; `Error::RecognizerDetect` aborts outbound cleaning. Infallible detectors return `Ok(candidates)`. [Fail-closed contract](../../docs/explanation/detection/ner-failclosed.md).
 
-Add adopter-specific recognizers outside this crate when the behavior is tied
-to one tenant, one private schema, or one proprietary data source.
-
-The per-recognizer metadata surface (`id`, `supported_class`, `token_family`,
-`validator_kind`, `locales`), the SafetyNet benchmark-snapshot fields
-(strict-span leak rate, observer-residual recall, composability quad), and
-the `Candidate`/`CollisionMembership` audit-row linkage are cataloged in
-[`docs/reference/metrics.md`](../../docs/reference/metrics.md#3-safetynet-metrics-gaze-recognizers)
-(SafetyNet) and
-[`docs/reference/metrics.md`](../../docs/reference/metrics.md#4-recognizer-surface-gaze-recognizers--gaze)
-(recognizer surface).
+Metadata, safety-net metrics, and candidate/audit linkage: [Metrics](../../docs/reference/metrics.md#4-recognizer-surface-gaze-recognizers--gaze).
 
 ## Test support
 

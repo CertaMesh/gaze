@@ -4,15 +4,7 @@
 [![docs.rs](https://docs.rs/gaze-document/badge.svg)](https://docs.rs/gaze-document)
 [![License](https://img.shields.io/crates/l/gaze-document.svg)](https://github.com/CertaMesh/gaze#license)
 
-Reversible PII pseudonymization for **documents** — image + single-page PDF →
-clean Markdown + a restorable `gaze::Manifest` + an OCR/PII report. Powers
-the `gaze document clean` CLI verb on top of the same `gaze-pii` runtime
-that handles streaming and structured inputs.
-
-The crate inherits the project's [north star](../../AGENTS.md#project-north-star): zero PII
-leaks from agent to data owner, deterministic detection, and a manifest
-contract that always restores. OCR is a subprocess call to the standard
-`tesseract` binary so adopters never need a native build toolchain.
+Extracts PNG/JPG/PDF text, protects it with `gaze-pii`, and writes clean Markdown, an owner-only restore manifest, and an OCR/PII report. Powers `gaze document clean`. OCR calls the `tesseract` subprocess.
 
 ## Install
 
@@ -48,12 +40,12 @@ free of OCR / PDF dependencies.
 
 If the binary is missing, `clean()` returns
 `DocumentError::TesseractNotFound` with a per-OS install hint in the
-message — fail-loud by design (Axis 1 reliability).
+message, fail-loud by design (Axis 1 reliability).
 
 ### pdfium (only for PDF input)
 
 PDF rasterization uses [`pdfium-render`](https://crates.io/crates/pdfium-render),
-which loads the **pdfium** shared library at runtime. Prebuilt binaries
+which loads the pdfium shared library at runtime. Prebuilt binaries
 for every major OS / arch are published by
 [`bblanchon/pdfium-binaries`](https://github.com/bblanchon/pdfium-binaries):
 
@@ -64,7 +56,7 @@ for every major OS / arch are published by
 | Linux (x64)   | Download `pdfium-linux-x64.tgz`; place `lib/libpdfium.so` on `LD_LIBRARY_PATH` or in `/usr/local/lib`. |
 | Windows       | Download `pdfium-win-x64.zip`; place `pdfium.dll` on `PATH` or next to the binary. |
 
-Image-only workflows (PNG / JPG) do **not** need pdfium.
+Image-only workflows (PNG / JPG) do not need pdfium.
 
 ## Quickstart (library)
 
@@ -121,12 +113,12 @@ contract instead of caller discipline.
 
 ## Bundle on-disk shapes
 
-* **`agent/clean.md`** — Markdown with a short header (`# gaze-document safe
+* `agent/clean.md`: Markdown with a short header (`# gaze-document safe
   bundle`) plus the OCR text after token substitution.
-* **`owner/manifest.json`** — serialized `gaze::Manifest` (re-exported from
+* `owner/manifest.json`: serialized `gaze::Manifest` (re-exported from
   `gaze-types`). Compatible with `gaze restore` and the rest of the
   `gaze` runtime.
-* **`agent/report.json`** — `BundleReport`. Schema versioned via
+* `agent/report.json`: `BundleReport`. Schema versioned via
   `bundle_version: u32 = 2`; field set is `#[non_exhaustive]` so additive
   fields are SemVer-safe. Includes per-page extraction source
   (`vector_pdf` or `ocr`), OCR backend, normalized confidence,
@@ -137,55 +129,24 @@ contract instead of caller discipline.
 
 ## OCR brittleness + normalization
 
-OCR is a lossy stage. Tesseract — like every engine — sometimes inserts
-spurious whitespace between adjacent glyphs that share kerning. The most
-common artifact in practice (and the most dangerous for axis-1
-reliability) is a single space inserted next to the `@` of an email.
-For example, OCR can split `jane.doe` from `@example.invalid` and produce
-`jane.doe @example.invalid`.
-
-The corrupted form is still unmistakably an email to a human or LLM but
-slips past strict `\S+@\S+` recognizers. To keep the bundle safe to hand
-to a model, `gaze-document` applies a narrow normalization pass between
-the OCR adapter and the redact pipeline.
+```mermaid
+flowchart LR
+    Input[Image or PDF] --> Extract[Extract text / OCR]
+    Extract --> Normalize[Repair email spacing]
+    Normalize --> Protect[Gaze pipeline]
+    Protect --> Agent[Agent: clean.md + report.json]
+    Protect --> Owner[Owner: manifest.json]
+```
 
 ### Normalization rules
 
-The full rule set is documented in source at
-`crates/gaze-document/src/ocr/normalize.rs`. Today there is exactly one
-rule:
-
-* **Email separator repair.** Collapse intra-line horizontal whitespace
-  immediately adjacent to `@` when both sides are non-whitespace.
-  Pattern: `(\S)[ \t]*@[ \t]*(\S)` → `$1@$2`. Newline-adjacent `@`
-  remains untouched.
-
-Additional rules will land here as additional artifact classes are
-discovered. Every rule lives next to the others in
-`ocr::normalize`, doc-commented with its trigger, scope, and a worked
-example.
+`src/ocr/normalize.rs` collapses horizontal whitespace beside `@` when both sides are non-whitespace: `(\S)[ \t]*@[ \t]*(\S)` → `$1@$2`. Newline-adjacent `@` stays unchanged. Add new artifact repairs here with their trigger, scope, and example.
 
 ### Brittleness limit
 
-`gaze-document` assumes **mostly-clean OCR** — text where most glyphs
-are recognized, line breaks are preserved, and only the documented
-narrow artifacts (currently: whitespace around `@`) intrude on PII
-shapes. Bundles produced from low-DPI rasterization, heavy noise, or
-non-Latin scripts without the right `--lang` setting may still leak.
-Two mitigations land at the test boundary so future drift fails loudly:
+OCR must be mostly clean, with recognized glyphs and preserved line breaks. Low DPI, noise, and non-Latin scripts without the right `--lang` can still leak PII. Tests in `tests/e2e.rs` check both token presence and absence of synthetic raw values.
 
-* The `tests/e2e.rs` fixtures assert with belt-and-braces negative
-  substring checks (`!contains("@example.invalid")`, `!contains("Jane Doe")`,
-  `!contains("555-0142")`) **in addition** to the positive `:Email_`,
-  `:Name_`, `:Custom:phone_` token assertions.
-* `BundleReport.pages[].confidence` and `pages[].low_confidence` are always
-  surfaced to adopters. The default threshold is `0.65`, configurable with
-  `gaze_document::Pipeline::with_low_confidence_threshold()`, so downstream
-  gates can route low-confidence pages for human review.
-
-If you observe a new artifact class slipping through, file an issue
-with the OCR output and the expected normalization shape; the fix
-belongs in `ocr::normalize` alongside the existing rules.
+`pages[].confidence` and `pages[].low_confidence` let callers route pages for review. The threshold defaults to `0.65`; change it with `Pipeline::with_low_confidence_threshold()`. Report new artifacts with synthetic OCR output and the expected repair.
 
 ## MCP feature
 
@@ -237,12 +198,11 @@ this crate only provides the opt-in tool implementations.
 | `ocr-tesseract`   | yes     | Tesseract subprocess OCR backend + `clean()` entry.  |
 | `pdf-input`       | yes     | `pdfium-render` PDF text extraction + raster OCR fallback. |
 | `mcp`             | no      | `gaze_read_file` + `gaze_read_text` Tool impls.      |
-| `extract-docling` | no      | Reserved — future Docling layout adapter.            |
-| `render-image`    | no      | Reserved — future redacted-preview renderer.         |
+| `extract-docling` | no      | Reserved: future Docling layout adapter.            |
+| `render-image`    | no      | Reserved: future redacted-preview renderer.         |
 
-The `extract-docling` and `render-image` features are intentionally empty
-in v0.10.0 so adopters can pin against the eventual flag names early.
+`extract-docling` and `render-image` are reserved empty features.
 
 ## License
 
-Dual-licensed under either of [Apache-2.0](https://github.com/CertaMesh/gaze/blob/main/LICENSE-APACHE) or [MIT](https://github.com/CertaMesh/gaze/blob/main/LICENSE-MIT), at your option.
+Licensed under either [Apache-2.0](https://github.com/CertaMesh/gaze/blob/main/LICENSE-APACHE) or [MIT](https://github.com/CertaMesh/gaze/blob/main/LICENSE-MIT).

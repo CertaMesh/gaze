@@ -1,6 +1,6 @@
 ---
 name: release
-description: "Use when orchestrating an CertaMesh/gaze release end to end, especially when the user says cut release, ship vX.Y.Z, tag vX.Y.Z, publish vX.Y.Z, or release vX.Y.Z. Covers pre-flight gates, explicit tag authorization, GitHub and crates.io workflow expectations, post-tag verification, escalation rules, and the counter-pattern to avoid: do not just push a tag and hope."
+description: "Execute a Gaze release: preflight, explicit tag authority, workflow publishing, and post-tag verification."
 ---
 
 # Release Orchestration
@@ -30,10 +30,9 @@ Run from `main` after all release-blocker PRs are merged.
    bodies use generated notes; `dist/release-notes/` is not committed. This
    preserves the `feedback-dogfood-gaze-on-own-output` memory.
 8. Verify benchmark claims in the changelog or release PR body link to the
-   script and hardware specification that produced them. This preserves the
-   `feedback-bench-claims-reproducible` memory.
+   script and hardware specification that produced them.
 9. Pair every release with its own benchmark: version X ships with benchmark X.
-   Run the scorecard harness on the release commit in a fresh anvil worktree
+   Run the scorecard runner on the release commit in a fresh anvil worktree
    (see the `docs/reference/benchmarks` README for the command and the hardware
    spec), store the result as
    `docs/reference/benchmarks/scorecard-vX.Y.Z.json`, and add one row and one
@@ -85,12 +84,7 @@ After the workflows finish:
 3. Confirm every published crate reports the new version. Derive the expected
    set with `cargo run -p xtask -- publish-plan` rather than a hard-coded list,
    then check `https://crates.io/api/v1/crates/<name>` and expect
-   `max_version == X.Y.Z` for each. As of v0.14.0 the plan covers 15 crates:
-   `gaze-pii`, `gaze-types`, `gaze-audit`, `gaze-inspection`, `gaze-recognizers`,
-   `gaze-assembly`, `gaze-model-setup`, `gaze-mcp-core`, `gaze-mcp-rmcp`,
-   `gaze-mcp-bridge`, `gaze-document`, `gaze-proxy`, `gaze-proxy-dashboard`,
-   `gaze-token-bridge`, and `gaze-cli`. A count that does not match the plan is a
-   partial publish, not a pass.
+   `max_version == X.Y.Z` for each. A count that differs from the plan is a partial publish.
 4. Update the orchestrator scratchpad with released URLs:
    GitHub Release URL plus one crates.io URL per crate in the publish plan.
 
@@ -105,10 +99,3 @@ After the workflows finish:
 - If generated GitHub release notes need prose changes after publication, edit
   the GitHub Release body explicitly and keep `CHANGELOG.md` as the curated
   source.
-
-## Counter-Pattern
-
-Do not just push a tag and hope. A Gaze release is complete only when the
-pre-flight gates are green, the tag was explicitly authorized, both workflows
-succeeded, every crate in the publish plan reports the expected version, and the orchestrator
-scratchpad records the shipped URLs.
