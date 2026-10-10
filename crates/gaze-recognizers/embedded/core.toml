@@ -2232,7 +2232,7 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:(?:person|contact|member)[ _-]?(?:id|number|no\.?)|membership[ _-]?number|(?:person|contact)[ _-]?record[ _-]?id|mitglieds[ _-]?(?:nummer|nr\.?)|personen[ _-]?id|kontakt[ _-]?id)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)\\?["']?((?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+(?:[-_./:](?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+)*)'''
+pattern = '''(?i)\b(?:(?:person|contact|member)[ _-]?(?:id|number|no\.?)|membership[ _-]?number|(?:person|contact)[ _-]?record[ _-]?id|mitglieds[ _-]?(?:nummer|nr\.?)|personen[ _-]?id|kontakt[ _-]?id|(?:personen|kontakt)[ _-]?datensatz[ _-]?id)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)\\?["']?((?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+(?:[-_./:](?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+)*)'''
 capture_groups = [1]
 complete_labelled_value = true
 

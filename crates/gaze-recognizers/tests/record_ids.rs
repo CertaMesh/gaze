@@ -27,6 +27,8 @@ fn labelled_person_ids_capture_only_whole_values_and_restore() {
         ("member_id: MEM-000123", "MEM-000123", "record_id"),
         ("Mitgliedsnummer: M-12345", "M-12345", "record_id"),
         ("person_record_id=PER-000123", "PER-000123", "record_id"),
+        ("Personendatensatz-ID: SYN-01234", "SYN-01234", "record_id"),
+        ("Kontaktdatensatz-ID: SYN-05678", "SYN-05678", "record_id"),
         (
             r#"{"contactId":"00000000-0000-4000-8000-000000000123"}"#,
             "00000000-0000-4000-8000-000000000123",
