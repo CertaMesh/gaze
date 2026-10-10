@@ -12,11 +12,11 @@ import tomllib
 import agentic_layers
 
 
-def measure(binary: Path, policy: Path) -> dict:
+def measure(binary: Path, policy: Path, *, all_new_cells: bool = False) -> dict:
     records = [r for r in agentic_layers._coverage_records('test')
-               if r.family == 'postal_de']
-    if len(records) != 20:
-        raise ValueError('expected ten postal positives and ten benign twins')
+               if all_new_cells or r.family == 'postal_de']
+    if len(records) != (680 if all_new_cells else 20):
+        raise ValueError('unexpected coverage document count')
     requests = ''.join(json.dumps({'fixture_id': r.uid, 'text': r.text,
                                    'locale_chain': r.to_document().locale_chain}) + '\n'
                        for r in records)
@@ -48,13 +48,15 @@ def main() -> None:
     parser.add_argument('--policy', type=Path, required=True)
     parser.add_argument('--de-policy', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--all-new-cells', action='store_true',
+                        help='also record all added cells under the ordinary setup policy')
     args = parser.parse_args()
     original = tomllib.loads(args.policy.read_text())
     german = tomllib.loads(args.de_policy.read_text())
     expected = [original['locale']['active'].copy(), german['locale']['active'].copy()]
     if expected[1] != ['de-DE'] + [locale for locale in expected[0] if locale != 'de-DE']:
         raise ValueError('DE policy must move only de-DE to the front')
-    original.pop('locale'); german.pop('locale')
+    original['locale']['active'] = []; german['locale']['active'] = []
     if original != german:
         raise ValueError('policies differ beyond locale order')
     result = {'schema_version': 1, 'generator_version': agentic_layers.GENERATOR_VERSION,
@@ -62,7 +64,8 @@ def main() -> None:
               'corpus_sha256': hashlib.sha256(agentic_layers.corpus_bytes(
                   agentic_layers.generate('test'))).hexdigest(),
               'binary_sha256': hashlib.sha256(args.binary.read_bytes()).hexdigest(),
-              'runs': [measure(args.binary, p) for p in (args.policy, args.de_policy)]}
+              'runs': [measure(args.binary, args.policy, all_new_cells=args.all_new_cells),
+                       measure(args.binary, args.de_policy)]}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + '\n')
 

@@ -37,7 +37,7 @@ Values are derived from public definitions, not production recognizer regexes.
 Exact citation URLs are pinned in [class-coverage-sources.json](class-coverage-sources.json):
 
 - Aadhaar: UIDAI authentication specification, twelve digits with Verhoeff error detection. The arithmetic implementation includes the independent `2363` checksum example.
-- Numeric CNPJ: Receita Federal MOD-11 specification, twelve payload digits and two check digits. This family covers the shipped numeric class; the newer alphanumeric CNPJ format is a separate coverage extension.
+- Numeric CNPJ: Receita Federal MOD-11 specification, twelve payload digits and two check digits, in bare and conventional `XX.XXX.XXX/XXXX-XX` presentations (the latter also specified by ANVISA public form inputs). This family covers the shipped numeric class; the newer alphanumeric CNPJ format is a separate coverage extension.
 - Ethereum: ERC-55, twenty bytes rendered as forty hexadecimal characters, with Keccak-256 case checksum. Seeded addresses include mixed, all-lower and all-upper case. They are invented test-network addresses, never copied account addresses. Tests verify the arithmetic against ERC-55's published vectors.
 - NIR: Service Public's field definition and the government's MOD-97 key specification. The fictional foreign birthplace `99000` avoids copying an allocated person record.
 - PAN: Income Tax Department's ten-character format. These are generated layout examples, not claims of issuer-valid PAN checksums.
@@ -67,6 +67,10 @@ The reproducible value-free attribution probe is
 <setup.toml> --de-policy <de-first.toml> --output <evidence.json>`. It checks
 that the two policies differ only in locale order, rejects refused or missing
 responses and records offsets and source IDs for ten positives and ten twins.
+Add `--all-new-cells` to record all 680 new cells under the ordinary setup
+policy as well as the German-first postal subset. Credentials require a
+policy that enables secrets; zero source attribution under an older release
+policy is reported as an activation limit.
 Attribution is separate from recall and precision: a postcode-shaped batch
 reference can still be protected and count as a false positive.
 

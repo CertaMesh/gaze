@@ -4067,7 +4067,9 @@ def _coverage_identifier(family: str, rng: Rng, partition: str, index: int) -> s
         return payload + next(d for d in "0123456789" if verhoeff_valid(payload + d))
     if family == "cnpj":
         payload = ("00" if partition == "dev" else "01") + rng.digits(6) + "0001"
-        return payload + cnpj_check_digits(payload)
+        digits = payload + cnpj_check_digits(payload)
+        return (f"{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}"
+                if index % 3 == 0 else digits)
     if family == "nir":
         # Fictional foreign birthplace 99000, never a sampled person record.
         payload = (
@@ -4375,11 +4377,13 @@ def _coverage_records(partition: str) -> list[Record]:
                     # Deliberately erroneous personal number: +28 is unassigned.
                     # This measures cue-only recovery rather than parser recall.
                     value = value.replace("+44", "+28")
+                if index % 3 == 0:
+                    value = value[:-3] + " " + value[-3:]
                 label, language, region = "TELEPHONENUM", "en", "GB"
                 templates = (
                     ("Phone: {V}", "telephone={V}", '{"phone":"{V}"}')
                     if partition == "dev"
-                    else ("Mobile: {V}", "cellphone={V}", '{"mobileNumber":"{V}"}')
+                    else ("Tel.: {V}", "cellphone={V}", '{"mobileNumber":"{V}"}')
                 )
                 twin = (
                     "Firmware version: {V}"

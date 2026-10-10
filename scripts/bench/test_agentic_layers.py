@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "d75777753f806fddb6a7daa7906c8f2ce9edb18f2649408936e116591f69296c",
-    "test": "0827ccb459a7f5029e7f4e7146820550ee9aa3ccf2f8a0066ef0595ca3b04437",
+    "dev": "8024bbdda92507bd866a784b6ae8ac7299bcd0b9f0f81a1ee1d767ff60a4a152",
+    "test": "ff5c3db7fc58ab068a54e0a8543727df529d99aa3f2ffdd097c34eab9c0644b8",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -2974,8 +2974,10 @@ class ShippedClassCoverageTests(unittest.TestCase):
                     if family == "aadhaar":
                         self.assertTrue(agentic.verhoeff_valid(value)); self.assertFalse(agentic.verhoeff_valid(bad))
                     elif family == "cnpj":
-                        self.assertEqual(value[-2:],agentic.cnpj_check_digits(value[:-2]))
-                        self.assertNotEqual(bad[-2:],agentic.cnpj_check_digits(bad[:-2]))
+                        digits = "".join(c for c in value if c.isdigit())
+                        bad_digits = "".join(c for c in bad if c.isdigit())
+                        self.assertEqual(digits[-2:],agentic.cnpj_check_digits(digits[:-2]))
+                        self.assertNotEqual(bad_digits[-2:],agentic.cnpj_check_digits(bad_digits[:-2]))
                     elif family == "nir":
                         self.assertEqual(int(value[-2:]),97-int(value[:-2])%97)
                         self.assertNotEqual(int(bad[-2:]),97-int(bad[:-2])%97)
