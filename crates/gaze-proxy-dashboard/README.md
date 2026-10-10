@@ -1,14 +1,13 @@
 # gaze-proxy-dashboard
 
 gaze-proxy-dashboard is the provider-neutral, memory-only inspection dashboard runtime for Gaze.
-It is deliberately absent by default. An adopter must explicitly construct the dashboard child,
+Default-off. Explicitly construct the dashboard child,
 complete acknowledged local pairing, and create the pending consumer. `ActivatedInspectionConsumerV1`
 itself exposes no registration identity, so identity comes from `gaze-inspection`: the pending
 consumer is created together with a one-shot `InspectionConsumerBindingV1`, which the dashboard
 retains. `PendingDashboardActivation::commit` binds the activated consumer against that binding
 before any socket, writer, runtime, or admission side effect; a consumer from a different
-registration fails with `ActivationFailed`. Descriptor equality and caller assertions are not an
-acceptable substitute.
+registration fails with `ActivationFailed`. Descriptor equality and caller assertions cannot replace the binding.
 
 Among Gaze crates, the normal dependency closure is exactly:
 
@@ -49,8 +48,7 @@ outbound client, analytics, telemetry, or a crash-dump handler.
 
 ## Current typed limitations
 
-The queue snapshot field is not measured and must be presented as unavailable, never as zero,
-empty, healthy, or no traffic. ProjectionFailedClosed is intentionally coarse and must not be
+Queue snapshots are unmeasured; show unavailable, never zero, empty, healthy, or no traffic. ProjectionFailedClosed is intentionally coarse and must not be
 expanded into a guessed cause. Configured ports are category-only and must never become numeric
 ports, hosts, URLs, or provenance. MetadataOnly supplies no content-derived measurements,
 structure, PII, timeline, decision, or attestation projection. Every absent projection carries its

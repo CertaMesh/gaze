@@ -8,9 +8,7 @@
 
 ## Scope
 
-`gaze-mcp` enforces the chokepoint on the **data-source ↔ model** path. Any data flowing **from a source through an agent-tier MCP tool to the model** passes through `PiiEnvelope::dispatch` and is protected before the model sees it. Authorized operator-tier tools can explicitly bypass response protection for restore/export semantics; their raw responses must stay on the operator surface.
-
-`gaze-mcp` **does not** cover the **user ↔ model** path. Pasted text, uploaded files, and screenshots in the agent host's chat UI reach the model unredacted. For that axis, use `gaze-proxy`, the v0.8+ multi-vendor reverse proxy supporting OpenAI, Anthropic, and Gemini SDK base-URL swaps.
+Agent-tier source data passes through `PiiEnvelope::dispatch` before reaching the model. Authorized operator tools can return raw restore/export results only on the operator surface. Chat pastes, uploads, and screenshots require `gaze-proxy`. See the [core boundary](../gaze-mcp-core/README.md#scope).
 
 ## Quickstart
 
@@ -44,8 +42,6 @@ Most adopters build `host` by wrapping `gaze_mcp_core::PiiEnvelope`: configure t
 
 - `transport-stdio` (default): MCP over process stdio, the standard agent-host integration path.
 - `transport-http`: MCP streamable HTTP via rmcp + axum at `/mcp`.
-
-`transport-http` is opt-in because it pulls HTTP server dependencies. `transport-stdio` remains the default path for local agent hosts.
 
 ## Tool errors
 
@@ -81,6 +77,6 @@ The adapter removes `_session_id` before dispatching tool args and passes it as 
 
 ## rmcp version policy
 
-This crate builds on `rmcp 2.x`. There is **no SemVer guarantee** on rmcp re-exports or transport internals; major rmcp bumps may force breaking releases of `gaze-mcp-rmcp` even within otherwise stable Gaze cycles.
+This crate builds on `rmcp 2.x`. There is no SemVer guarantee on rmcp re-exports or transport internals; major rmcp bumps may force breaking releases of `gaze-mcp-rmcp` even within otherwise stable Gaze cycles.
 
 [`gaze-mcp-core`]: https://crates.io/crates/gaze-mcp-core

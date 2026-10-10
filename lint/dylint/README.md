@@ -1,6 +1,3 @@
-# Gaze Dylint Lints
+# Gaze Dylint lints
 
-This detached workspace contains repository policy lints for Gaze.
-
-`gaze_module_isolation` enforces that protected restore/core paths do not
-resolve audit-sink symbols from `gaze_audit`.
+Detached workspace for repository policy lints. `gaze_module_isolation` blocks audit-sink symbol access from protected restore/core paths.

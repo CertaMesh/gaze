@@ -6,8 +6,6 @@
 
 Gaze command-line interface
 
-Part of the [Gaze](https://github.com/CertaMesh/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
-
 This crate publishes the `gaze` binary. It is the process boundary used by
 shell integrations and language adapters that should not link the Rust library
 directly.
@@ -73,9 +71,10 @@ Audit logging is captured on `clean` via `--audit-db <path>`; the
 ## `clean`
 
 ```console
-$ printf 'Email %s@%s now' alice example.invalid \
-  | gaze clean --policy policy.toml
+$ printf 'Email %s@%s now' alice example.invalid | gaze clean --policy policy.toml
 ```
+
+Without `--policy`, `clean` uses bundled `core` and tokenizes every active class. Pass a policy in production. Output is `{clean_text, session_blob, stats}` JSON.
 
 Flags:
 
@@ -106,30 +105,18 @@ Flags:
 | `--nym-intra-threads <n>` | ONNX Runtime intra-op threads for the `nym` backend. Defaults to `1`. |
 | `--safety-net-timeout-ms <ms>` | Subprocess deadline. Defaults to `5000`. |
 | `--safety-net-input-limit-bytes <bytes>` | Clean-text input cap forwarded to the safety net. Defaults to `1048576`. |
-| `--safety-net-mode <strict\|tolerant\|redact\|resolve>` | Production action on `Uncovered`/`PartialBleed` suspects. `strict` exits `3`; `tolerant` emits warnings on stderr and continues (dev-only, fires a stderr warning on every invocation); `redact` **replaces** the suspect span with a one-way `[REDACTED:<class>]` marker (the bytes do not come back; the marker is not a token and restore returns it verbatim) and records an audit row; `resolve` tokenizes the suspect span directly as a restorable token of the suspect's class, then runs the nets once more; what it cannot handle goes to `--safety-net-fallback`. Defaults to `resolve`. Mode catalog and posture guide: [`docs/explanation/safety-net/safety-net-modes.md`](../../docs/explanation/safety-net/safety-net-modes.md). |
-| `--safety-net-fallback <strict\|tolerant\|redact>` | Residual action for `--safety-net-mode resolve`, and **only** for `resolve`: what happens when the resolve pass cannot tokenize a suspect because it overlaps an existing token (`OverlapConflict`) or the post-resolve re-run still reports one (`ResidualSuspect`). `strict` rejects the document and exits `3`; `tolerant` ships the residual bytes; `redact` tokenizes the re-run's residuals when every one can be tokenized reversibly and otherwise replaces them with a one-way `[REDACTED:<class>]` marker (a first-pass refusal always gets the marker). Defaults to `redact`. Ignored by `strict`, `tolerant`, and `redact` modes — those are terminal per suspect and their failure paths are typed errors that fail closed, not a cascade. One-hop only. `tolerant` requires `GAZE_ALLOW_TOLERANT=1`. Lowering table and audit rows: [`docs/explanation/safety-net/safety-net-modes.md`](../../docs/explanation/safety-net/safety-net-modes.md#the-fallback-applies-only-under-resolve). |
+| `--safety-net-mode <strict\|tolerant\|redact\|resolve>` | Production action on `Uncovered`/`PartialBleed` suspects. `strict` exits `3`; `tolerant` emits warnings on stderr and continues (dev-only, fires a stderr warning on every invocation); `redact` replaces the suspect span with a one-way `[REDACTED:<class>]` marker (the bytes do not come back; the marker is not a token and restore returns it verbatim) and records an audit row; `resolve` tokenizes the suspect span directly as a restorable token of the suspect's class, then runs the nets once more; what it cannot handle goes to `--safety-net-fallback`. Defaults to `resolve`. Mode catalog and posture guide: [`docs/explanation/safety-net/safety-net-modes.md`](../../docs/explanation/safety-net/safety-net-modes.md). |
+| `--safety-net-fallback <strict\|tolerant\|redact>` | Residual action for `--safety-net-mode resolve`, and only for `resolve`: what happens when the resolve pass cannot tokenize a suspect because it overlaps an existing token (`OverlapConflict`) or the post-resolve re-run still reports one (`ResidualSuspect`). `strict` rejects the document and exits `3`; `tolerant` ships the residual bytes; `redact` tokenizes the re-run's residuals when every one can be tokenized reversibly and otherwise replaces them with a one-way `[REDACTED:<class>]` marker (a first-pass refusal always gets the marker). Defaults to `redact`. Ignored by `strict`, `tolerant`, and `redact` modes: those are terminal per suspect and their failure paths are typed errors that fail closed, not a cascade. One-hop only. `tolerant` requires `GAZE_ALLOW_TOLERANT=1`. Lowering table and audit rows: [`docs/explanation/safety-net/safety-net-modes.md`](../../docs/explanation/safety-net/safety-net-modes.md#the-fallback-applies-only-under-resolve). |
 
-When `--policy` is omitted, the CLI runs the bundled `core` rulepack, the same
-as `--rulepack-bundled core`, and tokenizes every class it activates.
-Production use should pass `--policy`.
+Full command reference: [CLI reference](../../docs/reference/cli.md). Safety-net `resolve` defaults to a `redact` fallback; this can make one-way replacements. Use the [mode catalog](../../docs/explanation/safety-net/safety-net-modes.md) to choose the required restore and refusal behavior.
 
 ## `restore`
 
 ```console
-$ printf '%s' '{"session_blob":"<base64>","text":"Email <token> now"}' \
-  | gaze restore
+$ printf '%s' '{"session_blob":"<base64>","text":"Email <token> now"}' | gaze restore
 ```
 
-Flags:
-
-| Flag | Meaning |
-|------|---------|
-| `--format <json>` | Output format. Only `json` is accepted. Defaults to `json`. |
-| `--restore-mode <strict\|tolerant>` | Unknown-token handling. Defaults to `strict`. |
-| `--max-bytes <bytes>` | Stdin byte cap. Defaults to `10485760`. |
-
-`strict` restore fails on unknown tokens. `tolerant` restore preserves unknown
-tokens and returns a warning in the JSON response.
+`--restore-mode strict` (default) rejects unknown tokens. `tolerant` preserves them and returns `restore_warning`. Output is JSON (`--format json` only); `--max-bytes` defaults to `10485760`.
 
 ## `setup`
 
@@ -210,76 +197,27 @@ For the full runtime contract, see
 
 ## `audit query`
 
-Reads the SQLite redaction log written by `gaze clean --audit-db <path>` and
-prints filtered metadata rows as tab-separated values. The DB is opened
-read-only via `OpenFlags::SQLITE_OPEN_READ_ONLY`, so the audit CLI cannot write
-back to the log even if compromised.
-
 ```console
 $ gaze audit query --audit-db audit.sqlite --class email --action tokenize
 ```
 
-Filters:
-
-| Flag | Meaning |
-|------|---------|
-| `--audit-db <path>` | Required. SQLite redaction-log database path. |
-| `--class <pii_class>` | Filter by PII class such as `email`, `name`, or `custom:term`. |
-| `--source <name>` | Filter by source recognizer name. |
-| `--action <kind>` | Filter by action: `tokenize`, `redact`, `preserve`. |
-| `--document-kind <kind>` | Filter by document kind: `text`, `structured`. |
-| `--from <iso8601>` | Include rows whose `created_at` is at or after this timestamp (v0.4.4). |
-| `--to <iso8601>` | Include rows whose `created_at` is at or before this timestamp (v0.4.4). |
-
-Time-filtered queries omit NULL `created_at` rows from legacy v0.4.3 audit DBs
-by SQL semantics. Unfiltered queries still surface those rows.
+Reads metadata as TSV with `SQLITE_OPEN_READ_ONLY`. Filters cover class, source, action, document kind, and inclusive `--from` / `--to` ISO8601 timestamps. Time filters omit legacy NULL timestamps; unfiltered queries retain them. Complete filters: [CLI reference](../../docs/reference/cli.md).
 
 ## `audit export`
-
-Same filter set as `audit query`, with output destined for downstream
-processing rather than the terminal:
 
 ```console
 $ gaze audit export --audit-db audit.sqlite --format jsonl --output redactions.jsonl
 ```
 
-| Flag | Meaning |
-|------|---------|
-| `--format <jsonl>` | Export format. JSONL is the default and currently the only supported format. |
-| `--output <path>` | Optional output file. Defaults to stdout. |
-
-Exported JSON rows include `created_at` since v0.4.4. The export ships a
-restricted column set so raw PII payloads stay outside the export surface.
+Uses the query filters and a restricted metadata-only column set including `created_at`. JSONL is the only format; without `--output`, writes stdout.
 
 ## `audit safety-net query`
 
-Reads the `safety_net_log` rows written by `gaze clean --audit-db <path>
---safety-net <kind>` and prints them as tab-separated values. The DB is
-opened read-only.
-
 ```console
-$ gaze audit safety-net query \
-    --audit-db audit.sqlite \
-    --leak-kind uncovered \
-    --field-path '$.user.email'
+$ gaze audit safety-net query --audit-db audit.sqlite --leak-kind uncovered --field-path '$.user.email'
 ```
 
-Filters:
-
-| Flag | Meaning |
-|------|---------|
-| `--audit-db <path>` | Required. SQLite redaction-log database path. |
-| `--leak-kind <kind>` | Filter by `uncovered`, `partial_bleed`, or `class_mismatch`. |
-| `--raw-label <label>` | Filter by validated upstream label, e.g. `private_email`. |
-| `--mapped-class <pii_class>` | Filter by Gaze class produced by the class map. |
-| `--field-path <selector>` | Filter by structured-document field path, e.g. `$.user.email`. |
-| `--from <iso8601>` | Include rows whose `created_at` is at or after this timestamp. |
-| `--to <iso8601>` | Include rows whose `created_at` is at or before this timestamp. |
-
-The `safety_net_log` table stores metadata only — `raw_label` is the
-validated upstream label, **not** the upstream raw text. See
-[`docs/explanation/safety-net/safety-nets.md`](../../docs/explanation/safety-net/safety-nets.md#safety_net_log-audit-table)
-for the full schema.
+Reads `safety_net_log` as TSV, read-only. Filters: `--leak-kind` (`uncovered`, `partial_bleed`, `class_mismatch`), `--raw-label`, `--mapped-class`, `--field-path`, inclusive `--from` / `--to`. `raw_label` is a validated label, never upstream text. [Schema](../../docs/explanation/safety-net/safety-nets.md#safety_net_log-audit-table).
 
 ## `index`
 
@@ -398,152 +336,49 @@ the user pastes directly into a chat UI.
 
 ## Safety net
 
-The policy `[safety_net].backend = "nym"` or a `--safety-net=<kind>` flag
-activates the observer-only safety net documented in
-[docs/explanation/safety-net/safety-nets.md](../../docs/explanation/safety-net/safety-nets.md).
-The safety net runs after the deterministic clean and reports suspected
-leaks against the manifest of emitted tokens. The net itself never edits the
-text; the pipeline acts on its report according to `--safety-net-mode`:
-`resolve` (default) tokenizes a suspect as a restorable token, `redact` writes
-a one-way `[REDACTED:<class>]` marker, `strict` rejects the document, and
-`tolerant` only warns.
+Safety nets report suspects; the pipeline chooses the action. No net runs without policy selection or a CLI choice. Repeat `--safety-net` to stack nets; `--safety-net-backend` replaces exactly one explicit choice.
 
 ### Safety-net backends
 
-No safety net runs when the policy table is absent and no CLI choice is given.
-Two observer-only backends are available. Repeat `--safety-net` to run both;
-`--safety-net-backend` replaces a single explicit choice.
-Both share the strict/tolerant exit-code contract, the `LeakReport` shape,
-and the `safety_net_log` audit table.
-
-**`openai-filter`** (v0.6+) wraps the official `openai/privacy-filter`
-subprocess. Strengths: eight typed labels covering Person, Email, Phone,
-URL, Address, Date, Account number, Secret; documented operating points;
-mature upstream. Trade-offs: heavier model and slower per-clean latency;
-no first-party fetch path; runtime depends on a third-party Python install
-the operator pins.
-
-**`nym`** (opt-in) runs the pinned Nym-small v3 int8 token classifier in
-process. Only building numbers, licence plates, usernames and dates of birth
-can fire by default (op-B); `[safety_net.nym]` in policy.toml changes the
-allowlist and thresholds. It is not available through
-`--safety-net-registry`. Contract:
-[safety-nets.md](../../docs/explanation/safety-net/safety-nets.md#nym-small-adapter).
+| Backend | Build / coverage |
+| --- | --- |
+| `openai-filter` | Opt-in `safety-net-openai`; subprocess with Person, Email, Phone, URL, Address, Date, Account number, Secret labels. Heavier model and per-call startup. |
+| `nym` | Default build through `setup` / `safety-net-nym`; pinned Nym-small v3 int8 in-process model. Default op-B labels: building numbers, licence plates, usernames, birth dates. Policy changes labels/thresholds; registry dispatch is unsupported. |
 
 ### Build and install the backends
 
-The OpenAI Privacy Filter backend is gated off by default. Build with it:
-
 ```console
 $ cargo build -p gaze-cli --features safety-net-openai
+$ gaze setup
 ```
 
-The `nym` backend is compiled into the default build through the `setup`
-feature (`safety-net-nym`). The default `gaze setup` installs its pinned bundle.
+Setup installs Nym. For OPF, pin an upstream revision/release from [`openai/privacy-filter`](https://github.com/openai/privacy-filter), record it in the deployment manifest, and supply the binary and weights. The adapter downloads or updates neither.
 
-The `opf` command must be installed from a pinned upstream Git revision or
-an official release of the
-[`openai/privacy-filter`](https://github.com/openai/privacy-filter) repository.
-Adopters should record the exact upstream Git SHA or tag they install in
-their deployment manifest. The adapter does **not** download or update the
-checkpoint; bring-your-own-binary plus bring-your-own-weights is the
-v0.6 contract.
+Set `GAZE_OPENAI_FILTER_OPF=/opt/opf/bin/opf` or `--openai-filter-command`. Absolute command paths must be regular files, not symlinks. The checkpoint must be user-owned, mode `0700`, with no group/world write bits. Missing weights return `WeightsMissing` (exit `3`) before spawn; initialization failures are cached for the process lifetime.
 
-Pin the install path with `GAZE_OPENAI_FILTER_OPF=/opt/opf/bin/opf` or pass
-`--openai-filter-command=<path>` per invocation. The command path must be a
-regular file (not a symlink) when given as an absolute path, and the
-checkpoint directory must be owned by the current user with mode `0700` and
-no group/world write bits.
-
-If the checkpoint is missing, the CLI fails closed with exit `3` and
-variant `WeightsMissing` before any subprocess spawn. Initialization
-failures are cached for the lifetime of the process so missing-checkpoint
-errors do not retry on every clean.
-
-### Synthetic example — strict mode
+### Synthetic example: strict mode
 
 ```console
-$ printf 'Email %s@%s or call 555-%s now' alice example.invalid 0100 \
-  | gaze clean \
-      --policy=policy.toml \
-      --safety-net=openai-filter \
-      --safety-net-mode=strict \
-      --openai-filter-command=/opt/opf/bin/opf \
-      --openai-filter-checkpoint=/opt/opf/checkpoint
+$ printf 'Email %s@%s now' alice example.invalid | gaze clean \
+    --policy=policy.toml --safety-net=openai-filter --safety-net-mode=strict \
+    --openai-filter-command=/opt/opf/bin/opf --openai-filter-checkpoint=/opt/opf/checkpoint
 ```
 
-A clean run emits the standard `{clean_text, session_blob, stats}` JSON
-plus a `leak_report` block on stdout:
+Output adds `leak_report.stats` with suspect, uncovered, partial-bleed, class-mismatch, and locale-skipped counts. Exit `0` with zero suspects means the net reported none; detection cannot certify that all PII was found.
 
-```json
-{
-  "clean_text": "Email <{session_hex}:Email_1> or call <{session_hex}:Phone_1> now",
-  "session_blob": "<base64>",
-  "stats": {"detections": 2},
-  "leak_report": {
-    "stats": {
-      "suspect_count": 0,
-      "uncovered_count": 0,
-      "partial_bleed_count": 0,
-      "class_mismatch_count": 0,
-      "locale_skipped_count": 0
-    }
-  }
-}
-```
+### Synthetic example: tolerant mode
 
-Exit code `0` and `suspect_count = 0` is the contract for "no leaks".
+Dev-only `--safety-net-mode tolerant` warns on stderr and exits `0` when uncovered/partial-bleed suspects remain. Strict mode returns `SuspectedLeak` (exit `3`) with empty stdout. Class mismatches warn but do not fail strict mode; findings wholly inside owned placeholders are dropped before action.
 
-### Synthetic example — tolerant mode
-
-```console
-$ printf 'Sender: %s, phone +44 %s%s' 'Sample Sender' '7700 900' 123 \
-  | gaze clean \
-      --policy=policy.toml \
-      --safety-net=openai-filter \
-      --openai-filter-command=/opt/opf/bin/opf \
-      --openai-filter-checkpoint=/opt/opf/checkpoint \
-      --safety-net-mode=tolerant
-```
-
-If the safety net reports an `Uncovered` or `PartialBleed` suspect that the
-deterministic pipeline missed, tolerant mode emits a stderr warning and
-exits `0`:
-
-```text
-{"warning":"SafetyNet","variant":"SuspectedLeak","count":1}
-```
-
-Strict mode (the v0.7.x default; now opt-in via `--safety-net-mode strict`)
-would exit `3` with the JSON error
-`{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout would
-be empty. `ClassMismatch` suspects always warn but never fail strict mode,
-because the manifest still tokenized the bytes — only the class disagrees.
-They arise only for tokens that fail the ownership check; findings inside a
-placeholder the session owns are dropped before any action.
-The default mode in v0.8.x+ is `resolve` with a `redact` fallback (see the
-[`clean` flag table](#clean) and the
-[mode catalog](../../docs/explanation/safety-net/safety-net-modes.md)). The
-same pair is `gaze::SafetyNetPolicy::default()`, so the library's policy-less
-`Pipeline::clean_with_safety_net*` entry points and the CLI share one
-documented default.
+Default CLI and `SafetyNetPolicy::default()` behavior is `resolve` plus `redact` fallback. See the [mode catalog](../../docs/explanation/safety-net/safety-net-modes.md) for overlap, residual, one-way replacement, and tolerant opt-in rules.
 
 ### Latency budget (`openai-filter`)
 
-Each safety-net check spawns one `opf` subprocess. The default subprocess
-deadline is `5000` ms; tighten it via `--safety-net-timeout-ms` for
-latency-sensitive callers. On timeout the adapter sends `SIGKILL`, reaps
-the process, and returns exit `3` with variant `Timeout`. The safety net
-does not currently amortize subprocess startup across calls; a long-lived
-helper is filed for post-v0.6.0.
+Each check spawns OPF. `--safety-net-timeout-ms` defaults to `5000`; timeout kills with `SIGKILL`, reaps, and returns `Timeout` (exit `3`). Startup is not amortized.
 
 ### Audit
 
-Combine the safety net with `--audit-db <path>` to persist metadata-only
-suspect rows into the `safety_net_log` table. Query the rows back with
-`gaze audit safety-net query` ([above](#audit-safety-net-query)). The schema and the bytes-free
-invariants are documented in
-[`docs/explanation/safety-net/safety-nets.md`](../../docs/explanation/safety-net/safety-nets.md#safety_net_log-audit-table).
+`--audit-db` stores metadata-only suspects. Read them with [`audit safety-net query`](#audit-safety-net-query). [Schema and bytes-free contract](../../docs/explanation/safety-net/safety-nets.md#safety_net_log-audit-table).
 
 ## Exit codes
 
@@ -585,17 +420,4 @@ For policy schema details, see [docs/reference/policy.md](../../docs/reference/p
 
 ## Approved synthetic PII in examples
 
-All examples in this README use project-approved synthetic fixtures so the
-fixture-citation and no-tenant-knowledge gates remain green:
-
-- Emails: `<local>@example.invalid`, `*.invalid`, `*.test`. RFC 6761
-  guarantees these never resolve.
-- US/CA phones: NANPA `555-01xx` range (`555-0100` through `555-0199`),
-  reserved by the FCC for fictional use.
-- UK phones: Ofcom drama ranges (e.g. `+44 113 496 0xxx`), reserved by
-  Ofcom for fictional use.
-- Names: `Alice Example`, `Bob Example`. Avoid real public-figure names.
-
-Do not paste real customer or operator data into examples or fixtures —
-the `fixture-citation-lint` xtask gate will reject any literal that looks
-real or that is not cited from a checked-in test.
+Use reserved email domains, fictional phone ranges, and synthetic names. See [fixture rules](../../CONTRIBUTING.md#phone-number-fixtures). Never paste customer or operator data into examples; cite the checked-in test for PII-shaped fixtures.
