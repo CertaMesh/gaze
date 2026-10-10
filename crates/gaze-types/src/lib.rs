@@ -767,6 +767,10 @@ pub enum ValidatorKind {
     /// Parser-backed national phone validator for a fixed region.
     #[cfg(feature = "phone-parser")]
     E164PhoneNational(Region),
+    /// Parser-backed international and national phone validity across supported regions.
+    /// National values retain their original form rather than guessing a country code.
+    #[cfg(feature = "phone-parser")]
+    PhoneNumber,
     /// Luhn checksum validator.
     Luhn,
     /// IBAN MOD-97 validator.
@@ -806,6 +810,24 @@ pub enum Region {
     De,
     /// United States.
     Us,
+    /// Austria.
+    At,
+    /// Switzerland.
+    Ch,
+    /// United Kingdom.
+    Gb,
+    /// Ireland.
+    Ie,
+    /// Australia.
+    Au,
+    /// Canada.
+    Ca,
+    /// New Zealand.
+    Nz,
+    /// South Africa.
+    Za,
+    /// France.
+    Fr,
 }
 
 /// What validator veto does with a candidate whose validator fails.
@@ -832,6 +854,21 @@ impl ValidatorOnFail {
 }
 
 impl ValidatorKind {
+    /// Whether this validator checks phone values, including regional national forms.
+    pub fn is_phone(self) -> bool {
+        #[cfg(feature = "phone-parser")]
+        {
+            matches!(
+                self,
+                Self::E164Phone | Self::E164PhoneNational(_) | Self::PhoneNumber
+            )
+        }
+        #[cfg(not(feature = "phone-parser"))]
+        {
+            false
+        }
+    }
+
     /// Whether a failed validation may keep a candidate with its failure reason.
     /// Rulepacks opt in per recognizer; broad scanners must still veto.
     pub fn allows_recorded_failure(self) -> bool {
@@ -846,7 +883,10 @@ impl ValidatorKind {
         ) || {
             #[cfg(feature = "phone-parser")]
             {
-                matches!(self, Self::E164Phone | Self::E164PhoneNational(Region::Us))
+                matches!(
+                    self,
+                    Self::E164Phone | Self::PhoneNumber | Self::E164PhoneNational(Region::Us)
+                )
             }
             #[cfg(not(feature = "phone-parser"))]
             {
@@ -861,6 +901,8 @@ impl ValidatorKind {
             "email_rfc" => Ok(Self::EmailRfc),
             #[cfg(feature = "phone-parser")]
             "e164_phone" => Ok(Self::E164Phone),
+            #[cfg(feature = "phone-parser")]
+            "phone_number" => Ok(Self::PhoneNumber),
             #[cfg(feature = "phone-parser")]
             "e164_phone_national_de" => Ok(Self::E164PhoneNational(Region::De)),
             #[cfg(feature = "phone-parser")]
@@ -907,6 +949,10 @@ impl ValidatorKind {
             },
             None => ValidatorOutcome::Fail {
                 reason: match self {
+                    #[cfg(feature = "phone-parser")]
+                    Self::PhoneNumber if input.starts_with('+') || input.starts_with("00") => {
+                        ValidatorFailReason::PhoneE164Rejected
+                    }
                     Self::Ipv4ParseNonDocumentation => match input.parse() {
                         Ok(address) if ipv4_is_documentation(address) => {
                             ValidatorFailReason::Ipv4DocumentationRange
@@ -935,6 +981,8 @@ impl ValidatorKind {
             Self::E164Phone => e164_phone_check(input).then(|| input.to_string()),
             #[cfg(feature = "phone-parser")]
             Self::E164PhoneNational(region) => validate_phone_national(region, input),
+            #[cfg(feature = "phone-parser")]
+            Self::PhoneNumber => phone_number_check(input).then(|| input.to_string()),
             Self::Luhn => luhn_check(input).then(|| input.to_string()),
             Self::IbanMod97 => iban_mod97_check(input).then(|| input.to_string()),
             Self::Ipv4Parse => ipv4_parse_check(input).then(|| input.to_string()),
@@ -980,6 +1028,8 @@ impl ValidatorKind {
             #[cfg(feature = "phone-parser")]
             Self::E164Phone => ValidatorFailReason::PhoneE164Rejected,
             #[cfg(feature = "phone-parser")]
+            Self::PhoneNumber => ValidatorFailReason::PhoneNationalRegionMismatch,
+            #[cfg(feature = "phone-parser")]
             Self::E164PhoneNational(_) => ValidatorFailReason::PhoneNationalRegionMismatch,
             Self::Luhn => ValidatorFailReason::LuhnFailed,
             Self::IbanMod97 => ValidatorFailReason::IbanMod97Failed,
@@ -1011,15 +1061,81 @@ fn e164_phone_check(input: &str) -> bool {
     phonenumber::parse(None, input).is_ok_and(|phone| phonenumber::is_valid(&phone))
 }
 
+/// International dialing prefixes and optional trunk markers are display syntax.
+#[cfg(feature = "phone-parser")]
+fn phone_number_check(input: &str) -> bool {
+    let normalized = input.strip_prefix("00").map(|tail| format!("+{tail}"));
+    let value = normalized.as_deref().unwrap_or(input);
+    if value.starts_with('+') {
+        return phonenumber::parse(None, value).is_ok_and(|phone| {
+            // Some national plans accept longer subscriber numbers. They cannot be
+            // trusted as international values beyond E.164's 15-digit limit.
+            // ITU-T E.164 Annex A.3.1.1: https://www.itu.int/rec/T-REC-E.164-202602-I/en
+            if phone
+                .format()
+                .mode(phonenumber::Mode::E164)
+                .to_string()
+                .bytes()
+                .filter(u8::is_ascii_digit)
+                .count()
+                > 15
+            {
+                return false;
+            }
+            phone.is_valid()
+                || (phone.country().code() == 44
+                    // The reserved-block exception must not bless a per-digit slash run
+                    // that the parser rejected; recorded failures cannot seed repeats.
+                    && value.bytes().filter(|byte| *byte == b'/').count() <= 1
+                    && is_safe_fixture_phone(
+                        Region::Gb,
+                        &phone.format().mode(phonenumber::Mode::E164).to_string(),
+                    ))
+        });
+    }
+    [
+        Region::De,
+        Region::Us,
+        Region::At,
+        Region::Ch,
+        Region::Gb,
+        Region::Ie,
+        Region::Au,
+        Region::Ca,
+        Region::Nz,
+        Region::Za,
+        Region::Fr,
+    ]
+    .into_iter()
+    .any(|region| validate_phone_national(region, value).is_some())
+}
+
 #[cfg(feature = "phone-parser")]
 fn validate_phone_national(region: Region, input: &str) -> Option<String> {
     let country = match region {
         Region::De => phonenumber::country::DE,
         Region::Us => phonenumber::country::US,
+        Region::At => phonenumber::country::AT,
+        Region::Ch => phonenumber::country::CH,
+        Region::Gb => phonenumber::country::GB,
+        Region::Ie => phonenumber::country::IE,
+        Region::Au => phonenumber::country::AU,
+        Region::Ca => phonenumber::country::CA,
+        Region::Nz => phonenumber::country::NZ,
+        Region::Za => phonenumber::country::ZA,
+        Region::Fr => phonenumber::country::FR,
     };
     let expected_code = match region {
         Region::De => 49,
-        Region::Us => 1,
+        Region::Us | Region::Ca => 1,
+        Region::At => 43,
+        Region::Ch => 41,
+        Region::Gb => 44,
+        Region::Ie => 353,
+        Region::Au => 61,
+        Region::Nz => 64,
+        Region::Za => 27,
+        Region::Fr => 33,
     };
     let number = phonenumber::parse(Some(country), input).ok()?;
     if number.country().code() != expected_code {
@@ -1042,6 +1158,19 @@ fn is_safe_fixture_phone(region: Region, input: &str) -> bool {
             digits == "15550100"
                 || matches!(digits.strip_prefix('1'), Some(rest) if rest.len() == 10 && rest[3..].starts_with("55501"))
         }
+        // Ofcom reserves the entire mobile drama block; libphonenumber deliberately
+        // excludes this allocation, but it remains the phone shape adopters use in tests.
+        // https://www.ofcom.org.uk/phones-and-broadband/phone-numbers/numbers-for-drama
+        Region::Gb => {
+            if input.bytes().filter(|byte| *byte == b'/').count() > 1 {
+                return false;
+            }
+            let national = digits
+                .strip_prefix("44")
+                .or_else(|| digits.strip_prefix('0'))
+                .unwrap_or(&digits);
+            national.len() == 10 && national.starts_with("7700900")
+        }
         Region::De => matches!(
             digits.as_str(),
             "493000000000"
@@ -1051,6 +1180,7 @@ fn is_safe_fixture_phone(region: Region, input: &str) -> bool {
                 | "491710000000"
                 | "01710000000"
         ),
+        _ => false,
     }
 }
 

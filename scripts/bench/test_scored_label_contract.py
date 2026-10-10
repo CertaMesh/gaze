@@ -21,6 +21,7 @@ import test_run_no_opf_benchmark as runner_tests
 REPO_ROOT = Path(__file__).resolve().parents[2]
 V2_PATH = REPO_ROOT / "docs/reference/benchmarks/scored-labels-v2.json"
 V3_PATH = REPO_ROOT / "docs/reference/benchmarks/scored-labels-v3.json"
+V4_PATH = REPO_ROOT / "docs/reference/benchmarks/scored-labels-v4.json"
 
 # The 29 labels observed in the pinned Dataiku EN/DE selection.
 CORPUS_LABELS = frozenset(
@@ -52,6 +53,10 @@ def document(*spans: score.Span, uid: str = "synthetic-contract-1") -> score.Doc
 
 def v2() -> score.ScoredLabelContract:
     return score.load_scored_label_contract(V2_PATH)
+
+
+def v4() -> score.ScoredLabelContract:
+    return score.load_scored_label_contract(V4_PATH)
 
 
 def metrics(doc: score.Document, *predictions: score.Span) -> dict:
@@ -88,6 +93,24 @@ class CommittedContractTests(unittest.TestCase):
         )
         self.assertEqual(contract.scored_labels | contract.excluded_labels, CORPUS_LABELS)
         self.assertRegex(contract.sha256, r"^[0-9a-f]{64}$")
+
+    def test_v4_scores_credentials_and_their_prediction_classes(self) -> None:
+        contract = v4()
+        self.assertEqual((contract.contract_id, contract.version), ("scored-labels-v4", 4))
+        self.assertTrue({"PASSWORD", "SECURITYTOKEN"} <= contract.scored_labels)
+        self.assertNotIn("PASSWORD", contract.excluded_labels)
+        self.assertNotIn("SECURITYTOKEN", contract.excluded_labels)
+        self.assertTrue(
+            {"custom:password", "custom:security_token", "custom:secret"}.isdisjoint(
+                contract.neutral_prediction_classes
+            )
+        )
+        self.assertEqual(contract.scored_labels | contract.excluded_labels, CORPUS_LABELS)
+
+        (applied,) = score.apply_scored_label_contract([document(EMAIL, PASSWORD)], contract)
+        result = metrics(applied, EMAIL, score.Span(15, 23, "custom:password"))
+        self.assertEqual(result["utf8_bytes"]["leaked"], 0)
+        self.assertEqual(result["utf8_bytes"]["false_positive"], 0)
 
     def test_v2_marks_the_open_rulings_pending(self) -> None:
         entries = json.loads(V2_PATH.read_text(encoding="utf-8"))["labels"]
@@ -501,7 +524,7 @@ class GoldGapContractTests(unittest.TestCase):
                 {"name": ["FIRSTNAME", "FIRSTNAME", "SURNAME"]}
             ),
             "needs contract_version 3": lambda v: v.update(contract_version=2),
-            "not supported by this scorer": lambda v: v.update(contract_version=4),
+            "not supported by this scorer": lambda v: v.update(contract_version=5),
         }
         for expected, mutate in cases.items():
             with self.subTest(expected):

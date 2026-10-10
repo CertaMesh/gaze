@@ -520,7 +520,6 @@ pub(crate) fn setup_policy_toml_with_dob(
 ) -> Result<String, CliError> {
     let model_dir = toml_basic_string(&model_dir.to_string_lossy());
     let packs = gaze_recognizers::embedded_rulepacks()
-        .filter(|(name, _)| *name != "secrets")
         .map(|(name, contents)| {
             Rulepack::parse_bundled(contents)
                 .map(|pack| (name, pack))
@@ -1041,7 +1040,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_policy_registers_every_non_secret_bundled_recognizer() {
+    fn generated_policy_registers_every_bundled_recognizer() {
         let dir = tempdir().unwrap();
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
         let policy_out = dir.path().join("policy.toml");
@@ -1062,7 +1061,6 @@ mod tests {
         .unwrap();
         let expected_packs = gaze_recognizers::embedded_rulepacks()
             .map(|(name, _)| name)
-            .filter(|name| *name != "secrets")
             .collect::<Vec<_>>();
         assert_eq!(
             resolved.policy.rulepacks.bundled,
@@ -1078,7 +1076,6 @@ mod tests {
             .filter(|id| *id != "ner")
             .collect::<BTreeSet<_>>();
         let expected = gaze_recognizers::embedded_rulepacks()
-            .filter(|(name, _)| *name != "secrets")
             .flat_map(|(_, contents)| {
                 Rulepack::parse_bundled(contents)
                     .unwrap()

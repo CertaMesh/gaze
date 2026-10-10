@@ -23,7 +23,8 @@ def contract(leaked: int) -> dict:
 def reports() -> tuple[dict, dict]:
     shared = {"corpus": {"agentic": {"generator_version": 4},
                          "layers": {layer: {"documents": 10} for layer in page.LAYERS}},
-              "contracts": {"v3": "x"}, "common_intersection_labels": ["EMAIL"]}
+              "contracts": {version: "x" for version in page.CONTRACTS},
+              "common_intersection_labels": ["EMAIL"]}
     committed = {**shared, "tools": {"opf": {"contracts": contract(50)}, "gliner": {"contracts": contract(20)}}}
     runtime = {"device": "cpu", "dtype": "bfloat16", "torch": "1", "transformers": "5",
                "worker_sha256": "w" * 64, "requirements_sha256": "r" * 64}

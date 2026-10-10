@@ -9,7 +9,7 @@ use syn::{Expr, Item, Lit, Meta, Pat, Stmt};
 const DOC_PATH: &str = "docs/reference/redaction-classes.md";
 const CORE_RULEPACK: &str = "core";
 const CORE_EXTENDED_RULEPACK: &str = "core-extended";
-/// Opt-in credential bundle; its rows are documented but it never joins a default activation.
+/// Separate credential bundle; setup enables it while library callers choose it explicitly.
 const SECRETS_RULEPACK: &str = "secrets";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -416,6 +416,7 @@ fn validator_variant_name(kind: ValidatorKind) -> &'static str {
     match kind {
         ValidatorKind::EmailRfc => "EmailRfc",
         ValidatorKind::E164Phone => "E164Phone",
+        ValidatorKind::PhoneNumber => "PhoneNumber",
         ValidatorKind::E164PhoneNational(_) => "E164PhoneNational",
         ValidatorKind::Luhn => "Luhn",
         ValidatorKind::IbanMod97 => "IbanMod97",

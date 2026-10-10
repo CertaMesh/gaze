@@ -5,8 +5,7 @@
 //! switched `phone.national.de` off for the whole document, and a national German number next to
 //! it shipped raw. Earlier locales now win per span, not per document.
 //!
-//! Numbers are synthetic: `+49 151` and Berlin `030` are valid prefixes, the subscriber digits are
-//! not assigned test contacts.
+//! Numbers come from the BNetzA reserved drama ranges for mobile and Berlin landline contacts.
 
 use gaze::Context;
 use gaze::{
@@ -63,13 +62,13 @@ fn clean_in(locales: &[LocaleTag], text: &str) -> String {
     }
 }
 
-const INTERNATIONAL: &str = "+4915199887766";
-const NATIONAL: &str = "030 12345678";
+const INTERNATIONAL: &str = "+491713920000";
+const NATIONAL: &str = "030 23125000";
 
 #[test]
 fn national_rule_fires_alone_under_de_de() {
     let cleaned = clean_in(&[LocaleTag::DeDe], &format!("Büro: {NATIONAL}."));
-    assert!(!without_tokens(&cleaned).contains("12345678"));
+    assert!(!without_tokens(&cleaned).contains("23125000"));
 }
 
 #[test]
@@ -81,7 +80,7 @@ fn global_first_chain_keeps_national_rule_beside_an_international_number() {
     ] {
         let cleaned = clean_in(&chain, &text);
         assert!(!cleaned.contains(INTERNATIONAL), "{chain:?}: {cleaned:?}");
-        assert!(!without_tokens(&cleaned).contains("12345678"), "{chain:?}");
+        assert!(!without_tokens(&cleaned).contains("23125000"), "{chain:?}");
         assert!(cleaned.contains("Büro: "), "{chain:?}: {cleaned:?}");
     }
 }

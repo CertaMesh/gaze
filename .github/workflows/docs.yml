@@ -19,6 +19,9 @@ jobs:
       - name: benchmark document matches its committed evidence
         run: python3 scripts/bench/render_benchmark_doc.py --check
 
+      - name: credential-inclusive contract stays in sync
+        run: python3 scripts/bench/compare/derive_contract_v4.py --check
+
       - name: competitor comparison matches current benchmark inputs
         run: python3 scripts/bench/compare/render.py docs/reference/benchmarks/comparison.json --page docs/reference/benchmarks/competitors.md --check
 

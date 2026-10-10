@@ -59,6 +59,7 @@ class ComparisonMetrics:
     mapping: Mapping[str, Sequence[str]]
     included_labels: frozenset[str] | None = None
     typed_mapping: Mapping[str, Sequence[str]] | None = None
+    include_per_label_bytes: bool = False
     documents: int = 0
     pii_documents: int = 0
     leaking_documents: int = 0
@@ -69,6 +70,8 @@ class ComparisonMetrics:
     true_positive_bytes: int = 0
     false_positive_bytes: int = 0
     leaked_bytes: int = 0
+    leaked_bytes_by_gold_label: dict[str, int] = field(default_factory=dict)
+    false_positive_bytes_by_prediction_label: dict[str, int] = field(default_factory=dict)
     typed_tp: int = 0
     typed_fp: int = 0
     typed_fn: int = 0
@@ -112,6 +115,30 @@ class ComparisonMetrics:
         self.true_positive_bytes += tp_bytes
         self.false_positive_bytes += predicted_bytes - tp_bytes
         self.leaked_bytes += gold_bytes - tp_bytes
+
+        for label in {span.label for span in document.spans}:
+            label_gold = score.subtract_intervals(
+                score.merge_intervals(
+                    (span.start, span.end) for span in document.spans if span.label == label
+                ),
+                ignored,
+            )
+            leaked = score.interval_length(score.subtract_intervals(label_gold, predicted))
+            if leaked:
+                self.leaked_bytes_by_gold_label[label] = (
+                    self.leaked_bytes_by_gold_label.get(label, 0) + leaked
+                )
+        for label in {span.label for span in retained}:
+            label_predictions = score.merge_intervals(
+                (span.start, span.end) for span in retained if span.label == label
+            )
+            false_positive = score.interval_length(
+                score.subtract_intervals(score.subtract_intervals(label_predictions, gold), ignored)
+            )
+            if false_positive:
+                self.false_positive_bytes_by_prediction_label[label] = (
+                    self.false_positive_bytes_by_prediction_label.get(label, 0) + false_positive
+                )
 
         # Character-level, label-agnostic, over the same merged intervals.
         chars = CharCounter(document.text)
@@ -166,6 +193,14 @@ class ComparisonMetrics:
             "true_positive_bytes": self.true_positive_bytes,
             "false_positive_bytes": self.false_positive_bytes,
             "leaked_bytes": self.leaked_bytes,
+            **({
+                "per_label_bytes": {
+                    "leaked_by_gold_label": dict(sorted(self.leaked_bytes_by_gold_label.items())),
+                    "false_positive_by_prediction_label": dict(
+                        sorted(self.false_positive_bytes_by_prediction_label.items())
+                    ),
+                },
+            } if self.include_per_label_bytes else {}),
             "char_level": self.char_level(),
             "typed_entities": {
                 "tp": self.typed_tp, "fp": self.typed_fp, "fn": self.typed_fn,

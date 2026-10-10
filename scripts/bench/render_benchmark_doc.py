@@ -687,18 +687,19 @@ def displayed_groups(history: Mapping[str, Any]) -> list[list[Mapping[str, Any]]
 # row, so every renderer below works on one contract at a time.
 # --------------------------------------------------------------------------
 
-#: The contract the document leads with: v3 scores the labels Gaze commits to
-#: detect (v2's labels) and credits a protected, unlabelled repeat of a labelled
-#: value instead of counting it as a false positive; its audit passed (#687).
-#: v2 and v1 (every original corpus label) stay beside it.
-HEADLINE_CONTRACT = 3
+#: The contract the document leads with: v4 adds credential protection to v3's
+#: labels and gold-gap credit. Historical v3, v2 and v1 results stay beside it.
+HEADLINE_CONTRACT = 4
 
 CONTRACT_ROLES: dict[int, str] = {
     1: "all original gold labels, kept for comparison with earlier releases",
     2: "the labels Gaze commits to detect, without gold-gap credit",
     3: (
-        "headline: the labels Gaze commits to detect, with protected repeats of a "
+        "the labels Gaze committed to detect before credentials, with protected repeats of a "
         "labelled value credited"
+    ),
+    4: (
+        "headline: credentials counted, with protected repeats of a labelled value credited"
     ),
 }
 
@@ -1680,7 +1681,8 @@ def render_readme_chart(
     newest = gaze[-1]
     caption = (
         f"{newest.name} leaks {newest.leaked:,} PII bytes on our holdout "
-        f"(character-level F2 {newest.f2:.3f}). Methods, competitor setups and how to "
+        f"(character-level F2 {newest.f2:.3f}; credentials counted since contract v4). "
+        "Methods, competitor setups and how to "
         "reproduce: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels)."
         + _pending_note(panel_set)
     )
@@ -1708,8 +1710,9 @@ def _source_lines(
     dataset = latest["dataset"]
     lines = [
         f"- **Own corpus:** {layer_display_name('C')}, "
-        f"{dataset['evaluated_population']['documents']:,} documents, scored labels v3 (the labels Gaze commits to detect, protected repeats "
-        "credited). Gaze from [`release-history.json`](release-history.json) "
+        f"{dataset['evaluated_population']['documents']:,} documents, scored labels v4 "
+        "(credentials counted; protected repeats credited). Gaze from "
+        "[`release-history.json`](release-history.json) "
         "(the shipped default of each tagged release); competitors from "
         "[`comparison.json`](comparison.json)."
     ]

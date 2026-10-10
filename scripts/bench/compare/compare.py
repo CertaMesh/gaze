@@ -40,6 +40,7 @@ CONTRACTS = {
     "v1": None,
     "v2": Path("docs/reference/benchmarks/scored-labels-v2.json"),
     "v3": Path("docs/reference/benchmarks/scored-labels-v3.json"),
+    "v4": Path("docs/reference/benchmarks/scored-labels-v4.json"),
 }
 TOOLS = (
     "presidio-all", "presidio-en", "presidio-en-de", "presidio-strong",
@@ -124,7 +125,7 @@ def typed_mapping_for_contract(
     for label in typed:
         if label.startswith("custom:family:"):
             typed[label] = ()
-    if version == "v1":
+    if version in {"v1", "v4"}:
         for label, gold in (("custom:password", ("PASSWORD",)),
                             ("custom:security_token", ("SECURITYTOKEN",)),
                             ("secret", ("PASSWORD", "SECURITYTOKEN")),

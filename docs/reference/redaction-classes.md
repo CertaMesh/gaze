@@ -1,7 +1,7 @@
 # Redaction classes and recognizers
 
 This is the canonical inventory of what Gaze can detect through the embedded
-`core` and `core-extended` names and the opt-in `secrets` bundle. It covers the emitted classes, every bundled
+`core` and `core-extended` names and the separate `secrets` bundle. It covers the emitted classes, every bundled
 recognizer, validator and normalizer support, collision precedence, conflict
 resolution, deterministic gaps, and no-policy activation.
 
@@ -22,11 +22,12 @@ policy, described under [Shipped default activation](#shipped-default-activation
 The shared payload currently contains exactly 54 recognizer specs
 (`crates/gaze-recognizers/src/lib.rs`, `embedded()`).
 
-The opt-in `secrets` bundle (`crates/gaze-recognizers/embedded/secrets.toml`)
+The separate `secrets` bundle (`crates/gaze-recognizers/embedded/secrets.toml`)
 carries the two credential recognizers, `security_token.anchored` and
-`password.field`. Credentials are not PII, so `secrets` is never part of a
-default activation: its rows below are inert until a caller loads it by name
-with `[policy.rulepacks] bundled = ["core", "secrets"]` or
+`password.field`. `gaze setup` includes it in newly generated policies so
+credentials are protected by default on the CLI setup path. Direct library
+callers and hand-authored policies still choose bundles explicitly; load it by
+name with `[policy.rulepacks] bundled = ["core", "secrets"]` or
 `--rulepack-bundled core,secrets`. The former `username.field` recognizer was
 removed in core 0.6.0; no rulepack emits `custom:username`. The opt-in Nym
 safety net emits `custom:username`, `custom:license_plate`,
@@ -97,8 +98,8 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `name.agent_recipient` | `anchored_match` | Person-name-shaped text after locale-provided agent-recipient cues | `Name` | `de-DE, de-AT, de-CH, en-US, en-GB, en-IE, en-AU, en-CA` | `none` | `none` | `safe_default` | yes | 0.88 | 110 |
 | `core, core-extended` | `name.auto_footer` | `anchored_match` | Person-name-shaped text after locale-provided footer or sign-off cues | `Name` | `de-DE, de-AT, de-CH, en-US, en-GB, en-IE, en-AU, en-CA` | `none` | `none` | `safe_default` | yes | 0.88 | 110 |
 | `core, core-extended` | `phone.structural` | `regex` | Compact international phone candidates beginning with plus and 6 to 15 digits | `custom:phone` | `global` | `e164_phone` | `none` | `safe_default` | yes | 0.70 | 80 |
-| `core, core-extended` | `phone.e164.spaced` | `regex` | Spaced or punctuated international phone candidates outside the US and German branches | `custom:phone` | `global` | `e164_phone` | `none` | `safe_default` | yes | 0.70 | 79 |
-| `core, core-extended` | `phone.e164.spaced.cued` | `regex` | Same-line international phone candidates after English or loaded locale phone-label buckets; parser failures retain a typed audit reason | `custom:phone` | `global` | `e164_phone` | `none` | `safe_default` | yes | 0.70 | 78 |
+| `core, core-extended` | `phone.e164.spaced` | `regex` | Spaced or punctuated international phones, 00 dialing prefixes, optional trunk zeroes and French dotted forms | `custom:phone` | `global` | `phone_number` | `none` | `safe_default` | yes | 0.70 | 79 |
+| `core, core-extended` | `phone.e164.spaced.cued` | `regex` | Labelled international or supported national phone forms; validated list neighbours inherit the cue and parser failures retain a typed audit reason | `custom:phone` | `global` | `phone_number` | `none` | `safe_default` | yes | 0.70 | 78 |
 | `core, core-extended` | `phone.national.de` | `regex` | German national or plus-49 phone shapes accepted by the German regional parser | `custom:phone` | `de-DE, de-AT, de-CH` | `e164_phone_national_de` | `none` | `locale_gated` | no | 0.82 | 85 |
 | `core, core-extended` | `phone.national.us` | `regex` | US NANPA phone shapes, including the documented synthetic 555-01xx range | `custom:phone` | `en-US` | `e164_phone_national_us` | `none` | `safe_default` | yes | 0.82 | 85 |
 | `core, core-extended` | `phone.national.us.cued` | `regex` | Same-line US phone candidates after English or loaded locale phone-label buckets; region failures retain a typed audit reason | `custom:phone` | `en-US` | `e164_phone_national_us` | `none` | `safe_default` | yes | 0.82 | 79 |
@@ -187,19 +188,19 @@ bytes. Pinned by `crates/gaze-recognizers/tests/unicode_group_separators.rs`.
 
 ### `ValidatorKind`
 
-`ValidatorKind` is owned by `gaze-types`; the source currently contains 15 Rust
-variants
-(`crates/gaze-types/src/lib.rs:505-553`). `E164Phone` and the parameterized
-`E164PhoneNational(Region)` variant are compiled only with `phone-parser`; the
-current closed `Region` set is Germany and the United States
-(`crates/gaze-types/src/lib.rs:555-564`). All other variants are always
-available.
+`ValidatorKind` is owned by `gaze-types` and currently contains 16 Rust
+variants. `E164Phone`, `PhoneNumber` and the parameterized
+`E164PhoneNational(Region)` variant are compiled only with `phone-parser`.
+The supported `Region` variants cover Germany, the United States, Austria,
+Switzerland, the United Kingdom, Ireland, Australia, Canada, New Zealand,
+South Africa and France. All other validator variants are always available.
 
 <!-- redaction-classes-gate:validators:start -->
 | Rust variant | Rulepack name or names | Feature | Validation | Source |
 |---|---|---|---|---|
 | `EmailRfc` | `email_rfc` | `always` | Basic email local-part and dotted-domain shape | `crates/gaze-types/src/lib.rs:520-522,566-593` |
 | `E164Phone` | `e164_phone` | `phone-parser` | Parser-backed international E.164 validity | `crates/gaze-types/src/lib.rs:523-525,566-593` |
+| `PhoneNumber` | `phone_number` | `phone-parser` | Parser-backed international dialing syntax (at most 15 canonical E.164 digits) and national validity across DE, US, AT, CH, GB, IE, AU, CA, NZ, ZA and FR; national values preserve their original form; failed national parsing reports `PhoneNationalRegionMismatch` (no supported region accepted the value) | `crates/gaze-types/src/lib.rs` |
 | `E164PhoneNational` | `e164_phone_national_de, e164_phone_national_us` | `phone-parser` | Parser-backed national validity for `Region::De` or `Region::Us` | `crates/gaze-types/src/lib.rs:526-528,555-593` |
 | `Luhn` | `luhn` | `always` | Luhn checksum, excluding all-zero candidates | `crates/gaze-types/src/lib.rs:529-530,566-593` |
 | `IbanMod97` | `iban_mod97` | `always` | IBAN MOD-97 checksum | `crates/gaze-types/src/lib.rs:531-532,566-593` |
@@ -219,8 +220,8 @@ available.
 
 A validator vetoes a failing candidate by default. `[recognizers.validator]`
 accepts `on_fail = "record"` only with `iban_mod97`, `luhn`,
-`de_steuer_id_mod1110`, `bsn_mod11`, `cpf_mod11`, `uk_nhs_mod11`, `e164_phone`, or
-`e164_phone_national_us`. The phone kinds require `phone-parser` when the
+`de_steuer_id_mod1110`, `bsn_mod11`, `cpf_mod11`, `uk_nhs_mod11`, `e164_phone`,
+`phone_number`, or `e164_phone_national_us`. The phone kinds require `phone-parser` when the
 recognizer is built. A kept candidate's audit row carries
 `validator_fail_reason`, and its value is never swept to other copies (see
 [validator veto](../explanation/detection/validator-veto.md#recorded-failures)).
@@ -395,7 +396,8 @@ no policy or explicit locale. It describes which recognizers are registered and
 eligible to match; whether a particular input produces a candidate still
 depends on its shape, cues, and validator outcome.
 
-With no policy, no safety net runs. The `gaze setup` policy activates Nym-small
+With no policy, no safety net runs and the library still loads only `core`.
+The `gaze setup` policy activates `secrets`, Nym-small
 alongside the pinned Davlan mBERT NER model; the OpenAI Privacy Filter remains
 opt-in (`--safety-net openai-filter`).
 
@@ -572,7 +574,7 @@ its resolved action is protective (`Action::is_protective`: anything but
   The closing quote at byte 21 sits outside the union and stays in the clear.
   See
   [`crates/gaze-recognizers/tests/explicit_field_collision_control.rs`](../../crates/gaze-recognizers/tests/explicit_field_collision_control.rs),
-  which pins exactly that geometry on the real `core` and opt-in `secrets` rulepacks.
+  which pins exactly that geometry on the real `core` and separate `secrets` rulepacks.
 
 Rules with no static preview (an adopter `Rule` impl that answers at runtime
 only) stay on the legacy path: such a selection blocks the sweep and its

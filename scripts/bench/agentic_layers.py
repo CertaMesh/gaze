@@ -26,6 +26,7 @@ is synthetic.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import sys
@@ -1174,7 +1175,7 @@ def _lookalike_records(partition: str, seed: int) -> list[Record]:
 
 # A consuming regex guard can eat the only separator before its neighbour.
 # These cases extend the published split without changing any v3 document.
-# The setup policy excludes `secrets`, so `password.field` has no gold here.
+# This generated layer has no credential family; layer C carries credential gold.
 @dataclass(frozen=True)
 class AdjacentValue:
     value: str
@@ -4876,6 +4877,29 @@ def _policy_delta_comparison(
         raise LayerError(f"invalid declared policy delta TOML: {error}") from error
     if not delta or any(not isinstance(section, dict) for section in delta.values()):
         return False, "policy delta must declare at least one TOML section", digests, set()
+    if set(delta) == {"mechanism_delta"}:
+        descriptor = delta["mechanism_delta"]
+        if set(descriptor) != {"append_bundled_rulepacks"}:
+            return False, "mechanism_delta has unsupported operations", digests, set()
+        appended = descriptor["append_bundled_rulepacks"]
+        if (
+            not isinstance(appended, list)
+            or not appended
+            or any(not isinstance(name, str) or not name for name in appended)
+            or len(set(appended)) != len(appended)
+        ):
+            return False, "append_bundled_rulepacks must be a non-empty unique string list", digests, set()
+        expected = copy.deepcopy(base_policy)
+        try:
+            bundled = expected["policy"]["rulepacks"]["bundled"]
+        except (KeyError, TypeError):
+            return False, "base policy has no policy.rulepacks.bundled list", digests, set()
+        if not isinstance(bundled, list) or any(name in bundled for name in appended):
+            return False, "appended bundled rulepacks must be absent from the base list", digests, set()
+        bundled.extend(appended)
+        if not _toml_equal(candidate_policy, expected):
+            return False, "candidate policy differs beyond the declared bundled-rulepack append", digests, set()
+        return True, "candidate policy equals base plus appended bundled rulepacks", digests, set()
     existing = sorted(base_policy.keys() & delta.keys())
     if existing:
         return False, f"policy delta changes existing base sections: {existing}", digests, set()
@@ -4939,6 +4963,54 @@ def gate(
     return {**result, "config": config, **delta_result}
 
 
+def gate_frozen_records(
+    base: Mapping[str, object], candidate: Mapping[str, object],
+    base_record: Path, candidate_record: Path, contract: score.ScoredLabelContract,
+    config: str | None = None, policy_delta: Path | None = None,
+    allow_legacy_policy_inputs: bool = False,
+) -> dict[str, object]:
+    """Explicit base oracle plus candidate-oracle sensitivity; ordinary gate stays strict."""
+    import scorecard_record as record
+    kwargs = {"config": config, "policy_delta": policy_delta,
+              "allow_legacy_policy_inputs": allow_legacy_policy_inputs}
+    raw = gate(base, candidate, **kwargs)
+    if raw["verdict"] == "not_comparable" and raw["differing"] != ["layer_c_gold_validity"]:
+        return raw
+    try:
+        # Bind each scorecard to its record and selected contract before freezing.
+        for card, path in ((base, base_record), (candidate, candidate_record)):
+            replay = record.rescore(path, contract, max_workers=1)
+            selected = config or production_config(card)
+            if (_layer_identity(card) != _layer_identity(replay)
+                    or layer_totals(card, selected) != layer_totals(replay, selected)
+                    or policy_dependency_identity(card, allow_legacy_policy_inputs)
+                    != policy_dependency_identity(replay, allow_legacy_policy_inputs)):
+                raise record.RecordError("scorecard does not match record/contract replay")
+            pointer = card.get("observation_record")
+            if pointer and pointer["sha256"] != score.sha256_file(path):
+                raise record.RecordError("scorecard observation record SHA-256 mismatch")
+        views = {}
+        changed = {}
+        for oracle, reference in (("base", base_record), ("candidate", candidate_record)):
+            cards = [record.rescore(path, contract, max_workers=1,
+                                    gold_verdict_reference=reference)
+                     for path in (base_record, candidate_record)]
+            views[oracle] = gate(*cards, **kwargs)
+            changed[oracle] = {side: card["frozen_gold_verdicts"]["changed_verdicts"]
+                               for side, card in zip(("base", "candidate"), cards, strict=True)}
+    except record.RecordError as error:
+        raise LayerError(str(error)) from error
+    result = {**views["base"], "frozen_gold_verdicts": {
+        "oracle": "base", "raw_comparison": raw, "changed_verdicts": changed,
+        "record_sha256": {"base": score.sha256_file(base_record),
+                          "candidate": score.sha256_file(candidate_record)},
+        "observations_unchanged": True, "candidate_verdict_view": views["candidate"],
+    }}
+    if views["candidate"]["verdict"] != "pass" and result["verdict"] == "pass":
+        result.update(verdict="fail", reason="candidate-verdict sensitivity view did not pass")
+    return result
+
+
 def gate_markdown(result: Mapping[str, object]) -> str:
     policy_differs = "policy_sha256" in result.get("differing", ()) and "policy_delta_reason" in result
     explanation = (
@@ -4976,6 +5048,12 @@ def gate_markdown(result: Mapping[str, object]) -> str:
                   "Phone has no layer A family; layer C credits all five newer labels without a cue split; "
                   "the excluded bytes are reported in the twin columns. "
                   "The gate is necessary, not sufficient: review still judges precision."]
+    frozen = result.get("frozen_gold_verdicts")
+    if frozen:
+        lines += ["", "Gold verdicts explicitly frozen to base; observed detections unchanged.",
+                  f"Raw comparison: {frozen['raw_comparison']['verdict']}; changed verdicts: {frozen['changed_verdicts']}",
+                  f"Record SHA-256: {frozen['record_sha256']}", "", "Candidate-verdict sensitivity view:",
+                  gate_markdown(frozen["candidate_verdict_view"]).rstrip()]
     return "\n".join(lines) + "\n"
 
 
@@ -5107,6 +5185,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     gate_cmd.add_argument("--policy-delta", type=Path, help="TOML sections added to the base policy")
     gate_cmd.add_argument("--allow-legacy-policy-inputs", action="store_true",
                           help="compare two historical scorecards without policy-dependency identity")
+    gate_cmd.add_argument("--freeze-gold-verdicts", choices=["base"],
+                          help="explicitly rescore both records with base verdicts and report candidate view")
+    gate_cmd.add_argument("--base-record", type=Path)
+    gate_cmd.add_argument("--candidate-record", type=Path)
+    gate_cmd.add_argument("--scored-labels", type=Path, help="record replay contract (default: v1)")
+    gate_cmd.add_argument("--output", type=Path, help="write gate JSON")
     args = parser.parse_args(argv)
     try:
         if args.command == "generate":
@@ -5125,8 +5209,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "grid":
             print(coverage_grid(_load_json(args.scorecard), args.config), end="")
         else:
-            result = gate(_load_json(args.base), _load_json(args.candidate), args.config,
-                          args.policy_delta, args.allow_legacy_policy_inputs)
+            base, candidate = _load_json(args.base), _load_json(args.candidate)
+            if args.freeze_gold_verdicts:
+                if args.base_record is None or args.candidate_record is None:
+                    raise LayerError("freezing requires --base-record and --candidate-record")
+                contract = (score.load_scored_label_contract(args.scored_labels)
+                            if args.scored_labels else score.SCORED_LABEL_CONTRACT_V1)
+                result = gate_frozen_records(base, candidate, args.base_record, args.candidate_record,
+                                             contract, args.config, args.policy_delta,
+                                             args.allow_legacy_policy_inputs)
+            else:
+                if args.base_record or args.candidate_record or args.scored_labels:
+                    raise LayerError("record replay arguments require --freeze-gold-verdicts base")
+                result = gate(base, candidate, args.config, args.policy_delta, args.allow_legacy_policy_inputs)
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
             print(gate_markdown(result), end="")
             return {"pass": 0, "fail": 1}.get(str(result["verdict"]), 2)
     except LayerError as error:
