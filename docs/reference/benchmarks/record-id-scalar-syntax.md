@@ -11,7 +11,8 @@ including later references without a repeated label. Every occurrence is gold,
 and each gold span selects the inserted number in UTF-8 bytes.
 
 D supplies valid JSON fields whose values are bare `null`, `true` or `false`.
-These keywords supply no identifier value. Other counterweights quote the schema
+These keywords supply no identifier value. A public tool-turn field makes each
+scalar document distinct without changing its identifier semantics. Other counterweights quote the schema
 label while leaving an ordinary placeholder word unquoted. Quoting the label
 alone does not establish an opaque string value. All predicted bytes in these
 documents are false positives.
