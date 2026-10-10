@@ -24,7 +24,9 @@ Password policy examples, incomplete credential fragments, batch codes and
 unassignable country-code versions provide their benign twins. Names in
 forwarded messages, agent recipient instructions and parenthesized sender
 headers are exact given-name/surname gold, repeated in a response line;
-roles and automated queues are benign. Email values use `.invalid` domains.
+roles and automated queues are benign. Forwarded and recipient fields are
+the terminal turn, following a response with the repeated names; header
+comments also cover a following response. Email values use `.invalid` domains.
 German postcodes use the unassigned `00xxx` range. Phone values use the
 Ofcom `+44-7700-900xxx` drama reservation; alternate cued gold values replace
 its country code with the unassigned `+28` to measure recovery of explicitly
@@ -70,7 +72,9 @@ responses and records offsets and source IDs for ten positives and ten twins.
 Add `--all-new-cells` to record all 680 new cells under the ordinary setup
 policy as well as the German-first postal subset. Credentials require a
 policy that enables secrets; zero source attribution under an older release
-policy is reported as an activation limit.
+policy is reported as an activation limit. Add `--rules-policy` with a twin
+that removes only the NER and safety-net tables to expose rule attribution
+that a higher-priority neural name span can otherwise hide.
 Attribution is separate from recall and precision: a postcode-shaped batch
 reference can still be protected and count as a false positive.
 

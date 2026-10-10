@@ -35,6 +35,16 @@ class PostalProbeTests(unittest.TestCase):
         self.assertEqual(len(result["documents"]), 680)
         self.assertTrue(all(set(d) == {"uid", "layer", "trace"} for d in result["documents"]))
 
+    def test_rule_only_policy_cannot_change_other_settings(self):
+        original = {'locale': {'active': ['en-US']}, 'ner': {'threshold': 0.3},
+                    'safety_net': {'backend': 'nym'}, 'rulepacks': ['core', 'secrets']}
+        rules = {'locale': {'active': ['en-US']}, 'rulepacks': ['core', 'secrets']}
+        probe.validate_rules_policy(original, rules)
+        self.assertIn('ner', original)
+        rules['rulepacks'] = ['core']
+        with self.assertRaisesRegex(ValueError, 'remove only'):
+            probe.validate_rules_policy(original, rules)
+
     def test_refusal_cannot_be_recorded_as_empty_protection(self):
         responses = self.responses()
         responses[0].pop('final_protection_trace')

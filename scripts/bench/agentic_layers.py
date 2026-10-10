@@ -4260,11 +4260,13 @@ def _coverage_records(partition: str) -> list[Record]:
                 header = "From" if partition == "dev" else "To"
                 template = header + ": {E} ({G} {S})\n"
                 twin = header + ": {E} ({V})\n"
-            template += (
-                "\nReply from {G} {S}."
-                if partition == "dev"
-                else "\nResponse by {G} {S}."
+            response = (
+                "Reply from {G} {S}." if partition == "dev" else "Response by {G} {S}."
             )
+            # Tool instructions and forwarded fields can be the terminal turn.
+            # Retain both occurrences while measuring that independent surface.
+            template = (template + "\n" + response if family == "name_header_paren"
+                        else response + "\n\n" + template.rstrip())
             fields = {
                 "G": (given, "GIVENNAME"),
                 "S": (surname, "SURNAME"),
