@@ -139,7 +139,7 @@ For library use, see [Use the `gaze setup` policy from Rust](docs/how-to/rust-li
 
 ## Workspace and crates.io
 
-Eleven published crates. Pick the smallest surface that does the job.
+Fifteen published crates. Pick the smallest surface that does the job.
 
 | Crate | Use when |
 |---|---|
@@ -154,6 +154,10 @@ Eleven published crates. Pick the smallest surface that does the job.
 | [`gaze-mcp-rmcp`](https://crates.io/crates/gaze-mcp-rmcp) | You want the rmcp transport sink for `gaze-mcp-core` (stdio default, opt-in streamable HTTP). |
 | [`gaze-mcp-bridge`](https://crates.io/crates/gaze-mcp-bridge) | You want the policy-gated MCP bridge that restores approved token fields before calling downstream MCP servers. |
 | [`gaze-proxy`](https://crates.io/crates/gaze-proxy) | You want an HTTP proxy in front of API-key traffic to OpenAI / Anthropic / Gemini; consumer subscription tiers are outside this surface. The proxy is daemon-managed via `gaze proxy`. |
+| [`gaze-inspection`](https://crates.io/crates/gaze-inspection) | You want the provider-neutral inspection runtime behind proxy traffic inspection. |
+| [`gaze-proxy-dashboard`](https://crates.io/crates/gaze-proxy-dashboard) | You want the opt-in, memory-only local dashboard for inspecting tokenized `gaze proxy` traffic. |
+| [`gaze-model-setup`](https://crates.io/crates/gaze-model-setup) | You want to install and verify the pinned model bundles (NER, Nym, GLiNER) that `gaze setup` installs. |
+| [`gaze-token-bridge`](https://crates.io/crates/gaze-token-bridge) | Work in progress: owner-side authorization and translation between a session and indexed data. |
 
 ```sh
 cargo add gaze-pii
@@ -161,27 +165,9 @@ cargo add gaze-pii
 
 Crate boundaries and the audit-isolation Dylint gate: [`docs/reference/crates.md`](docs/reference/crates.md). Document codec extension: [`docs/explanation/document/document-extension.md`](docs/explanation/document/document-extension.md).
 
-## Publishing
-
-The workspace publishes via the `publish-crates.yml` GitHub Actions workflow using crates.io trusted-publisher OIDC auth; it does not need a long-lived `CARGO_REGISTRY_TOKEN` secret.
-
-- **Tag push** (`git tag v<version> && git push --tags`) runs a real publish on every workspace crate in topological order.
-- **Manual dispatch** with `dry_run=true` packages each crate without publishing, useful for catching metadata or dependency issues before a release tag.
-
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). **New here?** Browse the [good first issues](https://github.com/CertaMesh/gaze/labels/good%20first%20issue) — locale rulepack entries and new validator-backed recognizers are natural starting points.
-
-Apache-2.0 OR MIT, **no CLA** (DCO sign-off only, `git commit -s`); the project is run as a commons — open detection forever, no bait-and-switch, commercial features in separate repos. See [`docs/explanation/governance.md`](docs/explanation/governance.md).
-
-Repository gates (xtask + Dylint) enforce the contracts in [`docs/explanation/`](docs/explanation/). Run them locally before pushing:
-
-```sh
-cargo fmt --all -- --check
-cargo clippy --workspace --all-features --all-targets -- -D warnings
-cargo test --workspace --all-features
-cargo run -p xtask -- ci-feature-matrix
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the local gates and DCO sign-off (`git commit -s`, no CLA). Governance: [`docs/explanation/governance.md`](docs/explanation/governance.md).
 
 ## License
 
