@@ -41,15 +41,15 @@ def records(api: ModuleType, partition: str) -> list:
         key, en, de = FIELDS[partition][family]
         for index in range(api.DOCS_PER_FAMILY):
             identifier = ("6" if partition == "dev" else "8") + rng.digits(5)
-            fields = {"K": (key, None), "V": (identifier, label)}
+            fields = {"K": (key, None), "V": (identifier, label), "T": (str(index + 1), None)}
             emit("A", family, "recordids_syntax_json_numeric", index,
-                 '{"tool":"lookup","arguments":{"{K}":{V}}}', fields)
+                 '{"tool":"lookup","arguments":{"{K}":{V}},"turn":{T}}', fields)
             emit("R", family, "recordids_syntax_json_numeric_repeat", index,
                  '{"{K}":{V}}\nUse {V} next; confirmed {V}.', fields)
             for keyword in ("null", "true", "false"):
                 emit("D", family, "recordids_syntax_json_" + keyword, index,
-                     '{"tool":"lookup","arguments":{"{K}":{V}}}',
-                     {"K": (key, None), "V": (keyword, "decoy:json_keyword")})
+                     '{"tool":"lookup","arguments":{"{K}":{V}},"turn":{T}}',
+                     {"K": (key, None), "V": (keyword, "decoy:json_keyword"), "T": (str(index + 1), None)})
         for index, word in enumerate(("token", "value", "placeholder", "example")):
             for language, cue in (("en", en), ("de", de)):
                 emit("D", family, "recordids_syntax_quoted_label_" + language, index,

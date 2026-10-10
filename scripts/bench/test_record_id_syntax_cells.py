@@ -52,6 +52,7 @@ class RecordIdScalarSyntaxTests(unittest.TestCase):
                 for keyword in ("null", "true", "false"):
                     cells = [r for r in rows if r.family == family and r.surface == "recordids_syntax_json_" + keyword]
                     self.assertEqual(len(cells), 10)
+                    self.assertEqual(len({r.text for r in cells}), 10)
                     for record in cells:
                         value, = json.loads(record.text)["arguments"].values()
                         self.assertTrue(value is None or type(value) is bool)

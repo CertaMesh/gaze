@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "23dcbbca51ded55109937aa9754edced3a527151c7e0622d207119194d7e4f1b",
-    "test": "ac5977de45725ce6dfb3d277a8c10eed86dd3011345ff1077554a024bb516196",
+    "dev": "3aa6c164957056dbad916fae6959a7ed75701cc656d2ade35f5492e044f669d1",
+    "test": "0a5f6576f2d5f5c8143628e88ec9d2985197fa3bd74c3823de86f611979c09ba",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
