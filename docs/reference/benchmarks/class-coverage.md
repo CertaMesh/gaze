@@ -44,7 +44,7 @@ Exact citation URLs are pinned in [class-coverage-sources.json](class-coverage-s
 - VAT: BZSt's EU format table and Agencia Tributaria's corporate NIF definition. German `DE` plus nine digits is layout-only, as the shipped rule has no validator. Spanish corporate NIF includes its numeric control digit.
 - Email headers: RFC 5322, mailbox comments and display names. Forwarding and recipient wording comes from the shipped declarative locale cue definitions, rather than their matching regexes.
 - Credentials: AWS access key prefixes, GitHub token prefixes and RFC 7519. JWT claim JSON and non-working signature bytes are generated locally.
-- Phones: Ofcom drama reservations.
+- Phones: Ofcom drama reservations and the ITU-T E.164 list marking the `28x` codes as spare.
 
 ## Measurement and updates
 
