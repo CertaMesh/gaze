@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "5675f3bb735e60923e04a26ba94984d7911462a62e44c5bfea0baff2c2ebf85b",
-    "test": "0748ced886e365873a928601d44029d5c7952f1845c5f29705c56a67fa53de84",
+    "dev": "2daab095ca7be277ae16bbc75f30b86767a1bb6d8042ecc138652b156d8edf34",
+    "test": "db3c3f3612aac6d0072b2dbfdc837495498f7b2b506af2bd9b6a15ffdaab9c4e",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -275,7 +275,7 @@ class GeneratorTests(unittest.TestCase):
         for record in records:
             # Cued card cells alternate validity per document instead
             # (`CueCellTests.test_card_cells_carry_both_validities`).
-            if record.validity == agentic.VALID and not record.surface.startswith("cue_"):
+            if record.validity == agentic.VALID and not record.surface.startswith(("cue_", "coverage_")):
                 self.assertIn(record.uid[: -len(agentic.VALID)] + agentic.INVALID, uids)
 
     def test_nbsp_surfaces_perturb_their_prose_cue_parent_only(self) -> None:
@@ -468,7 +468,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -1181,7 +1181,7 @@ class CueCellTests(unittest.TestCase):
 
     def test_each_narrow_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
         for partition in agentic.PARTITIONS:
-            layer_d = [r for r in self.full[partition] if r.layer == "D"]
+            layer_d = [r for r in agentic.records_as_of(12, self.full[partition]) if r.layer == "D"]
             costs = {}
             for shape, pattern in agentic.CUE_NARROW_PATTERNS.items():
                 rule = re.compile(pattern)
@@ -1696,7 +1696,7 @@ class ContractTests(unittest.TestCase):
         for version in (8, 9):
             self.assertNotIn("URL", agentic.load_contract(REPO_ROOT, version=version).scored_labels)
         self.assertIn("URL", agentic.load_contract(REPO_ROOT).scored_labels)
-        with self.assertRaisesRegex(agentic.LayerError, "generator_version 12"):
+        with self.assertRaisesRegex(agentic.LayerError, "generator_version 13"):
             agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=9)
 
     def test_generator_version_mismatch_fails_closed(self) -> None:
@@ -2939,6 +2939,69 @@ class ZipAgeGenerationTests(unittest.TestCase):
             self.assertEqual({len(r.decoys[0].value) for r in records if r.family == family}, {3, 4, 5, 6})
         for family, separator in (("archive_mb", "."), ("turned_distance", "."), ("turned_laps", ",")):
             self.assertTrue(all(separator in r.decoys[0].value for r in records if r.family == family))
+
+
+
+
+class ShippedClassCoverageTests(unittest.TestCase):
+    HISTORICAL_HASHES = {'dev': {'3': '4cab04e2418b5f6ffff482e84bd1c90bb523726f8d5b3aa560409071b49c8459', '4': '6df97e1ea7fbe49a0362335de0c0436913cf77689948156a1fd7e3701a40e9ad', '5': 'b9a17a2d1b57c3adaba687f5f1051ac0e1769c4814e59cd971d098bc1f34cb6c', '6': 'e1b6bc315cb52d41aaf93fd48cf9719d67e665317fc927cc9c6a5e33a3e57af7', '7': 'f7d45efdb7ac5bafeaa432ec1cb413e1137a1b78454fb3422a3bdcf1887c5168', '8': '60c3fe121db4ce07b0dfbc2397c1a48a0c1773a5c94eff324fdde597a6aa8ae6', '9': '6e1b24bf66f672e45d69b6f38f56db3da0d085ea0cd4241f5d7310bfddcdf0d1', '10': '2d35385772fd4966d7728fd42f5a42d683fa98b2c6b8dec11dafce116a63aebe', '11': '44c563a6ee1920e8e44a373d65eb11401bb5bfe3c3d2e8fb0c761388a7cff1ac', '12': '5675f3bb735e60923e04a26ba94984d7911462a62e44c5bfea0baff2c2ebf85b'}, 'test': {'3': 'c751da0b8b7d2e9e18663ad07458d75c70b26799b1c22d71004b3e0e351dd22b', '4': '387a35ac155153e9b58a26ec7946b3d459b0d094fffdd5f05de39558eb640604', '5': '9a648a1c5cbb261ba9e3503ddfa5b65cbeb0d0d489cbc3d42464851bd88d8545', '6': '9e6597c4b38a6adf6fe5b034da3a4ca585819e044d3437aafc02bcb721607d4a', '7': 'ac9ff6e7b47824ec22c5201e6ff900618d3408eaa823f709d85381334d6aba69', '8': 'ddd234551bcae00ab0f97026fd4b5b6d3d4b4b23cf08b8fa15926e87f598bd5c', '9': 'b2e363763fd7d3bf1b2678af5c5f45af92e6ebc20a38f78072be0f0ee541f7c6', '10': 'dfd4cba854335581b85365612e6825408e9e8575b1099fbb167a527b7f6a04df', '11': 'bab908dfd2f6a10ae7d3a2c4764d00f03229490e5535214f95cb16bb4730b6e7', '12': '0748ced886e365873a928601d44029d5c7952f1845c5f29705c56a67fa53de84'}}
+
+    def test_every_historical_version_is_byte_identical(self):
+        for partition in agentic.PARTITIONS:
+            records = agentic.generate(partition)
+            for version in range(3,13):
+                self.assertEqual(hashlib.sha256(agentic.corpus_bytes(agentic.records_as_of(version,records))).hexdigest(), self.HISTORICAL_HASHES[partition][str(version)])
+
+    def test_new_value_pools_are_disjoint(self):
+        pools = [{g.value for r in agentic._coverage_records(p) for g in r.gold} for p in agentic.PARTITIONS]
+        self.assertFalse(pools[0] & pools[1])
+
+    def test_checksums_and_exact_twin_shapes(self):
+        self.assertTrue(agentic.verhoeff_valid("2363"))  # Verhoeff's arithmetic example
+        self.assertFalse(agentic.verhoeff_valid("2364"))
+        for partition in agentic.PARTITIONS:
+            records = agentic._coverage_records(partition)
+            self.assertEqual(len(records),680)
+            for family in agentic.COVERAGE_CHECKSUM_FAMILIES:
+                positives = [r for r in records if r.family == family and r.layer == "A"]
+                twins = {r.uid.replace("-D-","-A-").removesuffix("_invalid"): r for r in records if r.family == family and r.surface.endswith("_invalid")}
+                self.assertEqual(len(positives),30)
+                for record in positives:
+                    value = record.gold[0].value
+                    bad = twins[record.uid].decoys[0].value
+                    self.assertEqual(len(value),len(bad))
+                    self.assertNotEqual(value,bad)
+                    if family == "aadhaar":
+                        self.assertTrue(agentic.verhoeff_valid(value)); self.assertFalse(agentic.verhoeff_valid(bad))
+                    elif family == "cnpj":
+                        digits = "".join(c for c in value if c.isdigit())
+                        bad_digits = "".join(c for c in bad if c.isdigit())
+                        self.assertEqual(digits[-2:],agentic.cnpj_check_digits(digits[:-2]))
+                        self.assertNotEqual(bad_digits[-2:],agentic.cnpj_check_digits(bad_digits[:-2]))
+                    elif family == "nir":
+                        self.assertEqual(int(value[-2:]),97-int(value[:-2])%97)
+                        self.assertNotEqual(int(bad[-2:]),97-int(bad[:-2])%97)
+                    else:
+                        self.assertEqual(agentic.eth_checksum(value[2:].lower()).lower(),value.lower())
+                        self.assertNotEqual(agentic.eth_checksum(bad[2:].lower()),bad)
+
+    def test_erc55_published_vector(self):
+        self.assertEqual(agentic.eth_checksum("5aaeb6053f3e94c9b9a09f33669435e7ef1beaed"), "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed")
+        self.assertEqual(agentic.eth_checksum("fb6916095ca1df60bb79ce92ce3ea74c37c5d359"), "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359")
+
+    def test_new_classes_are_scored_and_counterweights_have_no_gold(self):
+        expected = {"AADHAAR","CNPJ","ETHADDRESS","NIR","PAN","VATID","PASSWORD","SECURITYTOKEN"}
+        for partition in agentic.PARTITIONS:
+            records=agentic._coverage_records(partition)
+            labels={g.label for r in records for g in r.gold}
+            self.assertLessEqual(expected,labels)
+            self.assertFalse(any(r.gold for r in records if r.layer=="D"))
+            self.assertTrue(all(r.decoys for r in records if r.layer=="D"))
+            for r in records:
+                for span in (*r.gold,*r.decoys):
+                    self.assertEqual(r.text.encode()[span.start:span.end].decode(),span.value)
+        contract=agentic.load_contract(REPO_ROOT)
+        self.assertLessEqual(expected,contract.scored_labels)
 
 
 if __name__ == "__main__":
