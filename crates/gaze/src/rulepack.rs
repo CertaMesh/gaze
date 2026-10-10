@@ -116,6 +116,8 @@ pub struct ContextSpec {
     pub boost: Option<f32>,
     pub exclusions: Vec<String>,
     pub reject_match_regex: Option<String>,
+    /// Refuse matching capture text unless the captured value starts with a quote.
+    pub reject_unquoted_capture_regex: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -486,6 +488,8 @@ struct RawContextSpec {
     exclusions: Vec<String>,
     #[serde(default)]
     reject_match_regex: Option<String>,
+    #[serde(default)]
+    reject_unquoted_capture_regex: Option<String>,
     /// Removed before release; kept only so a pack that still declares it gets a typed error
     /// instead of silently losing the key.
     #[serde(default)]
@@ -751,6 +755,7 @@ fn parse_recognizer(
             boost: context.boost,
             exclusions: context.exclusions,
             reject_match_regex: context.reject_match_regex,
+            reject_unquoted_capture_regex: context.reject_unquoted_capture_regex,
         }),
         validator,
         normalizer: raw.normalizer.map(|normalizer| NormalizerSpec {
@@ -1399,6 +1404,20 @@ license = "Apache-2.0"
             RulepackError::MissingBundledLocaleBasis { recognizer_id }
                 if recognizer_id == "email.global"
         ));
+    }
+
+    #[test]
+    fn parses_unquoted_capture_guard_without_changing_existing_match_guard() {
+        let source = unsupported_field_rulepack(
+            "[recognizers.context]\nreject_unquoted_capture_regex = '^letters$'\nreject_match_regex = '^whole$'",
+        );
+        let pack = Rulepack::parse(&source).expect("both guards parse");
+        let context = pack.recognizers[0].context.as_ref().unwrap();
+        assert_eq!(
+            context.reject_unquoted_capture_regex.as_deref(),
+            Some("^letters$")
+        );
+        assert_eq!(context.reject_match_regex.as_deref(), Some("^whole$"));
     }
 
     #[test]

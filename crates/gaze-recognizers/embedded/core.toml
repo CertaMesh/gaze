@@ -2181,7 +2181,7 @@ complete_labelled_value = true
 [recognizers.context]
 # An unquoted prose word is a schema placeholder, not identifier evidence.
 # Quoted field scalars may be opaque alphabetic application keys.
-reject_match_regex = '''^[^"'\\]*[ \t:=][\p{L}\p{M}]+$'''
+reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+$'''
 
 [recognizers.scoring]
 base = 0.90
@@ -2210,7 +2210,7 @@ complete_labelled_value = true
 [recognizers.context]
 # An unquoted prose word is a schema placeholder, not identifier evidence.
 # Quoted field scalars may be opaque alphabetic application keys.
-reject_match_regex = '''^[^"'\\]*[ \t:=][\p{L}\p{M}]+$'''
+reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+$'''
 
 [recognizers.scoring]
 base = 0.90
@@ -2239,7 +2239,7 @@ complete_labelled_value = true
 [recognizers.context]
 # An unquoted prose word is a schema placeholder, not identifier evidence.
 # Quoted field scalars may be opaque alphabetic application keys.
-reject_match_regex = '''^[^"'\\]*[ \t:=][\p{L}\p{M}]+$'''
+reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+$'''
 
 [recognizers.scoring]
 base = 0.90

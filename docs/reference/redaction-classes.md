@@ -151,7 +151,8 @@ not classify an otherwise unlabelled scalar from its structured field name.
 Labels must identify a customer, employee or person/contact/member record.
 Generic identifier fields can refer to any kind of object and are insufficient
 by themselves. Unquoted alphabetic prose words are treated as placeholders;
-quoted field scalars can hold opaque alphabetic identifiers. Nym `CUSTOMER_ID` and `EMPLOYEE_ID` remain unsupported by
+quotes must open the value itself; quotes on a key or label provide no exemption.
+Quoted field scalars can hold opaque alphabetic identifiers. Nym `CUSTOMER_ID` and `EMPLOYEE_ID` remain unsupported by
 the closed safety-net class mapping: enabling them needs a class-contract change
 and separate measured evidence, rather than only an allowlist edit.
 

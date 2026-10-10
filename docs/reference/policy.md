@@ -408,6 +408,14 @@ emitted. This guard sees text outside `capture_groups`; an invalid guard
 regex fails pipeline assembly. It is unavailable in
 `[[policy.custom_recognizers]]`.
 
+Regex rulepacks may set `reject_unquoted_capture_regex` in the same context.
+This guard checks the original captured value, before scanner extensions,
+only when its first character is not immediately preceded by a single or double
+quote. Quotes on a field name or prose label do not exempt the value. It uses
+the same audit veto path and assembly-time regex validation. The person-linked
+ID rules use it to reject unquoted alphabetic placeholders and JSON keywords,
+while retaining numeric scalars and quoted opaque alphabetic identifiers.
+
 Regex rulepacks may also set `complete_labelled_value = true` under
 `[recognizers.match]` when a labelled identifier's captured value can continue
 through adjacent groups. The scanner protects the complete value run and

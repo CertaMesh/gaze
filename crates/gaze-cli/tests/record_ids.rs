@@ -9,7 +9,7 @@ fn labelled_record_ids_cli_round_trip_and_public_counterweights() {
     let dir = tempdir().unwrap();
     let policy = dir.path().join("policy.toml");
     fs::write(&policy, "[session]\nscope = \"persistent\"\nttl_secs = 86400\n[policy.rulepacks]\nbundled = [\"core\"]\n[[rule]]\nkind = \"default\"\naction = \"tokenize\"\n").unwrap();
-    let input = r#"{"customerId":"C-000123","personalnummer":"E-000123","member_id":"M-000123","order_id":"ORD-000123","record_id":"REC-000123","version":"1.2.3","amount":12.50}"#;
+    let input = r#"{"customerId":"C-000123","personalnummer":"E-000123","member_id":"M-000123","order_id":"ORD-000123","record_id":"REC-000123","version":"1.2.3","amount":12.50,"customer_id":null,"employeeId":true,"contact_record_id":false}"#;
     let out = Command::cargo_bin("gaze")
         .unwrap()
         .args(["clean", "--policy", policy.to_str().unwrap()])
@@ -23,6 +23,11 @@ fn labelled_record_ids_cli_round_trip_and_public_counterweights() {
     );
     let reply: Value = serde_json::from_slice(&out.stdout).unwrap();
     let clean = reply["clean_text"].as_str().unwrap();
+    let clean_json: Value =
+        serde_json::from_str(clean).expect("JSON keywords retain valid scalar syntax");
+    assert!(clean_json["customer_id"].is_null());
+    assert_eq!(clean_json["employeeId"], true);
+    assert_eq!(clean_json["contact_record_id"], false);
     for class in ["customer_id", "employee_id", "record_id"] {
         assert!(clean.contains(&format!(":Custom:{class}_")), "{clean}");
     }
