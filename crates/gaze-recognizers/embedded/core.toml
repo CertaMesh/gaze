@@ -209,14 +209,17 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-# Broad spaced international candidate scanner for country codes that do not
-# already have regional validators. +1 and spaced +49 remain with the US/DE
-# national recognizers because their safe fixtures are region-validator backed.
-pattern = '''(?:^|[^[:alnum:]_+])(\+(?:[235-9]\d{0,2}|4(?:[0-8]\d?|9\d))[\s.\-/]?(?:\d[\s.\-/]?){6,14}\d)\b'''
-capture_groups = [1]
+# International prefixes and optional trunk zero stay inside the value. French
+# national dotted pairs are a strong shape; explicit product/version fields consume
+# their lookalikes without emitting a phone. Final validity is parser-backed.
+pattern = '''(?:^|[^[:alnum:]_+])((?:\+(?:[235-9]\d{0,2}|4(?:[0-8]\d?|9\d))[\s.\-/]*(?:\(0\)[\s.\-/]*)?|00[1-9]\d{0,2}[\s.\-/]+(?:\(0\)[\s.\-/]*)?|\+49[\s.\-/]*\(0\)[\s.\-/]*)(?:\d[\s.\-/]?){6,14}\d)\b|(?:^|[^[:alnum:]_+])(?:(?i:(?:firmware|build|version|release|revision|part|catalog|model)(?:[_ -](?:number|no|id))?[\s:=\"']+))?(0[1-9](?:\.\d{2}){4})\b'''
+capture_groups = [1, 2]
+
+[recognizers.context]
+reject_match_regex = '''(?i)\b(?:firmware|build|version|release|revision|part|catalog|model)(?:[_ -](?:number|no|id))?[\s:=\"']+0[1-9](?:\.\d{2}){4}\b'''
 
 [recognizers.validator]
-kind = "e164_phone"
+kind = "phone_number"
 
 [recognizers.scoring]
 base = 0.70
@@ -238,15 +241,15 @@ enabled = true
 locales = ["global"]
 locale_basis = "document"
 
-# The broad international shape keeps its parser veto. A same-line phone label
-# gives a rejected regional parse enough evidence to keep only that value.
+# A same-line phone label supports national values in any supported numbering plan.
+# Failed parses remain typed, recorded candidates and cannot seed the repeat sweep.
 [recognizers.match]
 kind = "regex"
-pattern_template = '''(?i)\b(?:phone(?:[\x20\t\x{00A0}\x{202F}_-]?(?:number|num|no))?|{locale.phone_labels})\b\.?[\x20\t\x{00A0}\x{202F}]*["']?[\x20\t\x{00A0}\x{202F}]*[:=]?[\x20\t\x{00A0}\x{202F}]*["']?[\x20\t\x{00A0}\x{202F}]*(\+(?:[235-9]\d{0,2}|4(?:[0-8]\d?|9\d))[\s.\-/]?(?:\d[\s.\-/]?){6,14}\d)\b'''
+pattern_template = '''(?i)\b(?:phone(?:[\x20\t\x{00A0}\x{202F}_-]?(?:number|num|no))?|{locale.phone_labels})\b\.?[\x20\t\x{00A0}\x{202F}]*["']?[\x20\t\x{00A0}\x{202F}]*(?:[,=:]|(?:on|at|is)\b)?[\x20\t\x{00A0}\x{202F}]*["']?[\x20\t\x{00A0}\x{202F}]*((?:\+|00)[1-9]\d{0,2}[\x20\t\x{00A0}\x{202F}.\-/]*(?:\(0\)[\x20\t\x{00A0}\x{202F}.\-/]*)?\d(?:[\x20\t\x{00A0}\x{202F}.\-/]*\d){6,14}|\d(?:[\x20\t\x{00A0}\x{202F}.\-/]*\d){7,14})\b'''
 capture_groups = [1]
 
 [recognizers.validator]
-kind = "e164_phone"
+kind = "phone_number"
 on_fail = "record"
 
 [recognizers.scoring]

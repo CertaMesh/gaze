@@ -735,15 +735,52 @@ def _replay_group(request):
     return (layer, index), run
 
 
+def freeze_gold_header(header: dict, reference: Mapping[str, object]) -> int:
+    """Freeze layer C verdicts only after checking the complete gold inventory.
+
+    Values and observed detections are absent from this operation. Never align
+    by position alone: document identity, gold spans and verdict keys must agree.
+    """
+    def inventory(source):
+        return {row["id"]: {key: value for key, value in row.items() if key != "validator"}
+                for row in source["documents"]}
+    if (header["corpus_sha256"] != reference["corpus_sha256"]
+            or header.get("layer_identity") != reference.get("layer_identity")
+            or inventory(header) != inventory(reference)):
+        raise RecordError("cannot freeze verdicts across different document/gold inventories")
+    references = {row["id"]: row for row in reference["documents"]}
+    changed = 0
+    for row in header["documents"]:
+        if row["layer"] != "C":
+            continue
+        old = row["validator"]["gold_validation"]
+        new = references[row["id"]]["validator"]["gold_validation"]
+        keys = lambda verdicts: [(v["start"], v["end"], v["label"]) for v in verdicts]
+        if keys(old) != keys(new) or keys(old) != [tuple(span) for span in row["gold"]]:
+            raise RecordError("cannot freeze verdicts across different gold spans")
+        changed += sum(a != b for a, b in zip(old, new, strict=True))
+        row["validator"]["gold_validation"] = copy.deepcopy(new)
+    return changed
+
+
 def rescore(
     path: Path,
     contract: score.ScoredLabelContract,
     layer_contract: score.ScoredLabelContract | None = None,
     *,
     max_workers: int | None = None,
+    gold_verdict_reference: Path | None = None,
 ) -> dict[str, object]:
     header, observations = _read(path)
+    frozen = None
+    if gold_verdict_reference is not None:
+        reference, _ = _read(gold_verdict_reference)
+        frozen = {"reference_sha256": score.sha256_file(gold_verdict_reference),
+                  "changed_verdicts": freeze_gold_header(header, reference),
+                  "observations_unchanged": True}
     result = copy.deepcopy(header["scorecard"])
+    if frozen is not None:
+        result["frozen_gold_verdicts"] = frozen
     document_rows = {row["id"]: row for row in header["documents"]}
     available_rows = {uid: row for uid, row in document_rows.items() if row["layer"] == "C"}
     available = _contract_documents(available_rows, contract)

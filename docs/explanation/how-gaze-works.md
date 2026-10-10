@@ -15,13 +15,13 @@ This is pseudonymization, not deletion. The model never needs to know who the cu
 A support agent asks the model: *"Draft a short reply confirming the refund."* The app attaches the ticket. The customer and every value are synthetic:
 
 ```text
-Ticket #48213 from Laura Meyer <laura.meyer [at] example.invalid>, phone +49 1555 0112233:
+Ticket #48213 from Laura Meyer <laura.meyer [at] example.invalid>, phone [synthetic BNetzA drama phone]:
 I sent back the headphones from order 2026-4471 two weeks ago and still have no refund.
 Please pay it to my account [synthetic German example IBAN].
 Address: Lindenstraße 8, 10115 Berlin.
 ```
 
-**1. What the model receives** (captured with the explicit core + NER policy below, no Nym). The email and IBAN above are displayed descriptively; the reproduction command assembles their exact synthetic values. Token suffix `_N` stands for a numeric ordinal, and each session prefix is omitted:
+**1. What the model receives** (captured with the explicit core + NER policy below, no Nym). The email, phone and IBAN above are displayed descriptively; the reproduction command assembles their exact synthetic values. Token suffix `_N` stands for a numeric ordinal, and each session prefix is omitted:
 
 ```text
 Ticket #<Custom:postal_code_N> from <Name_N> <<Email_N>>, phone <Custom:phone_N>:
@@ -282,13 +282,13 @@ kind = "default"
 action = "tokenize"
 ```
 
-Assemble the exact synthetic ticket without putting a complete email or IBAN
-literal in this page. Save the model's draft as `reply.txt`, using the exact
+Assemble the exact synthetic ticket without putting a complete email, phone or IBAN
+literal in this page. The phone uses the [documented BNetzA drama range](../../CONTRIBUTING.md#phone-number-fixtures). Save the model's draft as `reply.txt`, using the exact
 tokens printed by `gaze clean`, including the session prefix and ordinals:
 
 ```sh
-printf 'Ticket #48213 from Laura Meyer <laura.meyer%s%s>, phone +49 1555 0112233:\nI sent back the headphones from order 2026-4471 two weeks ago and still have no refund.\nPlease pay it to my account DE89 %s %s %s %s %s.\nAddress: Lindenstraße 8, 10115 Berlin.\n' \
-  '@' 'example.invalid' '3704' '0044' '0532' '0130' '00' > ticket.txt
+printf 'Ticket #48213 from Laura Meyer <laura.meyer%s%s>, phone %s %s %s:\nI sent back the headphones from order 2026-4471 two weeks ago and still have no refund.\nPlease pay it to my account DE89 %s %s %s %s %s.\nAddress: Lindenstraße 8, 10115 Berlin.\n' \
+  '@' 'example.invalid' '+49' '171' '3920000' '3704' '0044' '0532' '0130' '00' > ticket.txt
 gaze clean --policy example-policy.toml < ticket.txt > clean.json
 jq -r .clean_text clean.json            # what the model receives
 

@@ -1653,6 +1653,32 @@ It also checks exact restores and valid manifests per layer against the same
 attempted-document population. Fewer refusals may not raise a layer's
 restore-failure or invalid-manifest count; missing or impossible counts exit `2`.
 
+Gold-validity changes are `not_comparable` by default. A validator change can
+be evaluated explicitly with frozen verdicts, using the original observation
+records and their matching scorecards:
+
+```bash
+uv run --project scripts/bench python scripts/bench/agentic_layers.py gate \
+  --base "$BASE_SCORECARD" --candidate "$CANDIDATE_SCORECARD" \
+  --base-record "$BASE_RECORD" --candidate-record "$CANDIDATE_RECORD" \
+  --freeze-gold-verdicts base \
+  --scored-labels docs/reference/benchmarks/scored-labels-v2.json \
+  --output "$GATE_JSON"
+```
+
+For v1, re-score those same records with `scorecard_record.py` without
+`--scored-labels`, then omit that option from the gate command. The freeze
+checks complete document and gold-span inventories, binds each scorecard to its
+record replay, and changes only layer C gold-verdict metadata in memory. It
+never changes observed detections. The report includes raw comparability,
+changed-verdict counts, record hashes, the base-verdict comparison and a second
+comparison with both sides using candidate verdicts. Both views must pass.
+Other identity mismatches remain refused. Omitting the freeze still refuses a
+gold-validity mismatch; this option never authorizes silently comparing different
+gold sets. Historical release scorecards need no new detection measurement for
+this comparison-only option: the corpus, scorer, release rows and headline are
+unchanged, and committed release observations exercise its replay tests.
+
 When a candidate intentionally adds policy sections, declare them in a separate
 TOML file and pass `--policy-delta <file.toml>` to the gate. This mode accepts
 any new top-level sections. It reads both policies from their scorecard

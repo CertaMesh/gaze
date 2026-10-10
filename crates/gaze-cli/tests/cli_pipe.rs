@@ -2987,9 +2987,9 @@ fn s2_cli_bundled_core_extended_no_policy_tokenizes_national_de_and_us_phones() 
 
     let de = clean_json_with_args(
         &["--rulepack-bundled", "core-extended"],
-        // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
-        // literals chosen for parser-valid + non-routable.
-        "Phone +49 30 0000 0000",
+        // Source: BNetzA media-production numbers, mobile +49 171 39200xx.
+        // https://www.bundesnetzagentur.de/DE/Fachthemen/Telekommunikation/Nummerierung/Rufnummern/Filmproduktion/start.html
+        "Phone +49 171 3920000",
     );
     let de_clean = de["clean_text"].as_str().unwrap();
     assert!(
@@ -3212,9 +3212,9 @@ fn s2_core_extended_national_phone_shipping_smoke() {
 
     let de = clean_json_with_args(
         &[&format!("--policy={}", policy.display()), "--locale=de-DE"],
-        // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
-        // literals chosen for parser-valid + non-routable.
-        "Phone +49 30 0000 0000",
+        // Source: BNetzA media-production numbers, mobile +49 171 39200xx.
+        // https://www.bundesnetzagentur.de/DE/Fachthemen/Telekommunikation/Nummerierung/Rufnummern/Filmproduktion/start.html
+        "Phone +49 171 3920000",
     );
     let de_clean = de["clean_text"].as_str().unwrap();
     assert!(
@@ -3226,17 +3226,30 @@ fn s2_core_extended_national_phone_shipping_smoke() {
     assert_eq!(de["stats"]["detections"], 1);
     assert_eq!(
         restore_success_text(de["session_blob"].as_str().unwrap(), de_clean),
-        "Phone +49 30 0000 0000"
+        "Phone +49 171 3920000"
     );
 
     let de_under_en = clean_json_with_args(
         &[&format!("--policy={}", policy.display()), "--locale=en-US"],
-        // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
-        // literals chosen for parser-valid + non-routable.
-        "Phone +49 30 0000 0000",
+        // Source: BNetzA media-production numbers, mobile +49 171 39200xx.
+        // https://www.bundesnetzagentur.de/DE/Fachthemen/Telekommunikation/Nummerierung/Rufnummern/Filmproduktion/start.html
+        "Phone +49 171 3920000",
     );
-    assert_eq!(de_under_en["clean_text"], "Phone +49 30 0000 0000");
-    assert_eq!(de_under_en["stats"]["detections"], 0);
+    let de_under_en_clean = de_under_en["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^Phone <[0-9a-f]{8}:Custom:phone_1>$")
+            .unwrap()
+            .is_match(de_under_en_clean),
+        "unexpected cued DE phone under English locale: {de_under_en_clean}"
+    );
+    assert_eq!(de_under_en["stats"]["detections"], 1);
+    assert_eq!(
+        restore_success_text(
+            de_under_en["session_blob"].as_str().unwrap(),
+            de_under_en_clean,
+        ),
+        "Phone +49 171 3920000"
+    );
 }
 
 #[test]

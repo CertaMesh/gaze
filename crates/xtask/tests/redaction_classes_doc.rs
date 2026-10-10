@@ -416,6 +416,7 @@ fn validator_variant_name(kind: ValidatorKind) -> &'static str {
     match kind {
         ValidatorKind::EmailRfc => "EmailRfc",
         ValidatorKind::E164Phone => "E164Phone",
+        ValidatorKind::PhoneNumber => "PhoneNumber",
         ValidatorKind::E164PhoneNational(_) => "E164PhoneNational",
         ValidatorKind::Luhn => "Luhn",
         ValidatorKind::IbanMod97 => "IbanMod97",

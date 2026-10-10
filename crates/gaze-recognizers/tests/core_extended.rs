@@ -679,11 +679,11 @@ fn cued_e164_rejection_is_tokenized_with_audit_reason_and_restores() {
         entries: Arc::clone(&entries),
     });
     let session = Session::new(Scope::Ephemeral).expect("session");
-    // Reserved Ofcom digits with punctuation that the regional parser rejects.
-    let input = "Phone: +44 7/7/0/0/9/0/0/1/2/3";
+    // Synthetic unassigned country code, unreachable even when parsed permissively.
+    let input = "Phone: +999 0/0/0/0/0/0/0/0/0/0";
 
     let clean = clean_text(&pipeline, &session, input, LocaleTag::EnGb);
-    assert!(!clean.contains("+44 7/7/0/0/9/0/0/1/2/3"), "{clean}");
+    assert!(!clean.contains("+999 0/0/0/0/0/0/0/0/0/0"), "{clean}");
     assert_eq!(restore_tokens(&session, &clean), input);
     let entries = entries.lock().unwrap();
     assert!(entries.iter().any(|entry| {
@@ -1968,4 +1968,369 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
             ..
         } if name == "postal_code"
     ));
+}
+
+// Ofcom, NANPA and BNetzA reserved drama ranges; never assigned to subscribers.
+#[test]
+fn adjacent_reserved_phones_are_independent_restorable_values() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    for (locale, values) in [
+        (LocaleTag::EnGb, ["+44 20 7946 0123", "+44 20 7946 0124"]),
+        (LocaleTag::EnUs, ["+1 202 555 0100", "+1 202 555 0101"]),
+        (LocaleTag::DeDe, ["+49 171 3920000", "+49 171 3920001"]),
+        (LocaleTag::DeDe, ["0171 3920000", "0171 3920001"]),
+    ] {
+        for separator in [" ", ",", "\t", "\u{a0}", "/", " / ", " or ", " oder ", "\n"] {
+            let input = values.join(separator);
+            let session = Session::new(Scope::Ephemeral).expect("session");
+            let clean = clean_text(&pipeline, &session, &input, locale.clone());
+            assert_eq!(
+                clean.matches(":Custom:phone_").count(),
+                2,
+                "{input:?}: {clean}"
+            );
+            for value in values {
+                assert!(!clean.contains(value), "{input:?}: {clean}");
+            }
+            assert_eq!(restore_tokens(&session, &clean), input);
+            assert_eq!(
+                gaze::token_shape::pattern().replace_all(&clean, ""),
+                separator
+            );
+        }
+    }
+}
+
+#[test]
+fn expanded_phone_formats_preserve_full_values_and_restore() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    // BNetzA, Ofcom and ARCEP drama blocks, and NANPA's 555-01xx block.
+    for (input, raw, locale) in [
+        (
+            "Tél.: 02.61.91.00.01",
+            "02.61.91.00.01",
+            LocaleTag::Other("fr-FR".into()),
+        ),
+        (
+            "Service client\n04.65.71.00.02",
+            "04.65.71.00.02",
+            LocaleTag::Other("fr-FR".into()),
+        ),
+        (
+            "Call +49 (0)30 23125 123",
+            "+49 (0)30 23125 123",
+            LocaleTag::DeDe,
+        ),
+        (
+            "Call +44 (0)20 7946 0123",
+            "+44 (0)20 7946 0123",
+            LocaleTag::EnGb,
+        ),
+        (
+            "Dial 0044 20 7946 0123",
+            "0044 20 7946 0123",
+            LocaleTag::EnGb,
+        ),
+        (
+            "Phone: 001-202-555-0100",
+            "001-202-555-0100",
+            LocaleTag::EnUs,
+        ),
+        ("Phone: 020 7946 0123", "020 7946 0123", LocaleTag::EnGb),
+        ("Mobile: 07700 900123", "07700 900123", LocaleTag::EnGb),
+        ("+44 7700 900123", "+44 7700 900123", LocaleTag::EnGb),
+        (
+            "Our new mobile, 07700 900123, is active.",
+            "07700 900123",
+            LocaleTag::EnGb,
+        ),
+        (
+            "Best reached by phone on 020 7946 0123 after six.",
+            "020 7946 0123",
+            LocaleTag::EnGb,
+        ),
+        // Deliberately unassignable, labelled national values: record the failed parse.
+        ("Phone: 000 000 000", "000 000 000", LocaleTag::EnUs),
+        ("Mobile: 00 00 00 00", "00 00 00 00", LocaleTag::EnUs),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, locale);
+        assert!(!clean.contains(raw), "{input}: {clean}");
+        assert_eq!(
+            clean.matches(":Custom:phone_").count(),
+            1,
+            "{input}: {clean}"
+        );
+        assert!(!clean.contains(":Custom:ip_address_"), "{input}: {clean}");
+        assert_eq!(restore_tokens(&session, &clean), input);
+        assert_eq!(
+            gaze::token_shape::pattern().replace_all(&clean, raw),
+            input,
+            "every phone byte must be inside the token: {clean}"
+        );
+    }
+}
+
+#[test]
+fn phone_and_ip_guards_preserve_numeric_identifiers() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    for input in [
+        "Firmware 02.61.91.00.01 fixes boot.",
+        "part=04.65.71.00.02",
+        "build=\"02.61.91.00.01\"",
+        "000 000 000",
+        "00 00 00 00",
+        "020",
+        "Amount: 000 000 000",
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        assert_eq!(
+            clean_text(&pipeline, &session, input, LocaleTag::EnUs),
+            input
+        );
+    }
+}
+
+#[test]
+fn three_adjacent_national_phones_are_split_without_protecting_separators() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    // BNetzA's reserved 0171 39200xx drama block.
+    for separator in [" ", " / ", "\t", "\n"] {
+        let input = ["0171 3920000", "0171 3920001", "0171 3920002"].join(separator);
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, &input, LocaleTag::DeDe);
+        assert_eq!(
+            clean.matches(":Custom:phone_").count(),
+            3,
+            "{input}: {clean}"
+        );
+        assert_eq!(
+            gaze::token_shape::pattern().replace_all(&clean, ""),
+            separator.repeat(2)
+        );
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}
+
+#[test]
+fn adjacent_phones_survive_sentence_punctuation_and_malformed_neighbours() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    // BNetzA and Ofcom reserved drama numbers. The suffixes are not phone values.
+    for (input, expected, locale) in [
+        ("Ruf an: 0171 3920000 0171 3920001.", 2, LocaleTag::DeDe),
+        ("(0171 3920000 / 0171 3920001)", 2, LocaleTag::DeDe),
+        ("Tel 0171 3920000 0171 3920001 12 Uhr", 2, LocaleTag::DeDe),
+        (
+            "0171 3920000 0171 3920001 0171 3920002.",
+            3,
+            LocaleTag::DeDe,
+        ),
+        ("+44 20 7946 0123 0124", 1, LocaleTag::EnGb),
+        ("+44 20 7946 0123 12345", 1, LocaleTag::EnGb),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, locale);
+        assert_eq!(
+            clean.matches(":Custom:phone_").count(),
+            expected,
+            "{input}: {clean}"
+        );
+        assert!(!clean.contains("392000"), "{input}: {clean}");
+        assert!(!clean.contains("7946"), "{input}: {clean}");
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}
+
+#[test]
+fn labelled_phone_pairs_and_triples_have_no_unprotected_digits() {
+    // drift-ack: core now records directly cued phone values even when parsing fails.
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    for (locale, values) in [
+        (
+            LocaleTag::EnGb,
+            ["020 7946 0123", "020 7946 0124", "020 7946 0125"],
+        ),
+        (
+            LocaleTag::EnUs,
+            ["202 555 0100", "202 555 0101", "202 555 0102"],
+        ),
+    ] {
+        for count in [2, 3] {
+            for separator in [" ", " / ", "\t", ",", " or ", " oder ", "\n", "\u{2028}"] {
+                let input = format!("Phone: {}.", values[..count].join(separator));
+                let session = Session::new(Scope::Ephemeral).expect("session");
+                let clean = clean_text(&pipeline, &session, &input, locale.clone());
+                let outside = gaze::token_shape::pattern().replace_all(&clean, "");
+                assert!(
+                    !outside.chars().any(|ch| ch.is_ascii_digit()),
+                    "{input}: {clean}"
+                );
+                assert_eq!(restore_tokens(&session, &clean), input);
+            }
+        }
+    }
+}
+
+#[test]
+fn phone_and_ipv4_suppressions_are_audited_and_oid_ips_remain_eligible() {
+    let entries = Arc::new(Mutex::new(Vec::new()));
+    let pipeline =
+        pipeline_from_rulepack(&core_extended()).with_redaction_logger(CapturingLogger {
+            entries: Arc::clone(&entries),
+        });
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    // ARCEP reserved drama range; part number, not a phone value.
+    let input = "Firmware 02.61.91.12.34";
+    assert_eq!(
+        clean_text(&pipeline, &session, input, LocaleTag::EnUs),
+        input
+    );
+    let audit = entries.lock().unwrap();
+    for source in ["phone.e164.spaced", "ip.v4"] {
+        assert!(
+            audit
+                .iter()
+                .any(|entry| entry.recognizer_id.as_deref() == Some(source)
+                    && entry.validator_fail_reason
+                        == Some(ValidatorFailReason::RegexGuardRejected)),
+            "{source}: {audit:?}"
+        );
+    }
+    drop(audit);
+    // RFC 1918 owner-side address used as a numeric SNMP index suffix.
+    let oid = "OID 1.3.6.1.2.1.4.20.1.1.10.42.7.12";
+    let clean = clean_text(&pipeline, &session, oid, LocaleTag::EnUs);
+    assert!(clean.contains(":Custom:ip_address_"), "{clean}");
+}
+
+#[test]
+fn a_labelled_phone_keeps_its_span_beside_other_validated_classes() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    // Ofcom drama range, a standard Luhn fixture, and RFC 1918 addresses.
+    for input in [
+        "Phone: 020 7946 0123\n4111 1111 1111 1111",
+        "phone 020 7946 0123 - 10.42.0.1",
+        "Phone: 020 7946 0123 / 4111 1111 1111 1111",
+        "Mobile: 07700 900123 - 10.42.0.1",
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, LocaleTag::EnGb);
+        assert!(
+            !clean.contains("7946") && !clean.contains("900123"),
+            "{input}: {clean}"
+        );
+        assert!(clean.contains(":Custom:phone_"), "{input}: {clean}");
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+    // ARCEP's reserved drama range, followed by a sentence period.
+    let input = "Appelez le 02.61.91.10.11.";
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::Other("fr-FR".into()));
+    assert_eq!(
+        gaze::token_shape::pattern().replace_all(&clean, "02.61.91.10.11"),
+        input
+    );
+    assert!(!clean.contains(":Custom:ip_address_"), "{clean}");
+}
+
+#[test]
+fn labelled_phone_tokens_never_cover_only_whitespace_or_trailing_whitespace() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    // Standard Luhn test card, preceded by an international dialing prefix.
+    for input in [
+        "Phone: 0049 4000 0566 5566 5556",
+        "card 0049 4000 0566 5566 5556",
+        "Phone: 0049\t4000 0566 5566 5556",
+        "Phone: 0049 \u{2003}4000 0566 5566 5556",
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, manifest, _) = pipeline
+            .clean_with_safety_net(
+                &session,
+                RawDocument::Text(input.into()),
+                &[LocaleTag::DeDe],
+            )
+            .expect("clean");
+        let CleanDocument::Text(clean) = clean else {
+            panic!("text")
+        };
+        for entry in &manifest {
+            let raw = &input[entry.raw_span.clone()];
+            assert!(!raw.trim().is_empty(), "whitespace token: {entry:?}");
+            assert_eq!(raw, raw.trim_end(), "trailing whitespace token: {entry:?}");
+        }
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}
+
+#[test]
+fn phone_card_overlap_keeps_the_international_plus_prefix_protected() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    // BNetzA reserved mobile number whose digits also pass Luhn. The card
+    // candidate starts after '+', so clipping must preserve that phone fragment.
+    for input in ["Phone: +49 176 040690 06", "+49 176 040690 06"] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
+        assert!(!clean.contains('+'), "exposed phone prefix: {clean}");
+        assert!(!clean.contains("040690"), "exposed phone digits: {clean}");
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}
+
+#[test]
+fn phone_number_validator_enforces_e164_fifteen_digit_cap() {
+    // A German numbering plan may accept long subscriber values, but E.164
+    // international form cannot exceed fifteen digits, including the country code.
+    // Extend a fictional Hamburg drama prefix beyond the global digit cap.
+    // It is not a reachable E.164 value, even if national metadata accepts it.
+    let overlong = "+49 40 66969 0000000";
+    let parsed = phonenumber::parse(None, overlong).expect("national metadata parses");
+    assert!(
+        parsed.is_valid(),
+        "fixture must exercise the E.164 cap, not a parser refusal"
+    );
+    assert!(
+        parsed
+            .format()
+            .mode(phonenumber::Mode::E164)
+            .to_string()
+            .bytes()
+            .filter(u8::is_ascii_digit)
+            .count()
+            > 15
+    );
+    for value in [overlong, "0049 40 66969 0000000"] {
+        assert!(matches!(
+            ValidatorKind::PhoneNumber.validate(value),
+            ValidatorOutcome::Fail { .. }
+        ));
+    }
+    // BNetzA reserved drama range still passes, with original spelling restorable.
+    assert!(matches!(
+        ValidatorKind::PhoneNumber.validate("0049 171 3920000"),
+        ValidatorOutcome::Pass { .. }
+    ));
+}
+
+#[test]
+fn directly_cued_dates_and_ssn_shapes_document_recorded_over_protection() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    // These are benign dates and an unassignable SSN shape (000 area).
+    // drift-ack: a direct phone cue records parser failures rather than risking a leak.
+    for input in [
+        "Tel: 2026 10 09",
+        "Tel. 1985-2024",
+        "Phone: 20261009",
+        "Phone: 000-12-3456",
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
+        assert!(clean.contains(":Custom:phone_"), "{input}: {clean}");
+        let outside = gaze::token_shape::pattern().replace_all(&clean, "");
+        assert!(
+            !outside.bytes().any(|byte| byte.is_ascii_digit()),
+            "{input}: {clean}"
+        );
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
 }

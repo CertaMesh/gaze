@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- [bundle-tokenization-drift] `core`: directly labelled phone values now remain
+  protected when parsing fails; record their typed validation reason.
+
 ### Security
 
 - **Credentials are protected by default.** Newly generated `gaze setup`
@@ -17,6 +22,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cued NHS numbers remain protected whole when MOD-11 fails, with a typed audit
   reason and no repeat-value sweep. Tax-identification key abbreviations also
   protect the full Steuer-ID value in tool-call JSON and logs.
+- Split rejected adjacent phone runs when both values independently pass the
+  recognizer and parser. Vetoed candidates no longer block valid locale fallbacks.
+- Protect international dialing prefixes, optional trunk-zero markers, French
+  dotted phones and directly labelled national values. IPv4 matches refuse tails
+  inside complete French dotted phone shapes. Parser failures remain auditable and cannot
+  seed repeat-value protection.
+- Enforce the international E.164 digit limit before trusting expanded phone
+  forms, so long numeric prefixes cannot change a valid card's class to phone.
+- Keep whitespace outside phone tokens after an overlap with a validated card or IP,
+  including residual fragments; restore remains exact.
+
+### Known limitations
+
+- Direct phone labels intentionally record failed parses. An 8–15 digit date,
+  grouped calendar date, year range, or SSN-shaped value following such a label
+  can therefore become a phone token. A newline continuation can also protect
+  a parser-valid date. This is known over-protection: refusing those numeric
+  shapes would also risk refusing genuine phone values.
 
 ### Benchmark
 

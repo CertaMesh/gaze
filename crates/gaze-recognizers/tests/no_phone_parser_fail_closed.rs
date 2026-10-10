@@ -44,6 +44,7 @@ fn phone_validators_fail_closed_without_phone_parser() {
         "e164_phone",
         "e164_phone_national_de",
         "e164_phone_national_us",
+        "phone_number",
     ] {
         assert_unsupported_phone_validator(validator);
     }
@@ -63,10 +64,10 @@ fn embedded_spaced_e164_phone_recognizer_fails_closed_without_phone_parser() {
     let raw = embedded("core-extended").expect("core-extended embedded rulepack");
     let recognizer = recognizer_block(&raw, "phone.e164.spaced");
     assert!(
-        recognizer.contains("kind = \"e164_phone\""),
-        "phone.e164.spaced must stay gated by e164_phone: {recognizer}"
+        recognizer.contains("kind = \"phone_number\""),
+        "phone.e164.spaced must stay gated by phone_number: {recognizer}"
     );
-    assert_unsupported_phone_validator("e164_phone");
+    assert_unsupported_phone_validator("phone_number");
 }
 
 #[cfg(not(feature = "phone-parser"))]

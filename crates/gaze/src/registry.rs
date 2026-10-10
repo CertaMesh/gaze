@@ -417,6 +417,72 @@ mod tests {
     }
 
     #[test]
+    fn vetoed_locale_candidate_does_not_block_partial_overlap_fallback() {
+        struct LocaleProbe {
+            id: &'static str,
+            locales: Vec<LocaleTag>,
+            span: std::ops::Range<usize>,
+        }
+        impl Recognizer for LocaleProbe {
+            fn id(&self) -> &str {
+                self.id
+            }
+            fn supported_class(&self) -> &PiiClass {
+                &PiiClass::Email
+            }
+            fn locales(&self) -> &[LocaleTag] {
+                &self.locales
+            }
+            fn token_family(&self) -> &str {
+                "counter"
+            }
+            fn validator_kind(&self) -> Option<gaze_types::ValidatorKind> {
+                Some(gaze_types::ValidatorKind::EmailRfc)
+            }
+            fn detect(
+                &self,
+                _: &str,
+                _: &DetectContext<'_>,
+            ) -> Result<Vec<Candidate>, DetectError> {
+                Ok(vec![Candidate::new(
+                    self.span.clone(),
+                    PiiClass::Email,
+                    self.id,
+                    1.0,
+                    0,
+                    None,
+                    "counter",
+                    self.id,
+                    ConflictTier::None,
+                    Vec::new(),
+                )])
+            }
+        }
+        let input = "!!alice@example.invalid";
+        let registry = RecognizerRegistry::builder()
+            .register(LocaleProbe {
+                id: "global.invalid",
+                locales: vec![LocaleTag::Global],
+                span: 0..8,
+            })
+            .register(LocaleProbe {
+                id: "regional.valid",
+                locales: vec![LocaleTag::DeDe],
+                span: 2..input.len(),
+            })
+            .build();
+        let dictionaries = DictionaryBundle::default();
+        let locales = [LocaleTag::Global, LocaleTag::DeDe];
+        let ctx = DetectContext::new(&locales, &dictionaries);
+        let (found, vetoed) = registry.detect_all_resolved(input, &ctx).expect("detect");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].recognizer_id, "regional.valid");
+        assert_eq!(found[0].span, 2..input.len());
+        assert_eq!(vetoed.len(), 1);
+        assert_eq!(vetoed[0].candidate.recognizer_id, "global.invalid");
+    }
+
+    #[test]
     fn registry_detect_all_uses_registered_recognizers() {
         let registry = RecognizerRegistry::builder()
             .register(StubRecognizer {
@@ -1277,10 +1343,12 @@ impl RecognizerRegistry {
 
             // Earlier chain locales win per span, except strict same-class containment:
             // keep both spans so the resolver can choose the enclosing one and audit the loser.
-            // This cannot reduce covered bytes for the pair. Spans are claimed before validator
-            // veto, so partial overlaps retain the existing locale fallback behavior.
+            // Only validator survivors claim spans. Keep the raw candidates for the later
+            // post-floor pass and the single audit veto pass; an invalid earlier-locale
+            // match must never suppress a valid partially overlapping fallback.
             let mut claimed = ClaimedSpans::default();
             let mut guard_audit_seen = BTreeSet::new();
+            let mut veto_audit_seen = BTreeSet::new();
             // Locale-invariant recognizers detect at their first eligible step; later steps
             // reuse that output, so NER infers once per document instead of once per step.
             let mut reused: HashMap<usize, Vec<Candidate>> = HashMap::new();
@@ -1330,13 +1398,31 @@ impl RecognizerRegistry {
                             .cloned(),
                     );
                 }
-                claimed.extend(
-                    class_candidates
-                        .iter()
-                        .filter(|candidate| !candidate.regex_guard_rejected)
-                        .map(|candidate| &candidate.span),
+                let (survivors, vetoed) = crate::validator_veto::apply(
+                    class_candidates.clone(),
+                    self,
+                    input,
+                    ctx.source_spans,
                 );
-                candidates.extend(class_candidates);
+                claimed.extend(survivors.iter().map(|candidate| &candidate.span));
+                let vetoed_keys = vetoed
+                    .into_iter()
+                    .map(|veto| {
+                        (
+                            veto.candidate.recognizer_id,
+                            veto.candidate.span.start,
+                            veto.candidate.span.end,
+                        )
+                    })
+                    .collect::<BTreeSet<_>>();
+                candidates.extend(class_candidates.into_iter().filter(|candidate| {
+                    let key = (
+                        candidate.recognizer_id.clone(),
+                        candidate.span.start,
+                        candidate.span.end,
+                    );
+                    !vetoed_keys.contains(&key) || veto_audit_seen.insert(key)
+                }));
             }
         }
 
@@ -1370,6 +1456,59 @@ impl RecognizerRegistry {
             })
             .collect::<Vec<_>>();
         for candidate in &mut candidates {
+            // A labelled phone run can include an adjacent IP or card. Preserve the phone
+            // separately before resolution, even when that tail has a higher rule priority.
+            // Only an independently validated other class can cut the labelled value.
+            if self
+                .recognizer(&candidate.recognizer_id)
+                .and_then(|recognizer| recognizer.validator_kind())
+                .is_some_and(gaze_types::ValidatorKind::is_phone)
+            {
+                if let Some(boundary) = boundaries
+                    .iter()
+                    .filter(|(start, class, validated)| {
+                        *validated
+                            && class != &candidate.class
+                            && *start > candidate.span.start
+                            && *start < candidate.span.end
+                    })
+                    .map(|(start, _, _)| *start)
+                    .min()
+                {
+                    candidate.span.end = candidate.span.start
+                        + input[candidate.span.start..boundary]
+                            .trim_end_matches(|ch: char| {
+                                ch.is_whitespace() || matches!(ch, '-' | '/' | '.' | ':')
+                            })
+                            .len();
+                    candidate.labelled_value_scan_reason =
+                        Some(LabelledValueScanReason::OtherClassBoundary);
+                    let recognizer = self
+                        .recognizer(&candidate.recognizer_id)
+                        .expect("declared recognizer");
+                    let kind = recognizer.validator_kind().expect("phone validator");
+                    match kind.validate(&input[candidate.span.clone()]) {
+                        gaze_types::ValidatorOutcome::Pass { canonical_form } => {
+                            candidate.canonical_form = canonical_form;
+                            candidate.validator_fail_reason = None;
+                            candidate.evidence = recognizer.evidence();
+                        }
+                        gaze_types::ValidatorOutcome::Fail { reason } => {
+                            candidate.canonical_form = None;
+                            candidate.validator_fail_reason = Some(reason);
+                            candidate.evidence = gaze_types::EvidenceKind::Learned;
+                        }
+                        _ => {}
+                    }
+                }
+                // Splitting or cutting a recorded phone must leave separators outside
+                // tokens. Keep the trim local so an empty prefix cannot move backwards.
+                candidate.span.end = candidate.span.start
+                    + input[candidate.span.clone()]
+                        .trim_end_matches(char::is_whitespace)
+                        .len();
+                continue;
+            }
             let Some(capture_end) = candidate.labelled_value_capture_end else {
                 continue;
             };
@@ -1440,6 +1579,13 @@ impl RecognizerRegistry {
             }
         }
 
+        candidates.retain(|candidate| {
+            !self
+                .recognizer(&candidate.recognizer_id)
+                .and_then(|recognizer| recognizer.validator_kind())
+                .is_some_and(gaze_types::ValidatorKind::is_phone)
+                || !input[candidate.span.clone()].trim().is_empty()
+        });
         Ok((crate::resolver::CandidatePool::new(candidates), vetoed))
     }
 

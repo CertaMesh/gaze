@@ -258,8 +258,10 @@ impl RegexDetector {
                     Vec::new(),
                 );
                 candidate.labelled_value_scan_reason = scan.reason;
-                candidate.labelled_value_capture_end =
-                    self.complete_labelled_value.then_some(scan.extension.start);
+                candidate.labelled_value_capture_end = (self.complete_labelled_value
+                    || (self.phone_validator_enabled()
+                        && self.validator_on_fail == ValidatorOnFail::Record))
+                    .then_some(scan.extension.start);
                 candidate.regex_guard_rejected = scan.rejected;
                 candidate
             })
@@ -342,6 +344,14 @@ impl RegexDetector {
                 let caps = self.regex.captures_at(input, at)?;
                 let full = caps.get(0)?;
                 let captured = self.span_from_captures(&caps);
+                let phone_parts = captured
+                    .as_ref()
+                    .filter(|_| self.phone_validator_enabled())
+                    .map(|span| self.phone_parts(input, span.clone(), full.start()));
+                let captured = phone_parts
+                    .as_ref()
+                    .and_then(|parts| Some(parts.first()?.start..parts.last()?.end))
+                    .or(captured);
                 let span = captured.clone().map(|span| {
                     if self.complete_labelled_value {
                         // Only these new fallbacks may trim a field cue inside their broad
@@ -384,11 +394,25 @@ impl RegexDetector {
                         };
                         guard.is_match(checked)
                     });
-                    return Some(span);
+                    span.rejected |= self.ipv4_phone_tail(input, &span.span);
+                    return Some(match phone_parts {
+                        None => vec![span],
+                        Some(parts) => parts
+                            .into_iter()
+                            .map(|part| LabelledValueScan {
+                                capture: part.clone(),
+                                extension: part.clone(),
+                                span: part,
+                                reason: span.reason,
+                                rejected: span.rejected,
+                            })
+                            .collect::<Vec<_>>(),
+                    });
                 }
             }
             None
-        });
+        })
+        .flatten();
         if !self.card_runs {
             return matches.collect();
         }
@@ -410,6 +434,248 @@ impl RegexDetector {
                     .collect::<Vec<_>>()
             })
             .collect()
+    }
+
+    fn phone_validator_enabled(&self) -> bool {
+        #[cfg(feature = "phone-parser")]
+        {
+            matches!(
+                self.validator_kind,
+                Some(
+                    ValidatorKind::E164Phone
+                        | ValidatorKind::E164PhoneNational(_)
+                        | ValidatorKind::PhoneNumber
+                )
+            )
+        }
+        #[cfg(not(feature = "phone-parser"))]
+        {
+            false
+        }
+    }
+
+    /// A bounded regex is candidate evidence, never permission to leave a labelled suffix raw.
+    /// Split independently valid values under the original cue; otherwise a recording rule
+    /// protects the complete run. Veto rules can recover a valid prefix before a malformed tail.
+    #[cfg(feature = "phone-parser")]
+    fn phone_parts(
+        &self,
+        input: &str,
+        span: std::ops::Range<usize>,
+        full_start: usize,
+    ) -> Vec<std::ops::Range<usize>> {
+        let mut parts = self.phone_numeric_parts(input, span.clone(), full_start);
+        if self.validator_on_fail != ValidatorOnFail::Record || full_start == span.start {
+            return parts;
+        }
+        let prefix = &input[full_start..span.start];
+        // A cue licenses a list of independently valid phone values. Replay it across
+        // explicit list separators, never across an arbitrary word or numeric field.
+        while let Some(last) = parts.last() {
+            let tail = &input[last.end..];
+            let trimmed = tail.trim_start_matches(char::is_whitespace);
+            let separator_end = if trimmed.starts_with(',') {
+                tail.len() - trimmed.len() + 1
+            } else if let Some(rest) = trimmed
+                .strip_prefix("oder")
+                .or_else(|| trimmed.strip_prefix("or"))
+            {
+                if !rest.starts_with(char::is_whitespace) {
+                    break;
+                }
+                tail.len() - rest.len()
+            } else if tail[..tail.len() - trimmed.len()]
+                .chars()
+                .any(|ch| matches!(ch, '\n' | '\r' | '\u{2028}' | '\u{2029}'))
+            {
+                tail.len() - trimmed.len()
+            } else {
+                break;
+            };
+            let after = tail[separator_end..].trim_start_matches(char::is_whitespace);
+            let next_start = input.len() - after.len();
+            // The regex is bounded; a small cue-replayed window is sufficient to offer
+            // the next candidate. Its continuation is scanned on the original input.
+            let window: String = after.chars().take(128).collect();
+            let evidence = format!("{prefix}{window}");
+            let Some(next) = self
+                .regex
+                .captures(&evidence)
+                .and_then(|caps| self.span_from_captures(&caps))
+                .filter(|matched| matched.start == prefix.len())
+            else {
+                break;
+            };
+            let kind = self.validator_kind.expect("phone validator");
+            let next_parts = self.phone_numeric_parts(&evidence, next, 0);
+            if next_parts.is_empty()
+                || next_parts
+                    .iter()
+                    .any(|part| !kind.validates(&evidence[part.clone()]))
+            {
+                break;
+            }
+            parts.extend(next_parts.into_iter().map(|part| {
+                next_start + part.start - prefix.len()..next_start + part.end - prefix.len()
+            }));
+        }
+        parts
+    }
+
+    #[cfg(feature = "phone-parser")]
+    fn phone_numeric_parts(
+        &self,
+        input: &str,
+        span: std::ops::Range<usize>,
+        full_start: usize,
+    ) -> Vec<std::ops::Range<usize>> {
+        let Some(
+            kind @ (ValidatorKind::E164Phone
+            | ValidatorKind::E164PhoneNational(_)
+            | ValidatorKind::PhoneNumber),
+        ) = self.validator_kind
+        else {
+            return vec![span];
+        };
+        let records = self.validator_on_fail == ValidatorOnFail::Record;
+        if !records && kind.validates(&input[span.clone()]) {
+            return vec![span];
+        }
+        let run_end = input[span.start..]
+            .char_indices()
+            .take_while(|(at, ch)| {
+                (records || *at < span.len().max(128))
+                    && (ch.is_ascii_digit()
+                        || (ch.is_whitespace()
+                            && (!records || !matches!(ch, '\n' | '\r' | '\u{2028}' | '\u{2029}')))
+                        || matches!(ch, '+' | '-' | '/' | '.' | '(' | ')'))
+            })
+            .last()
+            .map_or(span.end, |(at, ch)| span.start + at + ch.len_utf8());
+        let run = input[span.start..run_end].trim_end_matches(|ch: char| {
+            ch.is_whitespace() || matches!(ch, '/' | '.' | '-' | '(' | ')')
+        });
+        if records && kind.validates(run) {
+            return std::iter::once(span.start..span.start + run.len()).collect();
+        }
+        // Recorded runs of any size stay protected. Partition work itself is bounded;
+        // veto rules resume after a complete validated prefix of the bounded window.
+        let run = if run.len() > 128 {
+            if records {
+                return std::iter::once(span.start..span.start + run.len()).collect();
+            }
+            let end = run
+                .char_indices()
+                .take_while(|(at, _)| *at <= 128)
+                .last()
+                .map_or(0, |(at, _)| at);
+            &run[..end]
+        } else {
+            run
+        };
+        let prefix = &input[full_start..span.start];
+        let is_value = |piece: &str| {
+            if piece.bytes().filter(u8::is_ascii_digit).count() > 17 {
+                return false;
+            }
+            let evidence = format!("{prefix}{piece}");
+            self.regex
+                .captures(&evidence)
+                .and_then(|caps| self.span_from_captures(&caps))
+                .is_some_and(|matched| {
+                    matched.start == prefix.len() && matched.end == evidence.len()
+                })
+                && kind.validates(piece)
+        };
+        let mut boundaries = vec![0];
+        boundaries.extend(run.char_indices().filter_map(|(at, ch)| {
+            (ch.is_whitespace() || ch == '/').then_some(at + ch.len_utf8())
+        }));
+        boundaries.push(run.len());
+        boundaries.sort_unstable();
+        boundaries.dedup();
+        let mut paths: Vec<Option<Vec<std::ops::Range<usize>>>> = vec![None; boundaries.len()];
+        for (index, &at) in boundaries.iter().enumerate() {
+            if at == run.len() || (!records && at >= span.len()) {
+                paths[index] = Some(Vec::new());
+            }
+        }
+        for start in (0..boundaries.len() - 1).rev() {
+            for end in start + 1..boundaries.len() {
+                let Some(suffix) = &paths[end] else {
+                    continue;
+                };
+                let raw = &run[boundaries[start]..boundaries[end]];
+                let piece = raw.trim_matches(|ch: char| ch.is_whitespace() || ch == '/');
+                if !is_value(piece) {
+                    continue;
+                }
+                let leading = raw.len()
+                    - raw
+                        .trim_start_matches(|ch: char| ch.is_whitespace() || ch == '/')
+                        .len();
+                let part_start = span.start + boundaries[start] + leading;
+                let mut path: Vec<_> =
+                    std::iter::once(part_start..part_start + piece.len()).collect();
+                path.extend(suffix.iter().cloned());
+                paths[start] = Some(path);
+                break;
+            }
+        }
+        if let Some(path) = paths[0].take().filter(|path| !path.is_empty()) {
+            return path;
+        }
+        if records {
+            return std::iter::once(span.start..span.start + run.len()).collect();
+        }
+        // The extension can be malformed without invalidating a complete preceding number.
+        for &end in boundaries.iter().rev() {
+            let piece = run[..end].trim_end_matches(|ch: char| ch.is_whitespace() || ch == '/');
+            if is_value(piece) {
+                return std::iter::once(span.start..span.start + piece.len()).collect();
+            }
+        }
+        vec![span]
+    }
+
+    #[cfg(not(feature = "phone-parser"))]
+    fn phone_parts(
+        &self,
+        _: &str,
+        span: std::ops::Range<usize>,
+        _: usize,
+    ) -> Vec<std::ops::Range<usize>> {
+        vec![span]
+    }
+
+    /// Only a complete French dotted pair shape suppresses a competing IPv4 tail.
+    /// The rejected candidate still reaches the registry's audit veto path.
+    fn ipv4_phone_tail(&self, input: &str, span: &std::ops::Range<usize>) -> bool {
+        if !matches!(
+            self.validator_kind,
+            Some(ValidatorKind::Ipv4Parse | ValidatorKind::Ipv4ParseNonDocumentation)
+        ) {
+            return false;
+        }
+        let start = input[..span.start]
+            .bytes()
+            .rev()
+            .take_while(|ch| ch.is_ascii_digit() || *ch == b'.')
+            .count();
+        let end = input[span.end..]
+            .bytes()
+            .take_while(|ch| ch.is_ascii_digit() || *ch == b'.')
+            .count();
+        let groups = input[span.start - start..span.end + end]
+            .trim_matches('.')
+            .split('.')
+            .collect::<Vec<_>>();
+        groups.len() == 5
+            && groups
+                .iter()
+                .all(|group| group.len() == 2 && group.bytes().all(|ch| ch.is_ascii_digit()))
+            && groups[0].starts_with('0')
+            && groups[0].as_bytes()[1] != b'0'
     }
 
     fn is_excluded(&self, matched: &str) -> bool {
