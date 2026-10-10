@@ -1,6 +1,6 @@
 # Use the `gaze setup` policy from Rust
 
-Use the policy written by `gaze setup` from Rust with `gaze-assembly`'s Nym feature:
+Load the `gaze setup` policy with `gaze-assembly`'s Nym feature:
 
 ```toml
 [dependencies]
@@ -60,6 +60,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 ```
 <!-- /setup-nym-rust-example -->
 
-The snapshot contains restore material; store it privately and pass it only to an authorized restore flow. The published crate is named `gaze-pii` and imports as `gaze`. The [compiled source](../../crates/gaze-assembly/examples/setup_nym.rs) is checked against this page in CI. Release prep will switch the dependency snippet to published versions.
+Keep the snapshot private; use it only for authorized restore. `gaze-pii` imports as `gaze`. CI checks this example against the [compiled source](../../crates/gaze-assembly/examples/setup_nym.rs).
 
-For a step-by-step introduction to the library (clean, export the restore key, restore), start with the [Getting Started tutorial](../tutorials/getting-started.md).
+Learn the round trip in [Getting Started](../tutorials/getting-started.md).

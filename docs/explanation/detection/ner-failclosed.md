@@ -1,112 +1,80 @@
 # NER fails closed
 
-When a recognizer fails, Gaze stops outbound redaction instead of treating the
-failure as "no PII found". This page records that decision (tracked as P0-908),
-why it holds, and the two boundaries it depends on: the model output and
-long-input chunking.
+Recognizer errors abort outbound redaction. They cannot mean “no PII found.”
 
 ## Decision
-
-Use a fallible recognizer contract end to end:
 
 ```rust
 Recognizer::detect(...) -> Result<Vec<Candidate>, DetectError>
 ```
 
-The shared `DetectError` type lives in `gaze-types`. NER backend runtime
-failures map to `DetectError::Backend`, registry aggregation returns `Result`,
-and the pipeline aborts outbound redaction on recognizer failure.
+`gaze-types` owns `DetectError`. NER failures map to `DetectError::Backend`;
+registry aggregation propagates `Result` and the pipeline aborts on error.
 
 ## Fail-closed proof
 
-Backend failure is no longer representable as an empty candidate list at the
-recognizer boundary. Registry detection short-circuits on `Err`, and pipeline
-redaction uses that `Result` before translating spans, logging, or emitting
-clean text. A NER backend failure therefore prevents partially cleaned output
-from leaving the pipeline.
+```mermaid
+flowchart LR
+    I[Overlapping input chunks] --> B[NER backend]
+    B --> V[Validate model output]
+    V -->|valid| D[Decode + remap spans]
+    V -->|error| E[Abort outbound redaction]
+    B -->|error| E
+    D --> R[Registry Result]
+    R --> P[Pipeline emission]
+```
 
-Long NER input is scanned through bounded overlapping chunks before backend
-execution; chunk failures are propagated as recognizer errors.
+Registry detection short-circuits before span translation, logging, or clean-text
+emission. Chunk failures propagate too, preventing partially cleaned output.
 
 ## Model output boundary
 
-The fallible contract above only holds if the backend actually reports a
-failure. Between the ONNX session and the BIO decode there is a second
-boundary (the raw output tensor), and a malformed tensor there must not be read
-as "this document contains no PII".
+`OrtBackend::detect` validates every tensor before label selection, softmax,
+or filtering. Each failure is `NerRuntimeError::Output`:
 
-`OrtBackend::detect` funnels every model result through one validation
-function before any label selection, softmax, or span filtering runs. These
-four conditions each fail closed with `NerRuntimeError::Output`, never with an
-empty span list:
-
-| Model output | Outcome |
+| Invalid output | Error detail |
 | --- | --- |
-| No output tensor at all | `Output("missing logits tensor")` |
-| Rank/dimensions other than `[1, seq_len, num_labels]` | `Output("invalid logits tensor shape")` |
-| Flat buffer length != `seq_len * num_labels` | `Output("invalid logits dimensions")` |
-| Any non-finite value (`NaN`, `+Inf`, `-Inf`) | `Output("nonfinite logits")` |
+| Missing tensor | `missing logits tensor` |
+| Shape other than `[1, seq_len, num_labels]` | `invalid logits tensor shape` |
+| Buffer length != `seq_len * num_labels` | `invalid logits dimensions` |
+| Any `NaN`, `+Inf`, or `-Inf` | `nonfinite logits` |
 
-The non-finite scan covers every value in the tensor, including `O` rows,
-low-confidence rows, and special-token rows. Restricting it to the argmax
-label or to above-threshold rows would let corruption hide behind exactly the
-rows the decoder discards. `NaN` also loses every `>` comparison in the
-argmax fold, so a corrupt row silently reports `O` with maximum plausibility.
+Scan all values, including `O`, low-confidence, and special-token rows. A corrupt
+row must not disappear through decoding. Nym-small likewise errors on wrong
+logit length or non-finite values.
 
-An empty result stays representable only where it is genuinely correct: an
-empty token sequence, zero-width offsets, or a well-formed tensor whose spans
-all fall outside the document.
-
-The Nym-small safety-net decoder applies the same rule: a wrong logit length or
-a non-finite value is an error, not an `O`.
+Empty results remain valid for empty token sequences, zero-width offsets, or
+well-formed tensors whose spans all lie outside the document.
 
 ## Long-input chunking invariant
 
-NER chunk windows are measured in the model tokenizer's real WordPiece token
-offsets, not whitespace words. The ORT backend uses a 480-token payload budget,
-leaving room for `[CLS]` and `[SEP]` under the 512-token model ceiling, and a
-30-token overlap between adjacent windows.
-
-The overlap is a security invariant, not a throughput knob:
+ORT windows use real WordPiece offsets: 480 payload tokens plus `[CLS]`/`[SEP]`
+under the 512-token ceiling, with 30 tokens of overlap.
 
 ```text
 overlap_tokens >= longest detectable entity + margin
 stride = budget - overlap
 ```
 
-Current NER PII entities are assumed to be short in WordPiece space: personal
-names are typically 2-4 tokens, and common location/organization spans are
-well below the 30-token overlap. The margin protects entities that land on a
-window edge and prevents a surname/given-name split from becoming a leak
-surface. Spans are remapped to original byte offsets before overlap
-de-duplication, so an entity detected in both windows emits one manifest span.
-
-Residual risk remains for an entity longer than the overlap, especially long
-organization names or pathological fragmented input. Pass-3 SafetyNet should
-rescan the reassembled clean output as defense in depth for any boundary miss
-that tokenizer-window overlap cannot catch.
+Names typically take 2–4 tokens; common location/organization spans fit the
+assumed overlap. Remap spans to original bytes before deduplication, emitting
+one span when both windows find it. Entities longer than the overlap, including
+long organizations or fragmented input, remain a risk. Pass-3 SafetyNet should
+rescan reassembled clean output for boundary misses.
 
 ## Whole-word span edges
 
-The model labels WordPiece pieces, so a span can end inside a word:
-`jorunn vas` of `jorunn vasquez-ellery`, or a lone `J` of `JORUNN`. The rest of
-the word used to ship raw. After chunk offsets are remapped,
-every `Name`, `Location` and `Organization` span grows outward to whole-word
-edges under `gaze_types::expand_to_word_edges`, and a `Name` also grows over
-parts glued on by a hyphen or apostrophe (`gaze_types::extend_over_name_joiners`,
-the same rule the repeat-value sweep uses). Spans that now overlap merge.
-Identifier classes keep their spans, because their values legitimately sit
-inside longer strings. The cost is precision on a model span inside an
-ordinary word: a `Name` fragment `Ann` inside `Announcement` now tokenizes the
-whole word instead of cutting it.
+After remapping, `Name`, `Location`, and `Organization` spans expand through
+`gaze_types::expand_to_word_edges`; names also extend over hyphens/apostrophes
+with `extend_over_name_joiners`. Expanded overlaps merge. Identifier spans stay
+unchanged because they can sit inside longer strings.
+
+This prevents partial names from leaving suffixes raw, but an `Ann` model
+fragment inside `Announcement` tokenizes the whole word.
 
 ## Blast radius
 
-- `gaze-types`: `Recognizer::detect` becomes fallible and exposes `DetectError`.
-- `gaze`: `RecognizerRegistry::detect_all` and `detect_all_resolved` propagate
-  errors; `pipeline::Error` gains a recognizer-detection variant.
-- `gaze-recognizers`: regex, dictionary, anchored, and NER recognizers implement
-  the fallible contract. NER maps neither backend failure nor malformed
-  model output to an empty result (see [Model output boundary](#model-output-boundary)).
-- `gaze-cli`, `gaze-assembly`, and `gaze-mcp-core`: consume the existing core
-  pipeline `Result`, so recognizer failures surface as core pipeline errors.
+`gaze-types` defines the fallible trait. Core `detect_all` and
+`detect_all_resolved` propagate it as `Error::RecognizerDetect`.
+Regex, dictionary, anchored, and NER recognizers implement it. CLI, assembly,
+and MCP core receive these failures through the existing pipeline `Result`.

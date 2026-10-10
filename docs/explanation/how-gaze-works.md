@@ -1,27 +1,20 @@
 # How Gaze works
 
-Gaze, explained for the person who owns it: one document followed from input to restore, in plain English, then the details. Start with the [project README](../../README.md) if you only want the short version: what Gaze is, how well it performs, and a quickstart.
+Gaze replaces detected PII with session tokens and keeps the restore mapping
+with the owner. Detection has gaps; the goal is zero leaks. Start with the
+[README](../../README.md) for installation and current benchmark results.
 
 ## The promise in one picture
 
-![Your app sends a ticket to Gaze on your server. Gaze swaps personal details for placeholders and keeps the manifest at home. Only placeholders reach the AI model. Gaze restores the real details in the reply.](../../docs/assets/gaze-promise-loop.svg)
+![App sends owner data to Gaze, model receives tokens, and Gaze restores the reply.](../assets/gaze-promise-loop.svg)
 
-*Text version:* your app → Gaze swaps details for placeholders (the manifest stays on your server) → the AI model reads and writes placeholders only → Gaze restores the real details → your app.
-
-This is pseudonymization, not deletion. The model never needs to know who the customer is, only the shape of the task; your app puts the person back before anything leaves.
+The manifest stays on your server. Send only clean text to the model, then
+restore its reply before returning it to the user.
 
 ## A synthetic support ticket, start to finish
 
-A support agent asks the model: *"Draft a short reply confirming the refund."* The app attaches the ticket. The customer and every value are synthetic:
-
-```text
-Ticket #48213 from Laura Meyer <laura.meyer [at] example.invalid>, phone [synthetic BNetzA drama phone]:
-I sent back the headphones from order 2026-4471 two weeks ago and still have no refund.
-Please pay it to my account [synthetic German example IBAN].
-Address: Lindenstraße 8, 10115 Berlin.
-```
-
-**1. What the model receives** (captured with the explicit core + NER policy below, no Nym). The email, phone and IBAN above are displayed descriptively; the reproduction command assembles their exact synthetic values. Token suffix `_N` stands for a numeric ordinal, and each session prefix is omitted:
+With the explicit core + NER policy [below](#reproduce-the-support-ticket-example),
+a synthetic refund ticket becomes:
 
 ```text
 Ticket #<Custom:postal_code_N> from <Name_N> <<Email_N>>, phone <Custom:phone_N>:
@@ -30,119 +23,79 @@ Please pay it to my account <Custom:family:payment-card-or-iban_N>.
 Address: <Location_N> 8, <Custom:postal_code_N> <Location_N>.
 ```
 
-The manifest, the list that turns placeholders back into values, stays on your server.
+Session prefixes are omitted and `_N` means the numeric ordinal. The model
+can write `Dear <Name_N>, your refund was sent to
+<Custom:family:payment-card-or-iban_N>.` Restore substitutes the original bytes.
 
-**2. What the model replies**, written with the placeholders it was given:
-
-```text
-Dear <Name_N>,
-
-thank you for your patience. We received the headphones from order 2026-4471
-and issued your refund today to the account
-<Custom:family:payment-card-or-iban_N>.
-It should arrive within 3 to 5 business days.
-A confirmation is on its way to <Email_N>.
-
-Best regards,
-Support team
-```
-
-**3. What your app sends** after `gaze restore`. The restored email and IBAN are displayed descriptively here; the runtime restores their exact original bytes:
-
-```text
-Dear Laura Meyer,
-
-thank you for your patience. We received the headphones from order 2026-4471
-and issued your refund today to the account
-[synthetic German example IBAN].
-It should arrive within 3 to 5 business days.
-A confirmation is on its way to laura.meyer [at] example.invalid.
-
-Best regards,
-Support team
-```
-
-What this run gets wrong, stated plainly:
-
-- **Still raw:** the house number `8`. No bundled recognizer detects house numbers yet, so it reaches the model. The order number `2026-4471` also stays raw; order IDs are tenant-specific and need a custom recognizer in your policy.
-- **Over-caught:** the ticket number `48213` was taken for a postal code. That costs precision, not privacy, and it restores to the same value.
-
-The same boundary applies to tool-call arguments in agent frameworks: the JSON the model fills in carries placeholders, and Gaze restores them before your tool runs ([how it fits your stack](#how-it-fits-your-stack)).
-
-On the 2,910-document scored-label contract v2 benchmark, rules, NER, and Nym left **14,044 of 123,621 PII bytes (11.4%)** raw, with **0 refusals**; the goal is zero ([benchmark methods and evidence](../../docs/reference/benchmarks/README.md#safety-net-matrix)). Release prep will refresh this with the exact generated setup policy. The support-ticket policy and commands: [reproduce the support-ticket example](#reproduce-the-support-ticket-example).
+This run has two limits: house number `8` remains raw because no bundled
+recognizer detects it, and order ID `2026-4471` needs a tenant-specific rule.
+Ticket number `48213` is over-detected as a postal code, but restores exactly.
+Tool-call JSON uses the same token/restore boundary.
 
 ## Why this exists
 
-PII in agent workflows usually falls into one of three failure modes:
-
-1. **No redaction.** Real emails, phone numbers, and order IDs end up in the model provider's logs.
-2. **One-way redaction.** PII is stripped, the agent replies "I've sent the confirmation to `<REDACTED>`", and you have no way to thread the reply back to the actual customer.
-3. **LLM-judged redaction.** A second model call decides what's PII. It is non-deterministic and cannot be audited, and it costs another round trip every turn.
-
-Gaze is the fourth path: deterministic detection, signed restore manifest, every token traced to a versioned recognizer.
-
-Gaze is open-source privacy infrastructure for organisations that must meet GDPR or the EU AI Act while still using third-party LLMs. The detection layer and rulepacks are dual-licensed Apache-2.0 OR MIT — every PII recognizer that ships here is a contribution to a public commons that any privacy-sensitive project can audit, adopt, or extend.
-
-Your agent never sees a real email, phone number, or order ID. Your server keeps the only manifest that can read those tokens back. Detection is regex, validator, and locale-cue driven — every emitted token traces to a versioned recognizer, not to a second model's opinion of what was sensitive.
+Reversible tokens let an agent work on a task without needing detected personal
+values. One-way deletion cannot reconstruct a reply. Gaze's owner-held signed
+snapshot supports restore; emissions carry versioned recognizer metadata.
+The public detection layer and rulepacks use Apache-2.0 OR MIT.
 
 ## Seven steps
 
-![Steps 1 to 4, normalize, recognize, resolve and swap, are the deterministic floor. Step 5, the safety net on by default, and step 6, the output check, give a second opinion. The AI model sees placeholders only, and step 7 restores the reply.](../../docs/assets/gaze-seven-steps.svg)
+| Step | Action |
+|---|---|
+| Normalize | Normalize Unicode/spacing while mapping back to original bytes |
+| Recognize | Rules, dictionaries, and optional NER propose candidates |
+| Resolve | Choose overlap winners; audit losers |
+| Swap | Emit session tokens and manifest entries; sweep repeated rule-found values |
+| Safety net | Configured nets scan clean output and report suspects |
+| Output check | Core policy tokenizes, marks, refuses, or reports suspects |
+| Restore | Restore only issued tokens through the signed snapshot; refuse unknown tokens |
 
-1. **Normalize.** Tidy Unicode and spacing, and keep a map back to the original bytes.
-2. **Recognize.** 40 bundled rules (formats, checksums, cue words) plus one NER model (a model that spots names and places) each propose candidates.
-3. **Resolve.** Where candidates overlap, one wins; a whole entity takes precedence over pieces inside it. The losers are logged.
-4. **Swap.** Each winner becomes a placeholder plus a manifest entry. The same value always gets the same placeholder, and other copies of a rule-found value in the document or session are swept in too ([repeat-value sweep](detection/manifest-sweep.md)).
-5. **Safety net (on by default: Nym; OPF opt-in).** It rereads the output and turns PII it catches into a normal restorable placeholder.
-6. **Output check.** Each suspect becomes a placeholder, is replaced with a one-way `[REDACTED:<class>]` marker as a last resort, or the whole document is refused, depending on the mode below.
-7. **Restore.** Placeholders in the reply become the originals. A placeholder Gaze never issued is refused, never guessed.
-
-Steps 1 to 4 are the deterministic floor: same input, same output, every placeholder traceable to a versioned rule.
+[Repeat-value sweep](detection/manifest-sweep.md) and
+[safety-net modes](safety-net/safety-net-modes.md) define the exceptions and limits.
 
 ## Pipeline shape
 
-```text
-                       regex (always-on)  ─┐
-                       dictionary (opt-in) ├──► resolver ──► tokens ──► CleanDocument
-                       NER (opt-in)        ─┘     │
-                                                  │  conflict tiers:
-                                                  │  class > rule > score > length > id
-                                                  │
-                                                  ├──► Pass-3 SafetyNet (observer)
-                                                  │    reads clean text + manifest
-                                                  │    emits LeakReport, never mutates
-                                                  │
-                                                  └──► SensitiveSnapshot (signed)
-                                                              │
-                                                              ▼
-                                                          restore
+```mermaid
+flowchart LR
+    A[Regex and dictionary] --> C[Conflict resolver]
+    B[Optional NER] --> C
+    C --> D[Tokens and manifest]
+    D --> E[Configured safety nets]
+    E --> F[Core action policy]
+    F --> G[Clean text to model]
+    G --> H[Reply tokens]
+    H --> I[Owner-side restore]
 ```
 
-Three deterministic detection passes plus an optional observer pass. The safety net cannot modify the clean text or the restore path; it only emits suspect reports against the manifest of emitted tokens.
+The backend observes; only the core mutates output. Rules form the deterministic
+floor. A policy without `[safety_net]` runs no net; `gaze setup` enables Nym
+and pinned Davlan mBERT NER. OPF remains opt-in.
 
 ## What happens when the safety net disagrees
 
-The policy from `gaze setup` runs Nym by default.
+| Mode | Action | Restore |
+|---|---|---|
+| `resolve` (default) | Tokenize suspects, scan again, then apply fallback | Resolved tokens restore |
+| `redact` | Write `[REDACTED:<class>]`, with no fallback | Marker is one-way |
+| `strict` | Refuse uncovered/partial-bleed suspects, exit `3`, empty stdout | Nothing sent |
+| `tolerant` | Warn and keep flagged bytes | Development only; raw bytes may leave |
 
-| Mode | What happens to a suspect | Reversible? | Who refuses |
-|---|---|---|---|
-| `resolve` **(default)** | Becomes a normal placeholder. If that is impossible, the fallback decides. | Yes | Only a `strict` fallback |
-| `redact` | The suspect bytes are replaced with a one-way `[REDACTED:<class>]` marker, and an audit row is written. | No, for that span | Nobody |
-| `strict` | The whole document is refused (exit code 3, empty output). | Nothing was sent | Gaze |
-| `tolerant` | A warning only. **The suspect reaches the model.** Development use only. | Yes | Nobody, the leak ships |
-
-The fallback (`--safety-net-fallback`) can be `redact` (default), `strict`, or `tolerant`. Details: [safety-net modes](../../docs/explanation/safety-net/safety-net-modes.md).
+`--safety-net-fallback` applies only to `resolve`; choices are `redact`
+(default), `strict`, and `tolerant`. Both tolerant flags require
+`GAZE_ALLOW_TOLERANT=1`. Verified-token findings are dropped; sub-word and
+terminal-admission exceptions are documented in
+[safety nets](safety-net/safety-nets.md#sub-word-suspects-are-never-acted-on).
+No mode can protect PII that no detector finds.
 
 ### Nym in action
 
-With the policy from `gaze setup`, the rules and NER miss this synthetic licence plate and Nym catches it:
+Under the setup policy, Nym catches this synthetic licence plate:
 
 ```sh
 printf '%s' 'Das Fahrzeug mit dem Kennzeichen M-AB 1234 wurde abgeschleppt.' \
   | gaze clean --policy gaze.toml | jq -r .clean_text
 ```
-
-Recorded output, with the session prefix and ordinal generalized:
 
 ```text
 Das Fahrzeug mit dem Kennzeichen <session:Custom:license_plate_N> wurde abgeschleppt.
@@ -150,86 +103,55 @@ Das Fahrzeug mit dem Kennzeichen <session:Custom:license_plate_N> wurde abgeschl
 
 ## How it fits your stack
 
-Three execution layers, one core invariant: PII crosses the agent boundary only as manifest-backed tokens.
+| Integration | Use when | Boundary |
+|---|---|---|
+| Library (`gaze-pii`) | App controls the model call | App owns manifest and restore |
+| [MCP](mcp/mcp-runtime.md) | Agent host calls source tools | `PiiEnvelope::dispatch` protects tool calls; chat uploads are outside this boundary |
+| [Proxy](proxy/proxy-runtime.md) | SDK/agent supports a base-URL swap | API-key traffic to OpenAI, Anthropic, Gemini; consumer subscription clients are outside the contract |
 
-```text
-  Direct library          MCP source chokepoint        HTTP proxy in front of LLM
-
-  Application code        Agent tool call              SDK / agent request
-        │                       │                            │
-        ▼                       ▼                            ▼
-  gaze::Pipeline          gaze-mcp-rmcp transport       gaze-proxy provider driver
-        │                       │                            │
-        ▼                       ▼                            ▼
-  owner-controlled        gaze-mcp-core dispatch        OpenAI / Anthropic / Gemini
-  manifest + restore            │
-                                ▼
-                          source system call
-```
-
-- **Library** — link `gaze-pii` and own the data path. Use when your app already controls the LLM call.
-- **MCP chokepoint** — every agent tool call passes through `PiiEnvelope::dispatch` before reaching its source. Use when your agent host already speaks MCP and you want one redaction boundary across many tools.
-- **Proxy** — SDK base-URL swap, API-key path only. Use when the agent is a hosted product or vendor SDK that talks to `api.openai.com` / `api.anthropic.com` / `generativelanguage.googleapis.com` with an API key, and you cannot link a library or rewrite its tool layer. Subscription-tier web clients are out of scope.
-
-Architecture overview with eight Key Design Decisions: [`ARCHITECTURE.md`](../../ARCHITECTURE.md).
+See [Architecture](../../ARCHITECTURE.md) for crate boundaries.
 
 ## What ships
 
-Each feature, what you get, where the proof lives.
+| Feature | Contract and reference |
+|---|---|
+| Reversible tokens | Session-scoped `<session:Class_N>`, signed `SensitiveSnapshot`, no string-map fallback; [upgrade/restore compatibility](../../UPGRADE.md) |
+| Audit | Optional SQLite metadata, recognizer id/version; no raw payload export. Older rows use `legacy_unversioned` |
+| Detection failure | Backend `Result` errors abort outbound protection; long NER inputs use overlapping windows, [fail-closed NER](detection/ner-failclosed.md) |
+| Policy validation | Unknown validator/normalizer fails load; ambiguity is tokenized rather than silently passed |
+| Agent traffic | Tool-call JSON, provider SSE, evolving session mappings; [strict Anthropic contract](proxy/anthropic-messages-contract.md) |
+| Proxy lifecycle | `serve`, `start`, `stop`, `status`, `logs`, `restart`; opt-in `install-launchd` / `install-systemd-user`, [proxy README](../../crates/gaze-proxy/README.md) |
+| Dashboard | Default-off `gaze-cli/dashboard`; memory-only child, loopback pairing, explicit raw/restored capture acknowledgement. Expands the local trusted computing base; activation failure leaves proxy serving. [Trust boundary](dashboard/trust-boundary.md) |
+| Documents | PNG/JPG/PDF through Tesseract to partitioned `clean.md`, `report.json`, and owner-only `manifest.json`; [bundle contract](document/document-extension.md), [ingest guide](../how-to/document/ingest-documents.md) |
+| Daemon | JSONL stdio, one hot pipeline, per-session isolation, LRU/idle eviction, graceful SIGTERM; [guide](../how-to/daemon/run-daemon.md) |
 
-- **Reversible by contract.** Tokens are session-scoped, counted per class (`Email_1`, `Email_2`), and only resolvable through a signed `SensitiveSnapshot`. There is no string-map fallback. Manifests written by an older minor restore on a newer minor — see the reversibility statement at the bottom of [`UPGRADE.md`](../../UPGRADE.md).
-- **Every token is auditable.** Each emission carries a `recognizer_id` plus `recognizer_version_id` (suffixed `_vN`) into the optional SQLite audit log. Pre-v0.8 rows surface as `legacy_unversioned`. The export column set never includes raw PII payloads.
-- **10 validator-backed national IDs across 5 locale packs, 3 locale-gated regex IDs.** Aadhaar (Verhoeff), NIR (MOD-97 variant), Steuer-ID (MOD 11,10), BSN (MOD-11), CPF + CNPJ (MOD-11), NHS (MOD-11), US SSN, UK NINO, Indian PAN. Adopters in BR / FR / NL / IN / UK / US get coverage with one `--locale` flag. Full table in [Detection coverage](#detection-coverage).
-- **Defense in depth, observer-only.** Regex, dictionary, and optional NER form the detection floor. Every detector's `detect` returns a `Result`, so a backend failure fails **closed** — it aborts outbound redaction instead of silently returning an empty result, and long NER inputs (>512 tokens) are scanned in overlapping tokenizer-token windows so nothing slips past the model unscanned ([P0 #908](../../docs/explanation/detection/ner-failclosed.md)). Pass-3 SafetyNet runs *after* tokenization, against the already-clean text plus the manifest, and can flag suspect bytes the rules missed — but it cannot mutate the clean output or the manifest. A policy without `[safety_net]` runs no net; `gaze setup` enables Nym. OPF remains opt-in. Contract: [`docs/explanation/safety-net/safety-nets.md`](../../docs/explanation/safety-net/safety-nets.md).
-- **Fail closed everywhere.** Ambiguous matches are tokenized, never silently passed. Unknown validators or normalizers fail at policy load — no degraded mode. Strict-mode SafetyNet exits `3` with `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout stays empty.
-- **Agentic shapes are first-class.** Tool-call JSON arguments, SSE-streamed deltas, multi-turn sessions with evolving manifest state, and structured documents (PNG / JPG / PDF → Tesseract → `SafeBundle`) all redact correctly. The MCP runtime in [`gaze-mcp-core`](../../crates/gaze-mcp-core/) puts the same chokepoint between agent tool calls and source systems.
-- **Multi-provider HTTP proxy with a daemon.** `gaze proxy start` puts a PII chokepoint in front of **API-key-authenticated** traffic to OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages`, and Gemini's `/v1beta/models/*:{generateContent,streamGenerateContent}` — i.e. when an SDK or agent authenticates with `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY`. Consumer subscription tiers (ChatGPT Plus, Claude.ai, Gemini Advanced) use browser sessions and web endpoints and are outside this public proxy contract. SSE streams and tool-call argument JSON are accumulated chunk-by-chunk before redaction. The strict Anthropic profile proves each full request and response; see its [public contract](../../docs/explanation/proxy/anthropic-messages-contract.md). Subcommands `serve`, `start`, `stop`, `status`, `logs`, `restart`, plus opt-in `install-launchd` / `install-systemd-user`. See [`crates/gaze-proxy/README.md`](../../crates/gaze-proxy/README.md).
-- **Opt-in local inspection dashboard (default-off).** `gaze proxy serve --dashboard` pairs an isolated, memory-only dashboard child that renders the proxy's provider-visible traffic — and, only with explicit per-domain risk acknowledgements, owner-raw or owner-restored payloads — on a fresh loopback origin behind a one-shot pairing token. **Enabling it expands your local trusted computing base:** captured payloads become visible to the paired browser session. The dashboard never ships in the default build (`gaze-cli` `dashboard` cargo feature, default-off), never persists payloads, and any activation failure disables only the dashboard while the proxy keeps serving. See [Run the local dashboard](../../docs/how-to/dashboard/run-local-dashboard.md) and the [dashboard trust boundary](../../docs/explanation/dashboard/trust-boundary.md).
-- **OSS document ingestion.** `gaze document clean ./input.pdf --out ./safe-bundle/` OCRs PNG/JPG/PDF through Tesseract, runs the recognized text through the standard pipeline, and writes a `SafeBundle` — `clean.md` + `manifest.json` + `report.json`. Layout report v2 surfaces per-page OCR confidence, multi-column segmentation, table-cell preservation, and vector-PDF fallback when PDFs have selectable text. Plug in alternative OCR drivers via the `OcrBackend` trait. Adopter quickstart: [`docs/how-to/document/ingest-documents.md`](../../docs/how-to/document/ingest-documents.md). Full bundle contract: [`docs/explanation/document/document-extension.md`](../../docs/explanation/document/document-extension.md).
-- **Long-lived stdio server for repeated redaction.** `gaze daemon` keeps one pipeline and model load hot, then serves JSON-per-line requests with per-`session_id` manifest isolation. It avoids binary/model cold starts on every agent turn, exits gracefully on SIGTERM, and evicts sessions by LRU or idle timeout. Adopter quickstart: [`docs/how-to/daemon/run-daemon.md`](../../docs/how-to/daemon/run-daemon.md). Full contract: [`docs/explanation/daemon/daemon-mode.md`](../../docs/explanation/daemon/daemon-mode.md).
+Document report v2 includes OCR confidence, column segmentation, table-cell
+preservation, and selectable-PDF fallback. `OcrBackend` supports other drivers.
 
 ## Detection coverage
 
-All bundled detectors ship in the unified `core` rulepack. Activation is encoded in a closed `safety_tier` enum:
+Use the canonical [class reference](../reference/redaction-classes.md) and
+[locale matrix](policy/locale-chain.md#coverage-matrix) for formats and validators.
+The closed `safety_tier` selects activation:
 
-- **safe_default** — active whenever the bundle loads.
-- **locale_gated** — active only when the resolved locale matches `recognizer.locales`.
-- **opt_in** — active only when explicitly named under `[[policy.custom_recognizers]]`.
+| Tier | Activation |
+|---|---|
+| `safe_default` | Bundle loaded |
+| `locale_gated` | Matching recognizer locale |
+| `opt_in` | Named in `[[policy.custom_recognizers]]` |
 
-| Class | Locale | Validator | Tier |
-|---|---|---|---|
-| Email | global | RFC | safe_default |
-| Phone (E.164) | global | parser (`phone-parser` feature) | safe_default |
-| IPv4 / IPv6 | global | parser | safe_default |
-| IBAN | global | MOD-97 | safe_default |
-| Credit card | global | Luhn | safe_default |
-| Ethereum address | global | EIP-55 | safe_default |
-| Aadhaar | IN | Verhoeff | safe_default |
-| NIR | FR | MOD-97 variant | safe_default |
-| Steuer-ID | DE | MOD 11,10 | safe_default |
-| BSN | NL | MOD-11 | safe_default |
-| CPF | BR | MOD-11 | safe_default |
-| CNPJ | BR | MOD-11 | safe_default |
-| NHS number | UK | MOD-11 | safe_default |
-| Name (cue-anchored) | DE, EN | locale cue buckets | safe_default |
-| Phone (national) | DE, US | parser + locale | locale_gated |
-| Postal code | DE, US | regex + locale | locale_gated |
-| US SSN | US | cue + regex | locale_gated |
-| UK NINO | UK | cue + regex | locale_gated |
-| Indian PAN | IN | cue + regex | locale_gated |
-
-Validator names are a closed enum; unknown names fail at rulepack load with a typed `RulepackError`. The locale chain is strict and ordered: CLI > policy > rulepack default > system default.
-
-Tenant-specific PII — order IDs, song titles, artist names — needs a dictionary or custom regex recognizer. See [`docs/reference/policy.md`](../../docs/reference/policy.md).
+Unknown validator names return typed `RulepackError`. Locale precedence is
+CLI > policy > rulepack default > `global`; format-basis identifiers run
+regardless of document locale. Tenant PII such as order IDs, songs, and artist
+names needs a dictionary or custom regex in [policy](../reference/policy.md).
 
 ## Limits
 
-- Detection floor is regex + validator + locale cue. Tenant-specific PII needs a custom recognizer.
-- Linux x86_64 binaries link against glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). Older distros: build from source.
-- No Intel macOS, no musl, no Windows binaries today. Build from source.
-- NER model leaderboard: [`docs/reference/benchmarks/README.md`](../../docs/reference/benchmarks/README.md#ner-model-leaderboard). The `gaze setup` policy uses the pinned Davlan mBERT NER model plus Nym.
-- SafetyNet benchmark cells for the OpenAI Privacy Filter are populated in the [safety-net matrix](../../docs/reference/benchmarks/README.md#safety-net-matrix). Nym-small measurements are in [safety nets](../../docs/explanation/safety-net/safety-nets.md#measured).
-- `gaze-proxy` ships OpenAI / Anthropic / Gemini adapters. Certificate management, PAC mode, Electron integration, transparent interception, browser sessions, and consumer subscription endpoints are outside its public contract.
+Linux x86_64 binaries require glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10+).
+Older Linux, Intel macOS, musl, and Windows need source builds.
+Detection and safety-net evidence is in [benchmarks](../reference/benchmarks/README.md).
+The proxy does not cover certificates, PAC, Electron integration, transparent
+interception, browser sessions, or consumer subscription endpoints.
 
 ## Reproduce the support-ticket example
 
@@ -300,13 +222,15 @@ jq --rawfile text reply.txt '{session_blob, text: $text}' clean.json \
 
 ## Glossary
 
-- **Placeholder (token).** The stand-in Gaze writes where a detected value was, shown here as `<Name_N>` with a symbolic ordinal. Later sections and the code call it a token. Each one is session-scoped and turns back into the original only through the manifest.
-- **Recognizer.** One detection rule or model that proposes "these bytes look like a phone number" (or a name, an IBAN, and so on). Every placeholder names the recognizer that produced it.
-- **Manifest.** The private list that maps each placeholder back to its original value. It stays on your side and is never sent to the model.
-- **NER.** Named-entity recognition: a model that spots names, places, and organizations in free text. In Gaze it is one candidate source among the rules, not the judge.
-- **Safety net.** A second, different model that rereads the already-swapped output and raises suspects the rules missed. It cannot edit the output or the manifest itself.
-- **Resolve.** The default safety-net mode: a suspect is fed back through conflict resolution so it becomes a normal, restorable placeholder.
-- **Fallback / redact.** What happens when resolve cannot turn a suspect into a placeholder. The default, `redact`, replaces the suspect bytes with a one-way `[REDACTED:<class>]` marker; the marker says what was removed, and those bytes cannot be restored.
-- **Fail closed.** When something goes wrong (a model is missing, a rule is unknown, a suspect cannot be handled in `strict`), Gaze refuses instead of passing text through unchecked.
-- **Format vs document basis.** A `format` recognizer runs for every document because the shape itself is the evidence (for example a US phone format). A `document` recognizer runs only when the document's locale matches.
-- **Residual fragment.** The part of a suspect that is still uncovered after resolve, for example bytes next to an existing placeholder. The output check must still turn it into a placeholder, replace it with a one-way marker, or refuse.
+| Term | Meaning |
+|---|---|
+| Token/placeholder | Session-scoped stand-in for a detected value |
+| Recognizer | Rule or model that proposes a PII span |
+| Manifest | Owner-only token-to-original mapping |
+| NER | Model detecting names, places, organizations |
+| Safety net | Backend scanning clean output for missed PII |
+| Resolve | Core directly tokenizes a suspect into a restorable token |
+| Redact fallback | One-way marker when reversible handling fails |
+| Fail closed | Refuse rather than silently continue on failure |
+| Format/document basis | Format recognizers run across locales; document recognizers use locale eligibility |
+| Residual | Exposed suspect bytes left after resolution |

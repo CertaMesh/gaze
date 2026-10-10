@@ -1,34 +1,21 @@
 # MCP bridge architecture
 
-`gaze-mcp-bridge` is an optional MCP bridge for deployments where an agent
-should call real downstream MCP servers without ever seeing raw PII. Gaze is
-the only MCP server exposed to the agent. The bridge is also an MCP client to
-the real servers.
+`gaze-mcp-bridge` exposes Gaze as the agent's only MCP server and calls real
+downstream servers as an MCP client.
 
 ## When to use the bridge
 
-The bridge is for side-effecting agent workflows that already use Gaze tokens:
-email and calendar actions, filesystem tools, and computer-use agents. The
-agent sends pseudonymous tokens such as `<Email_1>`. The bridge restores those
-tokens only for fields that policy explicitly marks as sensitive and allowed,
-forwards the call to the downstream server, then redacts every text result
-before returning it to the agent.
-
-Resources and prompts are discovered in v1 so operators can see the downstream
-surface, but they are denied by default. Tool calls are the only proxied path.
+Use it for side effects such as email, calendar, filesystem, and computer use.
+It restores tokens only in sensitive fields policy allows, forwards the call,
+then protects text results. Resources/prompts are discoverable but denied by
+default; only tool calls are proxied.
 
 ## Trust model
 
-The agent is untrusted. It must never receive raw PII and must not be able to
-smuggle raw PII into downstream tools. Missing auth, missing session IDs,
-unknown tokens, unsupported content blocks, oversized responses, and audit
-write failures all fail closed.
-
-The key inversion is that normal Gaze redacts on egress to an untrusted model.
-Redaction is a safe, lossy operation. The bridge restores on egress from an
-untrusted agent into a real tool. Restore is dangerous and lossless: a wrong
-restore injects raw PII into a real side effect. For that reason the bridge is
-stricter than the core redaction path.
+The agent is untrusted. Restoring a wrong value can inject PII into a real
+side effect, so bridge egress is stricter than core redaction. Missing auth or
+session identity, unknown tokens, unsupported blocks, oversized responses,
+and audit failure all deny.
 
 ## Dispatch order
 
@@ -68,18 +55,15 @@ File mode stores one encrypted file per validated external session ID. Gaze's
 before writing. The AEAD key comes from `session.key_env`; file mode refuses to
 start if the variable is absent or empty.
 
-The session key is a restore key. If it is exposed, an attacker with session
-files can decrypt the token-to-PII map. Operators should inject it through a
-secret manager, rotate it deliberately, and treat old encrypted session files
-as unreadable after rotation unless migrated.
+The AEAD key can decrypt session files into token-to-PII mappings. Inject it
+from a secret manager; rotate deliberately. Old files become unreadable unless
+migrated.
 
 ## Stderr containment
 
-Downstream child MCP servers can log restored arguments. rmcp's child process
-transport inherits stderr by default, which would leak raw PII to parent logs.
-The bridge forces child stderr to a pipe and drains it without writing raw
-bytes to stdout, stderr, tracing, or audit. Operators should still review
-downstream server logging because those processes may write to their own files.
+Child MCP stderr is piped and drained without publishing raw bytes to stdout,
+stderr, tracing, or audit. Downstream tools may still write their own logs;
+operators must review those.
 
 ## Result handling
 

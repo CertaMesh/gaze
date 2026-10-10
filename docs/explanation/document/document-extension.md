@@ -1,40 +1,28 @@
 # Document extension architecture
 
-`gaze-document` turns a PNG, JPG, or PDF into a `SafeBundle`: files an agent
-can read, plus restore material that stays with the owner. This page covers the
-bundle that ships today and the envelope planned to sign it.
-
-`DocumentExtension` is the v0.7.x upstream hook for `gaze-document`. It lets a
-document bundle bind document metadata into the same signed owner-only
-`SensitiveSnapshot` that already restores tokens.
+`gaze-document` turns PNG/JPG/PDF into a `SafeBundle` using Tesseract and
+optional PDF rasterization. The shipped JSON manifest is owner-only. The signed
+`DocumentExtension` envelope below is a planned integrity upgrade, not the
+current on-disk format.
 
 ## Shipped in v0.7.1
 
-`gaze-document` now ships the OSS document-ingestion path with PNG/JPG/PDF
-input, Tesseract OCR, optional PDF rasterization, `write_bundle` runtime
-separation, and a versioned `BundleReport` with `bundle_version = 2`. The
-signed `DocumentExtension` envelope described below is still the intended Design B
-integrity upgrade, not the v0.10 on-disk owner manifest.
+`write_bundle` separates outputs using `AgentBundleDir` / `OwnerBundleDir`
+newtypes and path validation. `BundleReport.bundle_version` is `2`.
 
 ## Boundary
 
-Only the owner-side snapshot envelope may contain reversible PII. Agent-facing
-files must be safe to upload to an LLM workspace as a unit.
-
-```text
-agent_out/
-  clean.md
-  report.json
-
-owner_out/
-  manifest.json
+```mermaid
+flowchart LR
+    A[PNG / JPG / PDF] --> B[OCR]
+    B --> C[Gaze protects text]
+    C --> D[Agent: clean.md and report.json]
+    C --> E[Owner: manifest.json]
 ```
 
-`agent_out` is the agent-shippable directory. `owner_out/manifest.json` is
-owner-only restore material. The original `manifest.bin` signed-envelope binding
-remains a v0.11+ Design B follow-up; v0.10 Design A keeps the shipped JSON
-manifest and enforces the partition with `AgentBundleDir` / `OwnerBundleDir`
-newtypes plus path validation.
+Only the owner output may contain reversible PII. Never upload it with the
+agent directory. `manifest.bin` signed binding remains the v0.11+ Design B
+follow-up; shipped Design A uses `manifest.json`.
 
 ## Bundle files
 

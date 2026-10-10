@@ -1,48 +1,37 @@
 # Session contract
 
-A `Session` is the boundary of a pseudonym namespace in Gaze. The runtime contract below covers what `Session` and `Scope` guarantee, what they do not guarantee, and the common pitfall that triggered issue #275.
+A `Session` owns one pseudonym namespace. Use one per conversation or other
+isolation boundary. `Scope` controls persistence.
 
 ## What a Session guarantees
 
-- A `Session` is the pseudonym namespace boundary.
-- Each new `Session` starts with fresh per-class counters (`Name_1`, `Email_1`, etc.) and a fresh `session_hex` prefix.
-- Two `Session`s never share counters or value-keyed lookups, regardless of `Scope` variant.
-- `Scope` variants choose *persistence*, not *isolation*.
-- Once a rule-found value is tokenized, its later copies in the same `Session` are tokenized too, including copies in another case or spacing, which get a sibling token. See the [repeat-value sweep](../detection/manifest-sweep.md).
+Each new session has fresh per-class counters (`Name_1`, `Email_1`) and a fresh
+`session_hex` prefix. Sessions never share counters or value-keyed lookups,
+regardless of scope. Later copies of rule-found values in the same session are
+also tokenized; changed case or spacing gets a sibling token. See the
+[repeat-value sweep](../detection/manifest-sweep.md).
 
 ## `Scope` variants
 
-| Variant | Use case | `export()` allowed |
-|---------|----------|--------------------|
-| `Scope::Ephemeral` | Process-bound one-off redaction; namespace lives until the `Session` is dropped. | No |
-| `Scope::Conversation(id)` | Keyed multi-turn LLM sessions that can be re-opened across process restarts, storage backend-dependent. | Yes |
-| `Scope::Persistent { ttl: Duration }` | Long-lived sessions across restarts. | Yes |
+| Variant | Lifetime | `export()` |
+| --- | --- | --- |
+| `Scope::Ephemeral` | Until the session is dropped | No |
+| `Scope::Conversation(id)` | Keyed multi-turn session; reopening across restarts depends on storage | Yes |
+| `Scope::Persistent { ttl: Duration }` | Across restarts | Yes |
 
 ## Single shared session across conversations
 
-**Symptom:** the same email or person name in two adapter-side conversations
-produces the same pseudonym. Per-class counters (`Email_N`, `Name_N`) grow
-monotonically across the entire app lifetime. Internal value-to-token maps grow
-without bound.
+Sharing one `Session::new(Scope::Ephemeral)` across conversations reuses
+pseudonyms, grows counters and maps across the app lifetime, and lets observers
+link independent contexts.
 
-**Cause:** one `Session::new(Scope::Ephemeral)` shared across all calls. The
-`Scope` variant controls *persistence* (whether the namespace survives process
-restart), not *isolation* (whether two logical conversations share a namespace).
-
-**Fix:** use one `Session` per logical isolation boundary. For chat or agent
-threads, `Scope::Conversation(conv_id)` re-opens the same namespace on a key,
-which is useful across restarts. For ad-hoc one-shot redaction with no reuse,
-`Scope::Ephemeral` is fine.
-
-**Why this matters (axis 1):** cross-context linkability through pseudonym reuse
-is the failure mode that GDPR Art. 4(5) pseudonymization is meant to prevent. If
-two contexts that should be independent share a `Session`, the pseudonym becomes
-a stable identifier across them, which is exactly the property an attacker
-correlating two logs would exploit.
+Use a separate session for each boundary. Use `Scope::Conversation(conv_id)`
+for a namespace that can reopen across restarts, or `Scope::Ephemeral` for
+one-shot work.
 
 ## See also
 
-- [`docs/explanation/detection/manifest-sweep.md`](../detection/manifest-sweep.md) for how rule-found values propagate across a session and the v6 `session_blob`.
-- [`docs/explanation/daemon/daemon-mode.md`](../daemon/daemon-mode.md) for daemon-mode-specific `session_id` semantics.
-- [`docs/explanation/core/restore-boundary.md`](restore-boundary.md) for restore-side guarantees.
-- Rustdoc for [`Session`](https://docs.rs/gaze-pii/latest/gaze/struct.Session.html) and [`Scope`](https://docs.rs/gaze-pii/latest/gaze/enum.Scope.html).
+- [Repeat-value sweep and v6 `session_blob`](../detection/manifest-sweep.md)
+- [Daemon `session_id` semantics](../daemon/daemon-mode.md)
+- [Restore guarantees](restore-boundary.md)
+- Rustdoc: [Session](https://docs.rs/gaze-pii/latest/gaze/struct.Session.html), [Scope](https://docs.rs/gaze-pii/latest/gaze/enum.Scope.html)

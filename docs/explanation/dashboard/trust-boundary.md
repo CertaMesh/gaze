@@ -1,88 +1,92 @@
 # Dashboard trust boundary
 
-The dashboard expands the local trusted computing base only when an adopter explicitly enables it.
-The default is absence: no dashboard entropy call, credential, listener, inspection consumer,
-process, store, or browser surface exists. This page covers what runs where once the dashboard
-is enabled, who may capture what, how purge and failure work, and what the dashboard cannot
-revoke or report.
+Enabling the dashboard expands the local trusted computing base. By default
+there is no dashboard entropy call, credential, listener, consumer, process,
+store, or browser surface.
 
 ## Process boundary
 
-The provider process retains only bounded, nonblocking inspection ingress, a dedicated non-request
-IPC writer/supervisor, a one-shot registration binding, capped zeroizing in-flight frames,
-and the killable child handle. Provider request, enforcement, and restoration paths never perform
-dashboard IPC writes, wait for dashboard work, join threads, terminate the child, or reap it.
+| Provider owns | Child owns |
+| --- | --- |
+| Bounded nonblocking ingress; dedicated IPC writer/supervisor; one-shot registration binding; capped zeroizing in-flight frames; killable child handle | Literal-loopback listener; launch credential; page sessions; CSRF state; retained events; reveals; response buffers |
 
-The child owns every sensitive dashboard concern: the literal-loopback listener, launch
-credential, page sessions, CSRF state, retained events, reveals, and response buffers. Before it
-binds, generates a credential, declares readiness, or accepts a sensitive frame, it must install
-and verify application crash-dump suppression. The reviewed implementation currently covers
-non-Darwin Unix core limits. Darwin reports `Unsupported` and fails closed before binding or secret
-generation; no macOS crash-artifact suppression is claimed. Provider operation continues.
+Provider request, enforcement, and restore paths never write dashboard IPC,
+wait for dashboard work, join threads, terminate, or reap the child.
+
+Before binding, generating secrets, reporting readiness, or accepting sensitive
+frames, the child installs and verifies crash-dump suppression. It covers
+non-Darwin Unix core limits. Darwin returns `Unsupported` and fails closed
+before binding or secret generation; provider operation continues. No macOS
+crash-artifact suppression is claimed.
 
 ## Capture authority
 
-ProviderVisible is the dashboard-on baseline and is confidential pseudonymized content, not a
-verified-clean result. OwnerRaw and OwnerRestored are separately selected and acknowledged at
-startup. A browser can reveal only an exact retained logical ID, stage, emission ID, and domain that
-was already captured. It cannot promote capture, choose an epoch, replace an inspection sink, or
-revive a disabled registration.
+`ProviderVisible` is the dashboard-on baseline: confidential pseudonymized
+content, with no verified-clean claim. `OwnerRaw` and `OwnerRestored` each require startup selection and
+acknowledgement. Browser reveals require an exact retained logical ID, stage,
+emission ID, and domain. Browsers cannot promote capture, select epochs,
+replace sinks, or revive disabled registrations.
 
-The pending consumer does not exist until the 59-byte pairing frame has been delivered and the
-matching 22-byte nonce acknowledgement has completed. Master composition can atomically install
-the pending consumer with the producer through gaze-inspection. The activated handle itself
-exposes no registration identity, and descriptor equality, caller trust, and post-install
-wrappers cannot distinguish descriptor-equal registrations. Identity comes from gaze-inspection
-instead: the pending consumer is created together with a one-shot `InspectionConsumerBindingV1`,
-which the dashboard retains. `PendingDashboardActivation::commit` binds the activated consumer
-against that capability before any socket, writer, runtime, or admission side effect; a candidate
-from a different registration fails with `ActivationFailed`.
+No pending consumer exists until delivery of the 59-byte pairing frame and
+matching 22-byte nonce acknowledgement. `gaze-inspection` can atomically install
+the consumer and producer. Its one-shot `InspectionConsumerBindingV1` identifies
+the registration; descriptors, caller trust, wrappers, and the activated handle
+do not expose or distinguish descriptor-equal registration identities.
+
+`PendingDashboardActivation::commit` checks the activated consumer against that
+binding before socket, writer, runtime, or admission side effects. A different
+registration returns `ActivationFailed`.
 
 ## Purge and fatal failure
 
-With the activated consumer bound to its exact registration, purge is serialized:
+```mermaid
+flowchart LR
+    C[Close admission] --> D[Drain + zeroize ingress]
+    D --> G[begin_purge on bound consumer]
+    G --> P[Purge child under exact guard]
+    P --> A[Accept acknowledgement for guard epoch]
+    A --> F[Complete matching guard]
+    F --> O[Reopen for completed epoch]
+```
 
-1. close dashboard admission;
-2. drain and zeroize bounded ingress;
-3. call begin_purge on the activated consumer;
-4. while holding that exact guard, purge and zeroize child store, authentication, reveal permits,
-   active-response state, and buffers;
-5. accept only the child acknowledgement for the guard's runtime-selected epoch;
-6. complete the matching guard;
-7. reopen admission only for that completed epoch.
+Child purge zeroizes store, authentication, reveal permits, active responses,
+and buffers while the guard is held. The runtime chooses the epoch.
 
-A fatal child exit, IPC fault, deadline, writer fault, control-channel closure, failed rotation, or
-failed purge wins over ordinary work. The supervisor disables the exact activated consumer,
-zeroizes parent frames, terminates the child, and reaps it. No late command or acknowledgement can
-leave Disabled. Provider PII enforcement and restoration continue independently.
+Fatal child exit, IPC/deadline/writer faults, control-channel closure, or failed
+rotation/purge wins over ordinary work. The supervisor disables the exact
+consumer, zeroizes parent frames, terminates and reaps the child. Late commands
+or acknowledgements cannot leave Disabled. Provider enforcement and restore
+continue independently.
 
 ## Memory and revocation limits
 
-Retention is memory-only, capped by logical-event, byte, TTL, ingress, frame, page-session,
-follower, and active-response limits. TTL uses a monotonic clock and access never refreshes it.
-Response authorization is bound to authentication generation, inspection epoch, logical ID, stage,
-emission ID, domain, insertion generation, and deadline. One registered zeroizing response envelope
-contains the `GZPL` header and payload; its full reservation includes lease and bounded write
-overhead, so store plus concurrent responses cannot exceed the configured byte cap.
+Memory-only retention caps logical events, bytes, TTL, ingress, frames, page
+sessions, followers, and active responses. TTL uses monotonic time; access does
+not refresh it.
 
-Purge, expiry, rotation, conceal, authentication loss, disconnect, fatal failure, and shutdown
-cancel later application writes and zeroize owned buffers. Bytes already delivered to an
-authenticated browser, operating-system network buffer, terminal scrollback, extension,
-screenshot, or privileged memory-capture facility cannot be revoked. The host operating system,
-controlling terminal, and authenticated browser are inside the owner trust boundary; malicious
-trusted code and privileged external capture are outside the containment claim.
+Response authority binds authentication generation, inspection epoch, logical
+ID, stage, emission ID, domain, insertion generation, and deadline. One registered
+zeroizing envelope holds the `GZPL` header and payload. Its reservation includes
+lease and bounded write overhead; store plus responses cannot exceed the byte cap.
+
+Purge, expiry, rotation, conceal, auth loss, disconnect, fatal failure, and
+shutdown cancel later application writes and zeroize owned buffers. They cannot
+revoke bytes already in a browser, OS network buffer, terminal scrollback,
+extension, screenshot, or privileged memory capture. The host OS, controlling
+terminal, and authenticated browser are trusted. Malicious trusted code and
+privileged external capture are outside containment.
 
 ## Closed information limits
 
-Queue snapshots are unavailable/not measured. They must not render as zero, healthy, empty, clean,
-or no traffic. ProjectionFailedClosed remains one coarse caution label. Configured port metadata
-is a category only; a numeric port, host, URL, discovery path, or provenance must never be invented.
+Unavailable queue snapshots must never appear as zero, healthy, empty, clean,
+or no traffic. `ProjectionFailedClosed` stays one coarse caution.
+Configured port metadata is categorical; never invent a numeric port, host,
+URL, discovery path, or provenance.
 
-MetadataOnly contains no content-derived projection. Missing byte/chunk measurements, JSON shape,
-PII summaries, SSE timelines, decision traces, or attestation traces carry and render their exact
-closed omission reason. An absent projection never becomes zero, an empty collection, or a clean
-claim.
+`MetadataOnly` has no content-derived projection. Missing byte/chunk measurements,
+JSON shape, PII summaries, SSE timelines, decisions, or attestations retain their
+exact closed omission reason; absence never becomes zero, empty, or clean.
 
-SSE entries contain exactly ordinal, event kind, optional delta kind, and optional content-block
-index. They contain no per-entry bytes or timing, and neither the Rust view model nor browser
-consumer may derive those values.
+Each SSE entry has only ordinal, event kind, optional delta kind, and optional
+content-block index. Rust and browser consumers must not derive per-entry bytes
+or timing.

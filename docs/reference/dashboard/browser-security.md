@@ -1,7 +1,6 @@
 # Dashboard browser security reference
 
-The browser-facing security rules of the opt-in `gaze-proxy-dashboard` child: origin and
-transport checks, credentials, reveal and response leases, and safe view constraints.
+Rules for the opt-in `gaze-proxy-dashboard` child.
 
 ## Origin and transport
 
@@ -30,9 +29,9 @@ frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types 'none'
 
 ## Credentials
 
-The launch credential has one spelling: GazeDashboardV1 followed by one ASCII space and exactly 43
-unpadded base64url bytes encoding 32 random bytes. Reject padding, alternate alphabets, case
-changes, additional whitespace, and extra fields.
+Launch auth is exactly `GazeDashboardV1`, one ASCII space, then 43 unpadded
+base64url bytes encoding 32 random bytes. Reject alternate spelling or encoding,
+padding, extra whitespace and fields.
 
 After launch pairing, a private manual bootstrap envelope supplies separate 32-byte page-session
 and CSRF secrets once. The three secret types have no Debug, Display, Clone, Serialize, Deref,
@@ -60,8 +59,8 @@ inspection epoch, logical ID, stage, emission ID, domain, insertion generation, 
 Purge, TTL, rotation, conceal, authentication loss, disconnect, failure, and shutdown prevent later
 application writes and zeroize owned buffers.
 
-Concealment means byte absence from the DOM, attributes, safe snapshots, follow responses, and
-nonmatching payload responses. Hiding with CSS is not concealment.
+Concealment removes bytes from DOM, attributes, safe snapshots, follow and
+nonmatching payload responses. CSS hiding does not qualify.
 
 ## Safe view constraints
 

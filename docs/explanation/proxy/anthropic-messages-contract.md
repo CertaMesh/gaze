@@ -1,9 +1,7 @@
 # Strict Anthropic Messages Contract
 
-This is the public contract for the strict Anthropic direct profile in
-`gaze-proxy`. It covers the standard Anthropic Messages HTTP and SSE shapes only.
-Anything not admitted below fails closed rather than passing through
-uninspected.
+The strict `gaze-proxy` Anthropic profile admits only the Messages HTTP/SSE
+surfaces below. Everything else fails closed.
 
 ## Route, base URL, and upstream
 
@@ -156,20 +154,18 @@ trusted transport chunks.
 
 ## Buffering and the proof-before-I/O boundary
 
-For requests, the proxy reads, parses, pseudonymizes, validates, and proves the
-complete final buffer. It commits the session transaction immediately before
-the single upstream send. Dropping a prepared request performs neither commit
-nor upstream I/O.
+```mermaid
+flowchart TD
+    A[Complete request] --> B[Parse, protect, validate, prove]
+    B --> C[Commit immediately before one upstream send]
+    C --> D[Buffer complete upstream response]
+    D --> E[Restore, provenance, residual and lifecycle proof]
+    E --> F[Release JSON or replay proved SSE]
+```
 
-For non-stream responses, the proxy buffers, frames, parses, restores,
-provenance-checks, and residual-scans the complete upstream body before it
-creates any successful downstream response.
-
-For SSE, the upstream status and headers are validated before a downstream
-`200` head can open, but no provider payload byte is released until the entire
-bounded stream has passed lifecycle, restore, provenance, and residual proofs.
-While that proof is pending, the only permissible downstream bytes are the
-compiled constant ping:
+Dropping a prepared request neither commits nor sends. Non-stream responses
+release nothing before complete proof. SSE may open a `200` head after status
+and header validation, but only constant pings may leave while proof is pending:
 
 ```text
 event: ping
@@ -177,9 +173,8 @@ data: {"type":"ping"}
 
 ```
 
-The default ping interval is 10 seconds and may be configured only from 1
-through 30 seconds. If proof fails after the downstream head opened, the proxy
-emits only its compiled constant safe error frame:
+Ping interval defaults to 10 seconds, configurable from 1 to 30. A failed proof
+after opening the head emits only this constant safe frame:
 
 ```text
 event: error
@@ -187,40 +182,32 @@ data: {"type":"error","error":{"type":"api_error","message":"proxy_validation_fa
 
 ```
 
-It never includes provider bytes, raw error text, or partially restored data.
-Successful events are then replayed from the proved buffer.
+No provider bytes, raw errors, or partially restored data leave before proof.
 
 ### Complete request logical-domain proof
 
-After the ordinary per-carrier transform and exact reparse proof, Gaze performs
-an independent proof over the complete final request. It constructs contiguous
-views without inserting separators, then suppression-probes each view before
-the session can commit, upstream I/O can begin, or an inspection event can be
-published. A probe must reproduce its input byte-for-byte; otherwise the
-request fails closed with `ControlWouldMutate` (codec phase `RequestProof`,
-proxy phase `RequestTransform`, HTTP `422`).
+After per-carrier transform and exact reparse, an independent complete-request
+proof builds contiguous views without separators and suppression-probes each.
+Every probe must reproduce input exactly, before commit, upstream I/O, or
+inspection publication. Mutation is `ControlWouldMutate`: codec phase
+`RequestProof`, proxy phase `RequestTransform`, HTTP `422`.
 
-The prompt proof covers both provider-semantic order and emitted JSON order. It
-checks every present permutation of the system, tools, and messages components,
-and it checks metadata as its own semantic and emitted-order domain. Object
-members with a provider-defined order use that closed order; arbitrary objects
-use decoded-key byte order for the semantic view and source member order for the
-emitted view. Arrays retain API order. JSON member keys precede their value
-subtrees in each view. Signed or encrypted payloads remain opaque carriers, but
-their surrounding reviewed fields still participate in occurrence coverage.
+Prompt proof checks every present permutation of system/tools/messages in
+provider-semantic and emitted JSON order. Metadata is a separate domain in both
+orders. Provider-ordered members use that order; arbitrary objects use decoded-key
+byte order semantically and source member order in the emitted view. Arrays keep
+API order; keys precede value subtrees. Signed/encrypted carriers remain opaque,
+but surrounding fields participate in occurrence coverage.
 
-The proof deliberately does not join metadata or routing controls to prompt
-content, reorder arrays, skip intervening visible text, or claim to model every
-possible future concatenation an arbitrary LLM application might perform. The
-closed carrier inventory rejects unclassified or multiply classified strings,
-so adding a provider field requires an explicit contract decision.
+Proof does not join metadata/routing controls to prompts, reorder arrays, skip
+visible intervening text, or cover every future application's concatenation.
+Unclassified or multiply classified strings are rejected; new fields need
+explicit contract decisions.
 
-Suppression probes bypass both prefix-cache lookup and prefix-cache storage.
-They therefore cannot reuse a cached fragment to hide a newly joined detector
-match and cannot publish speculative cache entries. This conservative boundary
-can reject a benign request when a detector would change one of the proved
-views; that availability cost is intentional because an ambiguous cross-carrier
-join must never be allowed to reach the provider.
+Suppression probes bypass prefix-cache lookup/storage. A newly joined match
+cannot hide behind a cached fragment or publish speculative entries. Detector
+false positives may reject benign requests; this availability cost is accepted
+at the confidentiality boundary.
 
 ## Limits and timeouts
 
@@ -300,75 +287,52 @@ Recognized upstream statuses preserve only their closed meaning:
 
 ## Inspection is optional and off the enforcement path
 
-Inspection is observation, not proof. With no inspection/dashboard
-registration, the proxy constructs no capture producer/consumer and its
-enforcement path remains independent. The safe default capture domain is
-`MetadataOnly`; omitted payload projections are marked
-`NotCapturedByPolicy`, and metadata-only processing does not allocate a payload
-projection.
+Without inspection registration, no capture producer/consumer is constructed.
+Default `MetadataOnly` capture allocates no payload projection and marks omitted
+payloads `NotCapturedByPolicy`.
 
-Safe metadata is a closed vocabulary: route, provider profile, endpoint and
-port-selection categories, operational status/error/drop/delivery codes,
-coarse duration buckets, queue counters, and ordering identifiers. It contains
-no exact timestamp or fine-grained duration and makes no traffic-analysis
-resistance claim. Event existence, broad timing, queue outcomes, and callback
-cadence can still reveal operational patterns.
+Metadata uses closed route/profile, endpoint/port categories, status/error/drop/
+delivery codes, coarse durations, queue counters, and ordering IDs. It includes
+no exact timestamps or fine durations. Event timing, callback cadence, and queue
+outcomes can still reveal traffic patterns; there is no traffic-analysis guarantee.
 
-Payload capture requires an explicitly authorized domain. Its sensitive wrapper
-cannot be formatted or serialized as ordinary data; a trusted sink must invoke
-the scoped reveal callback. That callback is an explicit, irreversible
-declassification boundary: once a trusted sink copies bytes, purge or disable
-cannot revoke the copy. Treat payload sinks as part of the data owner's trusted
-computing base.
+Payload capture needs an authorized domain. Sensitive wrappers cannot be
+formatted/serialized normally; trusted sinks must use the scoped reveal callback.
+Copied bytes cannot be revoked by purge/disable, so sinks enter the owner's
+trusted computing base.
 
-Queue overflow, projection failure, a rejecting or panicking sink, purge, and
-disable affect only observation delivery. They never weaken or bypass proxy
-request/response enforcement. Purge and disable use lifecycle fences so stale
-queued payloads are dropped and released; disable is one-way.
+Overflow, projection failure, rejecting/panicking sinks, purge, and disable
+affect observation only, never enforcement. Lifecycle fences drop stale queued
+payloads; disable is one-way.
 
-Current availability/reporting limits are intentionally explicit:
+| Reporting limit | Meaning |
+|---|---|
+| Queue aggregate counters | Zero/default placeholders, not runtime totals |
+| Configured-port provenance | Closed category, no numeric port or source detail |
+| `ProjectionFailedClosed` | Coarse applicable-but-unavailable/unowned projection, no finer diagnosis |
 
-- Queue-snapshot aggregate counters in proxy events are currently zero/default
-  placeholders, not runtime-derived operational totals.
-- Configured-port provenance is a closed category; it does not reveal the
-  numeric port or source-detail provenance.
-- `ProjectionFailedClosed` is deliberately coarse for a projection that was
-  applicable but unavailable or not owned. It does not diagnose a finer cause.
-
-These limitations reduce inspection detail, not confidentiality enforcement.
-Selecting a stricter PII detector can separately reduce provider-response
-availability because a detector finding or false positive rejects the whole
-proved response.
+These limits reduce inspection detail. Separately, stricter detectors may
+reject whole provider responses on false positives.
 
 ## Migration and compatibility
 
-Earlier public text described a supplied session header as automatically
-enabling continuity and described authentication headers as forwarded
-unchanged. Both statements are obsolete for the strict Anthropic direct
-profile.
+Earlier session-header auto-continuity and unchanged-auth forwarding claims
+are obsolete for this profile.
 
-Migrate as follows:
+1. Set the SDK base URL to the proxy root; use exact `POST /v1/messages`.
+2. Remove `x-gaze-session-id` for `AnthropicAdapter::new`, or enable continuity
+   and send a canonical lowercase UUIDv4 every time.
+3. Supply `x-api-key` and allowlisted `anthropic-version`; explicitly allowlist
+   beta values before sending them.
+4. Do not depend on auth/cookie/tracing/vendor headers reaching Anthropic.
+   Configured local `Authorization` is singleton principal input only.
+5. Expect unknown JSON, opaque media, provider-origin PII, and unproved SSE to deny.
 
-1. Keep the Anthropic SDK base URL at the proxy root and use only exact
-   `POST /v1/messages`.
-2. Choose session behavior explicitly. Remove `x-gaze-session-id` when using
-   `AnthropicAdapter::new`; or enable the continuity builder/configuration and
-   send a canonical lowercase UUIDv4 on every request.
-3. Continue supplying `x-api-key` and an allowlisted `anthropic-version`. Add
-   beta values to the explicit allowlist before sending `anthropic-beta`.
-4. Do not depend on `Authorization`, cookies, tracing/vendor headers, or unknown
-   SDK headers reaching Anthropic. If local `Authorization` authentication is
-   configured, treat it only as singleton principal input.
-5. Expect unknown JSON, opaque media, provider-origin PII, and unproved SSE to
-   fail closed instead of being passed through.
-
-The `AnthropicAdapter::new` constructor remains source-compatible; its strict
-behavior is the intentional contract. The builder is the continuity opt-in.
-OpenAI and Gemini remain explicitly on their legacy adapter contracts.
-Third-party `ProviderAdapter` implementations must declare a contract too:
-`contract()` has no default, so an adapter that declares none does not compile.
-Existing public root re-exports remain available.
-None of those compatibility promises relaxes the strict Anthropic wire rules.
+`AnthropicAdapter::new` stays source-compatible with strict semantics;
+continuity uses the builder. Existing root re-exports remain. OpenAI/Gemini
+retain legacy contracts. Third-party `ProviderAdapter` implementations must
+supply `contract()`; it has no default. Source compatibility never relaxes the
+wire rules.
 
 ## Retained official-SDK manual gate
 

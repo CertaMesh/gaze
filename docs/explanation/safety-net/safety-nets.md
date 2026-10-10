@@ -1,150 +1,57 @@
 # Safety nets
 
-Safety nets are observer-only privacy backends that audit Gaze's clean output
-for PII the deterministic pipeline missed. They never replace bytes, never
-mutate the [`Manifest`](../../../crates/gaze-types/src/lib.rs), and never reach
-the restore path. They exist to surface leak suspects so the deterministic
-detectors and rulepacks can be improved.
+Safety nets scan clean output for PII the primary pipeline missed. Backends
+return metadata-only suspects; the core applies the caller's action policy.
+They cannot edit text or the manifest, veto candidates, or restore tokens.
+Validator checks run earlier in [validator veto](../detection/validator-veto.md).
 
-A policy without `[safety_net]` runs no net. `gaze setup` enables the in-process
-Nym-small adapter by default; `gaze setup --safety-net none` opts out. The OpenAI
-Privacy Filter subprocess adapter remains opt-in (`--safety-net openai-filter`). CLI flags and setup:
-[`crates/gaze-cli/README.md`](../../../crates/gaze-cli/README.md#safety-net).
+A policy without `[safety_net]` runs no net. `gaze setup` enables Nym-small;
+`gaze setup --safety-net none` opts out. OPF is opt-in with
+`--safety-net openai-filter`. See [CLI flags](../../../crates/gaze-cli/README.md#safety-net).
 
-Before a net scans clean text, Gaze replaces the random eight-character session
-hex in each manifest-owned or session-verified placeholder with a stable
-eight-character hex digest of the placeholder shape. The replacement has the
-same byte length, so model spans map exactly to the real clean text. Findings
-wholly inside a verified placeholder are dropped; crossing findings are clipped
-to exposed bytes before policy or fallback acts.
-The observable clean text, manifest, and restore input keep the original token
-bytes. Auditing keeps its existing schema and records the resulting safety-net
-decisions. Unowned token-shaped text is untouched.
-
-Nym also scans a byte-aligned neutral view of verified tokens and joins the
-findings from both views. See [Nym's neutral token view](nym-neutral-view.md).
-
-Validator-backed self-validation is handled earlier by the deterministic
-[`validator-veto`](../detection/validator-veto.md) stage. Safety nets do not veto candidates
-and do not participate in conflict resolution.
+Before inference, verified placeholders receive a stable eight-character digest
+in place of their random session hex. Byte lengths and real output stay unchanged.
+Unowned token-shaped text stays literal. Findings inside verified placeholders
+are dropped; crossing findings retain exposed bytes. Nym also scans a
+[neutral view](nym-neutral-view.md).
 
 ## How a safety net fits the pipeline
 
-This document describes the safety-net contract introduced in v0.6 through
-PR #91. The first shipped backend is the OpenAI Privacy Filter
-(`opf`) subprocess adapter; the contract is generic so additional backends
-can land without changing the trait shape or audit schema.
-
-```text
-                    GAZE CLEAN INVOCATION
-                            │
-                            ▼
-   ┌─────────────────────────────────────────────────────────────────┐
-   │ PASS 1 — REGEX + DICTIONARY (deterministic)                     │
-   │   "Contact " + "alice" + "@" + "example.invalid"               │
-   │     → recognizers (email.global, name.de, iban, …)              │
-   │     → Candidate { class=Email, score=1.0, span=(8,29), … }      │
-   └────────────────────────────┬────────────────────────────────────┘
-                                ▼
-   ┌─────────────────────────────────────────────────────────────────┐
-   │ PASS 2 — NER (optional, opt-in feature)                         │
-   │   mBERT (Davlan) emits B-PER / I-PER / B-LOC … per token        │
-   │   → Candidate { class=Name, score=0.91, span=(0,7) }            │
-   └────────────────────────────┬────────────────────────────────────┘
-                                ▼
-   ┌─────────────────────────────────────────────────────────────────┐
-   │ CONFLICT RESOLUTION + TOKENIZATION                              │
-   │   class-priority > rule-priority > score > span-len > id        │
-   │   emit tokens → "Contact <{sess}:Email_1>" + Manifest           │
-   └────────────────────────────┬────────────────────────────────────┘
-                                │ clean_text + manifest committed
-                                │ (this is what restore will reverse)
-                                ▼
-   ┌─────────────────────────────────────────────────────────────────┐
-   │ PASS 3 — SAFETYNET (setup enables Nym by default)               │
-   │   Selector: --safety-net-backend or registry dispatch           │
-   │                  ↓                  ↓                           │
-   │   ┌──────────────────────┐  ┌────────────────────────────┐      │
-   │   │  openai-filter       │  │  nym (setup default)       │      │
-   │   │  (OPF subprocess)    │  │  (in process, ORT)         │      │
-   │   │                      │  │                            │      │
-   │   │  ─ heavier weights   │  │  ─ Nym-small v3 int8       │      │
-   │   │  ─ OpenAI's PII set  │  │  ─ op-B label allowlist    │      │
-   │   │  ─ requires `opf`    │  │  ─ `gaze setup`            │      │
-   │   │    binary install    │  │    enables Nym             │      │
-   │   └──────────┬───────────┘  └────────────┬───────────────┘      │
-   │              │                            │                     │
-   │              └──────────────┬─────────────┘                     │
-   │                             ▼                                   │
-   │   Net output: span array [{start, end, label, score}, …]        │
-   │   over clean_text (post-tokenization!)                          │
-   │                                                                 │
-   │   Gaze compares the SafetyNet spans against the manifest:       │
-   │     ─ Span overlaps an emitted token → covered (no leak)        │
-   │     ─ Span outside every token       → "Uncovered" suspect      │
-   │     ─ Span overlaps partial token    → "PartialBleed" suspect   │
-   │     ─ Span overlaps wrong class      → "ClassMismatch" suspect  │
-   │       (unowned tokens only; findings inside owned               │
-   │        placeholders are dropped before any action)              │
-   │                                                                 │
-   │   Result: leak_report attached to JSON output. Manifest         │
-   │   UNCHANGED. Restore UNAFFECTED. (Axis 2 reversibility intact.) │
-   └─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A[Regex and dictionary] --> C[Resolve candidates and tokenize]
+    B[Optional NER] --> C
+    C --> D[Clean text and manifest]
+    D --> E[Configured safety nets]
+    E --> F[Correlate spans with manifest]
+    F --> G[LeakReport]
+    G --> H[Core applies action policy]
 ```
+
+Manifest correlation distinguishes `Uncovered`, `PartialBleed`, and
+`ClassMismatch`; findings inside owned placeholders are dropped first.
 
 ## Observer-only contract
 
-The *backend* is observer-only; the *pipeline* may still act on what it reports.
-A `SafetyNet` can never rewrite bytes itself — the trait has no return channel
-for replacement text and no mutable handle to the manifest, by construction —
-but the `SafetyNetPolicy` the caller passes decides what the deterministic core
-does with the resulting `LeakReport`: nothing (`Strict`, `Tolerant`), replace the
-suspect spans with a one-way marker (`Redact`), or tokenize them reversibly and re-run
-(`Resolve`). The policy-less entry points below use
-`SafetyNetPolicy::default()`, which is `Resolve` + `Redact` — the shipped
-production default since v0.8.1. Pass an explicit `Strict` policy to
-`Pipeline::clean_with_safety_net_policy_detect_context`, or use
-`Pipeline::scan_safety_nets`, when you want report-only behaviour. Mode catalog
-and the full lowering table:
-[`safety-net-modes.md`](safety-net-modes.md#the-fallback-applies-only-under-resolve).
+`SafetyNet` has no replacement-text return value or mutable manifest access.
+The core's `SafetyNetPolicy` decides whether to observe (`Strict`, `Tolerant`),
+replace spans (`Redact`), or tokenize and scan again (`Resolve`). Policy-less
+entry points use `SafetyNetPolicy::default()`: `Resolve` + `Redact`.
 
-The pipeline calls
-`Pipeline::clean_with_safety_net_detect_context`, which:
-
-1. Runs the deterministic detection-and-redaction pipeline.
-2. Records the emitted token spans into a `Manifest`.
-3. Iterates the registered safety nets after a successful clean. Each
-   backend receives the clean text and the immutable manifest snapshot.
-4. Returns `(CleanDocument, LeakReport)` to the caller.
-
-The bytes on `CleanDocument` are produced exclusively by the deterministic
-core. A safety net cannot rewrite, append to, or veto the clean text: under an
-enforcing policy it is still the core's tokenizer and redactor that mutate the
-document, driven by the report, never the backend.
+`Pipeline::clean_with_safety_net_detect_context` cleans, records token spans,
+checks the successful output with registered nets, and returns
+`(CleanDocument, LeakReport)`. Only the core tokenizer/redactor changes output.
+For report-only use, pass explicit `Strict` to
+`Pipeline::clean_with_safety_net_policy_detect_context`, or call
+`Pipeline::scan_safety_nets`. See [modes](safety-net-modes.md#the-fallback-applies-only-under-resolve).
 
 ## North-star fit
 
-Safety nets exist because of axis 1 (reliability — never leak) but must
-not weaken axes 2–4. The contract therefore mandates:
-
-- **A1 — never leak.** Safety nets read clean text after pseudonymization
-  and report metadata-only suspects. Raw input never leaves the deterministic
-  core. Backend-side raw bytes never cross the adapter boundary.
-- **A2 — reversibility preserved.** Safety nets do not mutate the manifest
-  or emit tokens, so restore round-trips are unaffected by their presence,
-  failure, or absence.
-- **A3 — agentic-first.** Per-field structured-document traversal lets agent
-  tool-call JSON be checked field-by-field, producing field-pathed suspects
-  that downstream FP-adjudication tooling can route to the right team.
-- **A4 — auditable + deterministic.** Suspects carry the backend id, version,
-  decoding-params hash, and an optional replay hash. The closed
-  [`SafetyNetError`](../../../crates/gaze-types/src/lib.rs) variant set keeps
-  failures typed; the optional `safety_net_log` SQLite table records
-  metadata-only rows that the `gaze audit safety-net` subcommand can replay.
-
-If a safety net cannot be initialized, the strict-mode CLI fails closed with
-exit `3` and an error variant; tolerant mode logs the suspects and continues.
-Both modes preserve the manifest contract.
+Backend results contain no source bytes. Suspects carry backend/version,
+decoding parameters, and optional replay identity for audit. The core's
+redaction marker is one-way; resolved tokens remain restorable. Structured
+reports carry field paths. Backend failures use typed `SafetyNetError`s and
+fail closed; audit rows contain metadata only.
 
 ## Trait shape
 
@@ -188,170 +95,79 @@ mode catalog is in [safety-net modes](safety-net-modes.md).
 
 ### The redaction marker
 
-Where the redact path once wrote the empty string, it now writes
-`[REDACTED:<class>]` — for example `[REDACTED:name]` or
-`[REDACTED:custom:phone]`.
+Redaction writes `[REDACTED:<class>]`, such as `[REDACTED:name]` or
+`[REDACTED:custom:phone]`. It marks a one-way replacement; restore leaves it
+unchanged. It has no session prefix or ordinal and never parses as a token.
+`gaze::is_redaction_marker` is the shared predicate; strict restore and the
+hallucination guard treat it as prose, and indexing skips it.
 
-Deleting was a silent one-way loss. Nobody downstream could tell a redaction
-from a typo: not the person reading the clean document, not the model consuming
-it, and not a later pass of gaze itself, which saw two fragments that deletion
-had glued together and read the join as a new finding. The marker keeps the same
-decision — those bytes do not cross the boundary — and makes the decision
-legible.
+The emitter lowercases the class, keeps `:` separators, and maps other
+non-alphanumeric bytes to `-`, including `_`. This prevents a class such as
+`address_2` from producing token-shaped text. It also handles directly built
+or deserialized custom/family classes. The audit row keeps the exact class.
 
-**It is not a token.** No session prefix, no ordinal, nothing to look up. Restore
-never substitutes it, the hallucination guard never judges it, and the strict
-restore scan treats it as ordinary prose. `gaze::is_redaction_marker` is the one
-predicate every consumer asks; a second spelling elsewhere would be a second
-thing to keep in step with the emitter.
+Markers have non-owned `Action::Redact` manifest entries for the original
+bytes and all contributing suspect IDs. A merged region uses its lowest-offset
+suspect's class; audit still writes one row per suspect.
 
-The class path renders lowercased, with `:` kept as the namespace separator and
-every other non-alphanumeric byte mapped to `-`. Mapping `_` is load-bearing
-rather than cosmetic: every bare arm of the token-shape grammar needs a trailing
-`_<digits>` inside word boundaries, so a custom class legitimately named
-`address_2` would otherwise make `[REDACTED:custom:address_2]` contain the token
-shape `custom:address_2` — the marker would parse as a token. Dropping the
-underscore makes that unrepresentable rather than merely untested;
-`a_redaction_marker_never_parses_as_a_token` pins it against every builtin class
-and the adversarial custom ones.
+A finding is protected only when wholly inside a recorded marker. Typing a
+marker grants no protection. A straddling finding uses normal rules and can
+deny when it overlaps a manifest entry. Invalid ranges, reversed spans, or
+split characters cannot be excused by marker overlap.
 
-Mapping everything else is what keeps the emitter and the predicate from drifting
-apart. `PiiClass::custom` normalises, but `PiiClass::Custom` is a public variant
-an adopter's own `SafetyNet` can build directly or deserialize, and
-`PiiClass::family` does not normalise its name; a class carrying an uppercase
-letter, a space or a `]` used to render a marker `is_redaction_marker` rejected.
-The index is the one production consumer of that predicate — it skips markers so
-a one-way redaction never becomes a searchable, translatable entity — so the
-divergence meant those redactions were indexed. Sanitising in the emitter makes
-`is_redaction_marker(redaction_marker(c))` true for every `PiiClass` by
-construction. The exact class is still carried by the audit row.
-
-**In the manifest.** A marker is recorded like any other one-way replacement:
-`Action::Redact`, not owned, standing for the original bytes it covered, with
-the ids of every suspect that drove it. A merged region is one marker carrying
-the class of its lowest-offset suspect, while the audit log still writes one row
-per suspect — merging must not merge away who asked for the redaction.
-
-**A marker is never redacted again.** `REDACTED` is a capitalised word in
-ordinary prose, which is exactly what a NER model reads as an organization. A
-suspect lying wholly inside a marker is dropped as already protected, on the
-manifest's authority rather than the text's — a document that merely *types*
-`[REDACTED:name]` gains nothing.
-
-**Containment, not overlap.** The first design dropped any suspect that merely
-*overlapped* a marker. That was rejected because it leaks: a net that reports
-`[REDACTED:name] Schmidt` has flagged a surname, and dropping the whole finding
-because half of it is a marker ships `Schmidt` raw. It also excused suspects that
-were simply malformed -- out of bounds, reversed, splitting a character --
-whenever they happened to touch a marker, where those must stay unjudgeable and
-deny. So a suspect is protected only when it lies *wholly inside* a marker gaze
-recorded. A suspect that straddles a marker and real text is judged by the
-ordinary rules, and since it overlaps a manifest entry it denies the document:
-fail-closed, never a leak. On the benchmark corpus no straddling suspect occurs
--- see the evidence below -- so the denial costs nothing measured; if one ever
-appears in practice, the refinement is to act on the bytes outside the marker,
-not to relax containment.
-
-**Evidence.** The benchmark's `full-stack-nym-redact` arm runs Nym-small under
-`SafetyNetMode::Redact` so that every suspect goes through the redaction path;
-the shipped `full-stack-nym-resolve` arm cannot show this, because on the corpus
-it resolves every Nym suspect reversibly and its fallback never fires. Compared
-against the deleting implementation over the full 2,910-document corpus,
-`scripts/bench/marker_ab.py` found the same 1,296 spans redacted in the same
-1,014 documents, identical leaked and false-positive byte counts, no new
-rejections, and -- in every document -- clean text identical to the deleting
-output once the markers are removed.
-
-**What it costs.** The output is longer than the input for those spans, where
-deleting made it shorter. Adopters who diffed clean text against raw byte counts
-will see that change; nothing about which spans get redacted moved.
+`scripts/bench/marker_ab.py` compared `full-stack-nym-redact` against deletion
+on 2,910 documents: the same 1,296 spans in 1,014 documents, identical leaked
+and false-positive bytes, no new refusals, and identical clean text after
+removing markers. Output grows by the marker length; selected spans do not
+change. The resolve arm cannot test this because its fallback did not fire.
 
 ### Terminal admission after a `Redact` fallback
 
-Under `Resolve` + `Redact` the fallback *replaces* the residual spans it could
-not resolve with a one-way marker. (When the re-run's whole residual set can be
-tokenized, the fallback tokenizes it instead and nothing is replaced; the
-terminal scan still runs.) That changes the input string, so the scan
-that follows is the first pass to see that text, and it routinely reports a
-short sub-word span that the earlier passes read and accepted. Denying on every
-such span held a fallback document to a standard no completing document has to
-meet.
-
-The terminal report instead gets one reversible round and one bounded
-replacement, and each remaining suspect is classified into a closed set:
+The fallback tokenizes a whole post-resolve residual set when possible;
+otherwise it writes markers. Terminal scanning sees the changed text. Its
+report gets at most one reversible round and one bounded replacement, then
+one final scan. These bounds are straight-line code, not retries.
 
 | Case | Condition | Outcome |
-|------|-----------|---------|
-| `FallbackIncomplete` | The suspect covers bytes the fallback's own audit rows say it removed. | Deny. Nothing further is replaced first. |
-| `SeamManufactured` | The suspect's span strictly **contains** a deletion seam, so part of its shape exists only because the fallback removed what sat between two fragments. Abutting a seam is not this. | One bounded replacement through the ordinary fallback path. A second one denies. **Unreachable since the fallback started writing a marker** — a marker separates the fragments a deletion used to glue together, so no seam exists to contain. Kept, unmeasured-for-removal. |
-| `Unjudgeable` | The suspect names no real range of the document, its own coverage claim contradicts the manifest, or the bytes it covers carry a token shape this pipeline never minted. | Deny. |
-| `Admit` | Anything else: a finding about the document that no stage is permitted to act on. | Merged into the returned `LeakReport`; the document completes carrying it. |
+|---|---|---|
+| `FallbackIncomplete` | Finding covers bytes fallback audit says it removed | Deny before further replacement |
+| `SeamManufactured` | Finding strictly contains a deletion seam, rather than abutting it | One bounded replacement; a second denies. Unreachable with markers, retained pending measured removal |
+| `Unjudgeable` | Invalid range, contradictory coverage, or an unminted token shape | Deny |
+| `Admit` | Remaining finding no stage may act on | Complete with the finding in `LeakReport` |
 
-Both bounds — one reversible round, one replacement — are straight-line code, not a
-loop with a counter. After they are spent, one more scan runs and the same
-classification applies: `Admit` ships with an honest report, anything else
-denies. Admission is strictly wider than the rule it replaced, so no document
-that completed before can begin denying.
+After the bounds are spent, only `Admit` completes. Admission is wider than
+its predecessor, so previously completing documents do not newly deny.
+The reversible round writes `decided_by: Resolve`, `action: Tokenize`, and the
+triggering `FallbackReason`. Its trace is `("safety_net", "resolve", "tokenize")`.
 
-The round tokenizes; it never redacts. Its audit rows are
-`decided_by: Resolve` with `action: Tokenize`, carrying the `FallbackReason`
-that made the round run — the combination that tells them apart from the
-second batch's rows. The protection trace projects them as an ordinary
-`("safety_net", "resolve", "tokenize")`, so the benchmark scorer's closed
-provenance set is unchanged.
-
-**Coordinates.** `map_clean_boundary_to_raw` infers original-request offsets
-from the manifest alone, assuming every untokenized clean run stands for an
-equal-length raw run. A *deletion* removes clean bytes and no raw bytes, so that
-assumption failed for everything after the first removed region, and every later
-mapping had to be rebuilt from a deletion ledger.
-
-Writing a marker is what removed that whole branch from the product path. A
-marker is an ordinary one-way manifest entry — `Action::Redact`, not owned,
-exactly the shape the primary pass has always emitted for a redacting policy —
-so the clean/raw alignment stays affine and the plain mapper describes the
-document end to end. The layout code that reconciled a deletion ledger against
-the manifest remains in tree but is no longer reachable; a measurement covers
-its removal.
-
-A
-resolution gap must map to exactly as many raw bytes as it has clean bytes,
-which is what prevents a token standing for bytes on both sides of a seam.
-
-**Cost.** A fallback document whose terminal scan reports anything runs one
-extra model pass. Only documents that reach the `Redact` fallback can.
+`map_clean_boundary_to_raw` uses manifest alignment and equal-length
+untokenized runs. Markers are ordinary one-way manifest entries, so no deletion
+ledger is needed. Legacy ledger reconciliation remains unreachable. Each
+resolution gap must map to the same number of raw and clean bytes. Fallback
+documents with terminal findings pay an extra model pass.
 
 ### Sub-word suspects are never acted on
 
-A name, location or organization suspect whose action span starts or ends
-between two letters or digits is a model firing on part of a word (`Pass` in
-`Passwort`). Tokenizing or deleting it protects nothing whole and hands the
-agent a mangled word, so under `Resolve` and `Redact` no stage acts on it: not
-the first pass, the second batch, the terminal round, `Redact` mode or the
-`Redact` fallback. Its bytes stay, it gets a `Preserve` audit row, it stays
-in the returned report, and a
-`LeakReportTelemetry::UnactionableSubword` row (CLI JSON kind
-`UnactionableSubword`) carries its net, class and offsets. `Observe` modes are
-unchanged.
+For name, location, and organization classes, a span starting or ending between
+letters or digits is a sub-word finding (`Pass` in `Passwort`). `Resolve`,
+`Redact`, and their enforcing stages leave it raw, write a `Preserve` audit
+row, and retain the finding and `LeakReportTelemetry::UnactionableSubword`
+(CLI JSON kind `UnactionableSubword`) with net, class, and offsets. Observe
+modes are unchanged.
 
-| Rule | Why |
-|------|-----|
-| Judged in the text the net reported on | The terminal round judges at scan time, so a whole word that its own seam deletion later glues to a neighbour is still resolved. |
-| A token's `<`/`>` is a word boundary | A gap starting right after a token is a whole word. |
-| A span touching a token shape is never a sub-word | Foreign-token handling (fallback, `Unjudgeable`) must still see it. |
-| No minimum length | A standalone letter is a whole word and often an initial (`J.`). |
-| Identifier classes are exempt | Their values legitimately sit inside longer strings (`ID12345`). |
-| `FallbackIncomplete` and a second seam finding still deny | A sub-word shape does not excuse a fallback that failed or a deletion outpacing itself. |
+| Rule | Effect |
+|---|---|
+| Judge against the scanned text | Later edits cannot change the original boundary decision |
+| Token `<` / `>` is a word boundary | A following gap may be a whole word |
+| Touching a token shape is never sub-word | Foreign-token refusal still applies |
+| No minimum length | A standalone initial such as `J.` is a whole word |
+| Identifier classes are exempt | Values may sit inside `ID12345` |
+| Incomplete fallback or a second seam still denies | Sub-word handling cannot excuse failed replacement |
 
-A net that decodes whole words does not need this guard; for every other net
-and for registry models it is defense in depth.
-
-**Cost (axis 1).** A net that does not decode whole words (OPF, adopter nets)
-can flag a real name inside a longer word, for example `Meier` in `Meiers`. Under `Resolve` with the `Redact` fallback and
-in `Redact` mode that suspect ships raw, with its `Preserve` audit row and
-`UnactionableSubword` row. Under the `Strict` fallback it counts as a residual
-and the document is refused. Earlier releases tokenized or deleted the flagged
-part of the word instead.
+This costs recall for nets that flag a real name inside a longer word, such as
+`Meier` in `Meiers`: `Resolve` + `Redact` and `Redact` leave it raw with honest
+metadata. `Strict` fallback refuses it as a residual. Earlier releases acted
+on the flagged fragment. Whole-word decoders still benefit from this guard.
 
 ## Locale gating
 
@@ -406,60 +222,28 @@ so adopters can branch on `Unavailable` versus `Timeout` versus
 
 ## Structured-document per-field behavior
 
-`Pipeline::clean_with_safety_net_detect_context` traverses
-`RawDocument::Structured` field by field. For each scalar string field it:
-
-1. Cleans the field through the deterministic pipeline.
-2. Builds a per-field `Manifest` from the emitted token spans.
-3. Runs each registered safety net with `field_path = Some(<JSONPath>)`.
-4. Aggregates the per-field reports into the run-level `LeakReport`.
-
-This means a class mismatch detected on `$.user.email` is reported with
-that field path, and the FP-adjudication query
-`gaze audit safety-net query --field-path '$.user.email'` can isolate
-it. Locale-skip telemetry is also recorded per field when the session-level
-locale chain does not match.
+For every scalar string in `RawDocument::Structured`, the pipeline cleans,
+builds a field manifest, checks the configured nets with a JSONPath
+`field_path`, and merges reports. One session locale chain applies to all
+fields; skip telemetry is per field. Query a field with
+`gaze audit safety-net query --field-path '$.user.email'`.
 
 ### The structured path is observer-only, and says so
 
-**A structured document accepts only an observer policy.** Passing
-`SafetyNetMode::Redact` or `SafetyNetMode::Resolve` with a
-`RawDocument::Structured` returns
-`Error::UnsupportedSafetyNetModeForStructured` before any field is
-tokenized. The traversal above has no enforcement stage: it cleans each
-leaf, runs the nets over the result, and reports. Accepting an enforcing
-policy and quietly performing observation would be the worst of both — the
-caller is told `Ok`, and the suspect bytes are still in the document.
-Failing closed is the axis-1 answer.
-
-Use `SafetyNetMode::Strict` (reject at your boundary when the report is
-non-empty) or `SafetyNetMode::Tolerant`, via
-`Pipeline::clean_with_safety_net_policy_detect_context`, or
-`Pipeline::scan_safety_nets_structured` for a read-only pass over an
-already-clean document. Note that the policy-less
-`Pipeline::clean_with_safety_net*` entry points default to `Resolve`
-(`SafetyNetPolicy::default()`), so they are text-only in practice.
-
-Enforcement for structured documents is not implemented rather than
-forbidden: per-field enforcement is a coherent future feature (each leaf
-carries its own manifest, so a leaf could be resolved or redacted in
-isolation). Until it exists, the contract says so out loud.
+Only `Strict` and `Tolerant` are supported. `Redact` or `Resolve` returns
+`Error::UnsupportedSafetyNetModeForStructured` before any field is tokenized.
+Use `Pipeline::clean_with_safety_net_policy_detect_context` with an explicit
+observer policy, and enforce strict reports at your boundary. For already-clean
+input, use `Pipeline::scan_safety_nets_structured`.
+Policy-less `clean_with_safety_net*` defaults to `Resolve`, so it is text-only.
+Per-field enforcement is not implemented.
 
 ### One walker
 
-All three structured traversals — pseudonymize, clean-and-scan, and
-scan-only — are the single `walk_structured` in
-`crates/gaze/src/pipeline.rs`, parameterized by a `LeafOp`. They were three
-near-identical copies and had already drifted. What the op varies is
-documented on `LeafOp` itself: empty-string skipping, whether scalar leaves
-are scanned, whether the document is rebuilt, and the root field-path
-prefix.
-
-The integration coverage lives in
-`crates/gaze/tests/safety_net.rs`:
-`structured_safety_net_traverses_nested_fields_and_preserves_shape`,
-`structured_walk_has_nested_parity_across_every_leaf_op`, and
-`structured_documents_do_not_silently_observe_when_enforcement_is_requested`.
+`walk_structured` in `crates/gaze/src/pipeline.rs` handles pseudonymize,
+clean-and-scan, and scan-only through `LeafOp`. The operation controls
+empty-string skipping, scalar scanning, rebuilding, and root path prefix.
+Parity and fail-closed tests live in `crates/gaze/tests/safety_net.rs`.
 
 ## Backends
 
@@ -520,7 +304,7 @@ in the negative corpus (op-A precision 0.572 on the gate set).
 ### Decoding
 
 Per piece, the entity mass of a label is `P(B-label) + P(I-label)`. The piece's
-label is the argmax over **all 40** labels, so a piece that looks most like
+label is the argmax over all 40 labels, so a piece that looks most like
 `GIVEN_NAME` is never relabelled into an enabled label. It counts only when that
 label is enabled and its mass reaches the label's threshold. Spans are assembled
 from whole words with the same word rule as the pipeline's sub-word guard
@@ -568,52 +352,40 @@ so there is no int8-kernel speedup.
 ### Measured
 
 The 2,910-document probe ran op-B through the full pipeline and
-measured: **6,017 leaked gold bytes bought** under scored-label contract v2,
-**+517 false-positive bytes**, action precision 0.890, 1 false flag across
+measured: 6,017 leaked gold bytes bought under scored-label contract v2,
++517 false-positive bytes, action precision 0.890, 1 false flag across
 1,024 PII-free documents, 1 one-way deletion. See
 [the in-process reproduction](#reproduction-in-process) for the numbers of this
-backend on the canonical harness (`clean_for_bench --config
+backend on the canonical benchmark runner (`clean_for_bench --config
 full-stack-nym-resolve`).
 
 ### Reproduction in process
 
-The same population through `clean_for_bench --config full-stack-nym-resolve`
-(this backend, one intra-op thread) against `pass2-ner` on the same commit:
+`clean_for_bench --config full-stack-nym-resolve`, one intra-op thread,
+compared with `pass2-ner` on the same commit and 2,910 documents:
 
-| Row | Leaked bytes v2 | Bought v2 | False-positive bytes added | Action precision | One-way deletions | Exact restore |
+| Row | Leaked bytes v2 | Bytes removed v2 | FP bytes added | Action precision | One-way deletions | Exact restore |
 |---|---:|---:|---:|---:|---:|---:|
 | rules + NER, no net | 20,727 | | | | | 2,910 / 2,910 |
 | `full-stack-nym-resolve` | 14,573 | 6,154 | +526 | 0.891 | 1 | 2,909 / 2,910 |
 
-The 137 bytes more than the probe come from class routing: the probe mapped
-building numbers to `location` and plates to `account_number`, so a span next
-to a rule token of that class resolved against it; with their own classes 42
-more spans tokenize. Timings from that run are provisional (shared host under
-load) and are not a latency claim.
+The probe mapped building numbers to `location` and plates to `account_number`.
+Separate classes let 42 more spans tokenize, removing 137 more bytes.
+Shared-host timings are not latency evidence.
 
-The model can read token text such as `Custom:building_number` as a building
-number. Findings wholly inside an owned placeholder are dropped before policy;
-straddling findings retain only exposed bytes. A suspect inside a live token
-is never acted on, so bytes and restore are unaffected under every `Resolve`
-fallback, including `strict`
-(`nym_suspect_inside_its_own_token_text_is_dropped_under_every_resolve_fallback`).
-The eight-byte session prefix is replaced with a stable hex digest of the
-placeholder shape before inference; emitted tokens and byte offsets stay
-unchanged. Hiding the remaining token text is a follow-up. A first
-attempt replaced every manifest token with same-length spaces before inference
-and was measured and not shipped: it removed the token-text flags, but the
-model lost the tokens as context and bought 18 % fewer leaked bytes (v2 6,154
-to 5,039 on the 2,910 documents), so a different mask shape needs its own
-measured proposal.
+A spaces-only token mask was tested and rejected: it lost context and reduced
+removed leaked bytes from 6,154 to 5,039 (18%). Current token views are
+described [above](nym-neutral-view.md). Findings inside verified tokens are
+dropped under every resolve fallback, including strict.
 
 ### Known gaps and open review items
 
-- **Room, platform and seat numbers.** `BUILDING_NUMBER` fires on "Raum 204"
+- Room, platform and seat numbers. `BUILDING_NUMBER` fires on "Raum 204"
   and "Gleis 9, Wagen 23, Platz 45": the 1,024-document negative corpus
   contains none of these shapes, so its false-flag rate says nothing about them.
   The fixture `room-number-known-gap` pins the current behaviour; an
   address-context guard is a follow-up.
-- **Latency measured (2026-09-24).** On a quiet MacBook Pro M5 Max with 64 GB RAM, macOS 26.5, release build, 30 documents: rules + NER p50 40.0 ms / p95 65.3 ms; with Nym p50 89.8 ms / p95 171.9 ms, peak memory 1,027 MB. This closes the default-decision latency item; it is a small local sample, not a fleet guarantee.
+- Latency measured (2026-09-24). On a quiet MacBook Pro M5 Max with 64 GB RAM, macOS 26.5, release build, 30 documents: rules + NER p50 40.0 ms / p95 65.3 ms; with Nym p50 89.8 ms / p95 171.9 ms, peak memory 1,027 MB. This closes the default-decision latency item; it is a small local sample, not a fleet guarantee.
 
 ### Licence review (open)
 
@@ -686,16 +458,11 @@ The Nym-small measurements are in [Measured](#measured).
 
 ## Replay hash
 
-`LeakReport.replay_hash` is an `Option<String>`. When set, it is a stable
-hash over the backend id, backend version, decoding-params, and operating
-point used for the run. The hash supports replaying the same input through
-the same configuration to see whether the FP set has stabilized.
-
-Replay determinism is only guaranteed when the operator fixes the command
-path, checkpoint, operating point, minimum score, and decode parameters
-**externally**. The adapter emits and stores the hash; it does not pin
-upstream weights or downloads. Adopters using a different `opf` checkpoint
-will see a different hash and a different suspect set, by design.
+`LeakReport.replay_hash: Option<String>` hashes backend id/version, decoding
+parameters, and operating point. Replay requires externally fixing the command,
+checkpoint, operating point, minimum score, and decode parameters. The adapter
+records the hash; it does not pin upstream downloads. Changed checkpoints may
+change both hash and suspects.
 
 ## `safety_net_log` audit table
 
@@ -726,7 +493,7 @@ CREATE TABLE IF NOT EXISTS safety_net_log (
 );
 ```
 
-The schema stores **metadata only**:
+The schema stores metadata only:
 
 - `raw_label` is the validated upstream label, such as `private_email` —
   not the upstream raw text.
@@ -757,56 +524,21 @@ field path, and creation time. The query is opened
 
 ## CI gate
 
-`safety-net-sanity` is the canonical local pre-push gate for the safety-net
-surface.
-
-The xtask command lives at
-[`crates/xtask/src/safety_net_sanity.rs`](../../../crates/xtask/src/safety_net_sanity.rs)
-and batches required behavioral tests across four target suites:
-
-- `gaze` — manifest diff and structured traversal invariants.
-- `gaze-cli` — strict/tolerant exit-code behavior.
-- `gaze-recognizers` — OPF subprocess boundary, stderr sanitization, label
-  mapping.
-- `gaze-audit` — `safety_net_log` schema and bytes-free invariants.
-
-Run the xtask gate manually before shared-branch pushes; the gate is **not**
-scheduled nightly in v0.6 and the live-model nightly workflow is deferred —
-see the "Future work" section below.
+Run `cargo run -p xtask -- safety-net-sanity` before shared-branch pushes.
+It covers manifest/structured invariants (`gaze`), CLI modes (`gaze-cli`), OPF
+boundary/labels/stderr (`gaze-recognizers`), and bytes-free audit (`gaze-audit`).
+Source: [gate](../../../crates/xtask/src/safety_net_sanity.rs).
 
 ## Future work (deferred to a post-v0.6.0 release)
 
-The following items are filed for a release after v0.6.0 and intentionally
-not in the v0.6 SafetyNet rollup scope:
-
-- **Live-model nightly workflow.** A scheduled cron that runs the safety
-  net against a non-empty synthetic corpus to detect FP-rate drift between
-  checkpoint upgrades.
-- **Native `ort` backend.** A first-party in-process backend that loads OPF
-  weights through `ort` plus a `weights.rs` SHA-pinned scaffolding module,
-  removing the subprocess hop. The trait shape on `OpenAiFilterBackend`
-  was designed so the same adapter API serves both subprocess and in-process
-  implementations.
-- **Fetch / download command.** A `gaze safety-net fetch` UX that pulls a
-  pinned `opf` build into a private cache directory and verifies the
-  checksum offline. Closes the "first-run requires manual install" gap.
-- **Long-lived subprocess / daemon mode.** The current adapter spawns one
-  `opf` invocation per clean. A persistent helper would amortize startup
-  cost when latency budgets tighten.
-- **False-positive adjudication dashboard.** A UI on top of
-  `gaze audit safety-net query` and `audit export` that lets reviewers
-  triage suspects across runs.
-
-Cross-references:
-
-- PR #91 — Pass-3 SafetyNet rollup.
-- v0.6.0 audit feature shim drop. Adopters must import concrete audit sinks
-  from `gaze-audit` directly.
+Deferred OPF work includes live-model drift checks, an in-process backend,
+pinned fetch command, persistent subprocess, and false-positive review UI.
+Current OPF spawns once per clean. Import concrete audit sinks from
+`gaze-audit`.
 
 ## See also
 
-- [`docs/reference/policy.md`](../../reference/policy.md) — explicit note that the v0.6 safety
-  nets are CLI-only.
+- [`docs/reference/policy.md`](../../reference/policy.md) — policy configuration.
 - [`crates/gaze-cli/README.md`](../../../crates/gaze-cli/README.md) — full flag
   reference, exit-code map, and synthetic examples.
 - [`docs/reference/crates.md`](../../reference/crates.md) — workspace map, including the

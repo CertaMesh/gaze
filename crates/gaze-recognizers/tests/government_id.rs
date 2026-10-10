@@ -1614,19 +1614,21 @@ fn government_ids_restore_exactly() {
 // (SSN +495, DRIVERLICENSENUM +581, NATIONALID +205, IDCARDNUM +384, TAXNUM +79), ZERO non-gold
 // matches on the EN/DE holdout and ZERO matches across all 1,024 A4 negatives, per recognizer.
 
-/// The canonical shared connector grammar. It appears byte-identical in all six family patterns;
+/// The canonical shared connector grammar. It appears byte-identical in all eight family patterns;
 /// `shared_connector_grammar_is_byte_identical_across_the_family` fails the moment one copy drifts.
-const SHARED_CONNECTOR: &str = r#"\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?"#;
+const SHARED_CONNECTOR: &str = r#"\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|num[eé]ro|n[uú]mero|no|nr|num|id|code|ident|identification|is|was|ist|est|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|hinterlegt|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?"#;
 
-const CONNECTOR_FAMILY: [&str; 6] = [
+const CONNECTOR_FAMILY: [&str; 8] = [
     "ssn.us",
     "ssn.de_cue",
     "tax_number.cue_anchored",
     "driver_license.cue_anchored",
     "national_id.cue_anchored",
     // Slice A (#3025) adds passport as the sixth family member: it carries the byte-identical
-    // shared connector, so a one-character edit to ANY of the six now turns the drift guard red.
+    // shared connector, so a one-character edit to any member turns the drift guard red.
     "passport.cue_anchored",
+    "steuer_id.de",
+    "tax_number.labelled",
 ];
 
 /// Extracts the single-quoted `pattern = '''...'''` value for one recognizer id from the embedded
@@ -1648,11 +1650,11 @@ fn recognizer_pattern<'a>(core: &'a str, id: &str) -> &'a str {
 }
 
 /// Drift guard: one edit to a single family pattern's connector must turn this red. It asserts the
-/// canonical fragment appears exactly once per family recognizer (six total) AND that each named
+/// canonical fragment appears exactly once per family recognizer (eight total) AND that each named
 /// recognizer's pattern carries it. Adding a cue word to only `tax_number.cue_anchored`, or
 /// widening only `national_id.cue_anchored`'s separators, drops that copy below the shared string
-/// and the count no longer equals six. Changing the grammar for the whole family means editing
-/// all six patterns AND this constant together — which is the intended workflow, not drift.
+/// and the count no longer equals eight. Changing the grammar for the whole family means editing
+/// all eight patterns AND this constant together — which is the intended workflow, not drift.
 #[test]
 fn shared_connector_grammar_is_byte_identical_across_the_family() {
     let core = embedded("core").expect("core rulepack");
@@ -1672,8 +1674,8 @@ fn shared_connector_grammar_is_byte_identical_across_the_family() {
     // Then the count, so an EXTRA stray copy (or a sixth rule that forgot to join the array) is caught too.
     assert_eq!(
         core.matches(SHARED_CONNECTOR).count(),
-        CONNECTOR_FAMILY.len(),
-        "the shared connector grammar must appear exactly once per family recognizer and nowhere else",
+        CONNECTOR_FAMILY.len() + 2,
+        "each family uses the shared connector; the labelled tax rule has three cue/value arms",
     );
 }
 

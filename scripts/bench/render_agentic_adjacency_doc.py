@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import re
@@ -17,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs/reference/benchmarks/README.md"
 # Pin the measured version so a later generator cannot relabel these rows.
 # Earlier v4, v8, v9, v10 and v11 ledgers remain committed as historical measurements.
-GENERATOR_VERSION = 12
+GENERATOR_VERSION = 13
 HISTORY = ROOT / f"docs/reference/benchmarks/agentic-adjacency-v{GENERATOR_VERSION}-history.json"
 CORPUS_SHA256, CONTRACT_SHA256 = agentic_layers.corpus_identity(ROOT, GENERATOR_VERSION)
 
@@ -47,12 +48,24 @@ class HistoryInputs:
 
 
 MEASURED_INPUTS = HistoryInputs.for_version(GENERATOR_VERSION)
-EXPECTED_ROWS = (
+LEGACY_ROWS = (
     ("v0.15.1", "policy-file"),
     ("v0.15.0", "policy-file"),
     ("v0.14.0", "full-stack-kiji-resolve"),
     ("v0.14.0", "pass2-ner"),
 )
+CURRENT_ROWS = (("v0.16.0", "policy-file"), *LEGACY_ROWS)
+EXPECTED_ROWS = CURRENT_ROWS if GENERATOR_VERSION >= 13 else LEGACY_ROWS
+V16_POLICY_SHA256 = "65cd6aa588ce6923f9e2156699893fcffb9a870967d9a0db5018deaa0c22c8cc"
+
+
+def expected_rows(inputs: HistoryInputs) -> tuple:
+    return CURRENT_ROWS if inputs.version >= 13 else LEGACY_ROWS
+
+
+def release_policy_sha256(version: str, inputs: HistoryInputs) -> str:
+    return V16_POLICY_SHA256 if inputs.version >= 13 and version == 'v0.16.0' else inputs.policy_sha256
+
 BEGIN = "<!-- BEGIN GENERATED: agentic-adjacency -->"
 END = "<!-- END GENERATED: agentic-adjacency -->"
 
@@ -79,9 +92,10 @@ def _metric(run: dict, field: str) -> int:
 
 
 def rows_from_scorecard(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> list[dict]:
-    scorecard = json.loads(path.read_text(encoding="utf-8"))
+    payload = path.read_bytes()
+    scorecard = json.loads(gzip.decompress(payload) if path.suffix == '.gz' else payload)
     version = scorecard.get("measured")
-    if version not in {release for release, _ in EXPECTED_ROWS}:
+    if version not in {release for release, _ in expected_rows(inputs)}:
         raise HistoryError(f"unsupported measured release {version!r}")
     generator = scorecard.get("layers", {}).get("generator", {})
     if generator.get("generator_version") != inputs.version or generator.get("corpus_sha256") != inputs.corpus_sha256:
@@ -90,7 +104,7 @@ def rows_from_scorecard(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> 
     if contract.get("file_sha256") != inputs.contract_sha256:
         raise HistoryError("scorecard agentic contract differs from the committed contract")
     parameters = scorecard.get("parameters", {})
-    if parameters.get("policy_sha256") != inputs.policy_sha256:
+    if parameters.get("policy_sha256") != release_policy_sha256(version, inputs):
         raise HistoryError("scorecard policy differs from the setup policy")
     binary_sha = _hex64(scorecard.get("binary_sha256"), "binary_sha256")
     binary_commit = scorecard.get("binary_commit", {})
@@ -100,7 +114,7 @@ def rows_from_scorecard(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> 
     configs = {run["config"] for run in scorecard["layers"]["A"]["runs"]}
     rows = []
     for config in sorted(configs):
-        if (version, config) not in EXPECTED_ROWS:
+        if (version, config) not in expected_rows(inputs):
             raise HistoryError(f"unsupported release arm {version}/{config}")
         layers = {}
         for name in ("A", "D", "R"):
@@ -122,6 +136,11 @@ def rows_from_scorecard(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> 
             "manifest_actions": parameters.get("manifest_replacing_actions"),
             "split_composite_source_ids": parameters.get("split_composite_source_ids"),
             "layers": layers,
+            **({'scorecard_file': path.name,
+                'policy_sha256': parameters['policy_sha256'],
+                'refused': {name: next(run for run in scorecard['layers'][name]['runs']
+                                      if run['config'] == config)['pipeline_availability']['failed_closed_documents']
+                            for name in ('A', 'D', 'R')}} if inputs.version >= 13 else {}),
         })
     return rows
 
@@ -139,11 +158,16 @@ def validate_history(value: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> di
     if value.get("contract_sha256") != inputs.contract_sha256:
         raise HistoryError("adjacency history contract differs")
     rows = value.get("rows")
-    if not isinstance(rows, list) or len(rows) != len(EXPECTED_ROWS) or {(row.get("version"), row.get("arm")) for row in rows} != set(EXPECTED_ROWS):
+    if not isinstance(rows, list) or len(rows) != len(expected_rows(inputs)) or {(row.get("version"), row.get("arm")) for row in rows} != set(expected_rows(inputs)):
         raise HistoryError("adjacency history needs exactly the displayed release arms")
     for row in rows:
         _hex64(row.get("binary_sha256"), "binary_sha256")
         _hex64(row.get("scorecard_sha256"), "scorecard_sha256")
+        if inputs.version >= 13:
+            if row.get('policy_sha256') != release_policy_sha256(row['version'], inputs):
+                raise HistoryError('release row policy differs from its setup policy')
+            if row.get('refused') != dict.fromkeys(('A', 'D', 'R'), 0):
+                raise HistoryError('release row must record zero refusals for each layer')
         for layer in ("A", "D", "R"):
             for field in ("gold", "leaked", "false_positive"):
                 metric = row.get("layers", {}).get(layer, {}).get(field)
@@ -158,7 +182,7 @@ def render(history: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> str:
         "| Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
-    for key in EXPECTED_ROWS:
+    for key in expected_rows(inputs):
         row = by_key[key]
         a, d, r = (row["layers"][layer] for layer in ("A", "D", "R"))
         lines.append(
@@ -166,14 +190,25 @@ def render(history: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> str:
             f"{a['leaked']:,} / {a['gold']:,} | {a['false_positive']:,} | "
             f"{d['false_positive']:,} | {r['leaked']:,} / {r['gold']:,} | {r['false_positive']:,} |"
         )
+    if inputs.version >= 13:
+        lines += ['', '| Release and arm | Refused A / D / R | Leaked on all processed A / D / R B |',
+                  '| --- | ---: | ---: |']
+        for key in expected_rows(inputs):
+            row = by_key[key]
+            refusals = ' / '.join(str(row['refused'][layer]) for layer in ('A', 'D', 'R'))
+            leaks = ' / '.join(f"{row['layers'][layer]['leaked']:,}" for layer in ('A', 'D', 'R'))
+            lines.append(f"| `{row['version']}` `{row['arm']}` | {refusals} | {leaks} |")
     lines += [
         "",
         "These are layers A, D and R only, measured by the current harness against each "
         "release's own binary. Layer C release headlines above are unchanged. The "
         f"[committed measurement ledger]({inputs.path.name}) records "
         "binary and scorecard SHA-256 digests, arm and manifest semantics. "
-        f"Generator v{inputs.version}, test corpus `{inputs.corpus_sha256[:12]}…`, "
-        f"setup policy `{inputs.policy_sha256[:12]}…`.",
+        f"Generator v{inputs.version}, test corpus `{inputs.corpus_sha256[:12]}…`"
+        + (", " if inputs.version < 13 else ". ")
+        + (f"setup policy `{inputs.policy_sha256[:12]}…`." if inputs.version < 13 else
+         f"Each release uses its own setup policy; v0.15.x `{inputs.policy_sha256[:12]}…`, "
+         f"v0.16.0 `{V16_POLICY_SHA256[:12]}…`; v0.14.0 retains the v0.15.x model settings."),
     ]
     return "\n".join(lines)
 
@@ -190,7 +225,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--record", type=Path, action="append", default=[])
     parser.add_argument('--generator-version', type=int, default=GENERATOR_VERSION,
-                        choices=sorted({GENERATOR_VERSION, agentic_layers.GENERATOR_VERSION}),
+                        choices=sorted({12, GENERATOR_VERSION, agentic_layers.GENERATOR_VERSION}),
                         help='keep measured history frozen by default; select the current corpus for new measurements')
     args = parser.parse_args()
     try:

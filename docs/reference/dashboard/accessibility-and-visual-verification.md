@@ -1,11 +1,8 @@
 # Dashboard accessibility and visual verification
 
-This document is the human-readable record of the rendered verification of the
-`gaze-proxy-dashboard` frontend assets against the frozen 44-state visual
-matrix (the dashboard plan) and the frontend/XSS/accessibility
-contract (§11). The machine-readable per-assertion record is
-[`crates/gaze-proxy-dashboard/browser-tests/evidence/state-ledger.json`](../../../crates/gaze-proxy-dashboard/browser-tests/evidence/state-ledger.json),
-regenerated on every run of the browser contract.
+Rendered verification record for the dashboard's 44-state matrix and
+frontend/XSS/accessibility contract. The browser suite regenerates the
+[per-assertion ledger](../../../crates/gaze-proxy-dashboard/browser-tests/evidence/state-ledger.json).
 
 ## How to reproduce
 
@@ -25,20 +22,10 @@ data only.
 
 ## Run identity
 
-- Implementer/verifier: visual/frontend worker
-  (`track-b-visual-impl-4590`), Claude (Fable 5).
-- Branch: `agent/proxy-dashboard-visual-4590`, based on frozen Track A
-  `edc063761f6e21617d9fe3a5d414acb3e27d37de`
-  (tree `9f7536fd5655cb9b04f6bfb1e815ebe800e206af`).
-- Assets commit: `0886177` (`[agent] feat(dashboard): implement accessible
-  inspection frontend`). Test-harness commit: `a46886f`.
-- Toolchain: Playwright (Chromium) via the dev-only harness in
-  `crates/gaze-proxy-dashboard/browser-tests/`; axe-core for the automated
-  accessibility pass; a std-only Rust asset contract in
-  `crates/gaze-proxy-dashboard/tests/browser_contract.rs`.
-- Result: **63/63 automated tests pass** — the 44 matrix states plus 19
-  security/lifecycle/accessibility suites (see "Post-review corrections"
-  below for the four regression tests added after review).
+Historical verification used Playwright Chromium, axe-core and
+`crates/gaze-proxy-dashboard/tests/browser_contract.rs`. Assets: `0886177`;
+harness: `a46886f`. The recorded result was 63/63 tests: 44 matrix states plus
+19 security/lifecycle/accessibility suites, including four post-review regressions.
 
 ## Viewports
 
@@ -59,11 +46,8 @@ layout-equivalent representation of browser zoom for reflow verification.
 
 ## The 44 rendered states
 
-Every state below was rendered against the shipped assets under the full
-production security-header set, asserted with the falsifiable checks listed in
-the state ledger, and captured as a screenshot for human review. Assertion
-counts are machine-verified PASS/FAIL checks; every state passed every
-assertion.
+Each state ran under production security headers and passed every recorded
+assertion. Screenshots support human review.
 
 | State | Viewport | Tier | Content | Condition | Fixture | Assertions | Result | Screenshot |
 |---|---|---|---|---|---|---|---|---|
@@ -117,153 +101,92 @@ security and lifecycle contract; they are recorded in the same ledger.
 
 ## Accessibility results
 
-- **axe-core:** zero serious or critical violations on the preauth shell and
-  the paired application (list + detail + lanes). One earlier finding
-  (`aria-allowed-attr` from set-position attributes on buttons) was fixed by
-  moving `aria-setsize`/`aria-posinset` to the list items.
-- **Computed contrast (quantitative audit):** all sampled text/background
-  pairs ≥ 5.75:1 in light scheme and ≥ 6.70:1 in dark scheme; caution
-  surfaces 6.62–7.80:1. WCAG 2.2 AA floor is 4.5:1 for text.
-- **Focus:** every sampled focus rectangle is visible inside the viewport and
-  never intersects the sticky safety bar. The machine gate caught a real
-  defect during implementation: the `scroll-padding-top` offset derived from
-  the safety bar exceeded short viewports where the bar is non-sticky, which
-  broke focus scrolling at V9. The same gate regression-locks the fix (zero
-  offset when the bar is not sticky).
-- **Sticky bar:** at viewport height ≤ 400 CSS px the bar is non-sticky by
-  stylesheet contract, so it can never obscure focus at V8/V9.
-- **Targets:** all buttons have a 24×24 px minimum via the stylesheet; the
-  Purge control is asserted ≥ 24×24 at the worst-case V9 state.
-- **Reflow:** zero horizontal document overflow at every viewport including
-  320 px (V9); wide tables scroll inside their own containers.
-- **Reduced motion:** every element computes 0s animation and transition
-  durations; screenshots show only the static presentation.
-- **Forced colors:** lane border grammar (double/solid/dashed) and all text
-  labels survive; meaning never relies on color alone. Lane glyphs are
-  `aria-hidden`; the text labels carry the semantics.
-- **Text spacing:** WCAG 2.2 letter/word/line/paragraph spacing overrides
-  cause no clipping and no overflow.
-- **Dark scheme:** OS-level only; there is no persisted toggle and no storage
-  write.
-- **Status messages:** reveal, conceal, expiry, purge, pause/resume, and
-  session-end announcements use one bounded `role=status` region; the auth
-  failure message uses `role=alert`. Payload regions are never live regions.
-- **Accessible authentication:** pairing is a single paste-enabled password
-  input with no cognitive puzzle, no name attribute, no form element, and
-  autofill surfaces disabled.
+| Check | Recorded result |
+|---|---|
+| axe-core | Zero serious/critical violations in shell and paired UI. Set-position attributes live on list items, not buttons. |
+| Text contrast | Light ≥5.75:1; dark ≥6.70:1; caution 6.62–7.80:1. AA text floor: 4.5:1. |
+| Focus | Sampled rectangles stay visible and avoid the safety bar; scroll padding is zero when the bar is non-sticky. |
+| Safety bar | Non-sticky at viewport height ≤400 CSS px. |
+| Targets | Buttons ≥24×24 px; Purge checked at V9. |
+| Reflow | No horizontal document overflow, including 320 px. Wide tables scroll internally. |
+| Reduced motion | All animation/transition durations 0s. |
+| Forced colors | Double/solid/dashed lane borders and labels preserve meaning. Glyphs are `aria-hidden`. |
+| Text spacing | WCAG overrides cause no clipping or overflow. |
+| Dark mode | OS preference only; no stored toggle. |
+| Announcements | One bounded `role=status` for reveal/conceal/expiry/purge/follow/session end; auth errors use `role=alert`. Payloads are never live regions. |
+| Authentication | Paste-enabled password input; no puzzle, `name` or form; autofill disabled. |
 
 ### SC 2.2.1 (Timing Adjustable) — Essential exception claim
 
-The 30-second owner-payload reveal window is a security limit on the exposure
-of re-identifiable PII, claimed under the WCAG 2.2 SC 2.2.1 "Essential"
-exception. Extending the window would extend the exposure of raw or restored
-PII bytes in the DOM, which contradicts the product's core fail-closed
-confidentiality contract; re-authorization starts a fresh, separately
-confirmed window rather than extending the old one. Expiry is announced
-unconditionally via the status region, and focus is returned to the reveal
-control when concealment removes the focused region.
+The 30-second owner reveal limit claims WCAG 2.2 SC 2.2.1's Essential exception:
+longer display would extend re-identifiable PII exposure. Reauthorization starts
+a separately confirmed window. Expiry always announces itself; concealment
+returns focus to the reveal control when it removes the focused region.
 
 ## Security and leakage results
 
-- **Prohibited sinks:** the Rust asset contract pins the absence of every
-  blocker-class sink (`innerHTML`, `insertAdjacentHTML`, `document.write`,
-  `eval`, string timers, `EventSource`, storage APIs, SVG/frames/external
-  links, and more) in the shipped assets.
-- **CSP/Trusted Types:** all suites run under the exact production CSP
-  including `require-trusted-types-for 'script'; trusted-types 'none'`; the
-  application uses no injection sink and needs no policy. The only exception
-  is the axe injection pass, which runs under an otherwise-identical CSP
-  without the two Trusted Types directives, because axe itself cannot be
-  injected under `trusted-types 'none'`. This is recorded as a conditional.
-- **Token hygiene:** the synthetic 43-char launch-token canary appears in no
-  DOM byte, attribute, console message, request URL, storage surface, or
-  page error across every state; it is sent only as the canonical
-  `Authorization: GazeDashboardV1 <43>` header on the pair request with
-  `credentials: omit`, `cache: no-store`, `redirect: error`, and
-  `referrerPolicy: no-referrer`.
-- **Concealment is DOM byte absence:** owner payload sentinels are absent
-  before reveal, present only inside text nodes during a reveal, and absent
-  again after manual conceal, expiry, navigation, lifecycle clearing, and
-  terminal states. Safe-metadata snapshot/follow responses never contain
-  payload sentinels.
-- **Hostile data:** markup, prototype-pollution-shaped keys, and
-  bidi/control/zero-width characters render as inert sanitized text
-  (`⟦U+XXXX⟧` placeholders in LTR plain text); no element or script is
-  created, no dialog fires, and `Object.prototype` is unpolluted.
-- **Fresh origin:** cookies, localStorage, sessionStorage, Cache API, and
-  service-worker registrations are all empty after full use; the shell enables
-  token entry only after affirmatively proving that no service worker controls
-  or is registered for the origin — enumeration failure or API unavailability
-  keeps entry disabled (fail closed).
-- **SSE rule:** stream rows render ordinal, event
-  kind, delta kind, and content-block index only. Table headers are asserted
-  exactly; per-entry byte counts, timestamps, cadence, latency, and relative
-  timing are asserted absent, and the accepted limitation is stated in the UI
-  copy itself.
-- **Closed-state honesty:** placeholder queue telemetry renders
-  "QUEUE TELEMETRY: UNAVAILABLE — NOT MEASURED"; `ProjectionFailedClosed`
-  renders its exact caution label; configured ports render category labels
-  only (no numeric port anywhere); MetadataOnly-style absences render their
-  exact closed omission reasons; the zero-event state explicitly disclaims
-  being a no-traffic claim; no success or affirmative style token exists in
-  the stylesheet (machine-asserted).
-- **Provider continuity:** disabled/disconnected copy states that dashboard
-  data was purged and the proxy is unaffected; wording that implies provider
-  impairment is asserted absent.
+- The Rust asset contract forbids injection sinks, `eval`, string timers,
+  `EventSource`, storage APIs, SVG, frames and external links.
+- Suites use production CSP and Trusted Types. Only axe injection relaxes
+  `require-trusted-types-for 'script'; trusted-types 'none'`.
+- The 43-character launch-token canary appears only in the pair request's
+  `Authorization: GazeDashboardV1 <43>` header, never DOM, attributes, console,
+  URLs, storage or page errors. Fetch uses `credentials: omit`, `cache: no-store`,
+  `redirect: error`, `referrerPolicy: no-referrer`.
+- Owner sentinels exist only in text nodes during reveal. Conceal, expiry,
+  navigation, lifecycle clearing and terminal states remove their bytes. Safe
+  snapshot/follow responses contain none.
+- Hostile markup, prototype keys, bidi/control/zero-width characters render as
+  inert LTR text with `⟦U+XXXX⟧` escapes; no script, dialog or prototype mutation.
+- Cookies, local/session storage, Cache API and service-worker registrations
+  stay empty. Token entry requires proof that no worker controls or registers
+  on the origin; enumeration failure or unavailable APIs keep it disabled.
+- SSE rows expose only ordinal, event kind, delta kind and content-block index.
+  No byte counts, timestamps, cadence, latency or relative time.
+- Queue telemetry says `UNAVAILABLE — NOT MEASURED`. Missing projections use
+  exact omission reasons; `ProjectionFailedClosed` stays coarse. Ports show
+  categories only. Zero events do not prove no traffic. No success style exists.
+- Dashboard disconnect/disable purges data and leaves the proxy unaffected.
+
+See [browser security](browser-security.md) for the runtime rules.
 
 ## Accepted limitations and conditionals (honest record)
 
-1. **Manual VoiceOver + Safari pass: NOT PERFORMED.** Requires a human
-   operator on macOS. Plan §12 requires one per release; recorded as an open
-   environment-prerequisite conditional.
-2. **Manual NVDA + Windows high-contrast pass: NOT PERFORMED.** Requires a
-   human operator on Windows; same conditional class.
-3. **Browser/OS credential-store write probe: NOT PERFORMED.** Headless
-   Chromium exposes no password-manager UI. The static contract
-   (`type=password`, `autocomplete=off`, no `name`, no `form`) is
-   machine-asserted; the behavioral no-save-prompt proof needs the manual
-   browser matrix.
-4. **axe ran under a Trusted-Types-relaxed CSP variant** (see above); every
-   other automated check ran under the full production CSP.
-5. **V8/V9 zoom emulated at effective CSS viewports** rather than through a
-   browser-chrome zoom gesture; this is the standard layout-equivalent
-   emulation for reflow testing.
-6. **Screenshot pixel review:** the implementer verified rendering through
-   DOM geometry, computed styles, quantitative contrast, aria snapshots, and
-   the assertion roster, and stored all 45 screenshots for the independent
-   rendered visual review required by the Track B phase gates. Screenshots
-   contain synthetic fixture data only.
-7. **Text-spacing paragraph margins** were applied per-paragraph via CSSOM in
-   the test (letter/word/line spacing inherit from the root); this matches
-   the WCAG test procedure's intent.
+| Limitation | Required follow-up or scope |
+|---|---|
+| VoiceOver + Safari | Not performed; human macOS pass required each release. |
+| NVDA + Windows high contrast | Not performed; human Windows pass required each release. |
+| Browser/OS credential-store probe | Not performed. Headless Chromium checks input attributes, not save prompts. |
+| axe CSP | Trusted Types relaxed only for axe injection. |
+| Zoom | V8/V9 use effective CSS viewports, not browser-chrome zoom. |
+| Pixel review | Implementer checked geometry, styles, contrast and ARIA; 45 synthetic screenshots were stored for independent visual review. |
+| Paragraph spacing | Applied per paragraph with CSSOM; other spacing inherits from root. |
 
 ## Interface needs recorded for core/master reconciliation
 
-The dev fixture server mocks only the closed typed API. The following wire
-details are fixture-owned stand-ins that the core crate owns and must
-reconcile at integration (recorded per the visual worker's brief; no runtime
-file was touched):
+The dev fixture mocks the typed API. These fixture-owned wire details require
+core integration reconciliation:
 
-1. **Bootstrap envelope:** fixture uses 70 bytes: `GZDB` ‖ `0x01` ‖ `0x02` ‖
+1. Bootstrap envelope: fixture uses 70 bytes: `GZDB` ‖ `0x01` ‖ `0x02` ‖
    32-byte page-session secret ‖ 32-byte CSRF secret. The browser decodes
    only this fixed shape and rejects any other length/magic/version.
-2. **Secondary-secret headers:** authed calls send
+2. Secondary-secret headers: authed calls send
    `x-gaze-page-session` and `x-gaze-csrf` as 43-char unpadded base64url.
    The launch credential is dropped from page memory after pairing.
-3. **Payload envelope:** fixture uses `GZPL` ‖ `0x01` ‖ domain tag (1–3) ‖
+3. Payload envelope: fixture uses `GZPL` ‖ `0x01` ‖ domain tag (1–3) ‖
    stage tag (1–4) ‖ u32be length ‖ UTF-8 text, hard-capped at 4 MiB in the
    browser decoder, rendered exclusively as text nodes.
-4. **Safe-metadata JSON shape:** `runtime` (lifecycle/captureTier/ttl/ring/
+4. Safe-metadata JSON shape: `runtime` (lifecycle/captureTier/ttl/ring/
    epoch), `counters` (distinct saturating drop counters), `queue: null`
    (placeholder limitation), and `events[]` view models mirroring the closed
-   #4732 revision 7 vocabulary with `{state: Present|Omitted, reason}`
+   vocabulary with `{state: Present|Omitted, reason}`
    availability wrappers. Field names are fixture-owned; the closed-code
-   string values are the frozen #4732 spellings.
-5. **Disabled-code vocabulary:** the UI maps a closed set
+   string values are the frozen spellings.
+5. Disabled-code vocabulary: the UI maps a closed set
    (`ChildExit`, `IpcFault`, `PurgeTimeout`, `Rotation`, `Shutdown`,
    `ConnectionLost`, `UnknownFuture`) to neutral labels; unknown codes fall
    closed to `UNKNOWN`.
-6. **Follow transport:** polling POST returning the full safe snapshot; the
+6. Follow transport: polling POST returning the full safe snapshot; the
    client diffs logical IDs for the buffered-count pause/resume contract.
    NDJSON streaming would slot into the same ingest path.
 
@@ -271,31 +194,18 @@ None of these stand-ins add provider semantics, reconstruct projections, or
 narrow the 44-state matrix; renderers treat every unknown wire value as a
 closed caution state.
 
-## Post-review corrections (2026-07-21, branch `agent/proxy-dashboard-visual-scroll-fix-4590`)
+## Post-review corrections
 
-Two review findings against the visual surface were remediated and
-regression-locked after the original 59-test evidence run:
+Four tests raised the historical suite from 59 to 63; the 44 states and 259
+matrix assertions stayed unchanged.
 
-1. **Scroll-up follow pause (#5971 BLOCKER-1):** the pause listener was bound
-   to `.pane-list`, which is not a scroll container, so a real upward scroll
-   of the document never paused live follow. Upward-scroll detection now also
-   binds once to `window` (the actual rendered scroll container at every
-   viewport); the element-level listener remains for any future element
-   scroller. `LC-SCROLL-PAUSE` scrolls the real document with wheel input at
-   V7 and proves: downward scroll stays LIVE, upward scroll shows
-   `FOLLOW PAUSED — N BUFFERED`, rows never change while paused, and explicit
-   Resume applies buffered rows. The test fails on the pre-fix assets.
-2. **Service-worker proof and pre-auth token lifecycle (#5976 BLOCKER-7):**
-   the boot proof previously treated enumeration failure as "clean" and the
-   hidden-lifecycle teardown ran only post-auth. Token entry now enables only
-   after affirmatively proving the absence of any service-worker controller
-   and registration; enumeration rejection or API unavailability keeps entry
-   disabled (fail closed). `visibilitychange(hidden)`, `freeze`, and
-   `pagehide` clear and disable the pre-auth token input and abort any
-   in-flight pairing request; returning visible re-runs the proof before
-   re-enabling. `SEC-SW-FAILCLOSED`, `LC-PREAUTH-HIDDEN`, and
-   `LC-PREAUTH-ABORT` prove each path in a real browser with token canaries;
-   all three fail on the pre-fix assets.
+- `LC-SCROLL-PAUSE`: real upward window scrolling pauses follow at V7;
+  downward scrolling stays live, paused rows stay fixed, Resume applies buffers.
+  The listener also supports a future element scroller.
+- `SEC-SW-FAILCLOSED`: worker enumeration failure or unavailable APIs disable
+  token entry.
+- `LC-PREAUTH-HIDDEN` and `LC-PREAUTH-ABORT`: hidden visibility, freeze and
+  pagehide clear/disable the preauth token and abort pairing; becoming visible
+  reruns worker proof before enabling input.
 
-The 44-state matrix, its 259 assertions, and the four honest conditionals are
-unchanged; the suite total is now 63.
+These regressions failed on the pre-fix assets.

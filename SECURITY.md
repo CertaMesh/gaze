@@ -2,55 +2,39 @@
 
 ## Reporting a Vulnerability
 
-If you believe you have found a security vulnerability in Gaze — whether a
-PII leak, a recognizer bypass, a manifest-restore divergence, or a
-chokepoint escape — please report it privately. **Do not open a public
-GitHub issue.**
+Report PII leaks, recognizer bypasses, restore divergences and chokepoint escapes
+privately to security@certamesh.com. Do not open a public GitHub issue.
+Request a PGP key at that address if needed.
 
-Email: **security@certamesh.com**
-PGP: optional; request a key via the same address.
-
-We will acknowledge receipt within 72 hours and aim to provide a triage
-verdict within 7 days.
+We acknowledge reports within 72 hours and aim to triage within 7 days.
 
 ## Scope
 
 In scope:
 
-- Any path through `gaze-mcp-core`, `gaze-mcp-rmcp`, the `gaze` (umbrella)
-  / `gaze-pii` runtime, `gaze-recognizers`, `gaze-cli`, or `gaze-assembly`
-  that allows PII to reach an LLM outside the manifest contract.
-- Restore-path divergences that produce different bytes than the original
-  source (manifest contract requires byte-for-byte round-trip on lossless
-  classes).
-- Audit-sink isolation bypasses (the `gaze_module_isolation` Dylint gate).
-- Recognizer fail-open regressions on the protected default,
-  `--no-default-features`, and safety-net feature graphs.
-- Tier-isolation bypasses in MCP tool dispatch (caller-tier vs tool-tier).
+- PII reaching an LLM outside the manifest contract through `gaze-mcp-core`,
+  `gaze-mcp-rmcp`, `gaze` / `gaze-pii`, `gaze-recognizers`, `gaze-cli` or `gaze-assembly`.
+- Restore differing from the original bytes on lossless classes.
+- Audit-sink isolation bypasses (`gaze_module_isolation` Dylint).
+- Recognizer fail-open behavior in default, `--no-default-features` or safety-net graphs.
+- MCP caller-tier/tool-tier isolation bypasses.
 
-Out of scope:
-
-- Issues only reproducible in adopter code that bypasses the documented
-  `Pipeline` / MCP `ToolCtx` chokepoints.
-- Performance-only regressions with no reliability impact.
-- Issues in any of our private downstream projects — those will be tracked
-  separately when those projects become public.
+Out of scope: adopter code bypassing `Pipeline` / MCP `ToolCtx`, performance
+regressions without reliability impact, and private downstream projects
+(which will be tracked separately when public).
 
 ## Supported versions
 
-We currently support security fixes on the latest minor of the `0.15.x`
-series (`v0.15.1` at the time of writing). The last released minor of
-`0.14.x` receives one-cycle backports for high-severity findings while
-adopters complete the `0.15.x` upgrade. Earlier versions do not receive
-backports.
+Security fixes cover the latest `0.15.x` minor (`v0.15.1`). The last `0.14.x`
+minor receives one-cycle high-severity backports during the `0.15.x` upgrade.
+Earlier versions receive no backports.
 
 ## Coordinated disclosure
 
-For high-severity findings we follow a 90-day coordinated-disclosure
-window from the date of acknowledgment, extendable by mutual agreement.
-We will credit reporters in the security advisory and CHANGELOG unless
-they request anonymity.
+High-severity findings have a 90-day disclosure window from acknowledgment,
+extendable by mutual agreement. Advisories and CHANGELOG credit reporters
+unless they request anonymity.
 
 ## Bug bounty
 
-There is no formal bug bounty program at this time.
+There is no formal bug bounty program.
