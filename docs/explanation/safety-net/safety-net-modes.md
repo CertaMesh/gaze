@@ -13,15 +13,13 @@ same pair. See the [observer contract](safety-nets.md#observer-only-contract).
 |---|---|---|---|
 | `resolve` (default) | Tokenize directly in family `safety_net`, scan again, then fallback on residuals. | Yes, for every resolved suspect | Default |
 | `redact` | Write `[REDACTED:<class>]` and audit; no fallback. | No, for that span | Opt-in, when you want to skip the resolve pass |
-| `strict` | Return report unchanged; CLI exits `3` with empty stdout for `Uncovered` / `PartialBleed`. `ClassMismatch`-only warns and ships. | Nothing was sent | Opt-in, when an uncovered suspect must stop the run |
+| `strict` | Return report unchanged; CLI exits `3` with empty stdout for `Uncovered` / `PartialBleed`. `ClassMismatch`-only warns and ships. | Tokens retain their mapping; no output on refusal | Opt-in, when an uncovered suspect must stop the run |
 | `tolerant` | Warn and ship unchanged suspect bytes. | Yes | Never. Development only |
 
-Two kinds of finding are never acted on in any mode:
-
-- A finding inside a placeholder Gaze issued is dropped before any action.
-- A name, location, or organization suspect that starts or ends inside a word
-  is left in place with a `Preserve` audit row; see
-  [sub-word suspects](safety-nets.md#sub-word-suspects-are-never-acted-on).
+Findings inside issued placeholders are dropped before any action. Under
+`Resolve` and `Redact`, name/location/organization sub-word findings remain raw
+with `Preserve` audit rows; strict fallback instead refuses them as residuals.
+See [sub-word suspects](safety-nets.md#sub-word-suspects-are-never-acted-on).
 
 ## The fallback applies only under resolve
 
