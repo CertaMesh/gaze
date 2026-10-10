@@ -53,13 +53,12 @@ upstream = "https://generativelanguage.googleapis.com/"
 - Anthropic: `POST /v1/messages`
 - Gemini: `POST /v1beta/models/*:{generateContent,streamGenerateContent,countTokens}`
 
-Each adapter walks text, tool-call, tool-result, and function argument surfaces
-in that provider's native JSON. The proxy does not transcode requests.
+Adapters inspect text, tool calls/results, and function arguments in native JSON without transcoding.
 
 ## Locale
 
-Recognizers that declare `locales = [...]` — `postal.de`, `postal.us`, the national phone
-recognizers — only run when the active locale chain intersects that list. The proxy resolves
+Recognizers that declare `locales = [...]`, `postal.de`, `postal.us`, the national phone
+recognizers, only run when the active locale chain intersects that list. The proxy resolves
 that chain once and uses it for both the primary surface pass and the outbound residual
 re-scan, so the two can never disagree about what counts as PII.
 
@@ -84,7 +83,7 @@ let core = gaze_assembly::CorePipelineConfig::new()
 let config = ProxyConfig::new(bind, adapters).with_locale_chain(core.locale_chain().clone());
 ```
 
-A locale chain always ends in `global`, so configuring one can only widen detection.
+Locale chains end in `global`; adding locales widens detection.
 
 ## Daemon commands
 
@@ -143,7 +142,7 @@ not tokenize, a malformed suspect, or a net execution error rejects the request 
 destructive clean fallback is used. See
 [Safety nets and refusals](../../docs/explanation/proxy/proxy-runtime.md#safety-nets-and-refusals).
 
-**Compatibility:** a net-flagged span, including text preserved by primary policy,
+Compatibility: a net-flagged span, including text preserved by primary policy,
 is now tokenized and forwarded instead of refused. Requests Resolve cannot protect
 are still denied before reaching the provider.
 Admission adds inference on surfaced text and codec validation views, bypasses

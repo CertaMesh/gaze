@@ -4,19 +4,7 @@
 [![docs.rs](https://docs.rs/gaze-assembly/badge.svg)](https://docs.rs/gaze-assembly)
 [![License](https://img.shields.io/crates/l/gaze-assembly.svg)](https://github.com/CertaMesh/gaze#license)
 
-Policy-to-pipeline assembly for Gaze
-
-Part of the [Gaze](https://github.com/CertaMesh/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
-
-This crate joins the core `gaze` policy model with the built-in recognizers
-from `gaze-recognizers`. It exists to keep the dependency direction clean:
-`gaze` defines the core contracts, `gaze-recognizers` implements shipped
-backends, and `gaze-assembly` wires them together for CLI-style policy
-execution.
-
-Without this crate, either `gaze` would need to depend on
-`gaze-recognizers`, creating an unnecessary backend dependency for every core
-adopter, or every consumer would need to duplicate policy assembly logic.
+Builds a `gaze::Pipeline` from policy, context, rulepacks, locales, and built-in recognizers. Core contracts stay in `gaze`; detector implementations stay in `gaze-recognizers`.
 
 ## Cargo
 
@@ -25,16 +13,6 @@ adopter, or every consumer would need to duplicate policy assembly logic.
 gaze-pii = "0.16.0"
 gaze-assembly = "0.16.0"
 gaze-recognizers = "0.16.0"
-serde_json = "1"
-```
-
-Inside the workspace:
-
-```toml
-[dependencies]
-gaze = { path = "../gaze" }
-gaze-assembly = { path = "../gaze-assembly" }
-gaze-recognizers = { path = "../gaze-recognizers" }
 serde_json = "1"
 ```
 
@@ -99,19 +77,7 @@ It returns a fully built `gaze::Pipeline`.
 
 ## What it assembles
 
-`build_pipeline` currently wires:
-
-- policy regex detectors into `gaze_recognizers::RegexDetector`
-- policy dictionary detectors into `gaze_recognizers::DictionaryRecognizer`
-- rulepack regex recognizers, including locale pattern-template lowering
-- rulepack dictionary recognizers
-- context-only dictionaries that are not already registered by policy or
-  rulepack recognizers
-- policy `RuleSpec` values into `ClassRule`, `ColumnRule`, and `DefaultRule`
-- optional NER model loading through `gaze_recognizers::NerRecognizer`
-
-The function fails closed with `BuildError` when policy, rulepack, recognizer,
-or pipeline construction fails.
+Assembly wires regex and dictionary detectors, locale templates, context-only dictionaries, policy rules, and optional NER. Construction errors return `BuildError`; assembly fails closed.
 
 ## Class-map safety
 
@@ -120,9 +86,6 @@ assembly layer only accepts that override when the resulting class is covered
 by a tokenize-or-stricter rule (`Tokenize`, `Redact`, `FormatPreserve`, or
 `Generalize`). Otherwise assembly fails closed with
 `RulepackError::ClassMapOverrideClash`.
-
-This check belongs here because it depends on the final policy rules and the
-runtime context together.
 
 ## Locale template lowering
 
@@ -138,13 +101,4 @@ fail closed with `PolicyError::UnknownLocaleBucket`.
 
 ## What belongs here
 
-Put code in this crate when it is assembly glue between:
-
-- `gaze::Policy`
-- `gaze::Context`
-- `gaze::Rulepack`
-- `gaze::LocaleChain`
-- recognizers from `gaze-recognizers`
-
-Do not put core contracts here. Those belong in `gaze`. Do not put backend
-implementation here. Those belong in `gaze-recognizers`.
+Add glue that combines `Policy`, `Context`, `Rulepack`, `LocaleChain`, and `gaze-recognizers`. Keep core contracts and detector implementations in their own crates.

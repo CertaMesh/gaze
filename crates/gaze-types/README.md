@@ -4,21 +4,11 @@
 [![docs.rs](https://docs.rs/gaze-types/badge.svg)](https://docs.rs/gaze-types)
 [![License](https://img.shields.io/crates/l/gaze-types.svg)](https://github.com/CertaMesh/gaze#license)
 
-Shared value contracts for Gaze
-
-Part of the [Gaze](https://github.com/CertaMesh/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
-
-Serde-only — no ML, no SQLite, no ONNX. This crate exists so that:
-- Restore-side adapters can take `gaze-types` without pulling in `ort` / `tokenizers` / `ndarray`
-- Audit sinks (`gaze-audit`) share the `RedactionLogger` trait without depending on `gaze` core
+Serde-only value contracts; no ML, SQLite, or ONNX dependencies.
 
 ## When to depend on this crate directly
 
-Use `gaze-types` instead of `gaze` when building:
-- An audit sink implementing `RedactionLogger`
-- A crate that needs `PiiClass`, `Action`, or `RedactionEntry` without the full pipeline
-
-Otherwise depend on `gaze` — it re-exports the public types from this crate.
+Use for restore adapters, audit sinks implementing `RedactionLogger`, or consumers needing values without the pipeline. `gaze` re-exports these types for pipeline users.
 
 ## Cargo
 
@@ -31,19 +21,19 @@ gaze-types = "0.16.0"
 
 | Type | Purpose |
 |------|---------|
-| `PiiClass` | PII category vocabulary (`Email`, `Name`, `Location`, `Organization`, `Custom(String)`) — `#[non_exhaustive]` |
-| `Action` | Disposition for a detected span — `#[non_exhaustive]` |
-| `RawDocument` | Input variant — `Text(String)` or `Structured(BTreeMap<String, Value>)` — `#[non_exhaustive]` |
-| `CleanDocument` | Cleaned output variant — same shape as `RawDocument` — `#[non_exhaustive]` |
+| `PiiClass` | PII category vocabulary (`Email`, `Name`, `Location`, `Organization`, `Custom(String)`): `#[non_exhaustive]` |
+| `Action` | Disposition for a detected span: `#[non_exhaustive]` |
+| `RawDocument` | Input variant: `Text(String)` or `Structured(BTreeMap<String, Value>)`: `#[non_exhaustive]` |
+| `CleanDocument` | Cleaned output variant: same shape as `RawDocument`: `#[non_exhaustive]` |
 | `RedactionLogger` | Trait for audit sinks (metadata-only contract) |
-| `RedactionEntry` | One audit row: class, action, span, session, timestamp — no raw PII |
+| `RedactionEntry` | One audit row: class, action, span, session, timestamp: no raw PII |
 | `ConflictTier` | Precedence tier for resolving overlapping detections |
 | `SafetyNet` | Observer-only post-clean trait (does not mutate the manifest) |
 | `LeakReport` / `LeakKind` | Suspected-miss report from a `SafetyNet` |
 
-`PiiClass` does **not** include a `Phone` variant. Phone detection is supplied by recognizers
+`PiiClass` does not include a `Phone` variant. Phone detection is supplied by recognizers
 in `gaze-recognizers` (e.g. the `phone-parser` feature) and emitted as `PiiClass::Custom(...)` or
-via rulepack-defined classes — see `docs/reference/policy.md`.
+via rulepack-defined classes, see `docs/reference/policy.md`.
 
 ## `#[non_exhaustive]` enums
 
