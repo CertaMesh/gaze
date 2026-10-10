@@ -4129,6 +4129,10 @@ def _coverage_records(partition: str) -> list[Record]:
                 twin = "Chargennummer: {V}"
             else:
                 value = f"+44 7700 900{rng.between(0,499) if partition=='dev' else rng.between(500,999):03d}"
+                if index % 2:
+                    # Deliberately erroneous personal number: +28 is unassigned.
+                    # This measures cue-only recovery rather than parser recall.
+                    value = value.replace("+44", "+28")
                 label,language,region = "TELEPHONENUM","en","GB"
                 templates = ("Phone: {V}", "telephone={V}", '{"phone":"{V}"}')
                 twin = "Firmware version: {V}"

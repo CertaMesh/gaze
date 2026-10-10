@@ -26,7 +26,10 @@ forwarded messages, agent recipient instructions and parenthesized sender
 headers are exact given-name/surname gold, repeated in a response line;
 roles and automated queues are benign. Email values use `.invalid` domains.
 German postcodes use the unassigned `00xxx` range. Phone values use the
-Ofcom `+44-7700-900xxx` drama reservation.
+Ofcom `+44-7700-900xxx` drama reservation; alternate cued gold values replace
+its country code with the unassigned `+28` to measure recovery of explicitly
+labelled, erroneous personal numbers. These are unchecked phone gold, not
+claims of valid E.164 allocation, and remain scored under both gate contracts.
 
 ## Independent format sources
 
