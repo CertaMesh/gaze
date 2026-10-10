@@ -62,6 +62,14 @@ ordinary setup policy for comparable release headline measurements. An
 `en-US`-first policy can assign the same ZIP span to `postal.us` before
 `postal.de` becomes a candidate. Record this activation limit explicitly.
 
+The reproducible value-free attribution probe is
+`scripts/bench/probe_postal_coverage.py --binary <clean_for_bench> --policy
+<setup.toml> --de-policy <de-first.toml> --output <evidence.json>`. It checks
+that the two policies differ only in locale order, rejects refused or missing
+responses and records offsets and source IDs for ten positives and ten twins.
+Attribution is separate from recall and precision: a postcode-shaped batch
+reference can still be protected and count as a false positive.
+
 For any future extension: use an independent format source, allocate templates
 and values to dev/test before generation, add positive and benign twins, bump
 the version, freeze the preceding contract, and verify every old corpus hash.
