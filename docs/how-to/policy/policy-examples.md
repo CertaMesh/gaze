@@ -1,7 +1,8 @@
 # Write a policy: worked examples
 
-Copy these complete policies; A–C include sample results. See the
-[policy reference](../../reference/policy.md) for fields and actions.
+Copy these complete policies; A–C include sample results. `[at]` means `@`
+in the displayed input. See the [policy reference](../../reference/policy.md)
+for fields and actions.
 
 ## Example A — Tokenize emails, redact phone numbers
 
@@ -37,7 +38,7 @@ kind = "default"
 action = "tokenize"
 ```
 
-Input `Reach Alice at alice@example.invalid or +49 171 3920010` produces
+Input `Reach Alice at alice [at] example.invalid or +49 171 3920010` produces
 `Reach Alice at <{session_hex}:Email_1> or [REDACTED]`.
 
 ## Example B — Custom class for tenant order IDs
@@ -90,7 +91,7 @@ kind = "default"
 action = "tokenize"
 ```
 
-`Mail alice@example.invalid` → `Mail email1.{session_hex}@gaze-fake.invalid`. Restoration returns
+`Mail alice [at] example.invalid` → `Mail email1.{session_hex}@gaze-fake.invalid`. Restoration returns
 the real address.
 
 ## Example D — Mixed regex + NER + custom class

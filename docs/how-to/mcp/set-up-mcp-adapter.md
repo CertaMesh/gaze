@@ -135,7 +135,7 @@ manifest metadata. Use it when the caller already has the text payload.
 Input shape:
 
 ```json
-{"text":"Contact alice@example.invalid before the meeting."}
+{"text":"Contact alice\u0040example.invalid before the meeting."}
 ```
 
 Output shape:
