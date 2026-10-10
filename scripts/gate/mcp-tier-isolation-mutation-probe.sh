@@ -42,20 +42,36 @@ if [ "${#CASES[@]}" -eq 0 ]; then
 fi
 
 MUTATED_FILES=()
+SNAPSHOT_DIR=""
 restore_sources() {
-    local file temporary failed=0
-    for file in "${MUTATED_FILES[@]}"; do
-        # Read the clean index without rewriting its metadata. Only this run's
-        # mutated paths belong to cleanup.
-        temporary="$(mktemp "$file.probe-tmp.XXXXXX")" || return 1
-        if ! git show ":$file" >"$temporary" || ! cat "$temporary" >"$file"; then
-            echo "FATAL: failed to restore $file" >&2
+    local file failed=0
+    for file in ${MUTATED_FILES[@]+"${MUTATED_FILES[@]}"}; do
+        # Restore actual checkout bytes, including Git conversions, without
+        # rewriting the index or replacing the source file's permissions.
+        if ! cat "$SNAPSHOT_DIR/$file" >"$file"; then
+            echo "FATAL: failed to restore $file (snapshot: $SNAPSHOT_DIR)" >&2
             failed=1
         fi
-        rm -f "$temporary"
     done
     [ "$failed" -eq 0 ] || return 1
+    if [ -n "$SNAPSHOT_DIR" ]; then
+        rm -rf "$SNAPSHOT_DIR" || return 1
+        SNAPSHOT_DIR=""
+    fi
     MUTATED_FILES=()
+}
+
+snapshot_source() {
+    local file="$1" owned
+    for owned in ${MUTATED_FILES[@]+"${MUTATED_FILES[@]}"}; do
+        [ "$owned" != "$file" ] || return 0
+    done
+    if [ -z "$SNAPSHOT_DIR" ]; then
+        SNAPSHOT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/gaze-tier-probe.XXXXXX")" || return 1
+    fi
+    mkdir -p "$SNAPSHOT_DIR/$(dirname "$file")" || return 1
+    cp "$file" "$SNAPSHOT_DIR/$file" || return 1
+    MUTATED_FILES+=("$file")
 }
 
 cleanup() {
@@ -71,7 +87,7 @@ require_clean() {
     if [ -n "$dirty" ]; then
         echo "FATAL: refusing to run — these sources already have uncommitted changes:"
         echo "$dirty"
-        echo "The probe rewrites and then restores its mutations from the clean index."
+        echo "The probe rewrites and then restores its mutations from working-tree snapshots."
         exit 2
     fi
 }
@@ -120,7 +136,11 @@ ungate() {
         rm -f "$temporary"
         exit 2
     fi
-    MUTATED_FILES+=("$file")
+    # Snapshot immediately before this path's first truncating write.
+    if ! snapshot_source "$file"; then
+        rm -f "$temporary"
+        exit 2
+    fi
     if ! cat "$temporary" >"$file"; then
         rm -f "$temporary"
         exit 2

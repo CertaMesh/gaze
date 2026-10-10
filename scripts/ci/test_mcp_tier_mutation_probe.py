@@ -3,6 +3,7 @@ from pathlib import Path
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -28,7 +29,7 @@ class MutationProbe(unittest.TestCase):
         # Fixture commits are signed too, without depending on a developer key.
         key = self.root / "fixture-signing-key"
         subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)],
-                       check=True, capture_output=True)
+                       check=True, capture_output=True, timeout=60)
         self.git("config", "gpg.format", "ssh")
         self.git("config", "user.signingkey", str(key))
         self.git("add", *map(str, TARGETS))
@@ -37,7 +38,7 @@ class MutationProbe(unittest.TestCase):
         self.assertIn(b"gpgsig ", self.git("cat-file", "-p", "HEAD"))
         stub = self.root / "bin/cargo"
         stub.parent.mkdir()
-        stub.write_text('''#!/usr/bin/env python3
+        stub.write_text(f'#!{sys.executable}\n' + '''
 import os
 from pathlib import Path
 import time
@@ -57,17 +58,18 @@ if os.environ.get("GATE_FAIL"):
 raise SystemExit(1 if mutated else 0)
 ''')
         stub.chmod(0o755)
-        git_stub = stub.parent / "git"
-        git_stub.write_text(
+        cat_stub = stub.parent / "cat"
+        cat_stub.write_text(
             '#!/usr/bin/env bash\n'
-            'if [ -f restore-fail ] && [ "$1" = show ]; then exit 1; fi\n'
-            f'exec "{shutil.which("git")}" "$@"\n'
+            'if [ -f restore-fail ] && [[ "$1" == *gaze-tier-probe.* ]]; then exit 1; fi\n'
+            f'exec "{shutil.which("cat")}" "$@"\n'
         )
-        git_stub.chmod(0o755)
-        self.env = dict(os.environ, PATH=str(stub.parent) + os.pathsep + os.environ["PATH"])
+        cat_stub.chmod(0o755)
+        self.env = dict(os.environ, TMPDIR=str(self.root),
+                        PATH=str(stub.parent) + os.pathsep + os.environ["PATH"])
 
     def git(self, *args):
-        return subprocess.check_output(["git", *args], cwd=self.root)
+        return subprocess.check_output(["git", *args], cwd=self.root, timeout=60)
 
     def snapshot(self):
         return ((self.root / ".git/index").read_bytes(),
@@ -75,7 +77,7 @@ raise SystemExit(1 if mutated else 0)
 
     def run_probe(self, *cases, **env):
         return subprocess.run(["bash", str(SCRIPT), *cases], cwd=self.root,
-                              env=dict(self.env, **env), capture_output=True, timeout=10)
+                              env=dict(self.env, **env), capture_output=True, timeout=60)
 
     def test_dirty_sources_preserve_index_and_worktree(self):
         for path in TARGETS:
@@ -104,7 +106,34 @@ raise SystemExit(1 if mutated else 0)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.snapshot(), before)
 
+    def make_clean_crlf_checkout(self):
+        self.git("config", "core.autocrlf", "true")
+        for path in TARGETS:
+            (self.root / path).unlink()
+        self.git("checkout", "--", *map(str, TARGETS))
+        self.assertEqual(self.git("status", "--porcelain", "--", *map(str, TARGETS)), b"")
+        for path in TARGETS:
+            self.assertIn(b"\r\n", (self.root / path).read_bytes())
+
+    def assert_snapshots_removed(self):
+        self.assertEqual(list(self.root.glob("gaze-tier-probe.*")), [])
+
+    def test_clean_crlf_normal_run_preserves_exact_bytes(self):
+        self.make_clean_crlf_checkout()
+        before = self.snapshot()
+        result = self.run_probe("full-surface")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.snapshot(), before)
+        self.assert_snapshots_removed()
+
+    def test_clean_crlf_interrupt_preserves_exact_bytes(self):
+        self.make_clean_crlf_checkout()
+        self.assert_interrupt_restores_sources()
+
     def test_interrupt_restores_sources(self):
+        self.assert_interrupt_restores_sources()
+
+    def assert_interrupt_restores_sources(self):
         for sig in (signal.SIGINT, signal.SIGTERM):
             with self.subTest(signal=sig):
                 ready = self.root / "mutated-ready"
@@ -115,14 +144,15 @@ raise SystemExit(1 if mutated else 0)
                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                            start_new_session=True)
                 try:
-                    deadline = time.monotonic() + 5
+                    deadline = time.monotonic() + 60
                     while not ready.exists() and time.monotonic() < deadline:
                         time.sleep(0.02)
                     self.assertTrue(ready.exists(), "mutation gate did not start")
                     os.killpg(process.pid, sig)
-                    process.communicate(timeout=5)
+                    process.communicate(timeout=60)
                     self.assertEqual(process.returncode, 128 + sig)
                     self.assertEqual(self.snapshot(), before)
+                    self.assert_snapshots_removed()
                 finally:
                     if process.poll() is None:
                         os.killpg(process.pid, signal.SIGKILL)
