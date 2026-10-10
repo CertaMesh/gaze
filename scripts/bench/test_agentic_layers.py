@@ -468,7 +468,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -1696,7 +1696,7 @@ class ContractTests(unittest.TestCase):
         for version in (8, 9):
             self.assertNotIn("URL", agentic.load_contract(REPO_ROOT, version=version).scored_labels)
         self.assertIn("URL", agentic.load_contract(REPO_ROOT).scored_labels)
-        with self.assertRaisesRegex(agentic.LayerError, "generator_version 13"):
+        with self.assertRaisesRegex(agentic.LayerError, f"generator_version {agentic.GENERATOR_VERSION}"):
             agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=9)
 
     def test_generator_version_mismatch_fails_closed(self) -> None:
