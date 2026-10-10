@@ -1,49 +1,30 @@
 # Policy — authoring `policy.toml`
 
-A `policy.toml` is the configuration file `gaze clean --policy=<path>` loads to
-build its detection-and-redaction pipeline. It declares which detectors run,
-which PII classes they emit, and what action the pipeline takes when each class
-is found.
-
-This document describes the current policy schema (`schema_version = "0.1.0"`;
-see [Policy schema versioning](#policy-schema-versioning)). The canonical
-parser lives at [`crates/gaze/src/policy.rs`](../../crates/gaze/src/policy.rs);
-the CLI wiring (argument parsing, context envelope assembly, policy-error
-mapping) is in [`crates/gaze-cli/src/main.rs`](../../crates/gaze-cli/src/main.rs).
-Recognizer backends (regex, dictionary, NER) live in
-[`crates/gaze-recognizers`](../../crates/gaze-recognizers). For version history,
-including shipped CLI and host-integration changes, see
-[`CHANGELOG.md`](../../CHANGELOG.md).
-
-The page runs from use to detail: how `gaze clean` loads a policy, a minimal
-working example, PII classes, the schema table by table, detector authoring,
-CLI overrides, and troubleshooting. Versioning, migration notes, and known
-limits come last.
+`gaze clean --policy=<path>` loads detectors, classes and actions from TOML.
+The current schema is `0.1.0`. Sources: [parser](../../crates/gaze/src/policy.rs),
+[CLI assembly](../../crates/gaze-cli/src/pipeline/build.rs) and
+[recognizers](../../crates/gaze-recognizers).
 
 ## What `policy.toml` is for
 
-`gaze clean` accepts `--policy=<path>`. It opens the path, parses the file as
-TOML, and turns it into a [`Pipeline`](../../crates/gaze/src/pipeline.rs) via
-`Pipeline::from_policy`. Two failure modes:
+Policy loading fails closed:
 
-- **File cannot be opened** (missing path, permission denied) → exit `4`,
+- File cannot be opened (missing path, permission denied) → exit `4`,
   stderr `{"error":"PolicyOpen","exit":4}`.
-- **File parses but is invalid** (unknown key, bad regex, unknown class,
+- File parses but is invalid (unknown key, bad regex, unknown class,
   unknown action, missing required field, no recognizers/rulepacks, no rules) → exit `2`,
   stderr `{"error":"PolicyConfig","exit":2}`.
 
-If `--policy` is omitted, `gaze clean` runs the bundled `core` rulepack, the
-same default a policy file gets when it omits `[policy.rulepacks]`. It is the
-same detection surface as `--rulepack-bundled core`: every class `core`
-activates is tokenized, and a span with no class rule (a `--context-json`
-dictionary term, an NER span) is tokenized rather than preserved. The locale
-chain is `global` unless `--locale` says otherwise. `--rulepack-path` adds a
-custom pack while keeping `core`; a `[policy.rulepacks]` table with `paths`
-but no `bundled` key does the same. `--rulepack-bundled` replaces the bundled
-selection. Use `--rulepack-bundled=none` or an explicit `bundled = []` to run
-custom packs without `core`; Gaze prints a one-line stderr notice when the
-core floor is off. Write a policy when you need
-custom recognizers, dictionaries, or non-tokenize actions.
+Without `--policy`, clean loads `core`, tokenizes all active classes and unmatched
+context/NER spans, and uses `global` unless `--locale` overrides it.
+
+| Bundle setting | Result |
+|---|---|
+| No table, or `paths` without `bundled` | Keep `core`; add custom paths |
+| `--rulepack-bundled` | Replace bundled selection |
+| `--rulepack-bundled=none` or `bundled = []` | Disable bundled packs; stderr notices the missing core floor |
+
+Use a policy for custom recognizers, dictionaries or actions.
 
 ## Minimal working example
 
@@ -88,10 +69,8 @@ Rust adopters should import the concrete SQLite sink and audit-query API from
 use gaze_audit::SqliteLogger;
 ```
 
-The v0.5 `gaze` audit feature shim has been removed in v0.6. Paths such as
-`gaze::SqliteLogger` no longer compile; `gaze::RedactionLogger` remains a
-supported facade re-export for the trait, whose canonical home is
-`gaze_types::RedactionLogger`.
+`gaze::SqliteLogger` is unavailable; import it from `gaze-audit`.
+`gaze::RedactionLogger` re-exports the trait from `gaze-types`.
 
 The test `policy_md_minimal_working_example_loads` in
 `crates/gaze/tests/policy_example.rs` loads this exact block.
@@ -189,61 +168,52 @@ Version 1 of the key alias table infers classes for common field names:
 Replace the bracketed values with the trusted app's actual record values before
 calling Gaze; do not send this raw context to the agent.
 
-The version 1 alias table normalizes ASCII case and snake, camel and kebab
-separators. It recognizes EN/DE/FR/NL/PT keys: `email`, `e_mail`, `mail`,
-`courriel`, `emailadres`, `correioEletronico`; `phone`, `tel`, `telefon`,
-`mobile`, `handy`, `telephone`, `telefono`, `telefoon`, `telemovel`, `celular`;
-`name`, `full_name`, `first_name`, `firstname`, `vorname`, `last_name`,
-`surname`, `nachname`, `nom`, `prenom`, `achternaam`, `voornaam`, `nome`,
-`sobrenome`; `iban`; `dob`, `date_of_birth`, `birthdate`, `geburtsdatum`,
-`date_de_naissance`, `geboortedatum`, `data_de_nascimento`; and `address`,
-`street`, `strasse`, `city`, `stadt`, `zip`, `postcode`, `plz`, `adresse`, `rue`,
-`ville`, `code_postal`, `adres`, `straat`, `plaats`, `endereco`, `rua`, `cidade`,
-`cep`. Email aliases map to `Email`, phone aliases to `custom:phone`, name aliases
-to `Name`, IBAN to `custom:iban`, birth-date aliases to `custom:birth_date`, postal
-aliases (`zip`, `postcode`, `plz`, `code_postal`, `cep`) to
-`custom:postal_code`, and other address aliases to `Location`. `field_map`
-overrides any inference, maps unknown keys to a built-in or
-`custom:<name>` class, or sets a leaf to `"ignore"`. Unknown unmapped keys,
-mapping paths without a leaf, arrays, nulls and duplicate JSON keys fail closed.
-Record errors name the field path, never its value.
+Version 1 normalizes ASCII case and snake/camel/kebab separators:
 
-Values are trimmed and whitespace runs, including nonbreaking spaces, collapse
-to one space. Defaults are selected per class and match kind using the
-[known-record oracle](benchmarks/known-record-oracle.md). Gaze's separate repeat-value
-sweep can still protect later copies under its own rules. The manifest restores
-the exact source bytes. Values with fewer than
-three letters or digit-only values shorter than four digits are skipped
-individually; other values in the record remain active. A structurally valid
-IBAN with a passing mod-97 checksum is accepted even when its country code is
-its only two letters. The Rust `Context::record_value_rejections` report gives
-each refused field's safe path and typed reason, without its value. It lists
-refusals only; accepted values in off-by-default groups are inert and do not
-appear there. `gaze clean` also prints a path-only warning for each refusal.
-Single-token names in the [version 1 common-word dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt),
-such as `Will`, `Grace`, `May` and `Mark`, are accepted. Their default
-`corroborated_single` match requires corroboration at
-each occurrence: a person span from NER, another record name
-in the same phrase, or a full record name elsewhere in the document plus a
-name-position cue. Other single-token names match changed-case copies by default;
-same-case exact copies require an explicit opt-in or another detector. The
-dictionary is matched with Unicode folding and Aho–Corasick; no common name is
-silently discarded. The current default Nym operating point has no person
-label, so model corroboration currently comes from the NER candidate layer.
+| Class | Field aliases |
+|---|---|
+| `Email` | `email`, `e_mail`, `mail`, `courriel`, `emailadres`, `correioEletronico` |
+| `custom:phone` | `phone`, `tel`, `telefon`, `mobile`, `handy`, `telephone`, `telefono`, `telefoon`, `telemovel`, `celular` |
+| `Name` | `name`, `full_name`, `first_name`, `firstname`, `vorname`, `last_name`, `surname`, `nachname`, `nom`, `prenom`, `achternaam`, `voornaam`, `nome`, `sobrenome` |
+| `custom:iban` | `iban` |
+| `custom:birth_date` | `dob`, `date_of_birth`, `birthdate`, `geburtsdatum`, `date_de_naissance`, `geboortedatum`, `data_de_nascimento` |
+| `custom:postal_code` | `zip`, `postcode`, `plz`, `code_postal`, `cep` |
+| `Location` | `address`, `street`, `strasse`, `city`, `stadt`, `adresse`, `rue`, `ville`, `adres`, `straat`, `plaats`, `endereco`, `rua`, `cidade` |
 
-The default record matcher enables `exact` and `whitespace_flexible` for
-credit cards, IBANs, national IDs and Steuer IDs; `exact` for passports and
-phones; `exact`, `case_folded` and `whitespace_case_folded` for multi-token
-names; and `case_folded` plus `corroborated_single` for single-token names.
-Whitespace-flexible matching collapses whitespace runs; it does not add or
-remove separators, so pass the value in the form the document uses.
-Address parts, single-name `exact`, multi-name `whitespace_flexible`, email,
-and other unlisted pairs are off. Disabling exact address parts and single
-names leaves 337 and 123 additional leaked gold bytes, respectively, in the
-all-on oracle comparison; use an explicit opt-in when that precision trade-off
-fits your data. Exact caller-known phone and credit-card values remain on by
-user decision despite 69 and 99 added layer D benign bytes, respectively.
-These are record-value matches, not a change to ordinary phone or card rules.
+`field_map` overrides inference, assigns unknown leaves a built-in or custom
+class, or sets them to `"ignore"`. Unknown unmapped keys, paths without leaves,
+arrays, nulls and duplicate JSON keys fail closed; errors contain paths, never values.
+
+Values are trimmed and whitespace runs (including NBSP) collapse to one space.
+Restore preserves source bytes. Individually skip values with fewer than three
+letters or digit-only values shorter than four digits; valid registry-length,
+mod-97-passing IBANs are exempt. `Context::record_value_rejections` lists safe
+paths and typed refusal reasons, never values. Off-by-default accepted groups
+are inert and absent from this list. Clean warns per refused path.
+
+Common single names (`Will`, `Grace`, `May`, `Mark`) from the
+[versioned dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt)
+are retained. `corroborated_single` needs a NER person span, another record name
+in the phrase, or a full record name elsewhere plus a name-position cue.
+Other single names match changed-case copies by default; same-case exact needs
+opt-in or another detector. Unicode folding and Aho–Corasick match the dictionary.
+Default Nym has no person label, so model corroboration comes from NER.
+
+Default kinds ([measured oracle](benchmarks/known-record-oracle.md)):
+
+| Group | Enabled kinds |
+|---|---|
+| Credit card, IBAN, national ID, Steuer-ID | `exact`, `whitespace_flexible` |
+| Passport, phone | `exact` |
+| Multi-token name | `exact`, `case_folded`, `whitespace_case_folded` |
+| Single-token name | `case_folded`, `corroborated_single` |
+
+Other pairs are off, including address parts, email, single-name `exact` and
+multi-name `whitespace_flexible`. Whitespace flexibility changes runs only,
+never separators. Disabling address/single-name exact adds 337/123 leaked gold
+bytes versus all-on. Exact caller-known phone/card stays on despite 69/99
+layer-D benign bytes; ordinary recognizers are unchanged.
+
 The adopter can replace a class group's allowed kinds in the same context JSON:
 
 ```json
@@ -267,22 +237,19 @@ multi-token value. Incompatible combinations fail with a path-only error.
 A record field whose class is off supplies no extra record detection;
 ordinary recognizers still run.
 
-`Name` values can also match full Unicode
-case folds, including `ß`/`SS`, when the kind is enabled, while preserving the original matched bytes for restore. Record matching
-does not match reversed name order, email case changes, fragments or fuzzy
-spellings. Each record dictionary uses the existing class action and manifest
-path; its class must resolve to `tokenize` or `format_preserve`. A nonreversible
-column action in the policy rejects record context, even if a default action is
-reversible. Record values stay out of errors; failures name only the field path
-(keys limited to `[A-Za-z0-9_-]`). Audit source IDs contain no record values.
-Do not put the context JSON in a
-command argument or log it in your app.
+Enabled name folds include `ß`/`SS`; restore keeps matched bytes. Matching
+excludes reversed names, email case changes, fragments and fuzzy spellings.
+The separate repeat-value sweep follows its own rules.
 
-The context JSON is limited to 4 MiB; the encoded record to 64 KiB; nesting to
-four object levels; 32 string leaves; and each value to 256 UTF-8 bytes. The
-internal `record-v2-` dictionary prefix is reserved. Existing `dictionaries`,
-`class_map` and `fields` remain available in the same envelope. Record context
-is call-scoped in `gaze clean`; the daemon still refuses per-document context.
+Every record class must resolve to `tokenize` or `format_preserve`; a
+nonreversible column rule rejects context even with a reversible default.
+Keys are limited to `[A-Za-z0-9_-]`; errors and audit IDs contain no values.
+Keep raw context away from agents, command arguments and logs.
+
+Limits: context JSON 4 MiB; encoded record 64 KiB; four object levels; 32 string
+leaves; 256 UTF-8 bytes per value. `record-v2-` dictionary prefix is reserved.
+The envelope still accepts `dictionaries`, `class_map` and `fields`. Record
+context is call-scoped in clean; daemon refuses per-document context.
 
 ### Class naming rules
 
@@ -310,10 +277,9 @@ own.
 
 ## Schema reference
 
-TOML tables use closed schemas unless explicitly documented otherwise — any key
-the parser does not recognise is a hard error. v0.4 adds
-`[policy.rulepacks]` and `[[policy.custom_recognizers]]`; legacy top-level
-`[[detector]]` is rejected.
+Unknown keys fail unless a table is explicitly open. Use
+`[policy.rulepacks]` and `[[policy.custom_recognizers]]`; top-level `[[detector]]`
+is rejected.
 
 ### `[session]`
 
@@ -327,10 +293,6 @@ ttl_secs = 86400       # required when scope = "persistent"; optional otherwise
 |------------|----------|------------------------------|-------------------------------------------------|
 | `scope`    | string   | yes                          | One of `"ephemeral"`, `"conversation"`, `"persistent"`. |
 | `ttl_secs` | integer  | yes if `scope = "persistent"`| Must be `> 0`. Zero is rejected.                |
-
-> Resolved in v0.3.1: `gaze clean` now constructs its session from
-> `[session]`. `--session-ttl` is an explicit CLI override for persistent
-> session TTL; when the flag is omitted, `ttl_secs` from policy is used.
 
 #### Session scope and TTL
 
@@ -358,7 +320,7 @@ The `--ner-threshold=<float>` CLI flag overrides `[ner].threshold` for one
 default `0.3`. Values outside `0.0..=1.0` fail closed as `PolicyConfig`.
 
 TTL enforcement on `gaze restore`: when the imported snapshot's `issued_at +
-ttl_secs` has passed, restore fails with **exit `3` `BlobExpired`**. (The
+ttl_secs` has passed, restore fails with exit `3` `BlobExpired`. (The
 `issued_at` field landed in v0.3.0-rc.2 — older blobs predating the field
 treat the TTL as bypassed for forward-compatibility.)
 
@@ -409,62 +371,16 @@ Or override the bundle list for one CLI run:
 gaze clean --rulepack-bundled core --locale=en-US --policy ./policy.toml
 ```
 
-`core` recognizers are intentionally tiered:
+See [Embedded recognizers](redaction-classes.md#embedded-recognizers) for
+classes, shapes, tiers, validators and activation. Format-basis identifiers
+run at every document locale; document-basis rules require a compatible chain.
+Plain `en` does not activate `postal.us`.
 
-- `phone.structural` matches E.164-only `+\d{6,15}` numbers and emits
-  `custom:phone` only when the match passes `e164_phone`. Regex-passing but
-  unassigned values such as `+99999999` do not emit detections.
-- `phone.national.us` has `locale_basis = "format"` and is `safe_default`; it
-  runs for every document locale because a US-format phone remains sensitive
-  inside a non-US-language document. Its `locales = ["en-US"]` value records
-  format provenance and is not an eligibility gate.
-- `phone.national.de`, `postal.de`, and `postal.us` remain `document` basis and
-  `locale_gated`; pass `--locale=de-DE` or `--locale=en-US`, or set
-  `[locale].active`, to activate them. `global` alone does not activate these
-  quarantined recognizers. The DE phone recognizer
-  includes Berlin (`30`), Hamburg (`40`), Frankfurt (`69`), Munich (`89`),
-  Cologne (`221`), Stuttgart (`711`), and the synthetic mobile fixture shape
-  (`151`) while still requiring `e164_phone_national_de` validation. These
-  recognizers cooperate with `phone.structural` so the rulepack can carry
-  multiple phone recognizers without fail-closed same-class rejection.
-- `iban.structural` emits `custom:iban` only for IBAN-shaped candidates that
-  pass `iban_mod97`; the canonical form is normalized with `iban_canonical`.
-  The pattern has no trailing word boundary: a compact IBAN glued to the next
-  label (an Austrian compact IBAN glued to `BIC`) is a candidate, and the boundary is
-  decided in code (`gaze_types::word_run_extends_identifier`) — the word run
-  after the candidate may be empty or letters only; a digit or underscore in it
-  marks the candidate as a prefix of a longer identifier and drops it.
-- `card.structural` emits `custom:credit_card` only for 13- to 19-digit
-  candidates that pass `luhn`. Its pattern takes a whole digit run; the
-  recognizer finds the card inside it, so a CVV, expiry or number touching the
-  card does not hide it (`gaze_types::payment_card::scan_card_run`). All-zero
-  candidates are rejected even though their Luhn checksum is zero.
-- `ip.v4` and `ip.v6` emit `custom:ip_address` for parsed addresses outside
-  RFC 5737 IPv4 documentation ranges and RFC 3849 IPv6 documentation range,
-  and outside loopback (`127.0.0.0/8`, `::1`). IPv4-compatible and
-  IPv4-mapped forms of RFC 5737 and loopback addresses are also excluded.
-  The ordinary `ipv4_parse` and `ipv6_parse` validators remain available to
-  custom rules that intentionally protect documentation addresses.
-- `postal.de` emits `custom:postal_code` only under active locale `de-DE`.
-- `postal.us` emits `custom:postal_code` only under active locale `en-US`.
-  Plain `en` does not activate `postal.us`.
-
-The DE/US national phone validators are behind the `phone-parser` crate feature.
-Default builds enable it. Builds with `--no-default-features` reject
-`e164_phone_national_de` and `e164_phone_national_us` as
-`RulepackError::UnsupportedValidator`, which fails closed instead of silently
-loading regex-only phone recognizers.
-
-US phone fixtures use NANPA 555-0100 through 555-0199, reserved for
-fictional/test use by the North American Numbering Plan Administration's
-555-LINE Number Reservation
-(`https://nationalnanpa.com/number_resource_info/555_numbers.html`). Germany
-does not have an equivalent official fictional phone range; DE fixtures use a
-synthetic-non-reachable policy: literals are chosen to be parser-valid but
-non-routable. Tenant numeric IDs such as `Subscriber_0001234567` and
-`Order_0815` are explicit negative fixtures for those recognizers; broad
-numeric shapes must not become phone or credit-card detections without a
-passing validator.
+Default builds enable `phone-parser`. Without it, phone validator wiring fails
+closed with `RulepackError::UnsupportedValidator`; it never falls back to regex-only
+phone detection. Use [documented fictional phone ranges](../../CONTRIBUTING.md#phone-number-fixtures)
+for fixtures. Tenant IDs such as `Subscriber_0001234567` must not be treated as
+phones or cards based on shape alone.
 
 ### Rulepack recognizers
 
@@ -515,22 +431,9 @@ overlaps keep their normal precedence rules.
 | `"format"` | `locales` records format provenance only. Assembly registers the recognizer regardless of document locale, and the registry runs it once outside locale fallback before ordinary conflict resolution. |
 
 Bundled rulepacks must state `locale_basis` explicitly for every recognizer.
-The bundled format-basis set is `aadhaar.in`, `bsn.nl`, `cnpj.br`, `cpf.br`,
-`nhs.uk`, `nino.uk`, `nir.fr`, `pan.in`, `phone.national.us`, `ssn.de_cue`,
-`ssn.us`, `steuer_id.de`, `vat.de`, and `vat.es`. Linguistic `name.*`
-recognizers, `phone.national.de`, `postal.de`, and `postal.us` remain
-document-basis, as do the bilingual cue-anchored `global` recognizers
-(`tax_number.cue_anchored`, `driver_license.cue_anchored`,
-`national_id.cue_anchored`, and the separate `secrets` bundle's
-`security_token.anchored`), which are eligible under every chain because
-`global` matches every document locale.
-
-This changes suppression behavior: `--locale=global` and narrow locale chains
-cannot suppress a format-basis recognizer. An adopter that needs the previous
-token stream must disable that recognizer outright, for example by selecting a
-copied rulepack with `enabled = false`, instead of relying on locale mismatch.
-This deliberately trades snapshot compatibility and configuration convenience
-(axis 5) for closing identifier leaks (axis 1).
+See the [recognizer inventory](redaction-classes.md#embedded-recognizers) for
+each bundled rule's basis. Locale mismatch cannot suppress a format-basis
+rule; disable it in a copied rulepack with `enabled = false` if needed.
 
 Missing cooperation fails rulepack load with
 `RulepackError::SameClassWithoutCooperation`. The check is strict by design:
@@ -547,37 +450,11 @@ strings fail policy load with `RulepackError::UnsupportedValidator`.
 kind = "luhn"
 ```
 
-| Kind | Applies to | Behavior |
-|------|------------|----------|
-| `email_rfc` | Email-like regex candidates | Basic email shape validation used by the bundled core email recognizer. |
-| `e164_phone` | E.164-like phone candidates | Parser-backed phone validation. `core` uses it with `phone.structural` so parser-valid international fixtures such as a synthetic German mobile number emit `custom:phone`, while unassigned regex-only values such as `+99999999` are dropped. |
-| `e164_phone_national_de` | German national or international phone candidates | Parser-backed DE validation with synthetic-non-reachable fixture allowance because Germany has no NANPA 555-01XX equivalent. |
-| `e164_phone_national_us` | US national or international phone candidates | Parser-backed US validation with NANPA 555-0100 through 555-0199 fixture allowance. |
-| `luhn` | Credit-card-like numeric candidates | Mod 10 checksum. ASCII whitespace is ignored; any other non-digit fails validation. |
-| `iban_mod97` | IBAN-like alphanumeric candidates | ISO 7064 mod-97 check at the country's ISO 13616 registry length. Input is canonicalized as uppercase with ASCII whitespace removed before validation. Recognizers with this validator also get the identifier-run trailing boundary: the word run after the candidate may be empty or letters only (`gaze_types::word_run_extends_identifier`), so their pattern must not end in `\b`. |
-| `ipv4_parse` | IPv4-like candidates | `std::net::Ipv4Addr` parser validation. Rejects leading-zero octets, hex forms, short forms, and out-of-range octets. |
-| `ipv6_parse` | IPv6-like candidates | `std::net::Ipv6Addr` parser validation for RFC 4291 textual forms, including IPv4-embedded addresses. Rejects bracketed URI literals and zone-id suffixes. |
-| `ipv4_parse_non_documentation` | Bundled `ip.v4` candidates | Same IPv4 parser, then excludes RFC 5737 documentation ranges and loopback with a typed audit veto. |
-| `ipv6_parse_non_documentation` | Bundled `ip.v6` candidates | Same IPv6 parser, then excludes RFC 3849 and IPv4-embedded RFC 5737 documentation ranges and loopback (mapped or compatible) with a typed audit veto. |
-| `eth_eip55` | Ethereum address candidates | EIP-55 checksum validation using Keccak-256. Mixed-case addresses must satisfy the checksum; all-lower and all-upper legacy forms are accepted. |
-| `aadhaar_verhoeff` | Aadhaar candidates | Verhoeff checksum validation for cue-anchored Indian Aadhaar recognizers. |
-| `fr_nir_mod97` | French NIR candidates | French NIR two-digit MOD-97 key validation. |
-| `de_steuer_id_mod1110` | German Steuer-ID candidates | ISO 7064 MOD 11,10 checksum validation. |
-| `bsn_mod11` | Dutch BSN candidates | Dutch 11-test checksum validation. |
-| `cpf_mod11` | Brazilian CPF candidates | Two-stage MOD-11 checksum validation with repeated-digit rejection. |
-| `cnpj_mod11` | Brazilian CNPJ candidates | Two-stage weighted MOD-11 checksum validation with repeated-digit rejection. |
-| `uk_nhs_mod11` | UK NHS number candidates | NHS MOD-11 checksum validation; check digit 10 is rejected. |
-
-Validator-backed regex candidates fail closed: a regex match whose validator
-returns false emits no detection. This is intentionally stricter than emitting
-an unvalidated candidate because shape-only false positives are a PII-leak risk
-for agent workflows.
-
-Validator names live in rulepack TOML and are compile-time/library behavior,
-not per-invocation CLI policy. `e164_phone` is backed by the
-`gaze-recognizers` `phone-parser` feature, which gates the optional
-`phonenumber` dependency and is enabled in default builds. There is no CLI flag
-or policy runtime knob for swapping validator semantics per invocation.
+The [validator catalog](redaction-classes.md#validatorkind) lists every name,
+feature gate and check. Default failure handling vetoes the candidate. Supported
+validators can use `on_fail = "record"` to retain the match and audit its failure;
+see [recorded failures](../explanation/detection/validator-veto.md#recorded-failures).
+Phone parsing is a build feature, not a per-run CLI or policy switch.
 
 #### Built-in normalizers
 
@@ -621,10 +498,8 @@ A regex Unicode class keeps its braces: `\p{Lu}` and `\P{L}` in a template
 are passed to the regex unchanged, not read as placeholders.
 
 If a template references an unknown locale bucket, assembly fails closed with
-`PolicyError::UnknownLocaleBucket`. The legacy `{locale_email_headers}`
-placeholder remains a v0.4.2 compatibility alias for
-`{locale.email_headers}`; prefer the generic syntax in new rulepacks. The alias
-is deprecated for removal in the v0.5 cycle.
+`PolicyError::UnknownLocaleBucket`. `{locale_email_headers}` is a deprecated compatibility alias for
+`{locale.email_headers}`; use the generic form.
 
 ### `[[policy.custom_recognizers]]`
 
@@ -737,7 +612,7 @@ recognizers and are available to library users through the borrowed
 runtime metadata for dictionary recognizer construction, not a general class
 override mechanism.
 
-NER is **not** a detector kind. NER is configured via the top-level `[ner]`
+NER is not a detector kind. NER is configured via the top-level `[ner]`
 block (below) — when set, the pipeline appends a transformer NER detector
 alongside the regex detectors declared here.
 
@@ -749,7 +624,7 @@ fails loudly with `PolicyConfig` instead of silently accepting both surfaces.
 
 ### `[[rule]]`
 
-One block per rule. **At least one rule is required** — an empty list is
+One block per rule. At least one rule is required — an empty list is
 rejected with `PolicyConfig`. Rules are evaluated in declaration order;
 the first rule whose match condition fires decides the action. If no rule
 matches, the pipeline falls back to `Action::Preserve`.
@@ -774,15 +649,14 @@ action = "tokenize"
 
 #### Rule kinds
 
-- **`kind = "class"`** — fires when a detection's class equals `class`. The
+- `kind = "class"` — fires when a detection's class equals `class`. The
   most common rule shape.
-- **`kind = "column"`** — fires when the document being redacted is a
-  structured value and the current field name equals `column`. Resolved in
-  v0.3.1: `gaze clean` rejects policies containing `column` rules with
+- `kind = "column"` — fires when the document being redacted is a
+  structured value and the current field name equals `column`. `gaze clean` rejects policies containing `column` rules with
   `PolicyConfig`, because the CLI only accepts text on stdin and has no field
   name. `column` rules are useful only when driving the library directly with
   `RawDocument::Structured`.
-- **`kind = "default"`** — always fires. Place last as a catch-all. If
+- `kind = "default"` — always fires. Place last as a catch-all. If
   omitted, unmatched detections fall through to `Preserve` automatically,
   but an explicit `default` makes the policy intent visible.
 
@@ -797,53 +671,36 @@ it produces no restore token.
 
 #### Collision-family fallback classes (avoid a silent leak)
 
-Some bundled recognizers belong to a **collision family** — a set of structural
+Some bundled recognizers belong to a collision family — a set of structural
 recognizers whose shape overlaps (for example IBANs and payment-card numbers,
 both long digit runs). When such a recognizer cannot commit to its precise
 variant class — its mandatory anchor cue is absent, or two variants tie — Gaze
-**fails closed** and emits one family-level token whose class is
+fails closed and emits one family-level token whose class is
 `custom:family:<family>` instead of the narrow variant class. See
 [Mandatory Anchor Resolution](../explanation/detection/anchor-resolution.md).
 
-Concretely, the `iban.structural` recognizer declares
-`mandatory_anchor = "iban"`. The anchor cue words (`IBAN`, `Account`, …) ship in
-the `locale-en` / `locale-de` rulepacks, **not** in `core`. So:
-
-- With only `bundled = ["core"]` loaded, the anchor is never available and every
-  detected IBAN is emitted as `custom:family:payment-card-or-iban` — the narrow
-  `custom:iban` class is effectively unreachable.
-- Load `bundled = ["core", "locale-en"]` (or `locale-de`) **and** keep a cue word
-  such as `IBAN` near the value to get the precise `custom:iban` class.
-
-> **Setting `[locale].active` is not enough** — it only orders the locale
-> fallback chain. The anchor cues live in a rulepack, so the pack must appear in
-> `[policy.rulepacks].bundled`.
+`iban.structural` requires the `iban` anchor. Cues such as `IBAN` and `Account`
+come from `locale-en` / `locale-de`, not `core`. With only `core`, IBAN matches
+use `custom:family:payment-card-or-iban`. To emit `custom:iban`, load the locale
+pack and put a cue near the value. `[locale].active` orders the fallback chain;
+it does not load cue packs.
 
 #### How a family-level token picks its action
 
-Rules are first-match-wins for every class, the family class included. A rule
-that names `custom:family:payment-card-or-iban` before your `default` rule sets
-the token's action directly and is always honoured verbatim, `preserve`
-included.
+A reachable explicit family-class rule wins, including `preserve`. Without
+one, Gaze takes the strictest of the family fallback and each member's resolved
+action. Rules use the same first-match walk. A member-only tokenize policy with
+a preserve default therefore protects ambiguous spans too.
 
-When no reachable rule names the family class, the token does **not** simply
-take the `default` rule. It takes the **strictest** action among
+```mermaid
+flowchart TD
+  A[Family fallback] --> B{Reachable family rule?}
+  B -->|Yes| C[Apply its action]
+  B -->|No| D[Resolve member actions and family default]
+  D --> E[Apply strictest action]
+```
 
-- each member class's resolved action (`custom:iban`, `custom:credit_card`,
-  each looked up through the same first-match walk), and
-- the action the family class would have taken on its own (the `default` rule,
-  or `preserve` when there is none).
-
-So a policy that tokenizes `custom:iban` and `custom:credit_card` with a
-`preserve` default tokenizes the family token too: naming a member is enough to
-stay fail-closed on the ambiguous span. The derivation is monotone; it never
-lands below the default the family would have taken, so an all-`preserve`
-member set under a `tokenize` default is still tokenized.
-
-The strictness order over the closed `Action` set, from strictest to laxest,
-with the measured number of original bytes each lets through on a family-token
-span (`protective_actions_execute_on_family_tokens_and_leak_no_original_byte`
-in `crates/gaze-assembly/src/tests.rs`):
+Action order:
 
 | Rank | Action | Original bytes in output | Restorable |
 |------|--------|--------------------------|------------|
@@ -853,31 +710,27 @@ in `crates/gaze-assembly/src/tests.rs`):
 | 1 | `format_preserve` | none (class-shaped fake) | yes |
 | 0 | `preserve` | all | - |
 
-Between two actions that leak nothing, the non-restorable one ranks higher: an
-adopter who redacts one member does not want that value restored downstream,
-and redacting the other member only costs restorability, never a leak. With
-`custom:iban = tokenize` and `custom:credit_card = redact`, an ambiguous span is
-redacted. Every protective action is executable on a family class, so the
-derived action is applied as-is.
+For example, `custom:iban = tokenize` plus `custom:credit_card = redact`
+redacts the ambiguous span. Every protective action works on family classes.
 
 Two consequences of a derived action that is not `tokenize`:
 
-- **Under a protection trace** (the MCP and proxy chokepoints, which prove
+- Under a protection trace (the MCP and proxy chokepoints, which prove
   every byte's disposition) only `tokenize` and `preserve` are executable. A
   family token that derives `redact`, `generalize` or `format_preserve` fails
   closed there with `UnsupportedActionVariant`, exactly as an explicit rule
   with that action on a member class already does. Nothing is emitted.
-- **Residual coverage** (the cells that cover a losing candidate's remaining
+- Residual coverage (the cells that cover a losing candidate's remaining
   bytes beside an overlapping winner) admits each claimant on its own
   resolved action, and a cell emits under that action: a derived `redact`
   on the family class writes the one-way `[REDACTED:custom:family:<name>]`
   marker over the losing member's remaining bytes. See
   [Residual coverage](redaction-classes.md#residual-coverage).
 
-> **To preserve family tokens you must say so.** Because the derivation is
+> To preserve family tokens you must say so. Because the derivation is
 > strictest-wins, the only way to leave an ambiguous span raw while a member
 > class or the default is protective is an explicit rule for the family class
-> declared **before** your `default` rule:
+> declared before your `default` rule:
 >
 > ```toml
 > [[rule]]
@@ -893,7 +746,7 @@ Two consequences of a derived action that is not `tokenize`:
 The audit row of a family token records how its action was chosen. Its
 `ambiguity_record` JSON carries `derived_action = { action, member_class }`
 whenever the action was derived; `member_class` names the member whose
-**explicit** rule set it (the lowest class in `PiiClass` order on a tie, a
+explicit rule set it (the lowest class in `PiiClass` order on a tie, a
 member exactly as strict as the default included), or is `null` when the
 family's own default applied and no member's own rule reached that strictness.
 The field is absent when an explicit family rule matched, and on rows written
@@ -910,16 +763,12 @@ the same list from `gaze_assembly::uncovered_collision_family_classes`. The
 bundled family names are listed under
 [Custom-recognizer collision metadata](#custom-recognizer-collision-metadata).
 
-> **Upgrading from v0.14 and earlier.** Family tokens used to take the `default`
-> rule when no rule named the family class, so a member-only policy with a
-> `preserve` default shipped ambiguous IBAN/card spans raw (a documented footgun
-> since v0.7.1, warned about since v0.11). They are now protected by
-> derivation. If you relied on family tokens falling to a `preserve` default,
-> add the explicit family `preserve` rule above; nothing else changes for
-> policies with a protective default or an explicit family rule.
+Older member-only policies with a preserve default left family spans raw.
+Add an explicit family `preserve` rule before `default` only if that behavior
+is intentional.
 
-> **`preserve` keeps a class's characters unless the same characters are
-> also PII of a class you protect.** Overlap resolution runs before the
+> `preserve` keeps a class's characters unless the same characters are
+> also PII of a class you protect. Overlap resolution runs before the
 > action lookup, and a span that wholly encloses a differently-classed span
 > keeps the slot (`ConflictTier::ContainmentPrecedence`, or
 > `StructuredContainment` for a custom container over a builtin sub-span),
@@ -963,7 +812,7 @@ threshold = 0.3
 | `threshold` | float  | no       | Confidence floor in the inclusive range `0.0..=1.0`. Defaults to `0.3`. `gaze clean --ner-threshold=<float>` overrides this value for one invocation. |
 
 If `model_dir` is set but the model fails to load (missing files, bad
-manifest), the CLI maps the failure to **exit `2` `PolicyConfig`**. Treat
+manifest), the CLI maps the failure to exit `2` `PolicyConfig`. Treat
 NER load errors as policy configuration failures: verify the install path
 against [`gaze setup`](../../crates/gaze-cli/README.md#setup).
 
@@ -1053,8 +902,8 @@ environment.
 ### Regex (`kind = "regex"`)
 
 Pattern syntax follows the [Rust `regex` crate](https://docs.rs/regex). The
-crate intentionally **does not support look-ahead, look-behind, or
-back-references**, so patterns ported from PCRE / Python `re` may need
+crate intentionally does not support look-ahead, look-behind, or
+back-references, so patterns ported from PCRE / Python `re` may need
 rewriting.
 
 Common idioms:
@@ -1070,42 +919,19 @@ Common idioms:
 
 #### Pitfall: `\b` next to non-word characters (currency symbols, punctuation)
 
-`\b` matches a *word boundary*: a transition between a word character
-(`[0-9A-Za-z_]` plus Unicode letters/digits) and a non-word character. When the
-character adjacent to `\b` inside your pattern is itself a **non-word**
-character — `€`, `$`, `£`, `%`, punctuation — the boundary can only exist if the
-*surrounding* text supplies a word character, which is usually the opposite of
-what you want:
+`\b` requires a word/non-word transition. A boundary beside `€`, `$`, `£` or
+punctuation can miss a value or capture the next amount, leaving bytes raw.
+Rust regex has no look-around. Guard digit/word edges; let symbols delimit themselves.
 
 ```toml
-# BROKEN: never matches "5000€" or "$3,500.00" in normal prose.
+# Broken beside symbols: misses "5000€" and can mis-span adjacent amounts.
 pattern = '\b(?:[$€£]\s?\d[\d.,]*|\d[\d.,]*\s?(?:€|£|EUR|USD|GBP))\b'
-```
 
-- `Order total 5000€ due today.` — no match: the trailing `\b` sits between `€`
-  (non-word) and a space (non-word) — no transition, no boundary.
-- `Posten: 5000€ 1000€ MwSt` — **mis-span**: the engine finds a sneaky
-  alternative parse (`€ 1000` via the symbol-prefix branch) and tokenizes the
-  wrong span, leaking `5000`.
-- `Betrag 1.500,00 EUR fällig.` — matches fine: `EUR` ends in a word character,
-  so `\b` works as expected.
-
-For a redaction policy this fails **open**: the amount silently stays in the
-clean text. This is standard Rust `regex` (and PCRE, and RE2) `\b` semantics,
-not a Gaze behavior, and it has been stable across every Gaze release
-(verified 0.5.x through 0.11.x, byte-identical outputs; see issue #361).
-Because Rust `regex` has no look-around, you cannot emulate a one-sided
-boundary with `(?<!...)`/`(?!...)`. Instead, apply `\b` only to the edges that
-end in a word character and let the symbol act as its own delimiter:
-
-```toml
-# WORKS: \b only guards the digit edges; €/$/£ delimit themselves.
+# Guard only digit edges.
 pattern = '(?:[$€£]\s?\d[\d.,]*\d|[$€£]\s?\d|\b\d[\d.,]*\d\s?(?:€|£|EUR|USD|GBP)|\b\d\s?(?:€|£|EUR|USD|GBP))'
 ```
 
-The same applies to any custom class whose values start or end with a symbol
-(percentages, `#`-prefixed IDs, currency): put `\b` next to `\d`/`\w` edges
-only, never next to the symbol.
+This also applies to percentages and `#`-prefixed IDs (issue #361).
 
 `Policy::load` compiles the pattern, so a malformed regex fails fast with
 `PolicyConfig` and never reaches `gaze clean`'s stdin read.
@@ -1190,72 +1016,28 @@ cannot be combined with these selectors.
 
 ### Configuration surfaces - three-surfaces parity table
 
-This table audits every current `policy.toml` field accepted by
-[`Policy::load`](../../crates/gaze/src/policy.rs). Runtime knobs are scalar,
-enum, or path values that can reasonably vary for one `gaze clean` execution;
-they must have a CLI flag, TOML field, and documented default or required
-state. Policy-document fields define recognizers, rules, dictionaries, or
-rulepacks and intentionally stay in TOML only, per the three-surfaces boundary.
+Runtime knobs use the [CLI override table](#cli-overrides-for-runtime-knobs).
+Recognizer definitions, dictionary sources and rule actions stay in TOML.
+Custom dictionary `dictionary` binds a dictionary name; when omitted it uses
+the recognizer name. Use `terms`, `terms_file` or `terms_from_context` for terms.
 
-| Policy field | Type | CLI flag | TOML | Default | Class | Rationale |
-|---|---|---|---|---|---|---|
-| `Policy.session.scope` | enum | `--session-scope` | `[session].scope` | Required in TOML; policy-less CLI uses `persistent` | runtime knob | CLI/TOML/default parity required for per-run session behavior. |
-| `Policy.session.ttl_secs` | `u64` | `--session-ttl` | `[session].ttl_secs` | Required for `persistent`; policy-less CLI uses `86400` | runtime knob | CLI/TOML/default parity required for per-run session lifetime. |
-| `Policy.ner.model_dir` | path | `--ner-model-dir` | `[ner].model_dir` | Absent; NER disabled unless configured | runtime knob | CLI/TOML/default parity required for per-run NER backend selection. |
-| `Policy.ner.locale` | BCP47 string | `--ner-locale` | `[ner].locale` | Absent; NER backend default | runtime knob | CLI/TOML/default parity required for per-run NER locale selection. `[ner].locale` is a single string, unlike `[locale].active`. |
-| `Policy.ner.threshold` | `f32` | `--ner-threshold` | `[ner].threshold` | `0.3` | runtime knob | CLI/TOML/default parity required for per-run NER sensitivity. |
-| `Policy.locale` | BCP47 list | `--locale` | `[locale].active` | Rulepack defaults, then system default chain | runtime knob | CLI/TOML/default parity required for per-run locale gating. |
-| `Policy.rulepacks.bundled` | string list | `--rulepack-bundled` | `[policy.rulepacks].bundled` | `["core"]` when the table or its `bundled` key is omitted | runtime knob | Explicit `bundled = []` or CLI `none` disables bundled packs. |
-| `Policy.rulepacks.paths` | path list | `--rulepack-path` | `[policy.rulepacks].paths` | Empty | runtime knob | CLI/TOML/default parity required for per-run external rulepack selection. |
-| `Policy.detectors` | recognizer list | none | `[[policy.custom_recognizers]]` | Empty when custom recognizers are omitted | policy document | Recognizer definitions are TOML-only structural policy; drawer `e8b5c041` boundary; bulk authoring is better in TOML. |
-| `Policy.detectors[].kind` | enum | none | `[[policy.custom_recognizers]].kind` | Required | policy document | Recognizer type is part of TOML-only recognizer definition; drawer `e8b5c041` boundary, not a per-run CLI knob. |
-| `Policy.detectors[].name` | string | none | `[[policy.custom_recognizers]].name` | Required | policy document | Recognizer identity is audit-relevant structural policy; drawer `e8b5c041` boundary keeps it in TOML. |
-| `Policy.detectors[].pattern` | regex string | none | `[[policy.custom_recognizers]].pattern` | Required for regex recognizers | policy document | Regex authoring needs reviewable TOML structure; drawer `e8b5c041` boundary, not shell-flag input. |
-| `Policy.detectors[].class` | class string | none | `[[policy.custom_recognizers]].class` | Required | policy document | Class mapping is recognizer policy data; drawer `e8b5c041` boundary keeps auditable mappings in TOML. |
-| `Policy.detectors[].dictionary_name` | string | none | `[[policy.custom_recognizers]].dictionary` or `.terms_from_context` | Recognizer name | policy document | Dictionary binding is adopter-defined recognizer policy; drawers `e8b5c041` and `eac549ae`, TOML-only. |
-| `Policy.detectors[].case_sensitive` | bool | none | `[[policy.custom_recognizers]].case_sensitive` | `false` | policy document | Per-recognizer dictionary behavior belongs with the recognizer definition; drawer `e8b5c041`, not a runtime knob. |
-| `Policy.detectors[].token_family` | string | none | `[[policy.custom_recognizers]].token_family` | `"counter"` | policy document | Token-family choice is part of restorable recognizer policy; drawer `e8b5c041`, TOML-only for auditability. |
-| `Policy.dictionaries` | dictionary list | none | `[[policy.custom_recognizers]].terms`, `.terms_file`, `.terms_from_context` | Empty unless dictionary recognizers define terms | policy document | Term-list authoring is adopter-defined policy data; drawer `eac549ae`; bulk authoring belongs in TOML or files. |
-| `Policy.dictionaries[].terms` | string list | none | `[[policy.custom_recognizers]].terms` | Required for inline dictionary recognizers without `terms_file` or `terms_from_context` | policy document | Inline terms are adopter-defined dictionary data; drawer `eac549ae`; TOML is safer than CLI list entry. |
-| `Policy.dictionaries[].terms_file` | path | none | `[[policy.custom_recognizers]].terms_file` | Absent | policy document | Dictionary file references are policy data; drawer `eac549ae`; TOML keeps reviewable data-source provenance. |
-| `Policy.dictionaries[].terms_from_context` | string | none | `[[policy.custom_recognizers]].terms_from_context` | Absent | policy document | Context dictionary binding is adopter-defined policy; drawer `eac549ae`, not a global runtime flag. |
-| `Policy.rules` | rule list | none | `[[rule]]` | At least one rule required | policy document | Class and column action mapping is TOML-only structural policy; bulk authoring is better in TOML. |
-| `Policy.rules[].kind` | enum | none | `[[rule]].kind` | Required | policy document | Rule kind selects structural policy shape (`class` or `column`); TOML-only to preserve auditability. |
-| `Policy.rules[].action` | enum | none | `[[rule]].action` | Required | policy document | Rule action is policy contract data, not a per-run override; TOML keeps restore behavior auditable. |
-| `Policy.rules[].class` | class string | none | `[[rule]].class` | Required for `kind = "class"` | policy document | Class rule mapping (`[[rule]] class = "...", action = "..."`) is TOML-only structural data. |
-| `Policy.rules[].column` | string | none | `[[rule]].column` | Required for `kind = "column"`; rejected by CLI mode | policy document | Column rules require file-shaped policy context and are rejected by CLI mode, so no CLI flag is exposed. |
-| `Policy.detectors` legacy surface | recognizer list | none | `[[detector]]` | Unsupported in v0.4; migrate to `[[policy.custom_recognizers]]` | explicitly deferred: retired compatibility surface | Retired compatibility surface remains documented only to explain migration; no CLI flag should revive it. |
-
-Runtime-knob verification is covered by the CLI integration suite:
-`s1_three_surfaces_flags_are_exposed_and_bundled_ids_unchanged` checks the
-complete flag set, while focused tests cover symmetric failure and observed
-behavior for session scope, session TTL, NER threshold/model/locale, active
-locale, bundled rulepacks, and rulepack paths. The audit found no runtime
-policy field missing a CLI flag.
+`s1_three_surfaces_flags_are_exposed_and_bundled_ids_unchanged` checks the flag
+set; focused tests cover scope, TTL, NER model/locale/threshold, active locale,
+bundled packs and paths.
 
 ## Policy file permissions
 
-`gaze setup` writes the policy owner-only (mode `0600`): only the account that
-ran setup can read it. The policy holds no secrets, but it records local model
-paths, and nothing else needs to read it in a single-user install.
-
-If you run setup as one account and gaze as another (for example setup as an
-admin, then `gaze proxy` or `gaze daemon` as a service user), grant that account
-read access. Either hand the file over:
+Setup writes mode `0600`. If another account runs Gaze, give it read access:
 
 ```console
+# Transfer ownership, or share through a group:
 chown <service-user> /etc/gaze/gaze.toml
-```
-
-or share it through a group:
-
-```console
 chgrp <service-group> /etc/gaze/gaze.toml
 chmod 0640 /etc/gaze/gaze.toml
 ```
 
-Re-running `gaze setup --force` replaces the file with a fresh owner-only
-copy, so apply the grant again afterwards.
+Choose the ownership or group approach, then keep the file unwritable by the
+service account. Reapply access after `gaze setup --force` replaces the file.
 
 Keep the policy unwritable by the service account. A policy it can rewrite lets
 that account turn detection off.
@@ -1313,21 +1095,13 @@ The loader checks the `major.minor` prefix against
 {"error":"PolicySchemaUnsupported","exit":2,"found":"0.2.0","supported":"0.1."}
 ```
 
-The envelope is intentionally distinct from `PolicyConfig` so adopters
-upgrading the gaze binary across a contract break see the version mismatch
-directly, rather than chasing a generic policy-load error that shadows the
-real cause. It mirrors the rulepack-side version gate in
-[`crates/gaze/src/rulepack.rs`](../../crates/gaze/src/rulepack.rs).
+This differs from generic `PolicyConfig` and mirrors the
+[rulepack schema gate](../../crates/gaze/src/rulepack.rs).
 
 ### Soft default for pre-versioned policies
 
-Policies written before the field was introduced (any 0.6.x / 0.7.x policy
-shipped before the `schema_version` field landed) omit `schema_version`. The
-loader soft-defaults the missing field to
-[`DEFAULT_POLICY_SCHEMA_VERSION`](../../crates/gaze/src/policy.rs) (currently
-`"0.1.0"`) so existing deployments continue to load on the binary upgrade
-that introduces the field. New policies should declare `schema_version =
-"0.1.0"` explicitly so a future `0.2.0` migration can detect them.
+A missing field defaults to `0.1.0` for compatibility. Declare it explicitly
+in new policies.
 
 ### Migration log
 
@@ -1337,45 +1111,20 @@ across the named gaze release boundary.
 
 #### `[ner]` block changes (0.6.x → 0.7.x)
 
-The 0.7.0 release tightened the `[ner]` block: `threshold` is now parsed as a
-required-typed field (0.6.x accepted any numeric coercion) and `model_dir`
-relative paths resolve against the policy file rather than the process CWD.
-A policy authored against 0.6.x that uses an unusual `threshold` literal or a
-relative `model_dir` may load against 0.7.x in unexpected ways.
-
-The recommended migration is:
-
-- Quote the threshold as a TOML float (`threshold = 0.3`, not `0.3 `).
-- Express `[ner].model_dir` as an absolute path, or move the policy file to
-  the directory the model is co-located with.
-- Stamp `schema_version = "0.1.0"` on the policy so a future contract break
-  surfaces the typed `PolicySchemaUnsupported` error instead of a generic
-  load failure.
-
-This entry exists because the Pulseflow Laravel demo lost ~30 minutes
-of debugging time to silent `[ner]` schema drift between 0.6.6 and 0.7.1.
+For policies from 0.6.x, use a TOML float (`threshold = 0.3`) and an absolute
+`model_dir`, or resolve the model path relative to the policy file. Stamp
+`schema_version = "0.1.0"`.
 
 ## Bundled rulepack version drift
 
-Bundled rulepacks in
-[`crates/gaze-recognizers/embedded`](../../crates/gaze-recognizers/embedded) are
-release artifacts. Their `rulepack_version` tracks the `gaze-recognizers` crate
-version unless a deliberate desync rule is documented before the release ships.
-
-A deliberate desync rule must name the affected bundled rulepack IDs, explain
-why the rulepack contract differs from the crate release, and state when the
-versions converge again. Undocumented drift is a release defect because it
-weakens the audit trail for which recognizer contract shipped with a given
-crate.
+Embedded `rulepack_version` tracks the recognizer crate version. A deliberate
+exception must name affected packs, explain the contract difference and state
+when versions converge. Undocumented drift is a release defect.
 
 ## Known limits - NER and prompt shape
 
-NER is not a region parser. A model that catches names in natural prose can
-miss the same bytes in agent prompt preambles, email headers, forwarded-message
-blocks, and auto-generated footers because those regions do not look like the
-training prose the model learned. v0.6 keeps NER as a useful free-text layer,
-but adds a deterministic `anchored_match` recognizer kind for cue-anchored
-structural contexts that commonly appear in agent workflows.
+NER can miss names in prompt preambles, email headers, forwarded messages
+and footers. Deterministic `anchored_match` rules cover cue-anchored contexts.
 
 `anchored_match` has a closed primitive surface:
 
@@ -1391,16 +1140,14 @@ define open cue buckets:
 - `agent_recipient_cues` for agent reply/draft preambles.
 - `footer_cues` for generated sender/footer lines.
 
-The default v0.6 posture is conservative: structural recognizers catch the
-documented GH#24 leak shapes while the open cue surface is held by the
-`p6_anchored_match_false_positive_budget_stays_within_limit` regression test.
-The v0.6 synthesis matrix explicitly leaves these classes out of scope:
+`p6_anchored_match_false_positive_budget_stays_within_limit` checks cue precision.
+Limits:
 
 - Subject-line and `Re:` text such as `Re: Order 12345 - Status update from Alice Example`.
 - Unanchored scheduling prose such as `Schedule a call with Alice next Tuesday`.
 - Markdown code-block exclusion. `anchored_match` and email-header recognizers
-  still fire inside fenced code blocks in v0.6.
-- URL exclusion. Cue-like text inside URLs is not region-filtered in v0.6.
+  still fire inside fenced code blocks.
+- URL exclusion. Cue-like text inside URLs is not region-filtered.
 - Additional `name_shape` variants beyond `person_name`.
 - Per-region NER thresholding. `[ner].threshold` is global to the NER
   recognizer invocation, not separately tunable for email headers, prompt
@@ -1408,8 +1155,7 @@ The v0.6 synthesis matrix explicitly leaves these classes out of scope:
 
 If an integration wraps raw email content in markdown code fences only to
 preserve formatting, unwrap the content before passing it to the Gaze pipeline
-and re-wrap the clean output afterward. RegionHint-style envelope markers for
-`CodeBlock` and `Url` are deferred to v0.7.
+and re-wrap the clean output afterward. There is no region exclusion contract here.
 
 ### v0.5.1 to v0.6 migration note
 
@@ -1501,30 +1247,11 @@ pipeline by hand register the words with
 
 ## Known spec drift
 
-Documented here so users get the truth while the gaps land on the
-engineering board:
-
-1. **Resolved in v0.3.1: `policy.session` is honoured by `gaze clean`.**
-   The CLI constructs sessions from `[session]`; `--session-ttl` is now only
-   an explicit persistent-TTL override.
-2. **Resolved in v0.3.1: `[ner]` load failures exit `2` `PolicyConfig`.**
-   `PolicyError::NerLoad` keeps missing or corrupt model bundles in the
-   policy/configuration failure class.
-3. **Resolved in v0.3.1: `kind = "column"` rules are rejected in CLI mode.**
-   `gaze clean` now fails policy load with exit `2` `PolicyConfig` and a
-   detail string, avoiding silent no-op column rules for text stdin.
-4. **v0.4.1 still gates `token.format` and context scoring hints.**
-   The rulepack schema parses `token.format`, `context.hotwords`,
-   `context.boost`, and `context.window` for forward-compatible authoring, but
-   the loader rejects any non-default value with
-   `RulepackError::UnsupportedFieldInB1`.
-5. **v0.4.1 dictionary audit granularity is per term.** Dictionary redaction
-   sources use `dictionary:{name}[#term_index]`, where `term_index` is the
-   term's position in the loaded dictionary.
-6. **v0.4.0-rc.1 NER context-sensitivity gap.** Default Davlan-HRL may
-   pass names embedded in prompt boilerplate or RFC822 email headers.
-   Workarounds (wrap with a dictionary recognizer, tighten locale gating
-   via `[ner] locale`) and roadmap in GitHub issue #24.
+The rulepack parser accepts `token.format`, `context.hotwords`, `context.boost`
+and `context.window`, but rejects non-default values with
+`RulepackError::UnsupportedFieldInB1`. Dictionary audit sources identify terms
+as `dictionary:{name}[#term_index]`. Davlan may miss names in boilerplate and
+email headers; add a dictionary or cue rule (issue #24).
 
 ## See also
 

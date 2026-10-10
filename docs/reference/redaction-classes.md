@@ -1,56 +1,27 @@
 # Redaction classes and recognizers
 
-This is the canonical inventory of what Gaze can detect through the embedded
-`core` and `core-extended` names and the separate `secrets` bundle. It covers the emitted classes, every bundled
-recognizer, validator and normalizer support, collision precedence, conflict
-resolution, deterministic gaps, and no-policy activation.
-
-The inventory is source-backed. A normal workspace test loads both embedded
-rulepacks through `Rulepack::load`, instantiates the real validator and
-normalizer enums, structurally reads the Rust enum definitions, and compares the
-marked tables below as sets. Run it directly with:
+Inventory of embedded `core` (`core-extended` alias) and `secrets`: classes,
+recognizers, validators, normalizers, precedence, activation and gaps.
+Marked tables are compared against loaded rulepacks and Rust enums by:
 
 ```bash
 rustup run 1.96.0 cargo test -p xtask --test redaction_classes_doc
 ```
 
-`core-extended` does not contain a second rulepack. It is a deprecated
-compatibility name for the same embedded `core.toml` bytes
-(`crates/gaze-recognizers/src/lib.rs:45-55`,
-`crates/gaze-cli/src/pipeline/run.rs:718-733`). Its difference is activation
-policy, described under [Shipped default activation](#shipped-default-activation).
-The shared payload currently contains exactly 54 recognizer specs
-(`crates/gaze-recognizers/src/lib.rs`, `embedded()`).
+`core` contains exactly 54 recognizer specs. `core-extended` loads the same bytes but widens
+[activation](#shipped-default-activation). `secrets` has `security_token.anchored`
+and `password.field`; setup includes it, while library callers and hand-written
+policies must select it: `bundled = ["core", "secrets"]` or
+`--rulepack-bundled core,secrets`.
 
-The separate `secrets` bundle (`crates/gaze-recognizers/embedded/secrets.toml`)
-carries the two credential recognizers, `security_token.anchored` and
-`password.field`. `gaze setup` includes it in newly generated policies so
-credentials are protected by default on the CLI setup path. Direct library
-callers and hand-authored policies still choose bundles explicitly; load it by
-name with `[policy.rulepacks] bundled = ["core", "secrets"]` or
-`--rulepack-bundled core,secrets`. The former `username.field` recognizer was
-removed in core 0.6.0; no rulepack emits `custom:username`. The opt-in Nym
-safety net emits `custom:username`, `custom:license_plate`,
-`custom:building_number`, `custom:tax_id`, `custom:postal_code` and
-`custom:date` suspects when enabled
-([mapping](../explanation/safety-net/safety-nets.md#which-labels-can-fire));
-those are safety-net classes, not recognizer rows, so they are not in the tables
-below.
+No rulepack emits `custom:username`. Optional Nym can report username, licence
+plate, building number, tax ID, postal code and date classes;
+see [mapping](../explanation/safety-net/safety-nets.md#which-labels-can-fire).
 
 ## PII classes and resolver priority
 
-`PiiClass` is the closed class vocabulary at
-`crates/gaze-types/src/lib.rs:62-96`. During generic overlap resolution, a
-higher class-priority integer wins a partial overlap
-(`compare_base_ladder` and `class_priority` in `crates/gaze/src/resolver.rs`).
-Two rungs decide containment before the generic tiers: **containment
-precedence** hands a span that wholly contains a differently-classed span the
-whole span as one token when its evidence tier is at least the contained
-span's (`containment_precedence` in `crates/gaze/src/resolver.rs`,
-`ConflictTier::ContainmentPrecedence`), and where that guard refuses, a
-custom-class structured span that strictly encloses a builtin-class span still
-keeps the slot (`structured_containment`, `ConflictTier::StructuredContainment`),
-so an NER token inside a URL, IBAN or credential cannot split the identifier.
+`PiiClass` lives in `gaze-types`. Higher integers win generic partial overlaps.
+Containment checks run first; see [resolution order](#full-conflict-resolution-order).
 
 <!-- redaction-classes-gate:pii-classes:start -->
 | Rust variant | Policy spelling | Class priority | Source |
@@ -80,13 +51,8 @@ normalizer changes the canonical value only and never the original restore span.
 See [Validator Veto](../explanation/detection/validator-veto.md) and
 [Recognizer normalizers preserve the original span](../explanation/detection/recognizer-normalizer-spans.md).
 
-Definitions live in `crates/gaze-recognizers/embedded/core.toml` (loaded under
-both the `core` and `core-extended` names) and `secrets.toml`; search for the
-`id = "..."` line. The table carried a per-recognizer `<file>:<lo>-<hi>`
-citation until v0.15, but no gate verified it and 35 of 37 ranges had drifted,
-some by more than 150 lines, so it was removed rather than re-verified. Every
-remaining column is checked against the loaded rulepack by
-`crates/xtask/tests/redaction_classes_doc.rs`.
+Definitions: `crates/gaze-recognizers/embedded/core.toml` and `secrets.toml`.
+`crates/xtask/tests/redaction_classes_doc.rs` checks every table column.
 
 <!-- redaction-classes-gate:recognizers:start -->
 | Embedded names | Recognizer id | Matcher | What it matches | Class | Locales | Validator | Normalizer | Safety tier | safe_default | Base | Priority |
@@ -254,24 +220,9 @@ typed recognizer errors to `RulepackError::UnsupportedValidator` and
 
 ## Collision families and precedence
 
-Collision-family policy runs after validator veto and before the generic class
-priority chain. **A numerically lower precedence wins.** The implementation is:
-
-```text
-match a_precedence.cmp(&b_precedence) {
-    Ordering::Less => Some(true),
-    Ordering::Greater => Some(false),
-    Ordering::Equal => None,
-}
-```
-
-Source: `crates/gaze/src/registry.rs:88-119`. Therefore, when
-`iban.structural` overlaps `card.structural`, IBAN precedence 10 defeats PAN
-precedence 20 even though 10 is numerically smaller. The result is decided by
-`ConflictTier::CollisionPolicy`, before either class reaches the generic
-`Custom(_)` priority tie. The `government-id` family orders its numeric
-variants by cue specificity the same way: an SSN cue (10) beats a tax cue (20),
-which beats the vaguer national-ID cues (30).
+After validator veto, lower family precedence wins before generic class
+priority (`crates/gaze/src/registry.rs`). IBAN 10 beats card 20; government-ID
+cues order SSN 10, tax 20, national ID 30.
 
 <!-- redaction-classes-gate:collisions:start -->
 | Family | Recognizer id | Variant | Precedence | Mandatory anchor | Source |
@@ -299,134 +250,57 @@ For mandatory-anchor lookup and family-level fallback, see
 
 ## Full conflict-resolution order
 
-The end-to-end order is:
+The resolver (`crates/gaze/src/resolver.rs`) follows this order:
 
-1. Locale and minimum-score filtering collect candidates
-   (`crates/gaze/src/registry.rs:342-380`).
-2. Validator veto removes validator-backed failures before any overlap is
-   resolved (`crates/gaze/src/registry.rs:382-390`). The detailed typed audit
-   contract is [Validator Veto](../explanation/detection/validator-veto.md).
-3. For a strict same-class containment overlap, the enclosing span is
-   preferred first. Other overlaps consult collision-family precedence,
-   mandatory-anchor context, containment precedence, structured containment,
-   then the generic tiers (`arbitrate` in `crates/gaze/src/resolver.rs`).
-4. Containment precedence (one entity, one token): when a span wholly
-   contains a span of a different class, the container wins the whole span
-   and the contained candidate is recorded as a merged source, unless the
-   container's evidence tier is below the contained candidate's. The tiers
-   are read from what a candidate already carries: **validator passed**
-   (mod-97, Luhn, RFC email, E.164; a canonical form is present) >
-   **anchored or cue-structured match** (a `structural.*` source, or a
-   mandatory anchor found in context) > **plain regex or dictionary term** >
-   **learned NER** (the `ner` recognizer). Equal tiers go to the container:
-   a validated German phone shape inside a validated IBAN is folded into one
-   IBAN token, whatever its rule priority or score. Audit tier
-   `ConflictTier::ContainmentPrecedence` on the winner; the swallowed
-   candidates keep loser rows (`containment_precedence` in
-   `crates/gaze/src/resolver.rs`). Geometry and tiers decide, never arrival
-   order. Partial overlaps keep the rungs below; nested chains resolve
-   outermost-first; same-class containment uses step 7. Because the rung
-   sits after collision-family policy and the anchor rung, a declared
-   rivalry (card inside IBAN) keeps its family verdict and a cue-anchored
-   identifier inside an adopter regex keeps its own token.
-5. Structured containment: when the guard above refuses a custom-class span
-   that strictly encloses a builtin-class (`Email`/`Name`/`Organization`/
-   `Location`) span (a plain URL regex over an RFC-validated email), the
-   enclosing span still wins and the enclosed candidate is recorded as a
-   merged source (`structured_containment` in `crates/gaze/src/resolver.rs`,
-   audit tier `ConflictTier::StructuredContainment`). Builtin containers over
-   custom spans and builtin-inside-builtin pairs the guard refuses fall
-   through to the generic tiers.
-6. The generic tiers are **class priority > rule priority > score > span length
-   > lexicographically smaller recognizer id**
-   (`compare_base_ladder` in `crates/gaze/src/resolver.rs`).
-7. Strict same-class containment prefers the enclosing span before evidence,
-   validator, and generic tiers, recording `SameClassContainment`. The resolver
-   also computes the prior arbitration for that candidate pool. If the new
-   selection would expose any byte the prior selection covered, it retains
-   the prior selection and its audit events. In that fallback, a
-   validator-produced canonical form can still decide a same-class pair as
-   `ConflictTier::Validator`, distinct from pre-resolver `ValidatorVeto`.
-8. Replacement removes every overlap with the winner, so multi-overlap inputs
-   converge to a disjoint fixed point rather than leaving a candidate that
-   overlapped an earlier loser (`insert_candidate` and `remove_overlaps` in
-   `crates/gaze/src/resolver.rs`).
-9. After pairwise resolution, a surviving candidate that requires but lacks a
-   mandatory anchor is converted to its family-level fallback
-   (`resolve_candidates_inner` and `apply_missing_anchor_fallback` in
-   `crates/gaze/src/resolver.rs`).
+1. Collect locale-eligible, minimum-score candidates; veto validator failures.
+2. Prefer strict same-class containers. Keep prior arbitration if the new
+   selection exposes any previously covered byte; retain its audit events too.
+   Exact and partial overlaps use normal arbitration.
+3. Resolve other overlaps by collision-family precedence, mandatory anchors,
+   containment precedence, structured containment, then generic tiers.
+4. Containment precedence gives a different-class container the whole span when
+   its evidence is at least the inner span's: validator-passed > anchored or
+   cue-structured > plain regex/dictionary > learned NER. Ties favor the
+   container. Resolve nested chains outermost-first, independent of arrival.
+   Inner candidates become merged sources and loser audit rows under
+   `ContainmentPrecedence`.
+5. If that guard refuses, a custom-class container over a builtin
+   (`Email`, `Name`, `Organization`, `Location`) still wins under
+   `StructuredContainment`. Other refused containers use generic tiers.
+6. Generic tiers: class priority > rule priority > score > span length >
+   lexicographically smaller recognizer ID. In the prior same-class fallback,
+   canonical form can decide as `Validator`, distinct from `ValidatorVeto`.
+7. Remove every overlap with each winner until selections are disjoint.
+8. Convert surviving candidates without required anchors to family fallbacks.
+
+Same-class preference records `SameClassContainment`. See
+[validator veto](../explanation/detection/validator-veto.md),
+[collision policy](../explanation/detection/collision-family.md) and
+[anchor resolution](../explanation/detection/anchor-resolution.md).
 
 ## Deterministic floor and NER-only mass
 
-The embedded table above is the derivation: no deterministic recognizer emits
-`Location` or `Organization`, and there is no standalone deterministic
-recognizer for arbitrary first names, surnames, streets, cities, states, or
-company names. Deterministic `Name` coverage is deliberately limited to email
-display names and locale-cue-anchored person-name shapes
-(`crates/gaze-recognizers/embedded/core.toml:51-155`).
-
-The no-OPF measurement supplied for the policy audit found all six corresponding
-benchmark labels **0-covered and 0-overlapped** at the deterministic rule floor:
-
-- `STREET`
-- `CITY`
-- `SURNAME`
-- `FIRSTNAME`
-- `STATE`
-- `COMPANYNAME`
-
-The archived v0.8 class-taxonomy gap analysis independently classifies company
-and street extraction as safety-net/NER gaps and explains why first-name and
-surname labels are not checksum-validatable
-([v0.8 class-taxonomy gap, lines 32-58](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md#L32-L58),
-archived at the `v0.13.0` tag).
-
-A broad deterministic rule for these free-text classes would be a
-false-positive catastrophe. Their benchmark mass is an NER problem, not an
-invitation to turn capitalization, dictionary membership, or common words into
-unanchored redaction rules. In `PiiClass` terms, the entirely NER-only built-in
-classes are `Location` and `Organization`; `Name` has narrow deterministic
-email/cue coverage but its unanchored `FIRSTNAME` and `SURNAME` mass remains
-NER-only.
+No standalone deterministic recognizer detects arbitrary streets, cities,
+states, companies, first names or surnames. Rule-based `Name` coverage is limited
+to email display names and locale cues; `Location` and `Organization` are NER-only.
+The archived no-OPF audit found `STREET`, `CITY`, `SURNAME`, `FIRSTNAME`, `STATE`
+and `COMPANYNAME` all 0-covered and 0-overlapped at the rule floor
+([gap analysis](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md#L32-L58)).
+Broad capitalization or common-word rules would add false positives.
 
 ## Shipped default activation
 
-The following assumes shipped default features, including `phone-parser`, and
-no policy or explicit locale. It describes which recognizers are registered and
-eligible to match; whether a particular input produces a candidate still
-depends on its shape, cues, and validator outcome.
+With default features (`phone-parser`) and no policy, Gaze loads `core` under
+`global`, without safety nets. Setup instead enables `secrets`, Davlan NER and
+Nym; OPF remains opt-in (`--safety-net openai-filter`). Eligibility still depends
+on shape, cues and validation.
 
-With no policy, no safety net runs and the library still loads only `core`.
-The `gaze setup` policy activates `secrets`, Nym-small
-alongside the pinned Davlan mBERT NER model; the OpenAI Privacy Filter remains
-opt-in (`--safety-net openai-filter`).
-
-The plain `core` default locale chain is `global`
-(`crates/gaze-recognizers/embedded/core.toml`), so the document-basis
-recognizers that activate are exactly the global `safe_default` ones. Every
-`locale_basis = "format"` recognizer activates regardless of the chain
-(`crates/gaze-assembly/src/detector_wiring.rs:271-301`); see
-[Locale Chain](../explanation/policy/locale-chain.md) for the mixed-basis
-model. For the CLI, `normalize_rulepack_bundles`
-rewrites the deprecated `core-extended` selection to `core` while returning an
-`auto_activate_locale_gated` bit
-(`crates/gaze-cli/src/pipeline/run.rs:712-728`). `CleanOverrides::apply_to`
-carries that bit into `Policy::rulepacks`
-(`crates/gaze-cli/src/clean_overrides.rs:48-62`). Pipeline construction then
-adds the auto-activation locales to the compatibility locale chain. That set is
-derived from the loaded rulepacks by
-`gaze_assembly::locale_gated_activation_locales`
-(`crates/gaze-assembly/src/locale.rs`): the union of `locales` over enabled,
-document-basis `safety_tier = "locale_gated"` recognizers, minus `global`,
-ordered compatibility-first (`en-US`, `de-DE`, `de-AT`, `de-CH`) then by
-canonical tag. For the bundled `core` recognizers that is `en-US`,
-`de-DE`, `de-AT`, `de-CH`, `en-AU`; an adopter path rulepack with a locale-gated
-recognizer for another locale extends the chain automatically. `gaze clean`
-(`crates/gaze-cli/src/pipeline/run.rs`), `gaze daemon`
-(`crates/gaze-cli/src/commands/daemon.rs`), and the library's
-`CorePipelineConfig` (`crates/gaze-assembly/src/defaults.rs`) all call that one
-function, and recognizer wiring admits locale-gated rows under that policy and
-locale intersection (`crates/gaze-assembly/src/detector_wiring.rs`).
+Format-basis recognizers run regardless of locale. Document-basis rules use
+locale intersection. The deprecated `core-extended` alias auto-activates enabled,
+document-basis `locale_gated` rows. `gaze_assembly::locale_gated_activation_locales`
+computes the union excluding `global`, ordered `en-US`, `de-DE`, `de-AT`, `de-CH`,
+then canonical tags; core also contributes `en-AU`. Custom packs can extend it.
+Clean, daemon and `CorePipelineConfig` share this function.
 
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
@@ -435,18 +309,9 @@ locale intersection (`crates/gaze-assembly/src/detector_wiring.rs`).
 | `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH, en-AU` | yes | `aadhaar.in, age.cue, age.phrase, birth_date.answer, birth_date.cue, bsn.nl, card.cued, card.cued_short, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.de, phone.national.us, phone.national.us.cued, phone.structural, postal.at_ch, postal.au, postal.ca, postal.cued_four_digit, postal.cued_short, postal.de, postal.gb, postal.ie, postal.us, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
-The v0.6+ compatibility behavior therefore does activate
-`phone.national.de`, `postal.us`, `postal.de`, and `postal.at_ch` with
-`--rulepack-bundled core-extended` and no policy. The complete second row is
-authoritative: the widened US/German compatibility locale chain also makes the
-listed document-basis cue-anchored and locale-specific recognizers eligible.
-Pass `--locale=global`, or use an explicit policy with narrower locale gating,
-to avoid that document-basis compatibility expansion. Format-basis identifiers
-(`ssn.us`, `ssn.de_cue`, `steuer_id.de`, `phone.national.us`, the alphanumeric
-postal rules `postal.ca`, `postal.gb`, and `postal.ie`, and the other format
-rows in the coverage matrix) are active in both rows; the locale chain is not a
-suppression mechanism for them, so an adopter that must not tokenize one of them
-has to disable that recognizer.
+Use `--locale=global` or a narrower policy to avoid compatibility expansion
+of document-basis rules. Format-basis rules cannot be suppressed by locale;
+disable the recognizer instead.
 
 The two postal groups differ on purpose. `postal.de` and `postal.us` match bare
 five-digit strings, a shape carrying no structural signal, so they stay
@@ -497,84 +362,43 @@ format-basis and run at every locale including `--locale=global`. An adopter
 who must not tokenize Canadian, UK, or Irish postal codes cannot suppress them
 with a locale chain and has to disable the recognizer.
 
-`iban.structural` carries a leading word boundary but no trailing one. A compact IBAN
-glued to the next label (an Austrian compact IBAN glued to `BIC`, the dense footer
-`IBAN:<value>BIC:<value>`) is therefore a candidate, and the trailing boundary
-is decided in code by `gaze_types::word_run_extends_identifier`, which reads
-the word run after a validated registry-length candidate with the same word
-predicate as `is_inside_word`: an empty run or a run of letters only (Unicode
-`is_alphabetic`) is a glued label or word and the IBAN tokenizes whole; a run
-holding a digit or an underscore could be more identifier and the candidate is
-dropped, so `ref AT611904300234573201XQ7 end` yields no token over its
-checksum-valid prefix. The disclosed gap is the other side of that rule: an
-IBAN glued to a digit or an underscore (`…32011234`, `…3201_x`) stays raw,
-because it cannot be told from a longer opaque identifier. The trade was
-measured, not assumed: a random registry-shaped prefix passes mod-97 1.02 % of
-the time (1 in 97, 200k tokens), so accepting every validated prefix would
-tokenize 1 % of every registry-shaped upper-case token regardless of length,
-while the letters-only rule's false-accept is 1 % × (26/36)^k for a glued
-upper-case alphanumeric run of k characters (0.7 % at k = 1, 0.07 % at k = 8).
-The Dataiku EN/DE holdout, the A4 negative corpus and `docs/**/*.md` are
-byte-identical under either rule (the A4 corpus contains no registry-shaped
-mod-97-valid token), so the evidence for the rule is the synthetic enumeration
-in `scripts/bench/iban_trailing_word_enumeration.py`.
-One related shape is only partly covered: a spaced German example IBAN glued
-to `BIC` is a candidate, but
-`phone.national.de` (priority 85) still claims the `0532 0130` sub-run, because
-its 22-character IBAN-consuming branch keeps its trailing `\b` and stops
-consuming at the glued label; with `custom:phone` tokenized every byte is
-covered as `[IBAN fragment][phone fragment][IBAN fragment]`; with it preserved
-the IBAN stays raw
-as before. Compact German IBANs glued to a label tokenize whole.
+`iban.structural` has a leading word boundary and no trailing one. After the
+registry-length candidate, `word_run_extends_identifier` accepts an empty or
+Unicode letters-only word run (for example a glued `BIC` label); any digit or
+underscore drops the candidate as a possible longer identifier. IBANs glued to
+digits or underscores can therefore stay raw. A valid prefix occurs in about
+1/97 random registry-shaped values; accepting every prefix would add false
+positives. Synthetic evidence:
+`scripts/bench/iban_trailing_word_enumeration.py` (200k tokens; the holdout,
+A4 and docs were byte-identical under either boundary).
+
+A spaced German IBAN glued to `BIC` can split around `phone.national.de`'s
+`0532 0130` match: tokenize phone to cover every byte with residual fragments;
+preserve phone and the IBAN may stay raw. Compact German forms tokenize whole.
 
 ## Residual coverage
 
-Residual coverage is **on by default** for every pipeline built through
-`Pipeline::builder()` (`crates/gaze/src/pipeline.rs`, `PipelineBuilder::build`
-sets `residual_coverage: true`). There is no flag to turn it on; it is the
-shipped behavior, and `gaze clean`, `gaze daemon`, `gaze-assembly`, and the
-library API all get it.
+`PipelineBuilder::build` enables residual coverage by default for library,
+assembly, clean and daemon pipelines. No activation flag is needed.
 
 ### What it covers
 
-Conflict resolution picks one winning selection per overlap and discards the
-losers. When a losing original covered raw bytes that the winner does not, those
-bytes previously survived into the clean text **in the clear**. Residual coverage
-emits a second replacement over them.
+After resolution, residual coverage replaces protected candidates' bytes that
+no protective winner covers (`crates/gaze/src/pipeline/residual.rs`).
 
-The invariant is per character: **every byte claimed by a candidate of a class
-the policy protects leaves the process protected.** A class is protected when
-its resolved action is protective (`Action::is_protective`: anything but
-`preserve`). Concretely (`crates/gaze/src/pipeline/residual.rs`):
-
-- Admission is **per original**, never per overlap component. An original is
-  admitted when its own class and its standalone fallback class (the family
-  class, for a cue-less collision-family member) both preview protective. A
-  preserved, redacted or unknown neighbour in the same overlap group cannot
-  switch another claimant's coverage off.
-- A **`preserve` winner does not shield the bytes a protected class claimed.**
-  Only protective selections block the sweep; inside a preserved selection,
-  bytes an admitted original claimed become a cell of the highest-ranked such
-  claimant, and the preserved winner keeps every other byte raw. The cell's
-  audit row says `decided_by: protection_override`. The candidates a
-  preserved selection *represents* (its own original, a same-span merge, the
-  rivals of a precedence tie) never override it: an explicit
-  `custom:family:<name> = preserve` rule still leaves the ambiguous span raw.
-- **One claimant, one fragment per uncovered run.** Adjacent cells of the same
-  representative and class merge even where an inner candidate starts or
-  ends, so an email inside a preserved URL leaves as one email token.
-- A cell emits under **its claimant's own action**: `tokenize` and
-  `format_preserve` mint a reversible class token (a fragment has no format
-  to preserve), `redact` writes the one-way `[REDACTED:<class>]` marker,
-  `generalize` the class placeholder. A neighbour's action never changes what
-  a fragment becomes.
-- Bytes that **no** original evidenced are still not protected. For
-  `password: "left right"` with a `password.field` original matching `0..21` and
-  a Name selection winning `0..15`, the residual covers `15..21` (`" right"`).
-  The closing quote at byte 21 sits outside the union and stays in the clear.
-  See
-  [`crates/gaze-recognizers/tests/explicit_field_collision_control.rs`](../../crates/gaze-recognizers/tests/explicit_field_collision_control.rs),
-  which pins exactly that geometry on the real `core` and separate `secrets` rulepacks.
+- Admit each original independently only when its class and standalone fallback
+  (including family fallback) both preview a protective action.
+- A preserved winner leaves other bytes raw, but protected claims inside it emit
+  with `decided_by: protection_override`. Its represented originals, same-span
+  merges and tied family rivals cannot override it; explicit family `preserve`
+  still leaves ambiguity raw.
+- Merge adjacent cells of one representative/class into one fragment per run.
+- Apply the claimant's own action: tokenize/format-preserve make a reversible
+  class token; redact writes `[REDACTED:<class>]`; generalize writes a class label.
+- Bytes outside the original evidence union remain raw. For a password original
+  at `0..21` and Name winner at `0..15`, residual protects `15..21`, not a closing
+  quote at byte 21. The real-pack geometry is pinned by
+  [explicit_field_collision_control.rs](../../crates/gaze-recognizers/tests/explicit_field_collision_control.rs).
 
 Rules with no static preview (an adopter `Rule` impl that answers at runtime
 only) stay on the legacy path: such a selection blocks the sweep and its
@@ -582,27 +406,15 @@ runtime verdict is not second-guessed; such an original is not admitted.
 
 ### What changes in the token stream
 
-**One recognized value can produce more than one replacement**, although
-containment precedence now folds a wholly contained rival into the container
-(a spaced Polish example IBAN followed by `BIC` in the reference letter is one
-IBAN token; fragments remain for partial overlaps and for claims inside a
-preserved winner). Adopters counting manifest entries are counting
-*replacements*, not distinct recognized values. See
-[`EmittedTokenOrigin`](metrics.md#52-per-call-output) for how to tell the two
-apart, and `BundleReport::pii_token_count` in `gaze-document` for the same
-distinction on the bundle side.
+One value can produce several replacements in partial overlaps or inside a
+preserved winner. Manifest and `BundleReport::pii_token_count` counts therefore
+measure replacements, not entities. Check
+[`EmittedTokenOrigin`](metrics.md#52-per-call-output) before counting entities.
+Tokenize/format-preserve fragments restore exactly; redact/generalize are one-way.
 
-Restore: a `tokenize` or `format_preserve` fragment is an ordinary reversible
-token, and `Session::restore_strict_text` round-trips a document containing
-one; a `redact` or `generalize` fragment is one-way exactly where the adopter
-chose a one-way action for that class.
-
-Activation does **not** move the bundled `core` tokenization snapshot: the
-`bundle-tokenization-drift` corpus contains only contained overlaps, never a
-partial one, so it produces no residual and
-`crates/xtask/snapshots/core-no-policy.json` is unchanged. A future corpus edit
-that introduces a *partial* overlap will move that snapshot and will need the
-gate's `--verify-ack` acknowledgement.
+The current `bundle-tokenization-drift` corpus has only contained overlaps, so
+residual coverage does not move its snapshot. Adding partial overlaps requires
+`--verify-ack`.
 
 ### Provenance
 
