@@ -1,40 +1,29 @@
 # Contributing
 
-Thanks for considering a contribution to Gaze. Three project-wide rules apply
-before you open a PR: the licence terms, the DCO sign-off, and the Code of
-Conduct. The rest of this document is the technical workflow: setup, the
-local checks, and the fixture rules.
+Follow the licence, DCO and Code of Conduct below, then run the PR checks.
 
 ## Before you open a PR
 
 ### Licence
 
-By submitting a contribution to this project you agree to licence it under
-**Apache-2.0 OR MIT** at the user's option — the same dual permissive licence
-the project ships under. Both licence files live at the repo root:
-[`LICENSE-APACHE`](LICENSE-APACHE) and [`LICENSE-MIT`](LICENSE-MIT).
-
-We do **not** require a Contributor Licence Agreement (CLA). Contributors
-retain their copyright; the project cannot be silently re-licensed by any
-later maintainer without contributor agreement. See [`docs/explanation/governance.md`](docs/explanation/governance.md)
-for the full governance model and the structural commitments that keep the
-project a commons.
+Contributions use [Apache-2.0](LICENSE-APACHE) OR [MIT](LICENSE-MIT), at the
+user's option. No CLA is required. Contributors keep copyright; later
+maintainers need contributor agreement to relicense.
+[Governance](docs/explanation/governance.md).
 
 ### Developer Certificate of Origin (DCO)
 
-Every commit MUST carry a `Signed-off-by:` trailer matching the commit author,
-certifying the [Developer Certificate of Origin](https://developercertificate.org/).
-Add it automatically:
+Every commit needs a `Signed-off-by:` trailer matching its author and certifying
+the [DCO](https://developercertificate.org/), plus a cryptographic signature:
 
 ```bash
-git commit -s
+git commit -S -s
 ```
 
-The `.github/workflows/dco.yml` check enforces this on every pull request: each
-non-merge commit must contain a `Signed-off-by: Name <email>` line matching its
-author identity. Fix existing commits with `git rebase --signoff <base>` (or
-`git commit --amend -s` for the latest). Enforcement is forward-looking on PRs;
-commits predating this gate are not retroactively signed.
+`.github/workflows/dco.yml` checks author-matching trailers on every non-merge
+PR commit. It does not apply retroactively to pre-gate history. Agents follow
+[commit discipline](AGENTS.md#universal-rules-all-agents), including no amend
+or force-push.
 
 ### Code of Conduct
 
@@ -56,19 +45,19 @@ pushing to a PR.
 
 ## Workspace shape
 
-The workspace has **15** published crates plus the internal `xtask` crate and the detached `lint/dylint/` workspace. [docs/reference/crates.md](docs/reference/crates.md) has the full dependency map.
+The workspace has 15 published crates plus the internal `xtask` crate and the detached `lint/dylint/` workspace. [docs/reference/crates.md](docs/reference/crates.md) has the full dependency map.
 
 | Crate | Role |
 |---|---|
-| `crates/gaze` | Core: pipeline, session, policy loader, recognizer registry, locale chain, rulepack schema, token grammar. Re-exports `gaze_types::RedactionLogger` for source-compat. **No `rusqlite` dep in any feature graph.** |
-| `crates/gaze-types` | Shared value contracts (`Recognizer`, `Detection`, `PiiClass`, `Action`, `RedactionEntry`, `LocaleTag` / `LocaleChain` / `LocaleError`, `RawDocument`, `CleanDocument`, `DictionaryBundle`, token-related types). Serde-only — no ML or sql deps. New in v0.5 Phase B (PR #74). |
+| `crates/gaze` | Core: pipeline, session, policy loader, recognizer registry, locale chain, rulepack schema, token grammar. Re-exports `gaze_types::RedactionLogger` for source-compat. No `rusqlite` dep in any feature graph. |
+| `crates/gaze-types` | Shared value contracts (`Recognizer`, `Detection`, `PiiClass`, `Action`, `RedactionEntry`, `LocaleTag` / `LocaleChain` / `LocaleError`, `RawDocument`, `CleanDocument`, `DictionaryBundle`, token-related types). Serde-only — no ML or sql deps. |
 | `crates/gaze-recognizers` | Regex/dictionary/NER detection backends + embedded `core` and `core-extended` rulepacks + locale bundles. |
-| `crates/gaze-audit` | Passive audit sink: `SqliteLogger`, `AuditFilter`, `AuditLogRow`, `build_audit_query_sql`, `AUDIT_RESTRICTED_COLUMNS`. `rusqlite` is isolated here. New in v0.5 Phase C (PR #75). |
+| `crates/gaze-audit` | Passive audit sink: `SqliteLogger`, `AuditFilter`, `AuditLogRow`, `build_audit_query_sql`, `AUDIT_RESTRICTED_COLUMNS`. `rusqlite` is isolated here. |
 | `crates/gaze-assembly` | Policy-to-pipeline assembly shared by CLI-style adopters. |
 | `crates/gaze-cli` | Standalone `gaze` binary; the only allowlisted `gaze-audit` consumer outside compatibility tests. |
-| `crates/gaze-mcp-core` | Transport-free MCP-shaped chokepoint runtime: `Tool` trait, sealed `ToolCtx`, `ToolRegistry`, `PiiEnvelope::dispatch`, `Frontend`/`DispatchHost`, `ManifestStore`, `AuthHook`, `SessionIdPolicy`. New in v0.7.0. |
-| `crates/gaze-mcp-rmcp` | rmcp transport sink: `RmcpFrontend`, stdio default transport, opt-in streamable HTTP transport, adopter-supplied `PrincipalResolver`. New in v0.7.0. |
-| `crates/gaze-document` | OSS document ingestion: PNG/JPG/PDF → Tesseract OCR → gaze redact → `SafeBundle` (`clean.md`, `manifest.json`, `report.json`). Ships a `gaze document clean` CLI verb under the `gaze-cli` `document` feature. `BundleReport` schema versioned via `bundle_version = 1`. New in v0.7.1. |
+| `crates/gaze-mcp-core` | Transport-free MCP-shaped chokepoint runtime: `Tool` trait, sealed `ToolCtx`, `ToolRegistry`, `PiiEnvelope::dispatch`, `Frontend`/`DispatchHost`, `ManifestStore`, `AuthHook`, `SessionIdPolicy`. |
+| `crates/gaze-mcp-rmcp` | rmcp transport sink: `RmcpFrontend`, stdio default transport, opt-in streamable HTTP transport, adopter-supplied `PrincipalResolver`. |
+| `crates/gaze-document` | OSS document ingestion: PNG/JPG/PDF → Tesseract OCR → gaze redact → `SafeBundle` (`clean.md`, `manifest.json`, `report.json`). Ships a `gaze document clean` CLI verb under the `gaze-cli` `document` feature. `BundleReport` has a versioned `bundle_version` schema. |
 | `crates/gaze-proxy` | Feature-gated HTTP proxy runtime for OpenAI, Anthropic, and Gemini SDK base-URL swaps; backs `gaze proxy`. |
 | `crates/gaze-inspection` | Provider-neutral, bounded inspection delivery: zeroizing payload wrappers and the matched producer/consumer runtime. |
 | `crates/gaze-model-setup` | Installs and verifies pinned model bundles for `gaze setup`. |
@@ -76,7 +65,7 @@ The workspace has **15** published crates plus the internal `xtask` crate and th
 | `crates/gaze-token-bridge` | Experimental owner-side authorization and translation bridge for searching redact-before-index corpora. |
 | `crates/gaze-proxy-dashboard` | Opt-in, memory-only inspection dashboard runtime for `gaze proxy`: a killable child process owns listener/auth/store/rendering while the parent owns bounded ingress and the registration-bound activation. Among Gaze crates it depends on exactly `gaze-types` + `gaze-inspection`; shipped behind the default-off `gaze-cli` `dashboard` feature and enforced by the `dashboard-isolation` xtask gate. |
 | `crates/xtask` | Internal repository gate runner: `bundle-tokenization-drift`, `fixture-citation-lint`, `trybuild-fixture-hygiene`, `ci-feature-matrix`, `class-map-override-safety`, `symmetric-potemkin`, `no-tenant-knowledge`, `cargo-metadata-audit-isolation` (Phase C), `dylint-gate` (Phase D), `dashboard-isolation`. |
-| `lint/dylint/` | Dylint lint crate hosting `gaze_module_isolation`. Detached workspace pinned to `nightly-2025-09-18`. New in v0.5 Phase D. |
+| `lint/dylint/` | Dylint lint crate hosting `gaze_module_isolation`. Detached workspace pinned to `nightly-2025-09-18`. |
 
 ## Run the PR checks
 
@@ -114,18 +103,13 @@ cargo test --release -p gaze-recognizers --lib dob_judge::tests::live_forty_row_
 cargo test -p gaze-recognizers --test dob_judge_live local_bundle_classifies_synthetic_dates -- --ignored --exact
 ```
 
-The `--all-features` flag on `cargo test` exercises every current workspace
-feature. The v0.5 `gaze` audit feature shim was removed in v0.6; compatibility
-tests import concrete audit sinks from `gaze-audit` directly.
+`--all-features` exercises every workspace feature. Import concrete audit sinks
+from `gaze-audit`; the old core `audit` shim is removed.
+`cargo-metadata-audit-isolation` parses Cargo metadata and fails closed on a
+normal-dependency path to `gaze-audit` from a non-audit-responsible member.
 
-The `cargo-metadata-audit-isolation` gate (v0.5 Phase C) parses
-`cargo metadata` and fails closed if any non-audit-responsible workspace
-member has a normal-dependency path to `gaze-audit`.
-
-Gaze does not ship a tracked pre-push hook — gates still run manually before
-opening or pushing to a PR. The command list above is the local set.
-Relevant PRs also run the workspace, MSRV, cargo-deny, and active xtask gates in
-GitHub Actions.
+There is no tracked pre-push hook. Run these gates manually before opening or
+pushing a PR; CI also runs workspace, MSRV, cargo-deny and active xtask gates.
 
 The required `test` check aggregates three owners: `test-support` (the existing
 feature-specific suites, all-feature doctests, pinned live models, and fresh
@@ -198,17 +182,11 @@ sources-bundled compiler to work around the guard.
 
 ### Dylint audit-sink gate
 
-The `dylint-gate` (v0.5 Phase D) is the canonical audit-sink protected-path
-enforcer. It supersedes the legacy `audit-metadata-only` syn walker, which was
-decommissioned in v0.5 Phase E (PR #77, commit `f4fde12`). Toolchain pins,
-fixture matrix, and timings are recorded in a private research note that is
-not published with this repository; the lint crate in
-[`lint/dylint`](lint/dylint) is the public source.
-The dedicated `dylint.yml` workflow runs the compiled lint and its UI fixtures
-on every pull request to `main`, weekly on Monday at 08:00 UTC, and on manual
-dispatch. It sets `GAZE_DYLINT_REQUIRED=1`, so missing tooling fails the job.
-The local gate ritual still permits a clearly reported deferral when
-`cargo-dylint` is unavailable.
+`dylint-gate` is the canonical audit-sink enforcer; the old
+`audit-metadata-only` syn walker is removed. [lint/dylint](lint/dylint) is the
+public source. CI runs the compiled lint and UI fixtures on every PR to `main`,
+Mondays at 08:00 UTC and manual dispatch. `GAZE_DYLINT_REQUIRED=1` makes
+missing tooling fail CI. Locally, report a deferral if `cargo-dylint` is unavailable.
 
 To run the compiled gate locally when touching audit-sink boundaries, install
 the same pinned tools as CI:
@@ -229,15 +207,22 @@ gh workflow run dylint.yml
 
 ### Tenant class names in tests
 
-Test fixtures and benchmark labels MUST use neutral class names (e.g. `class_alpha`, `tenant_class_a`, `dict_alpha`), never tenant-specific patterns like `order_id`, `Order_42`, `Song_42`, `User_7`. Rationale: drawer `eac549ae` — gaze core has no built-in tenant knowledge.
+Use neutral test/benchmark classes (`class_alpha`, `tenant_class_a`,
+`dict_alpha`), never tenant-specific `order_id`, `Order_42`, `Song_42` or
+`User_7`. Core has no tenant knowledge.
 
-The `cargo run -p xtask -- no-tenant-knowledge` gate scans production Rust code in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/**/*.rs` and fails on those tenant-specific patterns. It intentionally does not scan `tests/`, `benches/`, docs, `CONTRIBUTING.md`, or `crates/xtask/`.
+`cargo run -p xtask -- no-tenant-knowledge` scans production
+`crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src//*.rs`.
+It excludes tests, benches, docs, this file and `crates/xtask/`.
 
-Use `// allow(tenant-fixture)` only in tests, benches, or docs when a tenant-like fixture is necessary to exercise behavior. That marker is a production-bypass attempt in `crates/*/src/` and hard-fails the gate with `AllowMarkerInProductionScope`.
+`// allow(tenant-fixture)` is allowed only in tests, benches and docs when
+needed for behavior. In production `crates/*/src/` it fails with
+`AllowMarkerInProductionScope`. The broad `order_id` denylist also catches
+`order_ids`; ask maintainers for a documented allowlist entry for a legitimate
+collision such as `order_history_index_id`.
 
-The `order_id` denylist is intentionally broad — it catches `Order_42`, `order_ids`, etc. If a legitimate production identifier (e.g. `order_history_index_id` for an unrelated subsystem) collides with the denylist post-v0.4.3, coordinate with maintainers to add to allowlist with rationale comment. Do NOT silently bypass via `// allow(tenant-fixture)` in production code — that marker hard-fails the gate (drawer `eac549ae`).
-
-Round-trip, three-surfaces, and recognizer-composition cross-cutting rows are N/A for this structural gate: it emits no tokens, adds no runtime knobs, and does not compose recognizers. The no-tenant-knowledge row is enforced by CI so production code must pass post-merge.
+This CI structural gate emits no tokens, adds no runtime knobs and composes no
+recognizers, so round-trip, three-surface and composition rows are N/A.
 
 ### Fixture citations in production code
 
@@ -268,10 +253,7 @@ Test and benchmark fixtures that contain phone numbers MUST use synthetic, non-r
 - DE fixtures: the Bundesnetzagentur drama numbers ("Rufnummern für Medienproduktionen", Mitteilung 148/2021), which are never assigned to a subscriber. Mobile: `(0)171 39200 00` to `99` and `(0)176 040690 00` to `99` (100 numbers each), plus ten single numbers. Landline: 1,000 numbers each in Berlin `(0)30 23125 xxx`, Frankfurt `(0)69 90009 xxx`, Hamburg `(0)40 66969 xxx`, Köln `(0)221 4710 xxx` and München `(0)89 99998 xxx`. The `phonenumber` parser accepts them as valid E.164. Source: [BNetzA Mitteilung 148/2021](https://www.bundesnetzagentur.de/DE/Fachthemen/Telekommunikation/Nummerierung/_DL/mittlg148_2021.pdf?__blob=publicationFile&v=1). Do not use `+49 1555`: `(0)15-550` is an allocated mobile block, not a fictional one. Older fixtures that still use it are tracked for replacement.
 - Other locales: synthesize a non-reachable shape (e.g. exchange code `0` or out-of-band country code) and add a fixture comment noting the synthetic origin.
 
-Rationale: drawer `gaze_decisions_e1ab6dc0`. Real reachable numbers in test
-fixtures risk inadvertent leakage into adopter telemetry, public CI logs, and
-crate metadata. The `phonenumber` parser-backed `E164Phone` validator
-(v0.4.4 S3a) accepts the NANPA 555 reservation and Ofcom drama ranges as valid
-E.164, so positive-path tests continue to exercise the validator without using
-real numbers. v0.4.5 S2 (PR #58) adds parser-backed national phone recognizers
-for DE and US that follow the same synthetic-only fixture posture.
+Reserved fixtures avoid leaking reachable numbers into telemetry, CI logs or
+crate metadata. `E164Phone` accepts NANPA and Ofcom reservations, so positive
+tests still exercise validation. DE/US national-phone tests use fictional
+numbers too.
