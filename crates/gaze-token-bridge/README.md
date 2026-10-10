@@ -1,22 +1,18 @@
 # gaze-token-bridge
 
-> **Status:** experimental and published as `gaze-token-bridge = "0.16.0"`.
-> API is pre-1.0 and may change.
+Experimental, pre-1.0 owner-side search authorization and token translation.
 
-The token bridge is the **owner-side authorization + translation layer** that lets an
-agent search long-lived, policy-scoped document corpora while keeping raw values on
-the owner side of the bridge.
+```mermaid
+flowchart LR
+    Agent[Agent session token] --> Resolve[Owner resolves token]
+    Resolve --> Policy[Default-deny policy]
+    Policy --> Capability[Single-use entity capability]
+    Capability --> Search[Search redact-before-index corpus]
+    Search --> Translate[Translate to current session tokens]
+    Translate --> Agent
+```
 
-An agent works in a short-lived [`RedactionSession`](src/session.rs) whose only
-vocabulary is *session tokens* (e.g. `<…:Name_1>`). When it wants to search a corpus,
-the bridge — running entirely owner-side — resolves the token, checks policy
-(default-deny), mints a single-use, entity-bound capability, runs the search against a
-**redact-before-index** corpus, and translates the owner-side hits back into the
-agent's current session namespace. Raw PII, index aliases, and the restore manifest stay
-owner-side; the agent-visible response is current-session tokens plus non-sensitive text.
-
-For the architecture and the frozen data-model contract, see the crate docs
-([`src/lib.rs`](src/lib.rs)) and [`src/model.rs`](src/model.rs)'s three visibility tiers.
+Raw values, index aliases, and restore manifests stay owner-side. Contracts: [`src/lib.rs`](src/lib.rs) and [`src/model.rs`](src/model.rs).
 
 ## Install
 
@@ -27,78 +23,27 @@ gaze-token-bridge = "0.16.0"
 
 ## Local demo (try it)
 
-A runnable, **synthetic-data-only** walkthrough lives in
-[`examples/local_demo.rs`](examples/local_demo.rs). It uses the crate's public API and
-prints the allow/deny outcomes and translated snippets for the bundled fixture corpus.
-
-### Run it
+Run the synthetic-only [`examples/local_demo.rs`](examples/local_demo.rs):
 
 ```bash
 cargo run -p gaze-token-bridge --example local_demo
 ```
 
+### Run it
+
+The command uses the public library API. It ingests five documents across customer/legal domains, denies support access to legal documents, and allows admin access from the admin session. Policy uses the owner-bound purpose; capabilities bind one entity. Snippets translate into each principal’s session tokens.
+
 ### Expected output
 
-```text
-gaze-token-bridge - local synthetic demo
-Owner-side authorization and translation over bundled fixtures.
-
-=== Step 1 - ingest synthetic corpus ===
-Ingested 5 synthetic docs into two policy-scoped domains:
-  - tenant_demo/customer_docs/v1
-  - tenant_demo/legal_docs/v1
-
-=== Step 2 - mint a lookup token ===
-owner-side synthetic input: name = "Markus Gottschaue"
-session token passed to the bridge: [session A name token]
-
-=== Step 3 - support searches customer docs ===
-ALLOWED. target_domain = tenant_demo/customer_docs/v1
-  [cust-001] Customer profile [session A name token] / [session A email token] / [session A customer ID token] is linked to [session A organization token].
-
-=== Step 4 - support searches legal docs ===
-DENIED (authorization failed)
-
-=== Step 5 - admin searches legal docs ===
-ALLOWED. target_domain = tenant_demo/legal_docs/v1
-  [cust-001] Legal matter references [session B name token] at [session B organization token]; contact route [session B email token].
-
-audit events recorded: 3
-```
-
-> **Note on the token prefix.** The 8-hex prefix is a **per-session salt** and will
-> differ on every run — that is the point: a token minted
-> in one session is meaningless (`UnknownToken`) in another, so tokens cannot be
-> correlated across sessions. Only the structure after the prefix, the class plus
-> ordinal suffix (`:Name_1>`, `:Email_1>`, …), is stable. The support and admin
-> lines use different prefixes because they are different sessions.
+Allow/deny outcomes and translated snippets are checked in [`tests/local_demo_assertions.rs`](tests/local_demo_assertions.rs). The 8-hex session salt changes per run; class and ordinal suffixes stay stable. Another session rejects the token with `UnknownToken`.
 
 ### What each step demonstrates
 
-1. **Session and principal binding** - each principal mints tokens in its own
-   principal-bound session. The support principal is denied for `legal_docs`, while
-   the admin principal is allowed from the admin's own session.
-2. **Owner-bound purpose** - the request carries a `purpose`, but the policy gate uses
-   the owner-bound purpose resolved from config.
-3. **entity_ref binding** - authorization mints a single-use capability bound to one
-   specific entity, so the allowed search returns that entity's document.
-4. **Filter and value projection** - the corpus is redacted before indexing, and
-   returned snippets are translated into the active session's tokens.
-
-Integration coverage for expected outcomes and fixture leak checks lives in
-[`tests/local_demo_assertions.rs`](tests/local_demo_assertions.rs).
+Sessions bind principals, policy binds purpose, capabilities bind entities, and indexing protects text before storage.
 
 ### What's NOT shown
 
-- **Vector / semantic search** is deferred; the demo uses exact entity-bound lookup over
-  the in-memory adapter.
-- **Raw-filter projection over the wire** (passing a raw PII filter value that the bridge
-  projects owner-side before the adapter sees it) is exercised by the test suite
-  (`raw_filter_values_are_projected_before_adapter_receives_request` in
-  [`tests/track_c_bridge.rs`](tests/track_c_bridge.rs)) rather than this script.
-- **The MCP `search_documents` chokepoint tool** (the sealed-handle integration that
-  exposes this bridge as an agent tool) lives behind the `chokepoint` feature.
-  This example drives the bridge through its library API directly.
+The demo uses exact in-memory lookup; vector search is deferred. Raw-filter projection is tested by `raw_filter_values_are_projected_before_adapter_receives_request` in [`tests/track_c_bridge.rs`](tests/track_c_bridge.rs). The MCP `search_documents` tool requires `chokepoint`.
 
 ## MCP host configuration
 
@@ -112,31 +57,11 @@ numbers. Owner-side bridge tokens remain in their separate namespace.
 
 ## Known limitation: residual fragments are protected but not searchable
 
-Since v0.15 the core pipeline has [residual
-coverage](../../docs/reference/redaction-classes.md#residual-coverage) on by
-default, so a manifest can contain replacements that cover a *fragment* of the
-admitted raw union rather than a whole recognized value.
+Core [residual coverage](../../docs/reference/redaction-classes.md#residual-coverage) is on by default. A replacement can cover a fragment rather than a whole recognized value.
 
-The bridge handles a fragment **by location, not by identity**. On ingest
-(`build_index_hit` in [`src/ingest.rs`](src/ingest.rs)) a fragment gets a
-class-derived placeholder in the stored snippet — no raw bytes, no fingerprint,
-no ingest-session token — and produces **no `CanonicalEntity`, no `IndexEntity`
-and no posting**.
+On ingest, `build_index_hit` in [`src/ingest.rs`](src/ingest.rs) replaces fragments with class-derived placeholders. It stores no raw bytes, fingerprint, ingest-session token, `CanonicalEntity`, `IndexEntity`, or posting. Fragments cannot be searched by value/fingerprint and do not appear in `hit.entities`; whole entities remain searchable.
 
-Two consequences, stated plainly:
-
-- **The gain.** Fragment raw bytes no longer reach the persistent index. The
-  bridge is the only component that stores corpus text, so this closes the worst
-  place to keep uncovered bytes in the clear.
-- **The cost.** A fragment is **protected but unsearchable**. You cannot retrieve
-  it by value or by fingerprint, and it will not appear in `hit.entities`. Whole
-  entities remain searchable exactly as before, so nothing an adopter can do
-  today gets narrower.
-
-Making a fragment an entity is not an available alternative: `translate` fails
-closed when any entity's raw value survives into agent-visible output, and a
-fragment's raw value is frequently a single space or quote, so indexing fragments
-would make that guard true for almost any prose and deny every translation.
+Do not index fragments as entities. `translate` rejects output containing an entity’s raw value; a fragment can be one space or quote and would reject ordinary prose.
 
 ## Bring your own data
 

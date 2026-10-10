@@ -1,37 +1,36 @@
 # Scripts
 
-Repository helper scripts are grouped by purpose. Run paths below from the
-repository root.
+Run these helpers from the repository root.
 
 ## Fetch
 
-| Script | What it does | Who calls it |
-|---|---|---|
-| `scripts/fetch/fetch-ner-model.sh` | Fetches and verifies the pinned Davlan mBERT NER bundle. | Operators, adapters, and release validation. |
-| `scripts/fetch/fetch-openai-privacy-filter.sh` | Installs the pinned OpenAI Privacy Filter subprocess runtime. | Operators evaluating the OPF safety net. |
+| Script | Purpose |
+|---|---|
+| `scripts/fetch/fetch-ner-model.sh` | Fetches and verifies the pinned Davlan mBERT NER bundle. |
+| `scripts/fetch/fetch-openai-privacy-filter.sh` | Installs the pinned OpenAI Privacy Filter subprocess runtime. |
 
 ## Gate
 
-| Script | What it does | Who calls it |
-|---|---|---|
-| `scripts/gate/mcp-tier-isolation-mutation-probe.sh` | Un-gates the operator-tier surface and requires `cargo run -p xtask -- mcp-tier-isolation` to go red, then reverts, rebuilds, and requires green. | Maintainers and reviewers verifying the tier gate can still fail. |
+| Script | Purpose |
+|---|---|
+| `scripts/gate/mcp-tier-isolation-mutation-probe.sh` | Un-gates the operator-tier surface and requires `cargo run -p xtask -- mcp-tier-isolation` to go red, then reverts, rebuilds, and requires green. |
 
 ## Bench
 
-| Script | What it does | Who calls it |
-|---|---|---|
-| `scripts/bench/openpii_gaze_bench.py` | Fetches, verifies, and scores the current pipeline on the pinned synthetic OpenPII holdout. | Maintainers measuring external multilingual leak coverage. |
-| `scripts/bench/gaze-pipeline-bench.py` | Generates the end-to-end Gaze pipeline benchmark snapshot. | Maintainers refreshing benchmark evidence. |
-| `scripts/bench/opf-bench-scorer.py` | Scores OpenAI Privacy Filter direct, observer-residual, and latency cells. | Maintainers running safety-net benchmarks. |
-| `scripts/bench/ner-bench-scorer.py` | Runs the config-driven multi-model NER leaderboard. | Maintainers evaluating NER candidates. |
-| `scripts/bench/clean_scaling.py` | Times `gaze clean` on growing synthetic German inputs and, with `--compare`, diffs two binaries' outputs and restores. | Maintainers checking that runtime grows linearly with input size. |
-| `scripts/bench/ner-warm-latency.py` | Measures warm persistent-model latency for pinned NER candidates. | Maintainers evaluating low-latency NER options. |
-| `scripts/bench/safety_net_bench_lib.py` | Shared fixtures, scoring, and snapshot helpers for benchmark scripts. | Other scripts in `scripts/bench/`. |
-| `scripts/bench/onnx-token-classification-runner.py` | Generic ONNX Runtime token-classification subprocess wrapper. | NER leaderboard and warm-latency scripts. |
-| `scripts/bench/transformers-runner.py` | Generic Hugging Face transformers NER subprocess wrapper. | NER leaderboard scorer. |
+| Script | Purpose |
+|---|---|
+| `scripts/bench/openpii_gaze_bench.py` | Fetches, verifies, and scores the current pipeline on the pinned synthetic OpenPII holdout. |
+| `scripts/bench/gaze-pipeline-bench.py` | Generates the end-to-end Gaze pipeline benchmark snapshot. |
+| `scripts/bench/opf-bench-scorer.py` | Scores OpenAI Privacy Filter direct, observer-residual, and latency cells. |
+| `scripts/bench/ner-bench-scorer.py` | Runs the config-driven multi-model NER leaderboard. |
+| `scripts/bench/clean_scaling.py` | Times `gaze clean` on growing synthetic German inputs and, with `--compare`, diffs two binaries' outputs and restores. |
+| `scripts/bench/ner-warm-latency.py` | Measures warm persistent-model latency for pinned NER candidates. |
+| `scripts/bench/safety_net_bench_lib.py` | Shared fixtures, scoring, and snapshot helpers for benchmark scripts. |
+| `scripts/bench/onnx-token-classification-runner.py` | Generic ONNX Runtime token-classification subprocess wrapper. |
+| `scripts/bench/transformers-runner.py` | Generic Hugging Face transformers NER subprocess wrapper. |
 
 ## Verify
 
-| Script | What it does | Who calls it |
-|---|---|---|
-| `scripts/verify/cli-help-surface.sh` | Builds `gaze` at a base revision and at the working tree in one run and diffs `--help` for the root command and every subcommand, so a CLI refactor can be shown not to have moved the published surface. Refreshes `crates/gaze-cli/tests/fixtures/cli-help/` with `--write-fixtures`. | Anyone refactoring `gaze-cli` argument parsing, and reviewers checking that claim. |
+| Script | Purpose |
+|---|---|
+| `scripts/verify/cli-help-surface.sh` | Builds `gaze` at a base revision and at the working tree in one run and diffs `--help` for the root command and every subcommand, so a CLI refactor can be shown not to have moved the published surface. Refreshes `crates/gaze-cli/tests/fixtures/cli-help/` with `--write-fixtures`. |
