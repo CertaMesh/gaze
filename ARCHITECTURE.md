@@ -42,7 +42,7 @@ the agent boundary only as manifest-backed tokens.
 | Layer | Path | Scope |
 |---|---|---|
 | Library | App → `gaze::Pipeline` → owner manifest/restore | Apps that control their data path. |
-| MCP source chokepoint | Agent call → `gaze-mcp-rmcp` → `gaze-mcp-core::PiiEnvelope::dispatch` → source → safe result | Tool calls, document tools, manifest handles and tiered restore. |
+| MCP source chokepoint | Agent call → `gaze-mcp-rmcp` → `gaze_mcp_core::PiiEnvelope::dispatch` → source → safe result | Tool calls, document tools, manifest handles and tiered restore. |
 | LLM API proxy | API-key request → `gaze-proxy` driver → vendor → owner restore | OpenAI, Anthropic and Gemini SDK/agent traffic; native wire shapes and streaming. |
 
 MCP does not cover SDK API-key traffic. Proxy drivers isolate vendor request
