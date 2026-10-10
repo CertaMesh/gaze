@@ -1158,17 +1158,28 @@ mod tests {
     }
 }
 
-/// Runs one recognizer and stamps its declared [`Recognizer::evidence`] on every candidate.
+/// Admits a whole recognizer batch and stamps its declared [`Recognizer::evidence`].
 /// Every registry detect call goes through here, so the sweep reads a declaration the
-/// recognizer made, never a guess from its id.
+/// recognizer made, never a guess from its id. Non-finite scores fail closed before
+/// any filtering or locale reuse; finite negative scores retain the existing floor behavior.
 fn detect_declared(
     recognizer: &dyn Recognizer,
     input: &str,
     ctx: &DetectContext<'_>,
 ) -> Result<Vec<Candidate>, DetectError> {
     let evidence = recognizer.evidence();
-    Ok(recognizer
-        .detect_for_registry(input, ctx)?
+    let candidates = recognizer.detect_for_registry(input, ctx)?;
+    if candidates
+        .iter()
+        .any(|candidate| !candidate.score.is_finite())
+    {
+        // Fixed strings only: even an adopter's recognizer id may contain input values.
+        return Err(DetectError::backend(
+            "registry.score-admission",
+            "invalid_score",
+        ));
+    }
+    Ok(candidates
         .into_iter()
         .map(|candidate| candidate.with_evidence(evidence))
         .collect())
