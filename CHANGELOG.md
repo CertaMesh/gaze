@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Dictionary caches now distinguish compilation modes and exact ordered terms.
+  Enabling Unicode matching after warming a record dictionary no longer misses
+  configured values; term-order changes retain correct provenance.
+
 - Tax and government identifiers cover additional cue connectors and grouped
   layouts, including slash Steuernummer, separated SSN, Swiss AHV and national
   identity values. Full English tax-identification fields preserve trusted
