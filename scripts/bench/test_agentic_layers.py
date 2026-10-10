@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "2daab095ca7be277ae16bbc75f30b86767a1bb6d8042ecc138652b156d8edf34",
-    "test": "db3c3f3612aac6d0072b2dbfdc837495498f7b2b506af2bd9b6a15ffdaab9c4e",
+    "dev": "fa9df2412b489d2c94981f145e09666a0ff6009130597bd8022cba80b2415380",
+    "test": "1e07150bb9ba391488355b5212f0797bfd511b8095c8e3e2ebd6936627e26bec",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -3006,3 +3006,41 @@ class ShippedClassCoverageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PersonLinkedRecordIdTests(unittest.TestCase):
+    def test_v13_is_byte_identical_in_both_partitions(self):
+        hashes = {
+            "dev": "2daab095ca7be277ae16bbc75f30b86767a1bb6d8042ecc138652b156d8edf34",
+            "test": "db3c3f3612aac6d0072b2dbfdc837495498f7b2b506af2bd9b6a15ffdaab9c4e",
+        }
+        for partition in agentic.PARTITIONS:
+            records = agentic.records_as_of(13, agentic.generate(partition))
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(records)).hexdigest(), hashes[partition])
+
+    def test_exact_gold_repeats_and_benign_ownership(self):
+        for partition in agentic.PARTITIONS:
+            records = agentic.record_ids.records(agentic, partition)
+            self.assertEqual(len(records), 745)
+            self.assertEqual({r.layer for r in records}, {"A", "D", "R"})
+            self.assertEqual({g.label for r in records for g in r.gold}, {"CUSTOMER_ID", "EMPLOYEE_ID", "RECORD_ID"})
+            self.assertEqual(sum(r.layer == "A" for r in records), 360)
+            self.assertEqual(sum(r.layer == "D" for r in records), 265)
+            self.assertEqual(sum(r.layer == "R" for r in records), 120)
+            for record in records:
+                self.assertEqual(bool(record.gold), record.layer != "D")
+                self.assertEqual(bool(record.decoys), record.layer == "D")
+                self.assertEqual(len(record.gold), 3 if record.layer == "R" else 0 if record.layer == "D" else 1)
+                for span in (*record.gold, *record.decoys):
+                    self.assertEqual(record.text.encode()[span.start:span.end].decode(), span.value)
+            self.assertTrue(any(r.text == "[session A customer ID token]" and not r.gold for r in records))
+            for shape in agentic.record_ids.SHAPES:
+                positives = {g.value for r in records if r.layer == "A" and r.surface.endswith("_" + shape) for g in r.gold}
+                decoys = {g.value for r in records if r.layer == "D" and r.surface.endswith("_" + shape) for g in r.decoys}
+                self.assertEqual(positives, decoys)
+                for key in agentic.record_ids.PUBLIC_FIELDS[partition]:
+                    self.assertTrue(any(key in r.text for r in records if r.layer == "D" and r.surface.endswith("_" + shape)))
+
+    def test_gold_value_pools_are_partition_disjoint(self):
+        pools = [{g.value for r in agentic.record_ids.records(agentic, part) for g in r.gold} for part in agentic.PARTITIONS]
+        self.assertFalse(pools[0] & pools[1])
