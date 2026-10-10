@@ -26,6 +26,7 @@ is synthetic.
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import hashlib
 import json
@@ -41,7 +42,7 @@ import gaze_bench_score as score
 import government_id_cells as government_ids
 
 
-GENERATOR_VERSION = 12
+GENERATOR_VERSION = 13
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -3923,9 +3924,230 @@ def _zip_age_records(partition: str) -> list[Record]:
     return records
 
 
+# --------------------------------------------------------------------------
+# Generator v13: shipped-class coverage. Authored synthetic data, CC0-1.0.
+# Format sources and the fictional-value policy are recorded in
+# docs/reference/benchmarks/class-coverage.md. No production regex is imported.
+
+_VERHOEFF_D = (
+    (0,1,2,3,4,5,6,7,8,9), (1,2,3,4,0,6,7,8,9,5),
+    (2,3,4,0,1,7,8,9,5,6), (3,4,0,1,2,8,9,5,6,7),
+    (4,0,1,2,3,9,5,6,7,8), (5,9,8,7,6,0,4,3,2,1),
+    (6,5,9,8,7,1,0,4,3,2), (7,6,5,9,8,2,1,0,4,3),
+    (8,7,6,5,9,3,2,1,0,4), (9,8,7,6,5,4,3,2,1,0),
+)
+_VERHOEFF_P = (
+    (0,1,2,3,4,5,6,7,8,9), (1,5,7,6,2,8,3,0,9,4),
+    (5,8,0,3,7,9,6,1,4,2), (8,9,1,6,0,4,3,5,2,7),
+    (9,4,5,3,1,2,6,8,7,0), (4,2,8,6,5,7,3,9,0,1),
+    (2,7,9,3,8,0,6,4,1,5), (7,0,4,6,9,1,3,2,5,8),
+)
+
+
+def verhoeff_valid(value: str) -> bool:
+    state = 0
+    for i, digit in enumerate(reversed(value)):
+        state = _VERHOEFF_D[state][_VERHOEFF_P[i % 8][int(digit)]]
+    return state == 0
+
+
+def cnpj_check_digits(payload: str) -> str:
+    for weights in ((5,4,3,2,9,8,7,6,5,4,3,2), (6,5,4,3,2,9,8,7,6,5,4,3,2)):
+        remainder = sum(int(d) * w for d, w in zip(payload, weights, strict=True)) % 11
+        payload += str(0 if remainder < 2 else 11 - remainder)
+    return payload[-2:]
+
+
+# Keccak-f[1600], Keccak-256 padding (0x01), not FIPS SHA3's 0x06.
+# ERC-55 hashes exactly 40 ASCII bytes, so one rate block suffices here.
+_KECCAK_RC = (
+    0x1,0x8082,0x800000000000808A,0x8000000080008000,0x808B,0x80000001,
+    0x8000000080008081,0x8000000000008009,0x8A,0x88,0x80008009,0x8000000A,
+    0x8000808B,0x800000000000008B,0x8000000000008089,0x8000000000008003,
+    0x8000000000008002,0x8000000000000080,0x800A,0x800000008000000A,
+    0x8000000080008081,0x8000000000008080,0x80000001,0x8000000080008008,
+)
+_KECCAK_ROT = ((0,36,3,41,18),(1,44,10,45,2),(62,6,43,15,61),
+               (28,55,25,21,56),(27,20,39,8,14))
+
+
+def eth_checksum(payload: str) -> str:
+    if len(payload) != 40 or any(c not in "0123456789abcdef" for c in payload):
+        raise ValueError("ERC-55 requires 40 lowercase hexadecimal characters")
+    block = payload.encode() + b"\x01" + bytes(94) + b"\x80"
+    state = [int.from_bytes(block[i:i+8], "little") for i in range(0,136,8)] + [0] * 8
+    mask = (1 << 64) - 1
+    def rotate(value: int, bits: int) -> int:
+        return ((value << bits) | (value >> ((64 - bits) % 64))) & mask
+    for constant in _KECCAK_RC:
+        columns = [state[x] ^ state[x+5] ^ state[x+10] ^ state[x+15] ^ state[x+20] for x in range(5)]
+        for x in range(5):
+            delta = columns[(x-1) % 5] ^ rotate(columns[(x+1) % 5], 1)
+            for y in range(5):
+                state[x+5*y] ^= delta
+        moved = [0] * 25
+        for x in range(5):
+            for y in range(5):
+                moved[y + 5*((2*x+3*y) % 5)] = rotate(state[x+5*y], _KECCAK_ROT[x][y])
+        for x in range(5):
+            for y in range(5):
+                state[x+5*y] = moved[x+5*y] ^ ((~moved[(x+1)%5+5*y]) & moved[(x+2)%5+5*y])
+        state[0] ^= constant
+    digest = b"".join(v.to_bytes(8,"little") for v in state[:4]).hex()
+    return "0x" + "".join(c.upper() if int(digest[i],16) >= 8 else c for i,c in enumerate(payload))
+
+
+# Family, gold label, language, region, dev cue, held-out cue.
+COVERAGE_CLASSES = (
+    ("aadhaar", "AADHAAR", "en", "IN", "Aadhaar", "UID"),
+    ("cnpj", "CNPJ", "pt", "BR", "CNPJ", "CNPJ number"),
+    ("eth_address", "ETHADDRESS", "en", "US", "Ethereum wallet", "Ethereum address"),
+    ("nir", "NIR", "fr", "FR", "NIR", "numéro de sécurité sociale"),
+    ("pan", "PAN", "en", "IN", "PAN", "Permanent Account Number"),
+    ("vat_de", "VATID", "de", "DE", "USt-IdNr", "VAT ID"),
+    ("vat_es", "VATID", "es", "ES", "NIF", "VAT ID"),
+)
+COVERAGE_CHECKSUM_FAMILIES = frozenset(("aadhaar", "cnpj", "nir", "eth_address"))
+
+
+def _coverage_identifier(family: str, rng: Rng, partition: str, index: int) -> str:
+    if family == "aadhaar":
+        payload = str(rng.between(2,5) if partition == "dev" else rng.between(6,9)) + rng.digits(10)
+        return payload + next(d for d in "0123456789" if verhoeff_valid(payload+d))
+    if family == "cnpj":
+        payload = ("00" if partition == "dev" else "01") + rng.digits(6) + "0001"
+        return payload + cnpj_check_digits(payload)
+    if family == "nir":
+        # Fictional foreign birthplace 99000, never a sampled person record.
+        payload = str(1 if partition == "dev" else 2) + rng.digits(2) + f"{rng.between(1,12):02d}" + "99000" + f"{rng.between(1,999):03d}"
+        return payload + f"{97-int(payload)%97:02d}"
+    if family == "eth_address":
+        payload = "".join(rng.choice("0123456789abcdef") for _ in range(40))
+        value = eth_checksum(payload)
+        return value if index % 3 == 0 else "0x" + (payload.lower() if index % 3 == 1 else payload.upper())
+    if family == "pan":
+        letters = "ABCDE" if partition == "dev" else "VWXYZ"
+        return "".join(rng.choice(letters) for _ in range(3)) + "P" + rng.choice(letters) + rng.digits(4) + rng.choice(letters)
+    if family == "vat_de":
+        return "DE" + ("0" if partition == "dev" else "1") + rng.digits(8)
+    # Spanish corporate NIF, B + seven digits + numeric control digit.
+    payload = rng.digits(7)
+    odd = sum(sum(map(int,str(2*int(d)))) for d in payload[::2])
+    even = sum(map(int,payload[1::2]))
+    return "ESB" + payload + str((-odd-even) % 10)
+
+
+def _coverage_invalid(family: str, value: str) -> str:
+    if family == "eth_address":
+        value = eth_checksum(value[2:].lower())
+        index = next(i for i,c in enumerate(value[2:],2) if c.isalpha())
+        return value[:index] + value[index].swapcase() + value[index+1:]
+    return value[:-1] + str((int(value[-1])+1) % 10)
+
+
+def _coverage_record(partition: str, layer: str, family: str, surface: str, index: int,
+                     template: str, fields: Mapping[str, tuple[str, str | None]],
+                     language: str, region: str, validity: str = UNCHECKED) -> Record:
+    text, gold, decoys = _fill_with_decoys(template, fields)
+    return Record(
+        uid=f"agentic-{partition}-{layer}-{family}-{index:03d}-{surface}",
+        partition=partition, layer=layer, family=family, surface=surface,
+        validity=validity if layer != LAYER_LOOKALIKES else BENIGN,
+        group=f"{partition}-coverage-{family}-{index:03d}",
+        template=f"coverage/{family}/{surface}/{partition}", language=language,
+        region=region, text=text, gold=gold, decoys=decoys,
+    )
+
+
+def _coverage_records(partition: str) -> list[Record]:
+    records = []
+    for family,label,language,region,dev_cue,test_cue in COVERAGE_CLASSES:
+        rng = Rng(PARTITION_SEEDS[partition], f"coverage/{family}")
+        cue = dev_cue if partition == "dev" else test_cue
+        for index in range(DOCS_PER_FAMILY):
+            value = _coverage_identifier(family,rng,partition,index)
+            for surface,template in (("coverage_prose", "{C}: {V}."),
+                                     ("coverage_log", "{C}={V}\n"),
+                                     ("coverage_json", '{"{C}": "{V}"}')):
+                records.append(_coverage_record(partition,"A",family,surface,index,template,
+                    {"C":(cue,None),"V":(value,label)},language,region,
+                    VALID if family in COVERAGE_CHECKSUM_FAMILIES else UNCHECKED))
+                # Identical shape, explicitly non-personal ownership.
+                records.append(_coverage_record(partition,"D",family,surface,index,
+                    template,{"C":("inventory_reference" if partition == "dev" else "batch_reference",None),
+                    "V":(value,DECOY_PREFIX+family)},language,region))
+                if family in COVERAGE_CHECKSUM_FAMILIES:
+                    records.append(_coverage_record(partition,"D",family,surface+"_invalid",index,
+                        template,{"C":(cue,None),"V":(_coverage_invalid(family,value),DECOY_PREFIX+family)},language,region))
+    # Natural agent/email text, independent of the deterministic name patterns.
+    for family in ("name_forward", "name_recipient", "name_header_paren"):
+        rng = Rng(PARTITION_SEEDS[partition], f"coverage/{family}")
+        for index in range(DOCS_PER_FAMILY):
+            given,surname = _person(rng,partition)
+            german = index % 2 == 1
+            if family == "name_forward":
+                template = ("Weitergeleitete Nachricht von {G} {S}\n" if german else "Forwarded message from {G} {S}\n")
+                twin = "Forwarded message from {V}\n" if not german else "Weitergeleitete Nachricht von {V}\n"
+            elif family == "name_recipient":
+                template = ("Bitte antworte {G} {S}." if german else "Please reply to {G} {S}.")
+                twin = "Please reply to {V}." if not german else "Bitte antworte {V}."
+            else:
+                template = "From: {E} ({G} {S})\n"
+                twin = "From: {V} (automated delivery queue)\n"
+            template += "\nReply from {G} {S}."
+            fields = {"G":(given,"GIVENNAME"),"S":(surname,"SURNAME"),
+                      "E":(_name_email(given,surname,rng,partition),"EMAIL")}
+            records.append(_coverage_record(partition,"R",family,"coverage_name",index,template,fields,"de" if german else "en","DE" if german else "US"))
+            records.append(_coverage_record(partition,"D",family,"coverage_name",index,twin,
+                {"V":("support queue" if partition == "dev" else "billing team",DECOY_PREFIX+family)},"de" if german else "en","DE" if german else "US"))
+    for family in ("password", "security_token", "postal_de", "phone_spaced_cued"):
+        rng = Rng(PARTITION_SEEDS[partition], f"coverage/{family}")
+        for index in range(DOCS_PER_FAMILY):
+            if family == "password":
+                value = ("Fictional!" if partition == "dev" else "Invented#") + rng.digits(8) + ("é" if index%2 else "/x")
+                label,language,region = "PASSWORD","en","US"
+                templates = ('password="{V}"', "password = {V}", "passwd: '{V}'") if partition == "dev" else ('{"password":"{V}"}', 'password: "{V}"', "pwd={V}")
+                twin = "Password policy example (never assigned): {V}"
+            elif family == "security_token":
+                # Independently minted fake credentials, never usable account keys.
+                prefix = ("AKIA", "ASIA", "ghp_", "gho_", "jwt")[index % 5]
+                suffix = "".join(rng.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") for _ in range(16 if prefix in ("AKIA", "ASIA") else 36))
+                value = prefix + suffix
+                if prefix == "jwt":
+                    def segment(data: bytes) -> str:
+                        return base64.urlsafe_b64encode(data).decode().rstrip("=")
+                    header = segment(b'{"alg":"HS256","typ":"JWT"}')
+                    payload = segment(json.dumps({"sub": "synthetic-" + partition, "jti": suffix}, separators=(",", ":")).encode())
+                    value = ".".join((header, payload, segment(("fake-signature-" + suffix).encode())))
+                label,language,region = "SECURITYTOKEN","en","US"
+                templates = ("access_token={V}", '{"api_key":"{V}"}', "Credential: {V}")
+                twin = "Build identifier: {V}"
+            elif family == "postal_de":
+                value = "00" + rng.digits(3) # unassigned PLZ in an invented address
+                label,language,region = "ZIPCODE","de","DE"
+                templates = ("Postleitzahl: {V}", "PLZ={V}", '{"Postleitzahl":"{V}"}')
+                twin = "Chargennummer: {V}"
+            else:
+                value = f"+44 7700 900{rng.between(0,499) if partition=='dev' else rng.between(500,999):03d}"
+                label,language,region = "TELEPHONENUM","en","GB"
+                templates = ("Phone: {V}", "telephone={V}", '{"phone":"{V}"}')
+                twin = "Firmware version: {V}"
+            template = templates[index % len(templates)]
+            records.append(_coverage_record(partition,"A",family,"coverage_field",index,template,
+                {"V":(value,label)},language,region))
+            decoy = value
+            if family == "security_token":
+                decoy = value.rsplit(".", 1)[0] if prefix == "jwt" else value[:-1] # incomplete credential fragment
+            if family == "phone_spaced_cued":
+                decoy = value.replace("+44", "+0") # unassignable country code
+            records.append(_coverage_record(partition,"D",family,"coverage_field",index,twin,
+                {"V":(decoy,DECOY_PREFIX+family)},language,region))
+    return records
+
+
 # The surface prefix each generator version added. Every earlier document stays
 # byte identical, so an older corpus is a filter of the current one.
-GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "cue_", 9: "block_", 10: "url_", 11: "gov_", 12: "zipage_"}
+GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "cue_", 9: "block_", 10: "url_", 11: "gov_", 12: "zipage_", 13: "coverage_"}
 
 
 def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
@@ -3938,6 +4160,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    12: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v12.json"),
     11: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v11.json"),
     10: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v10.json"),
     9: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v9.json"),
@@ -4192,6 +4415,7 @@ def generate(partition: str) -> list[Record]:
         + _url_records(URL_TWINS, partition, LAYER_LOOKALIKES)
         + government_ids.records(sys.modules[__name__], partition)
         + _zip_age_records(partition)
+        + _coverage_records(partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)
