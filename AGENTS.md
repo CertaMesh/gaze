@@ -69,8 +69,7 @@ The workspace now has 15 published crates plus `xtask`; see the canonical
    commit-message prefix is required. Stage specific files by name. No `git add -A` or `git add .`.
    No amend, no force-push, no `--no-verify`. Commit after each logical phase, not only at the end.
 4. Branch per task. Work on a dedicated branch; keep `main` clean.
-5. Completion signaling: every agent brief includes a sentinel line (e.g. `IMPL DONE:`, `REVIEW
-   DONE:`, `DOCS DONE:`). Print it on the final stdout line.
+5. Completion signaling: every agent brief includes a sentinel line (e.g. `IMPL DONE:`, `REVIEW DONE:`, `DOCS DONE:`). Print it on the final stdout line.
 6. Never put private tracker ids in public text. Exclude private todo, scratchpad, process and audit
    ids from PR titles/bodies, commits, CHANGELOG, docs, code/test comments and scripts. Describe
    behavior ("tracked as a follow-up"). Public GitHub numbers (`#723`) stay.

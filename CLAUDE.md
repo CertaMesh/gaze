@@ -73,13 +73,11 @@ The browser-MITM project is separate (formerly in-tree `debug-proxy`).
   `ConflictTier::CollisionPolicy`. Precedence ties emit a family-level
   `PiiClass::Custom("family:<name>")` token plus `AmbiguityRecord::PrecedenceTie`. Contract:
   [`docs/explanation/detection/collision-family.md`](docs/explanation/detection/collision-family.md).
-- Mandatory-anchor resolution: collision-family recognizers can declare `mandatory_anchor =
-  "<key>"`; locale packs provide `[locale.cues.<key>]`. Missing anchors fail closed to one
+- Mandatory-anchor resolution: collision-family recognizers can declare `mandatory_anchor = "<key>"`; locale packs provide `[locale.cues.<key>]`. Missing anchors fail closed to one
   family-level `PiiClass::Custom("family:<name>")` token, `ConflictTier::AnchoredContext`, and
   `AmbiguityReason::NoAnchor`. Contract:
   [`docs/explanation/detection/anchor-resolution.md`](docs/explanation/detection/anchor-resolution.md).
-- MCP CLI surface: `gaze mcp install` writes supported client config for `gaze mcp serve`, `gaze mcp
-  doctor` checks runtime dependencies and client wiring, and `gaze mcp serve` starts the stdio
+- MCP CLI surface: `gaze mcp install` writes supported client config for `gaze mcp serve`, `gaze mcp doctor` checks runtime dependencies and client wiring, and `gaze mcp serve` starts the stdio
   server exposing agent-tier document tools. Requires the `gaze-cli` `mcp` feature; document tools
   also require the `document` feature.
 - gaze-proxy: API-key chokepoint for OpenAI, Anthropic, and Gemini SDK base-URL paths. Web-tier
@@ -106,8 +104,7 @@ The browser-MITM project is separate (formerly in-tree `debug-proxy`).
   installed by `gaze setup --safety-net nym`; op-B allowlist/thresholds in
   `gaze_types::nym::NymOperatingPoint`, overridable by `[safety_net.nym]` (configures, never
   activates); word-aligned via the shared `gaze_types::is_inside_word`; 512/64 chunking with a
-  coverage error; `raw_label = "LABEL>=THRESHOLD"`; bench arm `full-stack-nym-resolve`. The `gaze
-  setup` policy enables Nym; a policy without `[safety_net]` runs no net.
+  coverage error; `raw_label = "LABEL>=THRESHOLD"`; bench arm `full-stack-nym-resolve`. The `gaze setup` policy enables Nym; a policy without `[safety_net]` runs no net.
 - GLiNER DOB judge: `[dob_judge]` scores rule-found, unclaimed dates with the SHA-pinned
   `gliner-multi-pii-dob-int8` bundle (`GLINER_DOB_BUNDLE_SHA256`); fail-closed on a missing or
   corrupt bundle. `gaze setup --dob-judge` installs and enables it; plain `gaze setup` does not
@@ -119,8 +116,7 @@ The browser-MITM project is separate (formerly in-tree `debug-proxy`).
   [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#safety-net)) and the programmatic
   `Pipeline::with_safety_net` builder. Architecture contract:
   [`docs/explanation/safety-net/safety-nets.md`](docs/explanation/safety-net/safety-nets.md). The
-  OpenAI-filter subprocess device is selectable via `gaze clean --openai-filter-device
-  {auto|cpu|cuda|mps}`.
+  OpenAI-filter subprocess device is selectable via `gaze clean --openai-filter-device {auto|cpu|cuda|mps}`.
 - Cue-anchored Name detection: `anchored_match` recognizer kind and the `forward_markers` /
   `agent_recipient_cues` / `footer_cues` locale buckets in `locale-de` and `locale-en`. Composes
   with the `core` bundle without custom recognizers.
