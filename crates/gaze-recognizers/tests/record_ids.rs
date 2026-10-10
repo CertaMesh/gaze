@@ -49,6 +49,11 @@ fn labelled_person_ids_capture_only_whole_values_and_restore() {
             "customer_id",
         ),
         ("customer_id: AB/12_34.56", "AB/12_34.56", "customer_id"),
+        (
+            r#"{"customer_id":"AB\/12_34.56"}"#,
+            r"AB\/12_34.56",
+            "customer_id",
+        ),
         ("customer_id=C+000123", "C+000123", "customer_id"),
         ("customer_id=+YQ==", "+YQ==", "customer_id"),
         (
