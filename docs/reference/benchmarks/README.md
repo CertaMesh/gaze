@@ -1992,6 +1992,12 @@ v3–v13 corpora remain byte-identical. The full test partition now has 3,698 A,
 2,029 D and 250 R documents. The primary corpus inputs and scoring are unchanged,
 so layer C release rows retain their committed measurements.
 
+Known limitations: all numeric IDs in the v14 slice have six digits. Shorter
+unlabelled repeats are unmeasured and fall below the existing manifest-value
+sweep's six-digit floor, without deterministic sweep protection. Independent
+short-ID positives, repeats and benign counterweights are required before
+changing that floor.
+
 <!-- BEGIN GENERATED: agentic-adjacency -->
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |

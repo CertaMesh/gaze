@@ -27,6 +27,13 @@ claim. UUIDs have the version/variant structure of random version-4 UUIDs, but
 are deterministic synthetic fixtures. Previous generator versions 3–13 rebuild
 byte-identically and retain their frozen agentic contracts.
 
+Known limitations: every numeric identifier in this slice has six digits. The
+existing manifest-value sweep requires at least six digits for an unlabelled
+numeric repeat. Shorter unlabelled repeats are therefore below that floor and
+remain unmeasured here, without deterministic sweep protection. Independent
+short-ID positives, repeats and benign counterweights are required before
+changing that floor.
+
 The new labels are scored in the agentic contract for every primary scoring
 contract (v1–v4). The primary corpus and its contracts are unchanged: it contains
 none of these new labels. No checksum-credit or false-positive exception is added.
