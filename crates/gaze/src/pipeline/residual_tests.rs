@@ -223,16 +223,10 @@ fn all_twenty_five_action_pairs_admit_the_loser_under_its_own_action() {
                 &[crate::LocaleTag::Global],
             )
             .unwrap();
-            let selected = whole
-                .primary
-                .iter()
-                .chain(&whole.recovered)
-                .collect::<Vec<_>>();
             let plan = residual::plan(
                 &p,
                 &whole.evidence,
                 &whole.order,
-                &selected,
                 &normalized.text,
                 RAW,
                 &RuleContext::default(),
@@ -1740,23 +1734,10 @@ fn planning_counts_real_preview_and_sweep_operations() {
         )
         .unwrap();
     let whole = recovery::plan(pool, &p.registry, &normalized, &raw, &locales).unwrap();
-    let by_span = whole
-        .primary
-        .iter()
-        .chain(&whole.recovered)
-        .map(|c| ((c.span.start, c.span.end), c))
-        .collect::<BTreeMap<_, _>>();
-    let selected = whole
-        .evidence
-        .selections
-        .iter()
-        .map(|s| by_span[&(s.raw.start, s.raw.end)])
-        .collect::<Vec<_>>();
     let plan = residual::plan(
         &p,
         &whole.evidence,
         &whole.order,
-        &selected,
         &normalized.text,
         &raw,
         &RuleContext::default(),

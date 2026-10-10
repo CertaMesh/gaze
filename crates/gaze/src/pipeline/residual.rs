@@ -85,12 +85,10 @@ pub(super) fn fragment_action(action: Action) -> Action {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(super) fn plan(
     pipeline: &Pipeline,
     segment: &occurrence::Segment,
     order: &[usize],
-    selected: &[&Candidate],
     normalized: &str,
     raw: &str,
     context: &RuleContext,
@@ -125,9 +123,10 @@ pub(super) fn plan(
         admitted.push(protective(own) && protective(view));
         actions.push(view.map(fragment_action));
     }
-    let blocking = selected
+    let blocking = segment
+        .selections
         .iter()
-        .map(|candidate| preview(&candidate.class).map(Action::is_protective))
+        .map(|selection| preview(&selection.class).map(Action::is_protective))
         .collect::<Vec<_>>();
     let blocks = blocking
         .iter()

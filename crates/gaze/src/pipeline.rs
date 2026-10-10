@@ -1143,21 +1143,10 @@ impl Pipeline {
             ..
         } = whole;
         let residual_plan = if self.residual_coverage {
-            let by_span = resolved
-                .iter()
-                .chain(&recovered)
-                .map(|c| ((c.span.start, c.span.end), c))
-                .collect::<BTreeMap<_, _>>();
-            let selected = evidence
-                .selections
-                .iter()
-                .map(|s| by_span[&(s.raw.start, s.raw.end)])
-                .collect::<Vec<_>>();
             Some(residual::plan(
                 self,
                 &evidence,
                 &order,
-                &selected,
                 &normalized.text,
                 text,
                 &build_context(field_name),
