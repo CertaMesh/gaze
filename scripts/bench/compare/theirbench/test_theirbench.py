@@ -106,6 +106,22 @@ def row(leaked: int) -> dict:
             "latency": {"p50_ms": 1.0}}
 
 
+def per_label_bytes() -> dict:
+    return {
+        "leaked_by_gold_label": {"EMAIL": 7, "FIRSTNAME": 5},
+        "false_positive_by_prediction_label": {"name": 6, "custom:phone": 4},
+    }
+
+
+def telemetry_compatible_comparison() -> dict[str, str]:
+    import backends
+
+    return {
+        **backends.PINNED_SHA256,
+        "comparison_metrics.py": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
+    }
+
+
 def release_provenance() -> dict:
     """A complete tagged-row provenance block, as theirbench.py --gaze-release-tag writes it."""
     from tagged_gaze import RELEASE_PINS
@@ -398,11 +414,13 @@ class TaggedRowTest(unittest.TestCase):
     """A tagged Gaze release joins the aggregate only from a clean checkout of its tag."""
 
     def entry_and_report(self):
+        import backends
+
         data = synthetic()
         entry = data["benchmarks"]["presidio-research"]
         entry.update(identity={"documents": 1500, "sha256": "d" * 64}, splits={"test": {"documents": 1500}},
                      label_maps_sha256="a" * 64, mapping_sha256="b" * 64, typed_hold=["gaze", "opf"])
-        entry["rescored_with"]["comparison_sha256"] = {"compare.py": "c" * 64}
+        entry["rescored_with"]["comparison_sha256"] = telemetry_compatible_comparison()
         del entry["rows"]["gaze-v0.15.1"]
         report = {
             "schema_version": 1, "benchmark": "presidio-research", "preflight": None,
@@ -411,10 +429,12 @@ class TaggedRowTest(unittest.TestCase):
             "identity": entry["identity"], "splits": entry["splits"],
             "common_intersection_labels": entry["common_intersection_labels"],
             "label_maps_sha256": entry["label_maps_sha256"], "mapping_sha256": entry["mapping_sha256"],
-            "typed_hold": entry["typed_hold"], "comparison_sha256": {"compare.py": "c" * 64},
+            "typed_hold": entry["typed_hold"], "comparison_revision": backends.COMPARISON_REVISION,
+            "comparison_sha256": backends.PINNED_SHA256,
             "rows": {"gaze-v0.15.1": {"test": row(12)}},
             "provenance": {"gaze-v0.15.1": {"release": release_provenance()}},
         }
+        report["rows"]["gaze-v0.15.1"]["test"]["product_coverage"]["per_label_bytes"] = per_label_bytes()
         own = own_result("gaze-v0.15.1")
         own["input"]["prediction_sha256"] = "9" * 64
         return data, entry, report, own
@@ -426,11 +446,55 @@ class TaggedRowTest(unittest.TestCase):
         self.assertEqual(render.add_tagged(data, report, own, RESOLVE), "gaze-v0.15.1")
         self.assertEqual(entry["own_metric"]["gaze-v0.15.1"], own["scored"])
         self.assertEqual(entry["tagged_measurements"]["gaze-v0.15.1"]["harness_revision"], "d" * 40)
+        self.assertEqual(
+            entry["tagged_measurements"]["gaze-v0.15.1"]["comparison_revision"],
+            report["comparison_revision"],
+        )
+        self.assertEqual(
+            entry["tagged_measurements"]["gaze-v0.15.1"]["comparison_sha256"],
+            report["comparison_sha256"],
+        )
         body = render.render(data)
         self.assertLess(body.index("| gaze-v0.15.1 |"), body.index("| opf |"))
         self.assertNotIn("not yet measured", body)
         self.assertIn("Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `cccccccc`", body)
         self.assertIn("harness `dddddddd`", body)
+        self.assertIn(f"comparison code `{report['comparison_revision']}`", body)
+        self.assertIn("Top leaked labels for gaze-v0.15.1: `EMAIL` 7 B, `FIRSTNAME` 5 B.", body)
+        self.assertIn(
+            "False-positive bytes for gaze-v0.15.1 by emitted label: `name` 6 B, `custom:phone` 4 B.",
+            body,
+        )
+
+    def test_empty_per_label_totals_render_as_none(self) -> None:
+        import render_theirbench as render
+
+        data, _entry, report, own = self.entry_and_report()
+        coverage = report["rows"]["gaze-v0.15.1"]["test"]["product_coverage"]
+        coverage.update(leaked_bytes=0, false_positive_bytes=0)
+        coverage["per_label_bytes"] = {
+            "leaked_by_gold_label": {}, "false_positive_by_prediction_label": {},
+        }
+        render.add_tagged(data, report, own, RESOLVE)
+
+        body = render.render(data)
+        self.assertIn("Top leaked labels for gaze-v0.15.1: none.", body)
+        self.assertIn("False-positive bytes for gaze-v0.15.1 by emitted label: none.", body)
+
+    def test_a_tagged_report_requires_complete_per_label_byte_totals(self) -> None:
+        import render_theirbench as render
+
+        data, _entry, report, own = self.entry_and_report()
+        del report["rows"]["gaze-v0.15.1"]["test"]["product_coverage"]["per_label_bytes"]
+        with self.assertRaisesRegex(ValueError, "per-label byte totals"):
+            render.add_tagged(data, report, own, RESOLVE)
+
+        report["rows"]["gaze-v0.15.1"]["test"]["product_coverage"]["per_label_bytes"] = per_label_bytes()
+        report["rows"]["gaze-v0.15.1"]["test"]["product_coverage"]["per_label_bytes"][
+            "leaked_by_gold_label"
+        ]["EMAIL"] -= 1
+        with self.assertRaisesRegex(ValueError, "leaked bytes sum to 11, expected 12"):
+            render.add_tagged(data, report, own, RESOLVE)
 
     def test_each_mismatch_refuses_the_row(self) -> None:
         import render_theirbench as render
@@ -478,6 +542,32 @@ class TaggedRowTest(unittest.TestCase):
         refused(lambda r, o: (r["rows"].update({"gaze-main": r["rows"].pop("gaze-v0.15.1")}),
                               r["provenance"].update({"gaze-main": {}})), "exactly one")
 
+    def test_a_tagged_report_refuses_incompatible_aggregate_metrics(self) -> None:
+        import render_theirbench as render
+
+        data, entry, report, own = self.entry_and_report()
+        entry["rescored_with"]["comparison_sha256"] = {
+            **report["comparison_sha256"], "comparison_metrics.py": "0" * 64,
+        }
+
+        with self.assertRaisesRegex(ValueError, "incompatible with the committed aggregate"):
+            render.add_tagged(data, report, own, RESOLVE)
+
+    def test_telemetry_compatibility_does_not_follow_a_future_repin(self) -> None:
+        import backends
+        import render_theirbench as render
+
+        data, _entry, report, own = self.entry_and_report()
+        original = backends.PINNED_SHA256["comparison_metrics.py"]
+        try:
+            future = "f" * 64
+            backends.PINNED_SHA256["comparison_metrics.py"] = future
+            report["comparison_sha256"] = {**report["comparison_sha256"], "comparison_metrics.py": future}
+            with self.assertRaisesRegex(ValueError, "incompatible with the committed aggregate"):
+                render.add_tagged(data, report, own, RESOLVE)
+        finally:
+            backends.PINNED_SHA256["comparison_metrics.py"] = original
+
     def test_a_row_already_present_is_refused(self) -> None:
         import render_theirbench as render
 
@@ -485,6 +575,74 @@ class TaggedRowTest(unittest.TestCase):
         entry["rows"]["gaze-v0.15.1"] = row(1)
         with self.assertRaisesRegex(ValueError, "already in"):
             render.add_tagged(data, report, own, RESOLVE)
+
+    def test_refresh_adds_label_totals_only_when_headline_metrics_match(self) -> None:
+        import copy
+        import render_theirbench as render
+
+        data, entry, report, own = self.entry_and_report()
+        previous = copy.deepcopy(report["rows"]["gaze-v0.15.1"]["test"])
+        del previous["product_coverage"]["per_label_bytes"]
+        entry["rows"]["gaze-v0.15.1"] = previous
+        entry["own_metric"]["gaze-v0.15.1"] = {**own["scored"], "predict_seconds": 0.1}
+        own["scored"]["predict_seconds"] = 0.4
+        report["rows"]["gaze-v0.15.1"]["test"]["latency"]["p50_ms"] = 2.0
+
+        self.assertEqual(render.add_tagged(data, report, own, RESOLVE, refresh=True), "gaze-v0.15.1")
+        self.assertEqual(entry["rows"]["gaze-v0.15.1"]["product_coverage"]["leaked_bytes"], 12)
+        self.assertEqual(entry["rows"]["gaze-v0.15.1"]["latency"]["p50_ms"], 1.0)
+        self.assertEqual(
+            entry["rows"]["gaze-v0.15.1"]["product_coverage"]["per_label_bytes"], per_label_bytes()
+        )
+        self.assertEqual(entry["own_metric"]["gaze-v0.15.1"]["predict_seconds"], 0.1)
+        self.assertEqual(
+            entry["provenance"]["gaze-v0.15.1"]["cpu"],
+            {"contended": False, "valid": True},
+        )
+
+        data, entry, report, own = self.entry_and_report()
+        previous = copy.deepcopy(report["rows"]["gaze-v0.15.1"]["test"])
+        del previous["product_coverage"]["per_label_bytes"]
+        previous["product_coverage"]["leaked_bytes"] += 1
+        entry["rows"]["gaze-v0.15.1"] = previous
+        with self.assertRaisesRegex(ValueError, "headline metrics differ"):
+            render.add_tagged(data, report, own, RESOLVE, refresh=True)
+
+    def test_refresh_preserves_absent_latency(self) -> None:
+        import copy
+        import render_theirbench as render
+
+        data, entry, report, own = self.entry_and_report()
+        previous = copy.deepcopy(report["rows"]["gaze-v0.15.1"]["test"])
+        del previous["product_coverage"]["per_label_bytes"]
+        del previous["latency"]
+        entry["rows"]["gaze-v0.15.1"] = previous
+        entry["own_metric"]["gaze-v0.15.1"] = copy.deepcopy(own["scored"])
+
+        render.add_tagged(data, report, own, RESOLVE, refresh=True)
+
+        self.assertNotIn("latency", entry["rows"]["gaze-v0.15.1"])
+
+    def test_refresh_refuses_changed_vendor_headline_or_predictions(self) -> None:
+        import copy
+        import render_theirbench as render
+
+        data, entry, report, own = self.entry_and_report()
+        previous = copy.deepcopy(report["rows"]["gaze-v0.15.1"]["test"])
+        del previous["product_coverage"]["per_label_bytes"]
+        entry["rows"]["gaze-v0.15.1"] = previous
+        entry["own_metric"]["gaze-v0.15.1"] = {**own["scored"], "f2": 0.5}
+        with self.assertRaisesRegex(ValueError, "own metric differs"):
+            render.add_tagged(data, report, own, RESOLVE, refresh=True)
+
+        data, entry, report, own = self.entry_and_report()
+        previous = copy.deepcopy(report["rows"]["gaze-v0.15.1"]["test"])
+        del previous["product_coverage"]["per_label_bytes"]
+        entry["rows"]["gaze-v0.15.1"] = previous
+        entry["own_metric"]["gaze-v0.15.1"] = copy.deepcopy(own["scored"])
+        entry["provenance"]["gaze-v0.15.1"]["release"]["prediction_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "prediction digest differs"):
+            render.add_tagged(data, report, own, RESOLVE, refresh=True)
 
     def _temp_repo(self, tmp: str):
         import subprocess
@@ -655,11 +813,13 @@ class VendorTunedRowTest(unittest.TestCase):
         return json.loads((Path(__file__).with_name("vendor-tuned.json")).read_text(encoding="utf-8"))["presidio-research"]
 
     def entry_and_report(self):
+        import backends
+
         data = synthetic()
         entry = data["benchmarks"]["presidio-research"]
         entry.update(identity={"documents": 1500, "sha256": "d" * 64}, splits={"test": {"documents": 1500}},
                      label_maps_sha256="a" * 64, mapping_sha256="b" * 64, typed_hold=["gaze", "opf"])
-        entry["rescored_with"]["comparison_sha256"] = {"compare.py": "c" * 64}
+        entry["rescored_with"]["comparison_sha256"] = telemetry_compatible_comparison()
         entry["reproduction"]["reproduced"]["custom"] = {"f2": 0.9}
         decl = self.declaration()
         raw = "7" * 64
@@ -670,7 +830,7 @@ class VendorTunedRowTest(unittest.TestCase):
             "identity": entry["identity"], "splits": entry["splits"],
             "common_intersection_labels": entry["common_intersection_labels"],
             "label_maps_sha256": entry["label_maps_sha256"], "mapping_sha256": entry["mapping_sha256"],
-            "typed_hold": entry["typed_hold"], "comparison_sha256": {"compare.py": "c" * 64},
+            "typed_hold": entry["typed_hold"], "comparison_sha256": backends.PINNED_SHA256,
             "rows": {TUNED: {"test": row(7)}},
             "provenance": {TUNED: {"vendor_tuned": {
                 **{key: decl[key] for key in ("setup", "source", "commit", "caption")},
@@ -899,6 +1059,24 @@ if __name__ == "__main__":
 
 
 class ArchiveCitationTest(unittest.TestCase):
+    def test_tagged_citations_bind_both_code_revisions_and_archive_reachability(self):
+        import render_theirbench as render
+
+        measured = {"comparison_revision": "a" * 8, "harness_revision": "b" * 40,
+                    "harness_commits": {"comparison": "a" * 40, "measured": "b" * 40},
+                    "harness_archive_branch": "archive/bench-harness"}
+        self.assertEqual(render.checked_tagged_harness_commits(measured, lambda *_: True),
+                         measured["harness_commits"])
+        with self.assertRaisesRegex(ValueError, "not reachable"):
+            render.checked_tagged_harness_commits(measured, lambda *_: False)
+        for bad in ("c" * 40, "a" * 8):
+            measured["harness_commits"]["comparison"] = bad
+            with self.assertRaisesRegex(ValueError, "differs"):
+                render.checked_tagged_harness_commits(measured, lambda *_: True)
+        del measured["harness_commits"]["comparison"]
+        with self.assertRaisesRegex(ValueError, "need comparison and measured"):
+            render.checked_tagged_harness_commits(measured, lambda *_: True)
+
     def test_citations_bind_to_recorded_commits_and_archive_reachability(self):
         import render_theirbench as render
 

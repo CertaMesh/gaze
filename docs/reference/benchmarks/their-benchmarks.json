@@ -7574,7 +7574,7 @@
             "crates_tree": "276a8b2d7fcf3e5ef43d624307e175987131f9c7",
             "measured_with": {
               "harness_dirty": false,
-              "harness_revision": "b8cad035f170442c7c5fa8b65fb73ff6e56d390c"
+              "harness_revision": "9b91f140fb4ec740d618be437c2176542f3c7fd4"
             },
             "ner_model_tree_sha256": "1196662dfcf78d3ef4a9fbbd474d5dd4ce9e656d5fdc38ec38eff3d3249ba1fe",
             "nym_model_tree_sha256": "1878b4af812a531f5710692287e529106951d78e0e270820b05fa8e6ae082a2d",
@@ -7584,7 +7584,7 @@
             "reproduces": {
               "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
               "harness_dirty": false,
-              "harness_revision": "cd93710f08cebeb708cfa1c74d4fd04c908e5c16",
+              "harness_revision": "9b91f140fb4ec740d618be437c2176542f3c7fd4",
               "prediction_sha256": "219f6b974706dff07ea57685ff27e20b48d660ee3b766feb4b9ae27e2de75064"
             },
             "tag": "v0.16.0"
@@ -26815,6 +26815,102 @@
             "leaked_entity_rate": 0.610047705989752,
             "leaking_documents": 2766,
             "leaking_entities": 10358,
+            "per_label_bytes": {
+              "false_positive_by_prediction_label": {
+                "custom:age": 2,
+                "custom:birth_date": 88,
+                "custom:building_number": 228,
+                "custom:credit_card": 112,
+                "custom:date": 1296,
+                "custom:eth_address": 84,
+                "custom:family:payment-card-or-iban": 146,
+                "custom:iban": 27,
+                "custom:ip_address": 20,
+                "custom:license_plate": 874,
+                "custom:national_id": 4,
+                "custom:phone": 61,
+                "custom:postal_code": 2022,
+                "custom:ssn": 44,
+                "custom:url": 8372,
+                "custom:username": 30,
+                "location": 7218,
+                "name": 2054,
+                "organization": 25627
+              },
+              "leaked_by_gold_label": {
+                "ACCOUNT_NUMBER": 1109,
+                "ACCOUNT_PIN": 534,
+                "AGE": 120,
+                "API_KEY": 2947,
+                "BANK_ROUTING_NUMBER": 1058,
+                "BBAN": 152,
+                "BIOMETRIC_IDENTIFIER": 1366,
+                "BLOOD_TYPE": 165,
+                "CERTIFICATE_LICENSE_NUMBER": 662,
+                "CITY": 207,
+                "COMPANY": 4058,
+                "COMPANY_NAME": 1838,
+                "COORDINATE": 1436,
+                "COUNTRY": 228,
+                "COUNTY": 59,
+                "CREDIT_CARD_NUMBER": 152,
+                "CREDIT_CARD_SECURITY_CODE": 68,
+                "CREDIT_DEBIT_CARD": 204,
+                "CUSTOMER_ID": 1698,
+                "CVV": 115,
+                "DATE": 15632,
+                "DATE_OF_BIRTH": 107,
+                "DATE_TIME": 1955,
+                "DEVICE_IDENTIFIER": 1429,
+                "DRIVER_LICENSE_NUMBER": 113,
+                "EDUCATION_LEVEL": 1750,
+                "EMAIL": 690,
+                "EMPLOYEE_ID": 971,
+                "EMPLOYMENT_STATUS": 631,
+                "FAX_NUMBER": 131,
+                "FINANCIAL_ENTITY": 2052,
+                "FIRST_NAME": 281,
+                "GENDER": 257,
+                "HEALTH_PLAN_BENEFICIARY_NUMBER": 604,
+                "HTTP_COOKIE": 4676,
+                "IBAN": 179,
+                "IPV4": 140,
+                "IPV6": 588,
+                "LANGUAGE": 533,
+                "LAST_NAME": 326,
+                "LICENSE_PLATE": 44,
+                "LOC": 2405,
+                "LOCAL_LATLNG": 192,
+                "MAC_ADDRESS": 1178,
+                "MEDICAL_RECORD_NUMBER": 596,
+                "MISC": 15614,
+                "NAME": 5440,
+                "NATIONAL_ID": 190,
+                "OCCUPATION": 5885,
+                "ORG": 2207,
+                "PASSPORT_NUMBER": 94,
+                "PASSWORD": 1374,
+                "PERSON": 357,
+                "PHONE_NUMBER": 1139,
+                "PIN": 479,
+                "POLITICAL_VIEW": 409,
+                "POSTCODE": 108,
+                "RACE_ETHNICITY": 442,
+                "RELIGIOUS_BELIEF": 417,
+                "SEXUALITY": 188,
+                "SSN": 429,
+                "STATE": 159,
+                "STREET_ADDRESS": 6155,
+                "SWIFT_BIC": 508,
+                "SWIFT_BIC_CODE": 537,
+                "TAX_ID": 165,
+                "TIME": 3417,
+                "UNIQUE_ID": 1016,
+                "URL": 1865,
+                "USER_NAME": 103,
+                "VEHICLE_IDENTIFIER": 744
+              }
+            },
             "pii_documents": 3479,
             "predicted_bytes": 205935,
             "redaction_load": 0.08830040532387963,
@@ -27729,22 +27825,35 @@
           ]
         },
         "gaze-v0.16.0": {
-          "generated_at": "2026-10-08T10:52:56.864626+00:00",
+          "comparison_revision": "6a7f1782",
+          "comparison_sha256": {
+            "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+            "compare.py": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
+            "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+            "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+            "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+          },
+          "generated_at": "2026-10-09T11:21:26.210786+00:00",
           "hardware": "macOS-26.5-arm64-arm-64bit-Mach-O",
           "harness_dirty": false,
-          "harness_revision": "b8cad035f170442c7c5fa8b65fb73ff6e56d390c",
+          "harness_revision": "9b91f140fb4ec740d618be437c2176542f3c7fd4",
           "runs": [
             {
               "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
-              "harness_revision": "cd93710f08cebeb708cfa1c74d4fd04c908e5c16",
+              "harness_revision": "9b91f140fb4ec740d618be437c2176542f3c7fd4",
               "prediction_sha256": "219f6b974706dff07ea57685ff27e20b48d660ee3b766feb4b9ae27e2de75064"
             },
             {
               "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
-              "harness_revision": "b8cad035f170442c7c5fa8b65fb73ff6e56d390c",
+              "harness_revision": "9b91f140fb4ec740d618be437c2176542f3c7fd4",
               "prediction_sha256": "219f6b974706dff07ea57685ff27e20b48d660ee3b766feb4b9ae27e2de75064"
             }
-          ]
+          ],
+          "harness_archive_branch": "archive/bench-harness",
+          "harness_commits": {
+            "comparison": "6a7f1782f314fefacb5d89fb6148c15bad9adc75",
+            "measured": "9b91f140fb4ec740d618be437c2176542f3c7fd4"
+          }
         }
       },
       "typed_hold": [
@@ -28869,7 +28978,7 @@
             "crates_tree": "276a8b2d7fcf3e5ef43d624307e175987131f9c7",
             "measured_with": {
               "harness_dirty": false,
-              "harness_revision": "900679c00970b6c5ddf3e0d0342d67e8e720b23c"
+              "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8"
             },
             "ner_model_tree_sha256": "1196662dfcf78d3ef4a9fbbd474d5dd4ce9e656d5fdc38ec38eff3d3249ba1fe",
             "nym_model_tree_sha256": "1878b4af812a531f5710692287e529106951d78e0e270820b05fa8e6ae082a2d",
@@ -28879,7 +28988,7 @@
             "reproduces": {
               "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
               "harness_dirty": false,
-              "harness_revision": "cd93710f08cebeb708cfa1c74d4fd04c908e5c16",
+              "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8",
               "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077"
             },
             "tag": "v0.16.0"
@@ -31667,6 +31776,29 @@
             "leaked_entity_rate": 0.3080684596577017,
             "leaking_documents": 582,
             "leaking_entities": 882,
+            "per_label_bytes": {
+              "false_positive_by_prediction_label": {
+                "custom:building_number": 2,
+                "custom:credit_card": 2,
+                "custom:license_plate": 1,
+                "location": 484,
+                "name": 232,
+                "organization": 643
+              },
+              "leaked_by_gold_label": {
+                "CREDIT_CARD": 24,
+                "DATE_TIME": 601,
+                "GPE": 469,
+                "IBAN_CODE": 22,
+                "NRP": 355,
+                "ORGANIZATION": 483,
+                "PERSON": 423,
+                "PHONE_NUMBER": 768,
+                "STREET_ADDRESS": 4032,
+                "TITLE": 750,
+                "ZIP_CODE": 57
+              }
+            },
             "pii_documents": 1387,
             "predicted_bytes": 32911,
             "redaction_load": 0.2581335885047374,
@@ -32658,22 +32790,35 @@
           ]
         },
         "gaze-v0.16.0": {
-          "generated_at": "2026-10-08T10:34:51.940982+00:00",
+          "comparison_revision": "6a7f1782",
+          "comparison_sha256": {
+            "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+            "compare.py": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
+            "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+            "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+            "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+          },
+          "generated_at": "2026-10-09T10:06:34.195010+00:00",
           "hardware": "macOS-26.5-arm64-arm-64bit-Mach-O",
           "harness_dirty": false,
-          "harness_revision": "900679c00970b6c5ddf3e0d0342d67e8e720b23c",
+          "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8",
           "runs": [
             {
               "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
-              "harness_revision": "cd93710f08cebeb708cfa1c74d4fd04c908e5c16",
+              "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8",
               "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077"
             },
             {
               "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
-              "harness_revision": "900679c00970b6c5ddf3e0d0342d67e8e720b23c",
+              "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8",
               "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077"
             }
-          ]
+          ],
+          "harness_archive_branch": "archive/bench-harness",
+          "harness_commits": {
+            "comparison": "6a7f1782f314fefacb5d89fb6148c15bad9adc75",
+            "measured": "8e34c8eee0ec91ce54a86148f952168ea0763fb8"
+          }
         }
       },
       "tuned_measurement": {
@@ -32706,5 +32851,6 @@
     "ai4privacy/pii-masking-300k (OPF's published set)": "custom licence; commercial use requires a licence from ai4privacy; not downloaded or run"
   },
   "report_only": "never used to design or tune Gaze rules",
-  "schema_version": 1
+  "schema_version": 1,
+  "per_label_data": "Report-only label-to-count maps; never fixture input and never used to design or tune Gaze rules."
 }

@@ -50,6 +50,17 @@ def sync_contract_hashes(report: dict) -> None:
         report["contracts"][version] = digest(REPO / path) if path is not None else None
 
 
+def sync_metrics_hash(report: dict) -> None:
+    """Accept only the reviewed aggregate-identical per-label telemetry addition."""
+    previous = "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f"
+    telemetry = "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c"
+    current = digest(HERE / "comparison_metrics.py")
+    recorded = report["comparison_metrics_sha256"]
+    require(recorded == current or (recorded, current) == (previous, telemetry),
+            "comparison metrics changed beyond aggregate-identical telemetry; replay predictions")
+    report["comparison_metrics_sha256"] = current
+
+
 def derive_cell(v1: dict, v3: dict) -> dict:
     """v4 is v1 accounting plus the pre-existing non-credential v3 credit."""
     result = copy.deepcopy(v1)
@@ -87,6 +98,7 @@ def derive_tuned(report: dict) -> dict:
             )
     add_v4_contracts(report)
     sync_contract_hashes(report)
+    sync_metrics_hash(report)
     report["comparison_sha256"] = digest(REPORT)
     report["compare_sha256"] = digest(Path(compare.__file__))
     report["scorer_sha256"] = digest(BENCH / "gaze_bench_score.py")
@@ -214,6 +226,7 @@ def derive(
     require(receipt.get("variant_packs") == original["corpus"]["packs"], "v4 derivation variant packs changed")
     add_v4_contracts(report)
     sync_contract_hashes(report)
+    sync_metrics_hash(report)
     report["compare_sha256"] = digest(Path(compare.__file__))
     report["scorer_sha256"] = digest(BENCH / "gaze_bench_score.py")
     report["contract_v4_derivation"] = receipt

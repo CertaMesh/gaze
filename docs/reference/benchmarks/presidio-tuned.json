@@ -49,8 +49,8 @@
     "previous_sha256": "1c1060cec407ea2564824e91b2031febf72a7714d61389d33de3ce764708364f",
     "reason": "Only the compatible age label-map extension and its receipt changed. Every original comparison field other than the mapping digest is byte-for-byte equal as JSON; the tuned selection, anchors, scores and input predictions are unchanged."
   },
-  "comparison_metrics_sha256": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
-  "comparison_sha256": "4914f8d8387c7454e66ea8659c2b8e91a2ea6d18cc2e2f682752281e94f94f5c",
+  "comparison_metrics_sha256": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+  "comparison_sha256": "c0e2ca67cb5fcef7a71fa225d2edf4e1babf31c832248852eda1e97fb49a19e0",
   "contract_v4_derivation": {
     "credential_prediction_classes": false,
     "method": "v1 aggregates plus v3 gold-gap credit",

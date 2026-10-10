@@ -33,11 +33,15 @@ BACKEND_CODE_PARTS = ("class Presidio", "class Gliner", "class DataFogCore", "cl
                       "class Scrubadub", "class Opf", "def resolved_presidio_spans", "def byte_spans")
 PINNED_SHA256 = {
     "compare.py": "5ddedb6cab9bb15957803a79d2e7ea6b8f2848a04229b062ffbaea783892f38e",
-    "comparison_metrics.py": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
+    "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
     "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa",
     "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
     "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
 }
+# The aggregate rows predate opt-in per-label telemetry. Their default metrics
+# are byte-identical, but no other old-to-current metrics transition is compatible.
+TELEMETRY_ONLY_PREVIOUS_METRICS_SHA256 = "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f"
+TELEMETRY_ONLY_CURRENT_METRICS_SHA256 = "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c"
 COMPARE_DIR = Path(compare.__file__).resolve().parent
 
 

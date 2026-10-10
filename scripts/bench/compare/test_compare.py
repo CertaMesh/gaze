@@ -442,6 +442,18 @@ def test_contract_v4_derivation_uses_v1_scope_and_v3_gold_gap() -> None:
     }
 
 
+def test_contract_derivation_rejects_unreviewed_metrics_repin(monkeypatch) -> None:
+    previous = "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f"
+    current = "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c"
+    monkeypatch.setattr(derive_contract_v4, "digest", lambda _: current)
+    report = {"comparison_metrics_sha256": previous}
+    derive_contract_v4.sync_metrics_hash(report)
+    assert report["comparison_metrics_sha256"] == current
+    monkeypatch.setattr(derive_contract_v4, "digest", lambda _: "f" * 64)
+    with pytest.raises(ValueError, match="replay predictions"):
+        derive_contract_v4.sync_metrics_hash(report)
+
+
 def test_contract_v4_restores_typed_credential_credit() -> None:
     mapping = compare.load_mapping()["gaze"]
     assert compare.typed_mapping_for_contract(mapping, "v4")["custom:password"] == ("PASSWORD",)

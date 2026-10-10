@@ -23,6 +23,7 @@ from markdown_table import table_header  # noqa: E402
 from tagged_gaze import (  # noqa: E402
     RELEASE_PINS, TAG, check_model_receipt, check_own_input, check_own_score, check_public, tag_commit)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import backends  # noqa: E402
 import pii_trace_repro  # noqa: E402
 VENDOR_TUNED = Path(__file__).with_name("vendor-tuned.json")
 DATA = REPO / "docs/reference/benchmarks/their-benchmarks.json"
@@ -107,6 +108,29 @@ def checked_harness_commits(
             raise ValueError(f"{kind} archive citation does not match its recorded harness commit")
         if not contains(commit, branch):
             raise ValueError(f"{kind} harness commit is not reachable from branch {branch}")
+    return dict(commits)
+
+
+def checked_tagged_harness_commits(
+    measured: Mapping[str, Any], contains: Callable[[str, str], bool] = archive_contains,
+) -> dict[str, str]:
+    """Keep separately measured release-row code reachable after a squash merge."""
+    commits = measured.get("harness_commits", {})
+    if not commits:
+        return {}
+    branch = measured.get("harness_archive_branch")
+    if branch != "archive/bench-harness":
+        raise ValueError("tagged harness citations need branch archive/bench-harness")
+    expected = {"comparison": measured["comparison_revision"],
+                "measured": measured["harness_revision"]}
+    if set(commits) != set(expected):
+        raise ValueError("tagged harness citations need comparison and measured commits")
+    for kind, commit in commits.items():
+        if (len(commit) != 40 or any(char not in "0123456789abcdef" for char in commit)
+                or not commit.startswith(expected[kind])):
+            raise ValueError(f"{kind} archive citation differs from the tagged measurement")
+        if not contains(commit, branch):
+            raise ValueError(f"{kind} tagged harness commit is not reachable from branch {branch}")
     return dict(commits)
 
 
@@ -264,8 +288,44 @@ def _crates_tree(commit: str) -> str:
     return subprocess.check_output(["git", "rev-parse", f"{commit}:crates"], cwd=REPO, text=True).strip()
 
 
+def check_per_label_bytes(row: str, cell: Mapping[str, Any]) -> None:
+    """A tagged row's aggregate label maps must account for its headline byte totals."""
+    per_label = cell.get("per_label_bytes")
+    if not isinstance(per_label, Mapping):
+        raise ValueError(f"{row}: no per-label byte totals")
+    for key, total_key, description in (
+        ("leaked_by_gold_label", "leaked_bytes", "leaked bytes"),
+        ("false_positive_by_prediction_label", "false_positive_bytes", "false-positive bytes"),
+    ):
+        values = per_label.get(key)
+        if not isinstance(values, Mapping) or any(
+            not isinstance(label, str) or not isinstance(value, int) or value < 0
+            for label, value in values.items()
+        ):
+            raise ValueError(f"{row}: invalid {key} per-label byte totals")
+        measured, expected = sum(values.values()), cell[total_key]
+        if measured != expected:
+            raise ValueError(f"{row}: per-label {description} sum to {measured}, expected {expected}")
+
+
+def check_comparison_compatibility(name: str, entry: Mapping[str, Any], report: Mapping[str, Any]) -> None:
+    """Accept only the pinned metrics or the one audited telemetry-only transition."""
+    current = report["comparison_sha256"]
+    if current != backends.PINNED_SHA256:
+        raise ValueError(f"{name}: the report used different pinned comparison code")
+    previous = entry["rescored_with"]["comparison_sha256"]
+    if previous == current:
+        return
+    changed = {key for key in previous.keys() | current.keys() if previous.get(key) != current.get(key)}
+    if changed != {"comparison_metrics.py"} or (
+        previous.get("comparison_metrics.py") != backends.TELEMETRY_ONLY_PREVIOUS_METRICS_SHA256
+        or current["comparison_metrics.py"] != backends.TELEMETRY_ONLY_CURRENT_METRICS_SHA256
+    ):
+        raise ValueError(f"{name}: report comparison metrics are incompatible with the committed aggregate")
+
+
 def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str, Any],
-               resolve: Callable[[str], tuple[str, str]] | None = None) -> str:
+               resolve: Callable[[str], tuple[str, str]] | None = None, *, refresh: bool = False) -> str:
     """Merge one tagged Gaze row (theirbench.py --gaze-release-tag) into the aggregate.
 
     The row joins only if the report measured the same benchmark identity, roster labels,
@@ -282,10 +342,7 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
                 "mapping_sha256", "typed_hold"):
         if report[key] != entry[key]:
             raise ValueError(f"{name}: the report's {key} differs from the committed entry")
-    # The committed rows were rescored with today's pinned metric code; the new row was
-    # measured with it, so it must equal the rescore's pins, not the original measurement's.
-    if report["comparison_sha256"] != entry["rescored_with"]["comparison_sha256"]:
-        raise ValueError(f"{name}: the report used different pinned comparison code")
+    check_comparison_compatibility(name, entry, report)
     rows = [tool for tool in report["rows"] if is_tagged_gaze_row(tool)]
     if len(rows) != 1 or len(report["rows"]) != 1:
         raise ValueError("the report must hold exactly one gaze-vX.Y.Z row and nothing else")
@@ -293,19 +350,64 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
     release = report["provenance"][row].get("release")
     if not release or f"gaze-{release['tag']}" != row:
         raise ValueError(f"{row}: provenance does not name the release checkout it was measured from")
-    if row in entry["rows"]:
+    if row in entry["rows"] and not refresh:
         raise ValueError(f"{row} is already in {name}")
+    published_row = report["rows"][row]["test"]
+    if refresh:
+        if row not in entry["rows"]:
+            raise ValueError(f"{row} is not in {name}, so it cannot be refreshed")
+        previous = {
+            view: {key: value for key, value in values.items() if key != "per_label_bytes"}
+            for view, values in entry["rows"][row].items() if view != "latency"
+        }
+        measured = {
+            view: {key: value for key, value in values.items() if key != "per_label_bytes"}
+            for view, values in report["rows"][row]["test"].items() if view != "latency"
+        }
+        if measured != previous:
+            raise ValueError(f"{row}: refreshed headline metrics differ from the committed row")
+        previous_latency = entry["rows"][row].get("latency")
+        if previous_latency is None:
+            published_row = {key: value for key, value in published_row.items() if key != "latency"}
+        else:
+            published_row = {**published_row, "latency": previous_latency}
     if own["system"] != row:
         raise ValueError(f"own-scorer result is for {own['system']}, not {row}")
+    check_per_label_bytes(row, report["rows"][row]["test"]["product_coverage"])
     check_own_result(name, entry, row, own, release["prediction_sha256"])
     _check_release(row, release, resolve or (lambda tag: (tag_commit(tag, REPO), _crates_tree(tag_commit(tag, REPO)))))
     scored = own.get("scored") or own["overall"]
-    entry["rows"][row] = report["rows"][row]["test"]
-    entry["own_metric"][row] = scored
-    entry["provenance"][row] = {**report["provenance"][row], "own_scorer_input": own["input"]}
+    published_score = scored
+    published_provenance = {**report["provenance"][row], "own_scorer_input": own["input"]}
+    if refresh:
+        committed_score = entry["own_metric"].get(row, {})
+        previous_headline = {
+            key: value for key, value in committed_score.items()
+            if key != "predict_seconds"
+        }
+        refreshed_headline = {
+            key: value for key, value in scored.items() if key != "predict_seconds"
+        }
+        if previous_headline != refreshed_headline:
+            raise ValueError(f"{row}: refreshed own metric differs from the committed row")
+        previous_prediction = entry.get("provenance", {}).get(row, {}).get("release", {}).get(
+            "prediction_sha256"
+        )
+        if previous_prediction != release["prediction_sha256"]:
+            raise ValueError(f"{row}: refreshed prediction digest differs from the committed row")
+        if "predict_seconds" in committed_score:
+            published_score = {**scored, "predict_seconds": committed_score["predict_seconds"]}
+        previous_cpu = entry.get("provenance", {}).get(row, {}).get("cpu")
+        if previous_cpu is not None:
+            published_provenance["cpu"] = previous_cpu
+    entry["rows"][row] = published_row
+    entry["own_metric"][row] = published_score
+    entry["provenance"][row] = published_provenance
     reproduced = release["reproduces"]
     entry.setdefault("tagged_measurements", {})[row] = {
         "harness_revision": report["harness_revision"], "harness_dirty": False,
+        "comparison_revision": report["comparison_revision"],
+        "comparison_sha256": report["comparison_sha256"],
         "hardware": report["hardware"], "generated_at": report["generated_at"],
         "runs": [
             {"prediction_sha256": reproduced["prediction_sha256"], "binary_sha256": reproduced["binary_sha256"],
@@ -345,8 +447,7 @@ def add_tuned(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str,
                 "mapping_sha256", "typed_hold"):
         if report[key] != entry[key]:
             raise ValueError(f"{name}: the report's {key} differs from the committed entry")
-    if report["comparison_sha256"] != entry["rescored_with"]["comparison_sha256"]:
-        raise ValueError(f"{name}: the report used different pinned comparison code")
+    check_comparison_compatibility(name, entry, report)
     row = declaration["row"]
     if list(report["rows"]) != [row]:
         raise ValueError(f"the report must hold exactly the vendor-tuned row {row} and nothing else")
@@ -552,6 +653,20 @@ def render(data: Mapping[str, Any]) -> str:
         for tool in public_rows(rows):
             lines.append(f"| {tool} | " + " | ".join(cell(metric, name, entry, tool)
                                                     for metric in metrics(name)) + " |")
+        for tool in (tool for tool in public_rows(rows) if is_tagged_gaze_row(tool)):
+            per_label = rows[tool]["product_coverage"].get("per_label_bytes")
+            if per_label is None:
+                continue
+            leaked = sorted(per_label["leaked_by_gold_label"].items(), key=lambda item: (-item[1], item[0]))[:5]
+            false_positive = sorted(
+                per_label["false_positive_by_prediction_label"].items(), key=lambda item: (-item[1], item[0])
+            )[:5]
+            leaked_text = ", ".join(f"`{label}` {value:,} B" for label, value in leaked) or "none"
+            false_positive_text = (
+                ", ".join(f"`{label}` {value:,} B" for label, value in false_positive) or "none"
+            )
+            lines += ["", f"Top leaked labels for {tool}: {leaked_text}.",
+                      f"False-positive bytes for {tool} by emitted label: {false_positive_text}."]
         rescored = entry["rescored_with"]
         for tool, added in sorted(entry.get("rows_measured_separately", {}).items()):
             lines_after_table = [f"{tool} was measured separately on the same documents, with harness "
@@ -561,10 +676,18 @@ def render(data: Mapping[str, Any]) -> str:
             lines += ["", *lines_after_table]
         for tool in (t for t in public_rows(rows) if is_tagged_gaze_row(t)):
             measured = entry["tagged_measurements"][tool]
+            commits = checked_tagged_harness_commits(measured)
             release = entry["provenance"][tool]["release"]
+            comparison = measured.get("comparison_revision")
+            scored_with = (
+                f"comparison code `{comparison}` and harness " if comparison else "harness "
+            )
             lines += ["", f"Row {tool}: a clean checkout of tag `{release['tag']}` (crates tree "
                           f"`{release['crates_tree'][:8]}`, benchmark binary `{release['build']['binary_sha256'][:8]}`, reproduced by a second run) "
-                          f"scored with harness `{measured['harness_revision'][:8]}`; no timing is published."]
+                          f"scored with {scored_with}`{measured['harness_revision'][:8]}`; no timing is published."
+                          + ("".join(f" The {kind} commit `{commit[:8]}` is reachable from branch "
+                                     f"`{measured['harness_archive_branch']}`."
+                                     for kind, commit in sorted(commits.items())))]
         for family_name, choice in entry.get("vendor_tuned", {}).items():
             lines += ["", f"Row {choice['row']}: {choice['caption']}. Setup: {choice['setup']} "
                           f"(source {source_text(choice['source'])}, commit `{choice['commit'][:8]}`). "
@@ -613,6 +736,8 @@ def main(argv: list[str] | None = None) -> int:
     tagged_cmd.add_argument("--report", type=Path, required=True)
     tagged_cmd.add_argument("--own", type=Path, required=True, help="the row's own-scorer result")
     tagged_cmd.add_argument("--data", type=Path, default=DATA)
+    tagged_cmd.add_argument("--refresh", action="store_true",
+                            help="replace an existing tagged row only when its headline metrics are identical")
     tuned_cmd = sub.add_parser("add-tuned", help="merge a vendor's own tuned setup into their-benchmarks.json")
     tuned_cmd.add_argument("--report", type=Path, required=True)
     tuned_cmd.add_argument("--own", type=Path, required=True, help="presidio_research_repro.py --tuned result")
@@ -644,7 +769,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "add-tagged":
         data = json.loads(args.data.read_text(encoding="utf-8"))
         row = add_tagged(data, json.loads(args.report.read_text(encoding="utf-8")),
-                         json.loads(args.own.read_text(encoding="utf-8")))
+                         json.loads(args.own.read_text(encoding="utf-8")), refresh=args.refresh)
         args.data.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(f"added {row}")
         return 0

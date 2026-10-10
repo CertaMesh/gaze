@@ -291,7 +291,7 @@ class Cells:
     def __init__(self, mapping: Mapping[str, Sequence[str]], common: frozenset[str]) -> None:
         typed = backends.typed_mapping(dict(mapping))
         self.views = {
-            "product_coverage": ComparisonMetrics(mapping, None, typed),
+            "product_coverage": ComparisonMetrics(mapping, None, typed, include_per_label_bytes=True),
             "common_intersection": ComparisonMetrics(mapping, common, typed),
         }
 

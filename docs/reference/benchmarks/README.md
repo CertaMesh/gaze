@@ -784,7 +784,7 @@ contract v1 scores; those have their own table in the rendered output.
 
 <!-- BEGIN GENERATED: leak-ledger -->
 
-The leak ledger classifies every leaked gold byte of an unreleased build by root cause. Public pages show tagged releases only, so its table is not shown here. The classified rows ([`leak-ledger.json`](leak-ledger.json) and [its row file](leak-ledger/ledger-74701b227385.jsonl.gz)) stay committed, and `python3 scripts/bench/leak_ledger.py check` re-derives their totals from the observation record under every scored-label contract.
+The leak ledger classifies every leaked gold byte by root cause. It was recorded at `7779119`, an ancestor of `v0.16.0` with the identical crates tree `276a8b2d`; its observations are byte-identical to `observations-v0.16.0.jsonl.gz`. Its table is not shown here. The classified rows ([`leak-ledger.json`](leak-ledger.json) and [its row file](leak-ledger/ledger-7779119128ce.jsonl.gz)) stay committed, and `python3 scripts/bench/leak_ledger.py check` re-derives their totals from the observation record under every scored-label contract.
 
 <!-- END GENERATED: leak-ledger -->
 
@@ -886,11 +886,14 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 | scrubadub-base | 223,156 | 9,971 | 100.0% | held (typed-metric review) | held (typed-metric review) | 66,342 | held (typed-metric review) |
 | scrubadub-spacy | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
 
+Top leaked labels for gaze-v0.16.0: `DATE` 15,632 B, `MISC` 15,614 B, `STREET_ADDRESS` 6,155 B, `OCCUPATION` 5,885 B, `NAME` 5,440 B.
+False-positive bytes for gaze-v0.16.0 by emitted label: `organization` 25,627 B, `custom:url` 8,372 B, `location` 7,218 B, `name` 2,054 B, `custom:postal_code` 2,022 B.
+
 pii-tracer was measured separately on the same documents, with harness `bfd35ce6` (typed metrics rescored with `bfd35ce6`); it changes neither the other rows nor the common-intersection labels.
 
 Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `70679f36`, benchmark binary `923d5735`, reproduced by a second run) scored with harness `e66d3360`; no timing is published.
 
-Row gaze-v0.16.0: a clean checkout of tag `v0.16.0` (crates tree `276a8b2d`, benchmark binary `6369464a`, reproduced by a second run) scored with harness `b8cad035`; no timing is published.
+Row gaze-v0.16.0: a clean checkout of tag `v0.16.0` (crates tree `276a8b2d`, benchmark binary `6369464a`, reproduced by a second run) scored with comparison code `6a7f1782` and harness `9b91f140`; no timing is published. The comparison commit `6a7f1782` is reachable from branch `archive/bench-harness`. The measured commit `9b91f140` is reachable from branch `archive/bench-harness`.
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
@@ -924,11 +927,14 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 | scrubadub-base | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
 | scrubadub-spacy | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
 
+Top leaked labels for gaze-v0.16.0: `STREET_ADDRESS` 4,032 B, `PHONE_NUMBER` 768 B, `TITLE` 750 B, `DATE_TIME` 601 B, `ORGANIZATION` 483 B.
+False-positive bytes for gaze-v0.16.0 by emitted label: `organization` 643 B, `location` 484 B, `name` 232 B, `custom:building_number` 2 B, `custom:credit_card` 2 B.
+
 pii-tracer was measured separately on the same documents, with harness `7b09e385` (typed metrics rescored with `bfd35ce6`); it changes neither the other rows nor the common-intersection labels.
 
 Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `70679f36`, benchmark binary `0e665110`, reproduced by a second run) scored with harness `e66d3360`; no timing is published.
 
-Row gaze-v0.16.0: a clean checkout of tag `v0.16.0` (crates tree `276a8b2d`, benchmark binary `6369464a`, reproduced by a second run) scored with harness `900679c0`; no timing is published.
+Row gaze-v0.16.0: a clean checkout of tag `v0.16.0` (crates tree `276a8b2d`, benchmark binary `6369464a`, reproduced by a second run) scored with comparison code `6a7f1782` and harness `8e34c8ee`; no timing is published. The comparison commit `6a7f1782` is reachable from branch `archive/bench-harness`. The measured commit `8e34c8ee` is reachable from branch `archive/bench-harness`.
 
 Row presidio-tuned-presidio-research: Presidio tuned for this dataset by its authors (their published custom setup). Setup: notebook 5, custom analyzer: OpenMed NER recognizer, title/year/age pattern recognizers, lemma context enhancement, 14 predefined recognizers removed, score threshold 0.3 (source `microsoft/presidio-research` `notebooks/5_Evaluate_Custom_Presidio_Analyzer.ipynb`, commit `6db3769a`). It replaces the declared presidio configuration on the chart panel; the other Presidio rows stay in this table.
 

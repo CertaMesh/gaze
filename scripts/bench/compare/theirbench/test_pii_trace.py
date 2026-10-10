@@ -171,15 +171,18 @@ def test_native_identity_map_must_match_the_tools_labels() -> None:
 
 def tagged_trace() -> tuple[dict, dict, dict, dict]:
     """A committed PII-TRACE entry and a tagged Gaze report + own-scorer result that fit it."""
+    import backends
     from test_add_tool import DATASET, PREDICTIONS, own_pii_trace
-    from test_theirbench import release_provenance, row, synthetic
+    from test_theirbench import (
+        per_label_bytes, release_provenance, row, synthetic, telemetry_compatible_comparison,
+    )
 
     data = synthetic()
     entry = data["benchmarks"].pop("presidio-research")
     data["benchmarks"]["pii-trace"] = entry
     entry.update(identity={"messages": 3, "sha256": DATASET}, splits={"test": {"documents": 3}},
                  label_maps_sha256="a" * 64, mapping_sha256="b" * 64, typed_hold=["gaze", "opf"])
-    entry["rescored_with"]["comparison_sha256"] = {"compare.py": "c" * 64}
+    entry["rescored_with"]["comparison_sha256"] = telemetry_compatible_comparison()
     del entry["rows"]["gaze-v0.15.1"]
     report = {
         "schema_version": 1, "benchmark": "pii-trace", "preflight": None, "harness_dirty": False,
@@ -187,10 +190,12 @@ def tagged_trace() -> tuple[dict, dict, dict, dict]:
         "identity": entry["identity"], "splits": entry["splits"],
         "common_intersection_labels": entry["common_intersection_labels"],
         "label_maps_sha256": entry["label_maps_sha256"], "mapping_sha256": entry["mapping_sha256"],
-        "typed_hold": entry["typed_hold"], "comparison_sha256": {"compare.py": "c" * 64},
+        "typed_hold": entry["typed_hold"], "comparison_revision": backends.COMPARISON_REVISION,
+        "comparison_sha256": backends.PINNED_SHA256,
         "rows": {"gaze-v0.15.1": {"test": row(12)}},
         "provenance": {"gaze-v0.15.1": {"release": {**release_provenance(), "prediction_sha256": PREDICTIONS}}},
     }
+    report["rows"]["gaze-v0.15.1"]["test"]["product_coverage"]["per_label_bytes"] = per_label_bytes()
     report["provenance"]["gaze-v0.15.1"]["release"]["reproduces"]["prediction_sha256"] = PREDICTIONS
     return data, entry, report, own_pii_trace("gaze-v0.15.1")
 

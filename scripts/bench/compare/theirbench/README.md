@@ -93,6 +93,17 @@ python3 scripts/bench/compare/theirbench/render_theirbench.py render
 
 What the harness enforces in this mode: the tag is resolved as `refs/tags/<tag>`, the checkout is exactly that commit with no local changes, the harness itself is clean and its state is re-read every run; the benchmark binary is built by the harness from that checkout into a fresh `CARGO_TARGET_DIR` (an existing directory or `--gaze-binary` is refused, so a stale executable cannot be attributed to the tag); the policy and both model bundles must equal the digests pinned in `tagged_gaze.RELEASE_PINS`. The row's provenance records the exact build command, toolchain, `Cargo.lock` hash and binary SHA-256, the pins, the prediction file's SHA-256 and, from the second run, the first run's prediction and binary hashes; `add-tagged` refuses a row whose second run did not reproduce the predictions byte for byte. Predictions themselves are never committed.
 
+The aggregate report records leaked bytes by gold label and false-positive
+bytes by emitted label. These are label-to-count maps only: no values, spans,
+or document text enter the report. To backfill these totals for a tagged row
+already in `their-benchmarks.json`, pass `--refresh` to `add-tagged`. A refresh
+is refused unless every previously committed headline metric is identical.
+
+These per-label maps are report-only and never fixture input. They must never
+be used to design or tune Gaze rules. The v0.16.0 rows' comparison commit
+`6a7f1782` and measurement harness commits `9b91f140` and `8e34c8ee` are
+reachable from branch `archive/bench-harness`.
+
 ## A vendor's own tuned setup as its row
 
 On a vendor's own benchmark the chart compares Gaze with that vendor's best published setup, not its defaults (user ruling 2026-09-29). [`vendor-tuned.json`](vendor-tuned.json) declares it per benchmark: the setup, its source and pinned commit, and the panel caption. Presidio Research publishes one, notebook 5 (custom analyzer, OpenMed NER, extra recognizers, context enhancement; F2 0.91 with the evaluator that produced it, reproduced here). PIIBench-commercial has none, so Presidio keeps its declared best configuration there and the panel caption says so. The declaration lives beside the harness, not in `../chart-configs.json`, whose bytes `comparison.json` pins.
