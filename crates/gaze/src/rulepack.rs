@@ -1482,6 +1482,9 @@ window_chars = 48
                 PiiClass::custom("nino").expect("valid custom class"),
                 PiiClass::custom("pan").expect("valid custom class"),
                 PiiClass::custom("postal_code").expect("valid custom class"),
+                PiiClass::custom("customer_id").expect("valid custom class"),
+                PiiClass::custom("employee_id").expect("valid custom class"),
+                PiiClass::custom("record_id").expect("valid custom class"),
             ])
         );
     }
