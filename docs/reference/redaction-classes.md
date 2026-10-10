@@ -19,7 +19,7 @@ compatibility name for the same embedded `core.toml` bytes
 (`crates/gaze-recognizers/src/lib.rs:45-55`,
 `crates/gaze-cli/src/pipeline/run.rs:718-733`). Its difference is activation
 policy, described under [Shipped default activation](#shipped-default-activation).
-The shared payload currently contains exactly 54 recognizer specs
+The shared payload currently contains exactly 57 recognizer specs
 (`crates/gaze-recognizers/src/lib.rs`, `embedded()`).
 
 The separate `secrets` bundle (`crates/gaze-recognizers/embedded/secrets.toml`)
@@ -147,11 +147,14 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `age.phrase` | `regex` | Numeric person age from 1 to 122 after `turned` with a person word before it and a clause boundary or time word after it, before `geworden` after a person word and a copula, after `at the age of` / `im Alter von` with a person word before it, before `y/o` after a person copula or before a person noun, and before `year old female`/`male` unless an animal noun follows; only the number is tokenized | `custom:age` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 | `secrets` | `security_token.anchored` | `regex` | Cue-anchored credential values (a complete three-segment JWT after a cue included) plus structurally prefixed AWS access keys and three-segment JWTs | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 87 |
 | `secrets` | `password.field` | `regex` | Values in explicit EN/DE password or passphrase records; 1 to 256 normalized grammar units, with matching quoted or plain scalar syntax; not a raw-byte ceiling | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
+| `core, core-extended` | `customer_id.labelled` | `regex` | Explicit English/German person-linked customer identifier labels in JSON, logs or same-line prose; capture only the complete adjacent value | `custom:customer_id` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
+| `core, core-extended` | `employee_id.labelled` | `regex` | Explicit English/German person-linked employee identifier labels in JSON, logs or same-line prose; capture only the complete adjacent value | `custom:employee_id` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
+| `core, core-extended` | `record_id.labelled` | `regex` | Explicit English/German person-linked record identifier labels in JSON, logs or same-line prose; capture only the complete adjacent value | `custom:record_id` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 <!-- redaction-classes-gate:recognizers:end -->
 
-The three `*.labelled` rows are safe-default `core` rules. Their captured value,
-not the field name, becomes the token. They cooperate with the older
-`*.cue_anchored` rows of the same class. All six rows use
+The three government-ID `*.labelled` rows are safe-default `core` rules. Their
+captured value, not the field name, becomes the token. They cooperate with the
+older `*.cue_anchored` rows of the same class. Those six rows use
 `match.complete_labelled_value` to scan adjacent groups. An older cue rule keeps
 its full original capture even when a date-like group appears inside it; a
 following uppercase field label remains visible when its value is claimed by a
@@ -160,9 +163,28 @@ fallback. Grouped runs
 can extend beyond four groups or 40 bytes with a typed audit reason; the
 [labelled-identifier explanation](../explanation/detection/labelled-identifiers.md)
 describes its stop and audit rules. The `redaction_classes_doc` test pins these
-rows and the 54-spec inventory to the loaded rulepack. The
+rows and the 57-spec inventory to the loaded rulepack. The
 `bundle-tokenization-drift --verify-ack` gate separately checks the bundled
 output against its committed corpus snapshot.
+
+The three CRM/HR rules protect `custom:customer_id`, `custom:employee_id` and
+`custom:record_id` through the same complete-value scanner. Customer and employee
+labels establish their respective classes; person/contact/member identifiers
+establish the record class. Bare `id`, `record_id` and `unique_id` do not establish
+person linkage and stay outside these rules, as do order, invoice, issue, build,
+commit and tracking labels. Connectors must stay on the same line. The rules
+accept snake, camel and kebab spelling, English/German labels, numeric and opaque
+alphanumeric values, grouped runs and UUIDs. The original bytes remain in the
+manifest for exact restore. An explicit label is the authority; the rules cannot
+distinguish a corporate customer from an individual customer.
+
+The label conventions reflect [Microsoft Graph employeeId](https://learn.microsoft.com/en-us/graph/api/resources/user?view=graph-rest-1.0),
+[SAP personnel identifiers](https://help.sap.com/docs/ERP_HCM/d3bc4479e3344626be836c03a5c6962f/4fc7599929c05df3e10000000a42189b.html),
+and [membershipNumber](https://schema.org/membershipNumber). Generic
+[identifier](https://schema.org/identifier) covers any kind of object, so it is
+insufficient by itself. Nym `CUSTOMER_ID` and `EMPLOYEE_ID` remain unsupported by
+the closed safety-net class mapping: enabling them needs a class-contract change
+and separate measured evidence, rather than only an allowlist edit.
 
 ### Cue shapes and group separators
 
@@ -431,8 +453,8 @@ locale intersection (`crates/gaze-assembly/src/detector_wiring.rs`).
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
-| `core` | `global` | no | `aadhaar.in, age.cue, age.phrase, birth_date.answer, birth_date.cue, bsn.nl, card.cued, card.cued_short, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.us, phone.national.us.cued, phone.structural, postal.ca, postal.cued_four_digit, postal.cued_short, postal.gb, postal.ie, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml`; `crates/gaze-assembly/src/defaults.rs:45-77` |
-| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH, en-AU` | yes | `aadhaar.in, age.cue, age.phrase, birth_date.answer, birth_date.cue, bsn.nl, card.cued, card.cued_short, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.de, phone.national.us, phone.national.us.cued, phone.structural, postal.at_ch, postal.au, postal.ca, postal.cued_four_digit, postal.cued_short, postal.de, postal.gb, postal.ie, postal.us, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
+| `core` | `global` | no | `aadhaar.in, age.cue, age.phrase, birth_date.answer, birth_date.cue, bsn.nl, card.cued, card.cued_short, card.structural, cnpj.br, cpf.br, customer_id.labelled, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, employee_id.labelled, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.us, phone.national.us.cued, phone.structural, postal.ca, postal.cued_four_digit, postal.cued_short, postal.gb, postal.ie, record_id.labelled, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml`; `crates/gaze-assembly/src/defaults.rs:45-77` |
+| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH, en-AU` | yes | `aadhaar.in, age.cue, age.phrase, birth_date.answer, birth_date.cue, bsn.nl, card.cued, card.cued_short, card.structural, cnpj.br, cpf.br, customer_id.labelled, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, employee_id.labelled, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.de, phone.national.us, phone.national.us.cued, phone.structural, postal.at_ch, postal.au, postal.ca, postal.cued_four_digit, postal.cued_short, postal.de, postal.gb, postal.ie, postal.us, record_id.labelled, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
 The v0.6+ compatibility behavior therefore does activate

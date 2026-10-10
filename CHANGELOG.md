@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Protect explicitly labelled customer, employee and person/member record identifiers
+  in English/German prose, JSON and logs with exact reversible value capture.
+  Generic record, order, invoice, issue, build and tracking IDs remain outside these rules.
+
 - **Credentials are protected by default.** Newly generated `gaze setup`
   policies include the bundled `secrets` rulepack, protecting supported API
   keys, access and session tokens, JWTs, and password fields. Direct library

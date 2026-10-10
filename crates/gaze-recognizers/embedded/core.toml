@@ -1782,7 +1782,7 @@ license = "Apache-2.0"
 # require a class-specific field name and a bounded field connector. Only group 1,
 # the value, is tokenized. The shared value scanner extends bounded regex captures through the
 # complete adjacent identifier run. They deliberately leave generic `id`, `number`, and
-# `customer_id` alone.
+# unrelated generic keys alone.
 # The three rules share a digit-bearing value grammar; tax excludes bare digits so that an
 # invalid German Steuer-ID remains with its checksum validator.
 [[recognizers]]
@@ -2142,6 +2142,85 @@ pattern = '''(?ix)
   \b((?:[1-9][0-9]?|1[01][0-9]|12[0-2]))[\x20\t\x{A0}\x{202F}]?y/o[\x20\t\x{A0}\x{202F}]+(?:(?:fe)?male|man|woman|boy|girl|guy|lady|patient)\b
 )'''
 capture_groups = [1, 2, 3, 4, 5, 6, 7]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# Person-linked CRM/HR identifiers. Labels establish the class; opaque shape alone
+# never does. Same-line connectors exclude unrelated following records. Generic id,
+# record_id and unique_id are deliberately absent: they also identify public objects.
+# Membership identifiers belong to record_id; customer and employee records retain
+# their more specific classes. Capture only the value, then use the shared whole-value
+# scanner so grouped, UUID and overlong identifiers cannot leave a raw suffix.
+
+[[recognizers]]
+id = "customer_id.labelled"
+safety_tier = "safe_default"
+class = "custom:customer_id"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:customer[ _-]?(?:record[ _-]?)?(?:id|number|no\.?|nr\.?)|kunden(?:[ _-]?(?:id|nummer|nr\.?)))[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)\\?["']?((?:[\p{L}\p{N}]|\\u[0-9A-F]{4})+(?:[-_./:](?:[\p{L}\p{N}]|\\u[0-9A-F]{4})+)*)'''
+capture_groups = [1]
+complete_labelled_value = true
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+[[recognizers]]
+id = "employee_id.labelled"
+safety_tier = "safe_default"
+class = "custom:employee_id"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:employee[ _-]?(?:record[ _-]?)?(?:id|number|no\.?)|personnel[ _-]?(?:id|number|no\.?)|personal[ _-]?(?:nummer|nr\.?)|mitarbeiter[ _-]?(?:id|nummer|nr\.?))[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)\\?["']?((?:[\p{L}\p{N}]|\\u[0-9A-F]{4})+(?:[-_./:](?:[\p{L}\p{N}]|\\u[0-9A-F]{4})+)*)'''
+capture_groups = [1]
+complete_labelled_value = true
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+[[recognizers]]
+id = "record_id.labelled"
+safety_tier = "safe_default"
+class = "custom:record_id"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:(?:person|contact|member)[ _-]?(?:id|number|no\.?)|membership[ _-]?number|(?:person|contact)[ _-]?record[ _-]?id|mitglieds[ _-]?(?:nummer|nr\.?)|personen[ _-]?id|kontakt[ _-]?id)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)\\?["']?((?:[\p{L}\p{N}]|\\u[0-9A-F]{4})+(?:[-_./:](?:[\p{L}\p{N}]|\\u[0-9A-F]{4})+)*)'''
+capture_groups = [1]
+complete_labelled_value = true
 
 [recognizers.scoring]
 base = 0.90
