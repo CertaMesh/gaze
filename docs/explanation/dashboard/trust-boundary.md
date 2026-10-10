@@ -21,8 +21,8 @@ crash-artifact suppression is claimed.
 
 ## Capture authority
 
-`ProviderVisible` is confidential pseudonymized content, with no verified-clean
-claim. `OwnerRaw` and `OwnerRestored` each require startup selection and
+`ProviderVisible` is the dashboard-on baseline: confidential pseudonymized
+content, with no verified-clean claim. `OwnerRaw` and `OwnerRestored` each require startup selection and
 acknowledgement. Browser reveals require an exact retained logical ID, stage,
 emission ID, and domain. Browsers cannot promote capture, select epochs,
 replace sinks, or revive disabled registrations.
