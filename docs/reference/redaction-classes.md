@@ -174,7 +174,8 @@ establish the record class. Bare `id`, `record_id` and `unique_id` do not establ
 person linkage and stay outside these rules, as do order, invoice, issue, build,
 commit and tracking labels. Connectors must stay on the same line. The rules
 accept snake, camel and kebab spelling, English/German labels, numeric and opaque
-alphanumeric values, grouped runs and UUIDs. The original bytes remain in the
+alphanumeric values (including combining marks and `+/_=-` punctuation), grouped
+runs and UUIDs. The original bytes remain in the
 manifest for exact restore. An explicit label is the authority; the rules cannot
 distinguish a corporate customer from an individual customer. These are text
 matchers: serialized JSON retains the semantic key beside the value.
