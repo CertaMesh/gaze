@@ -35,6 +35,25 @@ def scorecard(corpus_sha256: str = render.CORPUS_SHA256) -> dict:
 
 
 class AdjacencyHistoryTests(unittest.TestCase):
+    def test_new_history_preserves_each_releases_own_policy(self) -> None:
+        current = render.HistoryInputs.for_version(13)
+        value = scorecard(current.corpus_sha256)
+        value['measured'] = 'v0.16.0'
+        value['layers']['generator']['generator_version'] = 13
+        value['layers']['scored_label_contract']['file_sha256'] = current.contract_sha256
+        value['parameters']['policy_sha256'] = render.V16_POLICY_SHA256
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'scorecard.json'
+            path.write_text(json.dumps(value))
+            row, = render.rows_from_scorecard(path, current)
+            self.assertEqual(row['policy_sha256'], render.V16_POLICY_SHA256)
+            self.assertEqual(row['refused'], {'A': 0, 'D': 0, 'R': 0})
+            value['parameters']['policy_sha256'] = current.policy_sha256
+            path.write_text(json.dumps(value))
+            with self.assertRaisesRegex(render.HistoryError, 'setup policy'):
+                render.rows_from_scorecard(path, current)
+        self.assertEqual(render.expected_rows(render.HistoryInputs.for_version(12)), render.LEGACY_ROWS)
+
     def test_incomplete_recording_preserves_the_existing_ledger(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
