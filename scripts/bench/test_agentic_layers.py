@@ -3044,3 +3044,47 @@ class PersonLinkedRecordIdTests(unittest.TestCase):
     def test_gold_value_pools_are_partition_disjoint(self):
         pools = [{g.value for r in agentic.record_ids.records(agentic, part) for g in r.gold} for part in agentic.PARTITIONS]
         self.assertFalse(pools[0] & pools[1])
+
+
+class RulepackPathDeltaTests(unittest.TestCase):
+    def pair(self, folder):
+        root = Path(folder)
+        texts = {
+            "base": '[policy.rulepacks]\nbundled=["secrets"]\npaths=["base-core.toml"]\n',
+            "candidate": '[policy.rulepacks]\nbundled=["secrets"]\npaths=["base-core.toml", "record-ids.toml"]\n',
+            "delta": '[mechanism_delta]\nappend_rulepack_paths=["record-ids.toml"]\n',
+        }
+        cards = {"base": _scorecard({"C": 100, "A": 50, "D": 0, "R": 30}),
+                 "candidate": _scorecard({"C": 100, "A": 40, "D": 0, "R": 30})}
+        for name, text in texts.items():
+            path = root / (name + ".toml")
+            path.write_text(text)
+            if name != "delta":
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                cards[name]["parameters"]["policy_sha256"] = digest
+                cards[name]["runner_provenance"]["policy"] = {"path": str(path), "sha256": digest}
+                cards[name]["runner_provenance"]["policy_dependencies"]["files"] = {"policy.rulepacks.paths[0]": "a" * 64}
+        cards["candidate"]["runner_provenance"]["policy_dependencies"]["files"]["policy.rulepacks.paths[1]"] = "b" * 64
+        return cards, root / "delta.toml"
+
+    def test_append_allows_only_new_slot_and_requires_its_digest(self):
+        with tempfile.TemporaryDirectory() as folder:
+            cards, delta = self.pair(folder)
+            self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "pass")
+            files = cards["candidate"]["runner_provenance"]["policy_dependencies"]["files"]
+            for reference in ("policy.rulepacks.paths[0]", "ner.model_dir/model.onnx"):
+                with self.subTest(reference=reference):
+                    original = dict(files)
+                    files[reference] = "c" * 64
+                    self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "not_comparable")
+                    files.clear(); files.update(original)
+            del files["policy.rulepacks.paths[1]"]
+            self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "not_comparable")
+
+    def test_duplicate_paths_and_undeclared_policy_edits_fail(self):
+        with tempfile.TemporaryDirectory() as folder:
+            cards, delta = self.pair(folder)
+            delta.write_text('[mechanism_delta]\nappend_rulepack_paths=["record-ids.toml", "record-ids.toml"]\n')
+            self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "not_comparable")
+            delta.write_text('[mechanism_delta]\nappend_rulepack_paths=["base-core.toml"]\n')
+            self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "not_comparable")

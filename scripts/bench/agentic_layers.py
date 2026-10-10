@@ -5405,6 +5405,30 @@ def _policy_delta_comparison(
         return False, "policy delta must declare at least one TOML section", digests, set()
     if set(delta) == {"mechanism_delta"}:
         descriptor = delta["mechanism_delta"]
+        if set(descriptor) == {"append_rulepack_paths"}:
+            appended = descriptor["append_rulepack_paths"]
+            if (not isinstance(appended, list) or not appended
+                    or any(not isinstance(path, str) or not path for path in appended)
+                    or len(set(appended)) != len(appended)):
+                return False, "append_rulepack_paths must be a non-empty unique string list", digests, set()
+            expected = copy.deepcopy(base_policy)
+            try:
+                paths = expected["policy"]["rulepacks"]["paths"]
+            except (KeyError, TypeError):
+                return False, "base policy has no policy.rulepacks.paths list", digests, set()
+            if not isinstance(paths, list) or any(path in paths for path in appended):
+                return False, "appended rulepack paths must be absent from the base list", digests, set()
+            paths.extend(appended)
+            if not _toml_equal(candidate_policy, expected):
+                return False, "candidate policy differs beyond the declared rulepack-path append", digests, set()
+            # Only files in newly appended slots may differ. Existing rulepacks,
+            # their dictionaries and every model input retain strict identity.
+            dependencies = policy_dependency_identity(candidate, False)["files"]
+            allowed = {f"policy.rulepacks.paths[{index}]"
+                       for index in range(len(paths) - len(appended), len(paths))}
+            if any(reference not in dependencies for reference in allowed):
+                return False, "appended rulepack paths lack dependency hashes", digests, set()
+            return True, "candidate policy equals base plus appended rulepack paths", digests, allowed
         if set(descriptor) != {"append_bundled_rulepacks"}:
             return False, "mechanism_delta has unsupported operations", digests, set()
         appended = descriptor["append_bundled_rulepacks"]
@@ -5444,7 +5468,8 @@ def _dependency_difference(
     for reference in sorted(base["files"].keys() | candidate["files"].keys()):
         if base["files"].get(reference) != candidate["files"].get(reference):
             owner = _dependency_owner(reference)
-            if not (owner in added_sections and reference not in base["files"]):
+            exact_append = reference in added_sections and reference not in base["files"]
+            if not (exact_append or (owner in added_sections and reference not in base["files"])):
                 differing.append(f"policy input {reference}")
     for model_id in sorted(base["model_bundles"].keys() | candidate["model_bundles"].keys()):
         if base["model_bundles"].get(model_id) != candidate["model_bundles"].get(model_id):
