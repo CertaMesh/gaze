@@ -1,0 +1,162 @@
+{
+  "verdict": "fail",
+  "reason": "credit guard: FP bytes rose on ['ref_number_9 (BSN: 0 -> 180)'], the benign twin of credited checksum-invalid gold; no net-bytes gain offsets it",
+  "summary": {
+    "leaked_bytes_decrease": 19120,
+    "false_positive_bytes_increase": 196
+  },
+  "layers": {
+    "C": {
+      "attempted_base": 2910,
+      "attempted_candidate": 2910,
+      "documents_base": 2910,
+      "documents_candidate": 2910,
+      "headline_leaked_base": 82348,
+      "headline_leaked_candidate": 82308,
+      "leaked_base": 82348,
+      "leaked_candidate": 82308,
+      "twin_leaked_base": 0,
+      "twin_leaked_candidate": 0,
+      "false_positive_base": 3646,
+      "false_positive_candidate": 3662,
+      "failed_closed_base": 0,
+      "failed_closed_candidate": 0,
+      "restore_exact_base": 2910,
+      "restore_exact_candidate": 2910,
+      "restore_failures_base": 0,
+      "restore_failures_candidate": 0,
+      "manifest_valid_base": 2910,
+      "manifest_valid_candidate": 2910,
+      "manifest_invalid_base": 0,
+      "manifest_invalid_candidate": 0
+    },
+    "A": {
+      "attempted_base": 3728,
+      "attempted_candidate": 3728,
+      "documents_base": 3728,
+      "documents_candidate": 3728,
+      "headline_leaked_base": 17946,
+      "headline_leaked_candidate": 8586,
+      "leaked_base": 17551,
+      "leaked_candidate": 8191,
+      "twin_leaked_base": 395,
+      "twin_leaked_candidate": 395,
+      "false_positive_base": 60,
+      "false_positive_candidate": 60,
+      "failed_closed_base": 0,
+      "failed_closed_candidate": 0,
+      "restore_exact_base": 3728,
+      "restore_exact_candidate": 3728,
+      "restore_failures_base": 0,
+      "restore_failures_candidate": 0,
+      "manifest_valid_base": 3728,
+      "manifest_valid_candidate": 3728,
+      "manifest_invalid_base": 0,
+      "manifest_invalid_candidate": 0
+    },
+    "D": {
+      "attempted_base": 2144,
+      "attempted_candidate": 2144,
+      "documents_base": 2144,
+      "documents_candidate": 2144,
+      "headline_leaked_base": 0,
+      "headline_leaked_candidate": 0,
+      "leaked_base": 0,
+      "leaked_candidate": 0,
+      "twin_leaked_base": 0,
+      "twin_leaked_candidate": 0,
+      "false_positive_base": 4325,
+      "false_positive_candidate": 4505,
+      "failed_closed_base": 0,
+      "failed_closed_candidate": 0,
+      "restore_exact_base": 2144,
+      "restore_exact_candidate": 2144,
+      "restore_failures_base": 0,
+      "restore_failures_candidate": 0,
+      "manifest_valid_base": 2144,
+      "manifest_valid_candidate": 2144,
+      "manifest_invalid_base": 0,
+      "manifest_invalid_candidate": 0
+    },
+    "R": {
+      "attempted_base": 280,
+      "attempted_candidate": 280,
+      "documents_base": 280,
+      "documents_candidate": 280,
+      "headline_leaked_base": 10000,
+      "headline_leaked_candidate": 280,
+      "leaked_base": 10000,
+      "leaked_candidate": 280,
+      "twin_leaked_base": 0,
+      "twin_leaked_candidate": 0,
+      "false_positive_base": 185,
+      "false_positive_candidate": 185,
+      "failed_closed_base": 0,
+      "failed_closed_candidate": 0,
+      "restore_exact_base": 280,
+      "restore_exact_candidate": 280,
+      "restore_failures_base": 0,
+      "restore_failures_candidate": 0,
+      "manifest_valid_base": 280,
+      "manifest_valid_candidate": 280,
+      "manifest_invalid_base": 0,
+      "manifest_invalid_candidate": 0
+    }
+  },
+  "gate_credit_version": 2,
+  "credit_guard": {
+    "ref_number_9": {
+      "base": 0,
+      "candidate": 180
+    },
+    "ref_number_11": {
+      "base": 30,
+      "candidate": 30
+    },
+    "card_twin_grouped_ref_csv": {
+      "base": 0,
+      "candidate": 0
+    },
+    "card_twin_order": {
+      "base": 0,
+      "candidate": 0
+    },
+    "card_twin_reader_serial": {
+      "base": 0,
+      "candidate": 0
+    },
+    "card_twin_timestamp_log": {
+      "base": 0,
+      "candidate": 0
+    },
+    "card_twin_transaction_json": {
+      "base": 0,
+      "candidate": 0
+    },
+    "ref_number_16": {
+      "base": 0,
+      "candidate": 0
+    },
+    "ref_number_10": {
+      "base": 0,
+      "candidate": 0
+    },
+    "gov_twin_tax_eleven": {
+      "base": 0,
+      "candidate": 0
+    },
+    "gov_near_tax_eleven": {
+      "base": 0,
+      "candidate": 0
+    },
+    "gov_twin_tax_grouped": {
+      "base": 0,
+      "candidate": 0
+    },
+    "gov_near_tax_grouped": {
+      "base": 0,
+      "candidate": 0
+    }
+  },
+  "config": "policy-file"
+}

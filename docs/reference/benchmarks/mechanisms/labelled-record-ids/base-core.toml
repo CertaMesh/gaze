@@ -10,6 +10,7 @@ names = ["phone", "mobile", "tel", "telephone", "msisdn"]
 names = ["From", "To", "Cc", "Bcc", "Reply-To", "Sender"]
 
 [[recognizers]]
+
 id = "email.global"
 safety_tier = "safe_default"
 class = "Email"
@@ -53,6 +54,7 @@ from = "presidio"
 license = "Apache-2.0"
 
 [[recognizers]]
+
 id = "email.header.name"
 safety_tier = "safe_default"
 class = "Name"
@@ -75,6 +77,7 @@ base = 0.85
 priority = 100
 
 [[recognizers]]
+
 id = "email.header.name.paren"
 safety_tier = "safe_default"
 class = "Name"
@@ -96,6 +99,7 @@ priority = 100
 family = "name.counter"
 
 [[recognizers]]
+
 id = "name.forward_marker"
 safety_tier = "safe_default"
 class = "Name"
@@ -120,6 +124,7 @@ priority = 110
 family = "name.counter"
 
 [[recognizers]]
+
 id = "name.agent_recipient"
 safety_tier = "safe_default"
 class = "Name"
@@ -144,6 +149,7 @@ priority = 110
 family = "name.counter"
 
 [[recognizers]]
+
 id = "name.auto_footer"
 safety_tier = "safe_default"
 class = "Name"
@@ -168,6 +174,7 @@ priority = 110
 family = "name.counter"
 
 [[recognizers]]
+
 id = "phone.structural"
 safety_tier = "safe_default"
 class = "custom:phone"
@@ -199,6 +206,7 @@ variant = "phone"
 precedence = 10
 
 [[recognizers]]
+
 id = "phone.e164.spaced"
 safety_tier = "safe_default"
 class = "custom:phone"
@@ -233,6 +241,7 @@ variant = "phone"
 precedence = 10
 
 [[recognizers]]
+
 id = "phone.e164.spaced.cued"
 safety_tier = "safe_default"
 class = "custom:phone"
@@ -264,6 +273,7 @@ variant = "phone"
 precedence = 10
 
 [[recognizers]]
+
 id = "phone.national.de"
 safety_tier = "locale_gated"
 class = "custom:phone"
@@ -306,6 +316,7 @@ variant = "phone"
 precedence = 10
 
 [[recognizers]]
+
 id = "phone.national.us"
 safety_tier = "safe_default"
 class = "custom:phone"
@@ -336,6 +347,7 @@ variant = "phone"
 precedence = 10
 
 [[recognizers]]
+
 id = "phone.national.us.cued"
 safety_tier = "safe_default"
 class = "custom:phone"
@@ -365,6 +377,7 @@ variant = "phone"
 precedence = 10
 
 [[recognizers]]
+
 id = "iban.structural"
 safety_tier = "safe_default"
 class = "custom:iban"
@@ -441,6 +454,7 @@ precedence = 10
 mandatory_anchor = "iban"
 
 [[recognizers]]
+
 id = "iban.cued"
 safety_tier = "safe_default"
 class = "custom:iban"
@@ -505,6 +519,7 @@ priority = 80
 [recognizers.token]
 
 [[recognizers]]
+
 id = "card.structural"
 safety_tier = "safe_default"
 class = "custom:credit_card"
@@ -534,6 +549,7 @@ variant = "pan"
 precedence = 20
 
 [[recognizers]]
+
 id = "card.cued"
 safety_tier = "safe_default"
 class = "custom:credit_card"
@@ -613,6 +629,7 @@ priority = 80
 # or `card terminal ID is` never reach the number. The issuer prefix is Maestro's
 # (50, 56 to 69). As in `card.cued`, a Luhn failure is recorded, never a veto.
 [[recognizers]]
+
 id = "card.cued_short"
 safety_tier = "safe_default"
 class = "custom:credit_card"
@@ -658,6 +675,7 @@ origin = "project-authored"
 license = "Apache-2.0"
 
 [[recognizers]]
+
 id = "ip.v4"
 safety_tier = "safe_default"
 class = "custom:ip_address"
@@ -680,6 +698,7 @@ priority = 80
 [recognizers.token]
 
 [[recognizers]]
+
 id = "ip.v6"
 safety_tier = "safe_default"
 class = "custom:ip_address"
@@ -739,6 +758,7 @@ priority = 80
 [recognizers.token]
 
 [[recognizers]]
+
 id = "eth.address"
 safety_tier = "safe_default"
 class = "custom:eth_address"
@@ -760,6 +780,7 @@ priority = 80
 [recognizers.token]
 
 [[recognizers]]
+
 id = "aadhaar.in"
 safety_tier = "safe_default"
 class = "custom:aadhaar"
@@ -782,6 +803,7 @@ priority = 86
 [recognizers.token]
 
 [[recognizers]]
+
 id = "nir.fr"
 safety_tier = "safe_default"
 class = "custom:nir"
@@ -804,6 +826,7 @@ priority = 86
 [recognizers.token]
 
 [[recognizers]]
+
 id = "steuer_id.de"
 safety_tier = "safe_default"
 class = "custom:steuer_id"
@@ -832,6 +855,7 @@ priority = 86
 [recognizers.token]
 
 [[recognizers]]
+
 id = "vat.de"
 safety_tier = "safe_default"
 class = "custom:vat_id"
@@ -854,6 +878,7 @@ priority = 86
 [recognizers.token]
 
 [[recognizers]]
+
 id = "vat.es"
 safety_tier = "safe_default"
 class = "custom:vat_id"
@@ -876,6 +901,7 @@ priority = 84
 [recognizers.token]
 
 [[recognizers]]
+
 id = "bsn.nl"
 safety_tier = "safe_default"
 class = "custom:bsn"
@@ -902,6 +928,7 @@ priority = 86
 [recognizers.token]
 
 [[recognizers]]
+
 id = "cpf.br"
 safety_tier = "safe_default"
 class = "custom:cpf"
@@ -925,6 +952,7 @@ priority = 86
 [recognizers.token]
 
 [[recognizers]]
+
 id = "cnpj.br"
 safety_tier = "safe_default"
 class = "custom:cnpj"
@@ -947,6 +975,7 @@ priority = 86
 [recognizers.token]
 
 [[recognizers]]
+
 id = "nhs.uk"
 safety_tier = "safe_default"
 class = "custom:nhs_number"
@@ -974,6 +1003,7 @@ priority = 86
 [recognizers.token]
 
 [[recognizers]]
+
 id = "ssn.us"
 safety_tier = "safe_default"
 class = "custom:ssn"
@@ -994,6 +1024,7 @@ priority = 86
 [recognizers.token]
 
 [[recognizers]]
+
 id = "nino.uk"
 safety_tier = "safe_default"
 class = "custom:nino"
@@ -1016,6 +1047,7 @@ priority = 86
 [recognizers.token]
 
 [[recognizers]]
+
 id = "pan.in"
 safety_tier = "safe_default"
 class = "custom:pan"
@@ -1062,6 +1094,7 @@ priority = 86
 # The groups cannot collide: every alphanumeric pattern below requires a letter in at least one
 # position where the numeric patterns require a digit.
 [[recognizers]]
+
 id = "postal.de"
 # RegexDetector's Rust-side boundary guard excludes numeric pieces of connected
 # SKU- stock-keeping identifiers with an alphabetic product component. Numeric-only
@@ -1084,6 +1117,7 @@ priority = 70
 [recognizers.token]
 
 [[recognizers]]
+
 id = "postal.us"
 # The same Rust-side SKU- boundary guard applies to five-digit ZIP and ZIP+4 shapes.
 safety_tier = "locale_gated"
@@ -1144,6 +1178,7 @@ priority = 70
 # `global, en-US, de-DE, de-AT, de-CH, en-AU` on every document, keeping each match that no `postal.us` or
 # `postal.de` candidate overlaps; pass `--locale=global` or a narrower policy chain to avoid that.
 [[recognizers]]
+
 id = "postal.at_ch"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
@@ -1171,6 +1206,7 @@ license = "Apache-2.0"
 # also end in years or amounts, so they do not license a match. The cue carries
 # enough meaning to use this rule globally without activating another locale.
 [[recognizers]]
+
 id = "postal.cued_four_digit"
 safety_tier = "safe_default"
 class = "custom:postal_code"
@@ -1201,6 +1237,7 @@ license = "Apache-2.0"
 # right before the value (separators and a copula only). Four- and five-digit codes stay with `postal.cued_four_digit`
 # and the locale rules.
 [[recognizers]]
+
 id = "postal.cued_short"
 safety_tier = "safe_default"
 class = "custom:postal_code"
@@ -1254,6 +1291,7 @@ license = "Apache-2.0"
 # declared state's published range may still need another detector. New Zealand needs a different
 # anchor. https://collectables.auspost.com.au/community-and-events/articles/postcodes-turn-50
 [[recognizers]]
+
 id = "postal.au"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
@@ -1304,6 +1342,7 @@ license = "Apache-2.0"
 # token with no `#` prefix therefore still matches; that is the known residual, and only the
 # alphabet restriction would close it. Tracked as its own decision, not asserted as zero-benefit.
 [[recognizers]]
+
 id = "postal.ca"
 safety_tier = "safe_default"
 class = "custom:postal_code"
@@ -1360,6 +1399,7 @@ license = "Apache-2.0"
 #     alphabet restriction would narrow it — which costs a gold entity here.
 #   * ZERO matches across the 1,024 A4 negative documents.
 [[recognizers]]
+
 id = "postal.gb"
 safety_tier = "safe_default"
 class = "custom:postal_code"
@@ -1412,6 +1452,7 @@ license = "Apache-2.0"
 # The `A99 9AA` tail shape (2 of 78) is not covered: a three-character inward part is the UK form,
 # and widening this pattern to accept it would let it shadow `postal.gb` on genuine UK codes.
 [[recognizers]]
+
 id = "postal.ie"
 safety_tier = "safe_default"
 class = "custom:postal_code"
@@ -1449,6 +1490,7 @@ license = "Apache-2.0"
 # is still given back; the original holdout measured 107 non-gold documents without that
 # give-back versus 12 with it. The structural/escaped forms need fresh benchmark evidence.
 [[recognizers]]
+
 id = "url.anchored"
 safety_tier = "safe_default"
 class = "custom:url"
@@ -1553,6 +1595,7 @@ license = "Apache-2.0"
 # carries. Native SVNR and checksummed AHV shapes remain follow-up #2926; the DACH provenance here
 # describes cue vocabulary until those native formats ship.
 [[recognizers]]
+
 id = "ssn.de_cue"
 safety_tier = "safe_default"
 class = "custom:ssn"
@@ -1619,6 +1662,7 @@ license = "Apache-2.0"
 # so no document-language gate is wanted. `global` under document basis is eligible for every
 # chain, including `--locale=global`.
 [[recognizers]]
+
 id = "tax_number.cue_anchored"
 safety_tier = "safe_default"
 class = "custom:tax_number"
@@ -1661,6 +1705,7 @@ license = "Apache-2.0"
 # (driver's/driving licence, DL#, Führerschein, Fahrerlaubnis) is the evidence and it is bilingual
 # by construction, so the recognizer is eligible for every chain and records no provenance.
 [[recognizers]]
+
 id = "driver_license.cue_anchored"
 safety_tier = "safe_default"
 class = "custom:driver_license"
@@ -1706,6 +1751,7 @@ license = "Apache-2.0"
 # also runs everywhere after #414; a National-Insurance-cued NINO can therefore be claimed by
 # either class and is resolved by the ordinary cross-class resolver, never left raw.
 [[recognizers]]
+
 id = "national_id.cue_anchored"
 safety_tier = "safe_default"
 class = "custom:national_id"
@@ -1752,6 +1798,7 @@ license = "Apache-2.0"
 # score ~0 and is NOT attached; the shape is a single capture so a `ValidatorKind` can attach
 # without redesign once a checksum-valid generator exists (gated on #2427).
 [[recognizers]]
+
 id = "passport.cue_anchored"
 safety_tier = "safe_default"
 class = "custom:passport"
@@ -1788,6 +1835,7 @@ license = "Apache-2.0"
 # German Steuer-ID cues retain their checksum-failure owner. Full English tax-identification
 # fields use the generic tax owner, preserving trusted repeated-value protection.
 [[recognizers]]
+
 id = "tax_number.labelled"
 safety_tier = "safe_default"
 class = "custom:tax_number"
@@ -1823,6 +1871,7 @@ origin = "project-authored"
 license = "Apache-2.0"
 
 [[recognizers]]
+
 id = "driver_license.labelled"
 safety_tier = "safe_default"
 class = "custom:driver_license"
@@ -1851,6 +1900,7 @@ origin = "project-authored"
 license = "Apache-2.0"
 
 [[recognizers]]
+
 id = "id_card.labelled"
 safety_tier = "safe_default"
 class = "custom:national_id"
@@ -1919,6 +1969,7 @@ license = "Apache-2.0"
 # (`password.field`) lives in the opt-in `secrets` rulepack.
 
 [[recognizers]]
+
 id = "birth_date.cue"
 safety_tier = "safe_default"
 class = "custom:birth_date"
@@ -1999,6 +2050,7 @@ license = "Apache-2.0"
 # unrelated next sentence (`Last login was 3/11/2026`) never licenses its date.
 # The date shapes are `birth_date.cue`'s.
 [[recognizers]]
+
 id = "birth_date.answer"
 safety_tier = "safe_default"
 class = "custom:birth_date"
@@ -2042,6 +2094,7 @@ license = "Apache-2.0"
 # An age needs a structured field or a person frame. Shorter units are durations,
 # and object ages are not person quasi-identifiers. Capture only the number.
 [[recognizers]]
+
 id = "age.cue"
 safety_tier = "safe_default"
 class = "custom:age"
@@ -2101,6 +2154,7 @@ license = "Apache-2.0"
 # alternative consumes `N year old female <animal>` without a capture group, so
 # the whole match yields no span. Capture only the number.
 [[recognizers]]
+
 id = "age.phrase"
 safety_tier = "safe_default"
 class = "custom:age"
@@ -2164,89 +2218,3 @@ license = "Apache-2.0"
 # their more specific classes. Capture only the value, then use the shared whole-value
 # scanner so grouped, UUID and overlong identifiers cannot leave a raw suffix.
 
-[[recognizers]]
-id = "customer_id.labelled"
-safety_tier = "safe_default"
-class = "custom:customer_id"
-enabled = true
-locales = ["global"]
-locale_basis = "document"
-
-[recognizers.match]
-kind = "regex"
-pattern = '''(?i)\b(?:customer[ _-]?(?:record[ _-]?)?(?:id|number|no\.?|nr\.?)|kunden(?:[ _-]?(?:id|nummer|nr\.?)))[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)\\?["']?((?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+(?:[-_./:](?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+)*)'''
-capture_groups = [1]
-complete_labelled_value = true
-
-[recognizers.context]
-# An unquoted prose word is a schema placeholder, not identifier evidence.
-# Quoted field scalars may be opaque alphabetic application keys.
-reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+$'''
-
-[recognizers.scoring]
-base = 0.90
-priority = 100
-
-[recognizers.token]
-
-[recognizers.source]
-origin = "project-authored"
-license = "Apache-2.0"
-
-[[recognizers]]
-id = "employee_id.labelled"
-safety_tier = "safe_default"
-class = "custom:employee_id"
-enabled = true
-locales = ["global"]
-locale_basis = "document"
-
-[recognizers.match]
-kind = "regex"
-pattern = '''(?i)\b(?:employee[ _-]?(?:record[ _-]?)?(?:id|number|no\.?)|personnel[ _-]?(?:id|number|no\.?)|personal[ _-]?(?:nummer|nr\.?)|mitarbeiter[ _-]?(?:id|nummer|nr\.?))[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)\\?["']?((?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+(?:[-_./:](?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+)*)'''
-capture_groups = [1]
-complete_labelled_value = true
-
-[recognizers.context]
-# An unquoted prose word is a schema placeholder, not identifier evidence.
-# Quoted field scalars may be opaque alphabetic application keys.
-reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+$'''
-
-[recognizers.scoring]
-base = 0.90
-priority = 100
-
-[recognizers.token]
-
-[recognizers.source]
-origin = "project-authored"
-license = "Apache-2.0"
-
-[[recognizers]]
-id = "record_id.labelled"
-safety_tier = "safe_default"
-class = "custom:record_id"
-enabled = true
-locales = ["global"]
-locale_basis = "document"
-
-[recognizers.match]
-kind = "regex"
-pattern = '''(?i)\b(?:(?:person|contact|member)[ _-]?(?:id|number|no\.?)|membership[ _-]?number|(?:person|contact)[ _-]?record[ _-]?id|mitglieds[ _-]?(?:nummer|nr\.?)|personen[ _-]?id|kontakt[ _-]?id|(?:personen|kontakt)[ _-]?datensatz[ _-]?id)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)\\?["']?((?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+(?:[-_./:](?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+)*)'''
-capture_groups = [1]
-complete_labelled_value = true
-
-[recognizers.context]
-# An unquoted prose word is a schema placeholder, not identifier evidence.
-# Quoted field scalars may be opaque alphabetic application keys.
-reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+$'''
-
-[recognizers.scoring]
-base = 0.90
-priority = 100
-
-[recognizers.token]
-
-[recognizers.source]
-origin = "project-authored"
-license = "Apache-2.0"

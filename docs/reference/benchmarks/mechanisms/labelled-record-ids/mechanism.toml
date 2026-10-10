@@ -1,0 +1,100 @@
+schema_version = "0.1.0"
+rulepack_id = "gaze-core"
+rulepack_version = "0.6.0"
+default_locales = ["global"]
+
+[locale.phone_labels]
+names = ["phone", "mobile", "tel", "telephone", "msisdn"]
+
+[locale.email_headers]
+names = ["From", "To", "Cc", "Bcc", "Reply-To", "Sender"]
+
+[[recognizers]]
+
+id = "customer_id.labelled"
+safety_tier = "safe_default"
+class = "custom:customer_id"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:customer[ _-]?(?:record[ _-]?)?(?:id|number|no\.?|nr\.?)|kunden(?:[ _-]?(?:id|nummer|nr\.?)))[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)\\?["']?((?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+(?:[-_./:](?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+)*)'''
+capture_groups = [1]
+complete_labelled_value = true
+
+[recognizers.context]
+# An unquoted prose word is a schema placeholder, not identifier evidence.
+# Quoted field scalars may be opaque alphabetic application keys.
+reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+$'''
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+[[recognizers]]
+
+id = "employee_id.labelled"
+safety_tier = "safe_default"
+class = "custom:employee_id"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:employee[ _-]?(?:record[ _-]?)?(?:id|number|no\.?)|personnel[ _-]?(?:id|number|no\.?)|personal[ _-]?(?:nummer|nr\.?)|mitarbeiter[ _-]?(?:id|nummer|nr\.?))[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)\\?["']?((?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+(?:[-_./:](?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+)*)'''
+capture_groups = [1]
+complete_labelled_value = true
+
+[recognizers.context]
+# An unquoted prose word is a schema placeholder, not identifier evidence.
+# Quoted field scalars may be opaque alphabetic application keys.
+reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+$'''
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+[[recognizers]]
+
+id = "record_id.labelled"
+safety_tier = "safe_default"
+class = "custom:record_id"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:(?:person|contact|member)[ _-]?(?:id|number|no\.?)|membership[ _-]?number|(?:person|contact)[ _-]?record[ _-]?id|mitglieds[ _-]?(?:nummer|nr\.?)|personen[ _-]?id|kontakt[ _-]?id|(?:personen|kontakt)[ _-]?datensatz[ _-]?id)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)\\?["']?((?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+(?:[-_./:](?:[\p{L}\p{N}\p{M}+/_=-]|\\(?:u[0-9A-F]{4}|/))+)*)'''
+capture_groups = [1]
+complete_labelled_value = true
+
+[recognizers.context]
+# An unquoted prose word is a schema placeholder, not identifier evidence.
+# Quoted field scalars may be opaque alphabetic application keys.
+reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+$'''
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"

@@ -562,6 +562,24 @@ fn index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw() {
             raw: "72",
             token: ":Custom:age_",
         },
+        CoreCase {
+            class: "customer_id",
+            line: "customer_id=C-000123",
+            raw: "C-000123",
+            token: ":Custom:customer_id_",
+        },
+        CoreCase {
+            class: "employee_id",
+            line: "employee_no=E-000123",
+            raw: "E-000123",
+            token: ":Custom:employee_id_",
+        },
+        CoreCase {
+            class: "record_id",
+            line: "member_id=M-000123",
+            raw: "M-000123",
+            token: ":Custom:record_id_",
+        },
     ];
 
     let core = Rulepack::parse_bundled(gaze_recognizers::embedded("core").expect("core bundle"))

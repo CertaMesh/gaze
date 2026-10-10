@@ -185,6 +185,12 @@ pub(crate) fn register_rulepack_recognizers(
                             .as_ref()
                             .and_then(|context| context.reject_match_regex.as_deref()),
                     )?
+                    .with_unquoted_capture_rejection(
+                        recognizer
+                            .context
+                            .as_ref()
+                            .and_then(|context| context.reject_unquoted_capture_regex.as_deref()),
+                    )?
                     .with_complete_labelled_value(complete_labelled_value)
                     .with_locale_basis(recognizer.locale_basis)
                     .with_validator_on_fail(

@@ -116,6 +116,8 @@ pub struct ContextSpec {
     pub boost: Option<f32>,
     pub exclusions: Vec<String>,
     pub reject_match_regex: Option<String>,
+    /// Refuse matching capture text unless the captured value starts with a quote.
+    pub reject_unquoted_capture_regex: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -252,6 +254,10 @@ pub enum RulepackError {
     },
     #[error("regex recognizer '{id}' must define exactly one of pattern or pattern_template")]
     RegexPatternChoice { id: String },
+    #[error(
+        "recognizer '{recognizer_id}': reject_unquoted_capture_regex requires a regex matcher"
+    )]
+    UnquotedCaptureGuardRequiresRegex { recognizer_id: String },
     #[error("invalid regex for recognizer '{id}': {source}")]
     RegexCompile {
         id: String,
@@ -486,6 +492,8 @@ struct RawContextSpec {
     exclusions: Vec<String>,
     #[serde(default)]
     reject_match_regex: Option<String>,
+    #[serde(default)]
+    reject_unquoted_capture_regex: Option<String>,
     /// Removed before release; kept only so a pack that still declares it gets a typed error
     /// instead of silently losing the key.
     #[serde(default)]
@@ -751,6 +759,7 @@ fn parse_recognizer(
             boost: context.boost,
             exclusions: context.exclusions,
             reject_match_regex: context.reject_match_regex,
+            reject_unquoted_capture_regex: context.reject_unquoted_capture_regex,
         }),
         validator,
         normalizer: raw.normalizer.map(|normalizer| NormalizerSpec {
@@ -892,6 +901,16 @@ fn apply_collision_family_cooperation(recognizers: &mut [RecognizerSpec]) {
 }
 
 fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
+    if !matches!(&raw.matcher, RawMatch::Regex { .. })
+        && raw
+            .context
+            .as_ref()
+            .is_some_and(|context| context.reject_unquoted_capture_regex.is_some())
+    {
+        return Err(RulepackError::UnquotedCaptureGuardRequiresRegex {
+            recognizer_id: raw.id.clone(),
+        });
+    }
     match &raw.matcher {
         RawMatch::Regex {
             pattern,
@@ -1402,6 +1421,38 @@ license = "Apache-2.0"
     }
 
     #[test]
+    fn parses_unquoted_capture_guard_without_changing_existing_match_guard() {
+        let source = unsupported_field_rulepack(
+            "[recognizers.context]\nreject_unquoted_capture_regex = '^letters$'\nreject_match_regex = '^whole$'",
+        );
+        let pack = Rulepack::parse(&source).expect("both guards parse");
+        let context = pack.recognizers[0].context.as_ref().unwrap();
+        assert_eq!(
+            context.reject_unquoted_capture_regex.as_deref(),
+            Some("^letters$")
+        );
+        assert_eq!(context.reject_match_regex.as_deref(), Some("^whole$"));
+    }
+
+    #[test]
+    fn unquoted_capture_guard_refuses_non_regex_matchers() {
+        for matcher in [
+            "kind = \"dictionary\"\nterms = [\"SYN-BENIGN\"]",
+            "kind = \"ner\"\nmodel_ref = \"synthetic-local\"",
+        ] {
+            let source = unsupported_field_rulepack(
+                "[recognizers.context]\nreject_unquoted_capture_regex = '^letters$'",
+            )
+            .replace("kind = \"regex\"\npattern = \"BAD_EMAIL_FIXTURE\"", matcher);
+            assert!(matches!(
+                Rulepack::parse(&source),
+                Err(RulepackError::UnquotedCaptureGuardRequiresRegex { recognizer_id })
+                    if recognizer_id == "bad.email"
+            ));
+        }
+    }
+
+    #[test]
     fn parses_nested_locale_cue_bundles() {
         let rulepack = Rulepack::parse(
             r#"
@@ -1482,6 +1533,9 @@ window_chars = 48
                 PiiClass::custom("nino").expect("valid custom class"),
                 PiiClass::custom("pan").expect("valid custom class"),
                 PiiClass::custom("postal_code").expect("valid custom class"),
+                PiiClass::custom("customer_id").expect("valid custom class"),
+                PiiClass::custom("employee_id").expect("valid custom class"),
+                PiiClass::custom("record_id").expect("valid custom class"),
             ])
         );
     }

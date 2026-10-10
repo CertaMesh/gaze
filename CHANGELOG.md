@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Protect explicitly labelled customer, employee and person/member record identifiers
+  in English/German prose, JSON and logs with exact reversible value capture.
+  Generic record, order, invoice, issue, build and tracking IDs remain outside these rules.
+
 - Tax and government identifiers cover additional cue connectors and grouped
   layouts, including slash Steuernummer, separated SSN, Swiss AHV and national
   identity values. Full English tax-identification fields preserve trusted
