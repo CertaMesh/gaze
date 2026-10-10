@@ -283,7 +283,10 @@ fn core_pipeline_non_utf8_terms_file_is_a_typed_error() {
 
 fn build_context_dictionary(extra_source: &str) -> Result<gaze_assembly::CorePipeline, BuildError> {
     let fixture = Fixture::new();
-    std::fs::write(&fixture.inline, format!(r#"
+    std::fs::write(
+        &fixture.inline,
+        format!(
+            r#"
 schema_version = "0.1.0"
 rulepack_id = "tenant-context"
 rulepack_version = "0.1.0"
@@ -297,22 +300,34 @@ kind = "dictionary"
 terms_from_context = "tenant_terms"
 case_sensitive = true
 {extra_source}
-"#)).expect("write context rulepack");
-    CorePipelineConfig::new().with_rulepack_path(fixture.inline.clone()).build()
+"#
+        ),
+    )
+    .expect("write context rulepack");
+    CorePipelineConfig::new()
+        .with_rulepack_path(fixture.inline.clone())
+        .build()
 }
 
 #[test]
 fn core_pipeline_context_dictionary_is_a_typed_error() {
     let built = build_context_dictionary("");
-    assert!(matches!(built, Err(BuildError::Policy(PolicyError::BadDictionary { ref name, .. })) if name == "tenant.song"),
-        "CorePipeline must reject a dictionary whose context it cannot populate");
+    assert!(
+        matches!(built, Err(BuildError::Policy(PolicyError::BadDictionary { ref name, .. })) if name == "tenant.song"),
+        "CorePipeline must reject a dictionary whose context it cannot populate"
+    );
 }
 
 #[test]
 fn core_pipeline_mixed_dictionary_sources_are_a_typed_error() {
-    for extra_source in [r#"terms = ["tenant-song-xyz"]"#, r#"terms_file = "unused-terms.txt""#] {
+    for extra_source in [
+        r#"terms = ["tenant-song-xyz"]"#,
+        r#"terms_file = "unused-terms.txt""#,
+    ] {
         let built = build_context_dictionary(extra_source);
-        assert!(matches!(built, Err(BuildError::Rulepack(gaze::RulepackError::DictionarySourceConflict { ref id })) if id == "tenant.song"),
-            "rulepack validation must reject context combined with {extra_source}");
+        assert!(
+            matches!(built, Err(BuildError::Rulepack(gaze::RulepackError::DictionarySourceConflict { ref id })) if id == "tenant.song"),
+            "rulepack validation must reject context combined with {extra_source}"
+        );
     }
 }

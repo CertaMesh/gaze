@@ -78,7 +78,13 @@ impl CorePipelineConfig {
         // This convenience API has no caller context to populate context dictionaries.
         for recognizer in inputs.rulepacks.iter().flat_map(|pack| &pack.recognizers) {
             if recognizer.enabled
-                && matches!(recognizer.matcher, RawMatch::Dictionary { terms_from_context: Some(_), .. })
+                && matches!(
+                    recognizer.matcher,
+                    RawMatch::Dictionary {
+                        terms_from_context: Some(_),
+                        ..
+                    }
+                )
             {
                 return Err(PolicyError::BadDictionary {
                     name: recognizer.id.clone(),

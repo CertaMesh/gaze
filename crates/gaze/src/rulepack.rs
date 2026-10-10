@@ -957,7 +957,12 @@ fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
                 });
             }
         }
-        RawMatch::Dictionary { terms, terms_file, terms_from_context, .. } => {
+        RawMatch::Dictionary {
+            terms,
+            terms_file,
+            terms_from_context,
+            ..
+        } => {
             if terms_from_context.is_some() && (!terms.is_empty() || terms_file.is_some()) {
                 return Err(RulepackError::DictionarySourceConflict { id: raw.id.clone() });
             }
