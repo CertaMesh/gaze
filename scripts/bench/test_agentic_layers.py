@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "5fb6b4f750b44e0dd1eb5b025e2351e7d3f51e4e010131ae4a65983aab7a9bd9",
-    "test": "6a75b1edabdefbafaf88694b9d6620f59c6a44b6018cc5325df6cb32ec0d5c29",
+    "dev": "d75777753f806fddb6a7daa7906c8f2ce9edb18f2649408936e116591f69296c",
+    "test": "0827ccb459a7f5029e7f4e7146820550ee9aa3ccf2f8a0066ef0595ca3b04437",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -2951,6 +2951,10 @@ class ShippedClassCoverageTests(unittest.TestCase):
             records = agentic.generate(partition)
             for version in range(3,13):
                 self.assertEqual(hashlib.sha256(agentic.corpus_bytes(agentic.records_as_of(version,records))).hexdigest(), self.HISTORICAL_HASHES[partition][str(version)])
+
+    def test_new_value_pools_are_disjoint(self):
+        pools = [{g.value for r in agentic._coverage_records(p) for g in r.gold} for p in agentic.PARTITIONS]
+        self.assertFalse(pools[0] & pools[1])
 
     def test_checksums_and_exact_twin_shapes(self):
         self.assertTrue(agentic.verhoeff_valid("2363"))  # Verhoeff's arithmetic example

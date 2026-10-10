@@ -33,17 +33,18 @@ claims of valid E.164 allocation, and remain scored under both gate contracts.
 
 ## Independent format sources
 
-Values are derived from public definitions, not production recognizer regexes:
+Values are derived from public definitions, not production recognizer regexes.
+Exact citation URLs are pinned in [class-coverage-sources.json](class-coverage-sources.json):
 
-- Aadhaar: [UIDAI authentication specification](https://uidai.gov.in/images/FrontPageUpdates/aadhaar_authentication_api_2_0.pdf), twelve digits with Verhoeff error detection. The arithmetic implementation includes the independent `2363` checksum example.
-- Numeric CNPJ: [Receita Federal MOD-11 specification](https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/manuais/sped/manuais-e-financeira/manual-de-preenchimento-do-modulo-especifico-rerct-da-e-financeira/03-ade-65_2017-anexo-unico-manual-rerct.pdf), twelve payload digits and two check digits. This family covers the shipped numeric class; the newer alphanumeric CNPJ format is a separate coverage extension.
-- Ethereum: [ERC-55](https://eips.ethereum.org/EIPS/eip-55), twenty bytes rendered as forty hexadecimal characters, with Keccak-256 case checksum. Seeded addresses include mixed, all-lower and all-upper case. They are invented test-network addresses, never copied account addresses. Tests verify the arithmetic against ERC-55's published vectors.
-- NIR: [Service Public's field definition](https://www.service-public.gouv.fr/particuliers/vosdroits/F33078) and [the government's MOD-97 key specification](https://sne.info.application.logement.gouv.fr/sites/default/files/2023-03/SNE_Contrat_interface_V13-20230329_v0.8.pdf). The fictional foreign birthplace `99000` avoids copying an allocated person record.
-- PAN: [Income Tax Department's ten-character format](https://www.incometaxindia.gov.in/documents/20117/43154/18__PAN__English.pdf/0f590273-a856-dee2-9053-76f8c0aa4127?download=true&t=1762672726879&version=1.0). These are generated layout examples, not claims of issuer-valid PAN checksums.
-- VAT: [BZSt's EU format table](https://www.bzst.de/SharedDocs/Downloads/DE/Merkblaetter/ust_idnr_aufbau.pdf?__blob=publicationFile&v=2) and [Agencia Tributaria's corporate NIF definition](https://sede.agenciatributaria.gob.es/Sede/ayuda/manuales-videos-folletos/manuales-practicos/guia-practica-cumplimentacion-modelo-censal-036/anexos/anexo-01-solicitud-nif-documentacion-aportar/informacion-sobre-numero-identificacion-fiscal/composicion-nif/personas-juridicas-entidades.html). German `DE` plus nine digits is layout-only, as the shipped rule has no validator. Spanish corporate NIF includes its numeric control digit.
-- Email headers: [RFC 5322](https://www.rfc-editor.org/rfc/rfc5322), mailbox comments and display names. Forwarding and recipient wording comes from the shipped declarative locale cue definitions, rather than their matching regexes.
-- Credentials: [AWS access key prefixes](https://docs.aws.amazon.com/STS/latest/APIReference/API_GetAccessKeyInfo.html), [GitHub token prefixes](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github) and [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519). JWT claim JSON and non-working signature bytes are generated locally.
-- Phones: [Ofcom drama reservations](https://www.ofcom.org.uk/phones-and-broadband/phone-numbers/numbers-for-drama).
+- Aadhaar: UIDAI authentication specification, twelve digits with Verhoeff error detection. The arithmetic implementation includes the independent `2363` checksum example.
+- Numeric CNPJ: Receita Federal MOD-11 specification, twelve payload digits and two check digits. This family covers the shipped numeric class; the newer alphanumeric CNPJ format is a separate coverage extension.
+- Ethereum: ERC-55, twenty bytes rendered as forty hexadecimal characters, with Keccak-256 case checksum. Seeded addresses include mixed, all-lower and all-upper case. They are invented test-network addresses, never copied account addresses. Tests verify the arithmetic against ERC-55's published vectors.
+- NIR: Service Public's field definition and the government's MOD-97 key specification. The fictional foreign birthplace `99000` avoids copying an allocated person record.
+- PAN: Income Tax Department's ten-character format. These are generated layout examples, not claims of issuer-valid PAN checksums.
+- VAT: BZSt's EU format table and Agencia Tributaria's corporate NIF definition. German `DE` plus nine digits is layout-only, as the shipped rule has no validator. Spanish corporate NIF includes its numeric control digit.
+- Email headers: RFC 5322, mailbox comments and display names. Forwarding and recipient wording comes from the shipped declarative locale cue definitions, rather than their matching regexes.
+- Credentials: AWS access key prefixes, GitHub token prefixes and RFC 7519. JWT claim JSON and non-working signature bytes are generated locally.
+- Phones: Ofcom drama reservations.
 
 ## Measurement and updates
 
