@@ -1,46 +1,34 @@
 # Collision-family policy
 
-Collision-family metadata handles cross-class recognizer rivalries that cannot
-be represented as one PII class. PAN vs IBAN is the first bundled example:
-`card.structural` emits `custom:credit_card`, `iban.structural` emits
-`custom:iban`, and family policy decides overlap before the generic
-class-priority chain.
+Families resolve cross-class overlaps before the generic class-priority chain.
+For example, `card.structural` emits `custom:credit_card` and `iban.structural`
+emits `custom:iban`.
 
 ## Contract
 
-- Collision metadata lives beside recognizer definitions, not on the
-  `Recognizer` trait. The runtime compiles it into `FamilyPolicyTable` and
-  queries by stable recognizer id.
-- `ValidatorVeto` still runs first. Validator-failed candidates never reach
-  family policy.
-- Same `(family, variant)` recognizers cooperate but do not arbitrate each
-  other. Different variants in the same family compare by precedence; lower
-  precedence wins and emits `ConflictTier::CollisionPolicy`.
-- A collision-policy win settles the family for that span. The settlement is
-  resolver state kept apart from `decided_by`: a later overlap with a
-  recognizer outside the family can still relabel `decided_by` for audit (for
-  example `RulePriority` when the settled IBAN also beats a lower-priority
-  postal candidate), but it never reopens the family. The missing-anchor
-  fallback skips settled spans, so the verdict does not depend on the order
-  or presence of unrelated overlaps.
-- Equal precedence between variants is ambiguous. The resolver emits a
-  family-level token using `PiiClass::Custom("family:<name>")`, attaches an
-  `AmbiguityRecord` with `AmbiguityReason::PrecedenceTie`, and writes
-  `collision_family = <name>` with `collision_variant = NULL`.
-- A family-level token (precedence tie or missing mandatory anchor) resolves
-  its policy action by the shared first-match walk. When no reachable rule
-  names the family class, it takes the strictest action among its member
-  classes' resolved actions and its own default
-  (`gaze_types::Action::strictness_rank`); an explicit family rule overrides.
-  The audit row records the derivation in `AmbiguityRecord::derived_action`.
-  See [How a family-level token picks its action](../../reference/policy.md#how-a-family-level-token-picks-its-action).
-- Policy custom recognizers take part under the id their membership is filed
-  under: the policy `name` for a regex rule, `dict/<name>` for a dictionary
-  rule. The registry resolves the same id, so `family_member_classes` (the
-  input of the action derivation) and the loser rows' class attribution see
-  policy members exactly as they see bundled ones.
-- Normal class-priority, rule-priority, score, span-length, and recognizer-id
-  ordering stays unchanged for recognizers without collision declarations.
+Collision metadata sits beside recognizer definitions, outside the `Recognizer`
+trait. `FamilyPolicyTable` indexes it by stable recognizer ID. Validator veto
+runs first; failed candidates do not reach family policy unless explicitly kept.
+
+| Candidates | Result |
+| --- | --- |
+| Same family and variant | Cooperate; no family arbitration |
+| Same family, different variants | Lower precedence wins with `ConflictTier::CollisionPolicy` |
+| Equal variant precedence | One `PiiClass::Custom("family:<name>")` token; `AmbiguityReason::PrecedenceTie`; `collision_family = <name>`, `collision_variant = NULL` |
+| No collision declarations | Existing class/rule priority, score, span-length, and recognizer-ID ordering |
+
+A family win settles the span. Later unrelated overlaps may change `decided_by`
+for audit, but cannot reopen the family or trigger missing-anchor fallback.
+
+Family-level actions use the shared first-match policy walk. Without a reachable
+family rule, choose the strictest resolved member action or family default
+(`gaze_types::Action::strictness_rank`). Explicit family rules override; audit
+records `AmbiguityRecord::derived_action`. See the
+[policy reference](../../reference/policy.md#how-a-family-level-token-picks-its-action).
+
+Custom policy members use the regex `name` or dictionary `dict/<name>` as their
+ID. Registry lookup, member-action derivation, and loser-class attribution use
+that same ID.
 
 ## TOML shape
 
@@ -53,24 +41,18 @@ class = "custom:iban"
 family = "payment-card-or-iban"
 variant = "iban"
 precedence = 10
-mandatory_anchor = "iban" # optional; consumed by later ambiguity handling
+mandatory_anchor = "iban" # optional
 ```
 
-`family` and `variant` are non-empty kebab-case identifiers up to 64 bytes.
-Two recognizers may share a `(family, variant)` only when their precedence
-matches. Two different variants in one family cannot share precedence in
-rulepacks; that fails rulepack load.
+`family` and `variant` must be non-empty kebab-case IDs, at most 64 bytes.
+Recognizers sharing a variant must share its precedence. Rulepack load rejects
+equal precedence between different variants.
 
 ## Bundled families
 
-Current bundled declarations:
+| Family | Members |
+| --- | --- |
+| `payment-card-or-iban` | `iban.structural`: 10; `card.structural`: 20 |
+| `phone-or-imei` | `phone.structural`, `phone.national.de`, `phone.national.us`: variant `phone`, precedence 10; reserved for a future IMEI variant |
 
-- `payment-card-or-iban`: `iban.structural` precedence 10,
-  `card.structural` precedence 20.
-- `phone-or-imei`: `phone.structural`, `phone.national.de`, and
-  `phone.national.us` all use variant `phone` precedence 10. IMEI can join as a
-  later variant without changing phone-only behavior.
-
-Adopter policy custom recognizers cannot claim reserved bundled family names.
-That guard prevents local policy from silently changing core collision
-semantics.
+Custom policy recognizers cannot claim reserved bundled family names.

@@ -1,41 +1,43 @@
 # Labelled identifiers
 
-The bundled tax-number, driver-licence, and national-ID or ID-card fallbacks read a class-specific field name,
-an explicit separator (`:`, `=`, `#`, `|`, tab, comma, semicolon, or hyphen) or a short connector such as `is`, `lautet`,
-`est`, or `Nr.`. A value can follow on the next line when the label ends the current line.
-They cover form fields, JSON keys, logs, and table cells whose values do not fit a country's
-fixed identifier shape. English, German, French, Dutch, and Portuguese labels are included.
+Bundled tax-number, driver-licence, and national-ID/ID-card fallbacks use
+class-specific EN/DE/FR/NL/PT labels for values outside fixed country shapes.
+A separator (`:`, `=`, `#`, `|`, tab, comma, semicolon, hyphen) or short connector
+(`is`, `lautet`, `est`, `Nr.`) introduces the value. It may start on the next
+line when the label ends the current line.
 
-Only the recognized field's value becomes a token. Its label and punctuation remain visible so an agent can still
-understand the field. The original value bytes go into the manifest, so strict restore returns
-the input exactly. A shared complete-value scan extends digit-bearing or uppercase groups after
-a bounded regex capture. It protects adjacent grouped runs even when they exceed four groups or
-40 bytes; those limits produce an audit reason, not a cutoff that exposes a suffix. The scan
-stops before a following date or field cue. For an uppercase next-field label, it waits until a
-second recognizer claims the following value before exposing that label. If no rule claims the
-value, the prior token keeps the label and value covered. The shared connector set is `:`, `=`,
-`|`, tab, comma, semicolon, and hyphen, with optional surrounding spaces. The
-audit reason records the boundary without recording value bytes. Letter-led and digit-led groups
-may use spaces, dots, slashes, or hyphens. A single ungrouped value still needs a matching regex
-shape. The three older `*.cue_anchored` rules also use this scan; their original regex captures
-remain protected when a date-like group occurs inside them.
-Grouped numbers need at least three chunks, except German slash tax-number layouts. A directly labelled nine-digit tax value also qualifies. These shapes keep ordinary decimal amounts out of the fallback.
+Only the value becomes a token; labels and punctuation stay readable. Exact
+source bytes enter the manifest for strict restore.
 
-The rules do not infer a class from a bare value or a generic `id` or `number` field. A field
-name supplies the class, and the value must contain a digit. The tax fallback admits compact
-nine-digit values under an explicit tax label and compact eleven-digit values under a full
-English tax identification number label. The latter remain generic tax numbers so their
-trusted manifest values also protect uncued repeated copies. Explicit German Steuer-ID values
-remain owned by the specific Steuer-ID rule and its auditable checksum-failure contract.
-Both compact numeric arms require at least one nonzero digit; zero runs inside letter-bearing values remain protected. All three
-fallbacks reject calendar dates that can resemble grouped identifiers. These are
-precision boundaries, not claims that every real identifier will fit the fallback. Benchmark
-evidence and hand-written shape probes are required before adding a new label or value shape.
-An unpunctuated `license number` remains outside the driver-licence fallback because it can
-refer to a non-personal licence.
+A shared complete-value scan extends digit-bearing or uppercase groups beyond
+the bounded regex capture. Four groups/40 bytes trigger an audit reason, never
+a cutoff that leaks a suffix. It stops before dates or following field cues.
+An uppercase next-field label is exposed only after another recognizer claims
+its value; otherwise the prior token covers both. Scan boundary reasons contain
+no value bytes.
 
-The three fallback rows and their activation stay in the
-[redaction-class inventory](../../reference/redaction-classes.md#embedded-recognizers). The
-rulepack's `complete_labelled_value` field is documented in the
-[policy reference](../../reference/policy.md); it is available to external rulepacks but not to
-`[[policy.custom_recognizers]]`.
+Scan connectors are `:`, `=`, `|`, tab, comma, semicolon, and hyphen, with optional
+spaces. Groups may use spaces, dots, slashes, or hyphens and start with letters
+or digits. Ungrouped values still need a regex shape. The older `*.cue_anchored`
+rules share this scan and keep their original capture protected when it includes
+a date-like group.
+
+| Boundary | Rule |
+| --- | --- |
+| Class | Requires a class-specific label; bare values and generic `id`/`number` do not qualify |
+| Content | At least one digit |
+| Grouped numbers | At least three chunks, except German slash tax layouts |
+| Compact tax numbers | Nine digits under an explicit tax label; eleven under a full English tax-identification-number label |
+| Compact numeric arms | At least one nonzero digit; zero runs in letter-bearing values stay protected |
+| Calendar dates | Rejected by all three fallbacks |
+| Unpunctuated `license number` | Excluded because it can describe a non-personal licence |
+
+Compact eleven-digit English values remain generic tax numbers, so trusted
+manifest copies can sweep uncued repeats. German Steuer-ID stays with its
+specific rule and typed checksum-failure contract. These boundaries do not
+cover every real identifier; new labels/shapes need benchmark evidence and
+hand-written probes.
+
+See the [fallback inventory](../../reference/redaction-classes.md#embedded-recognizers)
+and [policy reference](../../reference/policy.md). `complete_labelled_value` is
+available to external rulepacks, not `[[policy.custom_recognizers]]`.
