@@ -84,5 +84,8 @@ the version, freeze the preceding contract, and verify every old corpus hash.
 Remeasure all displayed release tags with the current harness and each tag's
 own detection code, retaining observations and scorecards. Detection changes
 remain subject to the paired benchmark gain gate; adding data is not evidence
-that a recognizer successfully covers it. A separate per-rule CI coverage gate
-is outside this generator change.
+that a recognizer successfully covers it. The [committed source certificate](class-coverage-source-attribution-v13.json.gz)
+records positive attribution for all 14 requested recognizers under an active
+policy, with historical setup activation limits documented alongside the
+release table. A separate per-rule CI coverage gate is outside this generator
+change.

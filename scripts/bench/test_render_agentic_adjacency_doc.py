@@ -145,6 +145,8 @@ class AdjacencyHistoryTests(unittest.TestCase):
             {
                 "version": version, "arm": arm, "binary_sha256": "a" * 64,
                 "scorecard_sha256": "b" * 64,
+                "policy_sha256": render.release_policy_sha256(version, render.MEASURED_INPUTS),
+                "refused": {layer: 0 for layer in ("A", "D", "R")},
                 "layers": {layer: {"gold": 100, "leaked": 20, "false_positive": 3}
                            for layer in ("A", "D", "R")},
             }

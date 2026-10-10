@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs/reference/benchmarks/README.md"
 # Pin the measured version so a later generator cannot relabel these rows.
 # Earlier v4, v8, v9, v10 and v11 ledgers remain committed as historical measurements.
-GENERATOR_VERSION = 12
+GENERATOR_VERSION = 13
 HISTORY = ROOT / f"docs/reference/benchmarks/agentic-adjacency-v{GENERATOR_VERSION}-history.json"
 CORPUS_SHA256, CONTRACT_SHA256 = agentic_layers.corpus_identity(ROOT, GENERATOR_VERSION)
 
@@ -204,7 +204,8 @@ def render(history: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> str:
         "release's own binary. Layer C release headlines above are unchanged. The "
         f"[committed measurement ledger]({inputs.path.name}) records "
         "binary and scorecard SHA-256 digests, arm and manifest semantics. "
-        f"Generator v{inputs.version}, test corpus `{inputs.corpus_sha256[:12]}…`, "
+        f"Generator v{inputs.version}, test corpus `{inputs.corpus_sha256[:12]}…`"
+        + (", " if inputs.version < 13 else ". ")
         + (f"setup policy `{inputs.policy_sha256[:12]}…`." if inputs.version < 13 else
          f"Each release uses its own setup policy; v0.15.x `{inputs.policy_sha256[:12]}…`, "
          f"v0.16.0 `{V16_POLICY_SHA256[:12]}…`; v0.14.0 retains the v0.15.x model settings."),
@@ -224,7 +225,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--record", type=Path, action="append", default=[])
     parser.add_argument('--generator-version', type=int, default=GENERATOR_VERSION,
-                        choices=sorted({GENERATOR_VERSION, agentic_layers.GENERATOR_VERSION}),
+                        choices=sorted({12, GENERATOR_VERSION, agentic_layers.GENERATOR_VERSION}),
                         help='keep measured history frozen by default; select the current corpus for new measurements')
     args = parser.parse_args()
     try:
