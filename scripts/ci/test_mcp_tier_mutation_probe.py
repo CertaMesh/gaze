@@ -3,9 +3,7 @@ from pathlib import Path
 import shutil
 import signal
 import subprocess
-import sys
 import tempfile
-import time
 import unittest
 
 
@@ -38,45 +36,62 @@ class MutationProbe(unittest.TestCase):
         self.assertIn(b"gpgsig ", self.git("cat-file", "-p", "HEAD"))
         stub = self.root / "bin/cargo"
         stub.parent.mkdir()
-        stub.write_text(f'#!{sys.executable}\n' + '''
-import os
-from pathlib import Path
-import time
-tools = Path("crates/gaze-mcp-core/src/tools/mod.rs")
-mutated = 'cfg(feature' not in tools.read_text()
-if mutated:
-    Path("mutated-ready").touch()
-    if os.environ.get("WAIT"):
-        time.sleep(30)
-    if os.environ.get("DIRTY_LIB"):
-        with Path("crates/gaze-mcp-core/src/lib.rs").open("a") as f:
-            f.write("// unrelated edit\\n")
-    if os.environ.get("RESTORE_FAIL"):
-        Path("restore-fail").touch()
-if os.environ.get("GATE_FAIL"):
-    raise SystemExit(7)
-raise SystemExit(1 if mutated else 0)
+        stub.write_text('''#!/bin/bash
+mutated=1
+while IFS= read -r line; do
+    if [[ "$line" == *'cfg(feature'* ]]; then mutated=0; fi
+done < crates/gaze-mcp-core/src/tools/mod.rs
+if [ "$mutated" -eq 1 ]; then
+    : >"${READY_FILE:-mutated-ready}"
+    if [ -n "${SIGNAL_CARGO:-}" ]; then
+        kill -"$SIGNAL_CARGO" "$PROBE_OWNER_PID"
+    fi
+    if [ -n "${DIRTY_LIB:-}" ]; then
+        printf '// unrelated edit\\n' >> crates/gaze-mcp-core/src/lib.rs
+    fi
+    if [ -n "${RESTORE_FAIL:-}" ]; then : > restore-fail; fi
+fi
+if [ -n "${GATE_FAIL:-}" ]; then exit 7; fi
+exit "$mutated"
 ''')
         stub.chmod(0o755)
-        cat_stub = stub.parent / "cat"
-        cat_stub.write_text(
-            '#!/usr/bin/env bash\n'
-            'if [ -f restore-fail ] && [[ "$1" == *gaze-tier-probe.* ]]; then exit 1; fi\n'
-            f'exec "{shutil.which("cat")}" "$@"\n'
+        cp_stub = stub.parent / "cp"
+        cp_stub.write_text('#!/bin/bash\n' + r'''
+args=("$@")
+source="${args[${#args[@]}-2]}"
+destination="${args[${#args[@]}-1]}"
+if [ -f restore-fail ] && [[ "$source" == *gaze-tier-probe.* ]]; then
+    case "${RESTORE_FAIL:-}" in
+        partial) printf 'partial snapshot' >"$destination"; exit 1 ;;
+        missing) "REAL_RM" -f "$source"; exit 1 ;;
+        rename) ;;
+        *) exit 1 ;;
+    esac
+fi
+exec "REAL_CP" "$@"
+'''.replace("REAL_RM", shutil.which("rm")).replace("REAL_CP", shutil.which("cp")))
+        cp_stub.chmod(0o755)
+        mv_stub = stub.parent / "mv"
+        mv_stub.write_text(
+            '#!/bin/bash\n'
+            'if [ "${RESTORE_FAIL:-}" = rename ]; then exit 1; fi\n'
+            f'exec "{shutil.which("mv")}" "$@"\n'
         )
-        cat_stub.chmod(0o755)
+        mv_stub.chmod(0o755)
         self.env = dict(os.environ, TMPDIR=str(self.root),
                         PATH=str(stub.parent) + os.pathsep + os.environ["PATH"])
 
     def git(self, *args):
-        return subprocess.check_output(["git", *args], cwd=self.root, timeout=60)
+        return subprocess.check_output(["git", *args], cwd=self.root, timeout=60,
+                                       env=dict(os.environ, GIT_OPTIONAL_LOCKS="0"))
 
     def snapshot(self):
         return ((self.root / ".git/index").read_bytes(),
                 tuple((self.root / p).read_bytes() for p in TARGETS))
 
     def run_probe(self, *cases, **env):
-        return subprocess.run(["bash", str(SCRIPT), *cases], cwd=self.root,
+        return subprocess.run(["bash", "-c", 'export PROBE_OWNER_PID=$$; exec bash "$@"',
+                               "probe", str(SCRIPT), *cases], cwd=self.root,
                               env=dict(self.env, **env), capture_output=True, timeout=60)
 
     def test_dirty_sources_preserve_index_and_worktree(self):
@@ -118,57 +133,117 @@ raise SystemExit(1 if mutated else 0)
     def assert_snapshots_removed(self):
         self.assertEqual(list(self.root.glob("gaze-tier-probe.*")), [])
         self.assertEqual(list(self.root.rglob("*.probe-tmp.*")), [])
+        self.assertEqual(list(self.root.rglob(".gaze-tier-probe.*")), [])
 
-    def test_preparation_and_write_interrupts_preserve_exact_bytes(self):
-        self.assert_preparation_and_write_interrupts()
-
-    def test_clean_crlf_preparation_and_write_interrupts_preserve_exact_bytes(self):
-        self.make_clean_crlf_checkout()
-        self.assert_preparation_and_write_interrupts()
-
-    def assert_preparation_and_write_interrupts(self):
-        # Signal the shell itself after grep prepares the intermediate or cat
-        # writes the source, before the shell can remove the intermediate.
-        for command in ("grep", "cat"):
-            real_command = shutil.which(command)
+    def install_command_wrappers(self, control):
+        # Include every external command in the script, including reporting
+        # pipelines and command substitutions. Count *invocations*, not just
+        # command names, so both files and both deletion phases are exercised.
+        commands = ("dirname", "git", "mkdir", "mktemp", "grep", "cp", "cat",
+                    "rm", "mv", "cargo", "touch", "head", "sed")
+        for command in commands:
             wrapper = self.root / "bin" / command
-            wrapper.write_text(f'#!{sys.executable}\n' + f'''
-import os
-from pathlib import Path
-import signal
-import subprocess
-import sys
-args = sys.argv[1:]
-result = subprocess.run([{real_command!r}, *args])
-target = os.environ.get("SIGNAL_TARGET", "")
-preparation = {command!r} == "grep" and "-v" in args and target in args
-write = ({command!r} == "cat" and args
-         and Path(args[0]).name.startswith(Path(target).name + ".probe-tmp."))
-if os.environ.get("SIGNAL_STAGE") == {command!r} and (preparation or write):
-    os.kill(os.getppid(), int(os.environ["SIGNAL_NUMBER"]))
-raise SystemExit(result.returncode)
+            if wrapper.exists():
+                real = control / (command + "-real")
+                shutil.copyfile(wrapper, real)
+                real.chmod(0o755)
+            else:
+                real = Path(shutil.which(command))
+            wrapper.write_text('#!/bin/bash\n' + f"command={command!r}\nreal={str(real)!r}\n" + r'''
+count=0
+counter="$CONTROL/$command.count"
+if [ -f "$counter" ]; then read -r count <"$counter"; fi
+count=$((count + 1))
+printf '%s\n' "$count" >"$counter"
+"$real" "$@"
+code=$?
+printf '%s|%s|%s\n' "$command" "$count" "$*" >>"$CONTROL/trace"
+if [ "$command:$count" = "${SIGNAL_AT:-}" ]; then
+    printf '%s\n' "$command:$count" >"$CONTROL/fired"
+    if [ "${SIGNAL_RECIPIENT:-parent}" = owner ]; then
+        kill -"$SIGNAL_NUMBER" "$PROBE_OWNER_PID"
+    else
+        kill -"$SIGNAL_NUMBER" "$PPID"
+    fi
+fi
+exit "$code"
 ''')
             wrapper.chmod(0o755)
-        with tempfile.TemporaryDirectory() as logs:
-            untracked = self.git("ls-files", "--others", "-z")
-            for stage in ("grep", "cat"):
-                for target in TARGETS:
-                    for sig in (signal.SIGINT, signal.SIGTERM):
-                        with self.subTest(stage=stage, target=target, signal=sig):
-                            before = self.snapshot()
-                            result = self.run_probe(
-                                "full-surface", SIGNAL_STAGE=stage,
-                                SIGNAL_TARGET=str(target), SIGNAL_NUMBER=str(int(sig)),
-                                TIER_PROBE_LOG_DIR=logs,
-                            )
-                            self.assertEqual(result.returncode, 128 + sig,
-                                             result.stdout + result.stderr)
-                            self.assertEqual(self.snapshot(), before)
-                            self.assert_snapshots_removed()
-                            self.assertEqual(
-                                self.git("ls-files", "--others", "-z"),
-                                untracked,
-                            )
+
+    def test_external_command_interrupt_matrix(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            control = Path(workspace)
+            self.install_command_wrappers(control)
+            env = dict(CONTROL=workspace, TIER_PROBE_LOG_DIR=str(control / "logs"),
+                       READY_FILE=str(control / "ready"))
+
+            def reset_trace():
+                for path in control.glob("*.count"):
+                    path.unlink()
+                for name in ("trace", "fired"):
+                    (control / name).unlink(missing_ok=True)
+
+            cells = 0
+            for crlf in (False, True):
+                if crlf:
+                    self.make_clean_crlf_checkout()
+                for case in ("deep-path", "full-surface"):
+                    # The second scenario enters EXIT cleanup with owned
+                    # mutations, then injects an additional signal there.
+                    for cleanup in (False, True):
+                        scenario = dict(env)
+                        if cleanup:
+                            scenario["SIGNAL_CARGO"] = str(int(signal.SIGTERM))
+                        reset_trace()
+                        before = self.snapshot()
+                        status = self.git("status", "--porcelain", "--ignored", "--untracked-files=all")
+                        result = self.run_probe(case, **scenario)
+                        self.assertEqual(result.returncode, 143 if cleanup else 0,
+                                         result.stdout + result.stderr)
+                        self.assertEqual(self.snapshot(), before)
+                        calls = [line.split("|", 2) for line in (control / "trace").read_text().splitlines()]
+                        # These calls precede trap installation and all mutation.
+                        calls = [call for call in calls if call[:2] not in
+                                 (["dirname", "1"], ["git", "1"], ["mkdir", "1"])]
+                        if cleanup:
+                            # Only the critical cleanup suffix; ordinary
+                            # boundaries are already covered by the first run.
+                            calls = calls[next(i for i, call in enumerate(calls)
+                                               if call[:2] == ["cargo", "2"]) + 1:]
+                        for command, occurrence, args in calls:
+                            for sig in (signal.SIGINT, signal.SIGTERM):
+                                # Direct parent tests also hit subshells (and
+                                # protected children); owner tests prove that
+                                # the public shell preserves the signal exit.
+                                for recipient in ("parent", "owner"):
+                                    with self.subTest(crlf=crlf, case=case, cleanup=cleanup,
+                                                      command=command, occurrence=occurrence,
+                                                      signal=sig, recipient=recipient):
+                                        reset_trace()
+                                        result = self.run_probe(
+                                            case, **scenario, SIGNAL_AT=f"{command}:{occurrence}",
+                                            SIGNAL_NUMBER=str(int(sig)), SIGNAL_RECIPIENT=recipient,
+                                        )
+                                        self.assertTrue((control / "fired").exists(), args)
+                                        expected = 143 if cleanup else 128 + sig
+                                        if recipient == "owner":
+                                            self.assertEqual(result.returncode, expected,
+                                                             result.stdout + result.stderr)
+                                        else:
+                                            # A signal to a protected child is
+                                            # deliberately ignored; a reporting
+                                            # subshell may instead fail the gate.
+                                            self.assertIn(result.returncode, (0, 1, 2, 130, 143),
+                                                          result.stdout + result.stderr)
+                                        self.assertEqual(self.snapshot(), before)
+                                        self.assert_snapshots_removed()
+                                        self.assertEqual(
+                                            self.git("status", "--porcelain", "--ignored", "--untracked-files=all"),
+                                            status,
+                                        )
+                                        cells += 1
+                        print(f"matrix scenario crlf={crlf} case={case} cleanup={cleanup}: {cells} cells", flush=True)
+            print(f"interrupt matrix: {cells} cells passed", flush=True)
 
     def test_clean_crlf_normal_run_preserves_exact_bytes(self):
         self.make_clean_crlf_checkout()
@@ -188,32 +263,42 @@ raise SystemExit(result.returncode)
     def assert_interrupt_restores_sources(self):
         for sig in (signal.SIGINT, signal.SIGTERM):
             with self.subTest(signal=sig):
-                ready = self.root / "mutated-ready"
-                ready.unlink(missing_ok=True)
                 before = self.snapshot()
-                process = subprocess.Popen(["bash", str(SCRIPT), "full-surface"],
-                                           cwd=self.root, env=dict(self.env, WAIT="1"),
-                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                           start_new_session=True)
-                try:
-                    deadline = time.monotonic() + 60
-                    while not ready.exists() and time.monotonic() < deadline:
-                        time.sleep(0.02)
-                    self.assertTrue(ready.exists(), "mutation gate did not start")
-                    os.killpg(process.pid, sig)
-                    process.communicate(timeout=60)
-                    self.assertEqual(process.returncode, 128 + sig)
-                    self.assertEqual(self.snapshot(), before)
-                    self.assert_snapshots_removed()
-                finally:
-                    if process.poll() is None:
-                        os.killpg(process.pid, signal.SIGKILL)
-                        process.communicate()
+                result = self.run_probe("full-surface", SIGNAL_CARGO=str(int(sig)))
+                self.assertEqual(result.returncode, 128 + sig, result.stdout + result.stderr)
+                self.assertEqual(self.snapshot(), before)
+                self.assert_snapshots_removed()
 
-    def test_restore_failure_is_nonzero(self):
-        result = self.run_probe("deep-path", RESTORE_FAIL="1")
-        self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertIn(b"FATAL: failed to restore", result.stderr)
+    def test_restore_failure_preserves_sources_and_recovery_snapshots(self):
+        before = self.snapshot()
+        for mode in ("unreadable", "partial", "missing", "rename"):
+            with self.subTest(mode=mode):
+                result = self.run_probe("deep-path", RESTORE_FAIL=mode)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(b"FATAL: failed to restore", result.stderr)
+                after_index, after_sources = self.snapshot()
+                self.assertEqual(after_index, before[0])
+                self.assertEqual(after_sources, (b"pub mod example;\n", before[1][1]))
+                snapshots = list(self.root.glob("gaze-tier-probe.*"))
+                self.assertEqual(len(snapshots), 1)
+                self.assertIn(str(snapshots[0]).encode(), result.stderr)
+                if mode != "missing":
+                    self.assertEqual((snapshots[0] / TARGETS[0]).read_bytes(), before[1][0])
+                # Failure intentionally retains recovery data. Reset only this
+                # disposable fixture before the next independent fault.
+                for path, contents in zip(TARGETS, before[1]):
+                    (self.root / path).write_bytes(contents)
+                shutil.rmtree(snapshots[0])
+                for directory in self.root.rglob(".gaze-tier-probe.*"):
+                    shutil.rmtree(directory)
+
+    def test_atomic_restore_preserves_source_modes(self):
+        modes = (0o640, 0o600)
+        for path, mode in zip(TARGETS, modes):
+            (self.root / path).chmod(mode)
+        result = self.run_probe("full-surface")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(tuple((self.root / path).stat().st_mode & 0o777 for path in TARGETS), modes)
 
     def test_deep_path_restores_only_owned_file(self):
         index, sources = self.snapshot()

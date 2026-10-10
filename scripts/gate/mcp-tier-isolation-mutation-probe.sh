@@ -43,27 +43,90 @@ fi
 
 MUTATED_FILES=()
 SNAPSHOT_DIR=""
-restore_sources() {
-    local file failed=0
-    for file in ${MUTATED_FILES[@]+"${MUTATED_FILES[@]}"}; do
-        # Restore actual checkout bytes, including Git conversions, without
-        # rewriting the index or replacing the source file's permissions.
-        if ! cat "$SNAPSHOT_DIR/$file" >"$file"; then
-            echo "FATAL: failed to restore $file (snapshot: $SNAPSHOT_DIR)" >&2
-            failed=1
-        fi
+RESTORE_DIRS=()
+CRITICAL=0
+PENDING_SIGNAL=0
+RESTORE_FAILED=0
+
+on_signal() {
+    # Defer exit while ownership or recovery data is changing. The first
+    # signal wins; EXIT cleanup must never interrupt itself.
+    if [ "$PENDING_SIGNAL" -eq 0 ]; then PENDING_SIGNAL="$1"; fi
+    if [ "$CRITICAL" -eq 0 ]; then
+        CRITICAL=1
+        cleanup "$PENDING_SIGNAL"
+    fi
+}
+
+end_critical() {
+    CRITICAL=0
+    if [ "$PENDING_SIGNAL" -ne 0 ]; then exit "$PENDING_SIGNAL"; fi
+}
+
+protected_command() (
+    # Parent traps record INT/TERM; children must finish the critical command.
+    # Ignoring signals in the parent itself would lose the requested exit code.
+    trap '' INT TERM
+    "$@"
+)
+
+remove_restore_dirs() {
+    local directory failed=0
+    for directory in ${RESTORE_DIRS[@]+"${RESTORE_DIRS[@]}"}; do
+        protected_command rm -rf "$directory" || failed=1
     done
     [ "$failed" -eq 0 ] || return 1
+    RESTORE_DIRS=()
+}
+
+remove_temporary_dirs() {
+    remove_restore_dirs || return 1
     if [ -n "$SNAPSHOT_DIR" ]; then
-        rm -rf "$SNAPSHOT_DIR" || return 1
+        protected_command rm -rf "$SNAPSHOT_DIR" || return 1
         SNAPSHOT_DIR=""
     fi
+}
+
+restore_sources() {
+    local file temporary directory failed=0
+    CRITICAL=1
+    # Never retry a failed restoration in EXIT cleanup or discard its backups.
+    if [ "$RESTORE_FAILED" -ne 0 ]; then return 1; fi
+    for file in ${MUTATED_FILES[@]+"${MUTATED_FILES[@]}"}; do
+        # Read the complete snapshot into a run-owned directory on the source
+        # filesystem before atomically replacing the source. A missing or
+        # unreadable snapshot therefore cannot truncate the source. cp -p
+        # preserves its original mode as well as its actual checkout bytes.
+        directory="$(protected_command mktemp -d "${file%/*}/.gaze-tier-probe.XXXXXX")" || { failed=1; break; }
+        RESTORE_DIRS+=("$directory")
+        temporary="$directory/original"
+        if ! protected_command cp -p "$SNAPSHOT_DIR/$file" "$temporary" ||
+           ! protected_command mv -f "$temporary" "$file"; then
+            failed=1
+            break
+        fi
+    done
+    if [ "$failed" -ne 0 ]; then
+        RESTORE_FAILED=1
+        remove_restore_dirs || echo "FATAL: could not remove restore staging directories" >&2
+        echo "FATAL: failed to restore sources; recovery snapshots retained at $SNAPSHOT_DIR" >&2
+        return 1
+    fi
+    # Ownership ends only after ALL replacements succeed. No later cleanup
+    # can read a snapshot that snapshot deletion has already removed.
     MUTATED_FILES=()
+    remove_temporary_dirs || return 1
+    end_critical
 }
 
 ensure_snapshot_dir() {
     if [ -z "$SNAPSHOT_DIR" ]; then
-        SNAPSHOT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/gaze-tier-probe.XXXXXX")" || return 1
+        # Register mktemp's result before honoring a pending signal.
+        CRITICAL=1
+        SNAPSHOT_DIR="$(protected_command mktemp -d "${TMPDIR:-/tmp}/gaze-tier-probe.XXXXXX")"
+        local code=$?
+        end_critical
+        [ "$code" -eq 0 ] || return 1
     fi
 }
 
@@ -73,15 +136,18 @@ snapshot_source() {
         [ "$owned" != "$file" ] || return 0
     done
     ensure_snapshot_dir || return 1
-    mkdir -p "$SNAPSHOT_DIR/$(dirname "$file")" || return 1
-    cp "$file" "$SNAPSHOT_DIR/$file" || return 1
+    mkdir -p "$SNAPSHOT_DIR/${file%/*}" || return 1
+    cp -p "$file" "$SNAPSHOT_DIR/$file" || return 1
     MUTATED_FILES+=("$file")
 }
 
 cleanup() {
-    local code=$?
-    trap - EXIT INT TERM
+    local code="$1" CRITICAL=1
+    trap - EXIT
+    # Keep recording signals until the final exit, including deletion. Do not
+    # reinstate default signal handling halfway through restoration.
     restore_sources || code=1
+    if [ "$code" -ne 1 ] && [ "$PENDING_SIGNAL" -ne 0 ]; then code="$PENDING_SIGNAL"; fi
     exit "$code"
 }
 
@@ -108,9 +174,9 @@ for case_name in "${CASES[@]}"; do
 done
 require_clean
 mkdir -p "$LOG_DIR" || exit 2
-trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'cleanup "$?"' EXIT
+trap 'on_signal 130' INT
+trap 'on_signal 143' TERM
 
 # Runs the gate, echoes its exit code, keeps the full log.
 run_gate() {
