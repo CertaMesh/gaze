@@ -1,0 +1,48 @@
+{
+  "comparison": "rules-only source pair",
+  "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5",
+  "sampling_seed": 20260710,
+  "rust_toolchain": "1.96.0-aarch64-apple-darwin",
+  "policy": "policy.toml",
+  "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
+  "ner_enabled": false,
+  "nym_enabled": false,
+  "arms": {
+    "base": {
+      "revision": "1fdd9454455f42d1896475acedf374dd78b918b6",
+      "binary_sha256": "5d6bb462511bbd22a34bee162708b054020122fc2e59d7ee5155184d282eb726",
+      "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
+      "observations": "observations-base.jsonl.gz",
+      "observations_sha256": "5cbc29c8c475afc8995dc5a2bb116affd990f8c53a14b3d92336615cd579d5bf",
+      "scorecards": {
+        "2": "scorecard-base-v2.json.gz",
+        "1": "scorecard-base-v1.json.gz",
+        "4": "scorecard-base-v4.json.gz"
+      },
+      "crates_tree": "05dbead70d6bc58f26f39b56b78382f9a2c49af6"
+    },
+    "candidate": {
+      "revision": "33d90b94c27a864c363d0c4135b855fb4ca27934",
+      "binary_sha256": "1b93e4e2a7281aa89580a601cd43075bb60d057531a6fac9420e47633cfc15af",
+      "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
+      "observations": "observations-candidate.jsonl.gz",
+      "observations_sha256": "2638a517c1a3bfa9dc34799c6dfc7384f967a9276e361bf5729e9761f218eaa1",
+      "scorecards": {
+        "2": "scorecard-candidate-v2.json.gz",
+        "1": "scorecard-candidate-v1.json.gz",
+        "4": "scorecard-candidate-v4.json.gz"
+      },
+      "crates_tree": "0c352bf3ef78a7f54237c36d2d06a60a64937fb7"
+    }
+  },
+  "gates": [
+    "gate-v2.json",
+    "gate-v1.json",
+    "gate-v4.json"
+  ],
+  "verdicts": {
+    "2": "fail",
+    "1": "fail",
+    "4": "fail"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5",
+  "sampling_seed": 20260710,
+  "arms": {
+    "base": {
+      "observations": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/observations-base.jsonl.gz",
+      "scorecards": {
+        "2": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/scorecard-base-v2.json.gz",
+        "1": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/scorecard-base-v1.json.gz",
+        "4": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/scorecard-base-v4.json.gz"
+      },
+      "revision": "1fdd9454455f42d1896475acedf374dd78b918b6",
+      "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462"
+    },
+    "candidate": {
+      "observations": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/observations-candidate.jsonl.gz",
+      "scorecards": {
+        "2": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/scorecard-candidate-v2.json.gz",
+        "1": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/scorecard-candidate-v1.json.gz",
+        "4": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/scorecard-candidate-v4.json.gz"
+      },
+      "revision": "33d90b94c27a864c363d0c4135b855fb4ca27934",
+      "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462"
+    }
+  },
+  "gates": [
+    "gate-v2.json",
+    "gate-v1.json",
+    "gate-v4.json"
+  ],
+  "verdicts": {
+    "2": "fail",
+    "1": "fail",
+    "4": "fail"
+  }
+}
