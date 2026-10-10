@@ -210,12 +210,19 @@ exit "$code"
                             # boundaries are already covered by the first run.
                             calls = calls[next(i for i, call in enumerate(calls)
                                                if call[:2] == ["cargo", "2"]) + 1:]
+                        # A shortened trace must not silently reduce coverage.
+                        expected_calls = {
+                            ("deep-path", False): 22, ("full-surface", False): 34,
+                            ("deep-path", True): 5, ("full-surface", True): 9,
+                        }
+                        self.assertEqual(len(calls), expected_calls[case, cleanup])
                         for command, occurrence, args in calls:
                             for sig in (signal.SIGINT, signal.SIGTERM):
                                 # Direct parent tests also hit subshells (and
                                 # protected children); owner tests prove that
                                 # the public shell preserves the signal exit.
                                 for recipient in ("parent", "owner"):
+                                    cells += 1
                                     with self.subTest(crlf=crlf, case=case, cleanup=cleanup,
                                                       command=command, occurrence=occurrence,
                                                       signal=sig, recipient=recipient):
@@ -241,9 +248,9 @@ exit "$code"
                                             self.git("status", "--porcelain", "--ignored", "--untracked-files=all"),
                                             status,
                                         )
-                                        cells += 1
                         print(f"matrix scenario crlf={crlf} case={case} cleanup={cleanup}: {cells} cells", flush=True)
-            print(f"interrupt matrix: {cells} cells passed", flush=True)
+            self.assertEqual(cells, 560)
+            print(f"interrupt matrix: {cells} cells exercised", flush=True)
 
     def test_clean_crlf_normal_run_preserves_exact_bytes(self):
         self.make_clean_crlf_checkout()

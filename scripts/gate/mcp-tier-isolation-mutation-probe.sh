@@ -97,7 +97,9 @@ restore_sources() {
         # filesystem before atomically replacing the source. A missing or
         # unreadable snapshot therefore cannot truncate the source. cp -p
         # preserves its original mode as well as its actual checkout bytes.
-        directory="$(protected_command mktemp -d "${file%/*}/.gaze-tier-probe.XXXXXX")" || { failed=1; break; }
+        # Protect the substitution shell itself: a nested protected_command
+        # may exec mktemp, leaving its waiting parent with default TERM handling.
+        directory="$(trap '' INT TERM; mktemp -d "${file%/*}/.gaze-tier-probe.XXXXXX")" || { failed=1; break; }
         RESTORE_DIRS+=("$directory")
         temporary="$directory/original"
         if ! protected_command cp -p "$SNAPSHOT_DIR/$file" "$temporary" ||
@@ -121,9 +123,10 @@ restore_sources() {
 
 ensure_snapshot_dir() {
     if [ -z "$SNAPSHOT_DIR" ]; then
-        # Register mktemp's result before honoring a pending signal.
+        # Protect the entire substitution and register mktemp's result before
+        # honoring a pending signal in the owner.
         CRITICAL=1
-        SNAPSHOT_DIR="$(protected_command mktemp -d "${TMPDIR:-/tmp}/gaze-tier-probe.XXXXXX")"
+        SNAPSHOT_DIR="$(trap '' INT TERM; mktemp -d "${TMPDIR:-/tmp}/gaze-tier-probe.XXXXXX")"
         local code=$?
         end_critical
         [ "$code" -eq 0 ] || return 1
