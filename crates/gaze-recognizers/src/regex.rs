@@ -406,16 +406,23 @@ impl RegexDetector {
                         };
                         guard.is_match(checked)
                     });
-                    span.rejected |=
-                        self.reject_unquoted_capture_regex
-                            .as_ref()
-                            .is_some_and(|guard| {
-                                let value_quoted = input[..span.capture.start]
-                                    .chars()
-                                    .next_back()
-                                    .is_some_and(|ch| matches!(ch, '\"' | '\''));
-                                !value_quoted && guard.is_match(&input[span.capture.clone()])
-                            });
+                    let unquoted_capture_rejected = self
+                        .reject_unquoted_capture_regex
+                        .as_ref()
+                        .is_some_and(|guard| {
+                            let value_quoted = input[..span.capture.start]
+                                .chars()
+                                .next_back()
+                                .is_some_and(|ch| matches!(ch, '\"' | '\''));
+                            !value_quoted && guard.is_match(&input[span.capture.clone()])
+                        });
+                    span.rejected |= unquoted_capture_rejected;
+                    if unquoted_capture_rejected && span.capture.end > full.start() {
+                        // A rejected placeholder cannot own scanner extensions: an uppercase
+                        // group may be the next field's cue. Retain the audit veto, but scan
+                        // again from the original capture end so that cue remains visible.
+                        search_at = Some(span.capture.end);
+                    }
                     span.rejected |= self.ipv4_phone_tail(input, &span.span);
                     return Some(match phone_parts {
                         None => vec![span],
@@ -1160,6 +1167,42 @@ mod tests {
             assert_eq!(audit[0].regex_guard_rejected, rejected, "{input}");
         }
         assert!(detector.with_unquoted_capture_rejection(Some("[")).is_err());
+    }
+
+    #[test]
+    fn rejected_unquoted_capture_resumes_before_scanner_extension() {
+        let detector = RegexDetector::with_rulepack_fields(
+            r"(?i:field)[ :=]+([A-Za-z0-9]+)",
+            PiiClass::custom("synthetic").unwrap(),
+            "synthetic.labelled",
+            vec![LocaleTag::Global],
+            0.9,
+            100,
+            "counter",
+            Some(vec![1]),
+            Vec::new(),
+            None,
+            None,
+        )
+        .unwrap()
+        .with_complete_labelled_value(true)
+        .with_unquoted_capture_rejection(Some(r"^[\p{L}\p{M}]+$"))
+        .unwrap();
+        let input = "field token FIELD=801234";
+        let dictionaries = gaze_types::DictionaryBundle::default();
+        let locales = [LocaleTag::Global];
+        let ctx = DetectContext::new(&locales, &dictionaries);
+        let scans = detector.scanned_spans(input, None);
+        assert_eq!(scans.len(), 2);
+        assert_eq!(&input[scans[0].capture.clone()], "token");
+        assert!(scans[0].rejected);
+        assert_eq!(&input[scans[1].span.clone()], "801234");
+        assert!(!scans[1].rejected);
+        let audit = Recognizer::detect_for_registry(&detector, input, &ctx).unwrap();
+        assert_eq!(audit.len(), 2);
+        assert!(audit[0].regex_guard_rejected);
+        assert!(!audit[1].regex_guard_rejected);
+        assert_eq!(Recognizer::detect(&detector, input, &ctx).unwrap().len(), 1);
     }
 
     #[test]

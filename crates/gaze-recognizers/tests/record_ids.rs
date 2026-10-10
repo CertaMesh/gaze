@@ -136,6 +136,45 @@ fn labelled_person_ids_capture_only_whole_values_and_restore() {
 }
 
 #[test]
+fn rejected_placeholders_do_not_consume_later_person_id_cues() {
+    let core = CorePipelineConfig::new().build().unwrap();
+    for (placeholder, key, class) in [
+        ("customer ID token", "CUSTOMER_ID", "customer_id"),
+        ("customer ID token", "customer_id", "customer_id"),
+        ("employee ID placeholder", "EMPLOYEE_ID", "employee_id"),
+        ("employee ID placeholder", "employee_id", "employee_id"),
+        ("contact record ID value", "CONTACT_RECORD_ID", "record_id"),
+        ("contact record ID value", "contact_record_id", "record_id"),
+    ] {
+        let input = format!("{placeholder} {key}=801234");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else {
+            panic!("text")
+        };
+        assert!(!clean.contains("801234"), "later value leaked: {input:?}");
+        assert!(clean.starts_with(&format!("{placeholder} {key}=")));
+        let entries = session.snapshot_entries();
+        assert_eq!(entries.len(), 1, "placeholder must stay raw: {input:?}");
+        assert_eq!(entries[0].raw, "801234");
+        assert_eq!(entries[0].class, PiiClass::custom(class).unwrap());
+        assert_eq!(
+            core.pipeline()
+                .restore_strict_text(&session, &clean)
+                .unwrap(),
+            input
+        );
+
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = core.pseudonymize_text(&session, placeholder).unwrap()
+        else {
+            panic!("text")
+        };
+        assert_eq!(clean, placeholder);
+        assert!(session.snapshot_entries().is_empty());
+    }
+}
+
+#[test]
 fn public_identifiers_lookalike_keys_and_cross_line_cues_stay_raw() {
     let core = CorePipelineConfig::new().build().unwrap();
     for input in [
