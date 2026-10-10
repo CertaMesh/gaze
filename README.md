@@ -4,23 +4,26 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/CertaMesh/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![Tests](https://github.com/CertaMesh/gaze/actions/workflows/test.yml/badge.svg)](https://github.com/CertaMesh/gaze/actions/workflows/test.yml) [![GitHub stars](https://img.shields.io/github/stars/CertaMesh/gaze?style=social)](https://github.com/CertaMesh/gaze/stargazers)
 
-**Gaze swaps the personal details in your text for placeholders before an AI model sees it, then swaps the real details back into the model's reply.** The model works with a name token such as `<Name_N>`; only your server knows that it means Ada Example.
+Gaze replaces personal details with placeholders before an AI model sees them,
+then restores them in the reply. The model sees `<Name_N>`; your server keeps
+the originals in a restore manifest. The goal is zero PII bytes reaching the
+model outside that contract.
 
-Gaze pseudonymizes: every placeholder can be restored, and the manifest that restores it never leaves your server. The goal is that no byte of personal data reaches the model outside that contract.
+Pre-1.0: the API is stabilizing. Older minor-version manifests restore on newer
+minors ([UPGRADE.md](UPGRADE.md)).
 
-*Pre-1.0, API stabilizing. Reversibility is guaranteed across minor versions — manifests written by an older minor restore on a newer minor (see [`UPGRADE.md`](UPGRADE.md)).*
+![Gaze replaces personal details before the model and restores them after; the manifest stays on your server.](docs/assets/gaze-promise-loop.svg)
 
-![Your app sends a ticket to Gaze on your server. Gaze swaps personal details for placeholders and keeps the manifest at home. Only placeholders reach the AI model. Gaze restores the real details in the reply.](docs/assets/gaze-promise-loop.svg)
-
-*Text version:* your app → Gaze swaps details for placeholders (the manifest stays on your server) → the AI model reads and writes placeholders only → Gaze restores the real details → your app.
-
-**Scope:** outbound PII control with reversibility. Gaze is *not* a guardrail, prompt-injection defense, or content-safety filter — it keeps real PII out of the model and restores it in the reply.
-
-The same boundary applies to tool-call arguments in agent frameworks: the JSON the model fills in carries placeholders, and Gaze restores them before your tool runs ([how it fits your stack](docs/explanation/how-gaze-works.md#how-it-fits-your-stack)).
+Gaze controls outbound PII. It does not defend against prompt injection or filter
+unsafe content. Tool-call JSON carries placeholders too; Gaze restores them
+before the tool runs ([integration](docs/explanation/how-gaze-works.md#how-it-fits-your-stack)).
 
 ## How good is it
 
-How much PII does each tool keep from reaching the model? The [v0.16.0 benchmark](docs/reference/benchmarks/README.md#current-release) runs the exact policy `gaze setup` writes, next to Presidio, DataFog, scrubadub, GLiNER and OPF on their declared configurations. "Leaked" means PII bytes that would still reach the model; the goal is zero.
+The [v0.16.0 benchmark](docs/reference/benchmarks/README.md#current-release)
+compares the `gaze setup` policy with Presidio, DataFog, scrubadub, GLiNER and
+OPF on their declared configurations. “Leaked” counts PII bytes still reaching
+the model. The target is zero.
 
 <!-- BEGIN GENERATED: readme-chart -->
 
@@ -37,17 +40,19 @@ Gaze 0.16 leaks 13,291 PII bytes on our holdout (character-level F2 0.879; crede
 
 ![Steps 1 to 4, normalize, recognize, resolve and swap, are the deterministic floor. Step 5, the safety net on by default, and step 6, the output check, give a second opinion. The AI model sees placeholders only, and step 7 restores the reply.](docs/assets/gaze-seven-steps.svg)
 
-The seven steps in the diagram, grouped:
+1. Forty bundled rules find structured details using formats, checksums and cues.
+2. NER finds names and places.
+3. The resolver picks one candidate per span; Gaze emits a placeholder and manifest entry.
+   The same input gives the same output; each placeholder traces to a versioned rule.
+4. The `gaze setup` policy runs local Nym to find missed PII and tokenize it.
+5. Restore replaces issued placeholders with originals. Unknown placeholders are refused.
 
-1. **Rules find the structured details.** 40 bundled rules match formats, checksums, and cue words: emails, IBANs, phone numbers, national IDs.
-2. **NER finds names and places.** A named-entity model proposes the free-text details the rules cannot see.
-3. **Overlaps are resolved, then swapped.** One candidate wins each span, and it becomes a placeholder plus a manifest entry. The same input always gives the same output, and every placeholder traces to a versioned rule.
-4. **A local safety net rereads the result.** The policy from `gaze setup` runs Nym, which turns anything it catches into another restorable placeholder.
-5. **Restore puts the originals back.** Placeholders in the model's reply become the real values. A placeholder Gaze never issued is refused, never guessed.
+Gaze fails closed on missing models and unknown rules. Unresolvable safety-net
+suspects become one-way `[REDACTED:<class>]` markers or cause refusal. Only
+`tolerant` development mode lets them through.
 
-Gaze fails closed. A missing model or an unknown rule stops the run. A safety-net suspect that cannot become a placeholder is replaced with a one-way `[REDACTED:<class>]` marker or the document is refused. Only `tolerant` mode, meant for development, lets it through.
-
-The full walkthrough, with a real support ticket and the safety-net modes: [How Gaze works](docs/explanation/how-gaze-works.md).
+[How Gaze works](docs/explanation/how-gaze-works.md) covers the seven steps,
+a support ticket and safety-net modes.
 
 ## Quickstart
 
@@ -61,10 +66,8 @@ jq -r .clean_text clean.json
 jq '{session_blob, text: .clean_text}' clean.json | gaze restore | jq -r .text
 ```
 
-Here is the real output. The two `sed` filters only normalize it for
-publication: the first drops the per-session token prefix, the second writes
-`@` as ` [at] `. The first line is what the model sees; the second is what
-the owner restores:
+The first line is model input; the second is restored output. For publication,
+`sed` removes session prefixes and replaces `@` with ` [at] `.
 
 ```console
 $ jq -r .clean_text clean.json | sed -E 's/<[0-9a-f]{8}:([A-Za-z]+)_[0-9]+>/<\1_N>/g'
@@ -73,19 +76,21 @@ $ jq '{session_blob, text: .clean_text}' clean.json | gaze restore | jq -r .text
 From: Ada Example <ada [at] example.invalid>
 ```
 
-`gaze setup` verifies the pinned NER and Nym bundles, writes `gaze.toml` with Nym on, and checks both detectors. It prints the Nym model card's MIT licence and the open [training-data licence review](docs/explanation/safety-net/safety-nets.md#licence-review-open). Use `gaze setup --safety-net none` for a NER-only policy.
+`gaze setup` verifies pinned NER and Nym bundles, writes `gaze.toml` with Nym on,
+and checks both detectors. It prints Nym's MIT model licence and the open
+[training-data licence review](docs/explanation/safety-net/safety-nets.md#licence-review-open).
+Use `gaze setup --safety-net none` for NER only.
 
-Use `gaze setup --dob-judge` to install the optional SHA-pinned local GLiNER
-bundle and enable cue-less date-of-birth judgments in the generated policy.
-This option is off by default until its 352 MB bundle is shrunk:
-on the benchmark it cuts leaked date-of-birth bytes from 810 to 725 with no
-added false-positive bytes, but adds 664 MiB peak memory
-([per-mechanism arms](docs/reference/benchmarks/README.md#per-mechanism-arms)).
-`--dob-model-dir <path>` selects its bundle
-directory. The setup doctor checks a synthetic birth date before publishing
-the policy.
+`gaze setup --dob-judge` installs a SHA-pinned local GLiNER bundle and enables
+cue-less birth-date judgments. It stays opt-in while its bundle is 352 MB:
+the benchmark reduces leaked DOB bytes from 810 to 725, adds no false-positive
+bytes, and adds 664 MiB peak memory
+([mechanism arms](docs/reference/benchmarks/README.md#per-mechanism-arms)).
+`--dob-model-dir <path>` selects its directory. Setup checks a synthetic birth
+date before writing the policy.
 
-`clean_text` is what you send to the model. `clean.json` also holds the `session_blob`: keep it on your server, because it is what `gaze restore` needs and it contains the originals.
+Send only `clean_text` to the model. Keep `clean.json` and its `session_blob`
+on your server: the blob contains originals and is needed for restore.
 
 ## Where next
 
@@ -139,35 +144,19 @@ For library use, see [Use the `gaze setup` policy from Rust](docs/how-to/rust-li
 
 ## Workspace and crates.io
 
-Fifteen published crates. Pick the smallest surface that does the job.
-
-| Crate | Use when |
-|---|---|
-| [`gaze-pii`](https://crates.io/crates/gaze-pii) (lib name `gaze`) | You link the runtime: `Pipeline`, `Session`, `Policy`, `Recognizer`, restore. |
-| [`gaze-types`](https://crates.io/crates/gaze-types) | You want the value contracts (`RedactionLogger`, `Manifest`, `LeakReport`) without ML deps. |
-| [`gaze-recognizers`](https://crates.io/crates/gaze-recognizers) | You're writing a custom recognizer or rulepack, or you want the bundled detectors and SafetyNet backends. |
-| [`gaze-audit`](https://crates.io/crates/gaze-audit) | You want SQLite-backed metadata audit logging. `gaze` core has no `rusqlite` dep in any feature graph. |
-| [`gaze-assembly`](https://crates.io/crates/gaze-assembly) | You want bundled defaults without hand-wiring recognizers. |
-| [`gaze-cli`](https://crates.io/crates/gaze-cli) | You want a process boundary for non-Rust adapters (Laravel, Python). |
-| [`gaze-document`](https://crates.io/crates/gaze-document) | You want PNG / JPG / PDF ingestion into `SafeBundle`s or MCP document tools. |
-| [`gaze-mcp-core`](https://crates.io/crates/gaze-mcp-core) | You're building an MCP tool host and want every call to pass through Gaze's chokepoint. |
-| [`gaze-mcp-rmcp`](https://crates.io/crates/gaze-mcp-rmcp) | You want the rmcp transport sink for `gaze-mcp-core` (stdio default, opt-in streamable HTTP). |
-| [`gaze-mcp-bridge`](https://crates.io/crates/gaze-mcp-bridge) | You want the policy-gated MCP bridge that restores approved token fields before calling downstream MCP servers. |
-| [`gaze-proxy`](https://crates.io/crates/gaze-proxy) | You want an HTTP proxy in front of API-key traffic to OpenAI / Anthropic / Gemini; consumer subscription tiers are outside this surface. The proxy is daemon-managed via `gaze proxy`. |
-| [`gaze-inspection`](https://crates.io/crates/gaze-inspection) | You want the provider-neutral inspection runtime behind proxy traffic inspection. |
-| [`gaze-proxy-dashboard`](https://crates.io/crates/gaze-proxy-dashboard) | You want the opt-in, memory-only local dashboard for inspecting tokenized `gaze proxy` traffic. |
-| [`gaze-model-setup`](https://crates.io/crates/gaze-model-setup) | You want to install and verify the pinned model bundles (NER, Nym, GLiNER) that `gaze setup` installs. |
-| [`gaze-token-bridge`](https://crates.io/crates/gaze-token-bridge) | Work in progress: owner-side authorization and translation between a session and indexed data. |
+Choose from the 15 published crates in the [crate map](docs/reference/crates.md).
+For the Rust runtime (package `gaze-pii`, library name `gaze`):
 
 ```sh
 cargo add gaze-pii
 ```
 
-Crate boundaries and the audit-isolation Dylint gate: [`docs/reference/crates.md`](docs/reference/crates.md). Document codec extension: [`docs/explanation/document/document-extension.md`](docs/explanation/document/document-extension.md).
+The core has no `rusqlite` dependency; SQLite auditing lives in `gaze-audit`.
+[Document codec extensions](docs/explanation/document/document-extension.md).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the local gates and DCO sign-off (`git commit -s`, no CLA). Governance: [`docs/explanation/governance.md`](docs/explanation/governance.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local gates and signed DCO commits (`git commit -S -s`, no CLA). Governance: [`docs/explanation/governance.md`](docs/explanation/governance.md).
 
 ## License
 

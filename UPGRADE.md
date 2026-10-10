@@ -1,44 +1,29 @@
 # Upgrading Gaze
 
-This file is a per-minor migration guide for adopters of the `gaze-pii`
-workspace (the published cargo name; the library is imported as `gaze`).
-Pair it with [CHANGELOG.md](CHANGELOG.md): CHANGELOG records what changed,
-UPGRADE.md tells you what *you* need to do.
+Migration steps for package `gaze-pii` (Rust library `gaze`).
+[CHANGELOG.md](CHANGELOG.md) records release changes.
 
 ## How this file is organized
 
-- One H2 section per release that needs adopter action, in
-  **reverse-chronological** order.
-- Each section opens with **TL;DR** (the one or two actions an adopter
-  cannot skip), then drills into details.
-- "Additive" entries are no-action and noted for awareness only.
-- "Action required" entries are the ones a human upgrade reviewer should
-  read in full.
+Releases run newest first. Read “Action required” entries in full;
+“Additive” entries need no action. Each release starts with a short checklist.
 
 ## Pre-1.0 promise
 
-Gaze is pre-1.0. Per the [SemVer pre-1.0 contract][semver-pre1] minor bumps
-*may* introduce breaking changes; we minimize them. Every breaking surface
-in this file is also a breaking entry in CHANGELOG.md, gated by closed
-non-exhaustive enums + typed errors so that downstream code only breaks
-at compile time, never silently at runtime.
+Before 1.0, [minor versions may break APIs][semver-pre1]. Breaking changes also
+appear in CHANGELOG. Closed non-exhaustive enums and typed errors prevent
+silent runtime mismatches.
 
-The five north-star axes — **reliability, reversibility, agentic-first,
-trust, ergonomics** — bound every upgrade. Reversibility means: if an
-upgrade ever changes a manifest's restore round-trip, that is a bug, not
-a migration step. Manifests written by an older minor restore on the new
-minor unless this file explicitly says otherwise. (No such exception
-exists today.)
+Upgrades must preserve reliability, reversibility, agentic fit, trust and
+integration ease. Older minor-version manifests must restore on newer minors;
+there are no exceptions.
 
 [semver-pre1]: https://semver.org/spec/v2.0.0.html#spec-item-4
 
 ## Reversibility statement (every upgrade)
 
-If an upgrade ever causes a manifest written by an older minor to fail
-restore on a newer minor, that is a bug. Open an issue tagged
-`reversibility-regression` and we will treat it as a critical defect
-against north-star axis 2. There is no migration step that asks you to
-re-tokenize stored manifests.
+Report older manifests failing restore as `reversibility-regression`.
+This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ---
 
@@ -54,7 +39,7 @@ Existing policies keep their selected rulepacks until you update them.
 
 ### TL;DR
 
-**Typed `Context` literals:** add both `record_match_kinds: Default::default()`
+Typed `Context` literals: add both `record_match_kinds: Default::default()`
 and `record_value_rejections: Default::default()`.
 Full names now match by default with measured exact, case-folded and combined
 whitespace/case kinds. If your caller-known records rely on exact single names,
@@ -65,21 +50,21 @@ outweighed their gains; a same-case single-name copy may now be raw unless
 another detector finds it. Exact declared phone and credit-card values remain on
 despite measured benign matches, by user decision.
 
-**Context JSON callers:** files over 4 MiB now fail with a typed size error.
+Context JSON callers: files over 4 MiB now fail with a typed size error.
 Duplicate keys now fail instead of silently keeping the last value. JSON parse
 errors are generic and no longer include source text; use a local JSON
 validator when you need line-level diagnostics. These changes also apply when
 the new `record`/`field_map` envelope is absent.
 
-1. **Custom `gaze-proxy` adapters must declare a contract.** Add a
+1. Custom `gaze-proxy` adapters must declare a contract. Add a
    `contract()` method to every `ProviderAdapter` you implement.
-2. **`session_blob` moves to envelope version 6.** Blobs written by v0.16
+2. `session_blob` moves to envelope version 6. Blobs written by v0.16
    cannot be read by v0.15 or older. Upgrade every process that restores a
    blob before (or together with) every process that writes one.
-3. **The `Redact` safety-net fallback tokenizes when it can.** Expect fewer
+3. The `Redact` safety-net fallback tokenizes when it can. Expect fewer
    `[REDACTED:<class>]` markers and more tokens; nothing to change unless you
    count markers.
-4. **Custom recognizers declare their evidence.** A `Recognizer` or
+4. Custom recognizers declare their evidence. A `Recognizer` or
    `Detector` you implement yourself no longer seeds the repeat-value sweep
    unless it returns `EvidenceKind::Rule` from `evidence()`. It also ranks
    lower in cross-class containment, so its spans no longer swallow an
@@ -87,7 +72,7 @@ the new `record`/`field_map` envelope is absent.
 
 ### Changed: loopback IP addresses stay raw
 
-**No action required.** The bundled IPv4 and IPv6 rules no longer tokenize
+No action required. The bundled IPv4 and IPv6 rules no longer tokenize
 loopback addresses (`127.0.0.0/8`, `::1`, IPv4-mapped or IPv4-compatible
 loopback): they never leave the host. Each rejection writes a loser audit row
 with `ipv4_loopback_range` or `ipv6_loopback_range`. Private and link-local
@@ -97,30 +82,21 @@ addresses stay protected. A rulepack that declares the never-released
 
 ### Changed: `SafetyNetFallback::Redact` tokenizes a resolvable residual
 
-**Action required only if you count or assert redaction markers.** This is
-the shipped default (`Resolve` + `Redact`). When the re-scan after the resolve
-rounds still flags something, the fallback used to redact every residual.
-Now it tokenizes them if every one can be tokenized reversibly (plain
-uncovered text, or the uncovered part of a partly tokenized span), and redacts
-them all otherwise, for example when one is a class mismatch or overlaps a
-value the session does not own. A first-pass refusal still redacts.
+Action required only if you count or assert redaction markers.
+The shipped default is `Resolve` + `Redact`. After resolve rounds, the fallback
+now tokenizes every residual if all are reversibly tokenizable: uncovered text
+or the uncovered part of a partly tokenized span. Otherwise it redacts all,
+including class mismatches or overlap with a value the session does not own.
+A first-pass refusal still redacts.
 
-- Restore is exact for the documents this changes, where before the marker
-  stood in for the value.
-- The fallback's audit rows are now `Tokenize` rows, still carrying
-  `fallback_triggered`, so an audit query can tell them from the resolve
-  rounds' rows.
-- The number of safety-net scans per document is unchanged.
+Restore is now exact for these newly tokenized documents. Audit rows use
+`Tokenize` and retain `fallback_triggered`, distinguishing them from resolve
+rounds. Scan count is unchanged.
 
 ### Breaking: the repeat-value sweep reads declared evidence
 
-**Action required only if you implement `gaze::Recognizer` or
-`gaze::Detector` yourself** and rely on the sweep copying its values to other
-occurrences and later turns. Until v0.15.x every candidate whose recognizer id
-was not `ner`, `dob.gliner` or the house-number id counted as rule evidence and
-was swept. Now each emitter declares it, and one that declares nothing is
-`Learned`, which is recorded but never swept. If your emitter is a
-deterministic rule a reviewer can read, say so:
+If your custom `gaze::Recognizer` or `gaze::Detector` relies on repeat-value
+sweeping across occurrences or turns, declare deterministic rule evidence:
 
 ```rust
 fn evidence(&self) -> gaze::EvidenceKind {
@@ -128,26 +104,22 @@ fn evidence(&self) -> gaze::EvidenceKind {
 }
 ```
 
-The same tier ranks cross-class containment in the resolver. A span from an
-undeclared emitter no longer swallows an enclosed rule candidate of another
-class: the tokens split around the rule span (for example an organization
-token, an email token and a second organization token where v0.15 emitted a
-single organization token). No raw bytes ship and restore stays exact, but the token
-stream and audit rows change. Declaring `Rule` keeps the v0.15 behaviour.
+Undeclared emitters default to `Learned`: recorded, never swept. Evidence also
+ranks cross-class containment. An undeclared span splits around an enclosed
+rule match of another class (for example organization/email/organization
+instead of one organization). No raw bytes ship; restore stays exact, but
+tokens and audit rows change. Declaring `Rule` keeps v0.15 behavior.
 
-Leave the default for anything model-backed or heuristic. The registry
-overwrites `Candidate::evidence` with the declaration, so setting it per
-candidate has no effect. Rulepack recognizers (bundled packs and
-`[[policy.custom_recognizers]]`) declare `Rule` already and need no action.
-Session blobs are unchanged: v6 already stored each entry's evidence tier.
+Keep the default for model-backed or heuristic emitters. The registry overwrites
+`Candidate::evidence`; per-candidate changes have no effect. Rulepacks and
+`[[policy.custom_recognizers]]` already declare `Rule`. Blobs remain v6,
+which already stores evidence tiers.
 
 ### Breaking: `ProviderAdapter::contract()` has no default
 
-**Action required only if you implement `gaze_proxy::ProviderAdapter`
-yourself.** Until v0.15.x an adapter that did not mention `contract()`
-silently took `AdapterContract::legacy()`. That method is now required, so
-such an adapter fails to compile with `E0046` (missing trait item
-`contract`). To keep the old behavior, say so explicitly:
+Custom `gaze_proxy::ProviderAdapter` implementations must define `contract()`.
+Omitting it now fails with `E0046`; the previous default was
+`AdapterContract::legacy()`. To retain that behavior:
 
 ```rust
 fn contract(&self) -> AdapterContract<'_> {
@@ -162,11 +134,8 @@ Gemini and Anthropic adapters need no action.
 
 ### Breaking: `session_blob` / `SensitiveSnapshot` envelope version 6
 
-**Action required only if blobs cross a version boundary** (a v0.16 writer
-and a v0.15 reader, for example a rolling deploy or a stored blob read by an
-older service). The repeat-value sweep records, per manifest entry, the
-evidence tier its value was found with, so a later turn can tell rule-found
-values from model-found ones. The envelope version byte is now `6`.
+When blobs cross versions, upgrade readers before writers. The envelope byte
+is now `6`; each entry stores whether evidence was rule- or model-found.
 
 - A v0.15 or older reader refuses a v6 blob with
   `InvalidSnapshotVersion(6)`. It fails closed; nothing is restored.
@@ -183,41 +152,40 @@ Upgrade readers first. See
 
 ### TL;DR
 
-1. **Regenerate your `gaze setup` policy.** Policies written by v0.11.2
+1. Regenerate your `gaze setup` policy. Policies written by v0.11.2
    through v0.14.0 preserve detected phone numbers, IBANs, payment cards and
    IP addresses raw. Back up any custom rules, run `gaze setup --force`, then
    re-add them. The v0.15 policy tokenized by default, loaded every bundled PII
    rulepack except `secrets`, used the Davlan NER model, and turned Nym on.
    Current `gaze setup` policies also load `secrets`.
-2. **Re-ingest every `gaze index`** and pass it the NER model
+2. Re-ingest every `gaze index` and pass it the NER model
    (`--ner-model-dir` or `GAZE_NER_MODEL_DIR`).
-3. **Load `secrets`** if you relied on Gaze to tokenize API keys, tokens or
+3. Load `secrets` if you relied on Gaze to tokenize API keys, tokens or
    passwords.
-4. **Expect more, and differently shaped, tokens.** Containment precedence,
+4. Expect more, and differently shaped, tokens. Containment precedence,
    per-character residual coverage, the strictest-member family action and the
    `core` floor under custom rulepack paths all protect bytes that used to
    pass through raw. Manifests written by v0.14.x still restore.
 
 ### Security fix: `gaze setup` policies tokenize every detected class
 
-**Action required if you ran `gaze setup` on v0.11.2 through v0.14.0.** The
-policy it wrote set `default` to `preserve`, so every detected class without
-its own rule, including phone numbers, IBANs, payment card numbers and IP
-addresses, left the process raw with a success exit.
+Policies generated by v0.11.2–v0.14.0 used `default = preserve`, leaving
+unruled classes (phones, IBANs, cards and IPs) raw with a success exit.
+Repair them:
 
-- **Regenerate.** Back up any custom rules in the policy, run
+- Regenerate. Back up any custom rules in the policy, run
   `gaze setup --force`, then re-add the custom rules.
-- **Or repair by hand.** Set the `kind = "default"` rule's action to
+- Or repair by hand. Set the `kind = "default"` rule's action to
   `"tokenize"`, delete the old per-class rules (the old
   `location = generalize` rule emits a one-way marker), and add the other
   bundled packs and their locales to `[policy.rulepacks]` and `[locale]`.
-- **Watch stderr.** `gaze clean`, `gaze daemon` and `gaze proxy` now name any
+- Watch stderr. `gaze clean`, `gaze daemon` and `gaze proxy` now name any
   detected class a loaded policy still sends through raw, and any reachable
   one-way `generalize` rule. The warning does not change output or exit code.
 
 ### `gaze setup` turns on Nym; safety-net flags changed
 
-**Action required if you script `gaze setup` or `--safety-net-backend`.**
+Action required if you script `gaze setup` or `--safety-net-backend`.
 
 - `gaze setup` installs the SHA-pinned Nym-small bundle and writes
   `[safety_net] backend = "nym"` with `[safety_net.nym] model_dir`. Pass
@@ -233,7 +201,7 @@ addresses, left the process raw with a success exit.
 
 ### `gaze-mcp-rmcp`, `gaze-mcp-bridge` and `gaze-document` move to rmcp 2.x
 
-**Action required if you name rmcp types next to these crates.** Upgrade your
+Action required if you name rmcp types next to these crates. Upgrade your
 own rmcp dependency to 2.x with them; rmcp's `ContentBlock` replaces `Content`
 and `RawContent`. MSRV stays 1.89. Bridge ingress now refuses non-text content
 variants and any text-block or `annotations` field it does not redact
@@ -241,28 +209,25 @@ variants and any text-block or `annotations` field it does not redact
 
 ### Custom rulepack paths retain core detection
 
-**Action required if your policy sets `[policy.rulepacks].paths` but omits
-`bundled`, or you pass `gaze clean --rulepack-path` without
-`--rulepack-bundled`.** These configurations now load `core` alongside the
-custom pack. This closes a silent leak of core classes and can produce more
-tokens than before. Policies without a rulepack table still load `core`.
+Custom `[policy.rulepacks].paths` and `gaze clean --rulepack-path` now load
+`core` too when `bundled` or `--rulepack-bundled` is omitted. This closes a core-class leak and may add
+tokens. Policies without a rulepack table still load `core`.
 
 To keep an intentional custom-only setup, set `bundled = []` in
 `[policy.rulepacks]` or pass `--rulepack-bundled=none` with your CLI custom
 path. Gaze emits one stderr notice after a successful build whenever the
 resolved bundled selection omits `core` and its `core-extended` alias, including
 selection of another bundled pack without a custom path.
-The omitted-key behavior dates to the v0.4.0 rulepack policy loader.
 
 ### One entity, one token; protection beats preservation
 
-**Action required if you count manifest entries per entity, pin token
+Action required if you count manifest entries per entity, pin token
 shapes for nested identifiers, or rely on `preserve` shielding every byte
-of a span.** Two resolver changes, both breaking in
+of a span. Two resolver changes, both breaking in
 0.x.
 
-1. **A span that wholly contains a differently-classed span now wins the
-   whole span as one token** (`ConflictTier::ContainmentPrecedence`), unless
+1. A span that wholly contains a differently-classed span now wins the
+   whole span as one token (`ConflictTier::ContainmentPrecedence`), unless
    it is less certain than what it would swallow (validator passed > anchored
    or cue-structured match > plain regex or dictionary > learned NER; ties go
    to the container). `IBAN PL56 0942 … 4500 BIC` (a spaced Polish IBAN) is one
@@ -274,8 +239,8 @@ of a span.** Two resolver changes, both breaking in
    plain adopter regex still cannot relabel a validated phone, email or IBAN
    inside it. Audit: the swallowed candidate's loser row carries
    `containment_precedence`.
-2. **`preserve` keeps a class's characters unless the same characters are
-   also PII of a class you protect.** With `custom:url = preserve` and
+2. `preserve` keeps a class's characters unless the same characters are
+   also PII of a class you protect. With `custom:url = preserve` and
    `email = tokenize` the email inside a URL now leaves as one `<Email_n>`
    fragment inside the otherwise raw URL; with `custom:postal_code =
    preserve` a postal code that is also part of a protected IBAN is
@@ -286,7 +251,7 @@ of a span.** Two resolver changes, both breaking in
    `custom:family:<name> = preserve` rule still leaves the ambiguous span
    raw. If you need a preserved span left entirely raw although a protected
    class claims part of it, preserve that class too.
-3. **Residual fragments merge per claimant.** One losing candidate yields one
+3. Residual fragments merge per claimant. One losing candidate yields one
    fragment per uncovered run; a fragment is no longer split where an inner
    candidate starts or ends.
 
@@ -295,26 +260,18 @@ Manifests written before this change still restore. `redact` and
 
 ### Policy regex collision families protect their family token
 
-**Action required only if your policy declares
-`[policy.custom_recognizers.collision]` on a `kind = "regex"` recognizer and
-relies on the family token that a precedence tie or a missing anchor cue emits
-being left raw.** A regex custom recognizer used to register under the constant
-recognizer id `legacy-detector`, so the registry could not find it by the policy
-`name` its membership is filed under. Precedence, ties and mandatory anchors
-still decided (a candidate always carried the policy `name`), but the family
-token they emit (`custom:family:<name>`) derived its action from no member at
-all and took your `default` rule: under `default = "preserve"` the span left the
-process raw, with zero detections and a success exit, although every member
-rule said `tokenize`. Dictionary custom recognizers (`dict/<name>`) were never
-affected. The id mismatch dates from v0.7.1, when the metadata was introduced;
-until the strictest-member derivation (the entry below) it was invisible
-because every family token took the default rule.
+Review policies with `[policy.custom_recognizers.collision]` on `kind = "regex"`
+that expect family tokens to remain raw. Previously the registry used
+`legacy-detector` rather than the policy `name`, so family actions fell back
+to `default`; `default = preserve` leaked spans even if every member tokenized.
+Precedence, ties and anchors still decided, and dictionary families
+(`dict/<name>`) were unaffected.
 
-1. **Family tokens over regex members now derive the strictest member action**,
+1. Family tokens over regex members now derive the strictest member action,
    exactly as bundled and dictionary families do
    ([How a family-level token picks its action](docs/reference/policy.md#how-a-family-level-token-picks-its-action)).
    To keep such a token raw on purpose, declare a rule for the family class
-   **before** your `default` rule:
+   before your `default` rule:
 
    ```toml
    [[rule]]
@@ -323,11 +280,11 @@ because every family token took the default rule.
    action = "preserve"
    ```
 
-2. **Audit rows.** Loser rows of a regex-member family carry the member's own
+2. Audit rows. Loser rows of a regex-member family carry the member's own
    class (they carried the winner's family class), and the family token's
    `ambiguity_record.losing_candidates` lists every member (it was empty).
    `recognizer_id` is unchanged: it was already the policy `name`.
-3. **Library API.** `Pipeline::registry()` exposes the built
+3. Library API. `Pipeline::registry()` exposes the built
    `RecognizerRegistry`; `FamilyPolicyTable::anchored_families()` lists the
    families with a `mandatory_anchor` member; `RegexDetector::with_base_score()`
    sets the emitted confidence; `gaze` re-exports `AmbiguityRecord`,
@@ -339,59 +296,42 @@ Manifests, tokens and restore are unchanged.
 
 ### The safety net redacts with a marker instead of deleting
 
-**Action required if your clean output goes anywhere that assumed redaction
-removed bytes.** This affects everyone on the shipped default policy, because
-the default is `Resolve` + `Redact`: the fallback runs whenever the resolve
-pass cannot honour a suspect reversibly.
+The default `Resolve` + `Redact` fallback now writes a one-way
+`[REDACTED:<class>]` marker (such as `[REDACTED:name]` or
+`[REDACTED:custom:phone]`) and records it in the manifest, instead of deleting
+flagged bytes. The selected spans are unchanged. Update consumers:
 
-Previously the redact path replaced a flagged span with the empty string. It
-now writes a one-way `[REDACTED:<class>]` marker — `[REDACTED:name]`,
-`[REDACTED:custom:phone]` — and records it in the manifest. Which spans get
-redacted has not changed. What is written in their place has.
-
-1. **Expect clean output to be longer, not shorter, for redacted spans.** Any
+1. Expect clean output to be longer, not shorter, for redacted spans. Any
    assertion that clean text is no longer than the raw input, or that a
    redaction shrinks the document, no longer holds. Byte-count diffing between
    raw and clean needs to account for marker text.
 
-2. **Do not pattern-match the marker yourself.** Call
-   `gaze::is_redaction_marker` (also `redaction_marker_spans` and
-   `redaction_marker_byte_len` for whole-document work). A local copy of the
-   shape is a second spelling to keep in step with the emitter, and the
-   predicate takes authority from the manifest where the runtime does.
+2. Call `gaze::is_redaction_marker`, `redaction_marker_spans` or
+   `redaction_marker_byte_len` rather than copying the marker pattern. These
+   helpers use manifest authority where the runtime does.
 
-3. **Restore is unchanged, deliberately.** A marker is not a token: restore
-   passes it through verbatim and the strict restore scan does not flag it.
-   Redacted bytes are still unrecoverable — that is what "one-way" means — but
-   the restored document now shows *where* they were.
+3. Restore passes markers through verbatim; strict restore does not flag them.
+   Redacted bytes remain unrecoverable.
 
-4. **If you consume the manifest, expect one more entry per redaction.** It
-   carries `Action::Redact`, is not owned, and stands for the original bytes it
-   covered. Code that inferred "a redaction happened" from the *absence* of a
-   manifest entry must now look for the entry instead; that inference was never
-   safe, because an absence cannot distinguish a redaction from a net that did
-   nothing.
+4. Expect one manifest entry per redaction: `Action::Redact`, unowned,
+   representing the covered originals. Check the entry rather than inferring
+   redaction from an absent entry.
 
-5. **Custom classes render lowercased, with every non-alphanumeric byte
-   except `:` mapped to `-`** (`custom:address_2` →
-   `[REDACTED:custom:address-2]`). Mapping `_` keeps the marker outside the
-   token grammar, which requires a trailing `_<digits>`. Mapping the rest means
-   `gaze::is_redaction_marker(gaze::redaction_marker(&class))` holds for every
-   `PiiClass`, including one you built as `PiiClass::Custom(..)` yourself in a
-   custom `SafetyNet` — so your redactions are recognised as protected output by
-   every consumer, including the index. The exact class is unchanged in the
-   audit row.
+5. Custom classes render lowercase. Every non-alphanumeric byte except `:`
+   becomes `-`: `custom:address_2` → `[REDACTED:custom:address-2]`.
+   This keeps markers outside the trailing `_<digits>` token grammar and makes
+   `gaze::is_redaction_marker(gaze::redaction_marker(&class))` true for every
+   `PiiClass`, including custom SafetyNet classes. Consumers such as the index
+   recognize protected output; audit rows retain the exact class.
 
 ### The Kiji DistilBERT safety net is removed
 
-**Action required if you ran `gaze setup`, use `gaze index`, or selected the
-Kiji net.** The Kiji DistilBERT safety net is gone. On the 2,910-document
-benchmark it recovered 1,831 leaked gold bytes (scored-label contract v2) for
-+169,657 false-positive bytes, a 2.5% action precision. No safety net runs
-without a policy that selects one; the policy `gaze setup` writes selects Nym. The full removed surface is in the
-[0.15.0 CHANGELOG section](CHANGELOG.md).
+If you used `gaze setup`, `gaze index` or Kiji, migrate away from the removed
+Kiji DistilBERT safety net. No net runs without a selecting policy;
+`gaze setup` selects Nym. The removed API surface is listed in
+[CHANGELOG](CHANGELOG.md).
 
-1. **Re-run `gaze setup`.** Earlier `gaze setup` runs installed the Kiji
+1. Re-run `gaze setup`. Earlier `gaze setup` runs installed the Kiji
    distilbert-NER bundle as the primary `[ner]` model in the policy they wrote.
    `gaze setup` now installs the pinned Davlan mBERT bundle
    (`onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX` at
@@ -400,7 +340,7 @@ without a policy that selects one; the policy `gaze setup` writes selects Nym. T
    `~/.local/share/gaze/models/davlan-mbert-ner-hrl`), the model the benchmark
    scores. Re-run it, with `--force` if you want it to overwrite the old
    policy file, or point `[ner].model_dir` at the new directory yourself.
-2. **Replace Kiji flags.** Drop `--safety-net kiji-distilbert`,
+2. Replace Kiji flags. Drop `--safety-net kiji-distilbert`,
    `--safety-net-backend kiji-distilbert`, `--safety-net-add kiji-distilbert`,
    `--kiji-backend`, `--kiji-distilbert-precision`,
    `--kiji-distilbert-command`, `--kiji-distilbert-model-dir`,
@@ -410,7 +350,7 @@ without a policy that selects one; the policy `gaze setup` writes selects Nym. T
    `--safety-net nym` (install with `gaze setup --safety-net nym`). With
    `--safety-net-registry`, `openai-filter` is the only registry-capable
    backend.
-3. **Pass the NER model to `gaze index ingest`.** It now requires
+3. Pass the NER model to `gaze index ingest`. It now requires
    `--ner-model-dir <dir>` or `GAZE_NER_MODEL_DIR` pointing at the pinned
    Davlan bundle. Without it, or with an unpinned directory, ingest fails
    closed with `IndexNerModelMissing` (exit 2) and writes nothing.
@@ -418,7 +358,7 @@ without a policy that selects one; the policy `gaze setup` writes selects Nym. T
    `gaze index --safety-net {openai-filter|nym}`, is optional for ingest and
    required for `gaze index search`, which fails closed with `SafetyNetConfig`
    without one.
-4. **Rebuild without removed features.** Remove `safety-net-kiji`,
+4. Rebuild without removed features. Remove `safety-net-kiji`,
    `runtime-tract` and `runtime-candle` from Cargo feature lists. There is no
    musl-static build path through `tract` any more. Rust callers of
    `gaze_recognizers::safety_net::kiji_distilbert` or the `gaze-model-setup`
@@ -430,9 +370,9 @@ detected differs.
 
 ### Collision-family tokens take the strictest member action
 
-**Action required only if you relied on a family token falling to a `preserve`
+Action required only if you relied on a family token falling to a `preserve`
 default, or run `redact` / `generalize` / `format_preserve` member rules behind
-the MCP or proxy chokepoint.** A collision-family token
+the MCP or proxy chokepoint. A collision-family token
 (`custom:family:<name>`, today `custom:family:payment-card-or-iban`, emitted
 when no IBAN cue is in range or a Luhn-valid card run collides with the IBAN)
 no longer takes the `default` rule when no reachable rule names the family
@@ -442,10 +382,10 @@ and its own default (`redact` > `tokenize` > `generalize` > `format_preserve`
 verbatim. Full contract:
 [How a family-level token picks its action](docs/reference/policy.md#how-a-family-level-token-picks-its-action).
 
-1. **To keep family tokens raw, say so explicitly.** A member-only policy
+1. To keep family tokens raw, say so explicitly. A member-only policy
    (`custom:iban = tokenize`, `default = preserve`) now tokenizes the family
    token instead of shipping the ambiguous IBAN raw. If that raw output was
-   intended, add, **before** your `default` rule:
+   intended, add, before your `default` rule:
 
    ```toml
    [[rule]]
@@ -458,18 +398,18 @@ verbatim. Full contract:
    unconditionally); `gaze clean` prints a load-time `warning:` naming the
    family class whenever a member or family rule shows intent without a
    reachable family rule, dead post-default rules included.
-2. **Behind a protection trace, a derived `redact` fails closed.** The MCP
+2. Behind a protection trace, a derived `redact` fails closed. The MCP
    and proxy chokepoints accept only `tokenize` and `preserve`. A family token
    that derives `redact`, `generalize` or `format_preserve` from a member rule
    now fails the request with `UnsupportedActionVariant`, the same error an
    explicit rule with that action on a member class already produced there.
    Either tokenize the member, or add an explicit `tokenize` family rule
    before the default.
-3. **Residual coverage is unchanged in output shape, wider in reach.** The
+3. Residual coverage is unchanged in output shape, wider in reach. The
    cells that cover a losing candidate's bytes beside an overlapping winner
    are now planned whenever every action in the overlap protects its span,
    not only under `tokenize`; they still emit tokens.
-4. **Audit rows.** A family token's `ambiguity_record` gains
+4. Audit rows. A family token's `ambiguity_record` gains
    `derived_action = { action, member_class }`; `member_class` names the
    member whose explicit rule set the action, or is `null` when the default
    applied. Rows written before this change are unchanged.
@@ -484,15 +424,15 @@ email-only stub, so cards, IBANs, IPs and the other `core` classes passed
 through raw. It now runs the bundled `core` rulepack, the same as
 `--rulepack-bundled core`.
 
-- **Expect more tokens.** Policy-less output now tokenizes every `core` class.
+- Expect more tokens. Policy-less output now tokenizes every `core` class.
   Anything downstream that relied on those values arriving raw was relying on
   the leak; restore round-trips them as before.
-- **Audit rows name real recognizers.** Emails log `source` and
+- Audit rows name real recognizers. Emails log `source` and
   `recognizer_id` `email.global` instead of `regex`. Update `gaze audit
   query --source regex` filters.
-- **Emails on `test.local` are no longer tokenized** without a policy: `core`
+- Emails on `test.local` are no longer tokenized without a policy: `core`
   excludes that fixture domain by design.
-- **Older releases:** pass `--rulepack-bundled core`, or a policy, to get the
+- Older releases: pass `--rulepack-bundled core`, or a policy, to get the
   protected default.
 
 ### Security fix: `gaze index ingest` runs `core`
@@ -503,15 +443,15 @@ phones and the other `core` classes stayed raw in the stored snippets, and
 `gaze index search` printed them. Ingest now runs the same `core` floor as a
 policy-less `gaze clean`.
 
-- **Re-ingest every index.** Run `gaze index ingest` again over the same
+- Re-ingest every index. Run `gaze index ingest` again over the same
   directory and domain; it replaces the domain's documents. Until then search
   keeps printing the raw values stored by the old ingest.
-- **Expect more tokens in search snippets** for every `core` class. They are
+- Expect more tokens in search snippets for every `core` class. They are
   protected, not searchable: `gaze index search` still looks up names, emails,
   organizations and field classes only.
-- **Emails on `test.local` are no longer tokenized** at ingest: `core`
+- Emails on `test.local` are no longer tokenized at ingest: `core`
   excludes that fixture domain by design.
-- **Older releases:** there is no workaround flag. Do not hand their search
+- Older releases: there is no workaround flag. Do not hand their search
   output to an agent for documents that contain structured identifiers.
 
 ### Security fix: prefix reuse disabled
@@ -551,8 +491,7 @@ callers using `CorePipelineConfig` add
 Manifests written before this change still restore: token spellings and the
 restore contract are unchanged, only which spans get detected differs. Policy
 rules that name `custom:security_token`, `custom:password` or
-`custom:username` still parse; without `secrets` loaded the first two simply
-never match.
+`custom:username` still parse; without `secrets` loaded the first two never match.
 
 ### Policy `schema_version` needs a patch component
 
@@ -570,33 +509,25 @@ If you match on the error's `supported` field, it now reads `"0.1."`.
 
 ## v0.9.0 → v0.9.1
 
-Status: **shipped** in v0.9.1.
-
 ### TL;DR
 
-1. **Document bundles now split agent and owner outputs.** `gaze document clean`
+1. Document bundles now split agent and owner outputs. `gaze document clean`
    requires either `--agent-out` + `--owner-out` or the `--out` shorthand that
    creates `<PATH>/agent` + `<PATH>/owner`.
 
 ### gaze document clean — bundle layout split (axis 1)
 
-Previous behavior: `gaze document clean --out <PATH>` wrote `clean.md`,
-`manifest.json`, and `report.json` into a single directory. Uploading
-that directory to an LLM workspace leaked restorable manifest material —
-an axis-1 violation that depended on caller discipline rather than
-runtime enforcement.
-
-New behavior: `gaze document clean` requires `--agent-out` + `--owner-out`
-or the `--out` shorthand that auto-creates `<PATH>/agent` + `<PATH>/owner`
-subdirs. `clean.md` and `report.json` land in the agent path; `manifest.json`
-lands in the owner path. The writer rejects equal or nested agent/owner
-paths with a typed `DocumentError::BundleLayoutInvalid`.
+`gaze document clean` now separates agent and owner files. Use
+`--agent-out` + `--owner-out`, or `--out` for `<PATH>/agent` + `<PATH>/owner`.
+`clean.md` and `report.json` go to the agent path; `manifest.json` goes to the
+owner path. Never upload the owner path. Equal or nested paths fail with
+`DocumentError::BundleLayoutInvalid`.
 
 Migration:
 
 - If you used `--out <PATH>` and you intend `<PATH>` to remain agent-shippable,
   switch to `--agent-out <PATH> --owner-out <SOMEWHERE_ELSE>`.
-- If you can accept the agent/ + owner/ subdir split, keep `--out <PATH>` —
+- If you can accept the agent/ + owner/ subdir split, keep `--out <PATH>` :
   the shorthand now creates both subdirs for you.
 - Downstream tooling that read files from `<PATH>` must move manifest reads
   to `<PATH>/owner/manifest.json` (or the explicit owner path).
@@ -607,19 +538,9 @@ Migration:
 
 ### Perf wave
 
-v0.9.0 is a performance and deployment release: in-process Kiji ORT
-removes the Python subprocess boundary for adopters who select it, int8 dynamic
-quantization adds a separately SHA-pinned smaller/faster model path, `gaze
-daemon` keeps multi-session state behind a JSONL stdio process boundary,
-pipeline skip-gating/capitals/prefix-cache/length-bucketing optimizations are
-available behind explicit opt-in flags, and `tract`/`candle` feature gates give
-static-binary deployments alternatives to the default `ort` runtime. Public
-benchmark claims are documented in [`docs/reference/benchmarks/README.md`](docs/reference/benchmarks/README.md):
-Kiji int8 ORT warm p50 is 1.849ms in the committed model leaderboard snapshot,
-and the safety-net matrix records a 0.000 F1 delta versus fp32 Kiji.
-
-Measured on: Apple M5 Max / macOS 26.5 hosts in the committed v0.9 snapshots
-and final rc revalidation.
+v0.9 added opt-in Kiji ORT/int8, daemon sessions, pipeline optimizations and
+`tract`/`candle`. Kiji and alternative runtime features were later removed;
+see [removal steps](#the-kiji-distilbert-safety-net-is-removed).
 
 ### New CLI flags (opt-in)
 
@@ -629,11 +550,11 @@ and final rc revalidation.
 
 ### New subcommand
 
-- `gaze daemon --policy <path> [--idle-timeout <secs>]` — long-lived JSONL stdio session manager. Protocol: `{session_id, text}` request, `{session_id, clean_text, manifest, tokens}` response. SIGTERM-graceful, multi-session-isolated.
+- `gaze daemon --policy <path> [--idle-timeout <secs>]` : long-lived JSONL stdio session manager. Protocol: `{session_id, text}` request, `{session_id, clean_text, manifest, tokens}` response. SIGTERM-graceful, multi-session-isolated.
 
 ### New opt-in features (Cargo)
 
-- `gaze-recognizers` features: `runtime-tract`, `runtime-candle` — alternative ONNX runtimes for static-binary deployments.
+- `gaze-recognizers` features: `runtime-tract`, `runtime-candle` : alternative ONNX runtimes for static-binary deployments.
 
 ### Reversibility
 
@@ -653,33 +574,24 @@ back in explicitly with `--safety-net-mode=strict`.
 
 ## v0.7.x → v0.8.0
 
-Status: **shipped.** v0.8.0 is published to crates.io; the workspace
-now includes ten published crates (the new `gaze-proxy` joins
-`gaze-types`, `gaze-recognizers`, `gaze-audit`, `gaze-pii`,
-`gaze-assembly`, `gaze-mcp-core`, `gaze-mcp-rmcp`, `gaze-document`,
-and `gaze-cli`).
-
 ### TL;DR
 
-1. **Bundle unification.** If your CLI invocation or `policy.toml`
+1. Bundle unification. If your CLI invocation or `policy.toml`
    references `core-extended`, switch to `core` and pass an explicit
    `--locale` (or `policy.locale`). `core-extended` is now a deprecation
    alias that warns at runtime. See "Tier 1.5".
-2. **Audit-row schema.** If you persist `gaze-audit` SQLite rows, the
+2. Audit-row schema. If you persist `gaze-audit` SQLite rows, the
    `recognizer_id` and `recognizer_version_id` columns are now populated.
    Forward-compatible: pre-v0.8 rows stay readable, new rows carry
    `_vN`-suffixed lineage. See "Tier 1".
-3. **Custom recognizers** in `[[policy.custom_recognizers]]` may now
+3. Custom recognizers in `[[policy.custom_recognizers]]` may now
    declare an optional `safety_tier`. When omitted, the loader defaults
-   to `safe_default` — your existing policy files keep working without
+   to `safe_default` : your existing policy files keep working without
    edits.
 
-Everything else in v0.8.0 is additive (new entities, new locales, new
-opt-in SafetyNet backend).
+Other v0.8 additions need no migration.
 
 ### Tier 1 — Versioned recognizer-IDs (additive)
-
-PR [#203](https://github.com/CertaMesh/gaze/pull/203) (`3c95304`).
 
 - `RedactionEntry` now carries both `recognizer_id` (semantic slug used
   for registry/collision lookup, unchanged shape) and
@@ -691,17 +603,15 @@ PR [#203](https://github.com/CertaMesh/gaze/pull/203) (`3c95304`).
 - The NER recognizer's bare `"ner"` slug is now extended with the loaded
   model id (e.g. `ner.distilbert.v1`).
 
-**Action required:** none. If you query the audit table directly, your
+Action required: none. If you query the audit table directly, your
 existing SQL keeps working. If you want to consume the new columns, they
 are nullable so a simple `SELECT recognizer_id, recognizer_version_id
 FROM gaze_audit_log` is forward-safe.
 
 ### Tier 1.5 — Bundled rulepack unification (action required for some)
 
-PR [#201](https://github.com/CertaMesh/gaze/pull/201) (`8ab9daf`).
-
 The two embedded rulepacks (`core` with 6 recognizers, `core-extended`
-with 10) have been collapsed into **one unified `core` bundle**. Each
+with 10) have been collapsed into one unified `core` bundle. Each
 recognizer now declares a closed-enum `safety_tier` that machine-encodes
 its activation contract:
 
@@ -717,23 +627,23 @@ The pre-v0.8 PR #58 no-policy surprise activation (where
 are now `locale_gated` and require an explicit `--locale=de-DE` or
 `--locale=en-US`.
 
-**Action required**
+Action required
 
-- **If your CLI scripts pass `--rulepack-bundled core-extended`**, they
+- If your CLI scripts pass `--rulepack-bundled core-extended`, they
   keep working in v0.8.x: the flag aliases to `--rulepack-bundled core`
   and emits a deprecation warning. The alias will be removed in a future
-  major (target v0.10.0). Update at your convenience.
-- **If your scripts rely on bare 5-digit postal or German/US national
-  phone tokenization without passing a locale**, you will see those
+  major. Update at your convenience.
+- If your scripts rely on bare 5-digit postal or German/US national
+  phone tokenization without passing a locale, you will see those
   spans pass through untokenized. Add the matching locale flag (or
   `policy.locale` field) to restore behavior. The deprecation warning
   on `core-extended` calls this out at runtime.
-- **If your `[[policy.custom_recognizers]]` blocks need explicit tier
-  declarations**, set `safety_tier = "safe_default"` (or the tier you
+- If your `[[policy.custom_recognizers]]` blocks need explicit tier
+  declarations, set `safety_tier = "safe_default"` (or the tier you
   want) on each entry. When omitted, the loader defaults to
   `safe_default` so existing policies load unchanged.
 
-**No action required**
+No action required
 
 - Manifest contracts are unchanged. Tokens emitted by v0.7.x deserialize
   + restore on v0.8.x.
@@ -742,9 +652,7 @@ are now `locale_gated` and require an explicit `--locale=de-DE` or
 
 ### Tier 2 — Checksum-backed locale parity (additive)
 
-In flight at tag time as `v0.8/tier2-validator-locales`. When merged, the
-release notes for v0.8.0 will replace this paragraph with the merged PR
-number(s) and the entity table below.
+Checksum-backed locale additions:
 
 | Entity     | Locale | Validator        | `ValidatorKind`         |
 | ---------- | ------ | ---------------- | ----------------------- |
@@ -760,17 +668,15 @@ All seven ship with `safety_tier = "safe_default"` (activated whenever
 the `core` bundle is loaded). New locale packs ship at `locale-fr`,
 `locale-nl`, `locale-br`, `locale-in`, `locale-uk`.
 
-**Action required:** none — every entity is additive, gated by locale
+Action required: none : every entity is additive, gated by locale
 unless your policy enables it globally. Adopters in BR / FR / NL / IN /
 UK get out-of-box coverage; everyone else sees no behavior change.
 
 ### Tier 2.5 — Kiji DistilBERT SafetyNet backend (opt-in)
 
-PR [#202](https://github.com/CertaMesh/gaze/pull/202) (`0cd9ccc`).
-
 A second Pass-3 SafetyNet observer is available alongside the existing
 OpenAI Privacy Filter. Subprocess contract is identical to
-`OpenAiFilterSafetyNet` — read clean text on stdin, emit JSON spans on
+`OpenAiFilterSafetyNet` : read clean text on stdin, emit JSON spans on
 stdout, never mutate the manifest. New CLI flags:
 
 - `--safety-net-backend {openai-filter|kiji-distilbert}`
@@ -786,16 +692,14 @@ spawns.
 
 Setup walkthrough: removed together with the backend; see the [removal section](#the-kiji-distilbert-safety-net-is-removed).
 
-**Action required:** none. The backend is opt-in. If you do not select
+Action required: none. The backend is opt-in. If you do not select
 it, your current SafetyNet configuration (OpenAI Privacy Filter or
 none) is unchanged.
 
 ### Tier 3 — Regex-only locale recognizers (additive)
 
-PR [#208](https://github.com/CertaMesh/gaze/pull/208).
-
 Adds US SSN, UK NINO, and Indian PAN as `safety_tier = "locale_gated"`
-recognizers — they fire only when the resolved locale matches. No
+recognizers : they fire only when the resolved locale matches. No
 validator math; regex shape plus cue context only.
 
 | Entity     | Locale | Cue examples                              | ValidatorKind |
@@ -804,7 +708,7 @@ validator math; regex shape plus cue context only.
 | UK NINO    | UK     | `NINO`, `NI Number`, `National Insurance` | None          |
 | Indian PAN | IN     | `PAN`, `Permanent Account Number`, `पैन`  | None          |
 
-**Action required:** none — pure additive coverage when the relevant
+Action required: none : pure additive coverage when the relevant
 locale is set.
 
 ### Depending on v0.8.0
@@ -821,8 +725,7 @@ as `gaze` (e.g. `use gaze::Pipeline;`).
 
 ### Schema-version field on `policy.toml`
 
-Shipped in v0.7.2 (PR #192) but worth re-stating because v0.8.0 is the
-first minor where the field is *exercised by new content*:
+Set an explicit policy schema:
 
 ```toml
 schema_version = "0.1.0"
@@ -860,32 +763,30 @@ cleaned after process liveness checks.
 
 ## v0.6.x → v0.7.0
 
-Highlights only — backfill in detail if adopter friction surfaces.
-
-- **New crate `gaze-document`** for OSS document → SafeBundle ingestion
+- New crate `gaze-document` for OSS document → SafeBundle ingestion
   (PNG/JPG/PDF → Tesseract OCR → redact → `clean.md` + `manifest.json`
   + `report.json`). Opt-in via `gaze-cli`'s `document` feature.
-- **MCP runtime split.** `gaze-mcp-core` (transport-free) +
+- MCP runtime split. `gaze-mcp-core` (transport-free) +
   `gaze-mcp-rmcp` (rmcp transport sink) replace the prior in-tree MCP
   surface. Opt-in via `gaze-cli`'s `mcp` feature.
-- **Validator-veto pre-resolver** rejects invalid candidates before
+- Validator-veto pre-resolver rejects invalid candidates before
   conflict resolution, logs loser-only audit rows with
   `decided_by: ValidatorVeto`. See
   [`docs/explanation/detection/validator-veto.md`](docs/explanation/detection/validator-veto.md).
-- **Collision-family metadata + `FamilyPolicyTable`** for cross-class
+- Collision-family metadata + `FamilyPolicyTable` for cross-class
   recognizer rivalries (PAN-vs-IBAN, phone family). See
   [`docs/explanation/detection/collision-family.md`](docs/explanation/detection/collision-family.md).
-- **Mandatory-anchor resolution** keeps structural candidates on their
+- Mandatory-anchor resolution keeps structural candidates on their
   precise variant when a `[locale.cues.<key>]` cue is in scope, else
   emits a family-level fallback token. See
   [`docs/explanation/detection/anchor-resolution.md`](docs/explanation/detection/anchor-resolution.md).
-- **`PiiClass::Custom("eth_address")`** for EIP-55 Ethereum addresses;
+- `PiiClass::Custom("eth_address")` for EIP-55 Ethereum addresses;
   new `Ipv4Parse`/`Ipv6Parse`/`EthEip55` validator kinds.
-- **`gaze_pii::default_policy` falls back to `Tokenize`** (axis-1
+- `gaze_pii::default_policy` falls back to `Tokenize` (axis-1
   fail-closed). Adopters who relied on the previous default-allow path
   must declare per-class policy explicitly.
 
-**Action required**
+Action required
 
 - The `Tokenize` default change may surface previously-allowed classes
   as tokens. Review your `[policy.classes]` block and set explicit
@@ -897,8 +798,8 @@ Highlights only — backfill in detail if adopter friction surfaces.
 
 ## v0.5.x → v0.6.0
 
-- `KijiDistilbertSafetyNet`'s predecessor — the OpenAI Privacy Filter
-  Pass-3 SafetyNet — landed as an observer-only backend. Manifests are
+- `KijiDistilbertSafetyNet`'s predecessor : the OpenAI Privacy Filter
+  Pass-3 SafetyNet : landed as an observer-only backend. Manifests are
   not mutated by Pass-3; restore round-trip is unaffected.
 - Cue-anchored Name detection (`anchored_match` recognizer kind +
   `forward_markers` / `agent_recipient_cues` / `footer_cues` locale

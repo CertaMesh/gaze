@@ -1,304 +1,166 @@
 # Gaze architecture
 
-This document is the root architecture map for contributors and adopters who
-need to understand how Gaze's crates fit together before reading individual
-crate READMEs or deep-dive design notes.
-
-Gaze's north star is defined in [AGENTS.md](AGENTS.md): reliable, reversible
-PII pseudonymization for agentic workflows, with zero PII leaks between the
-agent and the data owner. The short version is: fail closed, preserve restore
-round trips, make every token auditable, and keep the adopter path small enough
-to integrate without becoming a PII-domain specialist.
+Gaze replaces PII with restorable tokens before it reaches an agent.
+[AGENTS.md](AGENTS.md) defines the north star: fail closed, preserve exact
+restore, trace every token, and keep integration simple.
 
 ## Pipeline
 
-The core pipeline turns source content into safe content plus a restore
-manifest. SafetyNet runs after tokenization as an observer: it reports
-suspects, and the pipeline acts on that report according to the safety-net
-mode.
+SafetyNet reports suspects after tokenization. The pipeline applies the selected
+mode; the net never edits output or manifests itself.
 
-```text
-Raw text / structured document
-        |
-        v
-+-----------------------+
-| Recognizer registry   |
-| regex / dictionary /  |
-| NER / custom rules    |
-+-----------------------+
-        |
-        v
-+-----------------------+      +-------------------------+
-| Candidate validation  |----->| loser audit rows        |
-| validator veto first  |      | ValidatorVeto metadata  |
-+-----------------------+      +-------------------------+
-        |
-        v
-+-----------------------+
-| Conflict resolution   |
-| class, rule, score,   |
-| span, recognizer id   |
-+-----------------------+
-        |
-        v
-+-----------------------+      +-------------------------+
-| Tokenization          |----->| Manifest                |
-| format-preserving     |      | original <-> token map  |
-| pseudonyms            |      | restore contract        |
-+-----------------------+      +-------------------------+
-        |
-        v
-+-----------------------+      +-------------------------+
-| Clean output          |----->| Pass-3 SafetyNet        |
-| safe for agent / LLM  |      | observer-only suspects  |
-+-----------------------+      +-------------------------+
-        |
-        v
-Restore uses the manifest to recover owner-side originals.
+```mermaid
+flowchart TD
+    A[Text or structured document] --> B[Regex, dictionary, NER and custom recognizers]
+    B --> C[Validator veto]
+    C --> D[Conflict resolution]
+    C --> E[Loser audit rows: ValidatorVeto]
+    D --> F[Format-preserving tokenization]
+    F --> G[Owner-side manifest]
+    F --> H[Pass-3 SafetyNet reports suspects]
+    H --> I[Pipeline applies safety-net mode]
+    I --> J[Clean output for agent]
+    G --> K[Restore owner-side originals]
 ```
 
-Source anchors: [crates/gaze/src/pipeline.rs](crates/gaze/src/pipeline.rs),
-[crates/gaze/src/resolver.rs](crates/gaze/src/resolver.rs),
-[crates/gaze/src/registry.rs](crates/gaze/src/registry.rs),
-[crates/gaze-types/src/lib.rs](crates/gaze-types/src/lib.rs), and
-[docs/explanation/safety-net/safety-nets.md](docs/explanation/safety-net/safety-nets.md).
+Sources: [pipeline](crates/gaze/src/pipeline.rs),
+[resolver](crates/gaze/src/resolver.rs), [registry](crates/gaze/src/registry.rs),
+[contracts](crates/gaze-types/src/lib.rs),
+[safety nets](docs/explanation/safety-net/safety-nets.md).
 
 ## Crate map
 
 The workspace has 15 published crates plus internal `xtask`.
-For the fuller crate boundary table, see
-[docs/reference/crates.md](docs/reference/crates.md).
-
-| Crate | Role | You only need this if... |
-| --- | --- | --- |
-| `gaze` | Core reversible pseudonymization runtime: `Pipeline`, `Session`, policy, rulepacks, registry, locale chain, token shape, restore. | You want to link the library directly and own pipeline/session/audit wiring. |
-| `gaze-types` | Shared value contracts: recognizer traits, PII classes, documents, manifest/log types, `RedactionLogger`, SafetyNet contracts. | You need public contract types without pulling SQLite, policy loading, ONNX, tokenizers, or built-in recognizers. |
-| `gaze-recognizers` | Built-in regex, dictionary, NER recognizers, embedded rulepacks, validator/normalizer dispatch, and SafetyNet backends. | You want Gaze's shipped detectors instead of implementing recognizers yourself. |
-| `gaze-audit` | Passive SQLite audit sink and audit-query API. `rusqlite` lives here. | You want a concrete SQLite redaction-log sink or query surface. |
-| `gaze-assembly` | Policy-to-pipeline builder used by CLI-style adopters. | You want CLI-equivalent policy/rulepack assembly without copying CLI code. |
-| `gaze-cli` | Published `gaze` binary for process-boundary integrations: clean, restore, audit, document, MCP. | Your adapter or script should shell out instead of linking Rust. |
-| `gaze-mcp-core` | Transport-free MCP-shaped chokepoint runtime: tool registry, sealed context, envelope dispatch, manifest store, auth hook, session-id policy. | You are building an MCP tool host and need every tool call through Gaze before reaching a source system. |
-| `gaze-mcp-rmcp` | rmcp transport sink for `gaze-mcp-core`, with stdio default and opt-in streamable HTTP. | You want rmcp framing without reimplementing the transport adapter. |
-| `gaze-document` | OSS document ingestion: PNG/JPG/PDF to Tesseract OCR to Gaze redaction to `SafeBundle`. | You need `clean.md`, `manifest.json`, and `report.json` from scanned or rasterized documents. |
-| `gaze-proxy` | Feature-gated HTTP proxy runtime for LLM SDK base-URL swaps (OpenAI, Anthropic, Gemini); keeps each provider's native wire shape. | Your SDK or agent host calls a vendor LLM API with an API key and that traffic needs pseudonymization. |
-| `gaze-proxy-dashboard` | Opt-in, memory-only inspection dashboard runtime for `gaze proxy`, behind the default-off `gaze-cli` `dashboard` feature. | You operate the proxy and opt into local inspection of its traffic. |
-| `gaze-inspection` | Provider-neutral, bounded inspection delivery: zeroizing payload wrappers and the matched producer/consumer runtime. | You build an inspection consumer such as the dashboard. |
-| `gaze-model-setup` | Installs and verifies pinned Gaze model bundles; `gaze setup` uses it. | Your tooling installs the pinned model bundles itself. |
-| `gaze-mcp-bridge` | Optional policy-gated MCP bridge: agents see only tokens, downstream MCP tools receive restored PII only for explicitly allowed argument fields. | You put Gaze in front of existing downstream MCP tools. |
-| `gaze-token-bridge` | Experimental owner-side authorization and translation layer that lets an agent search redact-before-index corpora with session tokens. | An agent must search long-lived document corpora without seeing raw values. |
-| `xtask` | Internal gate runner plus detached Dylint workspace for protected-path enforcement. | You are adding or running repository gates and CI-only checks. |
+[CONTRIBUTING.md](CONTRIBUTING.md#workspace-shape) lists their roles;
+[crate boundaries](docs/reference/crates.md) maps dependencies.
 
 ## Three execution layers
 
-Gaze has three integration layers. They all rely on the same core invariant:
-PII must cross the agent boundary only as manifest-backed pseudonymous tokens.
+All three keep originals and restore authority with the owner. PII crosses
+the agent boundary only as manifest-backed tokens.
 
-```text
-Direct library integration
-  App code
-    -> gaze::Pipeline
-    -> owner-controlled manifest / restore
+| Layer | Path | Scope |
+|---|---|---|
+| Library | App → `gaze::Pipeline` → owner manifest/restore | Apps that control their data path. |
+| MCP source chokepoint | Agent call → `gaze-mcp-rmcp` → `gaze_mcp_core::PiiEnvelope::dispatch` → source → safe result | Tool calls, document tools, manifest handles and tiered restore. |
+| LLM API proxy | API-key request → `gaze-proxy` driver → vendor → owner restore | OpenAI, Anthropic and Gemini SDK/agent traffic; native wire shapes and streaming. |
 
-MCP source chokepoint
-  Agent tool call
-    -> gaze-mcp-rmcp transport
-    -> gaze-mcp-core PiiEnvelope::dispatch
-    -> source system, with safe results returned to the agent
+MCP does not cover SDK API-key traffic. Proxy drivers isolate vendor request
+shapes; the proxy core owns pseudonymization and restore. Supported hosts are
+`api.openai.com`, `api.anthropic.com` and `generativelanguage.googleapis.com`.
+Consumer subscription/cookie traffic belongs to a separate browser-MITM project.
 
-LLM API proxy (shipped in v0.8)
-  User or agent LLM request authenticated by API key
-    -> gaze-proxy provider driver
-    -> vendor API (OpenAI / Anthropic / Gemini)
-    -> restore path under owner control
-```
-
-`gaze::Pipeline` is the library API for applications that already control their
-data path. `gaze-mcp-core` and `gaze-mcp-rmcp` cover the model-to-source axis:
-agent tool calls, document tools, manifest handles, and tiered restore access.
-They explicitly do not cover raw API-key-authenticated request traffic from an
-SDK or agent host; that belongs to `gaze-proxy`.
-
-The `gaze-proxy` layer (shipped in v0.8) is a provider-driver runtime for the
-user-to-model axis. Its architecture is adapter-oriented: one proxy core owns
-request/response pseudonymization, while provider drivers isolate
-vendor-specific request shapes and streaming behavior. Scope is
-API-key-authenticated traffic to `api.openai.com`, `api.anthropic.com`, and
-`generativelanguage.googleapis.com`; consumer subscription tiers (web-tier
-cookie auth) are out of scope and covered by a separate browser-MITM project.
-
-Source anchors: [crates/gaze/src/pipeline.rs](crates/gaze/src/pipeline.rs),
-[docs/explanation/mcp/mcp-runtime.md](docs/explanation/mcp/mcp-runtime.md),
-[crates/gaze-mcp-core/src/lib.rs](crates/gaze-mcp-core/src/lib.rs), and
-[crates/gaze-mcp-rmcp/src/lib.rs](crates/gaze-mcp-rmcp/src/lib.rs).
+Sources: [MCP runtime](docs/explanation/mcp/mcp-runtime.md),
+[MCP core](crates/gaze-mcp-core/src/lib.rs),
+[rmcp sink](crates/gaze-mcp-rmcp/src/lib.rs),
+[proxy runtime](docs/explanation/proxy/proxy-runtime.md).
 
 ## Key design decisions
 
 ### KDD-1: Reversibility first
 
-Gaze is pseudonymization, not one-way redaction. The core contract emits clean
-tokens plus a manifest that can restore owner-side originals; anything that
-breaks clean/restore round trip is an architecture regression.
-
-Source anchors: [AGENTS.md](AGENTS.md),
-[crates/gaze/src/session.rs](crates/gaze/src/session.rs),
-[crates/gaze/src/pipeline.rs](crates/gaze/src/pipeline.rs), and
-[crates/gaze-types/src/lib.rs](crates/gaze-types/src/lib.rs).
+Clean tokens and the owner-side manifest must restore original bytes.
+Breaking that round trip is a regression.
+[Session](crates/gaze/src/session.rs), [contracts](crates/gaze-types/src/lib.rs).
 
 ### KDD-2: Rule-based detectors are the trust floor
 
-Deterministic recognizers, validators, dictionaries, and locale-aware rules
-should handle precise classes before neural systems get involved.
-Neural components are defense in depth; every emitted token must still trace
-back to a recognizer, rule, or typed safety contract.
-
-Source anchors: [AGENTS.md](AGENTS.md),
-[crates/gaze/src/registry.rs](crates/gaze/src/registry.rs),
-[crates/gaze-recognizers/src/regex.rs](crates/gaze-recognizers/src/regex.rs),
-and [docs/explanation/safety-net/safety-nets.md](docs/explanation/safety-net/safety-nets.md).
+Use deterministic rules, validators, dictionaries and locale cues for precise
+classes. Neural models add coverage. Every token must trace to a recognizer,
+rule or typed safety contract.
+[Regex recognizer](crates/gaze-recognizers/src/regex.rs).
 
 ### KDD-3: Audit sink isolation is enforced by Dylint
 
-SQLite audit storage is isolated in `gaze-audit`; `gaze` must not grow a
-`rusqlite` feature graph. The canonical protected-path gate is the
-`gaze_module_isolation` Dylint lint in the detached `lint/dylint` workspace,
-with the older syn walker decommissioned.
-
-Source anchors: [CLAUDE.md](CLAUDE.md),
-[docs/explanation/contributing/xtask-gates.md](docs/explanation/contributing/xtask-gates.md),
-[crates/gaze-audit/src/sqlite.rs](crates/gaze-audit/src/sqlite.rs), and
-[lint/dylint/src/lib.rs](lint/dylint/src/lib.rs).
+`rusqlite` belongs in `gaze-audit`; no core feature graph may depend on it.
+The canonical `gaze_module_isolation` lint lives in detached `lint/dylint`;
+the old syn walker is removed. This gate is required.
+[Lint](lint/dylint/src/lib.rs), [SQLite sink](crates/gaze-audit/src/sqlite.rs),
+[gates](docs/explanation/contributing/xtask-gates.md).
 
 ### KDD-4: Closed validator and normalizer surfaces fail closed
 
-Validator and normalizer names parse into typed enums, and unknown names fail
-at rulepack load with explicit unsupported-kind errors. The public enums are
-`#[non_exhaustive]` for forward-compatible Rust matching, but runtime accepted
-names remain closed and auditable.
-
-Source anchors: [crates/gaze-types/src/lib.rs](crates/gaze-types/src/lib.rs),
-[crates/gaze-recognizers/src/regex.rs](crates/gaze-recognizers/src/regex.rs),
-[crates/gaze-recognizers/src/error.rs](crates/gaze-recognizers/src/error.rs),
-and [crates/gaze/src/rulepack.rs](crates/gaze/src/rulepack.rs).
+Names parse into typed enums. Unknown names fail at rulepack load with explicit
+unsupported-kind errors. Public enums are `#[non_exhaustive]` for Rust callers;
+accepted runtime names remain closed.
+[Errors](crates/gaze-recognizers/src/error.rs), [rulepacks](crates/gaze/src/rulepack.rs).
 
 ### KDD-5: Locale resolution has four tiers
 
-Active locale resolution is ordered as CLI override, policy locale, rulepack
-default locale, then system/default fallback. Recognizers declare locale gates,
-and `LocaleTag::Other(_)` matching is strict rather than fuzzy.
-
-Source anchors: [docs/explanation/policy/locale-chain.md](docs/explanation/policy/locale-chain.md),
-[crates/gaze-types/src/lib.rs](crates/gaze-types/src/lib.rs),
-[crates/gaze-cli/src/pipeline/run.rs](crates/gaze-cli/src/pipeline/run.rs),
-and [crates/gaze-assembly/src/defaults.rs](crates/gaze-assembly/src/defaults.rs).
+CLI override → policy → rulepack default → system/default fallback.
+`LocaleTag::Other(_)` matches strictly.
+[Locale chain](docs/explanation/policy/locale-chain.md),
+[assembly defaults](crates/gaze-assembly/src/defaults.rs).
 
 ### KDD-6: Conflict resolution is deterministic
 
-When candidates overlap, Gaze resolves them in a fixed order: PII class
-priority, rule priority, score, span length, and recognizer id. Collision-family
-policy and mandatory anchors add fail-closed fallback, structured containment
-keeps a custom-class span whole when a builtin-class span sits strictly inside
-it, and `ConflictTier` keeps losers visible in the audit trail.
-
-Source anchors: [crates/gaze/src/resolver.rs](crates/gaze/src/resolver.rs),
-[crates/gaze/src/pipeline.rs](crates/gaze/src/pipeline.rs),
-[crates/gaze-types/src/lib.rs](crates/gaze-types/src/lib.rs),
-[docs/explanation/detection/collision-family.md](docs/explanation/detection/collision-family.md),
-and [docs/explanation/detection/anchor-resolution.md](docs/explanation/detection/anchor-resolution.md).
+Priority is class → rule → score → span length → recognizer id.
+Collision-family policy and mandatory anchors add fail-closed fallback.
+Structured containment keeps a custom-class span whole when a builtin span is
+strictly inside it. Loser audit rows record `ConflictTier`.
+[Resolver](crates/gaze/src/resolver.rs),
+[collision families](docs/explanation/detection/collision-family.md),
+[anchors](docs/explanation/detection/anchor-resolution.md).
 
 ### KDD-7: Pass-3 SafetyNet is observer-only
 
-SafetyNet runs after tokenization against already-clean output and the runtime
-manifest. The net itself only reports: it emits `LeakSuspect` metadata and never
-edits clean text or the manifest. The pipeline then acts on that report per
-mode: the default `resolve` tokenizes a suspect into the manifest as a
-restorable token, `redact` writes a one-way marker, `strict` fails, and
-`tolerant` warns.
+The net reads tokenized output and the runtime manifest, then reports
+`LeakSuspect` metadata. The pipeline acts:
 
-Source anchors: [docs/explanation/safety-net/safety-nets.md](docs/explanation/safety-net/safety-nets.md),
-[crates/gaze/src/pipeline.rs](crates/gaze/src/pipeline.rs),
-[crates/gaze-recognizers/src/safety_net/test_support.rs](crates/gaze-recognizers/src/safety_net/test_support.rs),
-and [crates/gaze/tests/safety_net.rs](crates/gaze/tests/safety_net.rs).
+| Mode | Pipeline action |
+|---|---|
+| `resolve` (default) | Add a restorable token to the manifest. |
+| `redact` | Write a one-way marker. |
+| `strict` | Refuse. |
+| `tolerant` | Warn. |
+
+[Contract](docs/explanation/safety-net/safety-nets.md),
+[behavioral tests](crates/gaze/tests/safety_net.rs).
 
 ### KDD-8: Proxy providers use adapter drivers (shipped in v0.8)
 
-The `gaze-proxy` runtime (shipped in v0.8.0) isolates vendor-specific API
-shape in provider drivers while the proxy core owns pseudonymization, manifest
-handling, restore boundaries, and fail-closed behavior. Adapters ship for
-OpenAI, Anthropic, and Gemini API-key paths.
-
-Source anchors: [docs/explanation/proxy/proxy-runtime.md](docs/explanation/proxy/proxy-runtime.md),
-[crates/gaze-proxy/src/lib.rs](crates/gaze-proxy/src/lib.rs), and
-[crates/gaze-proxy/src/adapters](crates/gaze-proxy/src/adapters).
+OpenAI, Anthropic and Gemini drivers own vendor wire shapes. The proxy core
+owns pseudonymization, manifests, restore boundaries and fail-closed behavior.
+[Proxy](crates/gaze-proxy/src/lib.rs), [drivers](crates/gaze-proxy/src/adapters).
 
 ## Cross-cutting invariants
 
-**Fail closed everywhere.** Unsupported validators, malformed locale tags,
-missing mandatory anchors, unavailable strict-mode SafetyNet backends, and
-invalid policies must surface typed errors or family-level safe fallback.
+Unsupported validators, malformed locales, missing mandatory anchors,
+unavailable strict-mode nets and invalid policies produce typed errors or
+safe family-level fallback. Audit and manifest metadata carry vetoes and
+ambiguity; clean text remains pseudonymized.
+[Ambiguity contract](docs/explanation/detection/ambiguity-side-channel.md).
 
-**Protected-path enforcement.** `rusqlite` and concrete SQLite audit behavior
-belong in `gaze-audit`; the core library remains free of that dependency. The
-Dylint protected-path gate is part of the architecture, not an optional hygiene
-check.
+Bundle activation is explicit:
 
-**Bundle activation is explicit.**
+| Invocation | Activation and suppression |
+|---|---|
+| `core` | Format-basis identifiers, including US national phone, run in every locale. DE national phone and numeric postal rules remain document-gated. |
+| `core-extended`, no policy | Compatibility defaults also activate document-gated DE national phone and postal rules. Prefer `core` or an explicit policy if too broad. |
+| Policy locale gates | Gate only `locale_basis = "document"`. Format rules run once outside locale fallback; disable them with `enabled = false`. |
+| Custom rulepack | Omitted `locale_basis` means document gating. Defaults rank below CLI and policy. Review collisions and negative corpora before selecting format basis. |
 
-| Invocation shape | Active national / postal recognizers | Adopter implication |
-| --- | --- | --- |
-| `core` bundled rulepack | Format-basis identifiers, including US national phone, run for every document locale. DE national phone and both postal recognizers remain document-gated. | Disable an unwanted format-basis recognizer outright; locale mismatch is not a suppression mechanism. |
-| `core-extended` with no policy | Compatibility defaults also activate the quarantined DE national phone and postal recognizers. | Prefer `core`; use an explicit policy/rulepack when the compatibility activation is too broad. |
-| Policy with locale gates | Locale gates apply to `locale_basis = "document"` recognizers only. Format-basis recognizers run once outside locale fallback. | Put document-language intent in TOML, but use `enabled = false` for intentional format suppression. |
-| Custom rulepack | Omitted `locale_basis` retains legacy document gating; rulepack defaults fill in only below CLI and policy locale choices. | Opt into format basis only after collision and negative-corpus review. |
-
-Source anchors: [CLAUDE.md](CLAUDE.md),
-[crates/gaze-cli/src/pipeline/run.rs](crates/gaze-cli/src/pipeline/run.rs),
-[crates/gaze-assembly/src/defaults.rs](crates/gaze-assembly/src/defaults.rs),
-and [docs/explanation/policy/locale-chain.md](docs/explanation/policy/locale-chain.md).
-
-**Ambiguity is a side channel, not a leak.** Validator vetoes, collision-family
-ties, no-anchor fallback, and related metadata travel as structured audit and
-manifest-side metadata while clean output remains pseudonymized.
-
-Source anchors:
-[docs/explanation/detection/ambiguity-side-channel.md](docs/explanation/detection/ambiguity-side-channel.md),
-[docs/explanation/detection/validator-veto.md](docs/explanation/detection/validator-veto.md),
-[docs/explanation/detection/collision-family.md](docs/explanation/detection/collision-family.md),
-and [crates/gaze-audit/src/sqlite.rs](crates/gaze-audit/src/sqlite.rs).
+[CLI assembly](crates/gaze-cli/src/pipeline/run.rs),
+[locale contract](docs/explanation/policy/locale-chain.md).
 
 ## Where to go next
 
-- [docs/explanation/detection/validator-veto.md](docs/explanation/detection/validator-veto.md)
-  explains validator-backed candidate rejection before conflict resolution.
-- [docs/explanation/detection/collision-family.md](docs/explanation/detection/collision-family.md)
-  defines cross-class rivalry policy and family-level fallback.
-- [docs/explanation/detection/anchor-resolution.md](docs/explanation/detection/anchor-resolution.md)
-  covers mandatory anchors, locale cue bundles, and no-anchor behavior.
-- [docs/explanation/detection/ambiguity-side-channel.md](docs/explanation/detection/ambiguity-side-channel.md)
-  documents structured metadata for validator failures and ambiguity records.
-- [docs/explanation/mcp/mcp-runtime.md](docs/explanation/mcp/mcp-runtime.md)
-  describes the MCP chokepoint, sealed tool context, tiers, and rmcp sink.
-- [docs/explanation/safety-net/safety-nets.md](docs/explanation/safety-net/safety-nets.md)
-  defines observer-only SafetyNet behavior, subprocess hardening, and audit.
-- [docs/reference/metrics.md](docs/reference/metrics.md) catalogs every observable surface
-  (audit-row columns, conflict tiers, SafetyNet benchmark snapshot fields,
-  recognizer registry, pipeline observability, `BundleReport`, MCP `ToolCtx`,
-  and CLI exit codes) with file-line pointers and stability guarantees.
-- `docs/explanation/proxy/proxy-runtime.md` is the deep dive for the user-to-model
-  proxy runtime and provider-driver pattern (shipped in v0.8).
-
-Related companion docs:
-[docs/reference/crates.md](docs/reference/crates.md),
-[docs/explanation/document/document-extension.md](docs/explanation/document/document-extension.md),
-[docs/explanation/detection/feedback-loop.md](docs/explanation/detection/feedback-loop.md),
-[docs/explanation/policy/locale-chain.md](docs/explanation/policy/locale-chain.md), and
-[docs/explanation/contributing/xtask-gates.md](docs/explanation/contributing/xtask-gates.md).
+- [Validator veto](docs/explanation/detection/validator-veto.md)
+- [Collision families](docs/explanation/detection/collision-family.md)
+- [Mandatory anchors](docs/explanation/detection/anchor-resolution.md)
+- [Ambiguity metadata](docs/explanation/detection/ambiguity-side-channel.md)
+- [MCP tiers and sealed context](docs/explanation/mcp/mcp-runtime.md)
+- [Safety-net modes, hardening and audit](docs/explanation/safety-net/safety-nets.md)
+- [Metrics and stability contracts](docs/reference/metrics.md): audit columns,
+  conflict tiers, benchmark snapshots, registry, pipeline, `BundleReport`,
+  MCP `ToolCtx` and CLI exit codes.
+- [Proxy drivers](docs/explanation/proxy/proxy-runtime.md)
+- [Document codecs](docs/explanation/document/document-extension.md)
+- [Feedback loop](docs/explanation/detection/feedback-loop.md)
 
 ## What this document does not cover
 
-- Per-recognizer rule documentation belongs in [docs/reference/policy.md](docs/reference/policy.md).
-- Release notes and chronology belong in [CHANGELOG.md](CHANGELOG.md).
-- Adopter quickstart material belongs in [README.md](README.md).
-- Version-to-version migration instructions belong in [UPGRADE.md](UPGRADE.md)
-  when present.
-- This document is not a substitute for source review before changing a
-  correctness-sensitive path.
+[Policy](docs/reference/policy.md) documents recognizers;
+[CHANGELOG.md](CHANGELOG.md) records releases; [README.md](README.md) gets adopters
+started; [UPGRADE.md](UPGRADE.md) lists migrations. Review source before changing
+any correctness-sensitive path.

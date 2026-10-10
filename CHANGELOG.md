@@ -19,10 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identity values. Full English tax-identification fields preserve trusted
   repeated-value protection. Generic national-ID cues reject short grouped
   order/invoice references, dates and triangle dimensions, and preserve IP ownership.
-- **Credentials are protected by default.** Newly generated `gaze setup`
-  policies include the bundled `secrets` rulepack, protecting supported API
-  keys, access and session tokens, JWTs, and password fields. Direct library
-  callers and hand-authored policies still select rulepacks explicitly.
+- `gaze setup` now includes `secrets` by default: supported API keys, access
+  and session tokens, JWTs and passwords. Library callers and hand-written
+  policies still select rulepacks explicitly.
 
 - Cued NHS numbers remain protected whole when MOD-11 fails, with a typed audit
   reason and no repeat-value sweep. Tax-identification key abbreviations also
@@ -48,11 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Benchmark
 
-- **Credentials now count in the headline benchmark.** Scored-label contract
-  v4 adds `PASSWORD` and `SECURITYTOKEN` while preserving v1–v3 as historical
+- Headline contract v4 adds `PASSWORD` and `SECURITYTOKEN` while preserving v1–v3 as historical
   views. On the unchanged v0.16.0 observation record, this scope change raises
-  the layer C headline from 7,348 leaked bytes under v2 to 13,291 under v4; it
-  is not a detection regression. The isolated `secrets` arm protects 2,879
+  the layer C headline from 7,348 leaked bytes under v2 to 13,291 under v4; this changes scoring scope, not detection. The isolated `secrets` arm protects 2,879
   previously leaked `SECURITYTOKEN` bytes; the complete candidate reduces
   layer C's v4 total to 10,405 leaked bytes.
 
