@@ -570,6 +570,95 @@ mod tests {
     }
 
     #[test]
+    fn warmed_record_cache_matches_fresh_after_unicode_mode_switch() {
+        let context = TypedContext {
+            dictionaries: HashMap::from([(
+                "record-name".into(),
+                ContextDictionary {
+                    terms: vec!["JÖRG STRASSE".into()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
+        };
+        let bundle = dictionary_bundle_from_context(&context);
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+        let make_recognizer = || {
+            DictionaryRecognizer::new(
+                "context/record-name",
+                PiiClass::Name,
+                "record-name",
+                true,
+                "counter",
+            )
+            .with_record_matching()
+            .with_cache_capacity(1)
+        };
+        let raw = "JÖRG STRASSE";
+        let warmed = make_recognizer();
+        assert_eq!(warmed.detect(raw, &detect_context).unwrap().len(), 1);
+        let warmed = warmed.with_unicode_case_insensitive();
+        let fresh = make_recognizer().with_unicode_case_insensitive();
+        for text in [raw, "Jörg Straße", "Jörg\u{a0}Straße"] {
+            let expected = fresh.detect(text, &detect_context).unwrap();
+            assert_eq!(expected.len(), 1);
+            assert_eq!(expected[0].span, 0..text.len());
+            let actual = warmed.detect(text, &detect_context).unwrap();
+            assert_eq!(actual.len(), expected.len(), "warmed cache missed {text}");
+            assert_eq!(actual[0].span, expected[0].span);
+            assert_eq!(actual[0].source, expected[0].source);
+            assert_eq!(actual[0].canonical_form, expected[0].canonical_form);
+        }
+    }
+
+    #[test]
+    fn warmed_dictionary_preserves_provenance_after_ordered_terms_change() {
+        let recognizer = DictionaryRecognizer::new(
+            "dict/songs",
+            PiiClass::Custom("song".into()),
+            "songs",
+            true,
+            "counter",
+        )
+        .with_cache_capacity(1);
+        for (terms, expected_sources) in [
+            (
+                ["alpha-one", "bravo-two"],
+                ["dictionary:songs[#0]", "dictionary:songs[#1]"],
+            ),
+            (
+                ["bravo-two", "alpha-one"],
+                ["dictionary:songs[#1]", "dictionary:songs[#0]"],
+            ),
+        ] {
+            let context = TypedContext {
+                dictionaries: HashMap::from([(
+                    "songs".into(),
+                    ContextDictionary {
+                        terms: terms.into_iter().map(str::to_owned).collect(),
+                        case_sensitive: true,
+                    },
+                )]),
+                class_map: HashMap::new(),
+                fields: Map::new(),
+                record_match_kinds: Default::default(),
+                record_value_rejections: Default::default(),
+            };
+            let bundle = dictionary_bundle_from_context(&context);
+            let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+            let hits = recognizer
+                .detect("alpha-one then bravo-two", &detect_context)
+                .unwrap();
+            assert_eq!(hits.len(), 2);
+            assert_eq!(hits[0].source, expected_sources[0]);
+            assert_eq!(hits[1].source, expected_sources[1]);
+        }
+    }
+
+    #[test]
     fn record_match_kinds_are_enforced_on_original_spans() {
         let context = TypedContext {
             dictionaries: HashMap::from([(
