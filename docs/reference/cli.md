@@ -1,9 +1,7 @@
 # Gaze CLI
 
-The canonical CLI reference is [`crates/gaze-cli/README.md`](../../crates/gaze-cli/README.md). It documents
-every subcommand, flag, exit code, and feature gate exposed by the `gaze`
-binary. This page is a short index plus a few adopter-facing walk-throughs that
-are not covered there.
+The [crate README](../../crates/gaze-cli/README.md) lists all flags and exit
+codes. This page indexes commands and their operating contracts.
 
 ## Subcommands
 
@@ -74,13 +72,8 @@ configuration error; install it with `gaze setup`.
 
 ## `gaze daemon`
 
-`gaze daemon` is a long-lived **stdio server** for adapters that need repeated
-low-latency redaction without paying binary startup and model-load cost on every
-request. It is a stdio server in the LSP / MCP tradition: a foreground child
-process that owns stdin/stdout for line-delimited JSON, not a Unix daemon in the
-strict sense. The subcommand verb is `gaze daemon`; there is no `gaze serve`
-alias. See the [Terminology note in `daemon-mode.md`](../explanation/daemon/daemon-mode.md)
-for the full framing.
+`gaze daemon` keeps one pipeline loaded for repeated requests. It is a
+foreground stdio JSONL server; there is no `gaze serve` alias.
 
 The wire format is one JSON request per stdin line and one JSON response per
 stdout line.
@@ -113,9 +106,6 @@ Errors never echo the input text.
 | `--session-idle-timeout <secs>` | Evict sessions idle for this many seconds. Default: `3600`. |
 | `--idle-timeout <secs>` | Exit the process after stdin inactivity for this many seconds. Default: `1800`. |
 
-The default values above are also documented in
-[`crates/gaze-cli/README.md`](../../crates/gaze-cli/README.md#daemon-mode).
-
 SIGINT and SIGTERM set a shutdown flag; the daemon finishes the current line,
 flushes stdout and audit writes, then exits. The session registry evicts by LRU
 when `--session-cap` is exceeded and by idle timeout when a session is quiet too
@@ -125,16 +115,6 @@ with source `daemon.session_eviction`.
 The daemon stamps its redaction audit rows with
 `provenance_stage = "daemon"`, which lets adopters filter daemon-emitted rows
 separately from one-shot `gaze clean` rows.
-
-Five-axis check:
-
-- Reliability: malformed protocol input produces typed JSON errors and the
-  daemon keeps reading.
-- Reversibility: restore material is scoped to one `session_id` manifest.
-- Agentic-first: JSONL over one stdio process fits multi-turn adapter loops.
-- Trust: daemon audit rows carry explicit provenance and eviction metadata.
-- Adopter ergonomics: adapters can keep one process hot and avoid per-call cold
-  starts.
 
 See [`docs/explanation/daemon/daemon-mode.md`](../explanation/daemon/daemon-mode.md) for the
 full contract. See
@@ -171,11 +151,8 @@ input:
 
 ## `gaze audit safety-net query`
 
-`gaze audit safety-net query` prints filtered TSV rows from the
-`safety_net_log` table. It is the SafetyNet companion to the redaction-log audit
-query verbs: the deterministic redaction audit table records emitted token
-metadata, while `safety_net_log` records observer-only leak suspects after the
-clean text and manifest already exist.
+Query `safety_net_log` observer suspects as TSV, separate from emitted-token
+metadata in `redaction_log`.
 
 ```sh
 gaze audit safety-net query --audit-db .gaze/audit.sqlite --leak-kind uncovered --mapped-class email
@@ -195,10 +172,6 @@ The leak-kind filter corresponds to the closed `LeakKind` set:
 `Uncovered`, `PartialBleed`, and `ClassMismatch`. The TSV values are the
 lowercase wire forms `uncovered`, `partial_bleed`, and `class_mismatch`.
 
-See
-[`crates/gaze-cli/README.md#audit-safety-net-query`](../../crates/gaze-cli/README.md#audit-safety-net-query)
-for the crate README reference.
-
 ## Legacy audit databases
 
 Audit databases written before v0.4.4 lack a `created_at` column. Unfiltered
@@ -208,12 +181,9 @@ filter to access legacy rows.
 
 ## `gaze document clean`
 
-`gaze document clean` is the OSS document ingestion verb. It OCRs the input
-through Tesseract, redacts the recognized text through the standard Gaze
-pipeline, and writes a split `SafeBundle`: `clean.md` and `report.json` go to
-the agent-visible output, while `manifest.json` goes to the owner-only output.
-The verb requires a binary built with `--features document`, and the host must
-have `tesseract` on PATH plus the pdfium runtime for PDF input.
+OCR PNG/JPG/PDF with Tesseract, run Gaze, then split the SafeBundle:
+`clean.md`/`report.json` for the agent; `manifest.json` for the owner.
+Requires `document`, Tesseract on PATH and pdfium for PDF.
 
 ```sh
 cargo install gaze-cli --features document
@@ -231,9 +201,7 @@ gaze document clean ./invoice.pdf --agent-out ./agent-bundle/ --owner-out ./owne
 | `--agent-out <PATH>` | With `--owner-out` | Agent-visible directory for `clean.md` and `report.json`. |
 | `--owner-out <PATH>` | With `--agent-out` | Owner-only directory for `manifest.json`. |
 
-Do not upload `owner/manifest.json` to an LLM workspace. It carries restorable
-PII mapping material; placing it beside `clean.md` defeats pseudonymization.
-The split output layout makes that axis-1 boundary a runtime contract.
+Keep `owner/manifest.json` away from LLM workspaces: it contains restorable PII.
 
 The supported inputs are `.png`, `.jpg`, `.jpeg`, and single-page `.pdf`. The
 `BundleReport` schema is versioned via `bundle_version = 2`. See the
@@ -241,14 +209,11 @@ The supported inputs are `.png`, `.jpg`, `.jpeg`, and single-page `.pdf`. The
 
 ## `gaze mcp install / doctor / serve`
 
-`gaze mcp install`, `gaze mcp doctor`, and `gaze mcp serve` surface the MCP
-chokepoint for adopters whose agent hosts already speak MCP. `install` writes a
-supported client config that points at the absolute `current_exe()` path with
-`["mcp", "serve"]`, then creates or updates an idempotent marker-fenced
-`AGENTS.md` guidance section. `doctor` checks runtime dependencies, client
-config, manifest storage, and the AGENTS.md marker. `serve` runs the stdio MCP
-server and exposes the agent-tier `gaze_read_file` and `gaze_read_text` tool
-implementations.
+| Verb | Effect |
+|---|---|
+| `install` | Write client config using absolute `current_exe()` with `["mcp", "serve"]`; update marker-fenced AGENTS.md guidance idempotently. |
+| `doctor` | Check dependencies, config, manifest store and guidance marker. |
+| `serve` | Run stdio MCP with agent-tier `gaze_read_file` and `gaze_read_text`. |
 
 ```sh
 cargo install gaze-cli --features mcp,document
@@ -283,12 +248,10 @@ runtime contract.
 
 ## `gaze proxy`
 
-`gaze proxy` is the multi-provider HTTP chokepoint daemon for SDK and agent
-traffic that authenticates with provider API keys. It preserves each provider's
-native request and response shape while redacting request PII, restoring
-owner-visible response text, and accumulating SSE streams and tool-call JSON
-arguments chunk-by-chunk before the text crosses the model boundary. The proxy
-is built into the default release binary as of v0.8.1.
+`gaze proxy` protects provider API-key traffic while preserving native wire
+shapes. It redacts requests, restores owner-visible responses, and accumulates
+SSE and tool-call JSON chunks before the model boundary. It is in the default
+release binary.
 
 ```sh
 gaze proxy start --policy ./policy.toml
@@ -363,11 +326,7 @@ hosts the dashboard disables itself and the proxy continues.
 See [Run the local dashboard](../how-to/dashboard/run-local-dashboard.md) and
 the [dashboard trust boundary](../explanation/dashboard/trust-boundary.md).
 
-SafetyNet activation follows the normal policy and CLI behavior: use policy
-configuration for the deterministic floor and activate observer-only safety-net
-backends with the same `safety_tier` posture used by the pipeline. Locale
-coverage comes from the policy, merged bundled rulepack defaults, and active
-locale chain.
+Safety nets, rulepacks and locales follow the loaded policy and CLI overrides.
 
 See [`docs/explanation/proxy/proxy-runtime.md`](../explanation/proxy/proxy-runtime.md) for
 the adapter and daemon contract. See

@@ -1,48 +1,36 @@
 # Reference
 
-Information-oriented and complete. Reference pages describe *what is* — exact commands,
-schema fields, crate boundaries, metric surfaces, and benchmark evidence — without tutorial
-narrative. Use them to look things up once you know what you're doing. For the reasoning
-behind a contract, follow through to [explanation](../explanation/README.md).
+Look up commands, configuration, contracts and evidence. For design reasoning,
+see [Explanation](../explanation/README.md).
 
 ## Commands and configuration
 
-- **[CLI](cli.md)** — every `gaze` subcommand, flag, stdin/stdout protocol, and exit code.
-- **[Policy schema](policy.md)** — the full `policy.toml` surface: rulepacks, custom
-  recognizers, validators, normalizers, and locale gating.
-- **[Example policy TOML](policy.example.toml)** — a copyable starter policy file.
-- **[Redaction classes and recognizers](redaction-classes.md)** — the canonical,
-  drift-gated inventory of emitted classes, embedded recognizers, validators,
-  normalizers, collision precedence, conflict ordering, deterministic gaps, and
-  shipped default activation.
+- [CLI](cli.md): commands, flags, protocols and exit codes.
+- [Policy schema](policy.md): TOML fields, recognizers, validators and locale rules.
+- [Example policy](policy.example.toml): starter TOML.
+- [Redaction classes and recognizers](redaction-classes.md): drift-checked inventory,
+  activation, conflict order and detection gaps.
 
 ## Observability
 
-- **[Metrics catalog](metrics.md)** — the single source of truth for every observable surface: audit-log
-  columns, conflict tiers, pipeline counters, SafeBundle fields, MCP context, with stability
-  guarantees per metric.
+[Metrics catalog](metrics.md): audit columns, conflict tiers, counters,
+SafeBundle fields and MCP context, with stability rules.
 
 ## Crates
 
-- **[Crate map](crates.md)** — the published crates and what each owns; links to every crate README.
+[Crate map](crates.md): ownership, dependencies and entry points.
 
 ## Security and accessibility
 
-- **[Security review](security-review.md)** — the security invariants, each citing the named
-  test that verifies it, plus the unverified bucket and explicit non-guarantees.
-- **[Accessibility](accessibility.md)** — the accessibility posture of each Gaze surface.
-- **[Dashboard browser security](dashboard/browser-security.md)** — the opt-in dashboard
-  child's HTTP gate, headers, auth, and no-store guarantees.
-- **[Dashboard accessibility & visual verification](dashboard/accessibility-and-visual-verification.md)** —
-  the WCAG 2.2 protocol, 44-state visual matrix, and committed evidence.
+- [Security review](security-review.md): tested invariants, unverified claims and limits.
+- [Accessibility](accessibility.md): CLI, docs and UI requirements.
+- [Dashboard browser security](dashboard/browser-security.md): HTTP checks, auth and leases.
+- [Dashboard verification](dashboard/accessibility-and-visual-verification.md):
+  accessibility checks, 44-state matrix and evidence limits.
 
 ## Benchmarks
 
-Public benchmark claims must trace to the canonical
-**[Gaze Benchmarks](benchmarks/README.md)** document. It carries the current
-release's measured numbers as a table and as charts, the corpora and scoring
-contract behind them, the safety-net and NER leaderboard surfaces, the commands
-to reproduce every figure, and a per-release history. Numbers are regenerated
-from each release's committed scorecard by
-[`scripts/bench/render_benchmark_doc.py`](../../scripts/bench/render_benchmark_doc.py),
-and CI fails if the document drifts from that evidence.
+[Gaze Benchmarks](benchmarks/README.md) holds the measured release results,
+scoring contracts, model comparisons and reproduction commands. Public claims
+must trace to its committed scorecards. CI checks the page with
+[`render_benchmark_doc.py`](../../scripts/bench/render_benchmark_doc.py).

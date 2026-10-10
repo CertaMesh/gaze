@@ -1,30 +1,35 @@
 # Accessibility
 
-Gaze treats accessibility as a baseline expectation, not a feature to be added later. The project consists of three surfaces today, each with its own accessibility posture.
-
 ## CLI (`gaze clean` / `gaze restore`)
 
-The `gaze` binary is the primary user-facing surface. It operates over stdin/stdout with plain-text input and output, which makes it screen-reader friendly and compatible with assistive tooling that pipes terminal sessions. We deliberately:
+The CLI uses plain text and stdin/stdout pipes. Diagnostics explain errors in
+text; color never carries meaning alone.
 
-- Never encode information through color alone. ANSI styling, when used in diagnostics, always carries the same information in the text itself (e.g. `[error]` prefixes, not just red text).
-- Keep error messages self-describing — the reader does not need visual context (such as a TUI panel position) to understand what went wrong.
-- Respect `NO_COLOR` and non-TTY environments by suppressing ANSI escapes. Human-facing CLI styling is behind one std `IsTerminal` gate: non-empty `NO_COLOR` disables ANSI, non-empty `CLICOLOR_FORCE` enables ANSI only when `NO_COLOR` is absent, and otherwise styling is emitted only for terminal streams. The `gaze mcp doctor` human table uses this gate for decorative state-column color while still printing the literal `pass`, `warn`, and `fail` words; `--json` output is never colored. Regression tests cover forced color, `NO_COLOR`, non-TTY stdout, text-only state words, and JSON output.
+ANSI styling uses one `IsTerminal` gate:
+
+| Condition | Styling |
+|---|---|
+| Non-empty `NO_COLOR` | Off |
+| Non-empty `CLICOLOR_FORCE`, with no non-empty `NO_COLOR` | On |
+| Otherwise | Terminal streams only |
+
+`gaze mcp doctor` always prints `pass`, `warn` and `fail`, even when the state
+column is colored. JSON is never colored. Tests cover forced color,
+`NO_COLOR`, non-TTY output, state words and JSON.
 
 ## Documentation
 
-The docs in this repository are plain Markdown and follow conventions that work for screen readers and text-only renderers:
-
-- Semantic heading levels (no skipped levels, one H1 per file).
-- Alt text on any embedded image (architecture diagrams, screenshots).
-- Code blocks always carry an explicit language tag (` ```rust `, ` ```toml `, ` ```bash `) so syntax highlighters and assistive tools can parse them correctly.
-- Tables are kept simple (no merged cells, header row always present).
+Use one H1, ordered heading levels, image alt text, language-tagged code blocks
+and simple tables with header rows.
 
 ## Dashboard UI
 
-The opt-in `gaze proxy serve --dashboard` inspection dashboard is the first end-user UI surface in the core repository. It targets **WCAG 2.2 AA conformance**; its verification protocol, 44-state visual matrix, and committed evidence live in [Dashboard accessibility and visual verification](dashboard/accessibility-and-visual-verification.md), with the browser-facing security posture in [Dashboard browser security](dashboard/browser-security.md).
+The opt-in `gaze proxy serve --dashboard` UI targets WCAG 2.2 AA. See the
+[verification protocol and 44-state evidence](dashboard/accessibility-and-visual-verification.md)
+and [browser security rules](dashboard/browser-security.md).
 
 ## Future UI surfaces
 
-The companion marketing site (`gaze-website`) and any future audit-viewer UI built on top of `gaze-audit` will target at least **WCAG 2.1 AA conformance** as their accessibility baseline. This includes keyboard-only navigation, sufficient color contrast, focus indicators, and ARIA labels on interactive controls.
-
-The project treats accessibility regressions like security regressions: they should not ship.
+The `gaze-website` marketing site and future audit viewers target at least
+WCAG 2.1 AA: keyboard navigation, contrast, visible focus and accessible
+control labels. Accessibility regressions must not ship.
