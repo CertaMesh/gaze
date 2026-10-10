@@ -70,9 +70,9 @@ Examples: `ValidatorKind::Luhn` (Mod 10 checksum, used by `card.structural`),
 `ValidatorKind::IbanMod97` (ISO 7064 mod-97, used by `iban.structural`) and
 `ValidatorKind::E164Phone` (requires the `phone-parser` feature).
 
-`E164Phone` is implemented via the `phonenumber` crate. It preserves valid E.164
-matches such as the fictional UK `+44 7700 900123`
-while rejecting regex-passing but unassigned shapes such as `+99999999`.
+`E164Phone` uses `phonenumber` to preserve valid E.164 matches and reject
+regex-passing but unassigned shapes such as `+99999999`. Use the
+[approved fictional ranges](../../CONTRIBUTING.md#phone-number-fixtures) in tests.
 
 ## Anchored match backend
 

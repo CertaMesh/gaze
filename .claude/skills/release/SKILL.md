@@ -27,8 +27,7 @@ Run from `main` after all release-blocker PRs are merged.
 7. Dogfood Gaze on its own release text: pipe the modified `CHANGELOG.md`
    section, plus any optional extra release text passed to the release
    preflight, through `gaze clean` and verify zero detections. GitHub Release
-   bodies use generated notes; `dist/release-notes/` is not committed. This
-   preserves the `feedback-dogfood-gaze-on-own-output` memory.
+   bodies use generated notes; `dist/release-notes/` is not committed.
 8. Verify benchmark claims in the changelog or release PR body link to the
    script and hardware specification that produced them.
 9. Pair every release with its own benchmark: version X ships with benchmark X.
@@ -83,7 +82,7 @@ After the workflows finish:
 2. Confirm both workflow runs succeeded: `release.yml` and `publish-crates.yml`.
 3. Confirm every published crate reports the new version. Derive the expected
    set with `cargo run -p xtask -- publish-plan` rather than a hard-coded list,
-   then check `https://crates.io/api/v1/crates/<name>` and expect
+   then query the `crates.io` API endpoint `/api/v1/crates/<name>` and expect
    `max_version == X.Y.Z` for each. A count that differs from the plan is a partial publish.
 4. Update the orchestrator scratchpad with released URLs:
    GitHub Release URL plus one crates.io URL per crate in the publish plan.

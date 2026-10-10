@@ -16,7 +16,7 @@ Resolves #
 
 ## Fixtures & PII hygiene
 
-- [ ] No real PII anywhere (code, tests, fixtures, docs): synthetic only (`alice@example.invalid`, `<Email_1>`).
+- [ ] No real PII anywhere (code, tests, fixtures, docs): synthetic only (reserved email domains and generated tokens).
 - [ ] Any PII-shaped literal is covered by a cited test (`fixture-citation-lint` enforces this).
 
 ## Benchmark evidence (AGENTS.md → "Benchmark gain gate")

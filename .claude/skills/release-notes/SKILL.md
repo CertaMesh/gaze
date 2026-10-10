@@ -5,7 +5,7 @@ description: Draft or review GitHub release notes for gaze, gaze-lens, or gaze-l
 
 # Release notes
 
-Use for GitHub Releases. Keep `CHANGELOG.md` in Keep a Changelog format. The [v0.4.5 release](https://github.com/piinuts/gaze/releases/tag/v0.4.5) is the voice reference; auto-generated Added/Changed dumps need rewriting.
+Use for GitHub Releases. Keep `CHANGELOG.md` in Keep a Changelog format. The [v0.4.5 release](https://github.com/CertaMesh/gaze/releases/tag/v0.4.5) is the voice reference; auto-generated Added/Changed dumps need rewriting.
 
 ## Required structure
 
@@ -52,14 +52,14 @@ Example: “DE and US national phone recognizers landed in PR #58. They use `pho
 
 ## Download
 
-- Apple Silicon macOS: https://github.com/piinuts/gaze/releases/download/vX.Y.Z/gaze-aarch64-apple-darwin
-- SHA256: https://github.com/piinuts/gaze/releases/download/vX.Y.Z/gaze-aarch64-apple-darwin.sha256
-- Linux x86_64: https://github.com/piinuts/gaze/releases/download/vX.Y.Z/gaze-x86_64-unknown-linux-gnu
-- SHA256: https://github.com/piinuts/gaze/releases/download/vX.Y.Z/gaze-x86_64-unknown-linux-gnu.sha256
+- Apple Silicon macOS: [URL for gaze-aarch64-apple-darwin]
+- SHA256: [URL for gaze-aarch64-apple-darwin.sha256]
+- Linux x86_64: [URL for gaze-x86_64-unknown-linux-gnu]
+- SHA256: [URL for gaze-x86_64-unknown-linux-gnu.sha256]
 
 ## Full CHANGELOG
 
-https://github.com/piinuts/gaze/blob/main/CHANGELOG.md#XYZ
+[Absolute repository URL for CHANGELOG.md#XYZ]
 ```
 
 ## Pre-publish checklist
