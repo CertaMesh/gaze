@@ -26,6 +26,7 @@
     "gaze-assembly::card_prefix_enumeration",
     "gaze-assembly::containment_precedence",
     "gaze-assembly::context_class_override",
+    "gaze-assembly::core_pipeline_dictionaries",
     "gaze-assembly::loopback_ip",
     "gaze-assembly::record_context",
     "gaze-assembly::rust_library_example",
