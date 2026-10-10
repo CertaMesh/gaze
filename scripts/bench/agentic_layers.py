@@ -41,9 +41,10 @@ from typing import Callable, Iterable, Mapping, Sequence
 import gaze_bench_score as score
 import government_id_cells as government_ids
 import record_id_cells as record_ids
+import record_id_syntax_cells as record_id_syntax
 
 
-GENERATOR_VERSION = 14
+GENERATOR_VERSION = 15
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -4447,6 +4448,7 @@ GENERATOR_ADDITIONS = {
     12: "zipage_",
     13: "coverage_",
     14: "recordids_",
+    15: "recordids_syntax_",
 }
 
 
@@ -4460,6 +4462,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    14: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v14.json"),
     13: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v13.json"),
     12: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v12.json"),
     11: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v11.json"),
@@ -4718,6 +4721,7 @@ def generate(partition: str) -> list[Record]:
         + _zip_age_records(partition)
         + _coverage_records(partition)
         + record_ids.records(sys.modules[__name__], partition)
+        + record_id_syntax.records(sys.modules[__name__], partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)
