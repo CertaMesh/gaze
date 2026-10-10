@@ -32,24 +32,23 @@ organizations, and optional locale-aware recognizers.
 ## 2. Clean a document
 
 ```rust
-use gaze::{CleanDocument, RawDocument, Scope, Session};
+use gaze::{CleanDocument, Scope, Session};
 use gaze_assembly::CorePipelineConfig;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Build once; share across requests in long-running apps.
     let core = CorePipelineConfig::new().build()?;
-    let pipeline = core.pipeline();
 
     // One Session per conversation -- it owns the token map.
     // Share a Session only within the same logical isolation boundary.
     let session = Session::new(Scope::Conversation("conv-abc".into()))?;
 
-    let cleaned = pipeline.redact(
+    let cleaned = core.pseudonymize_text(
         &session,
-        RawDocument::Text(format!(
+        format!(
             "Hi, {}{}{} called about ORD-789012.",
             "alice", "@", "example.invalid"
-        )),
+        ),
     )?;
 
     // CleanDocument is an enum: Text(String) or Structured(...). Destructure.
@@ -64,7 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`<hex:Email_N>` is display notation. Use the exact token returned by `redact`;
+`<hex:Email_N>` is display notation. Use the exact token returned by `pseudonymize_text`;
 its session prefix and numeric ordinal change on each run.
 
 Share sessions only within one logical boundary. See the

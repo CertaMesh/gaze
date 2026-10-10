@@ -1,0 +1,4 @@
+# Synthetic tenant terms; comments and blank lines must not match.
+
+tenant-file-song-xyz
+  tenant-second-song-abc

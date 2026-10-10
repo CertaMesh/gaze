@@ -35,6 +35,30 @@ Run `gaze setup --force` to regenerate an existing policy with credential
 protection, or add `"secrets"` to `[policy.rulepacks].bundled` in your policy.
 Existing policies keep their selected rulepacks until you update them.
 
+### Action required: custom CorePipeline dictionaries
+
+`CorePipelineConfig::with_rulepack_path` now loads inline dictionary terms and
+`terms_file` contents through the same resolver as policy-driven assembly.
+Previously the dictionary recognizers were registered but their terms were
+silently dropped. Missing, unreadable, or non-UTF-8 term files now fail at build
+with `BuildError::Policy(PolicyError::BadDictionary)`; make them readable by the
+process before constructing the pipeline. Term paths keep the policy resolver's
+semantics: relative paths resolve against the process working directory.
+
+Enabled `terms_from_context` dictionaries now fail CorePipeline construction
+with `BuildError::Policy(PolicyError::BadDictionary)`: this convenience API has
+no context input. Supply inline/file terms, or use policy assembly with caller
+context. All rulepack loading paths now reject `terms_from_context` combined
+with nonempty `terms` or `terms_file` as
+`BuildError::Rulepack(RulepackError::DictionarySourceConflict)` during assembly.
+Choose one source; inline terms may still accompany `terms_file`.
+
+Use `CorePipeline::pseudonymize_text` to pass the resolved dictionaries and
+locales automatically. Low-level callers can use `dictionaries()` or
+`into_parts()` to retain these inputs and pass them to
+`Pipeline::pseudonymize_with_detect_context`. `into_pipeline()` remains available,
+but discards the dictionaries and locale chain.
+
 ## v0.15.x → v0.16.0
 
 ### TL;DR

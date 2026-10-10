@@ -1,4 +1,4 @@
-//! Policy-derived inputs shared by CLI and benchmark assembly.
+//! Policy-derived inputs shared by CorePipeline, CLI and benchmark assembly.
 
 use gaze::{
     dictionary_bundle_from_context, DictionaryBundle, LocaleChain, LocaleTag, Policy, PolicyError,
