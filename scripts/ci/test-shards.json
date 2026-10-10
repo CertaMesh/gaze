@@ -59,6 +59,7 @@
     "gaze-pii::prop_roundtrip",
     "gaze-pii::registry_extension_api",
     "gaze-pii::repro_empty_registry",
+    "gaze-pii::residual_selection_coordinates",
     "gaze-pii::resolve_multiple_gaps",
     "gaze-pii::resolve_second_batch",
     "gaze-pii::restore_bare_adjacency",

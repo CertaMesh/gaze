@@ -4,11 +4,7 @@
 [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii)
 [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/CertaMesh/gaze#license)
 
-Reversible PII pseudonymization runtime for agentic workflows
-
-Part of the [Gaze](https://github.com/CertaMesh/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
-
-`gaze-pii` is the runtime crate for [Gaze](https://github.com/CertaMesh/gaze). It owns the contracts that must stay stable for adopters: `Pipeline`, `Session`, `Policy`, `RecognizerRegistry`, the rulepack schema, token shape, and the signed restore manifest.
+Gaze’s core runtime owns `Pipeline`, `Session`, `Policy`, `RecognizerRegistry`, the rulepack schema, token shape, and the signed restore manifest.
 
 The crate is published as `gaze-pii`; the import path remains `use gaze::...` because `[lib].name = "gaze"` is preserved.
 
@@ -21,7 +17,7 @@ gaze-assembly = "0.16.0"
 gaze-recognizers = "0.16.0"
 ```
 
-`gaze-assembly` provides `CorePipelineConfig` — bundled defaults so you don't hand-wire the `core` rulepack (emails, names, locations, organizations, locale cues).
+`gaze-assembly` provides `CorePipelineConfig`, bundled defaults so you don't hand-wire the `core` rulepack (emails, names, locations, organizations, locale cues).
 
 ## Minimal example
 
@@ -67,25 +63,19 @@ The full re-export list lives in [`src/lib.rs`](src/lib.rs).
 
 ## What this crate does not own
 
-- **Concrete recognizers.** Regex/dictionary/NER backends and bundled rulepacks live in `gaze-recognizers`.
-- **Policy-to-pipeline assembly.** `CorePipelineConfig` and `build_pipeline` live in `gaze-assembly`.
-- **SQLite audit sink.** `SqliteLogger` and the read-side audit query API live in `gaze-audit`. `gaze-pii` carries no `rusqlite` dependency in any feature graph.
-- **CLI.** The `gaze` binary lives in `gaze-cli`.
+Concrete detectors: `gaze-recognizers`. Assembly: `gaze-assembly`. SQLite logging: `gaze-audit` (`gaze-pii` has no `rusqlite` dependency). Binary: `gaze-cli`.
 
 ## Guarantees
 
-- **Fail closed** on unknown rulepack validators or normalizers — typed errors at load, no silent degradation.
-- **Fail closed** on recognizer backend failure at runtime — `Recognizer::detect` returns `Result<Vec<Candidate>, DetectError>`, so a backend error surfaces as `Error::RecognizerDetect` and aborts outbound redaction instead of emitting partially cleaned output ([P0 #908](https://github.com/CertaMesh/gaze/blob/main/docs/explanation/detection/ner-failclosed.md)).
-- **Reversible by design.** Tokens are session-scoped and counted by class; restore goes through the signed snapshot, not string substitution.
-- **Deterministic detection** as the floor. NER is an opt-in recognizer. Safety nets are opt-in observers: a net only reports suspects, and the pipeline acts on the report (the default `resolve` mode tokenizes a suspect as a restorable token).
-- **Auditable.** Every emitted token traces to a recognizer + rule. Conflict losers are logged with `decided_by: ConflictTier`.
+- Fail closed on unknown rulepack validators or normalizers: typed errors at load, no silent degradation.
+- Fail closed on recognizer backend failure at runtime: `Recognizer::detect` returns `Result<Vec<Candidate>, DetectError>`, so a backend error surfaces as `Error::RecognizerDetect` and aborts outbound redaction instead of emitting partially cleaned output ([P0 #908](https://github.com/CertaMesh/gaze/blob/main/docs/explanation/detection/ner-failclosed.md)).
+- Reversible by design. Tokens are session-scoped and counted by class; restore goes through the signed snapshot, not string substitution.
+- Deterministic detection as the floor. NER is an opt-in recognizer. Safety nets are opt-in observers: a net only reports suspects, and the pipeline acts on the report (the default `resolve` mode tokenizes a suspect as a restorable token).
+- Auditable. Every emitted token traces to a recognizer + rule. Conflict losers are logged with `decided_by: ConflictTier`.
 
 Full project north star + five-axis contract: [AGENTS.md](https://github.com/CertaMesh/gaze/blob/main/AGENTS.md#project-north-star).
 
-Every observable surface this crate exposes — `Pipeline` per-pass behavior,
-the `ConflictTier` audit-string set, `RedactionEntry` columns,
-`Recognizer` / `Candidate` metadata, and the `SafetyNetResult` return — is
-cataloged with file-line pointers and stability guarantees in
+Observable APIs, audit fields, and stability guarantees:
 [`docs/reference/metrics.md`](https://github.com/CertaMesh/gaze/blob/main/docs/reference/metrics.md).
 
 ## Features
@@ -97,4 +87,4 @@ cataloged with file-line pointers and stability guarantees in
 
 ## License
 
-Dual-licensed under either of [Apache-2.0](https://github.com/CertaMesh/gaze/blob/main/LICENSE-APACHE) or [MIT](https://github.com/CertaMesh/gaze/blob/main/LICENSE-MIT), at your option.
+Licensed under either [Apache-2.0](https://github.com/CertaMesh/gaze/blob/main/LICENSE-APACHE) or [MIT](https://github.com/CertaMesh/gaze/blob/main/LICENSE-MIT).

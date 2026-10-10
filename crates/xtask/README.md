@@ -2,32 +2,11 @@
 
 Internal gate runner for the Gaze repository.
 
-This crate is not published (`publish = false`). It gives maintainers and CI a
-stable place to run repository-specific checks that do not belong in the
-library or CLI binaries.
+Not published (`publish = false`). Maintainers and CI use it for repository checks.
 
 ## Run locally
 
-From the workspace root:
-
-```console
-$ cargo run -p xtask -- symmetric-potemkin
-$ cargo run -p xtask -- class-map-override-safety
-$ cargo run -p xtask -- recognizer-composition-validator
-$ cargo run -p xtask -- no-tenant-knowledge
-$ cargo run -p xtask -- bundle-tokenization-drift
-$ cargo run -p xtask -- family-policy-table-coherence
-$ cargo run -p xtask -- locale-cue-bundle-coherence
-$ cargo run -p xtask -- fixture-citation-lint
-$ cargo run -p xtask -- ci-feature-matrix
-$ cargo run -p xtask -- cargo-metadata-audit-isolation
-$ cargo run -p xtask -- readme-version-check
-$ cargo run -p xtask -- dylint-gate
-$ cargo run -p xtask -- safety-net-sanity
-$ cargo run -p xtask -- tokenbridge-no-raw-index
-$ cargo run -p xtask -- tokenbridge-encrypted-index
-$ cargo run -p xtask -- generate-negative-corpus --verify --seed 0
-```
+Run `cargo run -p xtask -- <command>` from the workspace root. Commands are listed below.
 
 Clap converts enum variants to kebab-case command names.
 
@@ -41,9 +20,9 @@ that list.
 | Gate | Command | Behavior |
 |------|---------|----------|
 | `SymmetricPotemkin` | `symmetric-potemkin` | Checks that every named behavioral test in `SYMMETRIC_POTEMKIN_TESTS` exists, then runs each exact test. |
-| `ClassMapOverrideSafety` | `class-map-override-safety` | Checks that every named behavioral test in `CLASS_MAP_OVERRIDE_SAFETY_TESTS` exists, then runs each exact test. Activated in v0.4.4. |
+| `ClassMapOverrideSafety` | `class-map-override-safety` | Checks that every named behavioral test in `CLASS_MAP_OVERRIDE_SAFETY_TESTS` exists, then runs each exact test. |
 | `RecognizerCompositionValidator` | `recognizer-composition-validator` | Checks that every named behavioral test in `RECOGNIZER_COMPOSITION_VALIDATOR_TESTS` exists, then runs each exact test. |
-| `NoTenantKnowledge` | `no-tenant-knowledge` | Production-code lint scanner that rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. `// allow(tenant-fixture)` markers hard-fail in production scope. Added in v0.4.3. |
+| `NoTenantKnowledge` | `no-tenant-knowledge` | Production-code lint scanner that rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. `// allow(tenant-fixture)` markers hard-fail in production scope. |
 | `BundleTokenizationDrift` | `bundle-tokenization-drift` | Runs bundled rulepacks through the real CLI clean/audit path and compares metadata-only snapshots. `--verify-ack` requires source/test and changelog acknowledgement for drift. |
 | `FamilyPolicyTableCoherence` | `family-policy-table-coherence` | Parses embedded rulepacks and checks collision-family declarations compile into the expected family precedence table, including IBAN-over-PAN and same-variant phone non-arbitration. |
 | `LocaleCueBundleCoherence` | `locale-cue-bundle-coherence` | Checks every mandatory-anchor declaration in core bundles has a matching cue key in embedded locale bundles. |
@@ -52,7 +31,7 @@ that list.
 | `CargoMetadataAuditIsolation` | `cargo-metadata-audit-isolation` | Parses `cargo metadata` and rejects normal dependency paths from non-audit-responsible packages to `gaze-audit` across default, no-default-features, and safety-net graphs. |
 | `ReadmeVersionCheck` | `readme-version-check` | Parses workspace package versions via `cargo metadata`, scans published crate READMEs for pinned Cargo/container versions, and fails when README pins drift from `Cargo.toml`. |
 | `DylintGate` | `dylint-gate` | Canonical audit-sink protected-path isolation gate. Verifies the Dylint UI fixture corpus and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. |
-| `SafetyNetSanity` | `safety-net-sanity` | Runs mock-driven safety-net behavioral suites across core, recognizers, CLI, and audit. Nightly/live OPF corpus hardening is deferred to v0.6.2+ follow-up. |
+| `SafetyNetSanity` | `safety-net-sanity` | Runs mock-driven safety-net behavioral suites across core, recognizers, CLI, and audit. |
 | `TokenbridgeNoRawIndex` | `tokenbridge-no-raw-index` | Pins the TokenBridge library invariant for emitted spans: synthetic fixture PII cannot appear raw or as current-session tokens in stored or searched snippets. Its fixture supplies an email detector; CLI core detector coverage belongs to `index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw` in `crates/gaze-cli/tests/index_cli.rs`. |
 | `TokenbridgeEncryptedIndex` | `tokenbridge-encrypted-index` | Runs the TokenBridge persistent-index behavioral test that saves a synthetic owner-side index, asserts the file is AEAD-sealed, and fails if raw PII or projection key material appears on disk. |
 
@@ -87,18 +66,7 @@ positive. The full annotation and stability contract is documented in
 
 ## CI integration
 
-CI can call gates directly:
-
-```console
-$ cargo run -p xtask -- symmetric-potemkin
-```
-
-Each gate exits non-zero when:
-
-- a protected test cannot be listed
-- a protected test has been renamed or removed
-- a protected test fails
-- the underlying `cargo test` command cannot be started
+CI calls the same commands. Behavioral gates fail when a protected test is missing, renamed, fails, or cannot start.
 
 ## Adding a gate
 

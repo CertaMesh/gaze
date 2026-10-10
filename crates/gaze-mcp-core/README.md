@@ -4,32 +4,13 @@
 [![docs.rs](https://docs.rs/gaze-mcp-core/badge.svg)](https://docs.rs/gaze-mcp-core)
 [![License](https://img.shields.io/crates/l/gaze-mcp-core.svg)](https://github.com/CertaMesh/gaze#license)
 
-> **Adding `gaze-mcp-core` (v0.16.0) to your crate enables:** the transport-free
-> MCP chokepoint runtime — `Tool` trait, `PiiEnvelope::dispatch`,
-> `ToolRegistry`, `ManifestStore` / `AuthHook` / `SessionIdPolicy` plug-in
-> points, and the optional `core-tools` agent-tier tool set.
-> **Does NOT bring in:** an MCP transport. No stdio, no streamable HTTP, no
-> JSON-RPC framing — this crate is transport-free by design.
-> **For the rmcp transport sink, also add `gaze-mcp-rmcp`** (or implement
-> `Frontend` yourself; see below).
-
-`gaze-mcp-core` is the transport-free runtime for Gaze's MCP chokepoint. It
-exposes a `Tool` trait, a sealed `ToolCtx`, a `ToolRegistry`, the
-`PiiEnvelope::dispatch` chokepoint, the `Frontend` / `DispatchHost`
-plug-in points, the `ManifestStore` contract, and the `AuthHook` +
-`SessionIdPolicy` policy surfaces. Transports (rmcp stdio/http, custom
-JSON-RPC, …) live in sink crates that depend on this one.
+Transport-free MCP runtime: `Tool`, sealed `ToolCtx`, `ToolRegistry`, `PiiEnvelope::dispatch`, `ManifestStore`, `AuthHook`, and `SessionIdPolicy`. Use `gaze-mcp-rmcp` for stdio/HTTP or implement `Frontend` / `DispatchHost`.
 
 ## Scope
 
-`gaze-mcp` enforces the chokepoint on the **data-source ↔ model** path. Any data flowing **from a source through an agent-tier MCP tool to the model** passes through `PiiEnvelope::dispatch` and is protected before the model sees it. Authorized operator-tier tools can explicitly bypass response protection for restore/export semantics; their raw responses must stay on the operator surface.
+Agent-tier source data passes through `PiiEnvelope::dispatch` before reaching the model. Authorized operator tools may bypass response protection for restore/export; raw results must stay on the operator surface.
 
-`gaze-mcp` **does not** cover the **user ↔ model** path. Pasted text, uploaded files, and screenshots in the agent host's chat UI reach the model unredacted. For that axis, use `gaze-proxy`, the v0.8+ multi-vendor reverse proxy supporting OpenAI, Anthropic, and Gemini SDK base-URL swaps.
-
-The architectural rationale, per-axis tradeoffs, and the data-source vs
-user-input scope split are summarized in the boundary statement above and
-captured in the v0.7.0 CHANGELOG entry. The transport-free runtime ships
-alongside the `gaze-mcp-rmcp` sink as of v0.7.0.
+Chat pastes, uploads, and screenshots bypass MCP. Use `gaze-proxy` for the user-to-model path (OpenAI, Anthropic, Gemini).
 
 ## Adopter quickstart
 
@@ -121,55 +102,22 @@ adopter's tokio runtime.
 
 ## What gets enforced
 
-`PiiEnvelope::dispatch` runs every tool call through the same sealed
-ordering — **redact args → manifest.begin → invoke → redact response →
-manifest.finish (or fail) → return**. The ordering is hard-coded inside
-the dispatcher; tools never see a path around it because:
+```mermaid
+flowchart LR
+    Args[Protect arguments] --> Begin[manifest.begin]
+    Begin --> Invoke[Invoke tool]
+    Invoke --> Response[Protect response]
+    Response --> Finish[manifest.finish or fail]
+    Finish --> Return[Return]
+```
 
-1. `ToolCtx::new` is `pub(crate)`. The dispatcher is the only construction
-   site for tool contexts. Verified by the trybuild compile-fail fixtures
-   in `tests/ui/`.
-2. `ToolCtx`'s fields are `pub(crate)` plus `#[non_exhaustive]`. External
-   crates cannot construct one via struct literal or `..Default::default()`
-   either.
-3. The context's lifetime `'a` binds it to the dispatcher's stack frame —
-   tools can't stash a reference past the call.
-4. `ToolRegistry::register` only accepts types that implement the
-   `Tool` trait. There is no `register_raw(Box<dyn Fn(JsonValue) -> JsonValue>)`
-   escape hatch.
+Only the dispatcher constructs `ToolCtx`: its constructor and fields are `pub(crate)`, its shape is `#[non_exhaustive]`, and its lifetime binds it to the call. The registry accepts only `Tool` implementations. Compile-fail fixtures in `tests/ui/` and `tests/chokepoint_ordering.rs` check these boundaries.
 
-The combination is the type-level chokepoint guarantee adopters depend on.
-The behavioral cousins — that the manifest store actually receives
-`begin_call` before `invoke`, and `finish_call` / `fail_call` before the
-response escapes — are checked in `tests/chokepoint_ordering.rs`.
-
-Snapshot refs use `sha256(audit_session_id || 0x00 || call_id || 0x00 ||
-payload_bytes)`. This is an integrity marker for audit lookup, not a secret
-commitment scheme. Threat model: anyone who can read audit rows and guess the
-exact response payload can verify that guess offline. Current v0.7.x stable accepts
-that risk because audit readers are already trusted with manifest metadata and
-operator-tier deployments must protect snapshot storage. If that trust boundary
-changes, replace the hash input with keyed HMAC material owned by the
-`ManifestStore` implementation.
+Snapshot refs use `sha256(audit_session_id || 0x00 || call_id || 0x00 || payload_bytes)`. Audit readers can verify guessed payloads offline. Protect snapshot storage; if audit readers become less trusted, use keyed HMAC owned by `ManifestStore`.
 
 ## Session ownership boundary
 
-> ⚠️ **One `gaze::Session` per authorization boundary.** A `Session`
-> tracks the entire token↔raw map for its lifetime in a single
-> `DashMap` (`crates/gaze/src/session.rs:299-304`). The operator-tier
-> tool `export_session_tokens` (Tool 3) dumps that **entire** map in
-> the clear — every token from every conversation that ever shared the
-> Session is exposed in one call. There is no per-call provenance
-> filter on `Session::tokens()` in v0.7.
->
-> If your host process serves multiple agents or users concurrently,
-> your code MUST construct a fresh `Session` per authorization domain
-> and supply it to `PiiEnvelope::new`. Sharing a single `Session`
-> across conversations is a critical leak: agent B's operator-tier
-> principal calling `export_session_tokens` reads agent A's PII
-> inventory.
->
-> Type-level enforcement of this boundary is deferred to v0.8.
+Use one `gaze::Session` per authorization domain. `export_session_tokens` exposes the session’s entire token/raw map without per-call filtering. Sharing a session across users or agents lets one authorized operator read another’s PII. Hosts must create and pass separate sessions to `PiiEnvelope::new`.
 
 ## Operator-tier tools and audit storage
 
@@ -211,7 +159,7 @@ backends run on every complete final string leaf, even when primary detection
 emits nothing or the input consists entirely of existing tokens. Observer
 skip optimizations cannot disable this boundary check. Invalid spans, backend
 failures, and residual suspects outside verified token coverage reject the
-operation. Zero installed safety nets is a **primary-only floor**, not a
+operation. Zero installed safety nets is a primary-only floor, not a
 claim that all PII was detected. Global residual policies are unchanged.
 
 Custom producers must declare their JSON carriers at trusted registration:
@@ -330,24 +278,13 @@ exposing restore.
 The exclusion is a `#[cfg(feature = "operator-tier")]` gate on each operator
 module, so rustc keeps the surface out of an agent-tier build entirely. That it
 stays that way is verified by the trybuild compile-fail fixtures in
-`tests/ui/tier/` — one per gated surface, each compiled as an external crate
-against an agent-tier feature graph and required to fail resolution — driven by
+`tests/ui/tier/`, one per gated surface, each compiled as an external crate
+against an agent-tier feature graph and required to fail resolution, driven by
 the `mcp-tier-isolation` xtask gate. `scripts/gate/mcp-tier-isolation-mutation-probe.sh`
 re-proves that the gate goes red when a gate is removed.
 
 ## Related crates and documents
 
-- `gaze-mcp-rmcp` ships alongside this crate as the reference rmcp
-  transport sink.
-- `gaze-proxy` is the user-input axis sibling: a multi-vendor LLM API
-  reverse proxy for OpenAI, Anthropic, and Gemini SDK base-URL swaps. See the
-  `## Scope` boundary statement at the top of this README.
+Transport: `gaze-mcp-rmcp`. User-input protection: `gaze-proxy`.
 
-See [`docs/explanation/mcp/mcp-runtime.md`](../../docs/explanation/mcp/mcp-runtime.md)
-for the full chokepoint contract + audit-row schema + threat model.
-
-The `ToolCtx` audit-correlation surface (`call_id`, `tool_name`,
-`principal_id`, `audit_session_id`), the `ManifestStore` lifecycle methods
-(`begin_call` / `finish_call` / `fail_call`), the closed `FailureReason`
-set, and the `AuthHook` decision audit are cataloged in
-[`docs/reference/metrics.md`](../../docs/reference/metrics.md#7-mcp-chokepoint-observability-gaze-mcp-core).
+Full dispatch, audit, and threat contracts: [MCP runtime](../../docs/explanation/mcp/mcp-runtime.md). Correlation fields, manifest lifecycle, failure variants, and authorization audit: [Metrics](../../docs/reference/metrics.md#7-mcp-chokepoint-observability-gaze-mcp-core).

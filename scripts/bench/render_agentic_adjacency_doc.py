@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs/reference/benchmarks/README.md"
 # Pin the measured version so a later generator cannot relabel these rows.
 # Earlier v4, v8, v9, v10 and v11 ledgers remain committed as historical measurements.
-GENERATOR_VERSION = 13
+GENERATOR_VERSION = 15
 HISTORY = ROOT / f"docs/reference/benchmarks/agentic-adjacency-v{GENERATOR_VERSION}-history.json"
 CORPUS_SHA256, CONTRACT_SHA256 = agentic_layers.corpus_identity(ROOT, GENERATOR_VERSION)
 
@@ -225,7 +225,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--record", type=Path, action="append", default=[])
     parser.add_argument('--generator-version', type=int, default=GENERATOR_VERSION,
-                        choices=sorted({12, GENERATOR_VERSION, agentic_layers.GENERATOR_VERSION}),
+                        choices=sorted({12, 13, 14, GENERATOR_VERSION, agentic_layers.GENERATOR_VERSION}),
                         help='keep measured history frozen by default; select the current corpus for new measurements')
     args = parser.parse_args()
     try:
