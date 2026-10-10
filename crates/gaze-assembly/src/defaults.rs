@@ -55,6 +55,10 @@ impl CorePipelineConfig {
             .collect()
     }
 
+    /// Resolve bundled and path rulepacks with the policy input loader.
+    ///
+    /// An unreadable dictionary `terms_file` fails with
+    /// [`BuildError::Policy`] wrapping [`gaze::PolicyError::BadDictionary`].
     pub fn build(self) -> Result<CorePipeline, BuildError> {
         let mut policy = default_policy(self.locale.clone(), Vec::new());
         policy.rulepacks.bundled = self

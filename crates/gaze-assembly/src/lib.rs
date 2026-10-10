@@ -15,14 +15,14 @@
 //! ```
 //!
 //! ```rust,no_run
-//! use gaze::{CleanDocument, RawDocument, Scope, Session};
+//! use gaze::{CleanDocument, Scope, Session};
 //! use gaze_assembly::CorePipelineConfig;
 //!
 //! let core = CorePipelineConfig::new().build()?;
 //! let session = Session::new(Scope::Conversation("s1".into()))?;
-//! let CleanDocument::Text(_clean) = core.pipeline().redact(
+//! let CleanDocument::Text(_clean) = core.pseudonymize_text(
 //!     &session,
-//!     RawDocument::Text("alice@example.invalid".into()), // fixture-cited(crates/gaze-assembly/src/lib.rs:tests::core_pipeline_config_tokenizes_synthetic_email)
+//!     "alice@example.invalid", // fixture-cited(crates/gaze-assembly/src/lib.rs:tests::core_pipeline_config_tokenizes_synthetic_email)
 //! )? else {
 //!     panic!("text variant expected");
 //! };
@@ -56,7 +56,8 @@ pub use defaults::CorePipeline;
 ///
 /// Activates the `core` rulepack and registers locale-aware recognizers. Use this
 /// for the common case; drop to [`gaze::Pipeline::builder`] only when you need a
-/// custom recognizer topology or non-bundled rulepack.
+/// custom recognizer topology. Path rulepacks are supported by
+/// [`CorePipelineConfig::with_rulepack_path`].
 pub use defaults::CorePipelineConfig;
 pub use error::BuildError;
 pub use locale::locale_gated_activation_locales;
