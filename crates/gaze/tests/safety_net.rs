@@ -2483,3 +2483,13 @@ fn nym_suspect_inside_its_own_token_text_is_dropped_under_every_resolve_fallback
         }
     }
 }
+
+// The harness=false timing target is not executed by cargo test. Share its
+// semantic proof with this CI-rostered integration binary instead.
+#[path = "../benches/support/tier4_recall.rs"]
+mod tier4_recall;
+
+#[test]
+fn tier4_gating_preserves_required_positive() {
+    tier4_recall::assert_required_positive();
+}
