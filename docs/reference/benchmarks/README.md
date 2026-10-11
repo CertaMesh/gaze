@@ -2106,33 +2106,39 @@ correction, not a runtime precision gain. Fresh tag-bound v18 measurements and
 [canonical v1/v2/v4 replay](personal-id-checksum-v18-contract-replay.json) underpin
 the table below. [Ownership rationale](personal-id-checksum-labels.md).
 
+V0.14.0 Kiji also shows a deterministic producer-identity effect: moving D to A
+changes the document ID and its derived session-token prefix. Eight NIR cells
+add two false-positive bytes and two restore failures beyond the layer migration.
+The [controlled identity audit](personal-id-checksum-v18-kiji-identity-diff.json)
+reproduces all eight old/new traces twice with text and locales held fixed.
+
 <!-- BEGIN GENERATED: agentic-adjacency -->
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.16.0` `policy-file` | 34,829 / 96,645 | 2,032 | 7,244 | 43,795 / 51,936 | 503 |
-| `v0.15.1` `policy-file` | 51,112 / 96,645 | 2,889 | 8,332 | 44,274 / 51,936 | 479 |
-| `v0.15.0` `policy-file` | 51,285 / 96,645 | 2,889 | 8,332 | 44,274 / 51,936 | 479 |
-| `v0.14.0` `full-stack-kiji-resolve` | 61,204 / 96,645 | 10,714 | 10,697 | 42,208 / 51,936 | 943 |
-| `v0.14.0` `pass2-ner` | 63,744 / 96,645 | 2,282 | 6,133 | 44,830 / 51,936 | 216 |
+| `v0.16.0` `policy-file` | 35,639 / 97,455 | 2,032 | 7,244 | 43,795 / 51,936 | 503 |
+| `v0.15.1` `policy-file` | 51,922 / 97,455 | 2,889 | 8,332 | 44,274 / 51,936 | 479 |
+| `v0.15.0` `policy-file` | 52,095 / 97,455 | 2,889 | 8,332 | 44,274 / 51,936 | 479 |
+| `v0.14.0` `full-stack-kiji-resolve` | 62,014 / 97,455 | 10,964 | 10,449 | 42,208 / 51,936 | 943 |
+| `v0.14.0` `pass2-ner` | 64,554 / 97,455 | 2,282 | 6,133 | 44,830 / 51,936 | 216 |
 
 | Release and arm | Refused A / D / R | Leaked on all processed A / D / R B |
 | --- | ---: | ---: |
-| `v0.16.0` `policy-file` | 0 / 0 / 0 | 34,829 / 0 / 43,795 |
-| `v0.15.1` `policy-file` | 0 / 0 / 0 | 51,112 / 0 / 44,274 |
-| `v0.15.0` `policy-file` | 0 / 0 / 0 | 51,285 / 0 / 44,274 |
-| `v0.14.0` `full-stack-kiji-resolve` | 0 / 0 / 0 | 61,204 / 0 / 42,208 |
-| `v0.14.0` `pass2-ner` | 0 / 0 / 0 | 63,744 / 0 / 44,830 |
+| `v0.16.0` `policy-file` | 0 / 0 / 0 | 35,639 / 0 / 43,795 |
+| `v0.15.1` `policy-file` | 0 / 0 / 0 | 51,922 / 0 / 44,274 |
+| `v0.15.0` `policy-file` | 0 / 0 / 0 | 52,095 / 0 / 44,274 |
+| `v0.14.0` `full-stack-kiji-resolve` | 0 / 0 / 0 | 62,014 / 0 / 42,208 |
+| `v0.14.0` `pass2-ner` | 0 / 0 / 0 | 64,554 / 0 / 44,830 |
 
 | Release and arm | Exact restores A / D / R | Valid manifests A / D / R | Restore failures A / D / R | Invalid manifests A / D / R |
 | --- | ---: | ---: | ---: | ---: |
-| `v0.16.0` `policy-file` | 4,958 / 3,374 / 1,390 | 4,958 / 3,374 / 1,390 | 0 / 0 / 0 | 0 / 0 / 0 |
-| `v0.15.1` `policy-file` | 4,949 / 3,374 / 1,390 | 4,949 / 3,374 / 1,390 | 9 / 0 / 0 | 9 / 0 / 0 |
-| `v0.15.0` `policy-file` | 4,949 / 3,374 / 1,390 | 4,949 / 3,374 / 1,390 | 9 / 0 / 0 | 9 / 0 / 0 |
-| `v0.14.0` `full-stack-kiji-resolve` | 4,890 / 3,359 / 1,353 | 4,958 / 3,374 / 1,390 | 68 / 15 / 37 | 0 / 0 / 0 |
-| `v0.14.0` `pass2-ner` | 4,958 / 3,374 / 1,390 | 4,958 / 3,374 / 1,390 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.16.0` `policy-file` | 5,018 / 3,314 / 1,390 | 5,018 / 3,314 / 1,390 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.15.1` `policy-file` | 5,009 / 3,314 / 1,390 | 5,009 / 3,314 / 1,390 | 9 / 0 / 0 | 9 / 0 / 0 |
+| `v0.15.0` `policy-file` | 5,009 / 3,314 / 1,390 | 5,009 / 3,314 / 1,390 | 9 / 0 / 0 | 9 / 0 / 0 |
+| `v0.14.0` `full-stack-kiji-resolve` | 4,937 / 3,310 / 1,353 | 5,018 / 3,314 / 1,390 | 81 / 4 / 37 | 0 / 0 / 0 |
+| `v0.14.0` `pass2-ner` | 5,018 / 3,314 / 1,390 | 5,018 / 3,314 / 1,390 | 0 / 0 / 0 | 0 / 0 / 0 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v17-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v17, test corpus `8c62d49926fa…`. Each release uses its own setup policy; v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`; v0.14.0 retains the v0.15.x model settings.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v18-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v18, test corpus `56c7bbd0d9a0…`. Each release uses its own setup policy; v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`; v0.14.0 retains the v0.15.x model settings.
 
 <!-- END GENERATED: agentic-adjacency -->
 
@@ -2143,15 +2149,16 @@ files match its tag. Its `clean_for_bench` was rebuilt with Rust 1.96.0
 Pro, Apple M5 Max (18 cores, 64 GB, macOS 26.5). Each v0.15.x and v0.16.0 release uses
 its own fresh `gaze setup --non-interactive --force` policy; v0.15.x has digest
 `f909a23a…` and v0.16.0 `65cd6aa5…`. The v0.14.0 arms use the v0.15.x policy's common model settings;
-`full-stack-kiji-resolve` also requires its Kiji model directory environment
-variable. Both v0.14.0 arms retain tokenize-only manifest semantics and
+`full-stack-kiji-resolve` is built with its shipped `safety-net-kiji` feature and
+requires its Kiji model directory environment variable. Both v0.14.0 arms retain tokenize-only manifest semantics and
 composite-source splitting. The ledger records binary revisions, digests
 and these legacy semantics. These are byte measurements; concurrent benchmark
 slots provide no latency evidence. Earlier machine and policy bindings stay
 in their historical ledgers.
 
-All historical arms completed without refusals. Their restoration and
-manifest limits are recorded separately from byte recall and precision:
+The following frozen [v16 ledger](agentic-adjacency-v16-history.json) counts
+retain earlier restoration and manifest limits. Current v18 counts are in the
+generated tables above; both measurements completed without refusals:
 
 | Release / arm | Non-exact restores A / D / R | Invalid manifests A / D / R |
 | --- | ---: | ---: |
