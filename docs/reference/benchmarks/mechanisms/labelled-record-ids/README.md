@@ -23,22 +23,12 @@ separate policy ablation. They contain every core recognizer except the three ID
 rules and those three rules unchanged, respectively. That policy ablation is not
 measured here and receives no gain credit.
 
-Known limitations: generator v16 does not characterize short unlabelled numeric
-repeats, typographic value quotes or rejected placeholders followed by valid ID
-cues. Independent positive, repeat and benign counterweight cells are deferred.
+Known limitations: generator v17 does not characterize short unlabelled numeric repeats, typographic value quotes, malformed quoted scalars or CSV header linkage. Unquoted alphabetic-only values are deliberately rejected as placeholders. Unterminated ASCII quotes conservatively protect the remainder, possibly including following public text; that malformed-input behavior is covered by runtime fixtures, not a measured claim.
 
-Both measured source comparisons pass v1, v2 and v4 on generator v16. The
-full-policy pair removes 19,030 gated leaked bytes and adds 14 net false-positive
-bytes; the rules-only pair removes 19,120 and adds 16, respectively. No layer's
-leaked bytes or refusals rise, and exact restores and valid manifests remain
-complete. Restore failures and invalid manifests remain zero. Layer D
-false-positive bytes are unchanged in both pairs.
+All six fresh source gates pass v1, v2 and v4 on generator v17. Full policy removes 70,650 gated leaked bytes with +204 net false-positive bytes. Rules only removes 74,783 gated leaked bytes with +272 net false-positive bytes.
+No layer's gated or headline leaks or refusals rise. Restore failures and invalid manifests remain zero; every attempted document restores exactly and has a valid manifest. Layer D strict counterweights pass.
 
-The measured base is `7464d8158845bed59755176928c475434270f68d`; the candidate is
-`d9e705152d87277c6ff5298e3bb992d964a1f445`. Generator v16 corrects the earlier
-BSN benign twins to use non-person labels. The customer-number cue remains
-unchanged: a bare customer number is personal data. The failed v15 measurements
-remain available in this directory's Git history.
+The measured base is `0fcfef14f9846ab1e85c723217fd67a4cae4fc86`; candidate source is `ebce7063b2667119e923c5969aae6ee6b4210567`. Generator v17 supplies independent ownership positives, repeats and benign controls, including grouped Unicode values, raw JSON Unicode escapes and newline-adjacent fields. Each source tree was clean at measurement. Earlier failed v15 and passing v16 results remain in Git history and receive no credit for this repair.
 
 Scorecards use deterministic gzip archives. Regenerate an ordinary JSON
 scorecard from its bound observations with `scripts/bench/rescore.py`, or unpack

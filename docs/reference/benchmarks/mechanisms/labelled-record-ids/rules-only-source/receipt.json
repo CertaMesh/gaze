@@ -9,30 +9,30 @@
   "nym_enabled": false,
   "arms": {
     "base": {
-      "revision": "7464d8158845bed59755176928c475434270f68d",
-      "binary_sha256": "bb71447be1ab629d00214f29963e62342f43884a14c46d9ca861834884278e53",
+      "revision": "0fcfef14f9846ab1e85c723217fd67a4cae4fc86",
+      "binary_sha256": "a62eca126ab894223228c921b5e9a7d6dfa0e24e1ac622345cd46cf07ee24ef4",
       "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
       "observations": "observations-base.jsonl.gz",
-      "observations_sha256": "429029f0f2bfbfd1cd92591bbc8e15fd50a4fe8a8a39b8ce05ed25f7cb42e075",
+      "observations_sha256": "23d37cc79eb13a9fca100c6e68779d8808eab8a3b0689ce0076f5cd54a6defa9",
       "scorecards": {
         "2": "scorecard-base-v2.json.gz",
         "1": "scorecard-base-v1.json.gz",
         "4": "scorecard-base-v4.json.gz"
       },
-      "crates_tree": "9e06fa7c1247a9fb83514d049dafa7aba5274a24"
+      "crates_tree": "6f7104cb68fca556635811951910b7a4cda35260"
     },
     "candidate": {
-      "revision": "d9e705152d87277c6ff5298e3bb992d964a1f445",
-      "binary_sha256": "5a64e5c662a250979d463289ec701d9486cdedf095662f7f01e84fc58df93e1b",
+      "revision": "ebce7063b2667119e923c5969aae6ee6b4210567",
+      "binary_sha256": "0cc16223d6076f1247dbd44fe352e9fc955414d0f38e2cecd280ec171d21fa4a",
       "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
       "observations": "observations-candidate.jsonl.gz",
-      "observations_sha256": "0949db532ef60791bb35f429ba309519b35220b9ffd18301f880c1fef65f8a9c",
+      "observations_sha256": "1e5dcfb7d7756f4e0c8befda1d80eefaafb50b044a1006c05a170864da8447a4",
       "scorecards": {
         "2": "scorecard-candidate-v2.json.gz",
         "1": "scorecard-candidate-v1.json.gz",
         "4": "scorecard-candidate-v4.json.gz"
       },
-      "crates_tree": "034f2e03487378867ce16fd358f29592d6fce241"
+      "crates_tree": "0538e701e0ef555dbeb36e1446def92f09fdd0e5"
     }
   },
   "gates": [
@@ -40,9 +40,14 @@
     "gate-v1.json",
     "gate-v4.json"
   ],
-  "verdicts": {
-    "2": "pass",
-    "1": "pass",
-    "4": "pass"
+  "policy_derivation": {
+    "derived_from_revision": "ebce7063b2667119e923c5969aae6ee6b4210567",
+    "setup_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+    "rules_policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
+    "removed_sections": [
+      "ner",
+      "safety_net"
+    ],
+    "remaining_policy_unchanged": true
   }
 }
