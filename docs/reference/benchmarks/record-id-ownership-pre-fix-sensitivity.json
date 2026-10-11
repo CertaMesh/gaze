@@ -1,0 +1,1766 @@
+{
+  "schema_version": 1,
+  "purpose": "Independent generated-cell sensitivity, not a benchmark gain claim",
+  "generator_version": 17,
+  "generator_revision": "c6165ed73306b26627e9d9b498aa4e0203260303",
+  "detector_revision": "d9e705152d87277c6ff5298e3bb992d964a1f445",
+  "binary_sha256": "5a64e5c662a250979d463289ec701d9486cdedf095662f7f01e84fc58df93e1b",
+  "config": "rule-floor-core",
+  "cases": [
+    {
+      "record": {
+        "id": "agentic-test-A-customer_id-000-grouped_space_en",
+        "partition": "test",
+        "layer": "A",
+        "family": "customer_id",
+        "surface": "recordids_ownership_grouped_space_en",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-customer_id-000",
+        "template": "recordids-ownership/customer_id/grouped_space_en/test",
+        "language": "en",
+        "region": "US",
+        "text": "customer number: TOPAZ 838815Z; status=active",
+        "gold": [
+          {
+            "start": 17,
+            "end": 30,
+            "label": "CUSTOMER_ID",
+            "value": "TOPAZ 838815Z"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 13,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 13,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "manifest_spans": [],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": null,
+          "recognizer_id": "customer_id.labelled",
+          "class": "custom:customer_id",
+          "raw_start": 17,
+          "raw_end": 30,
+          "outcome": "vetoed",
+          "selection_start": null,
+          "selection_end": null,
+          "settlement": null,
+          "role": null,
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": "regex_guard_rejected"
+        }
+      ],
+      "final_protection_trace": []
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-customer_id-000-quoted_unicode",
+        "partition": "test",
+        "layer": "A",
+        "family": "customer_id",
+        "surface": "recordids_ownership_quoted_unicode",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-customer_id-000",
+        "template": "recordids-ownership/customer_id/quoted_unicode/test",
+        "language": "en",
+        "region": "US",
+        "text": "{\"tool\":\"lookup\",\"arguments\":{\"customerId\":\"TOPAZ é838815\"}}",
+        "gold": [
+          {
+            "start": 44,
+            "end": 58,
+            "label": "CUSTOMER_ID",
+            "value": "TOPAZ é838815"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 14,
+        "predicted": 5,
+        "true_positive": 5,
+        "false_positive": 0,
+        "leaked": 9,
+        "precision": 1.0,
+        "recall": 0.35714285714285715,
+        "leak_rate": 0.6428571428571428,
+        "f1": 0.5263157894736842,
+        "f2": 0.40983606557377056,
+        "false_positive_rate": 0.0
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 44,
+          "raw_end": 49,
+          "clean_start": 44,
+          "clean_end": 75,
+          "class": "custom:customer_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "customer_id.labelled",
+          "class": "custom:customer_id",
+          "raw_start": 44,
+          "raw_end": 49,
+          "outcome": "selected",
+          "selection_start": 44,
+          "selection_end": 49,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 44,
+          "raw_end": 49,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 44,
+                "raw_end": 49,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-customer_id-000-quoted_words",
+        "partition": "test",
+        "layer": "A",
+        "family": "customer_id",
+        "surface": "recordids_ownership_quoted_words",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-customer_id-000",
+        "template": "recordids-ownership/customer_id/quoted_words/test",
+        "language": "en",
+        "region": "US",
+        "text": "{\"tool\":\"lookup\",\"arguments\":{\"customerId\":\"topaz mineral 838815\"}}",
+        "gold": [
+          {
+            "start": 44,
+            "end": 64,
+            "label": "CUSTOMER_ID",
+            "value": "topaz mineral 838815"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 20,
+        "predicted": 5,
+        "true_positive": 5,
+        "false_positive": 0,
+        "leaked": 15,
+        "precision": 1.0,
+        "recall": 0.25,
+        "leak_rate": 0.75,
+        "f1": 0.4,
+        "f2": 0.29411764705882354,
+        "false_positive_rate": 0.0
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 44,
+          "raw_end": 49,
+          "clean_start": 44,
+          "clean_end": 75,
+          "class": "custom:customer_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "customer_id.labelled",
+          "class": "custom:customer_id",
+          "raw_start": 44,
+          "raw_end": 49,
+          "outcome": "selected",
+          "selection_start": 44,
+          "selection_end": 49,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 44,
+          "raw_end": 49,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 44,
+                "raw_end": 49,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-customer_id-000-quoted_tab",
+        "partition": "test",
+        "layer": "A",
+        "family": "customer_id",
+        "surface": "recordids_ownership_quoted_tab",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-customer_id-000",
+        "template": "recordids-ownership/customer_id/quoted_tab/test",
+        "language": "en",
+        "region": "US",
+        "text": "{\"tool\":\"lookup\",\"arguments\":{\"customerId\":\"TOPAZ\\t838815\"}}",
+        "gold": [
+          {
+            "start": 44,
+            "end": 57,
+            "label": "CUSTOMER_ID",
+            "value": "TOPAZ\\t838815"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 13,
+        "predicted": 5,
+        "true_positive": 5,
+        "false_positive": 0,
+        "leaked": 8,
+        "precision": 1.0,
+        "recall": 0.38461538461538464,
+        "leak_rate": 0.6153846153846154,
+        "f1": 0.5555555555555556,
+        "f2": 0.43859649122807015,
+        "false_positive_rate": 0.0
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 44,
+          "raw_end": 49,
+          "clean_start": 44,
+          "clean_end": 75,
+          "class": "custom:customer_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "customer_id.labelled",
+          "class": "custom:customer_id",
+          "raw_start": 44,
+          "raw_end": 49,
+          "outcome": "selected",
+          "selection_start": 44,
+          "selection_end": 49,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 44,
+          "raw_end": 49,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 44,
+                "raw_end": 49,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-R-customer_id-001-adjacent_personal_same_space_repeat",
+        "partition": "test",
+        "layer": "R",
+        "family": "customer_id",
+        "surface": "recordids_ownership_adjacent_personal_same_space_repeat",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-customer_id-001",
+        "template": "recordids-ownership/customer_id/adjacent_personal_same_space_repeat/test",
+        "language": "en",
+        "region": "US",
+        "text": "customer number: TOPAZ896269 CUSTOMERID=TOPAZ825722; next lookup TOPAZ825722",
+        "gold": [
+          {
+            "start": 17,
+            "end": 28,
+            "label": "CUSTOMER_ID",
+            "value": "TOPAZ896269"
+          },
+          {
+            "start": 40,
+            "end": 51,
+            "label": "CUSTOMER_ID",
+            "value": "TOPAZ825722"
+          },
+          {
+            "start": 65,
+            "end": 76,
+            "label": "CUSTOMER_ID",
+            "value": "TOPAZ825722"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 33,
+        "predicted": 34,
+        "true_positive": 22,
+        "false_positive": 12,
+        "leaked": 11,
+        "precision": 0.6470588235294118,
+        "recall": 0.6666666666666666,
+        "leak_rate": 0.33333333333333337,
+        "f1": 0.6567164179104478,
+        "f2": 0.6626506024096386,
+        "false_positive_rate": 0.27906976744186046
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 17,
+          "raw_end": 51,
+          "clean_start": 17,
+          "clean_end": 48,
+          "class": "custom:customer_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "customer_id.labelled",
+          "class": "custom:customer_id",
+          "raw_start": 17,
+          "raw_end": 51,
+          "outcome": "selected",
+          "selection_start": 17,
+          "selection_end": 51,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 17,
+          "raw_end": 51,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 17,
+                "raw_end": 51,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-customer_id-000-adjacent_public_VERSION",
+        "partition": "test",
+        "layer": "A",
+        "family": "customer_id",
+        "surface": "recordids_ownership_adjacent_public_VERSION",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-customer_id-000",
+        "template": "recordids-ownership/customer_id/adjacent_public_VERSION/test",
+        "language": "en",
+        "region": "US",
+        "text": "customer number: TOPAZ838815 VERSION=4.8.860434",
+        "gold": [
+          {
+            "start": 17,
+            "end": 28,
+            "label": "CUSTOMER_ID",
+            "value": "TOPAZ838815"
+          }
+        ],
+        "decoys": [
+          {
+            "start": 29,
+            "end": 36,
+            "kind": "field_label",
+            "value": "VERSION"
+          },
+          {
+            "start": 37,
+            "end": 47,
+            "kind": "public_reference",
+            "value": "4.8.860434"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 11,
+        "predicted": 30,
+        "true_positive": 11,
+        "false_positive": 19,
+        "leaked": 0,
+        "precision": 0.36666666666666664,
+        "recall": 1.0,
+        "leak_rate": 0.0,
+        "f1": 0.5365853658536585,
+        "f2": 0.7432432432432432,
+        "false_positive_rate": 0.5277777777777778
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 17,
+          "raw_end": 47,
+          "clean_start": 17,
+          "clean_end": 48,
+          "class": "custom:customer_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "customer_id.labelled",
+          "class": "custom:customer_id",
+          "raw_start": 17,
+          "raw_end": 47,
+          "outcome": "selected",
+          "selection_start": 17,
+          "selection_end": 47,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 17,
+          "raw_end": 47,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 17,
+                "raw_end": 47,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-employee_id-000-grouped_space_en",
+        "partition": "test",
+        "layer": "A",
+        "family": "employee_id",
+        "surface": "recordids_ownership_grouped_space_en",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-employee_id-000",
+        "template": "recordids-ownership/employee_id/grouped_space_en/test",
+        "language": "en",
+        "region": "US",
+        "text": "employee ID: MAROON 895826Z; status=active",
+        "gold": [
+          {
+            "start": 13,
+            "end": 27,
+            "label": "EMPLOYEE_ID",
+            "value": "MAROON 895826Z"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 14,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 14,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "manifest_spans": [],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": null,
+          "recognizer_id": "employee_id.labelled",
+          "class": "custom:employee_id",
+          "raw_start": 13,
+          "raw_end": 27,
+          "outcome": "vetoed",
+          "selection_start": null,
+          "selection_end": null,
+          "settlement": null,
+          "role": null,
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": "regex_guard_rejected"
+        }
+      ],
+      "final_protection_trace": []
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-employee_id-000-quoted_unicode",
+        "partition": "test",
+        "layer": "A",
+        "family": "employee_id",
+        "surface": "recordids_ownership_quoted_unicode",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-employee_id-000",
+        "template": "recordids-ownership/employee_id/quoted_unicode/test",
+        "language": "en",
+        "region": "US",
+        "text": "{\"tool\":\"lookup\",\"arguments\":{\"employeeId\":\"MAROON é895826\"}}",
+        "gold": [
+          {
+            "start": 44,
+            "end": 59,
+            "label": "EMPLOYEE_ID",
+            "value": "MAROON é895826"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 15,
+        "predicted": 6,
+        "true_positive": 6,
+        "false_positive": 0,
+        "leaked": 9,
+        "precision": 1.0,
+        "recall": 0.4,
+        "leak_rate": 0.6,
+        "f1": 0.5714285714285715,
+        "f2": 0.45454545454545453,
+        "false_positive_rate": 0.0
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 44,
+          "raw_end": 50,
+          "clean_start": 44,
+          "clean_end": 75,
+          "class": "custom:employee_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "employee_id.labelled",
+          "class": "custom:employee_id",
+          "raw_start": 44,
+          "raw_end": 50,
+          "outcome": "selected",
+          "selection_start": 44,
+          "selection_end": 50,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 44,
+          "raw_end": 50,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 44,
+                "raw_end": 50,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-employee_id-000-quoted_words",
+        "partition": "test",
+        "layer": "A",
+        "family": "employee_id",
+        "surface": "recordids_ownership_quoted_words",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-employee_id-000",
+        "template": "recordids-ownership/employee_id/quoted_words/test",
+        "language": "en",
+        "region": "US",
+        "text": "{\"tool\":\"lookup\",\"arguments\":{\"employeeId\":\"maroon mineral 895826\"}}",
+        "gold": [
+          {
+            "start": 44,
+            "end": 65,
+            "label": "EMPLOYEE_ID",
+            "value": "maroon mineral 895826"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 21,
+        "predicted": 6,
+        "true_positive": 6,
+        "false_positive": 0,
+        "leaked": 15,
+        "precision": 1.0,
+        "recall": 0.2857142857142857,
+        "leak_rate": 0.7142857142857143,
+        "f1": 0.4444444444444445,
+        "f2": 0.3333333333333333,
+        "false_positive_rate": 0.0
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 44,
+          "raw_end": 50,
+          "clean_start": 44,
+          "clean_end": 75,
+          "class": "custom:employee_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "employee_id.labelled",
+          "class": "custom:employee_id",
+          "raw_start": 44,
+          "raw_end": 50,
+          "outcome": "selected",
+          "selection_start": 44,
+          "selection_end": 50,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 44,
+          "raw_end": 50,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 44,
+                "raw_end": 50,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-employee_id-000-quoted_tab",
+        "partition": "test",
+        "layer": "A",
+        "family": "employee_id",
+        "surface": "recordids_ownership_quoted_tab",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-employee_id-000",
+        "template": "recordids-ownership/employee_id/quoted_tab/test",
+        "language": "en",
+        "region": "US",
+        "text": "{\"tool\":\"lookup\",\"arguments\":{\"employeeId\":\"MAROON\\t895826\"}}",
+        "gold": [
+          {
+            "start": 44,
+            "end": 58,
+            "label": "EMPLOYEE_ID",
+            "value": "MAROON\\t895826"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 14,
+        "predicted": 6,
+        "true_positive": 6,
+        "false_positive": 0,
+        "leaked": 8,
+        "precision": 1.0,
+        "recall": 0.42857142857142855,
+        "leak_rate": 0.5714285714285714,
+        "f1": 0.6,
+        "f2": 0.48387096774193544,
+        "false_positive_rate": 0.0
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 44,
+          "raw_end": 50,
+          "clean_start": 44,
+          "clean_end": 75,
+          "class": "custom:employee_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "employee_id.labelled",
+          "class": "custom:employee_id",
+          "raw_start": 44,
+          "raw_end": 50,
+          "outcome": "selected",
+          "selection_start": 44,
+          "selection_end": 50,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 44,
+          "raw_end": 50,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 44,
+                "raw_end": 50,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-R-employee_id-001-adjacent_personal_same_space_repeat",
+        "partition": "test",
+        "layer": "R",
+        "family": "employee_id",
+        "surface": "recordids_ownership_adjacent_personal_same_space_repeat",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-employee_id-001",
+        "template": "recordids-ownership/employee_id/adjacent_personal_same_space_repeat/test",
+        "language": "en",
+        "region": "US",
+        "text": "employee ID: OCHRE860411 EMPLOYEEID=TOPAZ839345; next lookup TOPAZ839345",
+        "gold": [
+          {
+            "start": 13,
+            "end": 24,
+            "label": "EMPLOYEE_ID",
+            "value": "OCHRE860411"
+          },
+          {
+            "start": 36,
+            "end": 47,
+            "label": "EMPLOYEE_ID",
+            "value": "TOPAZ839345"
+          },
+          {
+            "start": 61,
+            "end": 72,
+            "label": "EMPLOYEE_ID",
+            "value": "TOPAZ839345"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 33,
+        "predicted": 34,
+        "true_positive": 22,
+        "false_positive": 12,
+        "leaked": 11,
+        "precision": 0.6470588235294118,
+        "recall": 0.6666666666666666,
+        "leak_rate": 0.33333333333333337,
+        "f1": 0.6567164179104478,
+        "f2": 0.6626506024096386,
+        "false_positive_rate": 0.3076923076923077
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 13,
+          "raw_end": 47,
+          "clean_start": 13,
+          "clean_end": 44,
+          "class": "custom:employee_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "employee_id.labelled",
+          "class": "custom:employee_id",
+          "raw_start": 13,
+          "raw_end": 47,
+          "outcome": "selected",
+          "selection_start": 13,
+          "selection_end": 47,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 13,
+          "raw_end": 47,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 13,
+                "raw_end": 47,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-employee_id-000-adjacent_public_VERSION",
+        "partition": "test",
+        "layer": "A",
+        "family": "employee_id",
+        "surface": "recordids_ownership_adjacent_public_VERSION",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-employee_id-000",
+        "template": "recordids-ownership/employee_id/adjacent_public_VERSION/test",
+        "language": "en",
+        "region": "US",
+        "text": "employee ID: MAROON895826 VERSION=4.8.800270",
+        "gold": [
+          {
+            "start": 13,
+            "end": 25,
+            "label": "EMPLOYEE_ID",
+            "value": "MAROON895826"
+          }
+        ],
+        "decoys": [
+          {
+            "start": 26,
+            "end": 33,
+            "kind": "field_label",
+            "value": "VERSION"
+          },
+          {
+            "start": 34,
+            "end": 44,
+            "kind": "public_reference",
+            "value": "4.8.800270"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 12,
+        "predicted": 31,
+        "true_positive": 12,
+        "false_positive": 19,
+        "leaked": 0,
+        "precision": 0.3870967741935484,
+        "recall": 1.0,
+        "leak_rate": 0.0,
+        "f1": 0.5581395348837209,
+        "f2": 0.759493670886076,
+        "false_positive_rate": 0.59375
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 13,
+          "raw_end": 44,
+          "clean_start": 13,
+          "clean_end": 44,
+          "class": "custom:employee_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "employee_id.labelled",
+          "class": "custom:employee_id",
+          "raw_start": 13,
+          "raw_end": 44,
+          "outcome": "selected",
+          "selection_start": 13,
+          "selection_end": 44,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 13,
+          "raw_end": 44,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 13,
+                "raw_end": 44,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-record_id-000-grouped_space_en",
+        "partition": "test",
+        "layer": "A",
+        "family": "record_id",
+        "surface": "recordids_ownership_grouped_space_en",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-record_id-000",
+        "template": "recordids-ownership/record_id/grouped_space_en/test",
+        "language": "en",
+        "region": "US",
+        "text": "member ID: MAROON 846962Z; status=active",
+        "gold": [
+          {
+            "start": 11,
+            "end": 25,
+            "label": "RECORD_ID",
+            "value": "MAROON 846962Z"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 14,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 14,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "manifest_spans": [],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": null,
+          "recognizer_id": "record_id.labelled",
+          "class": "custom:record_id",
+          "raw_start": 11,
+          "raw_end": 25,
+          "outcome": "vetoed",
+          "selection_start": null,
+          "selection_end": null,
+          "settlement": null,
+          "role": null,
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": "regex_guard_rejected"
+        }
+      ],
+      "final_protection_trace": []
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-record_id-000-quoted_unicode",
+        "partition": "test",
+        "layer": "A",
+        "family": "record_id",
+        "surface": "recordids_ownership_quoted_unicode",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-record_id-000",
+        "template": "recordids-ownership/record_id/quoted_unicode/test",
+        "language": "en",
+        "region": "US",
+        "text": "{\"tool\":\"lookup\",\"arguments\":{\"member_id\":\"MAROON é846962\"}}",
+        "gold": [
+          {
+            "start": 43,
+            "end": 58,
+            "label": "RECORD_ID",
+            "value": "MAROON é846962"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 15,
+        "predicted": 6,
+        "true_positive": 6,
+        "false_positive": 0,
+        "leaked": 9,
+        "precision": 1.0,
+        "recall": 0.4,
+        "leak_rate": 0.6,
+        "f1": 0.5714285714285715,
+        "f2": 0.45454545454545453,
+        "false_positive_rate": 0.0
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 43,
+          "raw_end": 49,
+          "clean_start": 43,
+          "clean_end": 72,
+          "class": "custom:record_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "record_id.labelled",
+          "class": "custom:record_id",
+          "raw_start": 43,
+          "raw_end": 49,
+          "outcome": "selected",
+          "selection_start": 43,
+          "selection_end": 49,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 43,
+          "raw_end": 49,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 43,
+                "raw_end": 49,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-record_id-000-quoted_words",
+        "partition": "test",
+        "layer": "A",
+        "family": "record_id",
+        "surface": "recordids_ownership_quoted_words",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-record_id-000",
+        "template": "recordids-ownership/record_id/quoted_words/test",
+        "language": "en",
+        "region": "US",
+        "text": "{\"tool\":\"lookup\",\"arguments\":{\"member_id\":\"maroon mineral 846962\"}}",
+        "gold": [
+          {
+            "start": 43,
+            "end": 64,
+            "label": "RECORD_ID",
+            "value": "maroon mineral 846962"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 21,
+        "predicted": 6,
+        "true_positive": 6,
+        "false_positive": 0,
+        "leaked": 15,
+        "precision": 1.0,
+        "recall": 0.2857142857142857,
+        "leak_rate": 0.7142857142857143,
+        "f1": 0.4444444444444445,
+        "f2": 0.3333333333333333,
+        "false_positive_rate": 0.0
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 43,
+          "raw_end": 49,
+          "clean_start": 43,
+          "clean_end": 72,
+          "class": "custom:record_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "record_id.labelled",
+          "class": "custom:record_id",
+          "raw_start": 43,
+          "raw_end": 49,
+          "outcome": "selected",
+          "selection_start": 43,
+          "selection_end": 49,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 43,
+          "raw_end": 49,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 43,
+                "raw_end": 49,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-record_id-000-quoted_tab",
+        "partition": "test",
+        "layer": "A",
+        "family": "record_id",
+        "surface": "recordids_ownership_quoted_tab",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-record_id-000",
+        "template": "recordids-ownership/record_id/quoted_tab/test",
+        "language": "en",
+        "region": "US",
+        "text": "{\"tool\":\"lookup\",\"arguments\":{\"member_id\":\"MAROON\\t846962\"}}",
+        "gold": [
+          {
+            "start": 43,
+            "end": 57,
+            "label": "RECORD_ID",
+            "value": "MAROON\\t846962"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 14,
+        "predicted": 6,
+        "true_positive": 6,
+        "false_positive": 0,
+        "leaked": 8,
+        "precision": 1.0,
+        "recall": 0.42857142857142855,
+        "leak_rate": 0.5714285714285714,
+        "f1": 0.6,
+        "f2": 0.48387096774193544,
+        "false_positive_rate": 0.0
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 43,
+          "raw_end": 49,
+          "clean_start": 43,
+          "clean_end": 72,
+          "class": "custom:record_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "record_id.labelled",
+          "class": "custom:record_id",
+          "raw_start": 43,
+          "raw_end": 49,
+          "outcome": "selected",
+          "selection_start": 43,
+          "selection_end": 49,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 43,
+          "raw_end": 49,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 43,
+                "raw_end": 49,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-R-record_id-001-adjacent_personal_same_space_repeat",
+        "partition": "test",
+        "layer": "R",
+        "family": "record_id",
+        "surface": "recordids_ownership_adjacent_personal_same_space_repeat",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-record_id-001",
+        "template": "recordids-ownership/record_id/adjacent_personal_same_space_repeat/test",
+        "language": "en",
+        "region": "US",
+        "text": "member ID: TOPAZ884523 MEMBER_ID=OCHRE894838; next lookup OCHRE894838",
+        "gold": [
+          {
+            "start": 11,
+            "end": 22,
+            "label": "RECORD_ID",
+            "value": "TOPAZ884523"
+          },
+          {
+            "start": 33,
+            "end": 44,
+            "label": "RECORD_ID",
+            "value": "OCHRE894838"
+          },
+          {
+            "start": 58,
+            "end": 69,
+            "label": "RECORD_ID",
+            "value": "OCHRE894838"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 33,
+        "predicted": 33,
+        "true_positive": 22,
+        "false_positive": 11,
+        "leaked": 11,
+        "precision": 0.6666666666666666,
+        "recall": 0.6666666666666666,
+        "leak_rate": 0.33333333333333337,
+        "f1": 0.6666666666666666,
+        "f2": 0.6666666666666666,
+        "false_positive_rate": 0.3055555555555556
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 11,
+          "raw_end": 44,
+          "clean_start": 11,
+          "clean_end": 40,
+          "class": "custom:record_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "record_id.labelled",
+          "class": "custom:record_id",
+          "raw_start": 11,
+          "raw_end": 44,
+          "outcome": "selected",
+          "selection_start": 11,
+          "selection_end": 44,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 11,
+          "raw_end": 44,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 11,
+                "raw_end": 44,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "record": {
+        "id": "agentic-test-A-record_id-000-adjacent_public_VERSION",
+        "partition": "test",
+        "layer": "A",
+        "family": "record_id",
+        "surface": "recordids_ownership_adjacent_public_VERSION",
+        "validity": "unchecked",
+        "group": "test-recordids-ownership-record_id-000",
+        "template": "recordids-ownership/record_id/adjacent_public_VERSION/test",
+        "language": "en",
+        "region": "US",
+        "text": "member ID: MAROON846962 VERSION=4.8.815725",
+        "gold": [
+          {
+            "start": 11,
+            "end": 23,
+            "label": "RECORD_ID",
+            "value": "MAROON846962"
+          }
+        ],
+        "decoys": [
+          {
+            "start": 24,
+            "end": 31,
+            "kind": "field_label",
+            "value": "VERSION"
+          },
+          {
+            "start": 32,
+            "end": 42,
+            "kind": "public_reference",
+            "value": "4.8.815725"
+          }
+        ]
+      },
+      "utf8_bytes": {
+        "pii": 12,
+        "predicted": 31,
+        "true_positive": 12,
+        "false_positive": 19,
+        "leaked": 0,
+        "precision": 0.3870967741935484,
+        "recall": 1.0,
+        "leak_rate": 0.0,
+        "f1": 0.5581395348837209,
+        "f2": 0.759493670886076,
+        "false_positive_rate": 0.6333333333333333
+      },
+      "manifest_spans": [
+        {
+          "raw_start": 11,
+          "raw_end": 42,
+          "clean_start": 11,
+          "clean_end": 40,
+          "class": "custom:record_id"
+        }
+      ],
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "candidate_events": [
+        {
+          "original": 0,
+          "recognizer_id": "record_id.labelled",
+          "class": "custom:record_id",
+          "raw_start": 11,
+          "raw_end": 42,
+          "outcome": "selected",
+          "selection_start": 11,
+          "selection_end": 42,
+          "settlement": "resolve",
+          "role": "winner",
+          "tier": null,
+          "defeat_kind": null,
+          "winner": null,
+          "veto_reason": null
+        }
+      ],
+      "final_protection_trace": [
+        {
+          "raw_start": 11,
+          "raw_end": 42,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 11,
+                "raw_end": 42,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
