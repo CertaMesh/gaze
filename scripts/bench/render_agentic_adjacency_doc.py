@@ -91,6 +91,29 @@ def _metric(run: dict, field: str) -> int:
     return value
 
 
+def _document_contract(run: dict) -> dict[str, int]:
+    contract = run.get("pipeline_contract", {})
+    fields = ("documents", "restore_exact_documents", "restore_success_decisions", "manifest_valid_documents")
+    values = {}
+    for field in fields:
+        value = contract.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise HistoryError(f"invalid pipeline_contract.{field}")
+        values[field] = value
+    documents = values["documents"]
+    if any(values[field] > documents for field in fields[1:]):
+        raise HistoryError("pipeline contract counts exceed completed documents")
+    if documents != run.get("pipeline_availability", {}).get("completed_documents"):
+        raise HistoryError("pipeline contract population differs from completed documents")
+    return {
+        "documents": documents,
+        "restore_exact": values["restore_exact_documents"],
+        "restore_failures": documents - values["restore_success_decisions"],
+        "valid_manifests": values["manifest_valid_documents"],
+        "invalid_manifests": documents - values["manifest_valid_documents"],
+    }
+
+
 def rows_from_scorecard(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> list[dict]:
     payload = path.read_bytes()
     scorecard = json.loads(gzip.decompress(payload) if path.suffix == '.gz' else payload)
@@ -129,6 +152,7 @@ def rows_from_scorecard(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> 
                 "gold": _metric(run, "pii"),
                 "leaked": _metric(run, "leaked"),
                 "false_positive": _metric(run, "false_positive"),
+                **(_document_contract(run) if inputs.version >= 16 else {}),
             }
         rows.append({
             "version": version, "arm": config, "binary_revision": revision,
@@ -169,7 +193,9 @@ def validate_history(value: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> di
             if row.get('refused') != dict.fromkeys(('A', 'D', 'R'), 0):
                 raise HistoryError('release row must record zero refusals for each layer')
         for layer in ("A", "D", "R"):
-            for field in ("gold", "leaked", "false_positive"):
+            for field in (("gold", "leaked", "false_positive", "documents", "restore_exact",
+                           "restore_failures", "valid_manifests", "invalid_manifests")
+                          if inputs.version >= 16 else ("gold", "leaked", "false_positive")):
                 metric = row.get("layers", {}).get(layer, {}).get(field)
                 if isinstance(metric, bool) or not isinstance(metric, int) or metric < 0:
                     raise HistoryError(f"invalid {layer}.{field} metric")
@@ -198,6 +224,14 @@ def render(history: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> str:
             refusals = ' / '.join(str(row['refused'][layer]) for layer in ('A', 'D', 'R'))
             leaks = ' / '.join(f"{row['layers'][layer]['leaked']:,}" for layer in ('A', 'D', 'R'))
             lines.append(f"| `{row['version']}` `{row['arm']}` | {refusals} | {leaks} |")
+    if inputs.version >= 16:
+        lines += ["", "| Release and arm | Exact restores A / D / R | Valid manifests A / D / R | Restore failures A / D / R | Invalid manifests A / D / R |",
+                  "| --- | ---: | ---: | ---: | ---: |"]
+        for key in expected_rows(inputs):
+            row = by_key[key]
+            counts = [" / ".join(f"{row['layers'][layer][field]:,}" for layer in ("A", "D", "R"))
+                      for field in ("restore_exact", "valid_manifests", "restore_failures", "invalid_manifests")]
+            lines.append(f"| `{row['version']}` `{row['arm']}` | " + " | ".join(counts) + " |")
     lines += [
         "",
         "These are layers A, D and R only, measured by the current harness against each "
