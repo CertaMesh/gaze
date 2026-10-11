@@ -1,12 +1,12 @@
 {
-  "source_sha256": "c1f90f8a15d28074ad51db2cdfb0cede701589feec01b3a416c22e1b5f9c10f7",
+  "source_sha256": "b56ce2c468ae099ffcb90d5f959c8999c57f1af3564d3b544a893f454aa42b15",
   "recognizers": [
     "customer_id.labelled",
     "employee_id.labelled",
     "record_id.labelled"
   ],
   "files": {
-    "base-core.toml": "2038b0606538fe55ad65b2057f4df7b2696d0add8c99ed0be16d9919b22f6f6f",
-    "mechanism.toml": "6af79a3062bbdd57d59a5d88bfa8449290ebcfe50e369598c130479638028b57"
+    "base-core.toml": "302a4dd01d43cfdd8108ab523b1fe53c7ea09843efb9f9b53cee9c592782c1eb",
+    "mechanism.toml": "f5c9caf0a3b709cfccf63b888a79342fe9e54f756f697dd6bd080892a1d96414"
   }
 }

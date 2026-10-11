@@ -41,3 +41,13 @@ hand-written probes.
 See the [fallback inventory](../../reference/redaction-classes.md#embedded-recognizers)
 and [policy reference](../../reference/policy.md). `complete_labelled_value` is
 available to external rulepacks, not `[[policy.custom_recognizers]]`.
+
+The CRM/HR identifier rules select the typed `field_owned` mode. A label owns
+the complete adjacent value: ASCII-quoted scalars keep every raw Unicode and
+escape byte, while unquoted grouped identifiers stop before another field
+assignment. Each personal field supplies its own token and repeat seed; a public
+field stays outside the prior value. The unquoted-placeholder guard judges that
+complete bounded value, and rejection leaves later cues available for matching.
+An unterminated quote conservatively owns the remainder, so malformed input may
+also protect following public text. Typographic quotes remain uncharacterized.
+This opt-in mode leaves the tax/licence/identity scanner described above unchanged.

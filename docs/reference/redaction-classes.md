@@ -134,7 +134,10 @@ rows and the 57-spec inventory to the loaded rulepack. The
 output against its committed corpus snapshot.
 
 The three CRM/HR rules protect `custom:customer_id`, `custom:employee_id` and
-`custom:record_id` through the same complete-value scanner. Customer and employee
+`custom:record_id` through the opt-in `field_owned` complete-value scanner.
+It protects whole ASCII-quoted scalars and bounds unquoted grouped values before
+following field assignments. The placeholder guard sees the entire owned value.
+Customer and employee
 labels establish their respective classes; person/contact/member identifiers
 establish the record class. Bare `id`, `record_id` and `unique_id` do not establish
 person linkage and stay outside these rules, as do order, invoice, issue, build,
