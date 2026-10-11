@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Mapping, Sequence
 
 import gaze_bench_score as score
+from dictionary_sequence_generators import GeneratorProvenanceError, resolve as resolve_dictionary_generator
 import government_id_cells as government_ids
 import record_id_cells as record_ids
 import record_id_syntax_cells as record_id_syntax
@@ -4937,6 +4938,10 @@ def dictionary_sequence_identity(scorecard):
     for key in ("adapter_sha256", "generator_sha256", "corpus_sha256"):
         if not re.fullmatch(r"[0-9a-f]{64}", str(identity.get(key, ""))):
             raise LayerError(f"invalid dictionary sequence {key}")
+    try:
+        resolve_dictionary_generator(identity["generator_sha256"])
+    except GeneratorProvenanceError as error:
+        raise LayerError(str(error)) from None
     if extension.get("runtime") != scorecard.get("gaze"):
         raise LayerError("dictionary sequence runtime differs from ordinary layers")
     if not re.fullmatch(r"[0-9a-f]{64}", str(extension.get("binary_sha256", ""))):

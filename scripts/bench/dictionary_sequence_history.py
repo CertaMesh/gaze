@@ -2,8 +2,6 @@
 """Replay and check the separate dictionary API-sequence release-history ledger."""
 import argparse
 import json
-import hashlib
-import gzip
 from pathlib import Path
 
 import dictionary_sequences as sequence
@@ -53,18 +51,10 @@ def check(path=ROOT / LEDGER):
         manifest = json.loads((directory / "capture.json").read_text())
         if manifest.get("producer_binding", {}).get("fresh_locked_build") is not True:
             raise ValueError("history capture has no fresh producer build binding")
-        generated = sequence.generate(manifest["identity"]["seed"], manifest["identity"]["partition"])
-        expected_identity = sequence.identity(generated, manifest["identity"]["seed"],
-                                              manifest["identity"]["partition"])
-        # Original captures retain their exact producer source identity. Replaying
-        # with stronger validation changes source bytes, not generated inputs.
-        original_source = gzip.decompress((ROOT /
-            "docs/reference/benchmarks/dictionary-sequences/generator-v1.py.gz").read_bytes())
-        original_hash = hashlib.sha256(original_source).hexdigest()
-        if manifest["identity"].get("generator_sha256") == original_hash:
-            expected_identity["generator_sha256"] = original_hash
-        if manifest["identity"] != expected_identity:
-            raise ValueError("capture does not use the committed generator and adapter")
+        # Replay owns generator resolution, hash verification and input binding.
+        replay = sequence.replay(directory, score.SCORED_LABEL_CONTRACT_V1)
+        if replay["identity"]["adapter_sha256"] != score.sha256_file(ROOT / sequence.RUST_ADAPTER):
+            raise ValueError("capture does not use the committed adapter")
         if manifest["runtime"]["revision"] != row["revision"]:
             raise ValueError("history runtime does not match capture")
         if replay_row(directory) != row["contracts"]:

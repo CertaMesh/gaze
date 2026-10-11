@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import agentic_layers as gate
 import dictionary_sequences as sequence
+import dictionary_sequence_history as history
 import gaze_bench_score as score
 from test_agentic_layers import _scorecard
 
@@ -174,6 +175,18 @@ class GeneratorProvenanceTests(unittest.TestCase):
         value["dictionary_sequence"]["identity"]["generator_sha256"] = "f" * 64
         self.assert_provenance_error(lambda: gate.dictionary_sequence_identity(value), "LayerError")
 
+    def test_unknown_generator_hash_is_refused_by_attach(self):
+        value = card()
+        value["dictionary_sequence"]["identity"]["generator_sha256"] = "f" * 64
+        self.assert_provenance_error(lambda: sequence.attach(value, value["dictionary_sequence"]))
+
+    def test_history_uses_retained_generation_and_current_scoring(self):
+        with patch.object(sequence, "generate", side_effect=AssertionError("current generator")):
+            with patch.object(sequence, "documents", side_effect=AssertionError("current documents")):
+                ledger = history.check()
+        self.assertEqual(len(ledger["releases"]), 4)
+        self.assertEqual(ledger["development"][0]["contracts"]["1"]["switch/K"]["leaked_bytes"], 35856)
+
     def test_historical_replay_survives_current_generator_change(self):
         before = sequence.replay(self.capture, score.SCORED_LABEL_CONTRACT_V1)
         changed = sequence.generate()
@@ -196,10 +209,11 @@ class GeneratorProvenanceTests(unittest.TestCase):
         def read(path):
             return tampered if path == source else original(path)
 
+        value = card()
         with patch.object(Path, "read_bytes", read):
             self.assert_provenance_error(lambda: sequence.replay(
                 self.capture, score.SCORED_LABEL_CONTRACT_V1))
-            self.assert_provenance_error(lambda: gate.dictionary_sequence_identity(card()), "LayerError")
+            self.assert_provenance_error(lambda: gate.dictionary_sequence_identity(value), "LayerError")
 
 
 class ExtensionGateTests(unittest.TestCase):

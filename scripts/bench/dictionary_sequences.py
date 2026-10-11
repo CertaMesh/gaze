@@ -20,6 +20,9 @@ from unittest.mock import patch
 
 import gaze_bench_score as score
 import scorecard_record as records
+from dictionary_sequence_generators import (
+    DEFAULT_GENERATOR, GeneratorProvenanceError, resolve as resolve_generator,
+)
 
 LAYERS = ("K", "B")
 SEQUENCES = ("switch", "fresh", "literal")
@@ -108,7 +111,7 @@ def identity(cases, seed, partition, adapter_root=ROOT):
         "version": VERSION, "seed": seed, "partition": partition,
         "layers": list(LAYERS), "sequences": list(SEQUENCES),
         "adapter_sha256": score.sha256_file(adapter_root / RUST_ADAPTER),
-        "generator_sha256": score.sha256_file(Path(__file__)),
+        "generator_sha256": DEFAULT_GENERATOR,
         "corpus_sha256": digest([
             [c.document.uid, c.document.text, c.terms,
              [(s.start, s.end, s.label) for s in c.document.spans],
@@ -130,7 +133,8 @@ def capture(repo, binary, probe, output, seed=SEED, partition="published"):
     if profile == "release":
         command.append("--release")
     subprocess.run(command, cwd=repo, check=True)
-    cases = generate(seed, partition)
+    generator = resolve_generator(DEFAULT_GENERATOR)
+    cases = generator.generate(seed, partition)
     manifest = {"identity": identity(cases, seed, partition),
                 "runtime": score.git_metadata(repo),
                 "binary_sha256": score.sha256_file(binary), "records": {}}
@@ -156,7 +160,7 @@ def capture(repo, binary, probe, output, seed=SEED, partition="published"):
     for sequence in SEQUENCES:
         for layer in LAYERS:
             selected = [c for c in cases if c.layer == layer]
-            docs = documents(selected, sequence)
+            docs = generator.documents(selected, sequence)
             corpus = digest([[d.uid, d.text, [(s.start, s.end, s.label) for s in d.spans]]
                              for d in docs])
             measurements = score.collect_validator_measurements(probe, docs, (d.uid for d in docs))
@@ -225,10 +229,14 @@ def replay(directory, contract):
     if set(manifest["records"]) != expected:
         raise ValueError("incomplete dictionary sequence capture")
     declared = manifest["identity"]
+    generator = resolve_generator(declared.get("generator_sha256"))
     try:
-        cases = generate(declared["seed"], declared["partition"])
+        cases = generator.generate(declared["seed"], declared["partition"])
         regenerated = identity(cases, declared["seed"], declared["partition"])
-        # Source hashes describe the historical producer, not today's replay code.
+        regenerated["version"] = generator.VERSION
+        regenerated["layers"] = list(generator.LAYERS)
+        regenerated["sequences"] = list(generator.SEQUENCES)
+        # Source provenance has been verified before regenerating historical inputs.
         inputs = ("version", "seed", "partition", "layers", "sequences", "corpus_sha256")
         if any(declared.get(field) != regenerated[field] for field in inputs):
             raise ReplayBindingError()
@@ -245,7 +253,7 @@ def replay(directory, contract):
         if score.sha256_file(path) != evidence["sha256"]:
             raise ValueError("dictionary observation digest mismatch")
         sequence, layer = key.split("/")
-        docs = documents([case for case in cases if case.layer == layer], sequence)
+        docs = generator.documents([case for case in cases if case.layer == layer], sequence)
         try:
             validate_binding(path, evidence, docs, sequence)
         except (KeyError, TypeError, ValueError):
@@ -258,6 +266,7 @@ def replay(directory, contract):
 
 
 def attach(full, extension):
+    resolve_generator(extension.get("identity", {}).get("generator_sha256"))
     result = copy.deepcopy(full)
     if result["gaze"] != extension["runtime"]:
         raise ValueError("extension runtime differs from ordinary scorecard")
