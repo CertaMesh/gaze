@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Family-level tokens retain their ambiguity reason and original participant
+  identities after later overlap decisions. Primary and recovered audit entries
+  no longer infer family provenance from the last conflict tier or source labels;
+  detection, token emission and restore behavior are unchanged.
+
 - `SqliteLogger::entries()` now retains all eleven stored provenance fields
   through the same metadata row decoder as `query()`. Typed reads reject negative
   restore counters and phase masks outside `u32`; raw queries retain their signed

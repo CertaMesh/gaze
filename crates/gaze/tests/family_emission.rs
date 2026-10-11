@@ -168,3 +168,26 @@ fn no_anchor_audit_uses_recognizer_ids_in_primary_and_recovery() {
             .all(|c| c.class == PiiClass::Custom(c.recognizer_id.clone())));
     }
 }
+
+#[test]
+fn recovered_precedence_tie_has_the_same_family_reason_and_member_identities() {
+    let entries = run(true, true, false);
+    let winner = entries
+        .iter()
+        .find(|e| !e.conflict_loser && e.class == PiiClass::family("documents"))
+        .unwrap();
+    assert_eq!(winner.decided_by, ConflictTier::CollisionPolicy);
+    let record = winner
+        .ambiguity_record
+        .as_ref()
+        .expect("recovered family audit");
+    assert_eq!(record.reason, AmbiguityReason::PrecedenceTie);
+    assert_eq!(
+        record
+            .losing_candidates
+            .iter()
+            .map(|c| c.recognizer_id.as_str())
+            .collect::<Vec<_>>(),
+        ["alpha", "beta"]
+    );
+}
