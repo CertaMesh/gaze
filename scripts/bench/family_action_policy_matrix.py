@@ -161,7 +161,7 @@ def main() -> int:
                     h_res = base_enum.raw_residue(h, doc)
                     stats["base_residue_docs"] += b_res is not None
                     stats["head_residue_docs"] += h_res is not None
-                    if b.get("clean_text") == h.get("clean_text"):
+                    if b["clean_text"] == h["clean_text"]:
                         continue
                     # Token hex differs per session even for identical decisions,
                     # so "changed" means the IBAN view (class or bytes) changed.

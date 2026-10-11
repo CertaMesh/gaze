@@ -200,7 +200,7 @@ def score_arm(base_bin, head_bin, docs, tmp, loc, iban, card, default, family):
         changed.append(row)
         if kind == "regressed":
             regressed.append(
-                dict(row, base_clean=b and b.get("clean_text"), head_clean=h and h.get("clean_text"))
+                dict(row, base_clean=b["clean_text"], head_clean=h["clean_text"])
             )
     failed = stats["regressed_docs"] > 0 or stats["missing_response"] > 0
     return arm, {
