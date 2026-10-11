@@ -3676,6 +3676,83 @@ mod tests {
         }
     }
 
+    struct CustomCodecAdapter {
+        anthropic: AnthropicAdapter,
+        codec: LimitFailureCodec,
+    }
+
+    #[async_trait::async_trait]
+    impl ProviderAdapter for CustomCodecAdapter {
+        fn contract(&self) -> crate::AdapterContract<'_> {
+            crate::AdapterContract::codec(
+                &self.codec,
+                SessionPolicy::EphemeralSingleRequest,
+                CodecLimits::default(),
+            )
+        }
+        fn name(&self) -> &'static str {
+            "custom-codec"
+        }
+        fn matches_path(&self, method: &Method, path: &str) -> bool {
+            self.anthropic.matches_path(method, path)
+        }
+        fn upstream_base(&self) -> &Url {
+            self.anthropic.upstream_base()
+        }
+        fn request_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<crate::PiiSurface<'a>> {
+            self.anthropic.request_pii_surfaces(body)
+        }
+        fn response_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<crate::PiiSurface<'a>> {
+            self.anthropic.response_pii_surfaces(body)
+        }
+        fn sse_event_pii_surfaces<'a>(
+            &self,
+            event: &'a mut SseEvent,
+        ) -> Vec<crate::PiiSurface<'a>> {
+            self.anthropic.sse_event_pii_surfaces(event)
+        }
+    }
+
+    #[tokio::test]
+    async fn compatibility_constructor_uses_its_custom_codec_before_upstream_io() {
+        let capture = Capture::default();
+        let (mut endpoint, upstream) = spawn_test_server(
+            Router::new()
+                .route("/v1/messages", post(capture_ok))
+                .with_state(capture.clone()),
+        )
+        .await;
+        endpoint.set_path("/");
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bind = listener.local_addr().unwrap();
+        let config = ProxyConfig::new(
+            bind,
+            vec![Arc::new(CustomCodecAdapter {
+                anthropic: AnthropicAdapter::new(endpoint),
+                codec: LimitFailureCodec(LimitFailureDirection::Request),
+            })],
+        );
+        let server = serve_with_listener(config, Arc::new(email_pipeline()), listener);
+        let request = async {
+            let response = Client::new()
+                .post(format!("http://{bind}/v1/messages"))
+                .header("x-api-key", "synthetic-provider-key")
+                .header("anthropic-version", DEFAULT_ANTHROPIC_VERSION)
+                .header("content-type", "application/json")
+                .body(DIRECT_REQUEST_BODY)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+            assert_eq!(capture.hits.load(Ordering::SeqCst), 0);
+        };
+        tokio::select! {
+            result = server => panic!("compatibility server stopped: {result:?}"),
+            result = tokio::time::timeout(Duration::from_secs(60), request) => result.unwrap(),
+        }
+        upstream.abort();
+    }
+
     async fn begin_delayed_non_stream(
         invalid_response: bool,
     ) -> (
