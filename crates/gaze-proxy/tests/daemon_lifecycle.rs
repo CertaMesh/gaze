@@ -91,3 +91,95 @@ fn start_failure_leaves_no_pidfile_and_retry_does_not_brick() {
     );
     assert!(!paths.pidfile.exists());
 }
+
+#[cfg(unix)]
+struct OwnedChild(std::process::Child);
+
+#[cfg(unix)]
+impl OwnedChild {
+    fn ignoring_term() -> Self {
+        use std::io::{BufRead, BufReader};
+        let child = std::process::Command::new("/bin/sh")
+            .args(["-c", "trap '' TERM; printf 'ready\\n'; exec sleep 120"])
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut owned = Self(child);
+        let mut ready = String::new();
+        BufReader::new(owned.0.stdout.take().unwrap())
+            .read_line(&mut ready)
+            .unwrap();
+        assert_eq!(ready, "ready\n");
+        owned
+    }
+
+    fn record(&self, paths: &DaemonPaths) -> Vec<u8> {
+        let contents = format!("{}\n", self.0.id()).into_bytes();
+        std::fs::write(&paths.pidfile, &contents).unwrap();
+        contents
+    }
+}
+
+#[cfg(unix)]
+impl Drop for OwnedChild {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+#[cfg(unix)]
+fn assert_stop_timeout(err: gaze_proxy::ProxyError, pid: u32, timeout: Duration) {
+    // Check the public error identity and payload even before the new variant exists.
+    assert_eq!(
+        format!("{err:?}"),
+        format!("DaemonStopTimeout {{ pid: {pid}, timeout: {timeout:?} }}")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn stop_timeout_keeps_live_child_and_owned_pidfile() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = temp_paths(&dir);
+    let mut child = OwnedChild::ignoring_term();
+    let record = child.record(&paths);
+    let timeout = Duration::from_millis(100);
+    let err = daemon::stop(StopOptions::new(paths.clone(), timeout, false)).unwrap_err();
+    assert_stop_timeout(err, child.0.id(), timeout);
+    assert!(child.0.try_wait().unwrap().is_none());
+    assert_eq!(std::fs::read(&paths.pidfile).unwrap(), record);
+}
+
+#[cfg(unix)]
+#[test]
+fn restart_propagates_stop_timeout_without_starting() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = temp_paths(&dir);
+    let mut child = OwnedChild::ignoring_term();
+    let record = child.record(&paths);
+    let timeout = Duration::from_millis(100);
+    let err = daemon::restart(
+        StartOptions::new(paths.clone(), DaemonConfig::default()),
+        timeout,
+        false,
+    ).unwrap_err();
+    assert_stop_timeout(err, child.0.id(), timeout);
+    assert!(child.0.try_wait().unwrap().is_none());
+    assert_eq!(std::fs::read(&paths.pidfile).unwrap(), record);
+    assert!(!paths.config.exists());
+    assert!(!paths.log_file.exists());
+    assert!(!paths.stderr_file.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn force_stop_terminates_owned_child_and_cleans_pidfile() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = temp_paths(&dir);
+    let mut child = OwnedChild::ignoring_term();
+    child.record(&paths);
+    daemon::stop(StopOptions::new(paths.clone(), Duration::ZERO, true)).unwrap();
+    assert!(!child.0.wait().unwrap().success());
+    assert!(!paths.pidfile.exists());
+}
