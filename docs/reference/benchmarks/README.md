@@ -1964,16 +1964,17 @@ The preserved phone and cued-cell prose above describes the historical
 [v8 measurements](agentic-adjacency-v8-history.json), and the release
 statement of the CRLF and plate section the historical
 [v9 measurements](agentic-adjacency-v9-history.json). Their links lead to this
-current comparison, which has since been re-measured on v16 below.
+current comparison, which has since been re-measured on v17 below.
 
-The release rows below use generator v16's test partition and each release's
-setup policy, so they include the v5 to v16 cells (labelled lookalikes, address
+The release rows below use generator v17's test partition and each release's
+setup policy, so they include the v5 to v17 cells (labelled lookalikes, address
 blocks, phone shapes, cued ages, birth dates, short cards, postcodes, CRLF
 blocks and German plates, URLs in structured text, tax and government IDs,
 ZIP compression lookalikes, personal age wording and the shipped-class
-identifier, credential, name and phone cells, plus person-linked CRM/HR IDs, numeric JSON ID scalars and benign JSON keywords).
+identifier, credential, name and phone cells, plus person-linked CRM/HR IDs, numeric JSON ID scalars, benign JSON keywords and whole-value field ownership).
 The table is rendered from
-the [v16 ledger](agentic-adjacency-v16-history.json). The earlier
+the [v17 ledger](agentic-adjacency-v17-history.json). The earlier
+[v16 ledger](agentic-adjacency-v16-history.json) on corpus `d6dac67a…`,
 [v15 ledger](agentic-adjacency-v15-history.json) on corpus `0a5f6576…`,
 [v13 ledger](agentic-adjacency-v13-history.json) on corpus `db3c3f36…`,
 [v12 ledger](agentic-adjacency-v12-history.json) on corpus `0748ced8…`,
@@ -1989,7 +1990,7 @@ retained as historical data and do not feed this table.
 Record the past-release `agentic_layers.py measure` outputs with
 `render_agentic_adjacency_doc.py --record`, then render this table from its
 committed ledger. Do not edit the rows by hand. The renderer pins the
-generator version, so a later generator leaves these rows bound to v16 until
+generator version, so a later generator leaves these rows bound to v17 until
 they are re-measured.
 
 Generator v12 adds 80 postcode and age positives and 80 benign counterweights
@@ -2049,8 +2050,8 @@ unchanged. The added numeric IDs also have six digits, so the short-repeat
 limitation above remains.
 Generator v15 has no curly or typographic value-quote cases and no cases where
 a rejected unquoted placeholder precedes a valid labelled-ID cue. These results
-do not establish coverage for either behavior. Independent positive, repeat and
-benign counterweight cells for both boundaries are deferred.
+do not establish coverage for either behavior. Generator v17 adds independent cue-resumption cells; typographic value-quote
+positives, repeats and benign counterweights remain deferred.
 
 Generator v16 corrects a corpus self-contradiction: the layer D BSN benign
 reference twins used customer-number labels, while the CRM/HR positives score
@@ -2062,7 +2063,7 @@ v3–v15 corpus still regenerates byte-for-byte. This correction can remove
 false-positive bytes for any rule that protects customer numbers; it is a
 benchmark correction, not a runtime precision gain. [Label audit and retained
 ambiguities](bsn-twin-labels.md) list the scoring of every relevant benign cell.
-The remeasurement adds 18 D false-positive bytes in each Nym release: two
+The v16 remeasurement adds 18 D false-positive bytes in each Nym release: two
 nine-digit `deviceSerial` values are classified as licence plates. Both v0.14.0
 arms retain identical byte counts. The vocabulary was not adjusted to improve
 these results.
@@ -2078,8 +2079,8 @@ The v16 corpus and contract remain frozen. Numeric repeat variants contain at
 least six digits; short repeats, typographic quotes and CSV linkage remain
 uncharacterized. These additions change the measurement, not runtime detection.
 
-All displayed release arms were re-measured on v16 using their own tagged code.
-[Bound observation replays](bsn-twin-v16-contract-replay.json) verify identical
+All displayed release arms were re-measured on v17 using their own tagged code.
+[Bound observation replays](record-id-ownership-v17-contract-replay.json) verify identical
 A/D/R metrics under primary contracts v1, v2 and v4: these generated layers use
 the same fully scored agentic contract under each. Layer C inputs and its
 published contract scores remain unchanged. The tables retain refusals and
@@ -2095,29 +2096,29 @@ work. The v14 corpus byte pin remains tested.
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.16.0` `policy-file` | 17,135 / 76,491 | 1,966 | 6,916 | 9,894 / 16,452 | 479 |
-| `v0.15.1` `policy-file` | 33,228 / 76,491 | 2,823 | 8,076 | 10,034 / 16,452 | 463 |
-| `v0.15.0` `policy-file` | 33,401 / 76,491 | 2,823 | 8,076 | 10,034 / 16,452 | 463 |
-| `v0.14.0` `full-stack-kiji-resolve` | 43,733 / 76,491 | 10,161 | 7,846 | 10,244 / 16,452 | 323 |
-| `v0.14.0` `pass2-ner` | 44,476 / 76,491 | 2,282 | 5,977 | 10,270 / 16,452 | 200 |
+| `v0.16.0` `policy-file` | 27,464 / 88,281 | 2,032 | 7,016 | 28,722 / 35,880 | 503 |
+| `v0.15.1` `policy-file` | 43,607 / 88,281 | 2,889 | 8,176 | 28,993 / 35,880 | 479 |
+| `v0.15.0` `policy-file` | 43,780 / 88,281 | 2,889 | 8,176 | 28,993 / 35,880 | 479 |
+| `v0.14.0` `full-stack-kiji-resolve` | 54,210 / 88,281 | 10,452 | 9,211 | 28,258 / 35,880 | 658 |
+| `v0.14.0` `pass2-ner` | 56,181 / 88,281 | 2,282 | 5,977 | 29,461 / 35,880 | 216 |
 
 | Release and arm | Refused A / D / R | Leaked on all processed A / D / R B |
 | --- | ---: | ---: |
-| `v0.16.0` `policy-file` | 0 / 0 / 0 | 17,135 / 0 / 9,894 |
-| `v0.15.1` `policy-file` | 0 / 0 / 0 | 33,228 / 0 / 10,034 |
-| `v0.15.0` `policy-file` | 0 / 0 / 0 | 33,401 / 0 / 10,034 |
-| `v0.14.0` `full-stack-kiji-resolve` | 0 / 0 / 0 | 43,733 / 0 / 10,244 |
-| `v0.14.0` `pass2-ner` | 0 / 0 / 0 | 44,476 / 0 / 10,270 |
+| `v0.16.0` `policy-file` | 0 / 0 / 0 | 27,464 / 0 / 28,722 |
+| `v0.15.1` `policy-file` | 0 / 0 / 0 | 43,607 / 0 / 28,993 |
+| `v0.15.0` `policy-file` | 0 / 0 / 0 | 43,780 / 0 / 28,993 |
+| `v0.14.0` `full-stack-kiji-resolve` | 0 / 0 / 0 | 54,210 / 0 / 28,258 |
+| `v0.14.0` `pass2-ner` | 0 / 0 / 0 | 56,181 / 0 / 29,461 |
 
 | Release and arm | Exact restores A / D / R | Valid manifests A / D / R | Restore failures A / D / R | Invalid manifests A / D / R |
 | --- | ---: | ---: | ---: | ---: |
-| `v0.16.0` `policy-file` | 3,728 / 2,144 / 280 | 3,728 / 2,144 / 280 | 0 / 0 / 0 | 0 / 0 / 0 |
-| `v0.15.1` `policy-file` | 3,724 / 2,144 / 280 | 3,724 / 2,144 / 280 | 4 / 0 / 0 | 4 / 0 / 0 |
-| `v0.15.0` `policy-file` | 3,724 / 2,144 / 280 | 3,724 / 2,144 / 280 | 4 / 0 / 0 | 4 / 0 / 0 |
-| `v0.14.0` `full-stack-kiji-resolve` | 3,674 / 2,129 / 279 | 3,728 / 2,144 / 280 | 54 / 15 / 1 | 0 / 0 / 0 |
-| `v0.14.0` `pass2-ner` | 3,728 / 2,144 / 280 | 3,728 / 2,144 / 280 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.16.0` `policy-file` | 4,508 / 2,924 / 940 | 4,508 / 2,924 / 940 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.15.1` `policy-file` | 4,499 / 2,924 / 940 | 4,499 / 2,924 / 940 | 9 / 0 / 0 | 9 / 0 / 0 |
+| `v0.15.0` `policy-file` | 4,499 / 2,924 / 940 | 4,499 / 2,924 / 940 | 9 / 0 / 0 | 9 / 0 / 0 |
+| `v0.14.0` `full-stack-kiji-resolve` | 4,444 / 2,909 / 923 | 4,508 / 2,924 / 940 | 64 / 15 / 17 | 0 / 0 / 0 |
+| `v0.14.0` `pass2-ner` | 4,508 / 2,924 / 940 | 4,508 / 2,924 / 940 | 0 / 0 / 0 | 0 / 0 / 0 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v16-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v16, test corpus `d6dac67a85d5…`. Each release uses its own setup policy; v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`; v0.14.0 retains the v0.15.x model settings.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v17-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v17, test corpus `6196bb388f75…`. Each release uses its own setup policy; v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`; v0.14.0 retains the v0.15.x model settings.
 
 <!-- END GENERATED: agentic-adjacency -->
 

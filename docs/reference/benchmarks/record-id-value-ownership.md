@@ -29,6 +29,8 @@ Repeat variants use at least six digits and repeat the exact raw spelling.
 Alphabetic-only quoted scalars are labelled positives with public scalar twins,
 without a claim about unlabelled-repeat protection. Vocabulary, seeded values
 and template identities are disjoint between dev and test; no real PII is used.
+[Committed pre-fix probes](record-id-ownership-pre-fix-sensitivity.json) reproduce
+these failures across all three classes using independently generated cells.
 Canonical scorer tests detect a prefix-only guard veto, truncated quoted scalar,
 combined adjacent-field span, omitted second-value repeat and overbroad public
 scalar prediction. Exact gold predictions have zero leaked and false-positive
