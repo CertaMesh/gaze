@@ -1,0 +1,24 @@
+schema_version = "0.1.0"
+rulepack_id = "tenant-songs"
+rulepack_version = "0.1.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "tenant.song"
+class = "custom:tenant_song"
+enabled = true
+
+[recognizers.match]
+kind = "dictionary"
+terms = ["tenant-song-xyz", "Tenant Tune"]
+case_sensitive = true
+
+[[recognizers]]
+id = "tenant.album"
+class = "custom:tenant_album"
+enabled = true
+
+[recognizers.match]
+kind = "dictionary"
+terms = ["tenant-album-abc"]
+case_sensitive = false

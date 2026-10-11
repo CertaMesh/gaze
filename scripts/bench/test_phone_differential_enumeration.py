@@ -3,6 +3,9 @@ import collections
 import hashlib
 import json
 import unittest
+import sys
+import tempfile
+from pathlib import Path
 import phone_differential_enumeration as enumeration
 
 
@@ -26,6 +29,15 @@ class PhoneEnumerationTests(unittest.TestCase):
             self.assertEqual(bool(gold), not family.startswith('benign_'))
 
     def test_unicode_line_separator_inside_json_string_is_not_a_record_boundary(self):
-        response = {'clean_text': 'left\u2028right', 'session_id': 'fixture'}
-        payload = json.dumps(response, ensure_ascii=False) + '\n'
-        self.assertEqual(enumeration.parse_responses(payload), [response])
+        with tempfile.TemporaryDirectory() as temporary:
+            binary = Path(temporary) / 'daemon'
+            binary.write_text(f'#!{sys.executable}\n' +
+                              'import json, sys\n'
+                              'for line in sys.stdin:\n'
+                              '    request = json.loads(line)\n'
+                              '    print(json.dumps(dict(session_id=request["session_id"], '
+                              'clean_text=request["text"], manifest=[]), ensure_ascii=False))\n')
+            binary.chmod(0o755)
+            rows = [('fixture', 'left\u2028right', {0})]
+            self.assertEqual(enumeration.run(binary, rows, Path(temporary) / 'policy'),
+                             [({0}, set(), {0})])

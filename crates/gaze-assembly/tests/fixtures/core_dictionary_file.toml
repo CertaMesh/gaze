@@ -1,0 +1,15 @@
+schema_version = "0.1.0"
+rulepack_id = "tenant-file-songs"
+rulepack_version = "0.1.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "tenant.file-song"
+class = "custom:tenant_file_song"
+enabled = true
+
+[recognizers.match]
+kind = "dictionary"
+terms = ["tenant-inline-companion"]
+terms_file = "__TERMS_FILE__"
+case_sensitive = false

@@ -2865,7 +2865,10 @@
         "opf",
         "pii-tracer",
         "scrubadub"
-      ]
+      ],
+      "receipt_status": {
+        "pii-tracer": "pre-receipt"
+      }
     },
     "piibench-commercial": {
       "chart_rows": [
@@ -27861,7 +27864,24 @@
         "opf",
         "pii-tracer",
         "scrubadub"
-      ]
+      ],
+      "receipt_status": {
+        "datafog-core": "pre-receipt",
+        "datafog-gliner": "pre-receipt",
+        "datafog-regex": "pre-receipt",
+        "datafog-spacy": "pre-receipt",
+        "gliner": "pre-receipt",
+        "gliner-high-recall": "pre-receipt",
+        "opf": "pre-receipt",
+        "pii-tracer": "pre-receipt",
+        "presidio-all": "pre-receipt",
+        "presidio-en": "pre-receipt",
+        "presidio-en-de": "pre-receipt",
+        "presidio-strong": "pre-receipt",
+        "presidio-strong-high-recall": "pre-receipt",
+        "scrubadub-base": "pre-receipt",
+        "scrubadub-spacy": "pre-receipt"
+      }
     },
     "presidio-research": {
       "chart_rows": [
@@ -32842,6 +32862,23 @@
           "setup": "notebook 5, custom analyzer: OpenMed NER recognizer, title/year/age pattern recognizers, lemma context enhancement, 14 predefined recognizers removed, score threshold 0.3",
           "source": "https://github.com/microsoft/presidio-research/blob/6db3769a3388b4075b93ab2229c5e0b9c30137f7/notebooks/5_Evaluate_Custom_Presidio_Analyzer.ipynb"
         }
+      },
+      "receipt_status": {
+        "datafog-core": "pre-receipt",
+        "datafog-gliner": "pre-receipt",
+        "datafog-regex": "pre-receipt",
+        "datafog-spacy": "pre-receipt",
+        "gliner": "pre-receipt",
+        "gliner-high-recall": "pre-receipt",
+        "opf": "pre-receipt",
+        "pii-tracer": "pre-receipt",
+        "presidio-all": "pre-receipt",
+        "presidio-en": "pre-receipt",
+        "presidio-en-de": "pre-receipt",
+        "presidio-strong": "pre-receipt",
+        "presidio-strong-high-recall": "pre-receipt",
+        "scrubadub-base": "pre-receipt",
+        "scrubadub-spacy": "pre-receipt"
       }
     }
   },

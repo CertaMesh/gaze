@@ -11,6 +11,7 @@ import copy
 import functools
 import gzip
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -87,8 +88,8 @@ def _released(ledger):
     """
     shown = copy.deepcopy(ledger)
     for entry in shown["mechanisms"]:
-        for measurement in entry["measurements"]:
-            measurement["release"] = "v0.15.0"
+        for index, measurement in enumerate(entry["measurements"]):
+            measurement["release"] = f"v0.15.{index}"
     return shown
 
 
@@ -177,6 +178,199 @@ class MechanismArmsTest(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         return self.pristine.clone(Path(tmp.name).resolve())
+
+    def rewrite_runs(self, fixture, revision=None):
+        """Valid runner receipts with a new revision or different gzip bytes."""
+        for name, directory in fixture.runs.items():
+            path = directory / "observations-v1.jsonl.gz"
+            if revision is None:
+                path.write_bytes(path.read_bytes() + b"\0")
+            else:
+                rows = _rows(path)
+                rows[0]["scorecard"]["gaze"]["revision"] = revision
+                _write_rows(path, rows)
+            version = 2 if name.endswith("v2") else 1
+            card = record.rescore(path, mech._contract(version))
+            (directory / "scorecard-v4.json").write_text(json.dumps(card), encoding="utf-8")
+
+    def assert_refusal_preserves(self, fixture, ledger, action, error=mech.MechanismError):
+        path = fixture.root / "ledger.json"
+        path.write_text(json.dumps(ledger), encoding="utf-8")
+        before = path.read_bytes()
+        in_memory = copy.deepcopy(ledger)
+        pins = {row["file"]: mech.sha256(fixture.root / row["file"])
+                for entry in ledger["mechanisms"] for measurement in entry["measurements"]
+                for row in measurement["records"].values()}
+        try:
+            with self.assertRaises(error):
+                action()
+                path.write_text(json.dumps(ledger), encoding="utf-8")
+        finally:
+            self.assertEqual(path.read_bytes(), before)
+            self.assertEqual({name: mech.sha256(fixture.root / name) for name in pins}, pins)
+            self.assertEqual(ledger, in_memory)
+
+    def publication_fixture(self):
+        fixture = self.fresh()
+        ledger = mech.empty_ledger()
+        fixture.record(ledger, release="v0.16.0")
+        path = fixture.root / "ledger.json"
+        path.write_text(json.dumps(ledger), encoding="utf-8")
+        before = path.read_bytes()
+        self.rewrite_runs(fixture)
+        return fixture, ledger, path, before
+
+    def assert_persisted_pins_unchanged(self, fixture, path, before):
+        self.assertEqual(path.read_bytes(), before)
+        old = json.loads(path.read_text(encoding="utf-8"))
+        for entry in old["mechanisms"]:
+            pins = [entry["policy_delta"]]
+            if "latency" in entry:
+                pins.append(entry["latency"])
+            pins += [row for measurement in entry["measurements"]
+                     for row in measurement["records"].values()]
+            for row in pins:
+                self.assertEqual(mech.sha256(fixture.root / row["file"]), row["sha256"])
+        mech.validate(old, fixture.root)
+
+    @unittest.skipUnless(hasattr(os, "fork"), "crash boundary requires fork")
+    def test_crash_after_evidence_publish_preserves_persisted_pins(self):
+        fixture, ledger, path, before = self.publication_fixture()
+        original = mech._publish_evidence
+        child = os.fork()
+        if child == 0:
+            def publish_then_die(*args):
+                original(*args)
+                os._exit(77)
+            with mock.patch.object(mech, "_publish_evidence", side_effect=publish_then_die):
+                fixture.record(ledger, release="v0.16.0")
+            os._exit(99)
+        _, status = os.waitpid(child, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 77)
+        self.assert_persisted_pins_unchanged(fixture, path, before)
+
+    def test_cli_ledger_write_failure_preserves_persisted_pins(self):
+        fixture, ledger, path, before = self.publication_fixture()
+        original_record = mech.record_measurement
+        original_write = Path.write_text
+        original_replace = os.replace
+        def record_in_fixture(ledger, **kwargs):
+            return original_record(ledger, **kwargs, root=fixture.root,
+                                   evidence_dir=fixture.root / "evidence", crates_tree="d" * 40)
+        def fail_write(target, *args, **kwargs):
+            if target == path:
+                raise OSError("synthetic ledger write failure")
+            return original_write(target, *args, **kwargs)
+        def fail_replace(source, target):
+            if Path(target) == path:
+                raise OSError("synthetic ledger write failure")
+            return original_replace(source, target)
+        args = ["record", "--mechanism", "synthetic-drop", "--title", "Synthetic drop",
+                "--added-in", "v0.16", "--shipped", "test only", "--machine", "test host",
+                "--policy-delta", str(fixture.delta), "--binary", str(fixture.binary),
+                "--release", "v0.16.0"]
+        for name, directory in fixture.runs.items():
+            args += ["--" + name, str(directory)]
+        with mock.patch.object(mech, "LEDGER", path), \
+             mock.patch.object(mech, "load_ledger", return_value=ledger), \
+             mock.patch.object(mech, "record_measurement", side_effect=record_in_fixture), \
+             mock.patch.object(Path, "write_text", fail_write), \
+             mock.patch.object(os, "replace", side_effect=fail_replace):
+            with self.assertRaises(SystemExit) as raised:
+                mech.main(args)
+            self.assertEqual(raised.exception.code, 2)
+        self.assert_persisted_pins_unchanged(fixture, path, before)
+
+    def test_release_revision_conflict_preserves_ledger_and_evidence(self):
+        fixture = self.fresh()
+        ledger = mech.empty_ledger()
+        fixture.record(ledger, release="v0.16.0")
+        self.rewrite_runs(fixture, "e" * 40)
+        self.assert_refusal_preserves(
+            fixture, ledger, lambda: fixture.record(ledger, release="v0.16.0"))
+
+    def test_same_target_failed_validation_preserves_ledger_and_evidence(self):
+        fixture = self.fresh()
+        ledger = mech.empty_ledger()
+        fixture.record(ledger, release="v0.16.0")
+        self.rewrite_runs(fixture)
+        self.assert_refusal_preserves(
+            fixture, ledger, lambda: fixture.record(ledger, release="v0.16.0", crates_tree="invalid"))
+
+    def test_same_target_second_copy_failure_preserves_ledger_and_evidence(self):
+        fixture = self.fresh()
+        ledger = mech.empty_ledger()
+        fixture.record(ledger)
+        self.rewrite_runs(fixture)
+        real_copy = shutil.copyfile
+        calls = 0
+        def fail_second(source, target, *args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("synthetic second copy failure")
+            return real_copy(source, target, *args, **kwargs)
+        with mock.patch.object(shutil, "copyfile", side_effect=fail_second):
+            self.assert_refusal_preserves(fixture, ledger, lambda: fixture.record(ledger), OSError)
+
+    def test_same_target_second_publish_failure_restores_ledger_and_evidence(self):
+        fixture = self.fresh()
+        ledger = mech.empty_ledger()
+        fixture.record(ledger)
+        self.rewrite_runs(fixture)
+        real_replace = mech.os.replace
+        calls = 0
+        def fail_second(source, target):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("synthetic second publish failure")
+            return real_replace(source, target)
+        with mock.patch.object(mech.os, "replace", side_effect=fail_second):
+            self.assert_refusal_preserves(fixture, ledger, lambda: fixture.record(ledger), OSError)
+
+    def test_duplicate_release_targets_are_rejected_on_load_and_render(self):
+        ledger = _released(self.ledger)
+        entry = ledger["mechanisms"][0]
+        entry["measurements"].append(copy.deepcopy(entry["measurements"][0]))
+        entry["measurements"][-1]["revision"] = "e" * 40
+        path = self.fixture.root / "duplicate-ledger.json"
+        path.write_text(json.dumps(ledger), encoding="utf-8")
+        with self.assertRaises(mech.MechanismError):
+            mech.load_ledger(path)
+        with self.assertRaises(mech.MechanismError):
+            mech.render(ledger, ["v0.16.0"])
+        with self.assertRaises(mech.MechanismError):
+            mech.release_cell(entry, "v0.16.0")
+
+    def test_two_untagged_revisions_remain_distinct(self):
+        fixture = self.fresh()
+        ledger = mech.empty_ledger()
+        first = fixture.record(ledger)
+        self.rewrite_runs(fixture, "e" * 40)
+        second = fixture.record(ledger)
+        self.assertEqual(len(ledger["mechanisms"][0]["measurements"]), 2)
+        self.assertNotEqual(first["records"], second["records"])
+        mech.validate(ledger, fixture.root)
+
+    def test_short_revision_prefix_alias_is_refused_without_overwrite(self):
+        fixture = self.fresh()
+        ledger = mech.empty_ledger()
+        first = fixture.record(ledger)
+        revision = first["revision"][:12] + "e" * 28
+        self.rewrite_runs(fixture, revision)
+        self.assert_refusal_preserves(fixture, ledger, lambda: fixture.record(ledger))
+
+    def test_summary_and_detail_use_the_same_measurement_after_rerecord(self):
+        fixture = self.fresh()
+        ledger = mech.empty_ledger()
+        fixture.record(ledger, release="v0.16.0")
+        self.rewrite_runs(fixture)
+        latest = fixture.record(ledger, release="v0.16.0")
+        self.assertEqual(ledger["mechanisms"][0]["measurements"], [latest])
+        body = mech.render(ledger, ["v0.16.0"], fixture.root)
+        self.assertEqual(body.count("| Synthetic drop | v0.16.0 | v4 |"), 1)
+        self.assertIn(f"| Synthetic drop | v4: leaked +{fixture.dropped} B, FP 0 B |", body)
 
     def test_a_second_mechanism_needs_only_a_delta_and_a_record_run(self) -> None:
         for version in ("4", "3", "2", "1"):
@@ -365,7 +559,8 @@ class MechanismArmsTest(unittest.TestCase):
         for entry in ledger["mechanisms"]:
             title = entry["title"]
             self.assertEqual(
-                body.count(f"| {title} | v0.15.0 |"),
+                sum(body.count(f"| {title} | v0.15.{index} |")
+                    for index in range(len(entry["measurements"]))),
                 4 * len(entry["measurements"]),
                 title,
             )

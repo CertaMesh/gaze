@@ -442,30 +442,32 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 | Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Own corpus | 0.836 | 0.879 | **0.894 (tuned)** | 0.184 | 0.561 | 0.356 | 0.765 | 0.798 |
-| Presidio Research | not run | 0.825 | **0.918 (tuned)** | 0.147 | 0.639 | 0.538 | 0.692 | 0.663 |
-| PIIBench-commercial | not run | 0.627 | **0.665** | 0.183 | 0.522 | 0.441 | 0.532 | 0.400 |
+| Presidio Research | not run | 0.825 | **0.918 (tuned)** | 0.147† | 0.639† | 0.538† | 0.692† | 0.663† |
+| PIIBench-commercial | not run | 0.627 | **0.665†** | 0.183† | 0.522† | 0.441† | 0.532† | 0.400† |
 
 **Leaked PII bytes** (lower is better; best per row in bold):
 
 | Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Own corpus | 19,556 | 13,291 | **8,261 (tuned)** | 110,273 | 33,270 | 89,546 | 26,515 | 25,485 |
-| Presidio Research | not run | 7,984 | **2,857 (tuned)** | 34,810 | 15,769 | 20,226 | 13,326 | 15,305 |
-| PIIBench-commercial | not run | 105,077 | **87,853** | 222,697 | 114,880 | 145,119 | 127,361 | 170,336 |
+| Presidio Research | not run | 7,984 | **2,857 (tuned)** | 34,810† | 15,769† | 20,226† | 13,326† | 15,305† |
+| PIIBench-commercial | not run | 105,077 | **87,853†** | 222,697† | 114,880† | 145,119† | 127,361† | 170,336† |
 
 **False-positive bytes per 1,000 bytes** (lower is better; best per row in bold):
 
 | Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Own corpus | 19.3 | 15.8 | 41.0 (tuned) | **6.2** | 257.5 | 16.0 | 55.6 | 32.7 |
-| Presidio Research | not run | 10.7 | 38.6 (tuned) | **0.0** | 31.5 | 14.6 | 38.3 | 5.2 |
-| PIIBench-commercial | not run | 20.7 | 38.0 | **1.9** | 94.1 | 71.2 | 36.6 | 5.2 |
+| Presidio Research | not run | 10.7 | 38.6 (tuned) | **0.0†** | 31.5† | 14.6† | 38.3† | 5.2† |
+| PIIBench-commercial | not run | 20.7 | 38.0† | **1.9†** | 94.1† | 71.2† | 36.6† | 5.2† |
 
 A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.15 0, Gaze 0.16 0.
 
 Own corpus: Presidio tuned for this corpus on its validation half (highest F2), the best of three tuned Presidio rows by test-half F2; like every bar it shows all of layer C, validation half included; Presidio's defaults are in competitors.md.
 Presidio Research: Presidio tuned for this dataset by its authors (their published custom setup).
 PIIBench-commercial: PIIBench publishes no vendor-tuned Presidio, so Presidio is the declared best configuration.
+
+† Pre-receipt evidence: not receipt-verified; regeneration pending.
 
 - **Own corpus:** Kiji EN/DE holdout and A4 negatives, 2,910 documents, scored labels v4 (credentials counted; protected repeats credited). Gaze from [`release-history.json`](release-history.json) (the shipped default of each tagged release); competitors from [`comparison.json`](comparison.json).
 - **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
@@ -850,7 +852,9 @@ Gold PII bytes: 55,580. Common-intersection labels: account_number, private_addr
 
 | Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | Own metric (character F1, label-agnostic, the paper's metric) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| pii-tracer | 1,083 | 1,871 | 8.7% | held (typed-metric review) | held (typed-metric review) | 702 | 0.974 |
+| pii-tracer† | 1,083 | 1,871 | 8.7% | held (typed-metric review) | held (typed-metric review) | 702 | 0.974 |
+
+† Pre-receipt evidence: not receipt-verified; regeneration pending.
 
 Gaze v0.16.0: not yet measured on this set, so no Gaze row is shown.
 
@@ -870,21 +874,23 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | gaze-v0.15.1 | 107,701 | 47,616 | 79.8% | held (typed-metric review) | held (typed-metric review) | 33,941 | held (typed-metric review) |
 | gaze-v0.16.0 | 105,077 | 48,309 | 79.5% | held (typed-metric review) | held (typed-metric review) | 32,190 | held (typed-metric review) |
-| datafog-core | 222,697 | 4,529 | 99.9% | 0.128 | 0.092 | 52,232 | 0.099 |
-| datafog-gliner | 112,941 | 71,574 | 75.6% | 0.315 | 0.308 | 25,463 | 0.200 |
-| datafog-regex | 223,137 | 4,926 | 99.9% | 0.128 | 0.092 | 51,108 | 0.097 |
-| datafog-spacy | 114,880 | 219,413 | 82.0% | 0.201 | 0.228 | 29,383 | 0.147 |
-| gliner | 127,361 | 85,245 | 81.1% | 0.253 | 0.243 | 48,389 | 0.181 |
-| gliner-high-recall | 113,436 | 118,822 | 77.5% | 0.235 | 0.241 | 45,994 | 0.176 |
-| opf | 170,336 | 12,174 | 97.0% | held (typed-metric review) | held (typed-metric review) | 44,064 | held (typed-metric review) |
-| pii-tracer | 128,632 | 22,988 | 95.2% | held (typed-metric review) | held (typed-metric review) | 33,519 | held (typed-metric review) |
-| presidio-all | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
-| presidio-en | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
-| presidio-en-de | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
-| presidio-strong | 87,853 | 88,715 | 70.2% | 0.301 | 0.318 | 32,815 | 0.247 |
-| presidio-strong-high-recall | 84,965 | 92,491 | 70.1% | 0.294 | 0.315 | 32,770 | 0.242 |
-| scrubadub-base | 223,156 | 9,971 | 100.0% | held (typed-metric review) | held (typed-metric review) | 66,342 | held (typed-metric review) |
-| scrubadub-spacy | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
+| datafog-core† | 222,697 | 4,529 | 99.9% | 0.128 | 0.092 | 52,232 | 0.099 |
+| datafog-gliner† | 112,941 | 71,574 | 75.6% | 0.315 | 0.308 | 25,463 | 0.200 |
+| datafog-regex† | 223,137 | 4,926 | 99.9% | 0.128 | 0.092 | 51,108 | 0.097 |
+| datafog-spacy† | 114,880 | 219,413 | 82.0% | 0.201 | 0.228 | 29,383 | 0.147 |
+| gliner† | 127,361 | 85,245 | 81.1% | 0.253 | 0.243 | 48,389 | 0.181 |
+| gliner-high-recall† | 113,436 | 118,822 | 77.5% | 0.235 | 0.241 | 45,994 | 0.176 |
+| opf† | 170,336 | 12,174 | 97.0% | held (typed-metric review) | held (typed-metric review) | 44,064 | held (typed-metric review) |
+| pii-tracer† | 128,632 | 22,988 | 95.2% | held (typed-metric review) | held (typed-metric review) | 33,519 | held (typed-metric review) |
+| presidio-all† | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-en† | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-en-de† | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-strong† | 87,853 | 88,715 | 70.2% | 0.301 | 0.318 | 32,815 | 0.247 |
+| presidio-strong-high-recall† | 84,965 | 92,491 | 70.1% | 0.294 | 0.315 | 32,770 | 0.242 |
+| scrubadub-base† | 223,156 | 9,971 | 100.0% | held (typed-metric review) | held (typed-metric review) | 66,342 | held (typed-metric review) |
+| scrubadub-spacy† | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
+
+† Pre-receipt evidence: not receipt-verified; regeneration pending.
 
 Top leaked labels for gaze-v0.16.0: `DATE` 15,632 B, `MISC` 15,614 B, `STREET_ADDRESS` 6,155 B, `OCCUPATION` 5,885 B, `NAME` 5,440 B.
 False-positive bytes for gaze-v0.16.0 by emitted label: `organization` 25,627 B, `custom:url` 8,372 B, `location` 7,218 B, `name` 2,054 B, `custom:postal_code` 2,022 B.
@@ -910,22 +916,24 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | gaze-v0.15.1 | 9,769 | 1,352 | 48.9% | held (typed-metric review) | held (typed-metric review) | 8,274 | 0.702 |
 | gaze-v0.16.0 | 7,984 | 1,364 | 42.0% | held (typed-metric review) | held (typed-metric review) | 6,762 | 0.779 |
-| datafog-core | 34,810 | 0 | 90.2% | 0.168 | 0.118 | 15,680 | 0.114 |
-| datafog-gliner | 9,520 | 5,525 | 34.4% | 0.578 | 0.577 | 5,807 | 0.691 |
-| datafog-regex | 35,039 | 0 | 90.6% | 0.165 | 0.116 | 15,893 | 0.115 |
-| datafog-spacy | 15,769 | 4,015 | 53.1% | 0.470 | 0.458 | 13,290 | 0.572 |
-| gliner | 13,326 | 4,884 | 44.7% | 0.528 | 0.489 | 8,173 | 0.615 |
-| gliner-high-recall | 8,158 | 7,031 | 34.8% | 0.517 | 0.504 | 4,482 | 0.676 |
-| opf | 15,305 | 667 | 57.8% | held (typed-metric review) | held (typed-metric review) | 5,905 | 0.551 |
-| pii-tracer | 6,510 | 5,277 | 38.4% | held (typed-metric review) | held (typed-metric review) | 773 | 0.640 |
-| presidio-all | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
-| presidio-en | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
-| presidio-en-de | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
-| presidio-strong | 12,383 | 3,243 | 50.5% | 0.534 | 0.519 | 12,300 | 0.603 |
-| presidio-strong-high-recall | 12,058 | 3,243 | 49.5% | 0.531 | 0.518 | 12,300 | 0.614 |
+| datafog-core† | 34,810 | 0 | 90.2% | 0.168 | 0.118 | 15,680 | 0.114 |
+| datafog-gliner† | 9,520 | 5,525 | 34.4% | 0.578 | 0.577 | 5,807 | 0.691 |
+| datafog-regex† | 35,039 | 0 | 90.6% | 0.165 | 0.116 | 15,893 | 0.115 |
+| datafog-spacy† | 15,769 | 4,015 | 53.1% | 0.470 | 0.458 | 13,290 | 0.572 |
+| gliner† | 13,326 | 4,884 | 44.7% | 0.528 | 0.489 | 8,173 | 0.615 |
+| gliner-high-recall† | 8,158 | 7,031 | 34.8% | 0.517 | 0.504 | 4,482 | 0.676 |
+| opf† | 15,305 | 667 | 57.8% | held (typed-metric review) | held (typed-metric review) | 5,905 | 0.551 |
+| pii-tracer† | 6,510 | 5,277 | 38.4% | held (typed-metric review) | held (typed-metric review) | 773 | 0.640 |
+| presidio-all† | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-en† | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-en-de† | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-strong† | 12,383 | 3,243 | 50.5% | 0.534 | 0.519 | 12,300 | 0.603 |
+| presidio-strong-high-recall† | 12,058 | 3,243 | 49.5% | 0.531 | 0.518 | 12,300 | 0.614 |
 | presidio-tuned-presidio-research | 2,857 | 4,918 | 22.3% | 0.068 | 0.072 | 2,469 | 0.857 |
-| scrubadub-base | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
-| scrubadub-spacy | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
+| scrubadub-base† | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
+| scrubadub-spacy† | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
+
+† Pre-receipt evidence: not receipt-verified; regeneration pending.
 
 Top leaked labels for gaze-v0.16.0: `STREET_ADDRESS` 4,032 B, `PHONE_NUMBER` 768 B, `TITLE` 750 B, `DATE_TIME` 601 B, `ORGANIZATION` 483 B.
 False-positive bytes for gaze-v0.16.0 by emitted label: `organization` 643 B, `location` 484 B, `name` 232 B, `custom:building_number` 2 B, `custom:credit_card` 2 B.
@@ -1926,17 +1934,17 @@ The preserved phone and cued-cell prose above describes the historical
 [v8 measurements](agentic-adjacency-v8-history.json), and the release
 statement of the CRLF and plate section the historical
 [v9 measurements](agentic-adjacency-v9-history.json). Their links lead to this
-current comparison, which has since been re-measured on v15 below.
+current comparison, which has since been re-measured on v16 below.
 
-The release rows below use generator v15's test partition and each release's
-setup policy, so they include the v5 to v15 cells (labelled lookalikes, address
+The release rows below use generator v16's test partition and each release's
+setup policy, so they include the v5 to v16 cells (labelled lookalikes, address
 blocks, phone shapes, cued ages, birth dates, short cards, postcodes, CRLF
 blocks and German plates, URLs in structured text, tax and government IDs,
 ZIP compression lookalikes, personal age wording and the shipped-class
 identifier, credential, name and phone cells, plus person-linked CRM/HR IDs, numeric JSON ID scalars and benign JSON keywords).
 The table is rendered from
-the [v15 ledger](agentic-adjacency-v15-history.json). The earlier
-[v14 ledger](agentic-adjacency-v14-history.json) on corpus `1e07150b…`,
+the [v16 ledger](agentic-adjacency-v16-history.json). The earlier
+[v15 ledger](agentic-adjacency-v15-history.json) on corpus `0a5f6576…`,
 [v13 ledger](agentic-adjacency-v13-history.json) on corpus `db3c3f36…`,
 [v12 ledger](agentic-adjacency-v12-history.json) on corpus `0748ced8…`,
 [v11 ledger](agentic-adjacency-v11-history.json) on corpus `bab908df…`,
@@ -1951,7 +1959,7 @@ retained as historical data and do not feed this table.
 Record the past-release `agentic_layers.py measure` outputs with
 `render_agentic_adjacency_doc.py --record`, then render this table from its
 committed ledger. Do not edit the rows by hand. The renderer pins the
-generator version, so a later generator leaves these rows bound to v15 until
+generator version, so a later generator leaves these rows bound to v16 until
 they are re-measured.
 
 Generator v12 adds 80 postcode and age positives and 80 benign counterweights
@@ -2014,13 +2022,41 @@ a rejected unquoted placeholder precedes a valid labelled-ID cue. These results
 do not establish coverage for either behavior. Independent positive, repeat and
 benign counterweight cells for both boundaries are deferred.
 
+Generator v16 corrects a corpus self-contradiction: the layer D BSN benign
+reference twins used customer-number labels, while the CRM/HR positives score
+labelled customer numbers as personal data. Twenty log/JSON cells per partition
+now cycle through semantic batch, shipment and equipment labels, drawn from an
+authored vocabulary independently of recognizer expressions. Digits, other
+cells and the 3,728 A / 2,144 D / 280 R document counts are unchanged. Every
+v3–v15 corpus still regenerates byte-for-byte. This correction can remove
+false-positive bytes for any rule that protects customer numbers; it is a
+benchmark correction, not a runtime precision gain. [Label audit and retained
+ambiguities](bsn-twin-labels.md) list the scoring of every relevant benign cell.
+The remeasurement adds 18 D false-positive bytes in each Nym release: two
+nine-digit `deviceSerial` values are classified as licence plates. Both v0.14.0
+arms retain identical byte counts. The vocabulary was not adjusted to improve
+these results.
+
+All displayed release arms were re-measured on v16 using their own tagged code.
+[Bound observation replays](bsn-twin-v16-contract-replay.json) verify identical
+A/D/R metrics under primary contracts v1, v2 and v4: these generated layers use
+the same fully scored agentic contract under each. Layer C inputs and its
+published contract scores remain unchanged. The tables retain refusals and
+leaked bytes on all processed documents, and now show exact restores, restore
+failures and valid/invalid manifests per arm.
+
+Generator v14 scorecards, observation records, ledger and frozen contract are
+retired, retaining v15 as the previous version. Externally bound v4–v13 history
+and consumers remain untouched; their migration is separate contract-pruning
+work. The v14 corpus byte pin remains tested.
+
 <!-- BEGIN GENERATED: agentic-adjacency -->
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.16.0` `policy-file` | 17,135 / 76,491 | 1,966 | 6,898 | 9,894 / 16,452 | 479 |
-| `v0.15.1` `policy-file` | 33,228 / 76,491 | 2,823 | 8,058 | 10,034 / 16,452 | 463 |
-| `v0.15.0` `policy-file` | 33,401 / 76,491 | 2,823 | 8,058 | 10,034 / 16,452 | 463 |
+| `v0.16.0` `policy-file` | 17,135 / 76,491 | 1,966 | 6,916 | 9,894 / 16,452 | 479 |
+| `v0.15.1` `policy-file` | 33,228 / 76,491 | 2,823 | 8,076 | 10,034 / 16,452 | 463 |
+| `v0.15.0` `policy-file` | 33,401 / 76,491 | 2,823 | 8,076 | 10,034 / 16,452 | 463 |
 | `v0.14.0` `full-stack-kiji-resolve` | 43,733 / 76,491 | 10,161 | 7,846 | 10,244 / 16,452 | 323 |
 | `v0.14.0` `pass2-ner` | 44,476 / 76,491 | 2,282 | 5,977 | 10,270 / 16,452 | 200 |
 
@@ -2032,7 +2068,15 @@ benign counterweight cells for both boundaries are deferred.
 | `v0.14.0` `full-stack-kiji-resolve` | 0 / 0 / 0 | 43,733 / 0 / 10,244 |
 | `v0.14.0` `pass2-ner` | 0 / 0 / 0 | 44,476 / 0 / 10,270 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v15-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v15, test corpus `0a5f6576f2d5…`. Each release uses its own setup policy; v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`; v0.14.0 retains the v0.15.x model settings.
+| Release and arm | Exact restores A / D / R | Valid manifests A / D / R | Restore failures A / D / R | Invalid manifests A / D / R |
+| --- | ---: | ---: | ---: | ---: |
+| `v0.16.0` `policy-file` | 3,728 / 2,144 / 280 | 3,728 / 2,144 / 280 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.15.1` `policy-file` | 3,724 / 2,144 / 280 | 3,724 / 2,144 / 280 | 4 / 0 / 0 | 4 / 0 / 0 |
+| `v0.15.0` `policy-file` | 3,724 / 2,144 / 280 | 3,724 / 2,144 / 280 | 4 / 0 / 0 | 4 / 0 / 0 |
+| `v0.14.0` `full-stack-kiji-resolve` | 3,674 / 2,129 / 279 | 3,728 / 2,144 / 280 | 54 / 15 / 1 | 0 / 0 / 0 |
+| `v0.14.0` `pass2-ner` | 3,728 / 2,144 / 280 | 3,728 / 2,144 / 280 | 0 / 0 / 0 | 0 / 0 / 0 |
+
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v16-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v16, test corpus `d6dac67a85d5…`. Each release uses its own setup policy; v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`; v0.14.0 retains the v0.15.x model settings.
 
 <!-- END GENERATED: agentic-adjacency -->
 
@@ -2154,6 +2198,105 @@ Used by the SafetyNet matrix, the NER leaderboard, and the pipeline benches:
 The corpus is synthetic by design and must remain free of real PII.
 
 ---
+
+### Dictionary cache API sequence extension
+
+This separate library arm exercises a warmed record-mode dictionary recognizer,
+then consumes that same object with `with_unicode_case_insensitive()` before
+cleaning. It measures the public API sequence, rather than a setup-policy
+default: its numbers do not enter the release headline tables.
+
+The [seeded generator](../../../scripts/bench/dictionary_sequences.py) uses
+fictional vocabulary independent of runtime rules, ordered term sets, original
+and Unicode case variants, repeated values, multibyte surrounding text, prose,
+quoted tool results and JSON strings. Layer K contains configured values and
+near misses; layer B contains only near misses and identifier-boundary twins.
+Fresh-after-switch and warm-without-switch controls use the same vocabulary.
+The literal control scores only literal configured occurrences as gold.
+Benign twins alter each word so the real pipeline's name-component sweep does
+not turn an unchanged word into another declared name.
+
+Unicode equivalence means **full, non-Turkic Unicode case folding**, with no
+NFC/NFD/NFKC/NFKD normalization: canonically equivalent spellings are not
+implicitly equal. The runtime's pinned `unicode-casefold` 0.2.0 tables cover
+Unicode 9.0.0. The generator's Python `lower()`/`upper()` produce variants and
+`casefold()` independently checks positive equivalence and benign exclusions;
+these are Unicode-data-version dependent (the locked Python 3.13 environment
+uses Unicode 15.1.0). This vocabulary uses mappings shared by those versions,
+including sharp-s expansion; it does not claim coverage of newer mappings or
+locale-sensitive casing. New vocabulary must independently verify agreement
+with the runtime's pinned folding version; Python casefold is not an oracle for
+all future Unicode characters.
+
+Replay regenerates every sequence/layer's corpus, IDs, gold inventory and
+population before scoring observations. A digest-valid record from another
+arm or layer is rejected with a value-free `ReplayBindingError`. Historical
+captures keep their original source hashes and measurements; the history check
+shares replay's [committed generator registry](../../../scripts/bench/dictionary_sequence_generators.py).
+Replay, attach and gate identity reject unknown source hashes or altered retained
+bytes with typed, value-free errors. Replay regenerates inputs with the declared,
+hash-verified [retained source](dictionary-sequences/generator-v1.py.gz), loading
+only its input construction definitions in isolation. Historical replay/scoring
+functions are excluded; the canonical scorer remains current. New captures also
+use a registered generator; future input changes require a new retained source
+and registry entry, keeping existing captures replayable.
+
+Each of six layer/control captures has 324 documents. Every response goes
+through the real pipeline's clean, restore, manifest and protection-trace
+paths. The canonical scorer and observation recorder measure it; standalone
+records use the recorder's C storage slot, independently of the Kiji layer C.
+Replay attaches switch/K and switch/B to a full scorecard as K/B gate layers,
+using the same net-bytes decision and correctness guards as C/A/D/R.
+Extension presence, corpus, adapter, contract, populations and control results
+must agree on both sides. Control changes are not comparable and cannot
+supply a gain. Comparisons without the extension retain their existing output;
+a [committed v4 comparison replay](dictionary-sequences/no-extension-v4-proof.json)
+produces byte-identical gate JSON before and after this gate extension.
+
+**Release history on this arm, contracts v1/v2/v4.** These contracts produce
+the same bytes here; raw and adjusted false-positive bytes are both zero.
+The [ledger](dictionary-sequence-history.json) retains each contract separately,
+all six runs, binary and adapter hashes, refusals, restores and manifest counts.
+
+| Runtime | Warm then switch: K leaked / FP bytes | B FP bytes | Fresh: K leaked / FP bytes | Literal: K leaked / FP bytes | Refusals / restore failures / invalid manifests |
+|---|---:|---:|---:|---:|---:|
+| v0.14.0 | unavailable: no public record-matching API | — | — | — | — |
+| v0.15.0 | unavailable: no public record-matching API | — | — | — | — |
+| v0.15.1 | unavailable: no public record-matching API | — | — | — | — |
+| v0.16.0 | 35,856 / 0 | 0 | 0 / 0 | 0 / 0 | 0 / 0 / 0 |
+
+Earlier tags lack `DictionaryRecognizer::with_record_matching`; the ledger
+pins their dictionary source hashes and revisions. Adding that API would
+backport detection behavior, so no numbers are invented for those rows.
+v0.16.0 uses its own released runtime and lockfile with only the committed
+example adapter overlaid. All 324 documents in every layer/control restore
+exactly and have valid manifests, including documents whose PII was missed.
+The unchanged development runtime also reproduces this leak; that capture is
+retained in the ledger separately from released rows. This is coverage of a
+known gap, not a passing runtime gain claim. Ordinary C/A/D/R inputs, scoring
+and previously measured release rows are unchanged.
+
+For a release checkout that supports the API, apply the exact harness adapter
+with `dictionary_sequences.py install-adapter --repo <checkout>`, then build
+its own `clean_for_bench` example and `validator_recall_probe` using Rust 1.96
+and a checkout-owned target directory. Capture with the current harness:
+
+```bash
+python3 scripts/bench/dictionary_sequences.py capture --repo <checkout> \
+  --binary <checkout>/target/debug/examples/clean_for_bench \
+  --probe <checkout>/target/validator-recall-probe/debug/validator-recall-probe \
+  --output <capture-directory> --seed 20260710
+python3 scripts/bench/dictionary_sequences.py replay --capture <capture-directory> \
+  --scored-labels docs/reference/benchmarks/scored-labels-v4.json \
+  --full-scorecard <same-runtime-full-v4-scorecard> --output <attached-scorecard>
+python3 scripts/bench/agentic_layers.py gate --base <attached-base> --candidate <attached-candidate>
+python3 scripts/bench/dictionary_sequence_history.py check
+```
+
+Repeat replay with v2 and with no `--scored-labels` for v1. Attach only a full
+scorecard measured from the same runtime revision and contract; the tool
+rejects mismatches. Both sides must use identical committed harness bytes.
+The harness lands before a runtime repair is measured against it.
 
 ## Evidence before the release gate
 

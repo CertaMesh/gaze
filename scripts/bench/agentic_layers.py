@@ -30,21 +30,23 @@ import base64
 import copy
 import hashlib
 import json
+import re
 import sys
 import tomllib
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 from typing import Callable, Iterable, Mapping, Sequence
 
 import gaze_bench_score as score
+from dictionary_sequence_generators import GeneratorProvenanceError, resolve as resolve_dictionary_generator
 import government_id_cells as government_ids
 import record_id_cells as record_ids
 import record_id_syntax_cells as record_id_syntax
 
 
-GENERATOR_VERSION = 15
+GENERATOR_VERSION = 16
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -716,6 +718,21 @@ LOOKALIKE_KEYS = {
         "local_date": "dueDate",
     },
 }
+# Authored semantic vocabulary: these references identify inventory or equipment,
+# with no person/account holder. Cycle by document index without consuming the
+# value RNG, preserving every digit and all other documents. LOOKALIKE_KEYS
+# retains the historical v3–v15 labels for exact corpus reconstruction.
+NEUTRAL_REFERENCE_LABELS = {
+    "dev": ("batch_number", "sensor_serial", "shipment_reference"),
+    "test": ("lotNumber", "deviceSerial", "shipmentReference"),
+}
+
+
+def neutral_reference_label(partition: str, index: int) -> str:
+    vocabulary = NEUTRAL_REFERENCE_LABELS[partition]
+    return vocabulary[index % len(vocabulary)]
+
+
 # Prose for the date counterweight: a delivery or due date, never a birth date.
 LOCAL_DATE_PROSE = {
     "dev": ("Die Lieferung kommt am {V}.", "Payment is due {V}."),
@@ -1152,7 +1169,8 @@ def _lookalike_records(partition: str, seed: int) -> list[Record]:
                     else LOOKALIKE_TEMPLATES[surface]
                 )
                 template = rng.choice(pool[partition])
-                text, gold = _fill(template, {"K": (key, None), "V": (value, None)})
+                label = neutral_reference_label(partition, index) if family == "ref_number_9" else key
+                text, gold = _fill(template, {"K": (label, None), "V": (value, None)})
                 records.append(
                     Record(
                         uid=f"agentic-{partition}-D-{family}-{index:03d}-{surface}-{BENIGN}",
@@ -4435,7 +4453,8 @@ def _coverage_records(partition: str) -> list[Record]:
 
 
 # The surface prefix each generator version added. Every earlier document stays
-# byte identical, so an older corpus is a filter of the current one.
+# byte identical, so an older corpus is a filter of the current one, with
+# the v16 label correction reversed for the two historical BSN twin surfaces.
 GENERATOR_ADDITIONS = {
     4: "adjacent_",
     5: "lookalike_",
@@ -4457,12 +4476,22 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
     if not 3 <= version <= GENERATOR_VERSION:
         raise LayerError(f"generator version {version} cannot be rebuilt from version {GENERATOR_VERSION}")
     later = tuple(prefix for added, prefix in GENERATOR_ADDITIONS.items() if added > version)
-    return [record for record in records if not record.surface.startswith(later)] if later else list(records)
+    selected = [record for record in records if not record.surface.startswith(later)] if later else list(records)
+    if version < 16:
+        selected = [
+            replace(record, text=record.text.replace(
+                neutral_reference_label(record.partition, int(record.group.rsplit("-", 1)[1])),
+                LOOKALIKE_KEYS[record.partition][record.family],
+            )) if record.layer == LAYER_LOOKALIKES and record.family == "ref_number_9"
+            and record.surface in ("log_kv", "tool_json") else record
+            for record in selected
+        ]
+    return selected
 
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
-    14: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v14.json"),
+    15: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v15.json"),
     13: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v13.json"),
     12: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v12.json"),
     11: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v11.json"),
@@ -4913,6 +4942,67 @@ def coverage_grid(scorecard: Mapping[str, object], config: str | None = None) ->
 
 
 GATE_LAYERS = ("C", LAYER_IDENTIFIERS, LAYER_LOOKALIKES, LAYER_REPEATS)
+DICTIONARY_SEQUENCE_LAYERS = ("K", "B")
+
+
+def dictionary_sequence_identity(scorecard):
+    """Validate the one supported library-only extension, without changing old gates."""
+    extension = scorecard.get("dictionary_sequence")
+    if extension is None:
+        return None
+    expected = {f"{sequence}/{layer}" for sequence in ("switch", "fresh", "literal")
+                for layer in DICTIONARY_SEQUENCE_LAYERS}
+    if (not isinstance(extension, dict) or set(extension.get("runs", {})) != expected
+            or set(extension.get("evidence", {})) != expected):
+        raise LayerError("incomplete dictionary sequence extension")
+    identity = extension.get("identity")
+    if (not isinstance(identity, dict) or identity.get("version") != 1
+            or identity.get("layers") != list(DICTIONARY_SEQUENCE_LAYERS)
+            or identity.get("sequences") != ["switch", "fresh", "literal"]
+            or identity.get("partition") != "published"
+            or type(identity.get("seed")) is not int):
+        raise LayerError("invalid dictionary sequence identity")
+    for key in ("adapter_sha256", "generator_sha256", "corpus_sha256"):
+        if not re.fullmatch(r"[0-9a-f]{64}", str(identity.get(key, ""))):
+            raise LayerError(f"invalid dictionary sequence {key}")
+    try:
+        resolve_dictionary_generator(identity["generator_sha256"])
+    except GeneratorProvenanceError as error:
+        raise LayerError(str(error)) from None
+    if extension.get("runtime") != scorecard.get("gaze"):
+        raise LayerError("dictionary sequence runtime differs from ordinary layers")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(extension.get("binary_sha256", ""))):
+        raise LayerError("invalid dictionary sequence binary digest")
+    binding = extension.get("producer_binding")
+    if (not isinstance(binding, dict) or binding.get("fresh_locked_build") is not True
+            or not str(binding.get("toolchain", "")).startswith("rustc 1.96.0 ")
+            or binding.get("profile") not in ("debug", "release")):
+        raise LayerError("dictionary sequence has no pinned producer build binding")
+    for key in ("example_source_sha256", "cargo_lock_sha256"):
+        if not re.fullmatch(r"[0-9a-f]{64}", str(binding.get(key, ""))):
+            raise LayerError("dictionary sequence has invalid producer source binding")
+    if extension.get("contract") != scorecard["layers"]["scored_label_contract"]["file_sha256"]:
+        raise LayerError("dictionary sequence contract differs from ordinary layers")
+    for key in expected:
+        evidence = extension["evidence"][key]
+        if not isinstance(evidence, dict) or not re.fullmatch(r"[0-9a-f]{64}", str(evidence.get("sha256", ""))):
+            raise LayerError("invalid dictionary sequence evidence")
+        run = extension["runs"][key]
+        if run.get("config") != "rule-floor-core":
+            raise LayerError("dictionary sequence has unexpected producer config")
+        availability = run.get("pipeline_availability", {})
+        if type(availability.get("attempted_documents")) is not int or availability["attempted_documents"] <= 0:
+            raise LayerError("dictionary sequence has empty or missing population")
+        if evidence.get("observations") != availability["attempted_documents"]:
+            raise LayerError("dictionary sequence population differs from evidence")
+    return {"identity": identity, "contract": extension["contract"],
+            "controls": {
+                key: {field: extension["runs"][key][field]
+                      for field in ("metrics", "pipeline_contract", "pipeline_availability")}
+                for key in sorted(expected) if not key.startswith("switch/")
+            },
+            "populations": {key: extension["runs"][key]["pipeline_availability"]["attempted_documents"]
+                            for key in sorted(expected)}}
 
 DEPENDENCY_OWNERS = {
     "policy.rulepacks.paths": "policy",
@@ -5086,6 +5176,9 @@ def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
             f"scorecard has no gate identity for {', '.join(missing)}; "
             "measure the base again on this harness"
         )
+    extension = dictionary_sequence_identity(scorecard)
+    if extension is not None:
+        identity["dictionary_sequence"] = extension
     return identity
 
 
@@ -5133,8 +5226,10 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
         raise LayerError("scorecard layers carry no integer generator_version")
     required_guard_families = guard_families(version)
     totals: dict[str, dict[str, int]] = {}
-    for layer in GATE_LAYERS:
-        run = _layer_run(scorecard, layer, config)
+    extension = dictionary_sequence_identity(scorecard)
+    for layer in GATE_LAYERS + (DICTIONARY_SEQUENCE_LAYERS if extension is not None else ()):
+        run = (scorecard["dictionary_sequence"]["runs"][f"switch/{layer}"]
+               if layer in DICTIONARY_SEQUENCE_LAYERS else _layer_run(scorecard, layer, config))
         utf8 = run["metrics"]["utf8_bytes"]
         contract = run.get("pipeline_contract")
         if not isinstance(contract, dict):
@@ -5233,6 +5328,13 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
     leaked-byte decrease. With no leak change, an FP-only fix passes when the
     summed FP bytes fall.
     """
+    layers = GATE_LAYERS
+    if set(base) != set(candidate):
+        raise LayerError("gate layer sets differ")
+    if set(base) == set(GATE_LAYERS + DICTIONARY_SEQUENCE_LAYERS):
+        layers += DICTIONARY_SEQUENCE_LAYERS
+    elif set(base) != set(GATE_LAYERS):
+        raise LayerError("unsupported gate layer set")
     rows = {
         layer: {
             "attempted_base": base[layer]["attempted"],
@@ -5258,7 +5360,7 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
             "manifest_invalid_base": base[layer]["documents"] - base[layer]["manifest_valid"],
             "manifest_invalid_candidate": candidate[layer]["documents"] - candidate[layer]["manifest_valid"],
         }
-        for layer in GATE_LAYERS
+        for layer in layers
     }
     # Any rise fails, on the gated bytes or on the headline (all gold): a
     # regression must not hide inside gold the gate leaves out.
@@ -5501,8 +5603,8 @@ def gate(
             "policy_delta_path": str(policy_delta),
         }
     differing = sorted(
-        key for key in base_identity
-        if base_identity[key] != candidate_identity[key]
+        key for key in base_identity.keys() | candidate_identity.keys()
+        if base_identity.get(key) != candidate_identity.get(key)
         and (key != "policy_sha256" or policy_delta is None)
         and (key != "ner_threshold" or "ner" not in added_sections)
     )

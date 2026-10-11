@@ -68,7 +68,7 @@ import hashlib
 import json
 import random
 import re
-import subprocess
+from checked_daemon_batch import run_daemon_batch
 import sys
 import tempfile
 from collections import Counter, defaultdict
@@ -272,31 +272,16 @@ def documents() -> list[dict]:
 
 
 def run(binary: str, policy: Path, docs: list[dict]) -> list[dict]:
-    lines = "".join(
-        json.dumps({"session_id": f"doc-{i}", "text": d["text"]}) + "\n"
-        for i, d in enumerate(docs)
-    )
-    out = subprocess.run(
-        [binary, "daemon", "--policy", str(policy)],
-        input=lines,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    by_id = {}
-    for line in out.stdout.splitlines():
-        value = json.loads(line)
-        by_id[value.get("session_id")] = value
-    return [by_id.get(f"doc-{i}") for i in range(len(docs))]
+    return run_daemon_batch(binary, policy, docs)
 
 
 TOKEN = re.compile(r"<[0-9a-f]{8}:[^>]+>")
 
 
-def blanked(response: dict) -> str | None:
-    """The clean text with every token replaced by one NUL, or None without clean text."""
-    clean = response.get("clean_text")
-    return None if clean is None else re.sub(r"\x00+", "\x00", TOKEN.sub("\x00", clean))
+def blanked(response: dict) -> str:
+    """The clean text with every token replaced by one NUL."""
+    clean = response["clean_text"]
+    return re.sub(r"\x00+", "\x00", TOKEN.sub("\x00", clean))
 
 
 def raw_residue(response: dict, doc: dict) -> str | None:
@@ -307,9 +292,7 @@ def raw_residue(response: dict, doc: dict) -> str | None:
     blanks collapsed (a fragmented span emits several adjacent tokens), and what
     is left must be exactly the prefix and the trailer.
     """
-    clean = response.get("clean_text")
-    if clean is None:
-        return "<no clean_text>"
+    clean = response["clean_text"]
     blanked = re.sub(r"\x00+", "\x00", TOKEN.sub("\x00", clean))
     expected = doc["prefix"] + "\x00" + doc["trailer"]
     return None if blanked == expected else blanked
@@ -320,7 +303,7 @@ def iban_view(response: dict, span: tuple[int, int]) -> tuple[str, int]:
     start, end = span
     protected = set()
     classes = []
-    for entry in response.get("manifest", []):
+    for entry in response["manifest"]:
         raw = entry["raw_span"]
         lo, hi = max(raw["start"], start), min(raw["end"], end)
         if lo < hi:
@@ -402,7 +385,7 @@ def main() -> int:
             # must not change how much of it is protected.
             no_trailer = {}
             for doc, b, f in zip(docs, base, fix):
-                if doc["trailer"] == "" and b is not None and f is not None:
+                if doc["trailer"] == "":
                     key = (doc["prefix"], doc["shape"])
                     f_cls, f_bytes = iban_view(f, doc["iban_span"])
                     span = doc["iban_span"][1] - doc["iban_span"][0]
@@ -412,9 +395,6 @@ def main() -> int:
                         f_cls == "iban" and f_bytes == span,
                     )
             for doc, b, f in zip(docs, base, fix):
-                if b is None or f is None:
-                    stats["missing_response"] += 1
-                    continue
                 b_cls, b_bytes = iban_view(b, doc["iban_span"])
                 f_cls, f_bytes = iban_view(f, doc["iban_span"])
                 span_len = doc["iban_span"][1] - doc["iban_span"][0]

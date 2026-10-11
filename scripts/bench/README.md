@@ -480,6 +480,25 @@ SHA-256 and refuses identical builds; run them against immutable copies.
   conflict winner), and every changed document must be `family-derived` or
   `family-strictest-member`.
 
+All seven daemon enumeration runners use `checked_daemon_batch.py`. A batch
+must exit successfully and return exactly one shaped success per request ID;
+refusals, missing responses and malformed output fail the measurement. Valid
+out-of-order responses are joined by ID. The bounded transport requires POSIX
+pipes and uses LF framing, preserving Unicode line separators inside JSON.
+
+The [checked-batch replay receipts](fixtures/checked-daemon-batch-evidence.json)
+pin historical binary builds, input sources, replay counts and test results.
+`replay_enumeration_proof.py` keeps today's scorer and checked transport while
+loading a hash-verified historical IBAN input generator. Its arguments are
+`SCRIPT INPUT_COMMIT INPUT_SHA256 BASE_BINARY HEAD_BINARY OUTPUT`, followed by
+the script's optional arguments. The receipts retain an independent discrepancy
+in the published PR #624 review result without rewriting its provenance.
+
+Collateral random-prefix, corpus-parity, containment and residual-count claims
+cannot be reproduced by these scripts alone: their exact one-off counting
+harnesses or input/policy receipts are not pinned beside the claims. The
+inventory records these limits; their existing published provenance is retained.
+
 ## Model-free verification
 
 Normal CI runs only the locked Python tests:

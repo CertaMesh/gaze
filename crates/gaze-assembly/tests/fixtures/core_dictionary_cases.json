@@ -1,0 +1,14 @@
+[
+  {"input":"Play tenant-song-xyz again.","classes":["tenant_song"]},
+  {"input":"Play Tenant Tune again.","classes":["tenant_song"]},
+  {"input":"Play tenant tune again.","classes":[]},
+  {"input":"Play TENANT-SONG-XYZ again.","classes":[]},
+  {"input":"tenant-song-xy tenant-song-xyzz prefix-tenant-song-xyz tenant-song-xyz-suffix","classes":[]},
+  {"input":"Play TENANT-ALBUM-ABC and tenant-album-abc.","classes":["tenant_album","tenant_album"]},
+  {"input":"tenant-album-ab tenant-album-abcd prefix-tenant-album-abc tenant-album-abc-suffix","classes":[]},
+  {"input":"Play tenant-file-song-xyz and TENANT-SECOND-SONG-ABC.","classes":["tenant_file_song","tenant_file_song"]},
+  {"input":"Play tenant-inline-companion twice: tenant-inline-companion.","classes":["tenant_file_song","tenant_file_song"]},
+  {"input":"tenant-file-song-xy tenant-file-song-xyzz prefix-tenant-file-song-xyz tenant-file-song-xyz-suffix","classes":[]},
+  {"input":"Synthetic tenant terms; comments and blank lines must not match.","classes":[]},
+  {"input":"Play tenant-song-xyz, tenant-album-abc, and tenant-file-song-xyz.","classes":["tenant_song","tenant_album","tenant_file_song"]}
+]

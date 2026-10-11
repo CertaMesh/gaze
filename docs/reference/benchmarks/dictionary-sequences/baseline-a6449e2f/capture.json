@@ -1,0 +1,87 @@
+{
+  "identity": {
+    "version": 1,
+    "seed": 20260710,
+    "partition": "published",
+    "layers": [
+      "K",
+      "B"
+    ],
+    "sequences": [
+      "switch",
+      "fresh",
+      "literal"
+    ],
+    "adapter_sha256": "cd3a47b248a524e28639c92fe509f64f668bc3f393ab57bb0242c1bc35369ed8",
+    "generator_sha256": "35e4a0950451eefc5022700d8424b13369a08e5f822a4a3083cb0a7a65b8ec90",
+    "corpus_sha256": "ce6863f7ea1c8dddaaaea2e1f2e9d8b21fba45e870a26f7ff2d06c4dcee4ed5a"
+  },
+  "runtime": {
+    "revision": "a6449e2f15563326e7ab9b76e5c9654148acd1e0",
+    "dirty": false
+  },
+  "binary_sha256": "58a45991a4d911b9e362ddc1e7e5a90c0edfb426ad2c5d85282cc3ce57b21161",
+  "records": {
+    "switch/K": {
+      "file": "switch-K.jsonl.gz",
+      "sha256": "ac1bc5c481e1bf12fe76aeb4cd0153fc3cefd7ba2e702321143386bc3ce21490",
+      "format": "gzip-jsonl",
+      "schema_version": 2,
+      "corpus_sha256": "953063ab631fbcf769b33ad343ee2ba9d1b9221c525779f198d63690949c5ee7",
+      "observations": 324,
+      "bytes": 15996
+    },
+    "switch/B": {
+      "file": "switch-B.jsonl.gz",
+      "sha256": "539fe6c5c1458878a3dc9fbd458e0aa0bde86ee4c019e09780a3024e29c60c75",
+      "format": "gzip-jsonl",
+      "schema_version": 2,
+      "corpus_sha256": "ca9de965121cd65d4fdf3b945fe5332c34063aead4205a39912e88d8c2194a32",
+      "observations": 324,
+      "bytes": 11366
+    },
+    "fresh/K": {
+      "file": "fresh-K.jsonl.gz",
+      "sha256": "22e6087be06fca079b394fbed105d9e08ecc35134fc67ac82aaf9ecba79446f5",
+      "format": "gzip-jsonl",
+      "schema_version": 2,
+      "corpus_sha256": "953063ab631fbcf769b33ad343ee2ba9d1b9221c525779f198d63690949c5ee7",
+      "observations": 324,
+      "bytes": 42457
+    },
+    "fresh/B": {
+      "file": "fresh-B.jsonl.gz",
+      "sha256": "219c0beefb04c2039519e9a10bfefb717f57ddfe0ad7aa84152aebb75017e7c3",
+      "format": "gzip-jsonl",
+      "schema_version": 2,
+      "corpus_sha256": "ca9de965121cd65d4fdf3b945fe5332c34063aead4205a39912e88d8c2194a32",
+      "observations": 324,
+      "bytes": 11358
+    },
+    "literal/K": {
+      "file": "literal-K.jsonl.gz",
+      "sha256": "9d4e746c6ad6a830e9e7df41fb7aab600d7161515c36fe7fa13e563184ec4e43",
+      "format": "gzip-jsonl",
+      "schema_version": 2,
+      "corpus_sha256": "b1b28249fa46ba322c49086d59e2b3e961b5eb1a40ea07b4b9d2edef94fbd0a7",
+      "observations": 324,
+      "bytes": 29831
+    },
+    "literal/B": {
+      "file": "literal-B.jsonl.gz",
+      "sha256": "d72faecf71086de493358bb43b9d1bf672cc86a4aafd669dd6cb2a83c77e5939",
+      "format": "gzip-jsonl",
+      "schema_version": 2,
+      "corpus_sha256": "ca9de965121cd65d4fdf3b945fe5332c34063aead4205a39912e88d8c2194a32",
+      "observations": 324,
+      "bytes": 11360
+    }
+  },
+  "producer_binding": {
+    "toolchain": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "profile": "debug",
+    "fresh_locked_build": true,
+    "example_source_sha256": "708f4edf8dc1334d93d75a2ed20b774b728de149b497309c24dab13c0ab61f96",
+    "cargo_lock_sha256": "d96bc6b40837ef9382a29f52a2f17152b363165150aced47097a4958c153b0c7"
+  }
+}

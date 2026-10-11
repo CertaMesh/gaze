@@ -1,0 +1,419 @@
+{
+  "schema_version": 1,
+  "scope": "Library-only dictionary API sequence; excluded from setup-policy release headlines. Standalone canonical records use storage layer C, then attach as K/B extension runs.",
+  "releases": [
+    {
+      "release": "v0.14.0",
+      "revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
+      "dictionary_source_sha256": "a6d21235a59cc72787ce11c94a4747238a3e227192371cfde3d9ac161b1126ef",
+      "record_api_available": false,
+      "unavailable": "This tag has no public DictionaryRecognizer::with_record_matching API. Running the warm-record-then-switch sequence would require a detection backport, so this arm is unavailable."
+    },
+    {
+      "release": "v0.15.0",
+      "revision": "5127788b089f0f6f4e3b8bcf176503953744be01",
+      "dictionary_source_sha256": "4426ec3ced2308a6a95facaf6497d8f0118819721803ce737cf8e4bab0975607",
+      "record_api_available": false,
+      "unavailable": "This tag has no public DictionaryRecognizer::with_record_matching API. Running the warm-record-then-switch sequence would require a detection backport, so this arm is unavailable."
+    },
+    {
+      "release": "v0.15.1",
+      "revision": "4927f7c0a862ece2cdcd8c00df34538a510d008e",
+      "dictionary_source_sha256": "4426ec3ced2308a6a95facaf6497d8f0118819721803ce737cf8e4bab0975607",
+      "record_api_available": false,
+      "unavailable": "This tag has no public DictionaryRecognizer::with_record_matching API. Running the warm-record-then-switch sequence would require a detection backport, so this arm is unavailable."
+    },
+    {
+      "release": "v0.16.0",
+      "revision": "5a7dac0fa198f20a628ed6b7fa2b5c9d41a91eb0",
+      "dictionary_source_sha256": "8bae3a0654a560b64590497aea8d0fe8dac0c708f582af63ad6cfdbde58c3c2a",
+      "record_api_available": true,
+      "capture": "docs/reference/benchmarks/dictionary-sequences/v0.16.0",
+      "contracts": {
+        "1": {
+          "switch/K": {
+            "leaked_bytes": 35856,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "switch/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "fresh/K": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "fresh/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "literal/K": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "literal/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          }
+        },
+        "2": {
+          "switch/K": {
+            "leaked_bytes": 35856,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "switch/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "fresh/K": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "fresh/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "literal/K": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "literal/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          }
+        },
+        "4": {
+          "switch/K": {
+            "leaked_bytes": 35856,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "switch/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "fresh/K": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "fresh/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "literal/K": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "literal/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          }
+        }
+      },
+      "overlay": "Only clean_for_bench.rs and the byte-identical committed support/dictionary_sequence.rs adapter changed; runtime detection sources and Cargo.lock stayed at the tag."
+    }
+  ],
+  "development": [
+    {
+      "revision": "a6449e2f15563326e7ab9b76e5c9654148acd1e0",
+      "capture": "docs/reference/benchmarks/dictionary-sequences/baseline-a6449e2f",
+      "contracts": {
+        "1": {
+          "switch/K": {
+            "leaked_bytes": 35856,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "switch/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "fresh/K": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "fresh/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "literal/K": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "literal/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          }
+        },
+        "2": {
+          "switch/K": {
+            "leaked_bytes": 35856,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "switch/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "fresh/K": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "fresh/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "literal/K": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "literal/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          }
+        },
+        "4": {
+          "switch/K": {
+            "leaked_bytes": 35856,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "switch/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "fresh/K": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "fresh/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "literal/K": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          },
+          "literal/B": {
+            "leaked_bytes": 0,
+            "false_positive_bytes": 0,
+            "refusals": 0,
+            "attempted": 324,
+            "exact_restores": 324,
+            "restore_failures": 0,
+            "valid_manifests": 324,
+            "invalid_manifests": 0
+          }
+        }
+      }
+    }
+  ],
+  "no_extension_proof": "docs/reference/benchmarks/dictionary-sequences/no-extension-v4-proof.json",
+  "mutation_proof": "docs/reference/benchmarks/dictionary-sequences/warm-bypass-mutation.json"
+}

@@ -7,7 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Third-party benchmark assembly now checks prediction and dataset receipts,
+  system identity, document counts and published scores through the same row
+  admission path as incremental publication. Untagged Gaze runs record their
+  prediction digest. Existing pre-receipt rows retain their numbers and are
+  explicitly marked as not receipt-verified, with regeneration pending.
+
+- Mechanism benchmark recording now rejects conflicting release revisions and
+  evidence filename aliases before publication. Failed validation or copying
+  preserves the ledger and its pinned observation records; summary and detail
+  tables use the same unambiguous measurement target. New evidence filenames
+  include their content hash, and the ledger is atomically replaced after
+  evidence is fsynced. Crashes before ledger publication and ledger-write
+  failures preserve all prior pins; existing committed filenames stay valid.
+
+- Enumeration proof scripts now reject failed daemon batches before scoring:
+  bounded transport, checked child exit, exact session IDs, LF framing and
+  validated successful response shapes. Matching refusals can no longer
+  prove unchanged behavior, and reordered phone responses are joined by ID.
+
 ### Changed
+
+- `CorePipelineConfig` now resolves custom rulepack dictionaries through the
+  policy input loader, and `CorePipeline::pseudonymize_text` passes their terms
+  on every call. Unreadable `terms_file` inputs fail with a typed
+  `BuildError::Policy(PolicyError::BadDictionary)` error. `dictionaries()` and
+  `into_parts()` retain all inputs for low-level callers. Enabled context-backed
+  dictionaries fail with `BuildError::Policy(PolicyError::BadDictionary)` because
+  CorePipeline cannot accept context. Shared rulepack loading rejects context
+  combined with inline/file terms as `RulepackError::DictionarySourceConflict`.
+  The getting-started tutorial uses the dictionary-preserving wrapper.
 
 - [bundle-tokenization-drift] `core`: directly labelled phone values now remain
   protected when parsing fails; record their typed validation reason.
@@ -17,6 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Protect explicitly labelled customer, employee and person/member record identifiers
   in English/German prose, JSON and logs with exact reversible value capture.
   Generic record, order, invoice, issue, build and tracking IDs remain outside these rules.
+- Direct Anthropic proxy readiness now requires the original adapter allocation.
+  Replacing or removing it from `ProxyConfig::adapters`, including a same-origin
+  replacement, returns `ProxyError::DirectAdapterMismatch` before serving.
+  Runtime settings and the codec come from one resolved adapter; compatibility
+  constructors retain their frozen defaults.
+- Custom recognizers returning NaN or infinite confidence scores now fail closed
+  with a sanitized `DetectError::Backend` (`invalid_score`) before score filtering.
+  Finite negative scores still fall below the existing 0.0 admission floor.
 
 - Tax and government identifiers cover additional cue connectors and grouped
   layouts, including slash Steuernummer, separated SSN, Swiss AHV and national
