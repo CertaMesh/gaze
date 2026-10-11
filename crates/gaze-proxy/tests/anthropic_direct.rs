@@ -487,10 +487,95 @@ async fn same_origin_adapter_replacement_fails_readiness_before_serving() {
     )
     .await
     .expect("replacement must fail readiness before accepting any request body");
-    assert!(result.is_err(), "replacement must be a readiness error");
+    assert!(matches!(
+        result,
+        Err(gaze_proxy::ProxyError::DirectAdapterMismatch)
+    ));
     assert!(!resolver_called.load(Ordering::SeqCst));
     assert_eq!(upstream.connections.load(Ordering::SeqCst), 0);
     assert!(upstream.captures.lock().await.is_empty());
+}
+
+#[tokio::test]
+async fn removed_changed_origin_and_duplicate_direct_adapters_fail_readiness() {
+    for mutation in ["removed", "changed_origin", "duplicate"] {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut config = ProxyConfig::anthropic_direct(
+            listener.local_addr().unwrap(),
+            AnthropicAdapter::new(Url::parse("http://127.0.0.1:1").unwrap()),
+        );
+        match mutation {
+            "removed" => config.adapters.clear(),
+            "changed_origin" => {
+                config.adapters[0] = Arc::new(AnthropicAdapter::new(
+                    Url::parse("http://127.0.0.1:2").unwrap(),
+                ));
+            }
+            "duplicate" => config.adapters.push(Arc::clone(&config.adapters[0])),
+            _ => unreachable!(),
+        }
+        let error = tokio::time::timeout(
+            Duration::from_secs(1),
+            gaze_proxy::serve_with_listener(config, Arc::new(email_pipeline()), listener),
+        )
+        .await
+        .expect("invalid adapter configuration must fail readiness")
+        .unwrap_err();
+        if mutation == "duplicate" {
+            assert!(
+                matches!(error, gaze_proxy::ProxyError::DaemonConfig { detail }
+                if detail == "direct_adapter_count_invalid")
+            );
+        } else {
+            assert!(matches!(
+                error,
+                gaze_proxy::ProxyError::DirectAdapterMismatch
+            ));
+        }
+    }
+}
+
+#[tokio::test]
+async fn compatibility_constructor_keeps_default_deny_and_serves_ordinary_requests() {
+    let upstream = spawn_upstream().await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let bind = listener.local_addr().unwrap();
+    let resolver_called = Arc::new(AtomicBool::new(false));
+    let adapter = AnthropicAdapter::builder(upstream.origin.clone())
+        .allow_beta("tools-2025-01-01")
+        .unwrap()
+        .principal_resolver(Arc::new(RecordingResolver {
+            called: Arc::clone(&resolver_called),
+        }))
+        .build()
+        .unwrap();
+    let config = ProxyConfig::new(bind, vec![Arc::new(adapter)]);
+    let handle = tokio::spawn(async move {
+        gaze_proxy::serve_with_listener(config, Arc::new(email_pipeline()), listener)
+            .await
+            .unwrap();
+    });
+    let proxy = RunningServer {
+        base_url: format!("http://{bind}"),
+        handle,
+        _inspection_consumer: None,
+    };
+    wait_for_proxy(bind).await;
+    let denied = sdk_client_request(&Client::new(), &proxy, false)
+        .header("anthropic-beta", "tools-2025-01-01")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(upstream.connections.load(Ordering::SeqCst), 0);
+    let allowed = sdk_client_request(&Client::new(), &proxy, false)
+        .header("x-gaze-session-id", "123e4567-e89b-42d3-a456-426614174000")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(allowed.status(), StatusCode::OK);
+    assert_eq!(upstream.captures.lock().await.len(), 1);
+    assert!(!resolver_called.load(Ordering::SeqCst));
 }
 
 #[test]

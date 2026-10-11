@@ -213,7 +213,56 @@ impl DirectClientConfig {
     }
 }
 
+/// One allocation owns both the direct contract and its runtime settings.
+enum ResolvedDirectAdapter {
+    Configured(Arc<AnthropicAdapter>),
+    Compatibility(Arc<dyn ProviderAdapter>),
+}
+
+impl ResolvedDirectAdapter {
+    fn resolve(config: &ProxyConfig) -> Result<Option<Self>, ProxyError> {
+        let mut direct = config
+            .adapters
+            .iter()
+            .filter(|adapter| matches!(adapter.contract().protocol(), ProtocolContract::Codec(_)));
+        let Some(selected) = direct.next() else {
+            return if config.direct_anthropic.is_some() {
+                Err(ProxyError::DirectAdapterMismatch)
+            } else {
+                Ok(None)
+            };
+        };
+        if direct.next().is_some() {
+            return Err(direct_readiness_error("direct_adapter_count_invalid"));
+        }
+        if let Some(configured) = &config.direct_anthropic {
+            let dynamic: Arc<dyn ProviderAdapter> = configured.clone();
+            if !Arc::ptr_eq(&dynamic, selected) {
+                return Err(ProxyError::DirectAdapterMismatch);
+            }
+            Ok(Some(Self::Configured(Arc::clone(configured))))
+        } else {
+            Ok(Some(Self::Compatibility(Arc::clone(selected))))
+        }
+    }
+
+    fn provider(&self) -> &dyn ProviderAdapter {
+        match self {
+            Self::Configured(adapter) => adapter.as_ref(),
+            Self::Compatibility(adapter) => adapter.as_ref(),
+        }
+    }
+
+    fn configured(&self) -> Option<&AnthropicAdapter> {
+        match self {
+            Self::Configured(adapter) => Some(adapter),
+            Self::Compatibility(_) => None,
+        }
+    }
+}
+
 struct DirectRuntime {
+    adapter: ResolvedDirectAdapter,
     client: DirectClient,
     endpoint: Url,
     session_policy: SessionPolicy,
@@ -240,18 +289,10 @@ struct PreparedDirectIngress {
 
 impl DirectRuntime {
     fn from_config(config: &ProxyConfig) -> Result<Option<Self>, ProxyError> {
-        let direct_adapters: Vec<_> = config
-            .adapters
-            .iter()
-            .filter(|adapter| matches!(adapter.contract().protocol(), ProtocolContract::Codec(_)))
-            .collect();
-        if direct_adapters.is_empty() {
+        let Some(resolved) = ResolvedDirectAdapter::resolve(config)? else {
             return Ok(None);
-        }
-        if direct_adapters.len() != 1 {
-            return Err(direct_readiness_error("direct_adapter_count_invalid"));
-        }
-        let adapter = direct_adapters[0];
+        };
+        let adapter = resolved.provider();
         let contract = adapter.contract();
         let session_policy = contract
             .session_policy()
@@ -266,10 +307,7 @@ impl DirectRuntime {
         let inspection_endpoint_codes =
             ProxyInspectionEndpointCodesV1::from_validated_origin(&endpoint);
 
-        let explicit = config.direct_anthropic.as_deref();
-        if explicit.is_some_and(|value| value.upstream_base() != adapter.upstream_base()) {
-            return Err(direct_readiness_error("direct_adapter_mismatch"));
-        }
+        let explicit = resolved.configured();
         let client_config = DirectClientConfig::from_anthropic(explicit);
         let client = DirectClient::new(client_config)
             .map_err(|_| direct_readiness_error("direct_client_invalid"))?;
@@ -307,6 +345,7 @@ impl DirectRuntime {
         let ping_interval =
             explicit.map_or(Duration::from_secs(10), AnthropicAdapter::ping_interval);
         Ok(Some(Self {
+            adapter: resolved,
             client,
             endpoint,
             session_policy,
@@ -1993,7 +2032,15 @@ async fn proxy_inner(
             method: method.clone(),
         })?;
     let contract = adapter.contract();
-    if let ProtocolContract::Codec(codec) = contract.protocol() {
+    if matches!(contract.protocol(), ProtocolContract::Codec(_)) {
+        let runtime = state
+            .direct
+            .as_ref()
+            .ok_or_else(|| direct_readiness_error("direct_runtime_missing"))?;
+        let resolved_contract = runtime.adapter.provider().contract();
+        let ProtocolContract::Codec(codec) = resolved_contract.protocol() else {
+            return Err(direct_readiness_error("direct_codec_missing"));
+        };
         return Ok(
             match direct_proxy_inner(
                 &state,
@@ -3215,6 +3262,7 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::SsePartialFrame { .. } => "SsePartialFrame",
         ProxyError::UnsurfacedPii { .. } => "UnsurfacedPii",
         ProxyError::UnprovenCoverage => "UnprovenCoverage",
+        ProxyError::DirectAdapterMismatch => "DirectAdapterMismatch",
         ProxyError::Refused { .. } => "Refused",
         ProxyError::Pipeline { .. } => "Pipeline",
         ProxyError::Server { .. } => "Server",
@@ -3498,6 +3546,9 @@ mod tests {
     ) -> AppState {
         let client_config = DirectClientConfig::default();
         let runtime = DirectRuntime {
+            adapter: ResolvedDirectAdapter::Compatibility(Arc::new(AnthropicAdapter::new(
+                endpoint.clone(),
+            ))),
             client: DirectClient::new(client_config).unwrap(),
             endpoint: endpoint.clone(),
             session_policy,
@@ -4605,6 +4656,9 @@ mod tests {
             .try_with_max_request_bytes(request_limit)
             .unwrap();
         let runtime = DirectRuntime {
+            adapter: ResolvedDirectAdapter::Compatibility(Arc::new(AnthropicAdapter::new(
+                url.clone(),
+            ))),
             client: DirectClient::new(client_config).unwrap(),
             endpoint: url.clone(),
             session_policy: SessionPolicy::OpaqueHeaderContinuity(registry_config),

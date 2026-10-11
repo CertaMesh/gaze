@@ -59,6 +59,19 @@ locales automatically. Low-level callers can use `dictionaries()` or
 `Pipeline::pseudonymize_with_detect_context`. `into_pipeline()` remains available,
 but discards the dictionaries and locale chain.
 
+### Action required: direct proxy adapter replacement
+
+If you use `ProxyConfig::anthropic_direct`, keep its adapter allocation in
+`ProxyConfig::adapters`. Removing or replacing that entry now fails readiness
+with `ProxyError::DirectAdapterMismatch`, even when the replacement uses the
+same upstream origin. Rebuild the configuration with `anthropic_direct` to
+change its resolver, allowlists, timeouts, session policy or codec limits.
+Cloning the configuration or its existing adapter `Arc` remains supported.
+
+`ProxyConfig::new` keeps its compatibility defaults, including the default-deny
+beta allowlist. Readiness rejects duplicate direct adapters as before. The
+identity check runs before accepting request bodies or performing upstream I/O.
+
 ## v0.15.x → v0.16.0
 
 ### TL;DR

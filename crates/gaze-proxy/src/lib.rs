@@ -99,6 +99,9 @@ impl ProxyConfig {
     /// This preserves builder-only settings such as continuity, allowlists, timeouts, and an
     /// optional trusted principal resolver. [`Self::new`] remains source-compatible for legacy
     /// multi-provider configurations and uses the direct profile's frozen defaults.
+    /// Removing or replacing this adapter in [`Self::adapters`] fails readiness with
+    /// [`ProxyError::DirectAdapterMismatch`], even if the replacement has the same origin.
+    /// Rebuild the configuration with this constructor to change the direct adapter.
     #[must_use]
     pub fn anthropic_direct(bind: SocketAddr, adapter: AnthropicAdapter) -> Self {
         let adapter = Arc::new(adapter);
