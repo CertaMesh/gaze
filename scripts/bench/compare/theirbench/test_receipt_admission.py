@@ -60,14 +60,93 @@ class ReceiptAdmissionTest(unittest.TestCase):
 
     def test_batch_and_incremental_publication_are_byte_identical(self):
         with tempfile.TemporaryDirectory() as root:
-            body, own = trace_report(chart_configs={"pii-tracer": "pii-tracer"}), own_pii_trace()
-            rp, op = (Path(root) / n for n in ('report.json', 'own.json'))
-            rp.write_text(json.dumps(body)); op.write_text(json.dumps(own))
-            batch = render.assemble([rp], [f'pii-trace={op}'], [f'pii-trace={op}'])
+            root = Path(root)
+            body = trace_report(chart_configs={"pii-tracer": "pii-tracer"})
+            body['rows']['opf'] = copy.deepcopy(body['rows']['pii-tracer'])
+            body['provenance']['opf'] = copy.deepcopy(body['provenance']['pii-tracer'])
+            body['provenance']['opf']['prediction_sha256'] = '8' * 64
+            own, opf_own = own_pii_trace(), own_pii_trace('opf')
+            opf_own['input']['prediction_sha256'] = '8' * 64
+            rp, op, opf_op = (root / n for n in ('report.json', 'own.json', 'opf-own.json'))
+            rp.write_text(json.dumps(body))
+            op.write_text(json.dumps(own)); opf_op.write_text(json.dumps(opf_own))
+            batch = render.assemble([rp], [f'pii-trace={op}', f'pii-trace={opf_op}'], [f'pii-trace={op}'])
             incremental = {'schema_version': 1, 'report_only': 'never used to design or tune Gaze rules',
                            'not_run': render.NOT_RUN, 'benchmarks': {}}
-            render.add_benchmark(incremental, rp, op, 'pii-tracer')
+            for tool, own_path in [('pii-tracer', op), ('opf', opf_op)]:
+                single = copy.deepcopy(body)
+                single['rows'] = {tool: single['rows'][tool]}
+                single['provenance'] = {tool: single['provenance'][tool]}
+                rp.write_text(json.dumps(single))
+                route = render.add_benchmark if tool == 'pii-tracer' else render.add_tool
+                route(incremental, rp, own_path, tool)
             self.assertEqual(json.dumps(batch, sort_keys=True), json.dumps(incremental, sort_keys=True))
+            self.assertNotIn('rows_measured_separately', incremental['benchmarks']['pii-trace'])
+
+    def test_incremental_publication_preserves_different_harness_provenance(self):
+        changes = {
+            'harness_revision': 'different-measurement', 'gaze_crates_tree': 'different-tree',
+            'comparison_revision': 'different-comparison', 'label_maps_sha256': 'different-labels',
+            'rescored_with': {'harness_dirty': False, 'harness_revision': 'different-rescore'},
+        }
+        for key, value in changes.items():
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as root:
+                rp, op = (Path(root) / n for n in ('report.json', 'own.json'))
+                body = trace_report()
+                rp.write_text(json.dumps(body)); op.write_text(json.dumps(own_pii_trace()))
+                state = {'not_run': {}, 'benchmarks': {}}
+                render.add_benchmark(state, rp, op, 'pii-tracer')
+                second = copy.deepcopy(body)
+                second['rows'] = {'opf': second['rows']['pii-tracer']}
+                second['provenance'] = {'opf': second['provenance']['pii-tracer']}
+                second[key] = value
+                rp.write_text(json.dumps(second)); op.write_text(json.dumps(own_pii_trace('opf')))
+                render.add_tool(state, rp, op, 'opf')
+                entry = state['benchmarks']['pii-trace']
+                self.assertEqual(entry['rows_measured_separately']['opf'][key], value)
+                self.assertEqual(entry[key], body[key])
+                # Replacing that row with equivalent evidence removes the route-only override.
+                second[key] = body[key]
+                rp.write_text(json.dumps(second))
+                render.add_tool(state, rp, op, 'opf')
+                self.assertNotIn('rows_measured_separately', entry)
+
+    def test_incomplete_tuned_declarations_are_rejected_without_mutation(self):
+        for field in ('row', 'family', 'bar_name', 'caption', 'setup', 'source', 'commit', 'model'):
+            with self.subTest(field=field):
+                state, _, body, own = fixtures.VendorTunedRowTest().entry_and_report()
+                declaration = fixtures.VendorTunedRowTest().declaration()
+                del declaration[field]
+                before = copy.deepcopy(state)
+                try:
+                    with self.assertRaisesRegex(ValueError, field):
+                        render.add_tuned(state, body, own, declaration)
+                finally:
+                    self.assertEqual(state, before)
+
+    def test_missing_route_metadata_is_rejected_before_installation(self):
+        for route in ('add_tool', 'add_benchmark', 'add_tagged', 'add_tuned'):
+            with self.subTest(route=route), tempfile.TemporaryDirectory() as root:
+                state, body, own = data(), complete_report(), own_presidio()
+                if route == 'add_tool':
+                    del body['typed_hold']
+                elif route == 'add_benchmark':
+                    body, own = trace_report(), own_pii_trace()
+                    del own['versions']
+                elif route == 'add_tagged':
+                    state, _, body, own = fixtures.TaggedRowTest().entry_and_report()
+                    del body['generated_at']
+                else:
+                    state, _, body, own = fixtures.VendorTunedRowTest().entry_and_report()
+                    del own['evaluator_commit']
+                before = copy.deepcopy(state)
+                rp, op = (Path(root) / n for n in ('report.json', 'own.json'))
+                rp.write_text(json.dumps(body)); op.write_text(json.dumps(own))
+                with self.assertRaises((ValueError, KeyError)):
+                    if route == 'add_tagged': render.add_tagged(state, body, own, fixtures.RESOLVE)
+                    elif route == 'add_tuned': render.add_tuned(state, body, own, fixtures.VendorTunedRowTest().declaration())
+                    else: getattr(render, route)(state, rp, op, next(iter(body['rows'])))
+                self.assertEqual(state, before)
 
     def test_committed_receipt_backed_rows_reassemble_identically(self):
         committed = json.loads(render.DATA.read_text())
