@@ -2067,6 +2067,17 @@ nine-digit `deviceSerial` values are classified as licence plates. Both v0.14.0
 arms retain identical byte counts. The vocabulary was not adjusted to improve
 these results.
 
+Generator v17 adds 780 A positives, 780 D counterweights and 660 R repeats
+per partition for complete labelled-value ownership. Independently authored
+[cell definitions](record-id-value-ownership.md) cover grouped alphanumeric IDs,
+whole ASCII-quoted JSON/log scalars with Unicode and escapes, adjacent personal
+and public assignments, and rejected-placeholder-then-valid-cue sequences.
+Each personal field owns a separate complete value; following labels and public
+fields stay outside it. The test partition has 4,508 A / 2,924 D / 940 R documents.
+The v16 corpus and contract remain frozen. Numeric repeat variants contain at
+least six digits; short repeats, typographic quotes and CSV linkage remain
+uncharacterized. These additions change the measurement, not runtime detection.
+
 All displayed release arms were re-measured on v16 using their own tagged code.
 [Bound observation replays](bsn-twin-v16-contract-replay.json) verify identical
 A/D/R metrics under primary contracts v1, v2 and v4: these generated layers use
