@@ -1400,7 +1400,7 @@ mod tests {
             );
             assert_eq!(
                 resolved[0].class,
-                PiiClass::custom("family:tenant-document").unwrap()
+                PiiClass::Custom("family:tenant-document".to_string())
             );
             assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
         }
