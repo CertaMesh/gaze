@@ -39,30 +39,57 @@ fn grouped_personal_identifiers_keep_the_complete_owned_value() {
 #[test]
 fn quoted_personal_scalars_preserve_every_raw_byte() {
     let core = CorePipelineConfig::new().build().unwrap();
-    for (key, class) in [("customer_id", "customer_id"), ("employeeId", "employee_id"),
-                         ("contact_record_id", "record_id")] {
-        for raw in ["LILAC é984321", "indigo crystal", "@FABLE984321",
-                    r"FABLE\u00e9984321", r"FABLE\u0065\u0301984321", r"FABLE\t984321",
-                    r#"FABLE\"984321"#, r"FABLE\\984321", r"FABLE984321\\"] {
+    for (key, class) in [
+        ("customer_id", "customer_id"),
+        ("employeeId", "employee_id"),
+        ("contact_record_id", "record_id"),
+    ] {
+        for raw in [
+            "LILAC é984321",
+            "indigo crystal",
+            "@FABLE984321",
+            r"FABLE\u00e9984321",
+            r"FABLE\u0065\u0301984321",
+            r"FABLE\t984321",
+            r#"FABLE\"984321"#,
+            r"FABLE\\984321",
+            r"FABLE984321\\",
+        ] {
             for embedded in [false, true] {
-                let value = if embedded { serde_json::to_string(raw).unwrap()[1..serde_json::to_string(raw).unwrap().len()-1].to_owned() }
-                            else { raw.to_owned() };
+                let value = if embedded {
+                    serde_json::to_string(raw).unwrap()
+                        [1..serde_json::to_string(raw).unwrap().len() - 1]
+                        .to_owned()
+                } else {
+                    raw.to_owned()
+                };
                 let input = if embedded {
                     format!(r#"{{"payload":"{{\"{key}\":\"{value}\"}}"}}"#)
                 } else {
                     format!(r#"{{"{key}":"{value}"}}"#)
                 };
                 let session = Session::new(Scope::Ephemeral).unwrap();
-                let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else { panic!("text") };
+                let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap()
+                else {
+                    panic!("text")
+                };
                 let entries = session.snapshot_entries();
                 assert_eq!(entries.len(), 1, "{input:?} -> {clean:?}");
                 assert_eq!(entries[0].raw, value, "quoted suffix leaked: {input:?}");
                 assert_eq!(entries[0].class, PiiClass::custom(class).unwrap());
                 assert_eq!(clean, input.replacen(&value, &entries[0].token, 1));
-                assert_eq!(core.pipeline().restore_strict_text(&session, &clean).unwrap(), input);
+                assert_eq!(
+                    core.pipeline()
+                        .restore_strict_text(&session, &clean)
+                        .unwrap(),
+                    input
+                );
                 let public = input.replace(key, "artifact_key");
                 let session = Session::new(Scope::Ephemeral).unwrap();
-                let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &public).unwrap() else { panic!("text") };
+                let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &public).unwrap()
+                else {
+                    panic!("text")
+                };
                 assert_eq!(clean, public);
                 assert!(session.snapshot_entries().is_empty());
             }

@@ -848,13 +848,12 @@ fn assignment_starts(rest: &str) -> bool {
 }
 
 fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
-    // The quoted contract is handled separately; grouped completion must not change it.
     if input[..capture.start]
         .chars()
         .next_back()
         .is_some_and(|ch| matches!(ch, '\"' | '\''))
     {
-        return scan_labelled_value(input, capture, false);
+        return scan_quoted_field_value(input, capture);
     }
     let mut end = capture.start;
     let mut reason = None;
@@ -907,6 +906,42 @@ fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> Label
         reason: labelled_value_over_limit(&input[span.clone()])
             .then_some(LabelledValueScanReason::LimitExceeded)
             .or(reason),
+        rejected: span.is_empty(),
+        span,
+    }
+}
+
+fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
+    let quote = input.as_bytes()[capture.start - 1];
+    let opening_escapes = input[..capture.start - 1]
+        .bytes()
+        .rev()
+        .take_while(|byte| *byte == b'\\')
+        .count();
+    // A JSON string embedded in another JSON string doubles its content escapes.
+    // Closing syntax has the opener's escape residue; an escaped content quote does not.
+    let stride = opening_escapes.saturating_add(1).saturating_mul(2);
+    let end = input[capture.start..]
+        .char_indices()
+        .find_map(|(offset, ch)| {
+            if ch as u32 != quote as u32 {
+                return None;
+            }
+            let at = capture.start + offset;
+            let escapes = input[capture.start..at]
+                .bytes()
+                .rev()
+                .take_while(|byte| *byte == b'\\')
+                .count();
+            (escapes % stride == opening_escapes).then(|| at - opening_escapes)
+        })
+        .unwrap_or(input.len());
+    let span = capture.start..end;
+    LabelledValueScan {
+        capture: capture.start..capture.end.min(end),
+        extension: capture.end.min(end)..end,
+        reason: labelled_value_over_limit(&input[span.clone()])
+            .then_some(LabelledValueScanReason::LimitExceeded),
         rejected: span.is_empty(),
         span,
     }
