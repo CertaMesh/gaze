@@ -252,6 +252,8 @@ pub enum RulepackError {
     },
     #[error("regex recognizer '{id}' must define exactly one of pattern or pattern_template")]
     RegexPatternChoice { id: String },
+    #[error("dictionary recognizer '{id}': terms_from_context cannot be combined with terms or terms_file")]
+    DictionarySourceConflict { id: String },
     #[error("invalid regex for recognizer '{id}': {source}")]
     RegexCompile {
         id: String,
@@ -955,7 +957,17 @@ fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
                 });
             }
         }
-        RawMatch::Dictionary { .. } | RawMatch::Ner { .. } => {}
+        RawMatch::Dictionary {
+            terms,
+            terms_file,
+            terms_from_context,
+            ..
+        } => {
+            if terms_from_context.is_some() && (!terms.is_empty() || terms_file.is_some()) {
+                return Err(RulepackError::DictionarySourceConflict { id: raw.id.clone() });
+            }
+        }
+        RawMatch::Ner { .. } => {}
     }
     Ok(())
 }

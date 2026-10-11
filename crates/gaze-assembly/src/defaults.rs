@@ -2,11 +2,11 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use gaze::{
-    Action, CleanDocument, Context, LocaleChain, LocaleTag, PiiClass, Pipeline, Policy,
-    PolicyError, RawDocument, RuleSpec, Rulepack, RulepackSource, Session,
+    Action, CleanDocument, Context, DictionaryBundle, LocaleChain, LocaleTag, PiiClass, Pipeline,
+    Policy, PolicyError, RawDocument, RawMatch, RuleSpec, Rulepack, Session,
 };
 
-use crate::{build_pipeline, locale_gated_activation_locales, BuildError};
+use crate::{build_pipeline, resolve_policy_inputs, BuildError};
 
 const CORE_BUNDLED_RULEPACK: &str = "core";
 
@@ -20,6 +20,7 @@ pub struct CorePipelineConfig {
 pub struct CorePipeline {
     pipeline: Pipeline,
     locale_chain: LocaleChain,
+    dictionaries: DictionaryBundle,
 }
 
 impl CorePipelineConfig {
@@ -54,27 +55,44 @@ impl CorePipelineConfig {
             .collect()
     }
 
+    /// Resolve bundled and path rulepacks with the policy input loader.
+    ///
+    /// An unreadable dictionary `terms_file` fails with
+    /// [`BuildError::Policy`] wrapping [`gaze::PolicyError::BadDictionary`].
+    /// Enabled context dictionaries fail with the same typed error because this
+    /// API cannot accept caller context. Conflicting dictionary sources fail in
+    /// shared rulepack validation with [`gaze::RulepackError::DictionarySourceConflict`].
     pub fn build(self) -> Result<CorePipeline, BuildError> {
-        let rulepacks = self.load_rulepacks()?;
-        let auto_activate_locale_gated = self
+        let mut policy = default_policy(self.locale.clone(), Vec::new());
+        policy.rulepacks.bundled = self
+            .bundled_rulepack_ids()
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        policy.rulepacks.paths = self.extra_rulepack_paths;
+        policy.rulepacks.auto_activate_locale_gated = self
             .extra_bundled
             .iter()
             .any(|bundle| bundle == "core-extended");
-        let mut rulepack_defaults = merged_rulepack_default_locales(&rulepacks);
-        if auto_activate_locale_gated {
-            for locale in locale_gated_activation_locales(&rulepacks) {
-                if !rulepack_defaults.contains(&locale) {
-                    rulepack_defaults.push(locale);
-                }
+        let inputs = resolve_policy_inputs(&policy, None, None, None)?;
+        // This convenience API has no caller context to populate context dictionaries.
+        for recognizer in inputs.rulepacks.iter().flat_map(|pack| &pack.recognizers) {
+            if recognizer.enabled
+                && matches!(
+                    recognizer.matcher,
+                    RawMatch::Dictionary {
+                        terms_from_context: Some(_),
+                        ..
+                    }
+                )
+            {
+                return Err(PolicyError::BadDictionary {
+                    name: recognizer.id.clone(),
+                    reason: "CorePipeline cannot populate terms_from_context; use policy assembly with context or inline/file terms".into(),
+                }.into());
             }
         }
-        let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(
-            None,
-            self.locale.as_deref(),
-            Some(&rulepack_defaults),
-        );
-        let mut policy = default_policy(self.locale, class_rules_from_rulepacks(&rulepacks));
-        policy.rulepacks.auto_activate_locale_gated = auto_activate_locale_gated;
+        policy.rules = class_rules_from_rulepacks(&inputs.rulepacks);
         let context = Context {
             dictionaries: std::collections::HashMap::new(),
             class_map: std::collections::HashMap::new(),
@@ -82,29 +100,25 @@ impl CorePipelineConfig {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         };
-        let pipeline = build_pipeline(&policy, &context, &rulepacks, &locale_chain, None)?;
+        let pipeline = build_pipeline(
+            &policy,
+            &context,
+            &inputs.rulepacks,
+            &inputs.locale_chain,
+            None,
+        )?;
 
         Ok(CorePipeline {
             pipeline,
-            locale_chain,
+            locale_chain: inputs.locale_chain,
+            dictionaries: inputs.dictionaries,
         })
-    }
-
-    fn load_rulepacks(&self) -> Result<Vec<Rulepack>, BuildError> {
-        let mut rulepacks = Vec::new();
-        for bundled in self.bundled_rulepack_ids() {
-            let contents = load_embedded_rulepack_contents(bundled)?;
-            rulepacks.push(Rulepack::load(RulepackSource::Embedded(contents))?);
-        }
-        for path in &self.extra_rulepack_paths {
-            rulepacks.push(Rulepack::load(RulepackSource::Path(path.clone()))?);
-        }
-
-        Ok(rulepacks)
     }
 }
 
 impl CorePipeline {
+    /// Low-level pipeline access. Calls must pass [`Self::locale_chain`] and
+    /// [`Self::dictionaries`] to retain configured detection inputs.
     pub fn pipeline(&self) -> &Pipeline {
         &self.pipeline
     }
@@ -113,8 +127,20 @@ impl CorePipeline {
         &self.locale_chain
     }
 
+    pub fn dictionaries(&self) -> &DictionaryBundle {
+        &self.dictionaries
+    }
+
+    /// Low-level escape hatch that discards configured locales and dictionaries.
+    /// Prefer [`Self::pseudonymize_text`] or [`Self::into_parts`]; callers of the
+    /// returned pipeline must retain and pass both detection inputs themselves.
     pub fn into_pipeline(self) -> Pipeline {
         self.pipeline
+    }
+
+    /// Decompose without losing the locale and dictionary detection inputs.
+    pub fn into_parts(self) -> (Pipeline, LocaleChain, DictionaryBundle) {
+        (self.pipeline, self.locale_chain, self.dictionaries)
     }
 
     pub fn pseudonymize_text(
@@ -122,32 +148,13 @@ impl CorePipeline {
         session: &Session,
         input: impl Into<String>,
     ) -> Result<CleanDocument, gaze::Error> {
-        self.pipeline.pseudonymize_with_context(
+        self.pipeline.pseudonymize_with_detect_context(
             session,
             RawDocument::Text(input.into()),
             self.locale_chain.as_slice(),
+            &self.dictionaries,
         )
     }
-}
-
-fn load_embedded_rulepack_contents(id: &str) -> Result<&'static str, BuildError> {
-    gaze_recognizers::embedded(id).ok_or_else(|| {
-        BuildError::Policy(PolicyError::BundledRulepackUnknown {
-            value: id.to_string(),
-        })
-    })
-}
-
-fn merged_rulepack_default_locales(rulepacks: &[Rulepack]) -> Vec<LocaleTag> {
-    let mut locales = Vec::new();
-    for rulepack in rulepacks {
-        for locale in &rulepack.default_locales {
-            if !locales.iter().any(|existing| existing == locale) {
-                locales.push(locale.clone());
-            }
-        }
-    }
-    locales
 }
 
 fn class_rules_from_rulepacks(rulepacks: &[Rulepack]) -> Vec<RuleSpec> {
@@ -203,6 +210,7 @@ fn default_policy(locale: Option<Vec<LocaleTag>>, rules: Vec<RuleSpec>) -> Polic
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gaze::RulepackSource;
 
     #[test]
     fn default_policy_unseen_class_does_not_preserve() {
