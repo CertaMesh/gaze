@@ -12,6 +12,10 @@ use crate::codec::OpaqueCarrierLocation;
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum ProxyError {
+    /// The configured direct adapter was removed or replaced in the public adapter list.
+    /// Readiness requires the original allocation, even for a same-origin replacement.
+    #[error("direct adapter allocation does not match the configured adapter")]
+    DirectAdapterMismatch,
     #[error("upstream unreachable: {url}")]
     UpstreamUnreachable {
         url: Url,

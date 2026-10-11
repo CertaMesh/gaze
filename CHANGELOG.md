@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Enabling Unicode matching after warming a record dictionary no longer misses
   configured values; term-order changes retain correct provenance.
 
+- Direct Anthropic proxy readiness now requires the original adapter allocation.
+  Replacing or removing it from `ProxyConfig::adapters`, including a same-origin
+  replacement, returns `ProxyError::DirectAdapterMismatch` before serving.
+  Runtime settings and the codec come from one resolved adapter; compatibility
+  constructors retain their frozen defaults.
+
 - Custom recognizers returning NaN or infinite confidence scores now fail closed
   with a sanitized `DetectError::Backend` (`invalid_score`) before score filtering.
   Finite negative scores still fall below the existing 0.0 admission floor.
