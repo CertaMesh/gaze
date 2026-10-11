@@ -1,0 +1,1134 @@
+{
+  "schema_version": 1,
+  "implementation_base": "d9db072e8b801ce310d6423fac0bb965833b4691",
+  "scope": "Checked enumeration transport only; detection code, corpora, scorer contracts and canonical release tables are unchanged.",
+  "build_receipts": [
+    {
+      "proof_pr": 622,
+      "side": "base",
+      "commit": "283d40399f643954739bd87db8ff1bd10e99ba5f",
+      "binary_sha256": "33a0c1b69656097aa3a302da1e66c355984c72fa330dac93c723134809d16be6",
+      "command": "cargo build --locked --release -p gaze-cli"
+    },
+    {
+      "proof_pr": 624,
+      "side": "base",
+      "commit": "6bd7d7651753ddff434d17b57240b3f29099a100",
+      "binary_sha256": "ab74a03b56819d1395581b993014812ab8ee7918733b8f3c0ae159fe14171683",
+      "command": "cargo build --locked --release -p gaze-cli"
+    },
+    {
+      "proof_pr": 626,
+      "side": "base",
+      "commit": "cd814eb2722045cd0ae22b91ff5743b8a3c8b051",
+      "binary_sha256": "a009b129c9f70e6423b22902105bbd7707c8057c37e494664ea0b37f5e7924ee",
+      "command": "cargo build --locked --release -p gaze-cli"
+    },
+    {
+      "proof_pr": 627,
+      "side": "base",
+      "commit": "95a6e3bfc530d857e21894570e0c56ddd35e0ccc",
+      "binary_sha256": "944d3ddaed0dceed10fa8a396bd883c13cb6d34ae9ff4d691906b0e8124e80b6",
+      "command": "cargo build --locked --release -p gaze-cli"
+    },
+    {
+      "proof_pr": 622,
+      "side": "head",
+      "commit": "92ae4a216ca80a9a283db02b126ddb83f3abc6c8",
+      "binary_sha256": "ce53d1dc056fddf17f334d44d9137e4184ce27e7a15d26f264c76e14563462fa",
+      "command": "cargo build --locked --release -p gaze-cli"
+    },
+    {
+      "proof_pr": 624,
+      "side": "head",
+      "commit": "f8edceecf197d0ba1ad01b556f451a12c62f9ef8",
+      "binary_sha256": "a009b129c9f70e6423b22902105bbd7707c8057c37e494664ea0b37f5e7924ee",
+      "command": "cargo build --locked --release -p gaze-cli"
+    },
+    {
+      "proof_pr": 626,
+      "side": "head",
+      "commit": "51de54855399259c6801a5e7fcdc40bfcb734572",
+      "binary_sha256": "856c61e9748bbf4f5f2f6cc94e39ddcb91d9bf6d341afb5a082d084f9183083d",
+      "command": "cargo build --locked --release -p gaze-cli"
+    },
+    {
+      "proof_pr": 627,
+      "side": "head",
+      "commit": "6879d8d4217c298eaeb248078bdaf53df555b4ba",
+      "binary_sha256": "95083856ada086905dbc5d6c4689b4e01920cabab33235d5ef8b88e396edae03",
+      "command": "cargo build --locked --release -p gaze-cli"
+    }
+  ],
+  "additional_build_receipts": {
+    "review-base": {
+      "commit": "a40dba4fff0cf8636f3a75d5dc9bb41197561770",
+      "binary_sha256": "ce53d1dc056fddf17f334d44d9137e4184ce27e7a15d26f264c76e14563462fa",
+      "build": "cargo build --locked --release -p gaze-cli"
+    },
+    "review-head": {
+      "commit": "98519327e75f6f4f494faefadf8297975e57648e",
+      "binary_sha256": "a003a72eb2310b3b3e87f2b9eed58eb8c5e6998454759bffc26a7f75b7600b20",
+      "build": "cargo build --locked --release -p gaze-cli"
+    },
+    "base-619": {
+      "commit": "17ec2789a4570e462b5036ddcca809dae00de8f9",
+      "binary_sha256": "64d6ab541566e8770761d97aefefcc94c1735d7e457c359d7f6c0746630a35e0",
+      "build": "cargo build --locked --release -p gaze-cli"
+    },
+    "head-619": {
+      "commit": "06bb52e243c0dfb33f7447361ba3840afbc92674",
+      "binary_sha256": "d5d5b088812ac2c1bb64da3ef4c969d1ecee3308afce0923d4ab622bf3c7ec71",
+      "build": "cargo build --locked --release -p gaze-cli"
+    }
+  },
+  "historical_input_pins": [
+    {
+      "commit": "a40dba4fff0cf8636f3a75d5dc9bb41197561770",
+      "path": "scripts/bench/iban_trailing_word_enumeration.py",
+      "sha256": "ed67576f12da1e2aaae4bbf4227fb116ba5d0a0f71992742f3ec34cd7f50e2e4",
+      "documents": 55536
+    },
+    {
+      "commit": "8ffc88d21d131008422985baf782d462dec4f855",
+      "path": "scripts/bench/iban_trailing_word_enumeration.py",
+      "sha256": "8aaeaaf23103336e59e80255532d4d02b4c26938044dce9571094a58058d919e",
+      "documents": 98256,
+      "registry_source": "crates/gaze-types/src/lib.rs:iban_country_length",
+      "registry_country_lengths_equal_to_pinned_commit": true,
+      "registry_entries": 89,
+      "sorted_json_registry_sha256": "313bdc3abb2405d0e3154fd6f9297728f08bb7dd82d81ba33bdd442b15fecfcb"
+    },
+    {
+      "path": "scripts/bench/dataiku_en_de_gaze_bench.py:DATASET_SHA256",
+      "sha256": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+      "selected_documents": 1886
+    }
+  ],
+  "test_first": {
+    "commit": "40e22bf20678c179b6710c08e3163178d4aa1a2c",
+    "exit": 1,
+    "methods": 4,
+    "failures": 8,
+    "errors": 22,
+    "output": "Ran 4 tests\nFAILED (failures=8, errors=22)"
+  },
+  "error_acceptance_mutation": {
+    "restoration": "git checkout -- scripts/bench/checked_daemon_batch.py",
+    "exit": 1,
+    "methods": 6,
+    "failures": 7,
+    "errors": 0,
+    "output": "Ran 6 tests\nFAILED (failures=7)"
+  },
+  "local_checks": {
+    "batch_tests": {
+      "methods": 6,
+      "exit": 0
+    },
+    "phone_tests": {
+      "methods": 2,
+      "exit": 0
+    },
+    "locked_unittest": {
+      "ran": 1031,
+      "skipped": 1,
+      "failures": 0,
+      "errors": 0,
+      "exit": 0
+    },
+    "locked_pytest": {
+      "passed": 274,
+      "skipped": 3,
+      "subtests_passed": 10,
+      "exit": 0
+    }
+  },
+  "independent_published_discrepancy": {
+    "source": "https://github.com/CertaMesh/gaze/pull/624",
+    "unchanged_scripts_commit": "d9db072e8b801ce310d6423fac0bb965833b4691",
+    "unchanged_source_sha256": {
+      "iban_trailing_word_enumeration": "166df41fa2f347596d2c8ddf1f4ce30ae5ce1d1c6fb6b718bf7b7ee0e367d94e",
+      "family_action_full_matrix": "ac66d360be7af5b29229f1866f67e9b527352c8ac2e7ce70fce6f8c5afb6772a"
+    },
+    "published_review_head_leaked_characters": 16553,
+    "old_and_checked_review_head_leaked_characters": 17220,
+    "documents_per_reviewed_arm": 18556,
+    "base_leaked_characters": 1619,
+    "regressed_documents": 872,
+    "both_reviewed_arms": {
+      "iban=tokenize/card=redact/default=tokenize/family=none/de-de": {
+        "stats": {
+          "documents": 18556,
+          "base_leaked": 1619,
+          "head_leaked": 17220,
+          "regressed_docs": 872
+        },
+        "failed": true
+      },
+      "iban=unset/card=redact/default=tokenize/family=none/de-de": {
+        "stats": {
+          "documents": 18556,
+          "base_leaked": 1619,
+          "head_leaked": 17220,
+          "regressed_docs": 872
+        },
+        "failed": true
+      }
+    },
+    "unchanged_origin_main_equals_checked": true,
+    "disposition": "Predates this fix. Disclosed without rewriting the published number."
+  },
+  "inventory": [
+    {
+      "artifact": "CHANGELOG.md (v0.15.0), collision-settlement entry",
+      "script": "collision_settled_enumeration.py",
+      "status": "reproduced",
+      "proof": "https://github.com/CertaMesh/gaze/pull/619"
+    },
+    {
+      "artifact": "CHANGELOG.md (v0.15.0), IBAN length entry; scripts/bench/README.md policy matrices",
+      "script": "iban_trailing_word_enumeration.py",
+      "status": "reproduced",
+      "proof": "https://github.com/CertaMesh/gaze/pull/622"
+    },
+    {
+      "artifact": "CHANGELOG.md (v0.15.0), glued IBAN boundary entry",
+      "script": "iban_trailing_word_enumeration.py",
+      "status": "reproduced",
+      "proof": "https://github.com/CertaMesh/gaze/pull/626"
+    },
+    {
+      "artifact": "scripts/bench/README.md ten-arm family contract",
+      "script": "family_action_policy_matrix.py",
+      "status": "reproduced"
+    },
+    {
+      "artifact": "scripts/bench/README.md full action matrix; CHANGELOG.md (v0.15.0) family/residual entry",
+      "script": "family_action_full_matrix.py",
+      "status": "reproduced"
+    },
+    {
+      "artifact": "scripts/bench/README.md and full-matrix docstring, reviewed residual regression",
+      "script": "family_action_full_matrix.py",
+      "status": "872 regressions reproduced; character discrepancy independent of adapter",
+      "proof": "https://github.com/CertaMesh/gaze/pull/624"
+    },
+    {
+      "artifact": "CHANGELOG.md (v0.15.0), policy regex entry; scripts/bench/README.md policy regex contract",
+      "script": "policy_regex_collision_matrix.py",
+      "status": "reproduced",
+      "proof": "https://github.com/CertaMesh/gaze/pull/627"
+    },
+    {
+      "artifact": "docs/reference/redaction-classes.md:372; CHANGELOG.md (v0.15.0), random-prefix false-accept and holdout/A4/docs parity claims",
+      "status": "not_remeasured",
+      "reason": "The named enumeration does not generate the 200k random-prefix probe or document-corpus parity run; exact probe seed, generator and oracle are not committed beside those collateral claims. Existing provenance is retained."
+    },
+    {
+      "artifact": "CHANGELOG.md (v0.15.0), containment and per-character residual enumeration counts",
+      "status": "not_remeasured",
+      "reason": "One-off token-splitting/wrong-class counting harness and exact before/after policy/subset receipts are not pinned beside these counts. They cannot be reproduced by the named scripts alone. Existing provenance is retained."
+    },
+    {
+      "script": "checksum_record_enumeration.py",
+      "status": "no displayed numerical artifact found in docs/ or scripts/"
+    },
+    {
+      "script": "phone_differential_enumeration.py",
+      "status": "no displayed numerical artifact found in docs/ or scripts/; original 5600-case input hash pin passes"
+    },
+    {
+      "consumer": "known_record_arm.py",
+      "status": "imports unchanged IBAN LENGTHS only, never the batch runner; canonical rendered release scorecards do not depend on these enumeration calls"
+    }
+  ],
+  "replay_command_contract": {
+    "current_scripts": "scripts/bench/<script>.py BASE_BINARY HEAD_BINARY OUTPUT",
+    "historical_inputs": "scripts/bench/replay_enumeration_proof.py SCRIPT INPUT_COMMIT INPUT_SHA256 BASE_BINARY HEAD_BINARY OUTPUT",
+    "full_matrix_extra": [
+      "--workers",
+      "4"
+    ],
+    "policy_regex_extra": [
+      "--holdout",
+      "<pinned parquet>"
+    ],
+    "python": "3.13",
+    "python_bytecode": "disabled",
+    "policy_regex_environment": "uv run --project scripts/bench --python 3.13 --group comparison-test"
+  },
+  "replays": {
+    "collision-settled": {
+      "exit": 0,
+      "documents": 2592,
+      "report_sha256": "5afd0dc80f5defa202f1a283ec6842e76f8d390cc25eb9ade1e8815410d608cb",
+      "policies": {
+        "de-at-preserve": {
+          "lost_bytes": 0,
+          "gained_bytes": 0,
+          "disallowed_changes": 0,
+          "missing_responses": 0,
+          "transitions": {}
+        },
+        "de-at-preserve-foreign": {
+          "lost_bytes": 0,
+          "gained_bytes": 2496,
+          "disallowed_changes": 0,
+          "missing_responses": 0,
+          "transitions": {
+            "raw -> iban (settled)": 84
+          }
+        },
+        "core-de-at-family": {
+          "lost_bytes": 0,
+          "gained_bytes": 0,
+          "disallowed_changes": 0,
+          "missing_responses": 0,
+          "transitions": {}
+        },
+        "de-de-family-foreign": {
+          "lost_bytes": 0,
+          "gained_bytes": 0,
+          "disallowed_changes": 0,
+          "missing_responses": 0,
+          "transitions": {
+            "family:payment-card-or-iban -> iban (settled)": 84
+          }
+        },
+        "core-extended-en-us-family": {
+          "lost_bytes": 0,
+          "gained_bytes": 0,
+          "disallowed_changes": 0,
+          "missing_responses": 0,
+          "transitions": {}
+        }
+      }
+    },
+    "iban-length": {
+      "exit": 0,
+      "documents": 55536,
+      "report_sha256": "2ba7f17e65531fac524bc0f6014c0a9df876b8e5041113ea6687bfad2dc583d8",
+      "policies": {
+        "core-de-de": {
+          "lost_bytes": 275,
+          "lost_bytes_trailer_artifact": 275,
+          "lost_bytes_unexplained": 0,
+          "fix_trailer_dependent": 0,
+          "gained_bytes": 190551,
+          "regressed": 0,
+          "recovered": 7367,
+          "missing_responses": 0,
+          "transitions": {
+            "raw -> iban": 6782,
+            "phone -> iban+phone": 394,
+            "credit_card+phone -> iban+phone": 54,
+            "credit_card+phone -> phone": 27,
+            "credit_card -> iban": 171,
+            "credit_card+phone -> credit_card+iban+phone": 16
+          },
+          "identifier_glued_changed": 0
+        },
+        "core-en-us": {
+          "lost_bytes": 0,
+          "lost_bytes_trailer_artifact": 0,
+          "lost_bytes_unexplained": 0,
+          "fix_trailer_dependent": 0,
+          "gained_bytes": 196338,
+          "regressed": 0,
+          "recovered": 7450,
+          "missing_responses": 0,
+          "transitions": {
+            "raw -> iban": 7176,
+            "credit_card -> iban": 276
+          },
+          "identifier_glued_changed": 0
+        },
+        "core-both-locales-de-de": {
+          "lost_bytes": 275,
+          "lost_bytes_trailer_artifact": 275,
+          "lost_bytes_unexplained": 0,
+          "fix_trailer_dependent": 0,
+          "gained_bytes": 190551,
+          "regressed": 0,
+          "recovered": 7367,
+          "missing_responses": 0,
+          "transitions": {
+            "raw -> iban": 6782,
+            "phone -> iban+phone": 394,
+            "credit_card+phone -> iban+phone": 54,
+            "credit_card+phone -> phone": 27,
+            "credit_card -> iban": 171,
+            "credit_card+phone -> credit_card+iban+phone": 16
+          },
+          "identifier_glued_changed": 0
+        },
+        "core-both-locales-en-us": {
+          "lost_bytes": 0,
+          "lost_bytes_trailer_artifact": 0,
+          "lost_bytes_unexplained": 0,
+          "fix_trailer_dependent": 0,
+          "gained_bytes": 196338,
+          "regressed": 0,
+          "recovered": 7450,
+          "missing_responses": 0,
+          "transitions": {
+            "raw -> iban": 7176,
+            "credit_card -> iban": 276
+          },
+          "identifier_glued_changed": 0
+        },
+        "core-de-at": {
+          "lost_bytes": 1715,
+          "lost_bytes_trailer_artifact": 1715,
+          "lost_bytes_unexplained": 0,
+          "fix_trailer_dependent": 0,
+          "gained_bytes": 187127,
+          "regressed": 0,
+          "recovered": 7367,
+          "missing_responses": 0,
+          "transitions": {
+            "postal_code -> iban": 728,
+            "raw -> iban": 6054,
+            "postal_code -> raw": 364,
+            "phone -> iban+phone": 346,
+            "phone+postal_code -> iban+phone+postal_code": 48,
+            "credit_card+phone -> iban+phone": 38,
+            "credit_card+phone -> phone": 19,
+            "credit_card+phone+postal_code -> iban+phone+postal_code": 16,
+            "credit_card -> iban": 99,
+            "credit_card+phone+postal_code -> phone+postal_code": 8,
+            "credit_card+postal_code -> iban": 72,
+            "credit_card+phone -> credit_card+iban+phone": 16
+          },
+          "identifier_glued_changed": 0
+        }
+      }
+    },
+    "iban-boundary": {
+      "exit": 0,
+      "documents": 98256,
+      "report_sha256": "766747228554d13d329dd3b37c16ba171762056a48a0e15d04c15ef69129e97c",
+      "policies": {
+        "core-de-de": {
+          "lost_bytes": 0,
+          "lost_bytes_trailer_artifact": 0,
+          "lost_bytes_unexplained": 0,
+          "fix_trailer_dependent": 0,
+          "gained_bytes": 553866,
+          "regressed": 0,
+          "recovered": 21360,
+          "missing_responses": 0,
+          "transitions": {
+            "raw -> iban": 13336,
+            "raw -> family:payment-card-or-iban": 6668,
+            "phone -> iban+phone": 604,
+            "phone -> family:payment-card-or-iban+phone": 302,
+            "credit_card+phone -> iban+phone": 50,
+            "credit_card+phone -> family:payment-card-or-iban+phone": 25,
+            "credit_card -> iban": 360,
+            "credit_card+phone -> credit_card+iban+phone": 10,
+            "credit_card+phone -> credit_card+family:payment-card-or-iban+phone": 5
+          },
+          "identifier_glued_changed": 0
+        },
+        "core-en-us": {
+          "lost_bytes": 0,
+          "lost_bytes_trailer_artifact": 0,
+          "lost_bytes_unexplained": 0,
+          "fix_trailer_dependent": 0,
+          "gained_bytes": 565770,
+          "regressed": 0,
+          "recovered": 21360,
+          "missing_responses": 0,
+          "transitions": {
+            "raw -> iban": 13940,
+            "raw -> family:payment-card-or-iban": 6970,
+            "credit_card -> iban": 450
+          },
+          "identifier_glued_changed": 0
+        },
+        "core-both-locales-de-de": {
+          "lost_bytes": 0,
+          "lost_bytes_trailer_artifact": 0,
+          "lost_bytes_unexplained": 0,
+          "fix_trailer_dependent": 0,
+          "gained_bytes": 553866,
+          "regressed": 0,
+          "recovered": 21360,
+          "missing_responses": 0,
+          "transitions": {
+            "raw -> iban": 13336,
+            "raw -> family:payment-card-or-iban": 6668,
+            "phone -> iban+phone": 604,
+            "phone -> family:payment-card-or-iban+phone": 302,
+            "credit_card+phone -> iban+phone": 50,
+            "credit_card+phone -> family:payment-card-or-iban+phone": 25,
+            "credit_card -> iban": 360,
+            "credit_card+phone -> credit_card+iban+phone": 10,
+            "credit_card+phone -> credit_card+family:payment-card-or-iban+phone": 5
+          },
+          "identifier_glued_changed": 0
+        },
+        "core-both-locales-en-us": {
+          "lost_bytes": 0,
+          "lost_bytes_trailer_artifact": 0,
+          "lost_bytes_unexplained": 0,
+          "fix_trailer_dependent": 0,
+          "gained_bytes": 565770,
+          "regressed": 0,
+          "recovered": 21360,
+          "missing_responses": 0,
+          "transitions": {
+            "raw -> iban": 13940,
+            "raw -> family:payment-card-or-iban": 6970,
+            "credit_card -> iban": 450
+          },
+          "identifier_glued_changed": 0
+        },
+        "core-de-at": {
+          "lost_bytes": 0,
+          "lost_bytes_trailer_artifact": 0,
+          "lost_bytes_unexplained": 0,
+          "fix_trailer_dependent": 0,
+          "gained_bytes": 553746,
+          "regressed": 0,
+          "recovered": 21360,
+          "missing_responses": 0,
+          "transitions": {
+            "raw -> iban": 13316,
+            "raw -> family:payment-card-or-iban": 6658,
+            "phone -> iban+phone": 604,
+            "phone -> family:payment-card-or-iban+phone": 302,
+            "credit_card+phone -> iban+phone": 50,
+            "credit_card+phone -> family:payment-card-or-iban+phone": 25,
+            "credit_card -> iban": 360,
+            "postal_code -> iban": 20,
+            "postal_code -> family:payment-card-or-iban": 10,
+            "credit_card+phone -> credit_card+iban+phone": 10,
+            "credit_card+phone -> credit_card+family:payment-card-or-iban+phone": 5
+          },
+          "identifier_glued_changed": 0
+        }
+      }
+    },
+    "family-ten": {
+      "exit": 0,
+      "documents": 55536,
+      "report_sha256": "812af1d6c31cb56c785b6ead28c9fe3ce1a9a5cfac49b4471715f92cf37d8e4e",
+      "arms": {
+        "member-only-tokenize/de-de": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 474320,
+            "base_residue_docs": 18278,
+            "head_residue_docs": 144,
+            "changed_docs": 18182
+          },
+          "reasons": {
+            "family-derived": 17206,
+            "family-residual": 976
+          },
+          "failed": false
+        },
+        "member-only-tokenize/en-us": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 484766,
+            "base_residue_docs": 18092,
+            "head_residue_docs": 21,
+            "changed_docs": 18078
+          },
+          "reasons": {
+            "family-derived": 18078
+          },
+          "failed": false
+        },
+        "all-preserve/de-de": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "base_residue_docs": 55536,
+            "head_residue_docs": 55536,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "all-preserve/en-us": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "base_residue_docs": 55536,
+            "head_residue_docs": 55536,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "all-preserve-default-tokenize/de-de": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "base_residue_docs": 38330,
+            "head_residue_docs": 38330,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "all-preserve-default-tokenize/en-us": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "base_residue_docs": 37458,
+            "head_residue_docs": 37458,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "explicit-family-rule/de-de": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "base_residue_docs": 144,
+            "head_residue_docs": 144,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "explicit-family-rule/en-us": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "base_residue_docs": 21,
+            "head_residue_docs": 21,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "default-tokenize/de-de": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "base_residue_docs": 144,
+            "head_residue_docs": 144,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "default-tokenize/en-us": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "base_residue_docs": 21,
+            "head_residue_docs": 21,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        }
+      }
+    },
+    "policy-regex": {
+      "exit": 0,
+      "documents": 1907,
+      "report_sha256": "b003f2bc477b07cb118241499196b197a6037c5b253409efe7f82a313dbbc7a9",
+      "arms": {
+        "global/collision-on/member-tokenize/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 0,
+            "head_raw_values": 0,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "global/collision-on/member-tokenize/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 2162,
+            "lost_values": 0,
+            "base_raw_values": 429,
+            "head_raw_values": 2,
+            "changed_docs": 395
+          },
+          "reasons": {
+            "family-derived": 427
+          },
+          "failed": false
+        },
+        "global/collision-on/member-redact/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 0,
+            "head_raw_values": 0,
+            "changed_docs": 395
+          },
+          "reasons": {
+            "family-strictest-member": 427
+          },
+          "failed": false
+        },
+        "global/collision-on/member-redact/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 2162,
+            "lost_values": 0,
+            "base_raw_values": 429,
+            "head_raw_values": 2,
+            "changed_docs": 395
+          },
+          "reasons": {
+            "family-derived": 427
+          },
+          "failed": false
+        },
+        "global/collision-on/member-preserve/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 229,
+            "head_raw_values": 229,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "global/collision-on/member-preserve/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 658,
+            "head_raw_values": 658,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "global/collision-off/member-tokenize/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 0,
+            "head_raw_values": 0,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "global/collision-off/member-tokenize/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 2,
+            "head_raw_values": 2,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "global/collision-off/member-redact/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 0,
+            "head_raw_values": 0,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "global/collision-off/member-redact/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 2,
+            "head_raw_values": 2,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "global/collision-off/member-preserve/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 656,
+            "head_raw_values": 656,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "global/collision-off/member-preserve/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 658,
+            "head_raw_values": 658,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-de-de/collision-on/member-tokenize/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 0,
+            "head_raw_values": 0,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-de-de/collision-on/member-tokenize/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 40,
+            "lost_values": 0,
+            "base_raw_values": 425,
+            "head_raw_values": 420,
+            "changed_docs": 5
+          },
+          "reasons": {
+            "family-derived": 5
+          },
+          "failed": false
+        },
+        "core-de-de/collision-on/member-redact/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 0,
+            "head_raw_values": 0,
+            "changed_docs": 5
+          },
+          "reasons": {
+            "family-strictest-member": 5
+          },
+          "failed": false
+        },
+        "core-de-de/collision-on/member-redact/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 40,
+            "lost_values": 0,
+            "base_raw_values": 425,
+            "head_raw_values": 420,
+            "changed_docs": 5
+          },
+          "reasons": {
+            "family-derived": 5
+          },
+          "failed": false
+        },
+        "core-de-de/collision-on/member-preserve/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 233,
+            "head_raw_values": 233,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-de-de/collision-on/member-preserve/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 658,
+            "head_raw_values": 658,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-de-de/collision-off/member-tokenize/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 0,
+            "head_raw_values": 0,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-de-de/collision-off/member-tokenize/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 420,
+            "head_raw_values": 420,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-de-de/collision-off/member-redact/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 0,
+            "head_raw_values": 0,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-de-de/collision-off/member-redact/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 420,
+            "head_raw_values": 420,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-de-de/collision-off/member-preserve/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 238,
+            "head_raw_values": 238,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-de-de/collision-off/member-preserve/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 658,
+            "head_raw_values": 658,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-en-us/collision-on/member-tokenize/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 0,
+            "head_raw_values": 0,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-en-us/collision-on/member-tokenize/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 56,
+            "lost_values": 0,
+            "base_raw_values": 427,
+            "head_raw_values": 420,
+            "changed_docs": 7
+          },
+          "reasons": {
+            "family-derived": 7
+          },
+          "failed": false
+        },
+        "core-en-us/collision-on/member-redact/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 0,
+            "head_raw_values": 0,
+            "changed_docs": 7
+          },
+          "reasons": {
+            "family-strictest-member": 7
+          },
+          "failed": false
+        },
+        "core-en-us/collision-on/member-redact/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 56,
+            "lost_values": 0,
+            "base_raw_values": 427,
+            "head_raw_values": 420,
+            "changed_docs": 7
+          },
+          "reasons": {
+            "family-derived": 7
+          },
+          "failed": false
+        },
+        "core-en-us/collision-on/member-preserve/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 231,
+            "head_raw_values": 231,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-en-us/collision-on/member-preserve/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 658,
+            "head_raw_values": 658,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-en-us/collision-off/member-tokenize/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 0,
+            "head_raw_values": 0,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-en-us/collision-off/member-tokenize/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 420,
+            "head_raw_values": 420,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-en-us/collision-off/member-redact/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 0,
+            "head_raw_values": 0,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-en-us/collision-off/member-redact/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 420,
+            "head_raw_values": 420,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-en-us/collision-off/member-preserve/default-tokenize": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 238,
+            "head_raw_values": 238,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        },
+        "core-en-us/collision-off/member-preserve/default-preserve": {
+          "stats": {
+            "lost_bytes": 0,
+            "gained_bytes": 0,
+            "lost_values": 0,
+            "base_raw_values": 658,
+            "head_raw_values": 658,
+            "changed_docs": 0
+          },
+          "reasons": {},
+          "failed": false
+        }
+      }
+    },
+    "family-full": {
+      "exit": 0,
+      "documents": 55536,
+      "arms": 648,
+      "failed": false,
+      "subset_sizes": {
+        "de-de": 18556,
+        "en-us": 18453
+      },
+      "totals": {
+        "base_leaked": 142145310,
+        "head_leaked": 109700768,
+        "regressed_docs": 0,
+        "improved_docs": 1259940,
+        "relabelled_docs": 0,
+        "missing_response": 0
+      },
+      "byte_identical_arms": 384,
+      "improving_arms": 264,
+      "report_sha256": "fef3c2c5baa97a3fad45e600885097797f9fb8126225b3aee915d387fcc588b5",
+      "changed_docs_sha256": "88eb0932ac8e21ae457200df96c6efe88cb9d063dcf892066bb6eff71dd32c6a"
+    }
+  },
+  "attempts": [
+    {
+      "proof": "policy-regex",
+      "exit": 1,
+      "reason": "Bare Python lacked pyarrow; not accepted as evidence."
+    },
+    {
+      "proof": "policy-regex",
+      "exit": 0,
+      "environment": "locked uv Python 3.13",
+      "reason": "Successful complete rerun."
+    },
+    {
+      "proof": "family-full first attempt",
+      "status": "interrupted to obey published-discrepancy stop; not accepted as complete evidence"
+    }
+  ]
+}
