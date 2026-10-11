@@ -28,10 +28,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # A generator change must bump GENERATOR_VERSION, the contract's
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
-PINNED_CORPUS_SHA256 = {
-    "dev": "7e1ef6cc0c9927f80e5c64abd4bcf3ec2cc0d4a7e2d8a0dfb0a026b31c566a20",
-    "test": "624a2d7c3349fe91686616cd53c5a0d295e2eb48c2f18643bc72749f8bda9650",
-}
+PINNED_CORPUS_SHA256 = {'dev': '161f89303546ff6801a85ccba885f07f9c43696b0c6ceb5b2f3128fb82988342', 'test': '031885ded4bb3b0cf8fc76c8da0fbe6ca3f631c17399cff4df33d4e5f976a190'}
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
     "dev": "6e1b24bf66f672e45d69b6f38f56db3da0d085ea0cd4241f5d7310bfddcdf0d1",

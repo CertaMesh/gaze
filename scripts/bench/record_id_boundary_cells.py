@@ -25,10 +25,10 @@ PUBLIC = {"dev": ("artifact_reference", "build version", "CEDAR"),
           "test": ("inventory_reference", "package version", "ONYX")}
 
 
-def encoded_content(value, depth):
+def encoded_content(value, depth, ascii_unicode=False):
     """Content bytes of a string, reserialized depth additional times."""
-    for _ in range(depth + 1):
-        value = json.dumps(value, ensure_ascii=False)[1:-1]
+    for step in range(depth + 1):
+        value = json.dumps(value, ensure_ascii=ascii_unicode and step == 0)[1:-1]
     return value
 
 
@@ -119,9 +119,10 @@ def records(api, partition):
                 if depth >= 8 and index != 0:
                     continue
                 for shape, decoded in (("unicode", first + " É" + other),
+                                       ("unicode_escape", first + " É E\u0301" + other),
                                        ("quote", first + '"\\' + other),
                                        ("tab", first + "\t" + other)):
-                    raw = encoded_content(decoded, depth)
+                    raw = encoded_content(decoded, depth, shape == "unicode_escape")
                     public = encoded_content("4.7." + other, depth)
                     surface = f"serialized_depth{depth}_{shape}"
                     fields = {"V": (raw, LABELS[family]), "W": (public, "decoy:public_column")}
@@ -153,6 +154,10 @@ def records(api, partition):
                 template = "{C}: {V}\t" + public_cue + CONNECTORS[name] + "{W}"
                 single(family, "tab_group_public_" + name, index, first,
                        template, cue, language, "6.2." + other)
+            # A producer knows this last TSV column is public, but the raw
+            # scalar alone is ambiguous. Conservative grouping pays its cost.
+            single(family, "tab_group_ambiguous_column", index, first + "\tÉ" + other,
+                   "{C}: {V}\t{W}", cue, language, word)
             for shape, template, fields in (
                 ("header", key + "\tpublic_version\n{V}\t{W}",
                  {"V": ("placeholder", "decoy:placeholder"), "W": ("2.0." + other, "decoy:public_column")}),

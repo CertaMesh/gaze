@@ -73,7 +73,7 @@ class RecordIdBoundaryTests(unittest.TestCase):
             rows = cells.records(api, partition)
             for family in cells.LABELS:
                 for depth in (0, 1, 2, 3, 8, 9):
-                    for shape in ("unicode", "quote", "tab"):
+                    for shape in ("unicode", "unicode_escape", "quote", "tab"):
                         selected = [r for r in rows if r.family == family and r.surface ==
                                     f"recordids_boundary_serialized_depth{depth}_{shape}"]
                         self.assertEqual({r.layer for r in selected}, {"A", "D", "R"})
@@ -86,7 +86,9 @@ class RecordIdBoundaryTests(unittest.TestCase):
                             for _ in range(depth + 1):
                                 raw = json.loads('"' + raw + '"')
                             self.assertEqual(raw, value)
-                            self.assertIn({"unicode": "É", "quote": '"', "tab": "\t"}[shape], raw)
+                            self.assertIn({"unicode": "É", "unicode_escape": "É", "quote": '"', "tab": "\t"}[shape], raw)
+                            if shape == "unicode_escape":
+                                self.assertIn("\\u", row.gold[0].value if row.gold else row.decoys[0].value)
                             if row.layer == "R":
                                 self.assertEqual(row.gold[0].value, row.gold[1].value)
                             self.assertTrue(any(d.label == "public_column" for d in row.decoys))
@@ -111,13 +113,13 @@ class RecordIdBoundaryTests(unittest.TestCase):
         for partition in api.PARTITIONS:
             rows = cells.records(api, partition)
             for family in cells.LABELS:
-                for shape in ("unicode", "combining", "public_equals", "public_is", "public_space"):
+                for shape in ("unicode", "combining", "public_equals", "public_is", "public_space", "ambiguous_column"):
                     selected = [r for r in rows if r.family == family and r.surface ==
                                 "recordids_boundary_tab_group_" + shape]
                     self.assertEqual({r.layer for r in selected}, {"A", "D", "R"})
                     for row in selected:
                         spans = row.gold if row.gold else row.decoys
-                        if shape in ("unicode", "combining"):
+                        if shape in ("unicode", "combining", "ambiguous_column"):
                             self.assertIn("\t", spans[0].value)
                         else:
                             self.assertNotIn("\t", spans[0].value)
@@ -152,7 +154,7 @@ class RecordIdBoundaryTests(unittest.TestCase):
                 predictions = [score.Span(g.start, row.gold[1].start, g.label)]
             self.assertGreater(metrics(row, predictions)["leaked"], 0, shape)
             self.assertEqual(metrics(row, [score.Span(g.start, g.end, g.label) for g in row.gold])["leaked"], 0)
-        for shape in ("serialized_depth9_unicode", "opening_lf_lf_malformed", "tab_group_public_equals"):
+        for shape in ("serialized_depth9_unicode", "opening_lf_lf_malformed", "tab_group_public_equals", "tab_group_ambiguous_column"):
             row = next(r for r in rows if r.layer == "A" and r.surface == "recordids_boundary_" + shape)
             g = row.gold[0]
             self.assertGreater(metrics(row, [score.Span(g.start, len(row.text.encode()), g.label)])["false_positive"], 0)
