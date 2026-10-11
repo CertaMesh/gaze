@@ -12,7 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mechanism benchmark recording now rejects conflicting release revisions and
   evidence filename aliases before publication. Failed validation or copying
   preserves the ledger and its pinned observation records; summary and detail
-  tables use the same unambiguous measurement target.
+  tables use the same unambiguous measurement target. New evidence filenames
+  include their content hash, and the ledger is atomically replaced after
+  evidence is fsynced. Crashes before ledger publication and ledger-write
+  failures preserve all prior pins; existing committed filenames stay valid.
 
 - Enumeration proof scripts now reject failed daemon batches before scoring:
   bounded transport, checked child exit, exact session IDs, LF framing and

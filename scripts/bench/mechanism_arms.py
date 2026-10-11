@@ -12,6 +12,15 @@ Adding a mechanism needs a delta file and a `record` run, no code. For a
 mechanism that `gaze setup` already enables, the base is the setup policy minus
 the delta's sections and the candidate is the setup policy, so the delta still
 only adds.
+
+Evidence filename scheme: existing schema-1 paths remain readable and are never
+migrated or rewritten. New recordings append the full SHA-256 of each record to
+its mechanism/target/arm stem. Changed bytes get a new path; identical bytes can
+reuse a verified path. Legacy short revision-prefix aliases remain refused.
+Old evidence is retained, including after ledger publication; no automatic GC.
+The CLI fsyncs new evidence before atomically replacing and fsyncing the ledger.
+A crash before ledger publication can leave unreferenced files, never broken pins.
+This is a single-writer recorder; concurrent ledger updates are not serialized.
 """
 
 from __future__ import annotations
@@ -447,12 +456,21 @@ def record_measurement(
         entry["latency"] = {
             "file": latency.resolve().relative_to(root).as_posix(), "sha256": sha256(latency)
         }
+    if release is None:
+        for old in indexes.get(mechanism, {}).values():
+            if (old["release"] is None and old["revision"] != pair["revision"]
+                    and old["revision"][:12] == pair["revision"][:12]):
+                raise MechanismError(f"{mechanism}: short revision-prefix alias")
     stem = f"{mechanism}-{release or pair['revision'][:12]}"
-    targets = {arm: evidence_dir / f"{stem}-{arm}.jsonl.gz" for arm in ("base", "candidate")}
+    targets = {
+        arm: evidence_dir / f"{stem}-{arm}-{sha256(arms[f'{arm}-v2'][1])}.jsonl.gz"
+        for arm in ("base", "candidate")
+    }
     # Resolve paths before copying; evidence must stay under the repository root.
     for target in targets.values():
         target.relative_to(root)
     evidence_dir.mkdir(parents=True, exist_ok=True)
+    _fsync_directory(evidence_dir.parent)
     with tempfile.TemporaryDirectory(prefix=".mechanism-record-", dir=evidence_dir) as directory:
         staging = Path(directory)
         staged = {}
@@ -487,31 +505,45 @@ def record_measurement(
 
 
 def _publish_evidence(staged: Mapping[Path, Path], staging: Path) -> None:
-    """Publish checked files, restoring old bytes if a later rename fails.
+    """Publish durable immutable evidence; never replace an existing pin.
 
-    All copies (including rollback backups) finish before any pinned path is
-    replaced. This protects normal I/O failures, not process or machine crashes
-    between the individual atomic renames.
+    The recorder is single-writer. Failures can leave unreferenced new files;
+    retaining them is safe because the old ledger and all its files stay valid.
     """
-    backups = {}
-    for index, target in enumerate(staged):
-        backup = staging / f"backup-{index}" if target.exists() else None
-        if backup is not None:
-            shutil.copyfile(target, backup)
-        backups[target] = backup
-    published = []
+    for target, path in staged.items():
+        if target.exists():
+            if sha256(target) != sha256(path):
+                raise MechanismError(f"immutable evidence differs: {target.name}")
+            continue
+        with path.open("rb") as stream:
+            os.fsync(stream.fileno())
+        os.replace(path, target)
+    _fsync_directory(staging.parent)
+
+
+def _fsync_directory(directory: Path) -> None:
+    descriptor = os.open(directory, os.O_RDONLY)
     try:
-        for target, path in staged.items():
-            os.replace(path, target)
-            published.append(target)
-    except OSError:
-        for target in reversed(published):
-            backup = backups[target]
-            if backup is None:
-                target.unlink()
-            else:
-                os.replace(backup, target)
-        raise
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _persist_ledger(ledger: Mapping[str, Any], path: Path) -> None:
+    """Replace the ledger only after its complete bytes are durable."""
+    descriptor, name = tempfile.mkstemp(prefix=f".{path.name}-", dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            if path.exists():
+                os.fchmod(stream.fileno(), path.stat().st_mode & 0o777)
+            stream.write(json.dumps(ledger, indent=2) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        _fsync_directory(path.parent)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 # --------------------------------------------------------------------------
@@ -907,10 +939,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 binary=args.binary, machine=args.machine, release=args.release,
                 latency=args.latency,
             )
-            LEDGER.write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
+            _persist_ledger(ledger, LEDGER)
         elif args.command == "refresh":
             refresh(ledger)
-            LEDGER.write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
+            _persist_ledger(ledger, LEDGER)
         validate(ledger)
         rendered = apply(original, render(ledger, _released_versions(RELEASE_HISTORY)))
         if args.command == "check":
