@@ -31,6 +31,9 @@ jobs:
       - name: adjacency layer table matches its committed measurements
         run: python3 scripts/bench/render_agentic_adjacency_doc.py --check
 
+      - name: dictionary API sequence history matches canonical replay
+        run: python3 scripts/bench/dictionary_sequence_history.py check
+
       - name: mechanism arm table matches its committed observation records
         run: python3 scripts/bench/mechanism_arms.py check
 

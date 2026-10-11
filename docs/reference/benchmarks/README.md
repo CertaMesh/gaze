@@ -2155,6 +2155,80 @@ The corpus is synthetic by design and must remain free of real PII.
 
 ---
 
+### Dictionary cache API sequence extension
+
+This separate library arm exercises a warmed record-mode dictionary recognizer,
+then consumes that same object with `with_unicode_case_insensitive()` before
+cleaning. It measures the public API sequence, rather than a setup-policy
+default: its numbers do not enter the release headline tables.
+
+The [seeded generator](../../../scripts/bench/dictionary_sequences.py) uses
+fictional vocabulary independent of runtime rules, ordered term sets, original
+and Unicode case variants, repeated values, multibyte surrounding text, prose,
+quoted tool results and JSON strings. Layer K contains configured values and
+near misses; layer B contains only near misses and identifier-boundary twins.
+Fresh-after-switch and warm-without-switch controls use the same vocabulary.
+The literal control scores only literal configured occurrences as gold.
+Benign twins alter each word so the real pipeline's name-component sweep does
+not turn an unchanged word into another declared name.
+
+Each of six layer/control captures has 324 documents. Every response goes
+through the real pipeline's clean, restore, manifest and protection-trace
+paths. The canonical scorer and observation recorder measure it; standalone
+records use the recorder's C storage slot, independently of the Kiji layer C.
+Replay attaches switch/K and switch/B to a full scorecard as K/B gate layers,
+using the same net-bytes decision and correctness guards as C/A/D/R.
+Extension presence, corpus, adapter, contract, populations and control results
+must agree on both sides. Control changes are not comparable and cannot
+supply a gain. Comparisons without the extension retain their existing output;
+a [committed v4 comparison replay](dictionary-sequences/no-extension-v4-proof.json)
+produces byte-identical gate JSON before and after this gate extension.
+
+**Release history on this arm, contracts v1/v2/v4.** These contracts produce
+the same bytes here; raw and adjusted false-positive bytes are both zero.
+The [ledger](dictionary-sequence-history.json) retains each contract separately,
+all six runs, binary and adapter hashes, refusals, restores and manifest counts.
+
+| Runtime | Warm then switch: K leaked / FP bytes | B FP bytes | Fresh: K leaked / FP bytes | Literal: K leaked / FP bytes | Refusals / restore failures / invalid manifests |
+|---|---:|---:|---:|---:|---:|
+| v0.14.0 | unavailable: no public record-matching API | — | — | — | — |
+| v0.15.0 | unavailable: no public record-matching API | — | — | — | — |
+| v0.15.1 | unavailable: no public record-matching API | — | — | — | — |
+| v0.16.0 | 35,856 / 0 | 0 | 0 / 0 | 0 / 0 | 0 / 0 / 0 |
+
+Earlier tags lack `DictionaryRecognizer::with_record_matching`; the ledger
+pins their dictionary source hashes and revisions. Adding that API would
+backport detection behavior, so no numbers are invented for those rows.
+v0.16.0 uses its own released runtime and lockfile with only the committed
+example adapter overlaid. All 324 documents in every layer/control restore
+exactly and have valid manifests, including documents whose PII was missed.
+The unchanged development runtime also reproduces this leak; that capture is
+retained in the ledger separately from released rows. This is coverage of a
+known gap, not a passing runtime gain claim. Ordinary C/A/D/R inputs, scoring
+and previously measured release rows are unchanged.
+
+For a release checkout that supports the API, apply the exact harness adapter
+with `dictionary_sequences.py install-adapter --repo <checkout>`, then build
+its own `clean_for_bench` example and `validator_recall_probe` using Rust 1.96
+and a checkout-owned target directory. Capture with the current harness:
+
+```bash
+python3 scripts/bench/dictionary_sequences.py capture --repo <checkout> \
+  --binary <checkout>/target/debug/examples/clean_for_bench \
+  --probe <checkout>/target/validator-recall-probe/debug/validator-recall-probe \
+  --output <capture-directory> --seed 20260710
+python3 scripts/bench/dictionary_sequences.py replay --capture <capture-directory> \
+  --scored-labels docs/reference/benchmarks/scored-labels-v4.json \
+  --full-scorecard <same-runtime-full-v4-scorecard> --output <attached-scorecard>
+python3 scripts/bench/agentic_layers.py gate --base <attached-base> --candidate <attached-candidate>
+python3 scripts/bench/dictionary_sequence_history.py check
+```
+
+Repeat replay with v2 and with no `--scored-labels` for v1. Attach only a full
+scorecard measured from the same runtime revision and contract; the tool
+rejects mismatches. Both sides must use identical committed harness bytes.
+The harness lands before a runtime repair is measured against it.
+
 ## Evidence before the release gate
 
 Before v0.14.0, benchmark evidence was committed per pull request rather than
