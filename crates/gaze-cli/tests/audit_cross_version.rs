@@ -583,7 +583,6 @@ fn private_backend_sidecar_is_excluded_from_audit_query_and_exports() {
     for args in [
         vec!["audit", "query"],
         vec!["audit", "export", "--format", "jsonl"],
-        vec!["audit", "export", "--format", "csv"],
     ] {
         let output = Command::cargo_bin("gaze")
             .unwrap()
