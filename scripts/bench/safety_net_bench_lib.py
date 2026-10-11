@@ -21,6 +21,13 @@ from typing import Any, Literal
 
 LOCALES = {"global": "Global", "en-US": "EnUs", "de-DE": "DeDe"}
 LOCALE_TAGS = {"Global": "global", "EnUs": "en-US", "DeDe": "de-DE"}
+POOLED_SCORER_WARNING = "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending"
+POOLED_SCORER_PROVENANCE = {
+    "contract": "pooled-span-v1",
+    "warning": POOLED_SCORER_WARNING,
+    "remeasurement_pending": True,
+    "retained_predictions": False,
+}
 OBSERVER_KEYS = [
     "observer_residual_recall",
     "agreement_with_rule_floor",
@@ -481,6 +488,74 @@ def ranges_overlap(left_start: int, left_end: int, right_start: int, right_end: 
     return left_start < right_end and right_start < left_end
 
 
+def retain_observations(
+    snapshot_path: Path,
+    backend: str,
+    mode: str,
+    fixtures: list[Fixture],
+    predictions: dict[str, list[Span]],
+    clean: dict[str, CleanFixture] | None,
+    coverage_sha256: str,
+    corpus_sha256: str | None,
+) -> dict[str, str]:
+    """Retain only offsets, class labels and corpus pins, never input values."""
+    if mode not in {"direct_detector", "observer_residual"}:
+        raise ValueError(f"unsupported observation mode: {mode}")
+    records = []
+    for index, fixture in enumerate(fixtures):
+        gold = fixture.gold_spans
+        if mode == "observer_residual":
+            if clean is None:
+                raise ValueError("observer observations require clean fixtures")
+            gold = clean[fixture.fixture_id].residual_gold
+        records.append({
+            "fixture_index": index,
+            "locale": fixture.locale,
+            "gold": [[span.start, span.end, span.pii_class] for span in gold],
+            "predictions": [[span.start, span.end, span.pii_class] for span in predictions[fixture.fixture_id]],
+        })
+    evidence = {
+        "schema_version": 1,
+        "scoring_contract": "fixture-span-v2",
+        "backend": backend,
+        "mode": mode,
+        "coverage_report_sha256": coverage_sha256,
+        "corpus_sha256": corpus_sha256,
+        "fixture_count": len(fixtures),
+        "records": records,
+    }
+    data = (json.dumps(evidence, indent=2) + "\n").encode("utf-8")
+    digest = hashlib.sha256(data).hexdigest()
+    path = snapshot_path.with_name(f"{snapshot_path.stem}.observations-{digest}.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Content-addressed evidence never replaces an earlier measurement.
+    try:
+        with path.open("xb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except FileExistsError:
+        if path.read_bytes() != data:
+            raise ValueError("retained observation digest mismatch")
+    return {"file": path.name, "sha256": digest}
+
+
+def rescore_observations(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Replay a retained supplemental run without loading text or a model."""
+    if evidence["schema_version"] != 1 or evidence["mode"] not in {"direct_detector", "observer_residual"}:
+        raise ValueError("unsupported supplemental observation schema or mode")
+    records = evidence["records"]
+    if len(records) != evidence["fixture_count"]:
+        raise ValueError("observation fixture count mismatch")
+    fixtures = [Fixture(str(i), row["locale"], [], "", [Span(*span) for span in row["gold"]])
+                for i, row in enumerate(records)]
+    predictions = {str(i): [Span(*span) for span in row["predictions"]] for i, row in enumerate(records)}
+    if evidence["mode"] == "direct_detector":
+        return score_direct(fixtures, predictions)
+    clean = {fixture.fixture_id: CleanFixture("", [], fixture.gold_spans) for fixture in fixtures}
+    return score_observer(fixtures, clean, predictions)
+
+
 def update_matrix_snapshot(
     snapshot_path: Path,
     backend_name: str,
@@ -491,8 +566,15 @@ def update_matrix_snapshot(
     fixture_count: int,
     run_environment: dict[str, Any],
     backend_pins: dict[str, Any] | None = None,
+    *,
+    scoring_provenance: dict[str, Any],
 ) -> None:
     snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    for cell in snapshot["cells"]:
+        cell.setdefault("scoring_provenance", POOLED_SCORER_PROVENANCE.copy())
+    leak_provenance = snapshot.setdefault("strict_span_leak_rate_provenance", {})
+    for key in snapshot["strict_span_leak_rate"]:
+        leak_provenance.setdefault(key, POOLED_SCORER_PROVENANCE.copy())
     snapshot["status"] = "observer_residual_and_direct_run_v1"
     if corpus_sha256 is not None:
         snapshot["corpus"]["sha256"] = corpus_sha256
@@ -506,9 +588,11 @@ def update_matrix_snapshot(
             snapshot["strict_span_leak_rate"][f"{backend_name}.{locale}"] = rounded(
                 None if metrics["recall"] is None else 1.0 - metrics["recall"]
             )
+            leak_provenance[f"{backend_name}.{locale}"] = scoring_provenance
         for cell in snapshot["cells"]:
             if cell["backend"] == backend_name and cell["locale"] == locale and cell["mode"] == mode:
                 cell["metrics"] = metrics
+                cell["scoring_provenance"] = scoring_provenance
                 break
         else:
             snapshot["cells"].append(
@@ -517,6 +601,7 @@ def update_matrix_snapshot(
                     "locale": locale,
                     "mode": mode,
                     "metrics": metrics,
+                    "scoring_provenance": scoring_provenance,
                 }
             )
     snapshot_path.write_text(json.dumps(snapshot, indent=2, sort_keys=False) + "\n", encoding="utf-8")
@@ -601,6 +686,7 @@ def scorer_main(args: argparse.Namespace, backend: Literal["opf"]) -> int:
     clean = clean_fixtures(root, fixtures) if "observer-residual" in requested_modes else None
     latency = LatencyRecorder(args.measure_latency, [])
     results: dict[str, Any] = {}
+    observations: dict[str, Any] = {}
 
     for mode in requested_modes:
         predictions: dict[str, list[Span]] = {}
@@ -627,6 +713,10 @@ def scorer_main(args: argparse.Namespace, backend: Literal["opf"]) -> int:
             else score_observer(fixtures, clean or {}, predictions)
         )
         results[matrix_mode] = metrics
+        observations[matrix_mode] = retain_observations(
+            args.snapshot, backend_name, matrix_mode, fixtures, predictions, clean,
+            coverage_sha256, corpus_sha256,
+        )
         if not args.no_update:
             update_matrix_snapshot(
                 args.snapshot,
@@ -637,6 +727,7 @@ def scorer_main(args: argparse.Namespace, backend: Literal["opf"]) -> int:
                 corpus_sha256,
                 len(fixtures),
                 run_environment(args, backend),
+                scoring_provenance={"contract": "fixture-span-v2", "observations": observations[matrix_mode]},
             )
 
     if not args.no_update:
@@ -654,6 +745,7 @@ def scorer_main(args: argparse.Namespace, backend: Literal["opf"]) -> int:
             "corpus_sha256": corpus_sha256,
             "fixture_count": len(fixtures),
             "metrics_by_mode": results,
+            "observations_by_mode": observations,
             "latency": latency.summary(len(fixtures), getattr(args, "device", "cpu")),
         },
         sys.stdout,

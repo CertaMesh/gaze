@@ -310,19 +310,33 @@ The schema is version 2; cells are keyed by `backend × locale × mode`
 (`{openai_privacy_filter} × {Global, EnUs, DeDe} × {direct_detector, observer_residual}`).
 See [`docs/reference/benchmarks/README.md`](benchmarks/README.md#matrix-shape).
 
+Strict `(start, end, class)` matches use multiset matching within each fixture.
+Only integer per-class support, prediction and true-positive counts are added
+across fixtures of a locale; offsets from different documents never match.
+Direct mode matches raw-text gold; observer mode matches clean-text residual
+gold. Locale precision is micro-averaged; recall averages the rounded recalls
+of supported classes. Empty denominators remain `null`, with six-decimal rounding.
+
+Each quality cell has `scoring_provenance`. Historical `pooled-span-v1` cells
+retain their numbers with the warning "scored with the pre-fix pooled scorer;
+may overstate recall; re-measurement pending". New `fixture-span-v2` cells pin
+a value-free, content-addressed observation file by name and SHA-256. The
+`strict_span_leak_rate_provenance` map carries the direct cell provenance for
+each corresponding headline value. Perf and latency metrics are unaffected.
+
 Top-level (mode-independent):
 
 | Field | What | Stability |
 |---|---|---|
-| `strict_span_leak_rate` | Per-(backend × locale) nullable fail-closed leak rate. End-to-end metric, not detector P/R. | `null` until pinned; numeric in `0.0..=1.0` when populated |
+| `strict_span_leak_rate` | Per-(backend × locale) one minus direct-detector macro recall. | `null` until pinned; numeric in `0.0..=1.0` when populated |
 
 Per cell (`direct_detector` mode):
 
 | Field | What | Stability |
 |---|---|---|
-| `precision` | Class-averaged precision. | Nullable f64 |
+| `precision` | Micro-averaged precision. | Nullable f64 |
 | `recall` | Class-averaged recall. | Nullable f64 |
-| `f1` | Class-averaged F1. | Nullable f64 |
+| `f1` | Harmonic mean of locale precision and macro recall. | Nullable f64 |
 | per-class metrics | P / R / F1 per `PiiClass`. | Nullable f64 |
 
 Per cell (`observer_residual` mode):

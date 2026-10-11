@@ -1,14 +1,70 @@
 """Supplemental quality evidence remains value-free and replayable."""
 
 import json
+import argparse
+import contextlib
+import importlib.util
+import io
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import safety_net_bench_lib as lib
 
 
 class SafetyNetEvidenceTest(unittest.TestCase):
+    def test_both_producers_retain_replayable_evidence_even_without_snapshot_updates(self):
+        spec = importlib.util.spec_from_file_location("ner_bench_evidence_test", Path(__file__).with_name("ner-bench-scorer.py"))
+        ner = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = ner
+        spec.loader.exec_module(ner)
+        span = lib.Span(0, 5, "Name")
+        fixtures = [lib.Fixture("a", "Global", [], "synthetic private input", [span])]
+        clean = {"a": lib.CleanFixture("private clean input", [], [span])}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            coverage = root / "coverage.json"
+            coverage.write_text('{"totals": {"fixture_count": 1}}')
+            args = argparse.Namespace(mode="all", measure_latency=False, no_update=True, device="cpu",
+                                      python=sys.executable, snapshot=root / "snapshot.json")
+            stdout = io.StringIO()
+            with patch.object(lib, "validate_inputs", return_value=(root, coverage, root, "b" * 64)), \
+                 patch.object(lib, "load_fixtures", return_value=fixtures), \
+                 patch.object(lib, "clean_fixtures", return_value=clean), \
+                 patch.object(lib, "run_backend", return_value=[span]), contextlib.redirect_stdout(stdout):
+                self.assertEqual(lib.scorer_main(args, "opf"), 0)
+            opf = json.loads(stdout.getvalue())
+            with patch.object(ner, "run_model", return_value=[span]):
+                result = ner.run_one_model(root, args, SimpleNamespace(id="synthetic-model"), root,
+                                           fixtures, clean, lib.sha256_file(coverage), "b" * 64)
+            for run in (opf, result):
+                self.assertEqual(set(run["observations_by_mode"]), {"direct_detector", "observer_residual"})
+                for mode, ref in run["observations_by_mode"].items():
+                    path = root / ref["file"]
+                    self.assertEqual(lib.sha256_file(path), ref["sha256"])
+                    self.assertEqual(lib.rescore_observations(json.loads(path.read_text())), run["metrics_by_mode"][mode])
+                    proc = subprocess.run([sys.executable, str(Path(__file__).with_name("rescore_safety_net.py")), str(path)],
+                                          capture_output=True, text=True)
+                    self.assertEqual(proc.returncode, 0, proc.stderr)
+                    self.assertEqual(json.loads(proc.stdout), run["metrics_by_mode"][mode])
+            self.assertFalse(args.snapshot.exists())
+
+    def test_historical_quality_data_and_docs_carry_the_same_warning(self):
+        root = Path(__file__).resolve().parents[2]
+        docs = (root / "docs/reference/benchmarks/README.md").read_text()
+        self.assertEqual(docs.count(lib.POOLED_SCORER_WARNING), 3)
+        for name in ("safety_net_matrix_snapshot.json", "ner_models_snapshot.json"):
+            data = json.loads((root / "crates/gaze-recognizers/benches" / name).read_text())
+            self.assertGreater(len(data["cells"]), 0)
+            for cell in data["cells"]:
+                self.assertEqual(cell["scoring_provenance"], lib.POOLED_SCORER_PROVENANCE)
+            for provenance in data.get("strict_span_leak_rate_provenance", {}).values():
+                self.assertEqual(provenance, lib.POOLED_SCORER_PROVENANCE)
+
     def test_direct_and_observer_evidence_replays_without_input_values(self):
         span = lib.Span(0, 5, "Name")
         fixtures = [lib.Fixture("a", "Global", [], "synthetic private text", [span]),

@@ -401,6 +401,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -514,6 +520,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -627,6 +639,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -685,6 +703,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.5
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -733,6 +757,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.5
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -781,6 +811,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 1.0
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -894,6 +930,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -1007,6 +1049,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -1120,6 +1168,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -1178,6 +1232,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.5
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -1226,6 +1286,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.465517
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -1274,6 +1340,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 1.0
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -1377,6 +1449,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -1480,6 +1558,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -1583,6 +1667,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -1631,6 +1721,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.5
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -1679,6 +1775,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.482758
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -1717,6 +1819,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 1.0
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -1820,6 +1928,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -1923,6 +2037,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -2026,6 +2146,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -2074,6 +2200,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.4
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -2122,6 +2254,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.206897
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -2160,6 +2298,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.206897
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -2273,6 +2417,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -2386,6 +2536,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -2509,6 +2665,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -2557,6 +2719,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.5
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -2615,6 +2783,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.482758
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -2663,6 +2837,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 1.0
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -2776,6 +2956,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -2889,6 +3075,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -3002,6 +3194,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -3060,6 +3258,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.5
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -3108,6 +3312,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.5
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -3156,6 +3366,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 1.0
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     }
   ]
