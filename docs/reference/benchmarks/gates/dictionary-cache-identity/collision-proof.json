@@ -1,0 +1,21 @@
+{
+  "test": "dictionary::tests::colliding_cache_keys_keep_unequal_ordered_terms_independent",
+  "toolchain": "rustc 1.96.0",
+  "mutant": {
+    "description": "Replace exact ordered-term key identity with a u64 digest and inject the same digest (0) for all term lists, retaining Exact mode.",
+    "key_field": "terms: u64",
+    "constructor_identity": "terms: 0",
+    "executed": 1,
+    "passed": 0,
+    "failed": 1,
+    "exit": 101,
+    "failure": "assert_ne! rejects equal identities for unequal ordered terms"
+  },
+  "restored": {
+    "executed": 1,
+    "passed": 1,
+    "failed": 0,
+    "exit": 0
+  },
+  "test_only_seam": "CollisionHasher forces the test cache bucket hashes to zero; full key equality preserves all three independent automata. No production hash override is committed."
+}
