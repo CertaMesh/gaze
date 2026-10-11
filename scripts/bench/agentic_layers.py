@@ -5140,6 +5140,7 @@ def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
             "scorecard predates the gold-validity digest; measure the base again on this harness"
         )
     parameters = scorecard.get("parameters", {})
+    extension = dictionary_sequence_identity(scorecard)
     identity = {
         "kiji_contract": score.scorecard_scored_label_contract_identity(scorecard),
         "kiji_dataset": scorecard.get("dataset", {}).get("integrity"),
@@ -5165,7 +5166,6 @@ def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
             f"scorecard has no gate identity for {', '.join(missing)}; "
             "measure the base again on this harness"
         )
-    extension = dictionary_sequence_identity(scorecard)
     if extension is not None:
         identity["dictionary_sequence"] = extension
     return identity
