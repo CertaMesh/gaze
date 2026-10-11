@@ -34,12 +34,12 @@ The current harness measured the added cells on each displayed release's own
 locked detection code and setup policy, using rustc 1.96.0. These figures cover
 only the new arm. They do not replace the default benchmark headline.
 
-| Release | A leaked bytes | D false-positive bytes | Refused | Exact restores | Valid manifests |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| v0.14.0 | 1,100 | 580 | 0 | 140/140 | 140/140 |
-| v0.15.0 | 1,100 | 580 | 0 | 140/140 | 140/140 |
-| v0.15.1 | 1,100 | 580 | 0 | 140/140 | 140/140 |
-| v0.16.0 | 1,100 | 580 | 0 | 140/140 | 140/140 |
+| Release | A leaked bytes | Leaked on all processed | D false-positive bytes | Refused | Exact restores | Valid manifests |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| v0.14.0 | 1,100 | 1,100 | 580 | 0 | 140/140 | 140/140 |
+| v0.15.0 | 1,100 | 1,100 | 580 | 0 | 140/140 | 140/140 |
+| v0.15.1 | 1,100 | 1,100 | 580 | 0 | 140/140 | 140/140 |
+| v0.16.0 | 1,100 | 1,100 | 580 | 0 | 140/140 | 140/140 |
 
 All four scored-label contracts give these totals. Layer A has no false-positive
 bytes; layer D has no leaked bytes. No-tie, same-variant and absent-membership
