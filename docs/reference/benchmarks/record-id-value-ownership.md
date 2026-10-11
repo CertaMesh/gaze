@@ -1,9 +1,9 @@
 # Record identifier value ownership
 
 Generator v17 adds authored CC0 CRM/HR field-ownership cells independently of
-runtime detector expressions. Each partition adds 780 A positives, 780 D benign
-counterweights and 660 R repeat documents. The complete test partition has 4,508
-A, 2,924 D and 940 R documents. Layer C and its scoring contracts are unchanged.
+runtime detector expressions. Each partition adds 1,230 A positives, 1,230 D benign
+counterweights and 1,110 R repeat documents. The complete test partition has 4,958
+A, 3,374 D and 1,390 R documents. Layer C and its scoring contracts are unchanged.
 
 An explicitly personal label owns the whole inserted identifier value. It does
 not own the next field's label or value. Customer, employee and person/member
@@ -13,9 +13,9 @@ equipment and inventory fields are benign.
 
 | Failure class | Positive and repeat cells | Benign counterweights |
 | --- | --- | --- |
-| Grouped values | Alphabetic prefixes followed by six-digit alphanumeric groups, ordinary and nonbreaking spaces, English/German cues | Same grouped values behind inventory labels; schema placeholders |
-| Quoted scalars | Whole ASCII-quoted word groups, Unicode, punctuation, tabs, quotes and backslashes in JSON, embedded JSON and English/German logs | Identically shaped public artifact scalars; quoting a schema label without quoting its placeholder |
-| Adjacent fields | Two independently generated personal IDs separated by assignment syntax, same/different classes, key-case variation; later repetition of the second ID | Personal values followed by public assignments; placeholder followed by a public assignment; two public fields |
+| Grouped values | ASCII and Unicode letter/combining-mark prefixes followed by six-digit alphanumeric groups, ordinary and nonbreaking spaces, English/German cues | Same grouped values behind inventory labels; schema placeholders |
+| Quoted scalars | Whole ASCII-quoted word groups, literal Unicode, raw JSON Unicode escapes, punctuation, tabs, quotes and backslashes in JSON, embedded JSON and English/German logs | Identically shaped public artifact scalars; quoting a schema label without quoting its placeholder |
+| Adjacent fields | Two independently generated personal IDs separated by assignment syntax, same/different classes, key-case variation, spaces, semicolons and newline boundaries; later repetition of the second ID | Personal values followed by public assignments; placeholder followed by a public assignment; two public fields |
 | Cue resumption | Rejected unquoted placeholder followed by an independently labelled ID and its later repeat | Placeholder-only schema text and quoted-label controls |
 
 Every gold or decoy span selects the exact inserted UTF-8 bytes. JSON gold covers

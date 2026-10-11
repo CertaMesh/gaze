@@ -54,23 +54,27 @@ def records(api: ModuleType, partition: str) -> list:
             other = lead + rng.digits(5)
             while other == serial:
                 other = lead + rng.digits(5)
-            for separator_name, separator in (("space", " "), ("nbsp", "\u00a0")):
-                value = word + separator + serial + "Z"
-                for language, cue in (("en", en), ("de", de)):
-                    fields = {"C": (cue, None), "V": (value, label)}
-                    surface = f"grouped_{separator_name}_{language}"
-                    emit("A", family, surface, index, "{C}: {V}; status=active", fields, language)
-                    emit("R", family, surface + "_repeat", index,
-                         "{C}: {V}; status=active\nLookup {V} again.", fields, language)
-                    emit("D", family, surface + "_public", index,
-                         "inventory_reference: {V}; status=active",
-                         {"V": (value, "decoy:public_reference")}, language)
-
+            grouped_words = (("", word),
+                             ("unicode_letters_", word + ("ÉLAN" if partition == "dev" else "ÖKO")),
+                             ("combining_marks_", word + ("E\u0301LAN" if partition == "dev" else "O\u0308KO")))
+            for form, grouped_word in grouped_words:
+                for separator_name, separator in (("space", " "), ("nbsp", "\u00a0")):
+                    value = grouped_word + separator + serial + "Z"
+                    for language, cue in (("en", en), ("de", de)):
+                        fields = {"C": (cue, None), "V": (value, label)}
+                        surface = f"grouped_{form}{separator_name}_{language}"
+                        emit("A", family, surface, index, "{C}: {V}; status=active", fields, language)
+                        emit("R", family, surface + "_repeat", index,
+                             "{C}: {V}; status=active\nLookup {V} again.", fields, language)
+                        emit("D", family, surface + "_public", index,
+                             "inventory_reference: {V}; status=active",
+                             {"V": (value, "decoy:public_reference")}, language)
             # Values reflect opaque application scalars; separators/escaping have
             # no semantic power to move bytes outside the labelled identifier.
             decoded_values = {
                 "words": word.lower() + " mineral " + serial,
                 "unicode": word + " é" + serial,
+                "unicode_escape": word + (" é e\u0301" if partition == "dev" else " ö o\u0308") + serial,
                 "at": word + serial + "@" + word,
                 "tab": word + "\t" + serial,
                 "quote": word + '"' + serial,
@@ -78,7 +82,7 @@ def records(api: ModuleType, partition: str) -> list:
                 "alphabetic": word.lower() + " mineral",
             }
             for shape, decoded in decoded_values.items():
-                raw = json.dumps(decoded, ensure_ascii=False)[1:-1]
+                raw = json.dumps(decoded, ensure_ascii=shape == "unicode_escape")[1:-1]
                 fields = {"K": (key, None), "V": (raw, label)}
                 surface = "quoted_" + shape
                 template = '{"tool":"lookup","arguments":{"{K}":"{V}"}}'
@@ -90,7 +94,7 @@ def records(api: ModuleType, partition: str) -> list:
                          template + '\nLookup {V} again.', fields)
                 # The outer agent payload is another JSON string; gold keeps
                 # the exact doubly escaped byte spelling in that surface.
-                if shape in ("tab", "quote", "backslash", "unicode"):
+                if shape in ("tab", "quote", "backslash", "unicode", "unicode_escape"):
                     embedded_raw = json.dumps(raw, ensure_ascii=False)[1:-1]
                     embedded = '{"payload":"{\\"arguments\\":{\\"{K}\\":\\"{V}\\"}}"}'
                     embedded_fields = {"K": (key, None), "V": (embedded_raw, label)}
@@ -117,7 +121,7 @@ def records(api: ModuleType, partition: str) -> list:
             for relation, second_family in (("same", family), ("different", families[(position + 1) % len(families)])):
                 second_key = FIELDS[partition][second_family][0]
                 second_key = second_key.upper() if index % 2 else second_key
-                for boundary, separator in (("space", " "), ("semicolon", "; ")):
+                for boundary, separator in (("space", " "), ("semicolon", "; "), ("newline", "\n")):
                     fields = {"C": (en, None), "V": (first, label), "K": (second_key, None),
                               "W": (second, LABELS[second_family])}
                     template = "{C}: {V}" + separator + "{K}={W}"
@@ -136,6 +140,16 @@ def records(api: ModuleType, partition: str) -> list:
                 emit("D", family, surface + "_placeholder", index, '[schema {C} {P} {K}={W}]',
                      {"C": (en, None), "P": ("placeholder", "decoy:placeholder"),
                       "K": (public_key, "decoy:field_label"), "W": (public_value, "decoy:public_reference")})
+                newline_fields = {"C": (en, None), "V": (first, label),
+                                  "K": (public_key, "decoy:field_label"),
+                                  "W": (public_value, "decoy:public_reference")}
+                newline_template = "{C}: {V}\n{K}={W}"
+                emit("A", family, surface + "_newline", index, newline_template, newline_fields)
+                emit("R", family, surface + "_newline_repeat", index,
+                     newline_template + "; next lookup {V}", newline_fields)
+                emit("D", family, surface + "_newline_public", index, "artifact_key: {V}\n{K}={W}",
+                     {"V": (first, "decoy:public_reference"), "K": (public_key, "decoy:field_label"),
+                      "W": (public_value, "decoy:public_reference")})
             for language, cue in (("en", en), ("de", de)):
                 fields = {"C": (cue, None), "P": ("token", "decoy:placeholder"),
                           "K": (key.upper() if index % 2 else key, None), "V": (first, label)}

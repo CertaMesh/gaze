@@ -2068,13 +2068,13 @@ nine-digit `deviceSerial` values are classified as licence plates. Both v0.14.0
 arms retain identical byte counts. The vocabulary was not adjusted to improve
 these results.
 
-Generator v17 adds 780 A positives, 780 D counterweights and 660 R repeats
+Generator v17 adds 1,230 A positives, 1,230 D counterweights and 1,110 R repeats
 per partition for complete labelled-value ownership. Independently authored
 [cell definitions](record-id-value-ownership.md) cover grouped alphanumeric IDs,
 whole ASCII-quoted JSON/log scalars with Unicode and escapes, adjacent personal
 and public assignments, and rejected-placeholder-then-valid-cue sequences.
 Each personal field owns a separate complete value; following labels and public
-fields stay outside it. The test partition has 4,508 A / 2,924 D / 940 R documents.
+fields stay outside it. The test partition has 4,958 A / 3,374 D / 1,390 R documents.
 The v16 corpus and contract remain frozen. Numeric repeat variants contain at
 least six digits; short repeats, typographic quotes and CSV linkage remain
 uncharacterized. These additions change the measurement, not runtime detection.

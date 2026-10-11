@@ -19,7 +19,8 @@ class RecordIdOwnershipTests(unittest.TestCase):
             rows = cells.records(api, partition)
             for family in cells.LABELS:
                 for shape in ("grouped_unicode_letters", "grouped_combining_marks",
-                              "quoted_unicode_escape", "adjacent_personal_same_newline",
+                              "quoted_unicode_escape", "quoted_unicode_escape_embedded",
+                              "adjacent_personal_same_newline",
                               "adjacent_personal_different_newline"):
                     selected = [r for r in rows if r.family == family and shape in r.surface]
                     self.assertEqual({r.layer for r in selected}, {"A", "D", "R"}, (partition, family, shape))
@@ -34,7 +35,7 @@ class RecordIdOwnershipTests(unittest.TestCase):
                                             if "letters" in shape else
                                             any(unicodedata.category(c).startswith("M") for c in value))
                             self.assertIn(" ", value.replace("\u00a0", " "))
-                        elif shape == "quoted_unicode_escape":
+                        elif shape.startswith("quoted_unicode_escape"):
                             value = spans[0].value
                             self.assertIn("\\u", value)
                             payload = json.loads(row.text.split("\nLookup ")[0])
@@ -53,6 +54,16 @@ class RecordIdOwnershipTests(unittest.TestCase):
                             self.assertNotIn("\n", second.value)
                             if row.layer == "R":
                                 self.assertEqual(row.gold[1].value, row.gold[2].value)
+                public = [r for r in rows if r.family == family and
+                          "adjacent_public" in r.surface and "newline" in r.surface]
+                self.assertEqual({r.layer for r in public}, {"A", "D", "R"})
+                for row in public:
+                    first = row.gold[0] if row.gold else row.decoys[0]
+                    self.assertEqual(row.text.encode()[first.end:first.end + 1], b"\n")
+                    self.assertTrue(any(d.label == "public_reference" for d in row.decoys))
+                    if row.layer == "R":
+                        self.assertEqual(len(row.gold), 2)
+                        self.assertEqual(row.gold[0].value, row.gold[1].value)
 
     def test_previous_corpus_and_contract_remain_reconstructible(self):
         expected = {"dev": "3504fb17f9dd74834aa85d60c89c33ad9b9ece658f73d0839fc94fd875c1b607",
@@ -127,7 +138,7 @@ class RecordIdOwnershipTests(unittest.TestCase):
                 self.assertGreaterEqual(sum(c.isdigit() for c in row.gold[1].value), 6)
         public = [r for r in cells.records(api, "test") if "adjacent_public" in r.surface]
         self.assertTrue(public)
-        self.assertEqual({r.layer for r in public}, {"A", "D"})
+        self.assertEqual({r.layer for r in public}, {"A", "D", "R"})
         self.assertTrue(all(r.decoys for r in public))
         self.assertTrue(all(len(r.gold) == 1 for r in public if r.layer == "A"))
 
