@@ -31,7 +31,7 @@ from __future__ import annotations
 import json
 import random
 import re
-import subprocess
+from checked_daemon_batch import run_daemon_batch
 import sys
 import tempfile
 from collections import Counter
@@ -186,22 +186,7 @@ def documents() -> list[dict]:
 
 
 def run(binary: str, policy: Path, docs: list[dict]) -> list[dict]:
-    lines = "".join(
-        json.dumps({"session_id": f"doc-{i}", "text": d["text"]}) + "\n"
-        for i, d in enumerate(docs)
-    )
-    out = subprocess.run(
-        [binary, "daemon", "--policy", str(policy)],
-        input=lines,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    by_id = {}
-    for line in out.stdout.splitlines():
-        value = json.loads(line)
-        by_id[value.get("session_id")] = value
-    return [by_id.get(f"doc-{i}") for i in range(len(docs))]
+    return run_daemon_batch(binary, policy, docs)
 
 
 def iban_view(response: dict, span: tuple[int, int]) -> tuple[str, int]:
@@ -209,7 +194,7 @@ def iban_view(response: dict, span: tuple[int, int]) -> tuple[str, int]:
     start, end = span
     protected = set()
     classes = []
-    for entry in response.get("manifest", []):
+    for entry in response["manifest"]:
         raw = entry["raw_span"]
         lo, hi = max(raw["start"], start), min(raw["end"], end)
         if lo < hi:
@@ -247,9 +232,6 @@ def main() -> int:
             transitions = Counter()
             examples = []
             for doc, b, f in zip(docs, base, fix):
-                if b is None or f is None:
-                    stats["missing_response"] += 1
-                    continue
                 b_cls, b_bytes = iban_view(b, doc["iban_span"])
                 f_cls, f_bytes = iban_view(f, doc["iban_span"])
                 stats["lost_bytes"] += max(0, b_bytes - f_bytes)

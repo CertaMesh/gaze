@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Third-party benchmark assembly now checks prediction and dataset receipts,
+  system identity, document counts and published scores through the same row
+  admission path as incremental publication. Untagged Gaze runs record their
+  prediction digest. Existing pre-receipt rows retain their numbers and are
+  explicitly marked as not receipt-verified, with regeneration pending.
+
+- Mechanism benchmark recording now rejects conflicting release revisions and
+  evidence filename aliases before publication. Failed validation or copying
+  preserves the ledger and its pinned observation records; summary and detail
+  tables use the same unambiguous measurement target. New evidence filenames
+  include their content hash, and the ledger is atomically replaced after
+  evidence is fsynced. Crashes before ledger publication and ledger-write
+  failures preserve all prior pins; existing committed filenames stay valid.
+
+- Enumeration proof scripts now reject failed daemon batches before scoring:
+  bounded transport, checked child exit, exact session IDs, LF framing and
+  validated successful response shapes. Matching refusals can no longer
+  prove unchanged behavior, and reordered phone responses are joined by ID.
+
 ### Changed
 
 - `CorePipelineConfig` now resolves custom rulepack dictionaries through the

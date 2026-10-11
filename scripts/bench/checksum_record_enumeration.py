@@ -256,9 +256,6 @@ def main() -> int:
     newly_bytes: collections.Counter = collections.Counter()
     unchanged: collections.Counter = collections.Counter()
     for doc, b, c in zip(docs, base, cand, strict=True):
-        if b is None or c is None:
-            failures.append(("missing response", doc["kind"], doc["context"]))
-            continue
         before, after = protected_bytes(b, doc["span"]), protected_bytes(c, doc["span"])
         key = (doc["kind"], doc["valid"], doc["context"])
         if after < before:
@@ -286,7 +283,7 @@ def main() -> int:
         recall = base_enum.run(cand_bin, policy, recall_docs)
     for doc, response in zip(recall_docs, recall, strict=True):
         span = doc["span"][1] - doc["span"][0]
-        if response is None or protected_bytes(response, doc["span"]) != span:
+        if protected_bytes(response, doc["span"]) != span:
             failures.append(("recall row not protected whole", doc["kind"], doc["context"]))
 
     rows = [
