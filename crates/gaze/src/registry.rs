@@ -151,6 +151,12 @@ struct FamilyEntry {
     variants: HashMap<String, u32>,
 }
 
+enum EffectiveFamilyOrdering<'a> {
+    NoPolicy,
+    Tie(&'a str),
+    Ordered(bool),
+}
+
 impl FamilyPolicyTable {
     pub const EMPTY: Self = Self {
         inner: FamilyPolicyTableInner::Empty,
@@ -181,19 +187,29 @@ impl FamilyPolicyTable {
     /// Returns `Some(true)` when `a` wins, `Some(false)` when `b` wins, and
     /// `None` when no family policy applies or precedence is tied.
     pub fn compare(&self, a: &str, b: &str) -> Option<bool> {
+        match self.effective_ordering(a, b) {
+            EffectiveFamilyOrdering::Ordered(a_wins) => Some(a_wins),
+            EffectiveFamilyOrdering::NoPolicy | EffectiveFamilyOrdering::Tie(_) => None,
+        }
+    }
+
+    fn effective_ordering(&self, a: &str, b: &str) -> EffectiveFamilyOrdering<'_> {
         let FamilyPolicyTableInner::Populated {
             by_recognizer,
             family_index,
         } = &self.inner
         else {
-            return None;
+            return EffectiveFamilyOrdering::NoPolicy;
         };
-        let ma = by_recognizer.get(a)?;
-        let mb = by_recognizer.get(b)?;
+        let (Some(ma), Some(mb)) = (by_recognizer.get(a), by_recognizer.get(b)) else {
+            return EffectiveFamilyOrdering::NoPolicy;
+        };
         if ma.family != mb.family || ma.variant == mb.variant {
-            return None;
+            return EffectiveFamilyOrdering::NoPolicy;
         }
-        let family = family_index.get(&ma.family)?;
+        let Some(family) = family_index.get(&ma.family) else {
+            return EffectiveFamilyOrdering::NoPolicy;
+        };
         let a_precedence = family
             .variants
             .get(&ma.variant)
@@ -205,9 +221,9 @@ impl FamilyPolicyTable {
             .copied()
             .unwrap_or(mb.precedence);
         match a_precedence.cmp(&b_precedence) {
-            Ordering::Less => Some(true),
-            Ordering::Greater => Some(false),
-            Ordering::Equal => None,
+            Ordering::Less => EffectiveFamilyOrdering::Ordered(true),
+            Ordering::Greater => EffectiveFamilyOrdering::Ordered(false),
+            Ordering::Equal => EffectiveFamilyOrdering::Tie(ma.family.as_str()),
         }
     }
 
@@ -260,10 +276,10 @@ impl FamilyPolicyTable {
     }
 
     pub(crate) fn precedence_tie_family(&self, a: &str, b: &str) -> Option<&str> {
-        let ma = self.membership(a)?;
-        let mb = self.membership(b)?;
-        (ma.family == mb.family && ma.variant != mb.variant && ma.precedence == mb.precedence)
-            .then_some(ma.family.as_str())
+        match self.effective_ordering(a, b) {
+            EffectiveFamilyOrdering::Tie(family) => Some(family),
+            EffectiveFamilyOrdering::NoPolicy | EffectiveFamilyOrdering::Ordered(_) => None,
+        }
     }
 }
 
