@@ -2188,8 +2188,8 @@ Replay regenerates every sequence/layer's corpus, IDs, gold inventory and
 population before scoring observations. A digest-valid record from another
 arm or layer is rejected with a value-free `ReplayBindingError`. Historical
 captures keep their original source hashes and measurements; the history check
-pins the original generator source to its committed revision while validating
-its generated inputs with the current replay.
+pins the original generator hash to a [committed source snapshot](dictionary-sequences/generator-v1.py.gz)
+while validating its generated inputs with the current replay.
 
 Each of six layer/control captures has 324 documents. Every response goes
 through the real pipeline's clean, restore, manifest and protection-trace

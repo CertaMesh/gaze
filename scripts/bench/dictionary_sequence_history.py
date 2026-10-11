@@ -3,7 +3,7 @@
 import argparse
 import json
 import hashlib
-import subprocess
+import gzip
 from pathlib import Path
 
 import dictionary_sequences as sequence
@@ -58,9 +58,8 @@ def check(path=ROOT / LEDGER):
                                               manifest["identity"]["partition"])
         # Original captures retain their exact producer source identity. Replaying
         # with stronger validation changes source bytes, not generated inputs.
-        original_revision = "a6449e2f15563326e7ab9b76e5c9654148acd1e0"
-        original_source = subprocess.check_output(
-            ["git", "show", f"{original_revision}:scripts/bench/dictionary_sequences.py"], cwd=ROOT)
+        original_source = gzip.decompress((ROOT /
+            "docs/reference/benchmarks/dictionary-sequences/generator-v1.py.gz").read_bytes())
         original_hash = hashlib.sha256(original_source).hexdigest()
         if manifest["identity"].get("generator_sha256") == original_hash:
             expected_identity["generator_sha256"] = original_hash
