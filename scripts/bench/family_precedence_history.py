@@ -33,6 +33,7 @@ from tagged_gaze import tag_commit
 ROOT = Path(__file__).resolve().parents[2]
 BRIDGE = ROOT / "scripts/bench/family-precedence-v014-policy-bridge.patch"
 RELEASES = ("v0.14.0", "v0.15.0", "v0.15.1", "v0.16.0")
+HISTORY_ROOT = ROOT / "docs/reference/benchmarks/mechanisms/family-precedence-history"
 
 
 def sha(path: Path) -> str:
@@ -269,14 +270,19 @@ def main() -> None:
     measure.add_argument("--validator-probe", type=Path, required=True)
     measure.add_argument("--output", type=Path, required=True)
     replay = commands.add_parser("check")
-    replay.add_argument("directory", type=Path)
+    replay.add_argument("directory", type=Path, nargs="?", default=HISTORY_ROOT)
     args = parser.parse_args()
     if args.command == "build":
         build(args.release, args.worktree.resolve(), args.build_receipt)
     elif args.command == "measure":
         capture(args.release, args.worktree.resolve(), args.build_receipt, args.validator_probe.resolve(), args.output)
-    else:
+    elif (args.directory / "capture.json").is_file():
         check(args.directory)
+    else:
+        if {path.name for path in args.directory.iterdir() if path.is_dir()} != set(RELEASES):
+            raise ValueError("history does not cover every displayed release")
+        for release in RELEASES:
+            check(args.directory / release)
     print("effective-family-precedence capture matches canonical scoring")
 
 
