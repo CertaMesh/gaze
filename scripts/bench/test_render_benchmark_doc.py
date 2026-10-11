@@ -1060,6 +1060,13 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             render.chart_panels(history, self.comparison, self.their)
 
     def test_a_third_party_gaze_slot_is_the_committed_tagged_run_and_pending_without_one(self):
+        def gaze_cells(panel):
+            cells = [line.split("|")[2].strip()
+                     for line in charts.model_card_tables([panel]).splitlines()
+                     if line.startswith(f"| {panel.title} |")]
+            self.assertEqual(len(cells), 3)
+            return cells
+
         # The committed gaze-v0.16.0 rows fill the slots with that run's own numbers, exactly.
         for key, panel, (f2, leaked, fp) in zip(
                 ("presidio-research", "piibench-commercial"), self.panels()[1:],
@@ -1069,7 +1076,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
                              (f2, leaked, fp))
             bar = next(b for b in panel.bars if b.gaze)
             self.assertEqual((bar.f2, bar.leaked), (f2, leaked))
-            self.assertNotIn("pending", charts.model_card_tables([panel]))
+            self.assertNotIn("pending", gaze_cells(panel))
         # Without a tagged row the slot reads pending; the untagged gaze-full row never fills it.
         their = copy.deepcopy(self.their)
         for bench in their.values():
@@ -1078,7 +1085,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         for panel in self.panels(their=their)[1:]:
             bar = next(b for b in panel.bars if b.gaze)
             self.assertIsNone(bar.f2)
-            self.assertIn("pending", charts.model_card_tables([panel]))
+            self.assertEqual(gaze_cells(panel), ["pending"] * 3)
 
     def test_presidio_research_charts_presidios_own_tuned_setup_only(self):
         _, presidio, piibench = self.panels()
