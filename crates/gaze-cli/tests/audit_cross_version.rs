@@ -557,3 +557,47 @@ fn assert_restricted_sql(sql: &str) {
     assert!(lower.contains(" class, action, field_name, document_kind, conflict_loser, "));
     assert!(lower.contains(" from redaction_log"));
 }
+
+#[test]
+fn private_backend_sidecar_is_excluded_from_audit_query_and_exports() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("sidecar.sqlite");
+    let logger = gaze_audit::SqliteLogger::new(&path).unwrap();
+    let entry = gaze_types::RedactionEntry::new(
+        "synthetic",
+        gaze_types::PiiClass::Name,
+        gaze_types::Action::Tokenize,
+        None,
+        gaze_types::DocumentKind::Text,
+        false,
+        gaze_types::ConflictTier::None,
+        123,
+        None,
+    )
+    .with_backend_silently_dropped(vec!["private-backend-marker".into()]);
+    logger.log(&entry).unwrap();
+    assert_eq!(
+        logger.entries().unwrap()[0].backend_silently_dropped,
+        entry.backend_silently_dropped
+    );
+    for args in [
+        vec!["audit", "query"],
+        vec!["audit", "export", "--format", "jsonl"],
+    ] {
+        let output = Command::cargo_bin("gaze")
+            .unwrap()
+            .args(args)
+            .args(["--audit-db", path.to_str().unwrap()])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(stdout.contains("synthetic"), "expected row: {stdout}");
+        assert!(!stdout.contains("backend_silently_dropped"), "{stdout}");
+        assert!(!stdout.contains("private-backend-marker"), "{stdout}");
+    }
+}

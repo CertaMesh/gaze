@@ -3,8 +3,8 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use gaze_types::{
-    Action, AmbiguityRecord, ConflictTier, DocumentKind, FallbackReason, LeakKind, LeakReport,
-    LeakReportTelemetry, LeakSuspect, PiiClass, RedactionEntry, ValidatorFailReason,
+    Action, ConflictTier, DocumentKind, FallbackReason, LeakKind, LeakReport, LeakReportTelemetry,
+    LeakSuspect, PiiClass, RedactionEntry,
 };
 use rusqlite::{params, params_from_iter, Connection, OpenFlags};
 use serde::de::DeserializeOwned;
@@ -12,8 +12,9 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::query::{
-    build_audit_query_sql, build_safety_net_query_sql, AuditFilter, AuditLogRow, LeakSuspectRow,
-    PresentColumns, DEFAULT_SNAPSHOT_ALG, DEFAULT_SNAPSHOT_SCHEME,
+    build_audit_query_sql, build_entries_query_sql, build_safety_net_query_sql, AuditFilter,
+    AuditLogRow, LeakSuspectRow, PresentColumns, AUDIT_RESTRICTED_COLUMNS, DEFAULT_SNAPSHOT_ALG,
+    DEFAULT_SNAPSHOT_SCHEME,
 };
 
 pub type Result<T> = std::result::Result<T, AuditError>;
@@ -387,71 +388,28 @@ impl SqliteLogger {
         Ok(())
     }
 
+    /// Reads typed redaction entries, including stored provenance and private
+    /// backend routing metadata. Unknown enums, malformed JSON, and restore
+    /// counters outside their unsigned target ranges return an error. Use
+    /// [`Self::query`] to inspect raw metadata without typed interpretation.
     pub fn entries(&self) -> Result<Vec<RedactionEntry>> {
         let conn = self
             .conn
             .lock()
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
+        let present_columns = PresentColumns::new(redaction_log_column_names(&conn)?);
+        // Private sidecar never enters AuditLogRow or the export allowlist.
+        let (sql, values) = build_entries_query_sql(&present_columns);
         let mut stmt = conn
-            .prepare(
-                "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask, restore_trap_shape_count, labelled_value_scan_reason FROM redaction_log",
-            )
+            .prepare(&sql)
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         let rows = stmt
-            .query_map([], |row| {
-                let mut entry = RedactionEntry::new(
-                    row.get::<_, String>(0)?,
-                    pii_class_from_db(&row.get::<_, String>(3)?)?,
-                    action_from_db(&row.get::<_, String>(4)?)?,
-                    row.get(5)?,
-                    document_kind_from_db(&row.get::<_, String>(6)?)?,
-                    row.get::<_, i64>(7)? != 0,
-                    conflict_tier_from_db(&row.get::<_, String>(8)?)?,
-                    row.get::<_, Option<i64>>(9)?.unwrap_or(0),
-                    row.get(10)?,
-                )
-                .with_recognizer_metadata(row.get(1)?, row.get(2)?);
-                if let Some(reason) =
-                    deserialize_json_column::<ValidatorFailReason>(row.get(11)?, 11)?
-                {
-                    entry = entry.with_validator_fail_reason(reason);
-                }
-                entry.labelled_value_scan_reason = deserialize_json_column(row.get(24)?, 24)?;
-                if let Some(record) = deserialize_json_column::<AmbiguityRecord>(row.get(12)?, 12)?
-                {
-                    entry = entry.with_ambiguity_record(record);
-                }
-                entry = entry.with_collision_metadata(row.get(13)?, row.get(14)?);
-                if let Some(reason) = row
-                    .get::<_, Option<String>>(15)?
-                    .map(|value| fallback_reason_from_db(&value))
-                    .transpose()?
-                {
-                    entry = entry.with_fallback_triggered(reason);
-                }
-                if let Some(dropped) = deserialize_json_column::<Vec<String>>(row.get(16)?, 16)? {
-                    entry = entry.with_backend_silently_dropped(dropped);
-                }
-                entry.restore_policy = row.get(17)?;
-                entry.restore_decision = row.get(18)?;
-                entry.restore_unknown_token_count =
-                    row.get::<_, Option<i64>>(19)?.map(|value| value as u64);
-                entry.restore_manifest_bypass_count =
-                    row.get::<_, Option<i64>>(20)?.map(|value| value as u64);
-                entry.restore_fresh_pii_count =
-                    row.get::<_, Option<i64>>(21)?.map(|value| value as u64);
-                entry.restore_phase_mask = row.get::<_, Option<i64>>(22)?.map(|value| value as u32);
-                entry.restore_trap_shape_count =
-                    row.get::<_, Option<i64>>(23)?.map(|value| value as u64);
-                Ok(entry)
+            .query_map(params_from_iter(values.iter()), |row| {
+                audit_row_to_entry(decode_audit_row(row)?, row.get("backend_silently_dropped")?)
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-
-        let mut entries = Vec::new();
-        for row in rows {
-            entries.push(row.map_err(|err| AuditError::Sqlite(err.to_string()))?);
-        }
-        Ok(entries)
+        rows.map(|row| row.map_err(|err| AuditError::Sqlite(err.to_string())))
+            .collect()
     }
 
     /// Queries metadata-only redaction audit rows from a SQLite database file.
@@ -467,48 +425,7 @@ impl SqliteLogger {
             .prepare(&sql)
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         let rows = stmt
-            .query_map(params_from_iter(values.iter()), |row| {
-                Ok(AuditLogRow {
-                    source: row.get(0)?,
-                    recognizer_id: row.get(1)?,
-                    recognizer_version_id: row.get(2)?,
-                    class: row.get(3)?,
-                    action: row.get(4)?,
-                    field_name: row.get(5)?,
-                    document_kind: row.get(6)?,
-                    conflict_loser: row.get::<_, i64>(7)? != 0,
-                    decided_by: row.get(8)?,
-                    created_at: row.get(9)?,
-                    session_id: row.get(10)?,
-                    snapshot_scheme: row.get(11)?,
-                    snapshot_alg: row.get(12)?,
-                    snapshot_key_version: row.get(13)?,
-                    validator_fail_reason: row.get(14)?,
-                    ambiguity_record: row.get(15)?,
-                    collision_family: row.get(16)?,
-                    collision_variant: row.get(17)?,
-                    fallback_triggered: row.get(18)?,
-                    provenance_stage: row.get(19)?,
-                    provenance_model_id: row.get(20)?,
-                    provenance_model_version: row.get(21)?,
-                    provenance_artifact_sha256: row.get(22)?,
-                    provenance_tokenizer_sha256: row.get(23)?,
-                    provenance_locale_resolved: row.get(24)?,
-                    provenance_locale_match_kind: row.get(25)?,
-                    provenance_canonical_class: row.get(26)?,
-                    provenance_native_class: row.get(27)?,
-                    provenance_confidence: row.get(28)?,
-                    provenance_merged_from: row.get(29)?,
-                    restore_policy: row.get(30)?,
-                    restore_decision: row.get(31)?,
-                    restore_unknown_token_count: row.get(32)?,
-                    restore_manifest_bypass_count: row.get(33)?,
-                    restore_fresh_pii_count: row.get(34)?,
-                    restore_phase_mask: row.get(35)?,
-                    restore_trap_shape_count: row.get(36)?,
-                    labelled_value_scan_reason: row.get(37)?,
-                })
-            })
+            .query_map(params_from_iter(values.iter()), decode_audit_row)
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
 
         let mut entries = Vec::new();
@@ -643,19 +560,6 @@ fn fallback_reason_to_db(reason: FallbackReason) -> &'static str {
     reason.as_str()
 }
 
-fn fallback_reason_from_db(value: &str) -> std::result::Result<FallbackReason, rusqlite::Error> {
-    FallbackReason::from_canonical_str(value).ok_or_else(|| {
-        rusqlite::Error::FromSqlConversionFailure(
-            18,
-            rusqlite::types::Type::Text,
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("unknown fallback reason {value}"),
-            )),
-        )
-    })
-}
-
 fn leak_kind_to_db(kind: &LeakKind) -> &'static str {
     kind.as_str()
 }
@@ -690,32 +594,6 @@ fn redaction_log_column_names(conn: &Connection) -> Result<BTreeSet<String>> {
     Ok(names)
 }
 
-fn conflict_tier_from_db(value: &str) -> std::result::Result<ConflictTier, rusqlite::Error> {
-    ConflictTier::from_canonical_str(value).ok_or_else(|| {
-        rusqlite::Error::FromSqlConversionFailure(
-            6,
-            rusqlite::types::Type::Text,
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("unknown conflict tier {value}"),
-            )),
-        )
-    })
-}
-
-fn pii_class_from_db(value: &str) -> std::result::Result<PiiClass, rusqlite::Error> {
-    PiiClass::from_canonical_str(value).ok_or_else(|| {
-        rusqlite::Error::FromSqlConversionFailure(
-            1,
-            rusqlite::types::Type::Text,
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("unknown class {value}"),
-            )),
-        )
-    })
-}
-
 fn serialize_json_column<T: Serialize>(value: Option<&T>) -> Result<Option<String>> {
     value
         .map(serde_json::to_string)
@@ -723,55 +601,188 @@ fn serialize_json_column<T: Serialize>(value: Option<&T>) -> Result<Option<Strin
         .map_err(|err| AuditError::Sqlite(err.to_string()))
 }
 
-fn deserialize_json_column<T: DeserializeOwned>(
-    value: Option<String>,
-    column: usize,
-) -> std::result::Result<Option<T>, rusqlite::Error> {
-    value
-        .map(|json| {
-            serde_json::from_str(&json).map_err(|err| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    column,
-                    rusqlite::types::Type::Text,
-                    Box::new(err),
-                )
-            })
-        })
-        .transpose()
-}
-
 fn action_to_db(action: Action) -> &'static str {
     action.as_str()
-}
-
-fn action_from_db(value: &str) -> std::result::Result<Action, rusqlite::Error> {
-    Action::from_canonical_str(value).ok_or_else(|| {
-        rusqlite::Error::FromSqlConversionFailure(
-            2,
-            rusqlite::types::Type::Text,
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("unknown action {value}"),
-            )),
-        )
-    })
 }
 
 fn document_kind_to_db(kind: &DocumentKind) -> &'static str {
     kind.as_str()
 }
 
-fn document_kind_from_db(value: &str) -> std::result::Result<DocumentKind, rusqlite::Error> {
-    DocumentKind::from_canonical_str(value).ok_or_else(|| {
-        rusqlite::Error::FromSqlConversionFailure(
-            3,
+// Both read paths use this decoder over the approved metadata projection.
+fn decode_audit_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AuditLogRow> {
+    Ok(AuditLogRow {
+        source: row.get("source")?,
+        recognizer_id: row.get("recognizer_id")?,
+        recognizer_version_id: row.get("recognizer_version_id")?,
+        class: row.get("class")?,
+        action: row.get("action")?,
+        field_name: row.get("field_name")?,
+        document_kind: row.get("document_kind")?,
+        conflict_loser: row.get::<_, i64>("conflict_loser")? != 0,
+        decided_by: row.get("decided_by")?,
+        created_at: row.get("created_at")?,
+        session_id: row.get("session_id")?,
+        snapshot_scheme: row.get("snapshot_scheme")?,
+        snapshot_alg: row.get("snapshot_alg")?,
+        snapshot_key_version: row.get("snapshot_key_version")?,
+        validator_fail_reason: row.get("validator_fail_reason")?,
+        ambiguity_record: row.get("ambiguity_record")?,
+        collision_family: row.get("collision_family")?,
+        collision_variant: row.get("collision_variant")?,
+        fallback_triggered: row.get("fallback_triggered")?,
+        provenance_stage: row.get("provenance_stage")?,
+        provenance_model_id: row.get("provenance_model_id")?,
+        provenance_model_version: row.get("provenance_model_version")?,
+        provenance_artifact_sha256: row.get("provenance_artifact_sha256")?,
+        provenance_tokenizer_sha256: row.get("provenance_tokenizer_sha256")?,
+        provenance_locale_resolved: row.get("provenance_locale_resolved")?,
+        provenance_locale_match_kind: row.get("provenance_locale_match_kind")?,
+        provenance_canonical_class: row.get("provenance_canonical_class")?,
+        provenance_native_class: row.get("provenance_native_class")?,
+        provenance_confidence: row.get("provenance_confidence")?,
+        provenance_merged_from: row.get("provenance_merged_from")?,
+        restore_policy: row.get("restore_policy")?,
+        restore_decision: row.get("restore_decision")?,
+        restore_unknown_token_count: row.get("restore_unknown_token_count")?,
+        restore_manifest_bypass_count: row.get("restore_manifest_bypass_count")?,
+        restore_fresh_pii_count: row.get("restore_fresh_pii_count")?,
+        restore_phase_mask: row.get("restore_phase_mask")?,
+        restore_trap_shape_count: row.get("restore_trap_shape_count")?,
+        labelled_value_scan_reason: row.get("labelled_value_scan_reason")?,
+    })
+}
+
+fn conversion_error(
+    column: &'static str,
+    kind: rusqlite::types::Type,
+    error: impl std::error::Error + Send + Sync + 'static,
+) -> rusqlite::Error {
+    // Sidecar follows the approved projection; all other indices come from it.
+    let index = AUDIT_RESTRICTED_COLUMNS
+        .iter()
+        .position(|name| *name == column)
+        .unwrap_or_else(|| {
+            assert_eq!(column, "backend_silently_dropped");
+            AUDIT_RESTRICTED_COLUMNS.len()
+        });
+    rusqlite::Error::FromSqlConversionFailure(index, kind, Box::new(error))
+}
+
+fn parse_enum<T>(
+    value: &str,
+    column: &'static str,
+    parse: impl FnOnce(&str) -> Option<T>,
+) -> rusqlite::Result<T> {
+    parse(value).ok_or_else(|| {
+        conversion_error(
+            column,
             rusqlite::types::Type::Text,
-            Box::new(std::io::Error::new(
+            std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("unknown document kind {value}"),
-            )),
+                format!("unknown {column}: {value}"),
+            ),
         )
     })
+}
+
+fn parse_json<T: DeserializeOwned>(
+    value: Option<String>,
+    column: &'static str,
+) -> rusqlite::Result<Option<T>> {
+    value
+        .map(|json| {
+            serde_json::from_str(&json)
+                .map_err(|err| conversion_error(column, rusqlite::types::Type::Text, err))
+        })
+        .transpose()
+}
+
+fn checked_counter<T: TryFrom<i64, Error = std::num::TryFromIntError>>(
+    value: Option<i64>,
+    column: &'static str,
+) -> rusqlite::Result<Option<T>> {
+    value
+        .map(|value| {
+            T::try_from(value)
+                .map_err(|err| conversion_error(column, rusqlite::types::Type::Integer, err))
+        })
+        .transpose()
+}
+
+// Raw rows keep unknown spellings, malformed JSON and signed counters. Only this
+// typed adapter interprets them, returning an error instead of silently coercing.
+fn audit_row_to_entry(
+    raw: AuditLogRow,
+    backend_silently_dropped: Option<String>,
+) -> rusqlite::Result<RedactionEntry> {
+    let mut entry = RedactionEntry::new(
+        raw.source,
+        parse_enum(&raw.class, "class", PiiClass::from_canonical_str)?,
+        parse_enum(&raw.action, "action", Action::from_canonical_str)?,
+        raw.field_name,
+        parse_enum(
+            &raw.document_kind,
+            "document_kind",
+            DocumentKind::from_canonical_str,
+        )?,
+        raw.conflict_loser,
+        parse_enum(
+            &raw.decided_by,
+            "decided_by",
+            ConflictTier::from_canonical_str,
+        )?,
+        raw.created_at.unwrap_or(0),
+        raw.session_id,
+    )
+    .with_recognizer_metadata(raw.recognizer_id, raw.recognizer_version_id)
+    .with_provenance_metadata(
+        raw.provenance_stage,
+        raw.provenance_model_id,
+        raw.provenance_model_version,
+        raw.provenance_artifact_sha256,
+        raw.provenance_tokenizer_sha256,
+        raw.provenance_locale_resolved,
+        raw.provenance_locale_match_kind,
+        raw.provenance_canonical_class,
+        raw.provenance_native_class,
+        raw.provenance_confidence,
+        raw.provenance_merged_from,
+    );
+    entry.validator_fail_reason = parse_json(raw.validator_fail_reason, "validator_fail_reason")?;
+    entry.ambiguity_record = parse_json(raw.ambiguity_record, "ambiguity_record")?;
+    entry.labelled_value_scan_reason =
+        parse_json(raw.labelled_value_scan_reason, "labelled_value_scan_reason")?;
+    entry.collision_family = raw.collision_family;
+    entry.collision_variant = raw.collision_variant;
+    entry.fallback_triggered = raw
+        .fallback_triggered
+        .map(|value| {
+            parse_enum(
+                &value,
+                "fallback_triggered",
+                FallbackReason::from_canonical_str,
+            )
+        })
+        .transpose()?;
+    entry.backend_silently_dropped =
+        parse_json(backend_silently_dropped, "backend_silently_dropped")?;
+    entry.restore_policy = raw.restore_policy;
+    entry.restore_decision = raw.restore_decision;
+    entry.restore_unknown_token_count = checked_counter(
+        raw.restore_unknown_token_count,
+        "restore_unknown_token_count",
+    )?;
+    entry.restore_manifest_bypass_count = checked_counter(
+        raw.restore_manifest_bypass_count,
+        "restore_manifest_bypass_count",
+    )?;
+    entry.restore_fresh_pii_count =
+        checked_counter(raw.restore_fresh_pii_count, "restore_fresh_pii_count")?;
+    entry.restore_phase_mask = checked_counter(raw.restore_phase_mask, "restore_phase_mask")?;
+    entry.restore_trap_shape_count =
+        checked_counter(raw.restore_trap_shape_count, "restore_trap_shape_count")?;
+    Ok(entry)
 }
 
 #[cfg(test)]
