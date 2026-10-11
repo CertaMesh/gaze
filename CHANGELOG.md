@@ -9,16 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Proxy daemon graceful-stop timeouts now return `DaemonStopTimeout { pid, timeout }`
-  instead of `DaemonAlreadyRunning`. Restart preserves stop failures and starts
-  only after a successful stop or a not-running result; timeout keeps the live
-  daemon and its pidfile intact.
-
 - `SqliteLogger::entries()` now retains all eleven stored provenance fields
   through the same metadata row decoder as `query()`. Typed reads reject negative
   restore counters and phase masks outside `u32`; raw queries retain their signed
   values and unknown enum/JSON spellings. The private backend routing sidecar
   remains excluded from audit query and export output.
+
+- Proxy daemon graceful-stop timeouts now return `DaemonStopTimeout { pid, timeout }`
+  instead of `DaemonAlreadyRunning`. Restart preserves stop failures and starts
+  only after a successful stop or a not-running result; timeout keeps the live
+  daemon and its pidfile intact.
 
 - Supplemental OPF and NER benchmark scorers now match strict spans within
   each fixture before aggregating locale counts. Wrong-document predictions
