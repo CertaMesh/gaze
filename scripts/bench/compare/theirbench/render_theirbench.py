@@ -221,7 +221,8 @@ def add_tool(data: dict[str, Any], report_path: Path, own_path: Path, tool: str)
     The measurement is refused unless it ran on the same documents as the existing rows (identity,
     split digests) and leaves the common-intersection label set unchanged, so the new row is
     comparable to the old ones without re-running them. Its own harness and rescore revisions are
-    kept per row: they differ from the entry's, which describe the earlier rows.
+    kept per row when they differ from the entry's baseline. Equivalent same-harness
+    rows inherit that baseline regardless of whether they arrived in a batch or incrementally.
     """
     report = json.loads(report_path.read_text(encoding="utf-8"))
     if report.get("preflight"):
@@ -245,7 +246,13 @@ def add_tool(data: dict[str, Any], report_path: Path, own_path: Path, tool: str)
         "rescored_with": report["rescored_with"]}
     install_row_bundle(entry, tool, bundle)
     entry["typed_hold"] = typed_hold
-    entry.setdefault("rows_measured_separately", {})[tool] = measurement
+    if any(value != entry.get(key) for key, value in measurement.items()):
+        entry.setdefault("rows_measured_separately", {})[tool] = measurement
+    else:
+        separate = entry.get("rows_measured_separately", {})
+        separate.pop(tool, None)
+        if not separate:
+            entry.pop("rows_measured_separately", None)
 
 
 def add_benchmark(data: dict[str, Any], report_path: Path, own_path: Path, tool: str) -> None:
@@ -454,6 +461,15 @@ def add_tuned(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str,
     """
     if report.get("preflight") or report.get("harness_dirty") or report.get("schema_version") != 1:
         raise ValueError("only a clean, full, schema-1 report can add a vendor-tuned row")
+    # Build the declaration before any row is installed; missing display metadata
+    # must reject the entire publication just like an invalid receipt does.
+    fields = ("row", "family", "bar_name", "caption", "setup", "source", "commit")
+    for key in fields:
+        if not isinstance(declaration.get(key), str) or not declaration[key].strip():
+            raise ValueError(f"vendor-tuned declaration needs a nonempty {key}")
+    if not isinstance(declaration.get("model"), Mapping):
+        raise ValueError("vendor-tuned declaration needs a model receipt")
+    vendor_tuned = {declaration["family"]: {key: declaration[key] for key in fields if key != "family"}}
     name = report["benchmark"]
     entry = data["benchmarks"][name]
     for key in ("identity", "common_intersection_labels", "splits", "label_maps_sha256",
@@ -487,8 +503,7 @@ def add_tuned(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str,
         "harness_revision": report["harness_revision"], "hardware": report["hardware"],
         "generated_at": report["generated_at"], "own_evaluator_commit": own["evaluator_commit"]}
     install_row_bundle(entry, row, bundle)
-    entry["vendor_tuned"] = {declaration["family"]: {key: declaration[key] for key in (
-        "row", "bar_name", "caption", "setup", "source", "commit")}}
+    entry["vendor_tuned"] = vendor_tuned
     entry["chart_rows"] = chart
     entry["tuned_measurement"] = measurement
     return row
