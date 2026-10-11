@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Supplemental OPF and NER benchmark scorers now match strict spans within
+  each fixture before aggregating locale counts. Wrong-document predictions
+  can no longer earn true positives. Future runs retain value-free per-fixture
+  evidence for re-scoring; historical quality values retain their provenance
+  and are marked as pre-fix, with re-measurement pending. Latency metrics and
+  canonical schema-v4 scorecards are unaffected.
+
 - Third-party benchmark assembly now checks prediction and dataset receipts,
   system identity, document counts and published scores through the same row
   admission path as incremental publication. Untagged Gaze runs record their

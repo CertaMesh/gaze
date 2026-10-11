@@ -170,6 +170,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -277,6 +283,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.5
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -419,6 +431,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -506,6 +524,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 0.666667
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -648,6 +672,12 @@
             "f1": null
           }
         }
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     },
     {
@@ -745,6 +775,12 @@
         "expansion_fraction": null,
         "contradiction_fraction": null,
         "novel_tp_over_rule_floor": 1.0
+      },
+      "scoring_provenance": {
+        "contract": "pooled-span-v1",
+        "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+        "remeasurement_pending": true,
+        "retained_predictions": false
       }
     }
   ],
@@ -754,5 +790,25 @@
     "python": "3.14.5",
     "onnxruntime_threads": "default",
     "precision": "int8"
+  },
+  "strict_span_leak_rate_provenance": {
+    "openai_privacy_filter.Global": {
+      "contract": "pooled-span-v1",
+      "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+      "remeasurement_pending": true,
+      "retained_predictions": false
+    },
+    "openai_privacy_filter.EnUs": {
+      "contract": "pooled-span-v1",
+      "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+      "remeasurement_pending": true,
+      "retained_predictions": false
+    },
+    "openai_privacy_filter.DeDe": {
+      "contract": "pooled-span-v1",
+      "warning": "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending",
+      "remeasurement_pending": true,
+      "retained_predictions": false
+    }
   }
 }

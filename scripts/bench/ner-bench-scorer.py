@@ -27,6 +27,7 @@ from safety_net_bench_lib import (
     clean_fixtures,
     load_fixtures,
     rounded,
+    retain_observations,
     score_direct,
     score_observer,
     sha256_file,
@@ -248,9 +249,12 @@ def run_one_model(
     checkpoint: Path,
     fixtures: list[Any],
     clean: dict[str, Any] | None,
+    coverage_sha256: str,
+    corpus_sha256: str | None,
 ) -> dict[str, Any]:
     requested_modes = ["direct", "observer-residual"] if args.mode == "all" else [args.mode]
     metrics_by_mode: dict[str, Any] = {}
+    observations_by_mode: dict[str, Any] = {}
     latency = LatencyRecorder(True, [])
 
     for mode in requested_modes:
@@ -284,9 +288,14 @@ def run_one_model(
             if mode == "direct"
             else score_observer(fixtures, clean or {}, predictions)
         )
+        observations_by_mode[matrix_mode] = retain_observations(
+            args.snapshot, model.id, matrix_mode, fixtures, predictions, clean,
+            coverage_sha256, corpus_sha256,
+        )
 
     return {
         "metrics_by_mode": metrics_by_mode,
+        "observations_by_mode": observations_by_mode,
         "latency": latency.summary(len(fixtures), args.device),
     }
 
@@ -352,6 +361,10 @@ def write_snapshot(
                         "native_locale": locale in model.native_locales,
                         "mode": mode,
                         "metrics": metrics,
+                        "scoring_provenance": {
+                            "contract": "fixture-span-v2",
+                            "observations": model_results["observations_by_mode"][mode],
+                        },
                     }
                 )
         if model_results["latency"] is not None:
@@ -396,6 +409,7 @@ def main() -> int:
     checkpoints: dict[str, Path] = {}
     bundle_shas: dict[str, str] = {}
     results: dict[str, Any] = {}
+    coverage_sha256 = sha256_file(args.coverage_report)
 
     for model in models:
         checkpoint = ensure_checkpoint(root, args.cache_dir, model, args.skip_download, args.python)
@@ -403,7 +417,7 @@ def main() -> int:
         print(f"{model.id}: checkpoint={checkpoint} sha256={observed_sha}", file=sys.stderr)
         checkpoints[model.id] = checkpoint
         bundle_shas[model.id] = observed_sha
-        results[model.id] = run_one_model(root, args, model, checkpoint, fixtures, clean)
+        results[model.id] = run_one_model(root, args, model, checkpoint, fixtures, clean, coverage_sha256, corpus_sha256)
 
     if not args.no_update:
         write_snapshot(
@@ -411,7 +425,7 @@ def main() -> int:
             models,
             checkpoints,
             bundle_shas,
-            sha256_file(args.coverage_report),
+            coverage_sha256,
             corpus_sha256,
             len(fixtures),
             results,
