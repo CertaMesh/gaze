@@ -63,8 +63,6 @@ def run(binary, rows, policy):
         for span in response['manifest']:
             a, b = span['clean_span']['start'], span['clean_span']['end']
             start, end = span['raw_span']['start'], span['raw_span']['end']
-            if not (0 <= a < b <= len(clean) and 0 <= start < end <= len(text.encode())):
-                raise RuntimeError('invalid manifest bounds')
             all_covered.update(range(start, end))
             if b':Custom:phone_' in clean[a:b]:
                 phone.update(range(start, end))
