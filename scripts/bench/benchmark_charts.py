@@ -128,6 +128,7 @@ class Bar:
     fp_per_1k: float | None
     gaze: bool = False
     column: str = ""  # the model-card table column this bar belongs to (default: its name)
+    receipt_unverified: bool = False
 
     @property
     def table_column(self) -> str:
@@ -213,6 +214,19 @@ def own_panel(
     )
 
 
+RECEIPT_NOTE = "† Pre-receipt evidence: not receipt-verified; regeneration pending."
+
+
+def receipt_marker(entry: Mapping[str, Any], row: str) -> str:
+    """Only an explicit data declaration marks legacy evidence; never infer its status."""
+    status = entry.get("receipt_status", {}).get(row)
+    if status is None:
+        return ""
+    if status != "pre-receipt":
+        raise ValueError(f"{row}: unknown receipt status {status!r}")
+    return "†"
+
+
 def third_party_panel(
     bench: Mapping[str, Any], title: str, vendor_metric: str,
     declared: Mapping[str, str], latest_tag: str,
@@ -237,13 +251,17 @@ def third_party_panel(
     for key, name in declared.items():
         choice = tuned.get(key)
         if choice is None:
-            bars.append(_third_party_bar(SHORT_NAMES[key], bench["rows"][name], False))
+            bar = _third_party_bar(SHORT_NAMES[key], bench["rows"][name], False)
+            bars.append(dataclasses.replace(bar, receipt_unverified=bool(receipt_marker(bench, name))))
             continue
         # A vendor's own benchmark shows that vendor's best published setup, nothing else.
         bar = _third_party_bar(choice["bar_name"], bench["rows"][choice["row"]], False)
-        bars.append(dataclasses.replace(bar, column=SHORT_NAMES[key]))
+        bars.append(dataclasses.replace(bar, column=SHORT_NAMES[key],
+                                        receipt_unverified=bool(receipt_marker(bench, choice["row"]))))
         notes.append(f"{SHORT_NAMES[key]}: tuned for this dataset by its authors")
         captions.append(f"{title}: {choice['caption']}")
+    if any(bar.receipt_unverified for bar in bars):
+        notes.append("† Not receipt-verified; regeneration pending")
     if not tuned and title in NO_VENDOR_TUNED:
         captions.append(f"{title}: {NO_VENDOR_TUNED[title]}")
     split = next(iter(bench["splits"]))
@@ -335,7 +353,7 @@ def _bar_svg(t: Mapping[str, str], bar: Bar, value: float | None, fmt: str,
                f'height="{max(bh, 1):.1f}" rx="3" fill="{fill}"/>')
     colour = t["accent"] if bar.gaze else t["text"]
     out.append(f'<text x="{cx:.1f}" y="{bot - bh - 6:.1f}" font-size="12" font-weight="700" '
-               f'text-anchor="middle" fill="{colour}">{fmt.format(value)}</text>')
+               f'text-anchor="middle" fill="{colour}">{fmt.format(value)}{"†" if bar.receipt_unverified else ""}</text>')
     return out
 
 
@@ -463,6 +481,7 @@ def _table(panel_set: Sequence[Panel], pick: Any, fmt: str, best: Any) -> list[s
                 cells.append("pending")
             else:
                 text = fmt.format(pick(bar)) + (" (tuned)" if bar.column else "")
+                text += "†" if bar.receipt_unverified else ""
                 cells.append(f"**{text}**" if pick(bar) == top else text)
         lines.append(f"| {panel.title} | " + " | ".join(cells) + " |")
     return lines
@@ -488,4 +507,5 @@ def model_card_tables(panel_set: Sequence[Panel]) -> str:
         "**False-positive bytes per 1,000 bytes** (lower is better; best per row in bold):",
         "", *false_pos, "", notes,
         *(["", *captions] if captions else []),
+        *(["", RECEIPT_NOTE] if any(b.receipt_unverified for p in panel_set for b in p.bars) else []),
     ])

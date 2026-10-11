@@ -533,7 +533,8 @@ def main() -> int:
                     report["rows"][name] = measure_gaze(name, args, policy, splits, mapping, common,
                                                         args.predictions_dir, Path(scratch))
                 report["provenance"][name] = {"policy_sha256_home_normalized": compare.normalized_policy_sha256(
-                    policy, compare.digest_file(policy)), "cpu": watch.result()}
+                    policy, compare.digest_file(policy)), "cpu": watch.result(),
+                    "prediction_sha256": sha256_file(args.predictions_dir / f"{name}.test.jsonl")}
                 if tagged_row_version(name):
                     release["prediction_sha256"] = sha256_file(args.predictions_dir / f"{name}.test.jsonl")
                     release["measured_with"] = {"harness_revision": head, "harness_dirty": dirty}
