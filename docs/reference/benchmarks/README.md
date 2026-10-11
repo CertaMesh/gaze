@@ -442,30 +442,32 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 | Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Own corpus | 0.836 | 0.879 | **0.894 (tuned)** | 0.184 | 0.561 | 0.356 | 0.765 | 0.798 |
-| Presidio Research | not run | 0.825 | **0.918 (tuned)** | 0.147 | 0.639 | 0.538 | 0.692 | 0.663 |
-| PIIBench-commercial | not run | 0.627 | **0.665** | 0.183 | 0.522 | 0.441 | 0.532 | 0.400 |
+| Presidio Research | not run | 0.825 | **0.918 (tuned)** | 0.147† | 0.639† | 0.538† | 0.692† | 0.663† |
+| PIIBench-commercial | not run | 0.627 | **0.665†** | 0.183† | 0.522† | 0.441† | 0.532† | 0.400† |
 
 **Leaked PII bytes** (lower is better; best per row in bold):
 
 | Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Own corpus | 19,556 | 13,291 | **8,261 (tuned)** | 110,273 | 33,270 | 89,546 | 26,515 | 25,485 |
-| Presidio Research | not run | 7,984 | **2,857 (tuned)** | 34,810 | 15,769 | 20,226 | 13,326 | 15,305 |
-| PIIBench-commercial | not run | 105,077 | **87,853** | 222,697 | 114,880 | 145,119 | 127,361 | 170,336 |
+| Presidio Research | not run | 7,984 | **2,857 (tuned)** | 34,810† | 15,769† | 20,226† | 13,326† | 15,305† |
+| PIIBench-commercial | not run | 105,077 | **87,853†** | 222,697† | 114,880† | 145,119† | 127,361† | 170,336† |
 
 **False-positive bytes per 1,000 bytes** (lower is better; best per row in bold):
 
 | Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Own corpus | 19.3 | 15.8 | 41.0 (tuned) | **6.2** | 257.5 | 16.0 | 55.6 | 32.7 |
-| Presidio Research | not run | 10.7 | 38.6 (tuned) | **0.0** | 31.5 | 14.6 | 38.3 | 5.2 |
-| PIIBench-commercial | not run | 20.7 | 38.0 | **1.9** | 94.1 | 71.2 | 36.6 | 5.2 |
+| Presidio Research | not run | 10.7 | 38.6 (tuned) | **0.0†** | 31.5† | 14.6† | 38.3† | 5.2† |
+| PIIBench-commercial | not run | 20.7 | 38.0† | **1.9†** | 94.1† | 71.2† | 36.6† | 5.2† |
 
 A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.15 0, Gaze 0.16 0.
 
 Own corpus: Presidio tuned for this corpus on its validation half (highest F2), the best of three tuned Presidio rows by test-half F2; like every bar it shows all of layer C, validation half included; Presidio's defaults are in competitors.md.
 Presidio Research: Presidio tuned for this dataset by its authors (their published custom setup).
 PIIBench-commercial: PIIBench publishes no vendor-tuned Presidio, so Presidio is the declared best configuration.
+
+† Pre-receipt evidence: not receipt-verified; regeneration pending.
 
 - **Own corpus:** Kiji EN/DE holdout and A4 negatives, 2,910 documents, scored labels v4 (credentials counted; protected repeats credited). Gaze from [`release-history.json`](release-history.json) (the shipped default of each tagged release); competitors from [`comparison.json`](comparison.json).
 - **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
@@ -850,7 +852,9 @@ Gold PII bytes: 55,580. Common-intersection labels: account_number, private_addr
 
 | Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | Own metric (character F1, label-agnostic, the paper's metric) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| pii-tracer | 1,083 | 1,871 | 8.7% | held (typed-metric review) | held (typed-metric review) | 702 | 0.974 |
+| pii-tracer† | 1,083 | 1,871 | 8.7% | held (typed-metric review) | held (typed-metric review) | 702 | 0.974 |
+
+† Pre-receipt evidence: not receipt-verified; regeneration pending.
 
 Gaze v0.16.0: not yet measured on this set, so no Gaze row is shown.
 
@@ -870,21 +874,23 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | gaze-v0.15.1 | 107,701 | 47,616 | 79.8% | held (typed-metric review) | held (typed-metric review) | 33,941 | held (typed-metric review) |
 | gaze-v0.16.0 | 105,077 | 48,309 | 79.5% | held (typed-metric review) | held (typed-metric review) | 32,190 | held (typed-metric review) |
-| datafog-core | 222,697 | 4,529 | 99.9% | 0.128 | 0.092 | 52,232 | 0.099 |
-| datafog-gliner | 112,941 | 71,574 | 75.6% | 0.315 | 0.308 | 25,463 | 0.200 |
-| datafog-regex | 223,137 | 4,926 | 99.9% | 0.128 | 0.092 | 51,108 | 0.097 |
-| datafog-spacy | 114,880 | 219,413 | 82.0% | 0.201 | 0.228 | 29,383 | 0.147 |
-| gliner | 127,361 | 85,245 | 81.1% | 0.253 | 0.243 | 48,389 | 0.181 |
-| gliner-high-recall | 113,436 | 118,822 | 77.5% | 0.235 | 0.241 | 45,994 | 0.176 |
-| opf | 170,336 | 12,174 | 97.0% | held (typed-metric review) | held (typed-metric review) | 44,064 | held (typed-metric review) |
-| pii-tracer | 128,632 | 22,988 | 95.2% | held (typed-metric review) | held (typed-metric review) | 33,519 | held (typed-metric review) |
-| presidio-all | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
-| presidio-en | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
-| presidio-en-de | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
-| presidio-strong | 87,853 | 88,715 | 70.2% | 0.301 | 0.318 | 32,815 | 0.247 |
-| presidio-strong-high-recall | 84,965 | 92,491 | 70.1% | 0.294 | 0.315 | 32,770 | 0.242 |
-| scrubadub-base | 223,156 | 9,971 | 100.0% | held (typed-metric review) | held (typed-metric review) | 66,342 | held (typed-metric review) |
-| scrubadub-spacy | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
+| datafog-core† | 222,697 | 4,529 | 99.9% | 0.128 | 0.092 | 52,232 | 0.099 |
+| datafog-gliner† | 112,941 | 71,574 | 75.6% | 0.315 | 0.308 | 25,463 | 0.200 |
+| datafog-regex† | 223,137 | 4,926 | 99.9% | 0.128 | 0.092 | 51,108 | 0.097 |
+| datafog-spacy† | 114,880 | 219,413 | 82.0% | 0.201 | 0.228 | 29,383 | 0.147 |
+| gliner† | 127,361 | 85,245 | 81.1% | 0.253 | 0.243 | 48,389 | 0.181 |
+| gliner-high-recall† | 113,436 | 118,822 | 77.5% | 0.235 | 0.241 | 45,994 | 0.176 |
+| opf† | 170,336 | 12,174 | 97.0% | held (typed-metric review) | held (typed-metric review) | 44,064 | held (typed-metric review) |
+| pii-tracer† | 128,632 | 22,988 | 95.2% | held (typed-metric review) | held (typed-metric review) | 33,519 | held (typed-metric review) |
+| presidio-all† | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-en† | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-en-de† | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-strong† | 87,853 | 88,715 | 70.2% | 0.301 | 0.318 | 32,815 | 0.247 |
+| presidio-strong-high-recall† | 84,965 | 92,491 | 70.1% | 0.294 | 0.315 | 32,770 | 0.242 |
+| scrubadub-base† | 223,156 | 9,971 | 100.0% | held (typed-metric review) | held (typed-metric review) | 66,342 | held (typed-metric review) |
+| scrubadub-spacy† | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
+
+† Pre-receipt evidence: not receipt-verified; regeneration pending.
 
 Top leaked labels for gaze-v0.16.0: `DATE` 15,632 B, `MISC` 15,614 B, `STREET_ADDRESS` 6,155 B, `OCCUPATION` 5,885 B, `NAME` 5,440 B.
 False-positive bytes for gaze-v0.16.0 by emitted label: `organization` 25,627 B, `custom:url` 8,372 B, `location` 7,218 B, `name` 2,054 B, `custom:postal_code` 2,022 B.
@@ -910,22 +916,24 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | gaze-v0.15.1 | 9,769 | 1,352 | 48.9% | held (typed-metric review) | held (typed-metric review) | 8,274 | 0.702 |
 | gaze-v0.16.0 | 7,984 | 1,364 | 42.0% | held (typed-metric review) | held (typed-metric review) | 6,762 | 0.779 |
-| datafog-core | 34,810 | 0 | 90.2% | 0.168 | 0.118 | 15,680 | 0.114 |
-| datafog-gliner | 9,520 | 5,525 | 34.4% | 0.578 | 0.577 | 5,807 | 0.691 |
-| datafog-regex | 35,039 | 0 | 90.6% | 0.165 | 0.116 | 15,893 | 0.115 |
-| datafog-spacy | 15,769 | 4,015 | 53.1% | 0.470 | 0.458 | 13,290 | 0.572 |
-| gliner | 13,326 | 4,884 | 44.7% | 0.528 | 0.489 | 8,173 | 0.615 |
-| gliner-high-recall | 8,158 | 7,031 | 34.8% | 0.517 | 0.504 | 4,482 | 0.676 |
-| opf | 15,305 | 667 | 57.8% | held (typed-metric review) | held (typed-metric review) | 5,905 | 0.551 |
-| pii-tracer | 6,510 | 5,277 | 38.4% | held (typed-metric review) | held (typed-metric review) | 773 | 0.640 |
-| presidio-all | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
-| presidio-en | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
-| presidio-en-de | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
-| presidio-strong | 12,383 | 3,243 | 50.5% | 0.534 | 0.519 | 12,300 | 0.603 |
-| presidio-strong-high-recall | 12,058 | 3,243 | 49.5% | 0.531 | 0.518 | 12,300 | 0.614 |
+| datafog-core† | 34,810 | 0 | 90.2% | 0.168 | 0.118 | 15,680 | 0.114 |
+| datafog-gliner† | 9,520 | 5,525 | 34.4% | 0.578 | 0.577 | 5,807 | 0.691 |
+| datafog-regex† | 35,039 | 0 | 90.6% | 0.165 | 0.116 | 15,893 | 0.115 |
+| datafog-spacy† | 15,769 | 4,015 | 53.1% | 0.470 | 0.458 | 13,290 | 0.572 |
+| gliner† | 13,326 | 4,884 | 44.7% | 0.528 | 0.489 | 8,173 | 0.615 |
+| gliner-high-recall† | 8,158 | 7,031 | 34.8% | 0.517 | 0.504 | 4,482 | 0.676 |
+| opf† | 15,305 | 667 | 57.8% | held (typed-metric review) | held (typed-metric review) | 5,905 | 0.551 |
+| pii-tracer† | 6,510 | 5,277 | 38.4% | held (typed-metric review) | held (typed-metric review) | 773 | 0.640 |
+| presidio-all† | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-en† | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-en-de† | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-strong† | 12,383 | 3,243 | 50.5% | 0.534 | 0.519 | 12,300 | 0.603 |
+| presidio-strong-high-recall† | 12,058 | 3,243 | 49.5% | 0.531 | 0.518 | 12,300 | 0.614 |
 | presidio-tuned-presidio-research | 2,857 | 4,918 | 22.3% | 0.068 | 0.072 | 2,469 | 0.857 |
-| scrubadub-base | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
-| scrubadub-spacy | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
+| scrubadub-base† | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
+| scrubadub-spacy† | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
+
+† Pre-receipt evidence: not receipt-verified; regeneration pending.
 
 Top leaked labels for gaze-v0.16.0: `STREET_ADDRESS` 4,032 B, `PHONE_NUMBER` 768 B, `TITLE` 750 B, `DATE_TIME` 601 B, `ORGANIZATION` 483 B.
 False-positive bytes for gaze-v0.16.0 by emitted label: `organization` 643 B, `location` 484 B, `name` 232 B, `custom:building_number` 2 B, `custom:credit_card` 2 B.

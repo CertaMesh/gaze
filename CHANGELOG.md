@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Third-party benchmark assembly now checks prediction and dataset receipts,
+  system identity, document counts and published scores through the same row
+  admission path as incremental publication. Untagged Gaze runs record their
+  prediction digest. Existing pre-receipt rows retain their numbers and are
+  explicitly marked as not receipt-verified, with regeneration pending.
+
 - Mechanism benchmark recording now rejects conflicting release revisions and
   evidence filename aliases before publication. Failed validation or copying
   preserves the ledger and its pinned observation records; summary and detail

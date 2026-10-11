@@ -20,6 +20,7 @@ from typing import Any, Callable, Mapping
 REPO = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO / "scripts/bench"))
 from markdown_table import table_header  # noqa: E402
+from benchmark_charts import receipt_marker, RECEIPT_NOTE  # noqa: E402
 from tagged_gaze import (  # noqa: E402
     RELEASE_PINS, TAG, check_model_receipt, check_own_input, check_own_score, check_public, tag_commit)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -137,6 +138,7 @@ def checked_tagged_harness_commits(
 def assemble(reports: list[Path], own: list[str], reproductions: list[str],
              historical: list[Path] = (), harness_tags: Mapping[str, str] | None = None) -> dict[str, Any]:
     benchmarks: dict[str, Any] = {}
+    measured_reports = {}
     for path in reports:
         report = json.loads(path.read_text(encoding="utf-8"))
         if report.get("preflight"):
@@ -146,12 +148,16 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str],
         if report["harness_dirty"]:
             raise ValueError(f"{path}: measured on a dirty harness")
         name = report["benchmark"]
-        rows = {tool: result["test"] for tool, result in report["rows"].items()}
+        if name in measured_reports:
+            raise ValueError(f"{name}: duplicate benchmark report")
+        measured_reports[name] = report
+        rows = {}
         benchmarks[name] = {key: report[key] for key in (
             "identity", "harness_revision", "gaze_crates_tree", "label_maps_sha256", "mapping_sha256",
-            "hardware", "common_intersection_labels", "splits", "provenance", "harness_revision",
+            "hardware", "common_intersection_labels", "splits", "harness_revision",
             "comparison_revision", "comparison_sha256", "typed_hold", "rescored_with")}
         benchmarks[name]["gaze_crates_tree"] = report["gaze_crates_tree"]
+        benchmarks[name]["provenance"] = {}
         benchmarks[name]["rows"] = rows
         benchmarks[name]["own_metric"] = {}
         benchmarks[name]["reproduction"] = {}
@@ -159,8 +165,14 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str],
         result = json.loads(path.read_text(encoding="utf-8"))
         if result.get("smoke_limit"):
             raise ValueError(f"{path}: smoke results are never published")
-        scored = result.get("scored") or result["overall"]
-        benchmarks[name]["own_metric"][result["system"]] = scored
+        tool = result["system"]
+        report = measured_reports.get(name)
+        if report is None or tool not in report["rows"]:
+            raise ValueError(f"{path}: no measured row for system {tool}")
+        if tool in benchmarks[name]["rows"]:
+            raise ValueError(f"{path}: duplicate own-scorer result for {tool}")
+        bundle = checked_row_bundle(name, benchmarks[name], report, tool, result)
+        install_row_bundle(benchmarks[name], tool, bundle)
     for name, path in tagged(reproductions):
         result = json.loads(path.read_text(encoding="utf-8"))
         if result.get("smoke_limit"):
@@ -187,15 +199,18 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str],
     for name, entry in benchmarks.items():
         if harness_tags:
             entry["harness_tags"] = checked_harness_tags(entry, harness_tags)
-        missing = sorted(set(entry["rows"]) - set(entry["own_metric"]))
+        expected = set(measured_reports[name]["rows"])
+        missing = sorted(expected - set(entry["own_metric"]))
         if missing:
             raise ValueError(f"{name}: no own-scorer result for {missing}")
         if not entry["reproduction"]:
             raise ValueError(f"{name}: the vendor number must be reproduced before anything is published")
-    for path in reports:
-        report = json.loads(path.read_text(encoding="utf-8"))
+    for report in measured_reports.values():
         # STEER 2: bars are the comparison's declared configurations, never the lowest-leak row.
-        benchmarks[report["benchmark"]]["chart_rows"] = ["gaze-full", *report["chart_configs"].values()]
+        benchmarks[report["benchmark"]]["chart_rows"] = [
+            *(["gaze-full"] if "gaze-full" in report["rows"] else []),
+            *report["chart_configs"].values(),
+        ]
     return {"schema_version": 1, "report_only": "never used to design or tune Gaze rules",
             "not_run": NOT_RUN, "benchmarks": benchmarks}
 
@@ -206,7 +221,8 @@ def add_tool(data: dict[str, Any], report_path: Path, own_path: Path, tool: str)
     The measurement is refused unless it ran on the same documents as the existing rows (identity,
     split digests) and leaves the common-intersection label set unchanged, so the new row is
     comparable to the old ones without re-running them. Its own harness and rescore revisions are
-    kept per row: they differ from the entry's, which describe the earlier rows.
+    kept per row when they differ from the entry's baseline. Equivalent same-harness
+    rows inherit that baseline regardless of whether they arrived in a batch or incrementally.
     """
     report = json.loads(report_path.read_text(encoding="utf-8"))
     if report.get("preflight"):
@@ -222,15 +238,21 @@ def add_tool(data: dict[str, Any], report_path: Path, own_path: Path, tool: str)
     own = json.loads(own_path.read_text(encoding="utf-8"))
     if own.get("smoke_limit") or own["system"] != tool:
         raise ValueError(f"{own_path}: not a full own-scorer result for {tool}")
-    check_own_result(report["benchmark"], entry, tool, own, measured_predictions(report, tool))
-    entry["rows"][tool] = report["rows"][tool]["test"]
-    entry["provenance"][tool] = {**report["provenance"][tool], "own_scorer_input": own["input"]}
-    entry["own_metric"][tool] = own.get("scored") or own["overall"]
-    entry["typed_hold"] = sorted(set(entry["typed_hold"]) | set(report["typed_hold"]))
-    entry.setdefault("rows_measured_separately", {})[tool] = {
+    bundle = checked_row_bundle(report["benchmark"], entry, report, tool, own)
+    typed_hold = sorted(set(entry["typed_hold"]) | set(report["typed_hold"]))
+    measurement = {
         "harness_revision": report["harness_revision"], "gaze_crates_tree": report["gaze_crates_tree"],
         "comparison_revision": report["comparison_revision"], "label_maps_sha256": report["label_maps_sha256"],
         "rescored_with": report["rescored_with"]}
+    install_row_bundle(entry, tool, bundle)
+    entry["typed_hold"] = typed_hold
+    if any(value != entry.get(key) for key, value in measurement.items()):
+        entry.setdefault("rows_measured_separately", {})[tool] = measurement
+    else:
+        separate = entry.get("rows_measured_separately", {})
+        separate.pop(tool, None)
+        if not separate:
+            entry.pop("rows_measured_separately", None)
 
 
 def add_benchmark(data: dict[str, Any], report_path: Path, own_path: Path, tool: str) -> None:
@@ -257,10 +279,9 @@ def add_benchmark(data: dict[str, Any], report_path: Path, own_path: Path, tool:
         "identity", "harness_revision", "gaze_crates_tree", "label_maps_sha256", "mapping_sha256",
         "hardware", "common_intersection_labels", "splits", "provenance", "comparison_revision",
         "comparison_sha256", "typed_hold", "rescored_with")}
-    check_own_result(name, entry, tool, own, measured_predictions(report, tool))
-    entry["provenance"][tool] = {**report["provenance"][tool], "own_scorer_input": own["input"]}
-    entry["rows"] = {tool: report["rows"][tool]["test"]}
-    entry["own_metric"] = {tool: own["scored"]}
+    bundle = checked_row_bundle(name, entry, report, tool, own)
+    entry["rows"], entry["provenance"], entry["own_metric"] = {}, {}, {}
+    install_row_bundle(entry, tool, bundle)
     entry["reproduction"] = {"published": None, "vendor_system": tool, "vendor_result": own["overall"],
                              "versions": own["versions"]}
     entry["chart_rows"] = [tool]
@@ -374,11 +395,11 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
     if own["system"] != row:
         raise ValueError(f"own-scorer result is for {own['system']}, not {row}")
     check_per_label_bytes(row, report["rows"][row]["test"]["product_coverage"])
-    check_own_result(name, entry, row, own, release["prediction_sha256"])
+    bundle = checked_row_bundle(name, entry, report, row, own)
     _check_release(row, release, resolve or (lambda tag: (tag_commit(tag, REPO), _crates_tree(tag_commit(tag, REPO)))))
-    scored = own.get("scored") or own["overall"]
+    scored = bundle.own_metric
     published_score = scored
-    published_provenance = {**report["provenance"][row], "own_scorer_input": own["input"]}
+    published_provenance = bundle.provenance
     if refresh:
         committed_score = entry["own_metric"].get(row, {})
         previous_headline = {
@@ -400,11 +421,8 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
         previous_cpu = entry.get("provenance", {}).get(row, {}).get("cpu")
         if previous_cpu is not None:
             published_provenance["cpu"] = previous_cpu
-    entry["rows"][row] = published_row
-    entry["own_metric"][row] = published_score
-    entry["provenance"][row] = published_provenance
     reproduced = release["reproduces"]
-    entry.setdefault("tagged_measurements", {})[row] = {
+    measurement = {
         "harness_revision": report["harness_revision"], "harness_dirty": False,
         "comparison_revision": report["comparison_revision"],
         "comparison_sha256": report["comparison_sha256"],
@@ -416,6 +434,8 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
              "harness_revision": release["measured_with"]["harness_revision"]},
         ],
     }
+    install_row_bundle(entry, row, RowBundle(published_row, published_provenance, published_score))
+    entry.setdefault("tagged_measurements", {})[row] = measurement
     return row
 
 
@@ -441,6 +461,15 @@ def add_tuned(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str,
     """
     if report.get("preflight") or report.get("harness_dirty") or report.get("schema_version") != 1:
         raise ValueError("only a clean, full, schema-1 report can add a vendor-tuned row")
+    # Build the declaration before any row is installed; missing display metadata
+    # must reject the entire publication just like an invalid receipt does.
+    fields = ("row", "family", "bar_name", "caption", "setup", "source", "commit")
+    for key in fields:
+        if not isinstance(declaration.get(key), str) or not declaration[key].strip():
+            raise ValueError(f"vendor-tuned declaration needs a nonempty {key}")
+    if not isinstance(declaration.get("model"), Mapping):
+        raise ValueError("vendor-tuned declaration needs a model receipt")
+    vendor_tuned = {declaration["family"]: {key: declaration[key] for key in fields if key != "family"}}
     name = report["benchmark"]
     entry = data["benchmarks"][name]
     for key in ("identity", "common_intersection_labels", "splits", "label_maps_sha256",
@@ -463,21 +492,20 @@ def add_tuned(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str,
         raise ValueError(f"{name} already has a vendor-tuned row")
     if own["system"] != row or not own.get("tuned_replay") or own.get("smoke_limit"):
         raise ValueError(f"the own-scorer result must be the full notebook-5 replay of {row}")
-    check_own_result(name, entry, row, own, tuned["prediction_sha256"])
+    bundle = checked_row_bundle(name, entry, report, row, own)
     if not entry["reproduction"].get("reproduced", {}).get("custom"):
         raise ValueError(f"{name}: the vendor's tuned number must be reproduced first")
-    entry["rows"][row] = report["rows"][row]["test"]
-    entry["own_metric"][row] = own["scored"]
-    entry["provenance"][row] = {**report["provenance"][row], "own_scorer_input": own["input"]}
-    entry["vendor_tuned"] = {declaration["family"]: {key: declaration[key] for key in (
-        "row", "bar_name", "caption", "setup", "source", "commit")}}
-    entry["chart_rows"] = [row if chosen == f"{declaration['family']}-strong" else chosen
-                           for chosen in entry["chart_rows"]]
-    if row not in entry["chart_rows"]:
+    chart = [row if chosen == f"{declaration['family']}-strong" else chosen
+             for chosen in entry["chart_rows"]]
+    if row not in chart:
         raise ValueError(f"{name}: no declared {declaration['family']} chart row to replace")
-    entry["tuned_measurement"] = {
+    measurement = {
         "harness_revision": report["harness_revision"], "hardware": report["hardware"],
         "generated_at": report["generated_at"], "own_evaluator_commit": own["evaluator_commit"]}
+    install_row_bundle(entry, row, bundle)
+    entry["vendor_tuned"] = vendor_tuned
+    entry["chart_rows"] = chart
+    entry["tuned_measurement"] = measurement
     return row
 
 
@@ -504,10 +532,37 @@ def _check_release(row: str, release: Mapping[str, Any], resolve: Callable[[str]
 
 def measured_predictions(report: Mapping[str, Any], tool: str) -> str:
     """The digest theirbench.py recorded for the predictions this row was measured from."""
-    digest = report["provenance"][tool].get("prediction_sha256")
+    provenance = report["provenance"][tool]
+    source = provenance.get("release", provenance.get("vendor_tuned", provenance))
+    digest = source.get("prediction_sha256")
     if not digest:
         raise ValueError(f"{tool}: the report records no prediction digest to tie an own-scorer result to")
     return digest
+
+
+@dataclass(frozen=True)
+class RowBundle:
+    measured: Mapping[str, Any]
+    provenance: Mapping[str, Any]
+    own_metric: Mapping[str, Any]
+
+
+def checked_row_bundle(name: str, entry: Mapping[str, Any], report: Mapping[str, Any],
+                       row: str, own: Mapping[str, Any]) -> RowBundle:
+    """Admit a row only after its independent prediction and scorer receipts agree."""
+    if own.get("smoke_limit") or own.get("system") != row:
+        raise ValueError(f"not a full own-scorer result for {row}")
+    check_own_result(name, entry, row, own, measured_predictions(report, row))
+    return RowBundle(report["rows"][row]["test"],
+                     {**report["provenance"][row], "own_scorer_input": own["input"]},
+                     own.get("scored") or own["overall"])
+
+
+def install_row_bundle(entry: dict[str, Any], row: str, bundle: RowBundle) -> None:
+    entry["rows"][row] = bundle.measured
+    entry["provenance"][row] = bundle.provenance
+    entry["own_metric"][row] = bundle.own_metric
+    entry.get("receipt_status", {}).pop(row, None)
 
 
 def check_own_result(name: str, entry: Mapping[str, Any], row: str, own: Mapping[str, Any],
@@ -651,8 +706,10 @@ def render(data: Mapping[str, Any]) -> str:
                   f"{', '.join(entry['common_intersection_labels']) or 'none'}.", "",
                   *table_header([("Tool", False), *((metric.title, True) for metric in metrics(name))])]
         for tool in public_rows(rows):
-            lines.append(f"| {tool} | " + " | ".join(cell(metric, name, entry, tool)
+            lines.append(f"| {tool}{receipt_marker(entry, tool)} | " + " | ".join(cell(metric, name, entry, tool)
                                                     for metric in metrics(name)) + " |")
+        if any(receipt_marker(entry, tool) for tool in public_rows(rows)):
+            lines += ["", RECEIPT_NOTE]
         for tool in (tool for tool in public_rows(rows) if is_tagged_gaze_row(tool)):
             per_label = rows[tool]["product_coverage"].get("per_label_bytes")
             if per_label is None:
