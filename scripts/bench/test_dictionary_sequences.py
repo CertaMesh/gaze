@@ -1,5 +1,7 @@
 """Independent generator invariants and canonical gate regression guards."""
 import copy
+import contextlib
+import io
 import json
 import gzip
 import shutil
@@ -18,9 +20,12 @@ from test_agentic_layers import _scorecard
 def card(leak=100):
     result = _scorecard({"C": 10, "A": 10, "D": 0, "R": 10})
     result["gaze"] = {"revision": "runtime"}
+    contract = score.load_scored_label_contract(sequence.ROOT /
+        "docs/reference/benchmarks/scored-labels-v2.json")
+    result["scoring"]["scored_label_contract"] = score.scored_label_contract_report(contract, [])
     extension = {
         "identity": sequence.identity(sequence.generate(), sequence.SEED, "published"),
-        "contract": "a", "runtime": result["gaze"],
+        "contract": contract.sha256, "runtime": result["gaze"],
         "binary_sha256": "b" * 64, "runs": {}, "evidence": {},
         "producer_binding": {"fresh_locked_build": True, "toolchain": "rustc 1.96.0 test",
                              "profile": "debug", "example_source_sha256": "d" * 64,
@@ -37,6 +42,93 @@ def card(leak=100):
             extension["evidence"][key] = {"sha256": "c" * 64, "observations": 10}
     result["dictionary_sequence"] = extension
     return result
+
+
+class FullRunContractTests(unittest.TestCase):
+    def test_primary_contract_capture_attaches_and_gates(self):
+        for version in (1, 2, 4):
+            with self.subTest(version=version):
+                contract = (score.SCORED_LABEL_CONTRACT_V1 if version == 1 else
+                            score.load_scored_label_contract(sequence.ROOT /
+                                f"docs/reference/benchmarks/scored-labels-v{version}.json"))
+                extension = sequence.replay(ReplayBindingTests.capture, contract)
+                full = _scorecard({"C": 10, "A": 10, "D": 0, "R": 10})
+                full["gaze"] = extension["runtime"]
+                full["scoring"]["scored_label_contract"] = score.scored_label_contract_report(contract, [])
+                full["layers"]["scored_label_contract"] = score.scored_label_contract_report(
+                    gate.load_contract(sequence.ROOT), [])
+                base = sequence.attach(full, extension)
+                self.assertEqual(full, {k: v for k, v in base.items() if k != "dictionary_sequence"})
+                candidate = copy.deepcopy(base)
+                candidate["dictionary_sequence"]["runs"]["switch/K"]["metrics"]["utf8_bytes"]["leaked"] = 0
+                with tempfile.TemporaryDirectory() as temporary:
+                    directory = Path(temporary)
+                    for name, value in (("base", base), ("candidate", candidate)):
+                        (directory / f"{name}.json").write_text(json.dumps(value))
+                    output = directory / "gate.json"
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        code = gate.main(["gate", "--base", str(directory / "base.json"),
+                                          "--candidate", str(directory / "candidate.json"),
+                                          "--output", str(output)])
+                    self.assertEqual(code, 0)
+                    decision = json.loads(output.read_text())
+                self.assertEqual(decision["verdict"], "pass")
+                self.assertEqual(decision["summary"], {"leaked_bytes_decrease": 35856,
+                                                       "false_positive_bytes_increase": 0})
+                self.assertEqual(set(decision["layers"]), {"C", "A", "D", "R", "K", "B"})
+                for layer in ("K", "B"):
+                    row = decision["layers"][layer]
+                    for side in ("base", "candidate"):
+                        self.assertEqual(row[f"attempted_{side}"], 324)
+                        self.assertEqual(row[f"restore_exact_{side}"], 324)
+                        self.assertEqual(row[f"manifest_valid_{side}"], 324)
+                        self.assertEqual(row[f"false_positive_{side}"], 0)
+                        self.assertEqual(row[f"failed_closed_{side}"], 0)
+                self.assertEqual(decision["layers"]["K"]["leaked_base"], 35856)
+                self.assertEqual(decision["layers"]["K"]["leaked_candidate"], 0)
+
+
+    def test_mismatched_and_unknown_contracts_are_refused(self):
+        for mutation in ("mismatch", "agentic", "unknown_hash", "unknown_id", "unsupported",
+                         "malformed", "missing_extension_contract"):
+            with self.subTest(mutation=mutation):
+                value = card()
+                extension = value["dictionary_sequence"]
+                primary = value["scoring"]["scored_label_contract"]
+                if mutation == "mismatch":
+                    extension["contract"] = score.load_scored_label_contract(sequence.ROOT /
+                        "docs/reference/benchmarks/scored-labels-v4.json").sha256
+                elif mutation == "agentic":
+                    extension["contract"] = value["layers"]["scored_label_contract"]["file_sha256"]
+                elif mutation == "unknown_hash":
+                    primary["file_sha256"] = extension["contract"] = "f" * 64
+                elif mutation == "unknown_id":
+                    primary["id"] = "unknown"
+                elif mutation == "unsupported":
+                    primary["version"] = 3
+                elif mutation == "malformed":
+                    value["scoring"]["scored_label_contract"] = []
+                else:
+                    del extension["contract"]
+                with self.assertRaises(ValueError):
+                    sequence.attach(value, extension)
+                with tempfile.TemporaryDirectory() as temporary:
+                    path = Path(temporary) / "card.json"
+                    path.write_text(json.dumps(value))
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                        self.assertEqual(gate.main(["gate", "--base", str(path),
+                                                   "--candidate", str(path)]), 2)
+
+    def test_implicit_v1_attaches_but_requires_explicit_extension_contract(self):
+        full = card()
+        del full["scoring"]
+        extension = full.pop("dictionary_sequence")
+        extension["contract"] = None
+        attached = sequence.attach(full, extension)
+        self.assertEqual(gate.dictionary_sequence_identity(attached)["contract"], None)
+        del extension["contract"]
+        with self.assertRaises(ValueError):
+            sequence.attach(full, extension)
 
 
 class GeneratorTests(unittest.TestCase):

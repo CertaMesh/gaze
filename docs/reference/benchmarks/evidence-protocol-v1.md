@@ -771,8 +771,10 @@ source path, binary crate type, debug profile, `profile.test=false`, exactly
 event and genuine exit status zero are all required. Cargo metadata identifies
 the planned package, but does not prove which complete dependency graph ran.
 
-The snapshot uses a bounded Git archive with verified blob hashes, modes and
-inventory, including `Cargo.lock`. Only ordinary USTAR files and expected ancestor
+The snapshot uses a metadata-sized Git archive capped at 128 MiB, with verified
+blob hashes, modes and inventory, including `Cargo.lock`. This larger allowance
+applies only to archive stdout; archive stderr, Cargo output and bridge output
+retain their 64 MiB ceilings. Only ordinary USTAR files and expected ancestor
 directories are supported. Links, devices, escapes, duplicates, unexpected entries
 and extension metadata fail closed. Source, native inputs, tool bytes, original
 and private cache copies, and configuration absence are rechecked at the build,
