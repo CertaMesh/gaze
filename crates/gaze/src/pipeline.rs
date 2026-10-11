@@ -20,7 +20,7 @@ use gaze_recognizers::{
 };
 use gaze_types::redaction_marker::redaction_marker;
 use gaze_types::{
-    AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, FallbackReason,
+    AmbiguityRecord, CollisionMembership, EmittedTokenSpan, FallbackReason,
     LabelledValueScanReason, LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest,
     RedactionLogError, RedactionLogger, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet,
     SafetyNetContext, SafetyNetError, ValidatorFailReason,
@@ -1140,6 +1140,7 @@ impl Pipeline {
             order,
             primary: resolved,
             recovered,
+            family_emissions,
             ..
         } = whole;
         let residual_plan = if self.residual_coverage {
@@ -1163,6 +1164,15 @@ impl Pipeline {
                 (
                     (selected.raw.start, selected.raw.end, selected.recovered),
                     id,
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let family_emissions = family_emissions
+            .into_iter()
+            .map(|(span, emission)| {
+                (
+                    span,
+                    crate::conflict::hybrid_fallback::emit(&emission, &evidence.originals),
                 )
             })
             .collect::<BTreeMap<_, _>>();
@@ -1204,7 +1214,9 @@ impl Pipeline {
         let losers = merged_losers(&resolved, &self.registry);
         let mut detections = resolved
             .into_iter()
-            .map(|candidate| indexed_detection_from_candidate(candidate, &self.registry))
+            .map(|candidate| {
+                indexed_detection_from_candidate(candidate, &self.registry, &family_emissions)
+            })
             .collect::<Vec<_>>();
         for loser in &losers {
             self.log_entry(
@@ -1224,9 +1236,9 @@ impl Pipeline {
         // Primary effects stay interleaved in legacy order. Recovery runs only
         // after every primary action, logger and allocation has succeeded.
         let mut prepared = Vec::with_capacity(detections.len() + recovered.len());
-        let recovered = recovered
-            .into_iter()
-            .map(|candidate| indexed_detection_from_candidate(candidate, &self.registry));
+        let recovered = recovered.into_iter().map(|candidate| {
+            indexed_detection_from_candidate(candidate, &self.registry, &family_emissions)
+        });
         let primary_count = detections.len();
         for (index, mut detection) in detections.into_iter().chain(recovered).enumerate() {
             let raw = text[detection.detection.span.clone()].to_string();
@@ -5593,6 +5605,10 @@ fn merged_losers(resolved: &[Candidate], registry: &RecognizerRegistry) -> Vec<I
 fn indexed_detection_from_candidate(
     candidate: Candidate,
     registry: &RecognizerRegistry,
+    family_emissions: &BTreeMap<
+        (usize, usize),
+        crate::conflict::hybrid_fallback::HybridFallbackRecord,
+    >,
 ) -> IndexedDetection {
     let trace_source_ids = candidate.source_recognizer_ids.clone();
     let evidence = ManifestEvidence::of(&candidate);
@@ -5603,16 +5619,9 @@ fn indexed_detection_from_candidate(
     let collision_variant = membership.map(|membership| membership.variant.clone());
     let mut ambiguity_record = None;
 
-    let hybrid_reason = match candidate.decided_by {
-        ConflictTier::CollisionPolicy => Some(AmbiguityReason::PrecedenceTie),
-        ConflictTier::AnchoredContext => Some(AmbiguityReason::NoAnchor),
-        _ => None,
-    };
-    if let Some(reason) = hybrid_reason {
-        if let Some(hybrid) = crate::conflict::hybrid_fallback::emit(&candidate, registry, reason) {
-            ambiguity_record = Some(hybrid.ambiguity_record);
-            collision_family = Some(hybrid.collision_family);
-        }
+    if let Some(emission) = family_emissions.get(&(candidate.span.start, candidate.span.end)) {
+        ambiguity_record = Some(emission.ambiguity_record.clone());
+        collision_family = Some(emission.collision_family.clone());
     }
 
     let decided_by = if candidate.recognizer_id == crate::sweep::SWEEP_ID {
