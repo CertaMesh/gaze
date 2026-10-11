@@ -29,6 +29,7 @@ from bench_subprocess import BenchSubprocess, ProducerFailure, TransportLimits, 
 import evidence_bridge
 
 MIB = 1024 * 1024
+SNAPSHOT_MAX_BYTES = 128 * MIB
 CHUNK = 64 * 1024
 PROCESS_RESERVE = 10
 DIRECTORY_RESERVE = 120
@@ -117,13 +118,18 @@ def group_members(pgid, deadline):
 class BuildOwner:
     """Keep the unreaped session leader pinned until the last signal decision."""
 
-    def __init__(self, *, deadline, seconds=1800, cap=64*MIB):
+    def __init__(self, *, deadline, seconds=1800, cap=64*MIB, stdout_cap=None):
         require(type(deadline) in (int, float) and math.isfinite(deadline)
                 and type(seconds) in (int, float) and 0 < seconds <= 1800
                 and type(cap) is int and 0 < cap <= 64*MIB, 'invalid_limits')
+        if stdout_cap is None:
+            stdout_cap = cap
+        require(type(stdout_cap) is int and 0 < stdout_cap <= SNAPSHOT_MAX_BYTES,
+                'invalid_limits')
         self.deadline = deadline
         self.work_end = min(deadline - PROCESS_RESERVE, time.monotonic() + seconds)
         self.cap = cap
+        self.stdout_cap = stdout_cap
         self.process = None
         self.observed = None
         self.state = OwnerState.NEW
@@ -246,7 +252,8 @@ class BuildOwner:
                             selector.unregister(key.fileobj)
                             continue
                         counts[key.data] += len(chunk)
-                        require(counts[key.data] <= self.cap, 'output_limit')
+                        limit = self.stdout_cap if key.data == 'stdout' else self.cap
+                        require(counts[key.data] <= limit, 'output_limit')
                         if key.data == 'stdout' and consume is not None:
                             consume(chunk)
             failure = False
@@ -374,13 +381,13 @@ def snapshot(repo, revision, destination, deadline):
         expected[path] = (int(mode, 8) & 0o777, oid.decode('ascii'), int(size))
         ancestors.update(str(p) for p in parts.parents if str(p) != '.')
     # Include end markers before rounding to the next 10 KiB tar record.
-    bound = min(64*MIB, sum(((v[2]+511)//512+1)*512 for v in expected.values())
+    bound = min(SNAPSHOT_MAX_BYTES, sum(((v[2]+511)//512+1)*512 for v in expected.values())
                 + len(ancestors)*512 + 12288)
     archive = bytearray()
     def collect(chunk):
         require(len(archive)+len(chunk) <= bound, 'output_limit')
         archive.extend(chunk)
-    owner = BuildOwner(deadline=end, seconds=100, cap=bound)
+    owner = BuildOwner(deadline=end, seconds=100, stdout_cap=bound)
     require(owner.run(['/usr/bin/git', '-c', 'tar.umask=0022', 'archive', '--format=tar', tree],
                       cwd=repo, env=env, consume=collect) == 0, 'producer_exit')
     validate_tar_headers(archive)

@@ -21,6 +21,19 @@ from bench_subprocess import ProducerFailure
 
 
 class OwnerStateTests(unittest.TestCase):
+    def test_archive_stdout_allowance_does_not_raise_build_limits(self):
+        for cap in (67108863, 67108865):
+            with self.subTest(cap=cap):
+                if cap < 67108864:
+                    binding.BuildOwner(deadline=time.monotonic()+30, cap=cap)
+                else:
+                    with self.assertRaises(ProducerFailure) as caught:
+                        binding.BuildOwner(deadline=time.monotonic()+30, cap=cap)
+                    self.assertEqual(caught.exception.code, 'invalid_limits')
+        with self.assertRaises(ProducerFailure) as caught:
+            binding.BuildOwner(deadline=time.monotonic()+30, stdout_cap=134217729)
+        self.assertEqual(caught.exception.code, 'invalid_limits')
+
     def test_no_signal_after_reap(self):
         for state in (binding.OwnerState.WAIT_ONLY, binding.OwnerState.REAPED):
             owner = binding.BuildOwner(deadline=time.monotonic()+30)
@@ -166,8 +179,14 @@ class SnapshotTests(unittest.TestCase):
     def test_snapshot_just_under_128_mib(self):
         # The last complete 10 KiB tar record below 128 MiB, with one header
         # and two end markers. The payload is synthetic, not a Cargo input.
-        size = self.assert_snapshot({'Cargo.lock': b'x' * 134214144})
+        size = self.assert_snapshot({'Cargo.lock': b'#' + b'x' * 134214143})
         self.assertEqual(size, 134215680)
+
+    def test_snapshot_just_over_128_mib(self):
+        # The next complete tar record above 128 MiB is rejected.
+        with self.assertRaises(ProducerFailure) as caught:
+            self.assert_snapshot({'Cargo.lock': b'#' + b'x' * 134224383})
+        self.assertEqual(caught.exception.code, 'output_limit')
 
     def assert_snapshot(self, files):
         rows = []
@@ -795,6 +814,80 @@ class BindingRegressionTests(unittest.TestCase):
         self.assertLess(support.index('      - name: Workspace all-feature doctests\n'), support.index('      - name: Test private fresh-build'))
 
 
+def output_boundaries(suite_deadline):
+    """Real streams straddling the archive, Cargo and bridge byte ceilings."""
+    results = {}
+    emit = '''import os,sys
+fd,remaining = map(int,sys.argv[1:])
+chunk = b'x'*65536
+while remaining:
+ count = os.write(fd,chunk[:min(remaining,len(chunk))])
+ remaining -= count
+'''
+    for kind, stream, ceiling in (
+            ('cargo', 'stdout', 67108864), ('cargo', 'stderr', 67108864),
+            ('archive', 'stdout', 134217728), ('archive', 'stderr', 67108864)):
+        for offset in (-1, 1):
+            label = f'{kind}_{stream}_{"under" if offset < 0 else "over"}'
+            binding.check_time(suite_deadline-binding.PROCESS_RESERVE)
+            options = {'stdout_cap': 134217728} if kind == 'archive' else {}
+            owner = binding.BuildOwner(deadline=min(suite_deadline, time.monotonic()+30),
+                                       seconds=15, **options)
+            received = 0
+            def consume(chunk):
+                nonlocal received
+                received += len(chunk)
+            try:
+                status = owner.run([sys.executable, '-c', emit,
+                                    '1' if stream == 'stdout' else '2', str(ceiling+offset)],
+                                   consume=consume)
+            except ProducerFailure as error:
+                assert offset > 0 and error.code == 'output_limit', label
+                results[label] = error.code
+            else:
+                assert offset < 0 and status == 0, label
+                assert received == (ceiling+offset if stream == 'stdout' else 0), label
+                results[label] = 'accepted'
+            assert owner.reaped, label+'-reaped'
+    bridge_emit = '''import os,sys
+fd,total = map(int,sys.argv[1:])
+prefix,suffix = (b'{"padding":"',b'"}\\n') if fd == 1 else (b'',b'')
+if prefix: os.write(fd,prefix)
+remaining = total-len(prefix)-len(suffix)
+chunk = b'x'*65536
+while remaining:
+ count = os.write(fd,chunk[:min(remaining,len(chunk))])
+ remaining -= count
+if suffix: os.write(fd,suffix)
+if fd == 2: os.write(1,b'{"ready":true}\\n')
+'''
+    for stream in ('stdout', 'stderr'):
+        for offset in (-1, 1):
+            label = f'bridge_{stream}_{"under" if offset < 0 else "over"}'
+            remaining = min(30, suite_deadline-time.monotonic())
+            limits = binding.TransportLimits(invocation_seconds=remaining,
+                                             handshake_seconds=remaining,
+                                             exchange_seconds=remaining,
+                                             finish_seconds=remaining)
+            try:
+                with binding.BenchSubprocess(
+                        [sys.executable, '-c', bridge_emit,
+                         '1' if stream == 'stdout' else '2', str(67108864+offset)],
+                        limits=limits) as owner:
+                    value = owner.receive_handshake()
+                    assert offset < 0, label
+                    assert (len(value['padding']) == 67108848 if stream == 'stdout'
+                            else value == {'ready': True}), label
+                    owner.finish()
+            except ProducerFailure as error:
+                expected = 'output_limit' if stream == 'stdout' else 'stderr_limit'
+                assert offset > 0 and error.code == expected, label
+                results[label] = error.code
+            else:
+                results[label] = 'accepted'
+    return results
+
+
 def lifecycle(suite_deadline):
     results = {}
     programs = {
@@ -899,6 +992,7 @@ finally:
             assert status == 0 and owner.reaped and not owner.signals, 'fifo-prompt-closed-refusal'
             assert time.monotonic()-started < 3, 'fifo-no-blocking-open'
             results['fifo_'+operation] = 'io'
+    results.update(output_boundaries(suite_deadline))
     return results
 
 
@@ -1156,5 +1250,7 @@ if __name__ == '__main__':
         print(json.dumps(mutation_proof(), sort_keys=True))
     elif '--lifecycle' in sys.argv:
         print(json.dumps(lifecycle(time.monotonic()+120), sort_keys=True))
+    elif '--output-boundaries' in sys.argv:
+        print(json.dumps(output_boundaries(time.monotonic()+120), sort_keys=True))
     else:
         unittest.main()
