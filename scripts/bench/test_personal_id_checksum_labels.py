@@ -1,5 +1,6 @@
 """Checksum errors do not make an explicitly labelled personal ID benign."""
 import hashlib
+import json
 import unittest
 from collections import Counter
 from dataclasses import replace
@@ -56,6 +57,24 @@ class PersonalIdChecksumLabelTests(unittest.TestCase):
                     self.assertNotEqual(int(value[-2:]), 97 - int(value[:-2]) % 97)
             self.assertEqual(sum(len(r.gold[0].value.encode()) for _, r in changes), 810)
             self.assertEqual(Counter(r.layer for r in current), {"A": 5018, "D": 3314, "R": 1390})
+
+    def test_committed_cell_diff_matches_every_changed_record(self):
+        evidence = json.loads((ROOT / "docs/reference/benchmarks/personal-id-checksum-v18-cell-diff.json").read_text())
+        for partition in api.PARTITIONS:
+            current = api.generate(partition)
+            old = api.records_as_of(17, current)
+            changes = evidence["partitions"][partition]
+            self.assertEqual(changes["changed_documents_by_class"], {"AADHAAR": 30, "NIR": 30})
+            self.assertEqual(changes["new_gold_bytes"], 810)
+            actual = []
+            for before, after in zip(old, current, strict=True):
+                if before != after:
+                    actual.append({"old_id": before.uid, "new_id": after.uid,
+                                   "old_cell": before.cell, "new_cell": after.cell,
+                                   "gold_label": after.gold[0].label,
+                                   "gold_start": after.gold[0].start, "gold_end": after.gold[0].end,
+                                   "text_sha256": hashlib.sha256(after.text.encode()).hexdigest()})
+            self.assertEqual(changes["changes"], actual)
 
     def test_company_wallet_and_public_ownership_controls_stay_benign(self):
         for partition in api.PARTITIONS:
