@@ -186,12 +186,56 @@ def capture(repo, binary, probe, output, seed=SEED, partition="published"):
     return manifest
 
 
+class ReplayBindingError(ValueError):
+    """A capture cannot attest the regenerated sequence inputs (no values exposed)."""
+
+    def __init__(self):
+        super().__init__("dictionary record does not match regenerated inputs")
+
+
+def validate_binding(path, evidence, docs, sequence):
+    header, observations = records._read(path)
+    corpus = digest([[d.uid, d.text, [(s.start, s.end, s.label) for s in d.spans]]
+                     for d in docs])
+    card = header["scorecard"]
+    inventory = [{**records._document_row(d), "layer": "C"}
+                 for d in sorted(docs, key=lambda d: d.uid)]
+    recorded = [{k: v for k, v in row.items() if k != "validator"}
+                for row in header["documents"]]
+    population = score.population_summary(docs)
+    expected_observations = sorted(("C", "rule-floor-core", d.uid) for d in docs)
+    actual_observations = sorted((row["layer"], row["config"], row["document_id"])
+                                 for row in observations)
+    if (card["parameters"].get("dictionary_sequence") != sequence
+            or header["corpus_sha256"] != corpus
+            or evidence.get("corpus_sha256") != corpus
+            or recorded != inventory
+            or card["dataset"].get("available_population") != population
+            or card["dataset"].get("evaluated_population") != population
+            or evidence.get("observations") != len(docs)
+            or actual_observations != expected_observations
+            or len(card["runs"]) != 1
+            or card["runs"][0]["config"] != "rule-floor-core"):
+        raise ReplayBindingError()
+
+
 def replay(directory, contract):
     manifest = json.loads((directory / "capture.json").read_text())
     expected = {f"{sequence}/{layer}" for sequence in SEQUENCES for layer in LAYERS}
     if set(manifest["records"]) != expected:
         raise ValueError("incomplete dictionary sequence capture")
-    result = {"identity": manifest["identity"],
+    declared = manifest["identity"]
+    try:
+        cases = generate(declared["seed"], declared["partition"])
+        regenerated = identity(cases, declared["seed"], declared["partition"])
+        # Source hashes describe the historical producer, not today's replay code.
+        inputs = ("version", "seed", "partition", "layers", "sequences", "corpus_sha256")
+        if any(declared.get(field) != regenerated[field] for field in inputs):
+            raise ReplayBindingError()
+    except (KeyError, TypeError, ValueError):
+        raise ReplayBindingError() from None
+    bound_identity = {**declared, **{field: regenerated[field] for field in inputs}}
+    result = {"identity": bound_identity,
               "contract": score.scored_label_contract_report(contract, [])["file_sha256"],
               "runtime": manifest["runtime"], "binary_sha256": manifest["binary_sha256"],
               "runs": {}, "evidence": manifest["records"]}
@@ -200,6 +244,12 @@ def replay(directory, contract):
         path = directory / evidence["file"]
         if score.sha256_file(path) != evidence["sha256"]:
             raise ValueError("dictionary observation digest mismatch")
+        sequence, layer = key.split("/")
+        docs = documents([case for case in cases if case.layer == layer], sequence)
+        try:
+            validate_binding(path, evidence, docs, sequence)
+        except (KeyError, TypeError, ValueError):
+            raise ReplayBindingError() from None
         card = records.rescore(path, contract, max_workers=1)
         if card["gaze"] != manifest["runtime"]:
             raise ValueError("dictionary record runtime mismatch")

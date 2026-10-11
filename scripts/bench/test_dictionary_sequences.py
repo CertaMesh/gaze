@@ -1,6 +1,9 @@
 """Independent generator invariants and canonical gate regression guards."""
 import copy
 import json
+import gzip
+import shutil
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -65,6 +68,84 @@ class GeneratorTests(unittest.TestCase):
                 self.assertFalse(doc.spans)
             self.assertTrue(all(raw[s.start:s.end].decode() in case.terms for s in case.literal_spans))
             self.assertEqual(list(json.loads(case.context())["dictionaries"]), ["sequence"])
+
+
+class ReplayBindingTests(unittest.TestCase):
+    capture = sequence.ROOT / "docs/reference/benchmarks/dictionary-sequences/baseline-a6449e2f"
+
+    def test_valid_committed_capture_replays_unchanged(self):
+        replay = sequence.replay(self.capture, score.SCORED_LABEL_CONTRACT_V1)
+        self.assertEqual(replay["runs"]["switch/K"]["metrics"]["utf8_bytes"]["leaked"], 35856)
+        self.assertEqual(replay["runs"]["fresh/K"]["metrics"]["utf8_bytes"]["leaked"], 0)
+        for run in replay["runs"].values():
+            self.assertEqual(run["pipeline_availability"]["attempted_documents"], 324)
+            self.assertEqual(run["pipeline_contract"]["restore_exact_documents"], 324)
+            self.assertEqual(run["pipeline_contract"]["manifest_valid_documents"], 324)
+
+    def assert_substitution_rejected(self, replacement):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "capture"
+            shutil.copytree(self.capture, directory)
+            path = directory / "capture.json"
+            manifest = json.loads(path.read_text())
+            manifest["records"]["switch/K"] = copy.deepcopy(manifest["records"][replacement])
+            path.write_text(json.dumps(manifest))
+            with self.assertRaises(ValueError) as error:
+                sequence.replay(directory, score.SCORED_LABEL_CONTRACT_V1)
+            self.assertEqual(type(error.exception).__name__, "ReplayBindingError")
+            self.assertEqual(str(error.exception), "dictionary record does not match regenerated inputs")
+
+    def test_digest_valid_record_must_match_regenerated_inventory(self):
+        for mutation in ("sequence", "corpus", "id", "gold", "population", "observation"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary) / "capture"
+                shutil.copytree(self.capture, directory)
+                path = directory / "capture.json"
+                manifest = json.loads(path.read_text())
+                evidence = manifest["records"]["switch/K"]
+                record = directory / evidence["file"]
+                with gzip.open(record, "rt") as stream:
+                    rows = [json.loads(line) for line in stream]
+                header = rows[0]
+                if mutation == "sequence":
+                    header["scorecard"]["parameters"]["dictionary_sequence"] = "fresh"
+                elif mutation == "corpus":
+                    header["corpus_sha256"] = "f" * 64
+                    header["scorecard"]["dataset"]["integrity"]["sha256"] = "f" * 64
+                    evidence["corpus_sha256"] = "f" * 64
+                elif mutation == "id":
+                    header["documents"][0]["id"] = "wrong-input"
+                elif mutation == "gold":
+                    header["documents"][0]["gold"] = []
+                elif mutation == "population":
+                    header["scorecard"]["dataset"]["evaluated_population"]["documents"] -= 1
+                else:
+                    rows[1]["document_id"] = rows[2]["document_id"]
+                with gzip.open(record, "wt") as stream:
+                    for row in rows:
+                        stream.write(json.dumps(row) + "\n")
+                evidence["sha256"] = score.sha256_file(record)
+                path.write_text(json.dumps(manifest))
+                with self.assertRaises(sequence.ReplayBindingError) as error:
+                    sequence.replay(directory, score.SCORED_LABEL_CONTRACT_V1)
+                self.assertEqual(str(error.exception), "dictionary record does not match regenerated inputs")
+
+    def test_manifest_cannot_claim_a_different_generated_corpus(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "capture"
+            shutil.copytree(self.capture, directory)
+            path = directory / "capture.json"
+            manifest = json.loads(path.read_text())
+            manifest["identity"]["corpus_sha256"] = "f" * 64
+            path.write_text(json.dumps(manifest))
+            with self.assertRaises(sequence.ReplayBindingError):
+                sequence.replay(directory, score.SCORED_LABEL_CONTRACT_V1)
+
+    def test_fresh_control_cannot_replace_switch_record(self):
+        self.assert_substitution_rejected("fresh/K")
+
+    def test_benign_layer_cannot_replace_positive_record(self):
+        self.assert_substitution_rejected("switch/B")
 
 
 class ExtensionGateTests(unittest.TestCase):

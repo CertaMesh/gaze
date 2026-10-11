@@ -2,6 +2,8 @@
 """Replay and check the separate dictionary API-sequence release-history ledger."""
 import argparse
 import json
+import hashlib
+import subprocess
 from pathlib import Path
 
 import dictionary_sequences as sequence
@@ -52,8 +54,17 @@ def check(path=ROOT / LEDGER):
         if manifest.get("producer_binding", {}).get("fresh_locked_build") is not True:
             raise ValueError("history capture has no fresh producer build binding")
         generated = sequence.generate(manifest["identity"]["seed"], manifest["identity"]["partition"])
-        if manifest["identity"] != sequence.identity(generated, manifest["identity"]["seed"],
-                                                     manifest["identity"]["partition"]):
+        expected_identity = sequence.identity(generated, manifest["identity"]["seed"],
+                                              manifest["identity"]["partition"])
+        # Original captures retain their exact producer source identity. Replaying
+        # with stronger validation changes source bytes, not generated inputs.
+        original_revision = "a6449e2f15563326e7ab9b76e5c9654148acd1e0"
+        original_source = subprocess.check_output(
+            ["git", "show", f"{original_revision}:scripts/bench/dictionary_sequences.py"], cwd=ROOT)
+        original_hash = hashlib.sha256(original_source).hexdigest()
+        if manifest["identity"].get("generator_sha256") == original_hash:
+            expected_identity["generator_sha256"] = original_hash
+        if manifest["identity"] != expected_identity:
             raise ValueError("capture does not use the committed generator and adapter")
         if manifest["runtime"]["revision"] != row["revision"]:
             raise ValueError("history runtime does not match capture")
