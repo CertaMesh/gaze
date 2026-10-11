@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Enabling Unicode matching after warming a record dictionary no longer misses
   configured values; term-order changes retain correct provenance.
 
+- Custom recognizers returning NaN or infinite confidence scores now fail closed
+  with a sanitized `DetectError::Backend` (`invalid_score`) before score filtering.
+  Finite negative scores still fall below the existing 0.0 admission floor.
+
 - Tax and government identifiers cover additional cue connectors and grouped
   layouts, including slash Steuernummer, separated SSN, Swiss AHV and national
   identity values. Full English tax-identification fields preserve trusted
