@@ -3,10 +3,15 @@
   "purpose": "Independent model-free pre-repair sensitivity; no gain claim",
   "generator_version": 19,
   "generator_revision": {
-    "revision": "ae26e4f5cc4a6f604c069475531626fcfb542f10",
+    "revision": "ac03a73bcf0b038a0bb8459f205b2fd3aa226b6d",
     "dirty": false
   },
-  "detector_revision": {
+  "source_binding": {
+    "revision": "ebce7063b2667119e923c5969aae6ee6b4210567",
+    "binary_sha256": "0cc16223d6076f1247dbd44fe352e9fc955414d0f38e2cecd280ec171d21fa4a",
+    "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096"
+  },
+  "vocabulary_revision": {
     "revision": "63240742ac8b1712bd0e9a5dab0fd68b32f2ef3a",
     "dirty": false
   },
