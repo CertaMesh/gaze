@@ -18,10 +18,10 @@ class RecordIdScalarSyntaxTests(unittest.TestCase):
         for partition, expected in V14_HASHES.items():
             records = agentic.records_as_of(14, agentic.generate(partition))
             self.assertEqual(hashlib.sha256(agentic.corpus_bytes(records)).hexdigest(), expected)
-        contract = agentic.load_contract(ROOT, version=14)
-        frozen = ROOT / agentic.HISTORICAL_CONTRACTS[14]
-        self.assertEqual(hashlib.sha256(frozen.read_bytes()).hexdigest(), "ba4ade507783cd521d11aba13ff4992f0250d4df3fe1fd34a759f4e1ab2bdf19")
-        self.assertEqual(json.loads(frozen.read_text())["corpus"]["generator_version"], 14)
+        contract = agentic.load_contract(ROOT, version=15)
+        frozen = ROOT / agentic.HISTORICAL_CONTRACTS[15]
+        self.assertEqual(hashlib.sha256(frozen.read_bytes()).hexdigest(), "c8542632aad9373bc251c8ab10f2eaabd5df01f9f66ba217e914f93a4ffecabb")
+        self.assertEqual(json.loads(frozen.read_text())["corpus"]["generator_version"], 15)
         self.assertLessEqual({"CUSTOMER_ID", "EMPLOYEE_ID", "RECORD_ID"}, contract.scored_labels)
 
     def test_numeric_json_values_are_numbers_with_exact_gold_and_repeats(self):

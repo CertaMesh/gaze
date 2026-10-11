@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "generator_version": 16,
+  "corpus_sha256": "d6dac67a85d555f3997f0684a2e58a29570937a82fb16347daeadf4b63967622",
+  "contract_sha256": "177cdd59eb82ec1700ffc3983261d6b459644f3b8499d4f828dd9f29c8cf1317",
+  "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+  "rows": [
+    {
+      "version": "v0.16.0",
+      "arm": "policy-file",
+      "binary_revision": "5a7dac0fa198f20a628ed6b7fa2b5c9d41a91eb0",
+      "binary_sha256": "afe7a2000945126cd08363c3dcc5203c1a7a1e89d121bb6c743d98ac0356e2b4",
+      "scorecard_sha256": "1f77294a8a70b5fa0545cfddebc878eab496de44ec7d4363934b876b11d40875",
+      "manifest_actions": [
+        "redact",
+        "tokenize"
+      ],
+      "split_composite_source_ids": false,
+      "layers": {
+        "A": {
+          "gold": 76491,
+          "leaked": 17135,
+          "false_positive": 1966,
+          "documents": 3728,
+          "restore_exact": 3728,
+          "restore_failures": 0,
+          "valid_manifests": 3728,
+          "invalid_manifests": 0
+        },
+        "D": {
+          "gold": 0,
+          "leaked": 0,
+          "false_positive": 6916,
+          "documents": 2144,
+          "restore_exact": 2144,
+          "restore_failures": 0,
+          "valid_manifests": 2144,
+          "invalid_manifests": 0
+        },
+        "R": {
+          "gold": 16452,
+          "leaked": 9894,
+          "false_positive": 479,
+          "documents": 280,
+          "restore_exact": 280,
+          "restore_failures": 0,
+          "valid_manifests": 280,
+          "invalid_manifests": 0
+        }
+      },
+      "scorecard_file": "agentic-layers-v16-v0.16.0.json.gz",
+      "policy_sha256": "65cd6aa588ce6923f9e2156699893fcffb9a870967d9a0db5018deaa0c22c8cc",
+      "refused": {
+        "A": 0,
+        "D": 0,
+        "R": 0
+      }
+    },
+    {
+      "version": "v0.15.1",
+      "arm": "policy-file",
+      "binary_revision": "4927f7c0a862ece2cdcd8c00df34538a510d008e",
+      "binary_sha256": "76faf0ab4088f8c1b321522ed651ce05fd8b6191022de586ef3234d99fb49a20",
+      "scorecard_sha256": "188776b6b1ad800b3045d36349a63c5b59a426731d4ade6c011e0e3d2a41a8d6",
+      "manifest_actions": [
+        "redact",
+        "tokenize"
+      ],
+      "split_composite_source_ids": false,
+      "layers": {
+        "A": {
+          "gold": 76491,
+          "leaked": 33228,
+          "false_positive": 2823,
+          "documents": 3728,
+          "restore_exact": 3724,
+          "restore_failures": 4,
+          "valid_manifests": 3724,
+          "invalid_manifests": 4
+        },
+        "D": {
+          "gold": 0,
+          "leaked": 0,
+          "false_positive": 8076,
+          "documents": 2144,
+          "restore_exact": 2144,
+          "restore_failures": 0,
+          "valid_manifests": 2144,
+          "invalid_manifests": 0
+        },
+        "R": {
+          "gold": 16452,
+          "leaked": 10034,
+          "false_positive": 463,
+          "documents": 280,
+          "restore_exact": 280,
+          "restore_failures": 0,
+          "valid_manifests": 280,
+          "invalid_manifests": 0
+        }
+      },
+      "scorecard_file": "agentic-layers-v16-v0.15.1.json.gz",
+      "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+      "refused": {
+        "A": 0,
+        "D": 0,
+        "R": 0
+      }
+    },
+    {
+      "version": "v0.15.0",
+      "arm": "policy-file",
+      "binary_revision": "5127788b089f0f6f4e3b8bcf176503953744be01",
+      "binary_sha256": "d3696c1483cdb7fa8066afd7930a06067c124470e5d43fff806d72de34e9ea50",
+      "scorecard_sha256": "621d7ad9cef43fde3301292796eb3be66364304003968ef47a3f1d79bd9db529",
+      "manifest_actions": [
+        "redact",
+        "tokenize"
+      ],
+      "split_composite_source_ids": false,
+      "layers": {
+        "A": {
+          "gold": 76491,
+          "leaked": 33401,
+          "false_positive": 2823,
+          "documents": 3728,
+          "restore_exact": 3724,
+          "restore_failures": 4,
+          "valid_manifests": 3724,
+          "invalid_manifests": 4
+        },
+        "D": {
+          "gold": 0,
+          "leaked": 0,
+          "false_positive": 8076,
+          "documents": 2144,
+          "restore_exact": 2144,
+          "restore_failures": 0,
+          "valid_manifests": 2144,
+          "invalid_manifests": 0
+        },
+        "R": {
+          "gold": 16452,
+          "leaked": 10034,
+          "false_positive": 463,
+          "documents": 280,
+          "restore_exact": 280,
+          "restore_failures": 0,
+          "valid_manifests": 280,
+          "invalid_manifests": 0
+        }
+      },
+      "scorecard_file": "agentic-layers-v16-v0.15.0.json.gz",
+      "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+      "refused": {
+        "A": 0,
+        "D": 0,
+        "R": 0
+      }
+    },
+    {
+      "version": "v0.14.0",
+      "arm": "full-stack-kiji-resolve",
+      "binary_revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
+      "binary_sha256": "c2de4dd80b59d3df3c12913af7d2e4b037d62194fc54554aeac542a3f6b6473f",
+      "scorecard_sha256": "a86276c2194d76736c93014038945bf13e2fecfdfbef10ada11e6effe27c7dbd",
+      "manifest_actions": [
+        "tokenize"
+      ],
+      "split_composite_source_ids": true,
+      "layers": {
+        "A": {
+          "gold": 76491,
+          "leaked": 43733,
+          "false_positive": 10161,
+          "documents": 3728,
+          "restore_exact": 3674,
+          "restore_failures": 54,
+          "valid_manifests": 3728,
+          "invalid_manifests": 0
+        },
+        "D": {
+          "gold": 0,
+          "leaked": 0,
+          "false_positive": 7846,
+          "documents": 2144,
+          "restore_exact": 2129,
+          "restore_failures": 15,
+          "valid_manifests": 2144,
+          "invalid_manifests": 0
+        },
+        "R": {
+          "gold": 16452,
+          "leaked": 10244,
+          "false_positive": 323,
+          "documents": 280,
+          "restore_exact": 279,
+          "restore_failures": 1,
+          "valid_manifests": 280,
+          "invalid_manifests": 0
+        }
+      },
+      "scorecard_file": "agentic-layers-v16-v0.14.0.json.gz",
+      "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+      "refused": {
+        "A": 0,
+        "D": 0,
+        "R": 0
+      }
+    },
+    {
+      "version": "v0.14.0",
+      "arm": "pass2-ner",
+      "binary_revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
+      "binary_sha256": "c2de4dd80b59d3df3c12913af7d2e4b037d62194fc54554aeac542a3f6b6473f",
+      "scorecard_sha256": "a86276c2194d76736c93014038945bf13e2fecfdfbef10ada11e6effe27c7dbd",
+      "manifest_actions": [
+        "tokenize"
+      ],
+      "split_composite_source_ids": true,
+      "layers": {
+        "A": {
+          "gold": 76491,
+          "leaked": 44476,
+          "false_positive": 2282,
+          "documents": 3728,
+          "restore_exact": 3728,
+          "restore_failures": 0,
+          "valid_manifests": 3728,
+          "invalid_manifests": 0
+        },
+        "D": {
+          "gold": 0,
+          "leaked": 0,
+          "false_positive": 5977,
+          "documents": 2144,
+          "restore_exact": 2144,
+          "restore_failures": 0,
+          "valid_manifests": 2144,
+          "invalid_manifests": 0
+        },
+        "R": {
+          "gold": 16452,
+          "leaked": 10270,
+          "false_positive": 200,
+          "documents": 280,
+          "restore_exact": 280,
+          "restore_failures": 0,
+          "valid_manifests": 280,
+          "invalid_manifests": 0
+        }
+      },
+      "scorecard_file": "agentic-layers-v16-v0.14.0.json.gz",
+      "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+      "refused": {
+        "A": 0,
+        "D": 0,
+        "R": 0
+      }
+    }
+  ]
+}
