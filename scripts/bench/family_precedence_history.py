@@ -209,7 +209,7 @@ def capture(release: str, tree: Path, receipt_file: Path, probe: Path, output: P
             repo_root=tree, dataset_metadata={"repository": "gaze-effective-family-precedence", "revision": corpus},
             dataset_report={"integrity": {"sha256": corpus}},
             sampling_report={"available_population": population, "evaluated_population": population},
-            parameters={"sampling_seed": agentic.PARTITION_SEEDS["test"], "policy_sha256": sha(policy), "arm_layer": layer},
+            parameters={"sampling_seed": agentic.PARTITION_SEEDS["test"], "policy_sha256": sha(policy), "ner_threshold": policy_data["ner"]["threshold"], "arm_layer": layer},
             runs=[run], scored_label_contract=score.scored_label_contract_report(score.SCORED_LABEL_CONTRACT_V1, documents),
         )
         reference = writer.write(output / f"{layer}-observations.jsonl.gz", card, add_reference=True)
@@ -233,7 +233,10 @@ def check(directory: Path) -> dict:
     if set(capture.get("layers", {})) != {"A", "D"}:
         raise ValueError("history capture omits positives or benign controls")
     for layer, block in capture["layers"].items():
-        path = directory / block["record"]["file"]
+        name = block["record"]["file"]
+        if name != f"{layer}-observations.jsonl.gz":
+            raise ValueError("history observation path is not the declared arm record")
+        path = directory / name
         if sha(path) != block["record"]["sha256"]:
             raise ValueError("history observations differ from their pin")
         header, observations = records._read(path)

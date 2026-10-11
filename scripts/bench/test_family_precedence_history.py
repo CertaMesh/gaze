@@ -61,7 +61,7 @@ def valid_capture(tmp_path, monkeypatch):
     }
     for layer in ("A", "D"):
         rows = [row for row in arm.generate("test") if row.layer == layer]
-        path = tmp_path / f"{layer}.gz"
+        path = tmp_path / f"{layer}-observations.jsonl.gz"
         path.write_bytes(layer.encode())
         headers[path] = ({"corpus_sha256": capture["corpus_sha256"],
                           "scorecard": {"gaze": {"revision": "a" * 40}},
@@ -84,11 +84,11 @@ def test_history_replay_rejects_tampering(tmp_path, monkeypatch, tamper):
     capture, headers = valid_capture(tmp_path, monkeypatch)
     history.check(tmp_path)
     if tamper == "file":
-        (tmp_path / "A.gz").write_bytes(b"modified observation")
+        (tmp_path / "A-observations.jsonl.gz").write_bytes(b"modified observation")
     elif tamper == "gold":
-        headers[tmp_path / "A.gz"][0]["documents"][0]["gold"][0][0] += 1
+        headers[tmp_path / "A-observations.jsonl.gz"][0]["documents"][0]["gold"][0][0] += 1
     elif tamper == "population":
-        headers[tmp_path / "D.gz"][0]["documents"].pop()
+        headers[tmp_path / "D-observations.jsonl.gz"][0]["documents"].pop()
     elif tamper == "metrics":
         capture["layers"]["A"]["contracts"]["2"]["leaked"] += 1
     elif tamper == "missing_layer":
