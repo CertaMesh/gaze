@@ -47,7 +47,12 @@ class ReceiptAdmissionTest(unittest.TestCase):
                     repro.write_text(json.dumps({'published': {}, 'reproduced': {}, 'versions': {}}))
                     with self.assertRaises(ValueError):
                         if route == 'assemble':
-                            render.assemble([rp], [f'presidio-research={op}'], [f'presidio-research={repro}'])
+                            own_paths = [f'presidio-research={op}']
+                            if case == 'wrong system':
+                                correct = Path(root) / 'correct.json'
+                                correct.write_text(json.dumps(own_presidio()))
+                                own_paths.append(f'presidio-research={correct}')
+                            render.assemble([rp], own_paths, [f'presidio-research={repro}'])
                         elif route == 'add_tagged': render.add_tagged(state, body, own, fixtures.RESOLVE)
                         elif route == 'add_tuned': render.add_tuned(state, body, own, fixtures.VendorTunedRowTest().declaration())
                         else: getattr(render, route)(state, rp, op, tool)
