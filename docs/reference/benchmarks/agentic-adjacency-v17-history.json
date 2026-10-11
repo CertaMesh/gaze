@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generator_version": 17,
-  "corpus_sha256": "6196bb388f7549014cfc1167516e1add9ccaf5444351e507895702d20a01e478",
-  "contract_sha256": "7efaa02c1c9a5b9a8050062f788b971a9d410ca47275d869b7522b0fcb0be694",
+  "corpus_sha256": "8c62d49926fa90107fa538b03b39aed6d76a2ad9f2d38e38d14cb3e8b1706725",
+  "contract_sha256": "a13af8a9773195adc0f8dee2a2ef0aa53a838158d876748b03a26cdfbb3a173a",
   "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
   "rows": [
     {
@@ -10,7 +10,7 @@
       "arm": "policy-file",
       "binary_revision": "5a7dac0fa198f20a628ed6b7fa2b5c9d41a91eb0",
       "binary_sha256": "afe7a2000945126cd08363c3dcc5203c1a7a1e89d121bb6c743d98ac0356e2b4",
-      "scorecard_sha256": "3ad942ce13df9cbdc71eb794676032ed11425ecf94ef460ca2ff4ebbb719a625",
+      "scorecard_sha256": "963cdf7350cb80cf0d3268c6756655fc6ba43f0a4d1aea9c62edda57845a7821",
       "manifest_actions": [
         "redact",
         "tokenize"
@@ -18,33 +18,33 @@
       "split_composite_source_ids": false,
       "layers": {
         "A": {
-          "gold": 88281,
-          "leaked": 27464,
+          "gold": 96645,
+          "leaked": 34829,
           "false_positive": 2032,
-          "documents": 4508,
-          "restore_exact": 4508,
+          "documents": 4958,
+          "restore_exact": 4958,
           "restore_failures": 0,
-          "valid_manifests": 4508,
+          "valid_manifests": 4958,
           "invalid_manifests": 0
         },
         "D": {
           "gold": 0,
           "leaked": 0,
-          "false_positive": 7016,
-          "documents": 2924,
-          "restore_exact": 2924,
+          "false_positive": 7244,
+          "documents": 3374,
+          "restore_exact": 3374,
           "restore_failures": 0,
-          "valid_manifests": 2924,
+          "valid_manifests": 3374,
           "invalid_manifests": 0
         },
         "R": {
-          "gold": 35880,
-          "leaked": 28722,
+          "gold": 51936,
+          "leaked": 43795,
           "false_positive": 503,
-          "documents": 940,
-          "restore_exact": 940,
+          "documents": 1390,
+          "restore_exact": 1390,
           "restore_failures": 0,
-          "valid_manifests": 940,
+          "valid_manifests": 1390,
           "invalid_manifests": 0
         }
       },
@@ -61,7 +61,7 @@
       "arm": "policy-file",
       "binary_revision": "4927f7c0a862ece2cdcd8c00df34538a510d008e",
       "binary_sha256": "76faf0ab4088f8c1b321522ed651ce05fd8b6191022de586ef3234d99fb49a20",
-      "scorecard_sha256": "e69acf6f699d8d74e032eb5b0f0bc9262955d1317286d90bf8638a4d87c7a064",
+      "scorecard_sha256": "ae0b0af50b57ba92343e8bb411e43c1bbe115609b5740b5f7479e553a6911d9b",
       "manifest_actions": [
         "redact",
         "tokenize"
@@ -69,33 +69,33 @@
       "split_composite_source_ids": false,
       "layers": {
         "A": {
-          "gold": 88281,
-          "leaked": 43607,
+          "gold": 96645,
+          "leaked": 51112,
           "false_positive": 2889,
-          "documents": 4508,
-          "restore_exact": 4499,
+          "documents": 4958,
+          "restore_exact": 4949,
           "restore_failures": 9,
-          "valid_manifests": 4499,
+          "valid_manifests": 4949,
           "invalid_manifests": 9
         },
         "D": {
           "gold": 0,
           "leaked": 0,
-          "false_positive": 8176,
-          "documents": 2924,
-          "restore_exact": 2924,
+          "false_positive": 8332,
+          "documents": 3374,
+          "restore_exact": 3374,
           "restore_failures": 0,
-          "valid_manifests": 2924,
+          "valid_manifests": 3374,
           "invalid_manifests": 0
         },
         "R": {
-          "gold": 35880,
-          "leaked": 28993,
+          "gold": 51936,
+          "leaked": 44274,
           "false_positive": 479,
-          "documents": 940,
-          "restore_exact": 940,
+          "documents": 1390,
+          "restore_exact": 1390,
           "restore_failures": 0,
-          "valid_manifests": 940,
+          "valid_manifests": 1390,
           "invalid_manifests": 0
         }
       },
@@ -112,7 +112,7 @@
       "arm": "policy-file",
       "binary_revision": "5127788b089f0f6f4e3b8bcf176503953744be01",
       "binary_sha256": "d3696c1483cdb7fa8066afd7930a06067c124470e5d43fff806d72de34e9ea50",
-      "scorecard_sha256": "4b8e92c1659faad17c212b03e9897fe40217a6bad9c2671a0264703189e1b2fb",
+      "scorecard_sha256": "e5fcce65c330e659ebb068fdcf54175bd3fcab1cfa889da5fcdfb94159e697e6",
       "manifest_actions": [
         "redact",
         "tokenize"
@@ -120,33 +120,33 @@
       "split_composite_source_ids": false,
       "layers": {
         "A": {
-          "gold": 88281,
-          "leaked": 43780,
+          "gold": 96645,
+          "leaked": 51285,
           "false_positive": 2889,
-          "documents": 4508,
-          "restore_exact": 4499,
+          "documents": 4958,
+          "restore_exact": 4949,
           "restore_failures": 9,
-          "valid_manifests": 4499,
+          "valid_manifests": 4949,
           "invalid_manifests": 9
         },
         "D": {
           "gold": 0,
           "leaked": 0,
-          "false_positive": 8176,
-          "documents": 2924,
-          "restore_exact": 2924,
+          "false_positive": 8332,
+          "documents": 3374,
+          "restore_exact": 3374,
           "restore_failures": 0,
-          "valid_manifests": 2924,
+          "valid_manifests": 3374,
           "invalid_manifests": 0
         },
         "R": {
-          "gold": 35880,
-          "leaked": 28993,
+          "gold": 51936,
+          "leaked": 44274,
           "false_positive": 479,
-          "documents": 940,
-          "restore_exact": 940,
+          "documents": 1390,
+          "restore_exact": 1390,
           "restore_failures": 0,
-          "valid_manifests": 940,
+          "valid_manifests": 1390,
           "invalid_manifests": 0
         }
       },
@@ -163,40 +163,40 @@
       "arm": "full-stack-kiji-resolve",
       "binary_revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
       "binary_sha256": "c2de4dd80b59d3df3c12913af7d2e4b037d62194fc54554aeac542a3f6b6473f",
-      "scorecard_sha256": "5db43fd6b413af28576b8a00844fe85d0c290ad67d1692212b54fd0cf6aa35bc",
+      "scorecard_sha256": "1a2ce5b81a772e6ea923fa57f87ea8c5406cb4e4b1aa27f6465e30bf1b53edc3",
       "manifest_actions": [
         "tokenize"
       ],
       "split_composite_source_ids": true,
       "layers": {
         "A": {
-          "gold": 88281,
-          "leaked": 54210,
-          "false_positive": 10452,
-          "documents": 4508,
-          "restore_exact": 4444,
-          "restore_failures": 64,
-          "valid_manifests": 4508,
+          "gold": 96645,
+          "leaked": 61204,
+          "false_positive": 10714,
+          "documents": 4958,
+          "restore_exact": 4890,
+          "restore_failures": 68,
+          "valid_manifests": 4958,
           "invalid_manifests": 0
         },
         "D": {
           "gold": 0,
           "leaked": 0,
-          "false_positive": 9211,
-          "documents": 2924,
-          "restore_exact": 2909,
+          "false_positive": 10697,
+          "documents": 3374,
+          "restore_exact": 3359,
           "restore_failures": 15,
-          "valid_manifests": 2924,
+          "valid_manifests": 3374,
           "invalid_manifests": 0
         },
         "R": {
-          "gold": 35880,
-          "leaked": 28258,
-          "false_positive": 658,
-          "documents": 940,
-          "restore_exact": 923,
-          "restore_failures": 17,
-          "valid_manifests": 940,
+          "gold": 51936,
+          "leaked": 42208,
+          "false_positive": 943,
+          "documents": 1390,
+          "restore_exact": 1353,
+          "restore_failures": 37,
+          "valid_manifests": 1390,
           "invalid_manifests": 0
         }
       },
@@ -213,40 +213,40 @@
       "arm": "pass2-ner",
       "binary_revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
       "binary_sha256": "c2de4dd80b59d3df3c12913af7d2e4b037d62194fc54554aeac542a3f6b6473f",
-      "scorecard_sha256": "5db43fd6b413af28576b8a00844fe85d0c290ad67d1692212b54fd0cf6aa35bc",
+      "scorecard_sha256": "1a2ce5b81a772e6ea923fa57f87ea8c5406cb4e4b1aa27f6465e30bf1b53edc3",
       "manifest_actions": [
         "tokenize"
       ],
       "split_composite_source_ids": true,
       "layers": {
         "A": {
-          "gold": 88281,
-          "leaked": 56181,
+          "gold": 96645,
+          "leaked": 63744,
           "false_positive": 2282,
-          "documents": 4508,
-          "restore_exact": 4508,
+          "documents": 4958,
+          "restore_exact": 4958,
           "restore_failures": 0,
-          "valid_manifests": 4508,
+          "valid_manifests": 4958,
           "invalid_manifests": 0
         },
         "D": {
           "gold": 0,
           "leaked": 0,
-          "false_positive": 5977,
-          "documents": 2924,
-          "restore_exact": 2924,
+          "false_positive": 6133,
+          "documents": 3374,
+          "restore_exact": 3374,
           "restore_failures": 0,
-          "valid_manifests": 2924,
+          "valid_manifests": 3374,
           "invalid_manifests": 0
         },
         "R": {
-          "gold": 35880,
-          "leaked": 29461,
+          "gold": 51936,
+          "leaked": 44830,
           "false_positive": 216,
-          "documents": 940,
-          "restore_exact": 940,
+          "documents": 1390,
+          "restore_exact": 1390,
           "restore_failures": 0,
-          "valid_manifests": 940,
+          "valid_manifests": 1390,
           "invalid_manifests": 0
         }
       },

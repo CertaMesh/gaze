@@ -23,6 +23,9 @@ class RecordIdOwnershipTests(unittest.TestCase):
                               "adjacent_personal_same_newline",
                               "adjacent_personal_different_newline"):
                     selected = [r for r in rows if r.family == family and shape in r.surface]
+                    if shape.startswith("quoted_unicode_escape"):
+                        exact = {"recordids_ownership_" + shape + suffix for suffix in ("", "_repeat", "_public")}
+                        selected = [r for r in selected if r.surface in exact]
                     self.assertEqual({r.layer for r in selected}, {"A", "D", "R"}, (partition, family, shape))
                     for row in selected:
                         raw = row.text.encode()

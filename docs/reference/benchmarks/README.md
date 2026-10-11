@@ -2071,8 +2071,9 @@ these results.
 Generator v17 adds 1,230 A positives, 1,230 D counterweights and 1,110 R repeats
 per partition for complete labelled-value ownership. Independently authored
 [cell definitions](record-id-value-ownership.md) cover grouped alphanumeric IDs,
-whole ASCII-quoted JSON/log scalars with Unicode and escapes, adjacent personal
-and public assignments, and rejected-placeholder-then-valid-cue sequences.
+Unicode letters and combining marks in grouped values, whole ASCII-quoted
+JSON/log scalars with literal Unicode and raw JSON Unicode escapes, newline
+boundaries between adjacent personal/public assignments, and rejected-placeholder-then-valid-cue sequences.
 Each personal field owns a separate complete value; following labels and public
 fields stay outside it. The test partition has 4,958 A / 3,374 D / 1,390 R documents.
 The v16 corpus and contract remain frozen. Numeric repeat variants contain at
@@ -2096,29 +2097,29 @@ work. The v14 corpus byte pin remains tested.
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.16.0` `policy-file` | 27,464 / 88,281 | 2,032 | 7,016 | 28,722 / 35,880 | 503 |
-| `v0.15.1` `policy-file` | 43,607 / 88,281 | 2,889 | 8,176 | 28,993 / 35,880 | 479 |
-| `v0.15.0` `policy-file` | 43,780 / 88,281 | 2,889 | 8,176 | 28,993 / 35,880 | 479 |
-| `v0.14.0` `full-stack-kiji-resolve` | 54,210 / 88,281 | 10,452 | 9,211 | 28,258 / 35,880 | 658 |
-| `v0.14.0` `pass2-ner` | 56,181 / 88,281 | 2,282 | 5,977 | 29,461 / 35,880 | 216 |
+| `v0.16.0` `policy-file` | 34,829 / 96,645 | 2,032 | 7,244 | 43,795 / 51,936 | 503 |
+| `v0.15.1` `policy-file` | 51,112 / 96,645 | 2,889 | 8,332 | 44,274 / 51,936 | 479 |
+| `v0.15.0` `policy-file` | 51,285 / 96,645 | 2,889 | 8,332 | 44,274 / 51,936 | 479 |
+| `v0.14.0` `full-stack-kiji-resolve` | 61,204 / 96,645 | 10,714 | 10,697 | 42,208 / 51,936 | 943 |
+| `v0.14.0` `pass2-ner` | 63,744 / 96,645 | 2,282 | 6,133 | 44,830 / 51,936 | 216 |
 
 | Release and arm | Refused A / D / R | Leaked on all processed A / D / R B |
 | --- | ---: | ---: |
-| `v0.16.0` `policy-file` | 0 / 0 / 0 | 27,464 / 0 / 28,722 |
-| `v0.15.1` `policy-file` | 0 / 0 / 0 | 43,607 / 0 / 28,993 |
-| `v0.15.0` `policy-file` | 0 / 0 / 0 | 43,780 / 0 / 28,993 |
-| `v0.14.0` `full-stack-kiji-resolve` | 0 / 0 / 0 | 54,210 / 0 / 28,258 |
-| `v0.14.0` `pass2-ner` | 0 / 0 / 0 | 56,181 / 0 / 29,461 |
+| `v0.16.0` `policy-file` | 0 / 0 / 0 | 34,829 / 0 / 43,795 |
+| `v0.15.1` `policy-file` | 0 / 0 / 0 | 51,112 / 0 / 44,274 |
+| `v0.15.0` `policy-file` | 0 / 0 / 0 | 51,285 / 0 / 44,274 |
+| `v0.14.0` `full-stack-kiji-resolve` | 0 / 0 / 0 | 61,204 / 0 / 42,208 |
+| `v0.14.0` `pass2-ner` | 0 / 0 / 0 | 63,744 / 0 / 44,830 |
 
 | Release and arm | Exact restores A / D / R | Valid manifests A / D / R | Restore failures A / D / R | Invalid manifests A / D / R |
 | --- | ---: | ---: | ---: | ---: |
-| `v0.16.0` `policy-file` | 4,508 / 2,924 / 940 | 4,508 / 2,924 / 940 | 0 / 0 / 0 | 0 / 0 / 0 |
-| `v0.15.1` `policy-file` | 4,499 / 2,924 / 940 | 4,499 / 2,924 / 940 | 9 / 0 / 0 | 9 / 0 / 0 |
-| `v0.15.0` `policy-file` | 4,499 / 2,924 / 940 | 4,499 / 2,924 / 940 | 9 / 0 / 0 | 9 / 0 / 0 |
-| `v0.14.0` `full-stack-kiji-resolve` | 4,444 / 2,909 / 923 | 4,508 / 2,924 / 940 | 64 / 15 / 17 | 0 / 0 / 0 |
-| `v0.14.0` `pass2-ner` | 4,508 / 2,924 / 940 | 4,508 / 2,924 / 940 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.16.0` `policy-file` | 4,958 / 3,374 / 1,390 | 4,958 / 3,374 / 1,390 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.15.1` `policy-file` | 4,949 / 3,374 / 1,390 | 4,949 / 3,374 / 1,390 | 9 / 0 / 0 | 9 / 0 / 0 |
+| `v0.15.0` `policy-file` | 4,949 / 3,374 / 1,390 | 4,949 / 3,374 / 1,390 | 9 / 0 / 0 | 9 / 0 / 0 |
+| `v0.14.0` `full-stack-kiji-resolve` | 4,890 / 3,359 / 1,353 | 4,958 / 3,374 / 1,390 | 68 / 15 / 37 | 0 / 0 / 0 |
+| `v0.14.0` `pass2-ner` | 4,958 / 3,374 / 1,390 | 4,958 / 3,374 / 1,390 | 0 / 0 / 0 | 0 / 0 / 0 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v17-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v17, test corpus `6196bb388f75…`. Each release uses its own setup policy; v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`; v0.14.0 retains the v0.15.x model settings.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v17-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v17, test corpus `8c62d49926fa…`. Each release uses its own setup policy; v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`; v0.14.0 retains the v0.15.x model settings.
 
 <!-- END GENERATED: agentic-adjacency -->
 
