@@ -27,7 +27,9 @@ def scorecard(corpus_sha256: str = render.CORPUS_SHA256) -> dict:
                 layer: {"runs": [{
                     "config": "policy-file",
                     "metrics": {"utf8_bytes": {"pii": 100, "leaked": 20, "false_positive": 3}},
-                    "pipeline_availability": {"failed_closed_documents": 0},
+                    "pipeline_availability": {"failed_closed_documents": 0, "completed_documents": 100},
+                    "pipeline_contract": {"documents": 100, "restore_exact_documents": 99,
+                                          "restore_success_decisions": 100, "manifest_valid_documents": 99},
                 }]}
                 for layer in ("A", "D", "R")
             },
@@ -36,6 +38,26 @@ def scorecard(corpus_sha256: str = render.CORPUS_SHA256) -> dict:
 
 
 class AdjacencyHistoryTests(unittest.TestCase):
+    def test_v16_records_restore_and_manifest_counts_without_hiding_legacy_errors(self):
+        inputs = render.HistoryInputs.for_version(16)
+        value = scorecard(inputs.corpus_sha256)
+        value["layers"]["generator"]["generator_version"] = 16
+        value["layers"]["scored_label_contract"]["file_sha256"] = inputs.contract_sha256
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "scorecard.json"
+            path.write_text(json.dumps(value))
+            row, = render.rows_from_scorecard(path, inputs)
+            for layer in ("A", "D", "R"):
+                self.assertEqual(row["layers"][layer]["restore_exact"], 99)
+                self.assertEqual(row["layers"][layer]["valid_manifests"], 99)
+                self.assertEqual(row["layers"][layer]["restore_failures"], 1)
+                self.assertEqual(row["layers"][layer]["invalid_manifests"], 1)
+            for bad in (None, True, -1, 101):
+                value["layers"]["A"]["runs"][0]["pipeline_contract"]["restore_exact_documents"] = bad
+                path.write_text(json.dumps(value))
+                with self.assertRaises(render.HistoryError):
+                    render.rows_from_scorecard(path, inputs)
+
     def test_compressed_scorecard_digest_matches_the_committed_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / 'scorecard.json.gz'
@@ -134,7 +156,9 @@ class AdjacencyHistoryTests(unittest.TestCase):
             path = Path(temporary) / "scorecard.json"
             path.write_text(json.dumps(scorecard()), encoding="utf-8")
             (row,) = render.rows_from_scorecard(path)
-            self.assertEqual(row["layers"]["A"], {"gold": 100, "leaked": 20, "false_positive": 3})
+            self.assertEqual(row["layers"]["A"], {"gold": 100, "leaked": 20, "false_positive": 3,
+                "documents": 100, "restore_exact": 99, "restore_failures": 1,
+                "valid_manifests": 99, "invalid_manifests": 1})
             self.assertEqual(row["scorecard_sha256"], render.sha256(path))
             path.write_text(json.dumps(scorecard("c" * 64)), encoding="utf-8")
             with self.assertRaisesRegex(render.HistoryError, f"pinned v{render.GENERATOR_VERSION} test corpus"):
@@ -147,7 +171,9 @@ class AdjacencyHistoryTests(unittest.TestCase):
                 "scorecard_sha256": "b" * 64,
                 "policy_sha256": render.release_policy_sha256(version, render.MEASURED_INPUTS),
                 "refused": {layer: 0 for layer in ("A", "D", "R")},
-                "layers": {layer: {"gold": 100, "leaked": 20, "false_positive": 3}
+                "layers": {layer: {"gold": 100, "leaked": 20, "false_positive": 3,
+                    "documents": 100, "restore_exact": 99, "restore_failures": 1,
+                    "valid_manifests": 99, "invalid_manifests": 1}
                            for layer in ("A", "D", "R")},
             }
             for version, arm in render.EXPECTED_ROWS

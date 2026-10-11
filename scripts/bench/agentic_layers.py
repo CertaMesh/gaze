@@ -34,7 +34,7 @@ import re
 import sys
 import tomllib
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 from typing import Callable, Iterable, Mapping, Sequence
@@ -46,7 +46,7 @@ import record_id_cells as record_ids
 import record_id_syntax_cells as record_id_syntax
 
 
-GENERATOR_VERSION = 15
+GENERATOR_VERSION = 16
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -718,6 +718,21 @@ LOOKALIKE_KEYS = {
         "local_date": "dueDate",
     },
 }
+# Authored semantic vocabulary: these references identify inventory or equipment,
+# with no person/account holder. Cycle by document index without consuming the
+# value RNG, preserving every digit and all other documents. LOOKALIKE_KEYS
+# retains the historical v3–v15 labels for exact corpus reconstruction.
+NEUTRAL_REFERENCE_LABELS = {
+    "dev": ("batch_number", "sensor_serial", "shipment_reference"),
+    "test": ("lotNumber", "deviceSerial", "shipmentReference"),
+}
+
+
+def neutral_reference_label(partition: str, index: int) -> str:
+    vocabulary = NEUTRAL_REFERENCE_LABELS[partition]
+    return vocabulary[index % len(vocabulary)]
+
+
 # Prose for the date counterweight: a delivery or due date, never a birth date.
 LOCAL_DATE_PROSE = {
     "dev": ("Die Lieferung kommt am {V}.", "Payment is due {V}."),
@@ -1154,7 +1169,8 @@ def _lookalike_records(partition: str, seed: int) -> list[Record]:
                     else LOOKALIKE_TEMPLATES[surface]
                 )
                 template = rng.choice(pool[partition])
-                text, gold = _fill(template, {"K": (key, None), "V": (value, None)})
+                label = neutral_reference_label(partition, index) if family == "ref_number_9" else key
+                text, gold = _fill(template, {"K": (label, None), "V": (value, None)})
                 records.append(
                     Record(
                         uid=f"agentic-{partition}-D-{family}-{index:03d}-{surface}-{BENIGN}",
@@ -4437,7 +4453,8 @@ def _coverage_records(partition: str) -> list[Record]:
 
 
 # The surface prefix each generator version added. Every earlier document stays
-# byte identical, so an older corpus is a filter of the current one.
+# byte identical, so an older corpus is a filter of the current one, with
+# the v16 label correction reversed for the two historical BSN twin surfaces.
 GENERATOR_ADDITIONS = {
     4: "adjacent_",
     5: "lookalike_",
@@ -4459,12 +4476,22 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
     if not 3 <= version <= GENERATOR_VERSION:
         raise LayerError(f"generator version {version} cannot be rebuilt from version {GENERATOR_VERSION}")
     later = tuple(prefix for added, prefix in GENERATOR_ADDITIONS.items() if added > version)
-    return [record for record in records if not record.surface.startswith(later)] if later else list(records)
+    selected = [record for record in records if not record.surface.startswith(later)] if later else list(records)
+    if version < 16:
+        selected = [
+            replace(record, text=record.text.replace(
+                neutral_reference_label(record.partition, int(record.group.rsplit("-", 1)[1])),
+                LOOKALIKE_KEYS[record.partition][record.family],
+            )) if record.layer == LAYER_LOOKALIKES and record.family == "ref_number_9"
+            and record.surface in ("log_kv", "tool_json") else record
+            for record in selected
+        ]
+    return selected
 
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
-    14: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v14.json"),
+    15: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v15.json"),
     13: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v13.json"),
     12: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v12.json"),
     11: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v11.json"),

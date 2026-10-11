@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "3aa6c164957056dbad916fae6959a7ed75701cc656d2ade35f5492e044f669d1",
-    "test": "0a5f6576f2d5f5c8143628e88ec9d2985197fa3bd74c3823de86f611979c09ba",
+    "dev": "3504fb17f9dd74834aa85d60c89c33ad9b9ece658f73d0839fc94fd875c1b607",
+    "test": "d6dac67a85d555f3997f0684a2e58a29570937a82fb16347daeadf4b63967622",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -356,7 +356,7 @@ class CounterweightTests(unittest.TestCase):
     def lookalike_values(self, family: str) -> list[str]:
         key = agentic.LOOKALIKE_KEYS["test"][family]
         return [
-            json.loads(r.text)[key]
+            json.loads(r.text)[agentic.neutral_reference_label(r.partition, int(r.group.rsplit("-", 1)[1])) if family == "ref_number_9" else key]
             for r in self.records
             if r.layer == agentic.LAYER_LOOKALIKES and r.family == family and r.surface == "tool_json"
         ]
