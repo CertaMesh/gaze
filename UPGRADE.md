@@ -35,6 +35,18 @@ Run `gaze setup --force` to regenerate an existing policy with credential
 protection, or add `"secrets"` to `[policy.rulepacks].bundled` in your policy.
 Existing policies keep their selected rulepacks until you update them.
 
+### Action required: finite custom recognizer scores
+
+Custom recognizers must emit finite `Candidate.score` values. NaN, positive
+infinity and negative infinity now abort the entire detection call with
+`DetectError::Backend { recognizer_id: "registry.score-admission", message:
+"invalid_score" }`, propagated by the pipeline as `Error::RecognizerDetect`.
+The error contains no input, candidate value or custom recognizer identifier;
+no partial candidate batch or clean document is returned.
+Finite negative scores keep their existing behavior: resolved detection and
+pseudonymization drop them below the 0.0 floor; `detect_all` returns them as
+unresolved candidates. Zero and other finite scores remain accepted.
+
 ### Action required: custom CorePipeline dictionaries
 
 `CorePipelineConfig::with_rulepack_path` now loads inline dictionary terms and

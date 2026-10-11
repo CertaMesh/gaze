@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Custom recognizers returning NaN or infinite confidence scores now fail closed
+  with a sanitized `DetectError::Backend` (`invalid_score`) before score filtering.
+  Finite negative scores still fall below the existing 0.0 admission floor.
+
 - Tax and government identifiers cover additional cue connectors and grouped
   layouts, including slash Steuernummer, separated SSN, Swiss AHV and national
   identity values. Full English tax-identification fields preserve trusted
