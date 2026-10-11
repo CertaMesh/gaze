@@ -1112,6 +1112,79 @@ mod tests {
         );
     }
 
+    fn mixed_precedence_table(beta_precedence: u32, order: [usize; 4]) -> FamilyPolicyTable {
+        let entries = [
+            (
+                "a",
+                CollisionMembership::new("tenant-doc", "alpha", 10, None),
+            ),
+            (
+                "a2",
+                CollisionMembership::new("tenant-doc", "alpha", 5, None),
+            ),
+            (
+                "b",
+                CollisionMembership::new("tenant-doc", "beta", beta_precedence, None),
+            ),
+            (
+                "other",
+                CollisionMembership::new("other-doc", "gamma", 5, None),
+            ),
+        ];
+        FamilyPolicyTable::from_memberships(
+            order
+                .into_iter()
+                .map(|i| (entries[i].0.to_string(), entries[i].1.clone()))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn effective_family_precedence_does_not_create_a_raw_tie() {
+        for order in [[0, 1, 2, 3], [3, 2, 1, 0], [1, 3, 0, 2]] {
+            let table = mixed_precedence_table(10, order);
+            for (a, b, winner) in [("a", "b", true), ("b", "a", false)] {
+                assert_eq!(table.compare(a, b), Some(winner));
+                assert_eq!(table.precedence_tie_family(a, b), None);
+            }
+            assert_eq!(table.membership("a").unwrap().precedence, 10);
+        }
+    }
+
+    #[test]
+    fn effective_family_precedence_recognizes_a_tie_with_different_declarations() {
+        for order in [[0, 1, 2, 3], [3, 2, 1, 0], [2, 0, 3, 1]] {
+            let table = mixed_precedence_table(5, order);
+            for (a, b) in [("a", "b"), ("b", "a"), ("a2", "b"), ("b", "a2")] {
+                assert_eq!(table.compare(a, b), None);
+                assert_eq!(table.precedence_tie_family(a, b), Some("tenant-doc"));
+            }
+            assert_eq!(table.membership("a").unwrap().precedence, 10);
+        }
+    }
+
+    #[test]
+    fn effective_family_precedence_ignores_same_variant_missing_and_foreign_members() {
+        for table in [
+            FamilyPolicyTable::EMPTY,
+            mixed_precedence_table(5, [0, 1, 2, 3]),
+        ] {
+            for (a, b) in [
+                ("a", "a"),
+                ("a", "a2"),
+                ("a2", "a"),
+                ("a", "missing"),
+                ("missing", "a"),
+                ("missing", "missing"),
+                ("a", "other"),
+                ("other", "a"),
+            ] {
+                assert_eq!(table.compare(a, b), None);
+                assert_eq!(table.precedence_tie_family(a, b), None);
+            }
+        }
+    }
+
     // Dangling memberships can change real variants' precedence through min aggregation.
     // Assembly must register collision metadata only after building its recognizer.
     #[test]

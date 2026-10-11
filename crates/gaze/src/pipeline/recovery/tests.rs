@@ -690,3 +690,35 @@ fn collision_settled_family_survives_later_foreign_overlap_in_both_resolvers() {
     let result = run(input, &registry, raw);
     assert_eq!(result.primary, expected);
 }
+
+#[test]
+fn effective_family_precedence_legacy_agrees_on_mixed_variant_declarations() {
+    for (beta_precedence, expected) in [(10, "a"), (5, "collision-family:tenant-document")] {
+        let registry = RecognizerRegistry::builder()
+            .register_collision(
+                "a",
+                crate::CollisionMembership::new("tenant-document", "alpha", 10, None),
+            )
+            .register_collision(
+                "a2",
+                crate::CollisionMembership::new("tenant-document", "alpha", 5, None),
+            )
+            .register_collision(
+                "b",
+                crate::CollisionMembership::new("tenant-document", "beta", beta_precedence, None),
+            )
+            .build();
+        let a = candidate(0..5, PiiClass::custom("alpha").unwrap(), "a");
+        let b = candidate(0..5, PiiClass::custom("beta").unwrap(), "b");
+        for originals in [vec![a.clone(), b.clone()], vec![b, a]] {
+            let resolved =
+                legacy::resolve_candidates_with_policy(originals.clone(), registry.family_policy());
+            assert_eq!(resolved.len(), 1);
+            assert_eq!(resolved[0].recognizer_id, expected);
+            let current = run(originals, &registry, "XXXXX");
+            assert_eq!(current.primary.len(), 1);
+            assert_eq!(current.primary[0].recognizer_id, expected);
+            assert_eq!(resolved[0].class, current.primary[0].class);
+        }
+    }
+}
