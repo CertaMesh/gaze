@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -289,36 +290,48 @@ def percentile(samples: list[float], quantile: float) -> float:
     return samples[lower] * (1.0 - weight) + samples[upper] * weight
 
 
-def class_metrics(gold: list[Span], predictions: list[Span]) -> dict[str, Any]:
-    gold_counts = Counter(span.pii_class for span in gold)
-    pred_counts = Counter(span.pii_class for span in predictions)
-    gold_set = Counter((span.start, span.end, span.pii_class) for span in gold)
-    true_positive_counts: Counter[str] = Counter()
-    for pred in predictions:
-        key = (pred.start, pred.end, pred.pii_class)
-        if gold_set[key] > 0:
-            gold_set[key] -= 1
-            true_positive_counts[pred.pii_class] += 1
+@dataclass
+class ClassCounts:
+    support: int = 0
+    predicted: int = 0
+    true_positive: int = 0
 
-    classes = sorted(set(gold_counts) | set(pred_counts))
+
+def fixture_counts(gold: list[Span], predictions: list[Span]) -> dict[str, ClassCounts]:
+    """Match a multiset of strict spans in one fixture's coordinate space."""
+    counts: dict[str, ClassCounts] = defaultdict(ClassCounts)
+    remaining_gold = Counter((span.start, span.end, span.pii_class) for span in gold)
+    for span in gold:
+        counts[span.pii_class].support += 1
+    for pred in predictions:
+        counts[pred.pii_class].predicted += 1
+        key = (pred.start, pred.end, pred.pii_class)
+        if remaining_gold[key] > 0:
+            remaining_gold[key] -= 1
+            counts[pred.pii_class].true_positive += 1
+    return counts
+
+
+def metrics_from_counts(counts: dict[str, ClassCounts]) -> dict[str, Any]:
     per_class: dict[str, Any] = {}
-    for pii_class in classes:
-        tp = true_positive_counts[pii_class]
-        precision = safe_div(tp, pred_counts[pii_class])
-        recall = safe_div(tp, gold_counts[pii_class])
+    for pii_class in sorted(counts):
+        count = counts[pii_class]
+        tp = count.true_positive
+        precision = safe_div(tp, count.predicted)
+        recall = safe_div(tp, count.support)
         per_class[pii_class] = {
-            "support": gold_counts[pii_class],
-            "predicted": pred_counts[pii_class],
+            "support": count.support,
+            "predicted": count.predicted,
             "true_positive": tp,
-            "false_positive": pred_counts[pii_class] - tp,
-            "false_negative": gold_counts[pii_class] - tp,
+            "false_positive": count.predicted - tp,
+            "false_negative": count.support - tp,
             "precision": rounded(precision),
             "recall": rounded(recall),
             "f1": rounded(f1(precision, recall)),
         }
 
-    total_tp = sum(true_positive_counts.values())
-    precision = safe_div(total_tp, len(predictions))
+    total_tp = sum(count.true_positive for count in counts.values())
+    precision = safe_div(total_tp, sum(count.predicted for count in counts.values()))
     recall_values = [
         metrics["recall"] for metrics in per_class.values() if metrics["support"] > 0
     ]
@@ -331,46 +344,49 @@ def class_metrics(gold: list[Span], predictions: list[Span]) -> dict[str, Any]:
     }
 
 
-def score(fixtures: list[Fixture], predictions: dict[str, list[Span]], gold_attr: str) -> dict[str, Any]:
-    by_locale_gold: dict[str, list[Span]] = defaultdict(list)
-    by_locale_pred: dict[str, list[Span]] = defaultdict(list)
-    for fixture in fixtures:
-        by_locale_gold[fixture.locale].extend(getattr(fixture, gold_attr))
-        by_locale_pred[fixture.locale].extend(predictions[fixture.fixture_id])
+def class_metrics(gold: list[Span], predictions: list[Span]) -> dict[str, Any]:
+    """Metrics for spans from a single fixture."""
+    return metrics_from_counts(fixture_counts(gold, predictions))
+
+
+def reduce_fixture_metrics(
+    fixtures: Iterable[tuple[str, list[Span], list[Span]]],
+) -> dict[str, Any]:
+    by_locale: dict[str, dict[str, ClassCounts]] = defaultdict(lambda: defaultdict(ClassCounts))
+    for locale, gold, predictions in fixtures:
+        for pii_class, count in fixture_counts(gold, predictions).items():
+            total = by_locale[locale][pii_class]
+            total.support += count.support
+            total.predicted += count.predicted
+            total.true_positive += count.true_positive
     return {
-        locale: class_metrics(by_locale_gold[locale], by_locale_pred[locale])
+        locale: metrics_from_counts(by_locale[locale])
         for locale in ["Global", "EnUs", "DeDe"]
     }
+
+
+def score(fixtures: list[Fixture], predictions: dict[str, list[Span]], gold_attr: str) -> dict[str, Any]:
+    return reduce_fixture_metrics(
+        (fixture.locale, getattr(fixture, gold_attr), predictions[fixture.fixture_id])
+        for fixture in fixtures
+    )
 
 
 def score_direct(fixtures: list[Fixture], predictions: dict[str, list[Span]]) -> dict[str, Any]:
-    by_locale_gold: dict[str, list[Span]] = defaultdict(list)
-    by_locale_pred: dict[str, list[Span]] = defaultdict(list)
-    for fixture in fixtures:
-        by_locale_gold[fixture.locale].extend(fixture.gold_spans)
-        by_locale_pred[fixture.locale].extend(predictions[fixture.fixture_id])
-    return {
-        locale: class_metrics(by_locale_gold[locale], by_locale_pred[locale])
-        for locale in ["Global", "EnUs", "DeDe"]
-    }
+    return score(fixtures, predictions, "gold_spans")
 
 
 def score_observer(fixtures: list[Fixture], clean: dict[str, CleanFixture], predictions: dict[str, list[Span]]) -> dict[str, Any]:
-    by_locale_gold: dict[str, list[Span]] = defaultdict(list)
-    by_locale_pred: dict[str, list[Span]] = defaultdict(list)
-    for fixture in fixtures:
-        by_locale_gold[fixture.locale].extend(clean[fixture.fixture_id].residual_gold)
-        by_locale_pred[fixture.locale].extend(predictions[fixture.fixture_id])
-
-    result = {}
-    for locale in ["Global", "EnUs", "DeDe"]:
-        metrics = class_metrics(by_locale_gold[locale], by_locale_pred[locale])
+    result = reduce_fixture_metrics(
+        (fixture.locale, clean[fixture.fixture_id].residual_gold, predictions[fixture.fixture_id])
+        for fixture in fixtures
+    )
+    for metrics in result.values():
         metrics["observer_residual_recall"] = metrics["recall"]
         metrics["agreement_with_rule_floor"] = None
         metrics["expansion_fraction"] = None
         metrics["contradiction_fraction"] = None
         metrics["novel_tp_over_rule_floor"] = metrics["recall"]
-        result[locale] = metrics
     return result
 
 
