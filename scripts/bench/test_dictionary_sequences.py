@@ -6,6 +6,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import agentic_layers as gate
 import dictionary_sequences as sequence
@@ -146,6 +147,59 @@ class ReplayBindingTests(unittest.TestCase):
 
     def test_benign_layer_cannot_replace_positive_record(self):
         self.assert_substitution_rejected("switch/B")
+
+
+class GeneratorProvenanceTests(unittest.TestCase):
+    capture = ReplayBindingTests.capture
+
+    def assert_provenance_error(self, action, error_type="GeneratorProvenanceError"):
+        with self.assertRaises(ValueError) as error:
+            action()
+        self.assertEqual(type(error.exception).__name__, error_type)
+        self.assertEqual(str(error.exception), "dictionary generator source is not verified")
+
+    def test_unknown_generator_hash_is_refused_by_replay(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "capture"
+            shutil.copytree(self.capture, directory)
+            path = directory / "capture.json"
+            manifest = json.loads(path.read_text())
+            manifest["identity"]["generator_sha256"] = "f" * 64
+            path.write_text(json.dumps(manifest))
+            self.assert_provenance_error(lambda: sequence.replay(
+                directory, score.SCORED_LABEL_CONTRACT_V1))
+
+    def test_unknown_generator_hash_is_refused_by_gate_identity(self):
+        value = card()
+        value["dictionary_sequence"]["identity"]["generator_sha256"] = "f" * 64
+        self.assert_provenance_error(lambda: gate.dictionary_sequence_identity(value), "LayerError")
+
+    def test_historical_replay_survives_current_generator_change(self):
+        before = sequence.replay(self.capture, score.SCORED_LABEL_CONTRACT_V1)
+        changed = sequence.generate()
+        first = changed[0]
+        changed[0] = sequence.Case(
+            score.Document(**{**first.document.__dict__, "text": first.document.text + " "}),
+            first.terms, first.literal_spans, first.layer)
+        with patch.object(sequence, "generate", return_value=changed) as current_generate:
+            with patch.object(sequence, "documents", side_effect=AssertionError(
+                    "historical replay used current documents")):
+                after = sequence.replay(self.capture, score.SCORED_LABEL_CONTRACT_V1)
+        current_generate.assert_not_called()
+        self.assertEqual(before, after)
+
+    def test_tampered_retained_source_is_refused_before_execution(self):
+        source = sequence.ROOT / "docs/reference/benchmarks/dictionary-sequences/generator-v1.py.gz"
+        original = Path.read_bytes
+        tampered = gzip.compress(gzip.decompress(original(source)) + b"\nraise AssertionError('executed tampered source')\n")
+
+        def read(path):
+            return tampered if path == source else original(path)
+
+        with patch.object(Path, "read_bytes", read):
+            self.assert_provenance_error(lambda: sequence.replay(
+                self.capture, score.SCORED_LABEL_CONTRACT_V1))
+            self.assert_provenance_error(lambda: gate.dictionary_sequence_identity(card()), "LayerError")
 
 
 class ExtensionGateTests(unittest.TestCase):
