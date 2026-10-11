@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -20,6 +21,13 @@ from typing import Any, Literal
 
 LOCALES = {"global": "Global", "en-US": "EnUs", "de-DE": "DeDe"}
 LOCALE_TAGS = {"Global": "global", "EnUs": "en-US", "DeDe": "de-DE"}
+POOLED_SCORER_WARNING = "scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending"
+POOLED_SCORER_PROVENANCE = {
+    "contract": "pooled-span-v1",
+    "warning": POOLED_SCORER_WARNING,
+    "remeasurement_pending": True,
+    "retained_predictions": False,
+}
 OBSERVER_KEYS = [
     "observer_residual_recall",
     "agreement_with_rule_floor",
@@ -289,36 +297,48 @@ def percentile(samples: list[float], quantile: float) -> float:
     return samples[lower] * (1.0 - weight) + samples[upper] * weight
 
 
-def class_metrics(gold: list[Span], predictions: list[Span]) -> dict[str, Any]:
-    gold_counts = Counter(span.pii_class for span in gold)
-    pred_counts = Counter(span.pii_class for span in predictions)
-    gold_set = Counter((span.start, span.end, span.pii_class) for span in gold)
-    true_positive_counts: Counter[str] = Counter()
-    for pred in predictions:
-        key = (pred.start, pred.end, pred.pii_class)
-        if gold_set[key] > 0:
-            gold_set[key] -= 1
-            true_positive_counts[pred.pii_class] += 1
+@dataclass
+class ClassCounts:
+    support: int = 0
+    predicted: int = 0
+    true_positive: int = 0
 
-    classes = sorted(set(gold_counts) | set(pred_counts))
+
+def fixture_counts(gold: list[Span], predictions: list[Span]) -> dict[str, ClassCounts]:
+    """Match a multiset of strict spans in one fixture's coordinate space."""
+    counts: dict[str, ClassCounts] = defaultdict(ClassCounts)
+    remaining_gold = Counter((span.start, span.end, span.pii_class) for span in gold)
+    for span in gold:
+        counts[span.pii_class].support += 1
+    for pred in predictions:
+        counts[pred.pii_class].predicted += 1
+        key = (pred.start, pred.end, pred.pii_class)
+        if remaining_gold[key] > 0:
+            remaining_gold[key] -= 1
+            counts[pred.pii_class].true_positive += 1
+    return counts
+
+
+def metrics_from_counts(counts: dict[str, ClassCounts]) -> dict[str, Any]:
     per_class: dict[str, Any] = {}
-    for pii_class in classes:
-        tp = true_positive_counts[pii_class]
-        precision = safe_div(tp, pred_counts[pii_class])
-        recall = safe_div(tp, gold_counts[pii_class])
+    for pii_class in sorted(counts):
+        count = counts[pii_class]
+        tp = count.true_positive
+        precision = safe_div(tp, count.predicted)
+        recall = safe_div(tp, count.support)
         per_class[pii_class] = {
-            "support": gold_counts[pii_class],
-            "predicted": pred_counts[pii_class],
+            "support": count.support,
+            "predicted": count.predicted,
             "true_positive": tp,
-            "false_positive": pred_counts[pii_class] - tp,
-            "false_negative": gold_counts[pii_class] - tp,
+            "false_positive": count.predicted - tp,
+            "false_negative": count.support - tp,
             "precision": rounded(precision),
             "recall": rounded(recall),
             "f1": rounded(f1(precision, recall)),
         }
 
-    total_tp = sum(true_positive_counts.values())
-    precision = safe_div(total_tp, len(predictions))
+    total_tp = sum(count.true_positive for count in counts.values())
+    precision = safe_div(total_tp, sum(count.predicted for count in counts.values()))
     recall_values = [
         metrics["recall"] for metrics in per_class.values() if metrics["support"] > 0
     ]
@@ -331,46 +351,49 @@ def class_metrics(gold: list[Span], predictions: list[Span]) -> dict[str, Any]:
     }
 
 
-def score(fixtures: list[Fixture], predictions: dict[str, list[Span]], gold_attr: str) -> dict[str, Any]:
-    by_locale_gold: dict[str, list[Span]] = defaultdict(list)
-    by_locale_pred: dict[str, list[Span]] = defaultdict(list)
-    for fixture in fixtures:
-        by_locale_gold[fixture.locale].extend(getattr(fixture, gold_attr))
-        by_locale_pred[fixture.locale].extend(predictions[fixture.fixture_id])
+def class_metrics(gold: list[Span], predictions: list[Span]) -> dict[str, Any]:
+    """Metrics for spans from a single fixture."""
+    return metrics_from_counts(fixture_counts(gold, predictions))
+
+
+def reduce_fixture_metrics(
+    fixtures: Iterable[tuple[str, list[Span], list[Span]]],
+) -> dict[str, Any]:
+    by_locale: dict[str, dict[str, ClassCounts]] = defaultdict(lambda: defaultdict(ClassCounts))
+    for locale, gold, predictions in fixtures:
+        for pii_class, count in fixture_counts(gold, predictions).items():
+            total = by_locale[locale][pii_class]
+            total.support += count.support
+            total.predicted += count.predicted
+            total.true_positive += count.true_positive
     return {
-        locale: class_metrics(by_locale_gold[locale], by_locale_pred[locale])
+        locale: metrics_from_counts(by_locale[locale])
         for locale in ["Global", "EnUs", "DeDe"]
     }
+
+
+def score(fixtures: list[Fixture], predictions: dict[str, list[Span]], gold_attr: str) -> dict[str, Any]:
+    return reduce_fixture_metrics(
+        (fixture.locale, getattr(fixture, gold_attr), predictions[fixture.fixture_id])
+        for fixture in fixtures
+    )
 
 
 def score_direct(fixtures: list[Fixture], predictions: dict[str, list[Span]]) -> dict[str, Any]:
-    by_locale_gold: dict[str, list[Span]] = defaultdict(list)
-    by_locale_pred: dict[str, list[Span]] = defaultdict(list)
-    for fixture in fixtures:
-        by_locale_gold[fixture.locale].extend(fixture.gold_spans)
-        by_locale_pred[fixture.locale].extend(predictions[fixture.fixture_id])
-    return {
-        locale: class_metrics(by_locale_gold[locale], by_locale_pred[locale])
-        for locale in ["Global", "EnUs", "DeDe"]
-    }
+    return score(fixtures, predictions, "gold_spans")
 
 
 def score_observer(fixtures: list[Fixture], clean: dict[str, CleanFixture], predictions: dict[str, list[Span]]) -> dict[str, Any]:
-    by_locale_gold: dict[str, list[Span]] = defaultdict(list)
-    by_locale_pred: dict[str, list[Span]] = defaultdict(list)
-    for fixture in fixtures:
-        by_locale_gold[fixture.locale].extend(clean[fixture.fixture_id].residual_gold)
-        by_locale_pred[fixture.locale].extend(predictions[fixture.fixture_id])
-
-    result = {}
-    for locale in ["Global", "EnUs", "DeDe"]:
-        metrics = class_metrics(by_locale_gold[locale], by_locale_pred[locale])
+    result = reduce_fixture_metrics(
+        (fixture.locale, clean[fixture.fixture_id].residual_gold, predictions[fixture.fixture_id])
+        for fixture in fixtures
+    )
+    for metrics in result.values():
         metrics["observer_residual_recall"] = metrics["recall"]
         metrics["agreement_with_rule_floor"] = None
         metrics["expansion_fraction"] = None
         metrics["contradiction_fraction"] = None
         metrics["novel_tp_over_rule_floor"] = metrics["recall"]
-        result[locale] = metrics
     return result
 
 
@@ -465,6 +488,74 @@ def ranges_overlap(left_start: int, left_end: int, right_start: int, right_end: 
     return left_start < right_end and right_start < left_end
 
 
+def retain_observations(
+    snapshot_path: Path,
+    backend: str,
+    mode: str,
+    fixtures: list[Fixture],
+    predictions: dict[str, list[Span]],
+    clean: dict[str, CleanFixture] | None,
+    coverage_sha256: str,
+    corpus_sha256: str | None,
+) -> dict[str, str]:
+    """Retain only offsets, class labels and corpus pins, never input values."""
+    if mode not in {"direct_detector", "observer_residual"}:
+        raise ValueError(f"unsupported observation mode: {mode}")
+    records = []
+    for index, fixture in enumerate(fixtures):
+        gold = fixture.gold_spans
+        if mode == "observer_residual":
+            if clean is None:
+                raise ValueError("observer observations require clean fixtures")
+            gold = clean[fixture.fixture_id].residual_gold
+        records.append({
+            "fixture_index": index,
+            "locale": fixture.locale,
+            "gold": [[span.start, span.end, span.pii_class] for span in gold],
+            "predictions": [[span.start, span.end, span.pii_class] for span in predictions[fixture.fixture_id]],
+        })
+    evidence = {
+        "schema_version": 1,
+        "scoring_contract": "fixture-span-v2",
+        "backend": backend,
+        "mode": mode,
+        "coverage_report_sha256": coverage_sha256,
+        "corpus_sha256": corpus_sha256,
+        "fixture_count": len(fixtures),
+        "records": records,
+    }
+    data = (json.dumps(evidence, indent=2) + "\n").encode("utf-8")
+    digest = hashlib.sha256(data).hexdigest()
+    path = snapshot_path.with_name(f"{snapshot_path.stem}.observations-{digest}.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Content-addressed evidence never replaces an earlier measurement.
+    try:
+        with path.open("xb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except FileExistsError:
+        if path.read_bytes() != data:
+            raise ValueError("retained observation digest mismatch")
+    return {"file": path.name, "sha256": digest}
+
+
+def rescore_observations(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Replay a retained supplemental run without loading text or a model."""
+    if evidence["schema_version"] != 1 or evidence["mode"] not in {"direct_detector", "observer_residual"}:
+        raise ValueError("unsupported supplemental observation schema or mode")
+    records = evidence["records"]
+    if len(records) != evidence["fixture_count"]:
+        raise ValueError("observation fixture count mismatch")
+    fixtures = [Fixture(str(i), row["locale"], [], "", [Span(*span) for span in row["gold"]])
+                for i, row in enumerate(records)]
+    predictions = {str(i): [Span(*span) for span in row["predictions"]] for i, row in enumerate(records)}
+    if evidence["mode"] == "direct_detector":
+        return score_direct(fixtures, predictions)
+    clean = {fixture.fixture_id: CleanFixture("", [], fixture.gold_spans) for fixture in fixtures}
+    return score_observer(fixtures, clean, predictions)
+
+
 def update_matrix_snapshot(
     snapshot_path: Path,
     backend_name: str,
@@ -475,8 +566,15 @@ def update_matrix_snapshot(
     fixture_count: int,
     run_environment: dict[str, Any],
     backend_pins: dict[str, Any] | None = None,
+    *,
+    scoring_provenance: dict[str, Any],
 ) -> None:
     snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    for cell in snapshot["cells"]:
+        cell.setdefault("scoring_provenance", POOLED_SCORER_PROVENANCE.copy())
+    leak_provenance = snapshot.setdefault("strict_span_leak_rate_provenance", {})
+    for key in snapshot["strict_span_leak_rate"]:
+        leak_provenance.setdefault(key, POOLED_SCORER_PROVENANCE.copy())
     snapshot["status"] = "observer_residual_and_direct_run_v1"
     if corpus_sha256 is not None:
         snapshot["corpus"]["sha256"] = corpus_sha256
@@ -490,9 +588,11 @@ def update_matrix_snapshot(
             snapshot["strict_span_leak_rate"][f"{backend_name}.{locale}"] = rounded(
                 None if metrics["recall"] is None else 1.0 - metrics["recall"]
             )
+            leak_provenance[f"{backend_name}.{locale}"] = scoring_provenance
         for cell in snapshot["cells"]:
             if cell["backend"] == backend_name and cell["locale"] == locale and cell["mode"] == mode:
                 cell["metrics"] = metrics
+                cell["scoring_provenance"] = scoring_provenance
                 break
         else:
             snapshot["cells"].append(
@@ -501,6 +601,7 @@ def update_matrix_snapshot(
                     "locale": locale,
                     "mode": mode,
                     "metrics": metrics,
+                    "scoring_provenance": scoring_provenance,
                 }
             )
     snapshot_path.write_text(json.dumps(snapshot, indent=2, sort_keys=False) + "\n", encoding="utf-8")
@@ -585,6 +686,7 @@ def scorer_main(args: argparse.Namespace, backend: Literal["opf"]) -> int:
     clean = clean_fixtures(root, fixtures) if "observer-residual" in requested_modes else None
     latency = LatencyRecorder(args.measure_latency, [])
     results: dict[str, Any] = {}
+    observations: dict[str, Any] = {}
 
     for mode in requested_modes:
         predictions: dict[str, list[Span]] = {}
@@ -611,6 +713,10 @@ def scorer_main(args: argparse.Namespace, backend: Literal["opf"]) -> int:
             else score_observer(fixtures, clean or {}, predictions)
         )
         results[matrix_mode] = metrics
+        observations[matrix_mode] = retain_observations(
+            args.snapshot, backend_name, matrix_mode, fixtures, predictions, clean,
+            coverage_sha256, corpus_sha256,
+        )
         if not args.no_update:
             update_matrix_snapshot(
                 args.snapshot,
@@ -621,6 +727,7 @@ def scorer_main(args: argparse.Namespace, backend: Literal["opf"]) -> int:
                 corpus_sha256,
                 len(fixtures),
                 run_environment(args, backend),
+                scoring_provenance={"contract": "fixture-span-v2", "observations": observations[matrix_mode]},
             )
 
     if not args.no_update:
@@ -638,6 +745,7 @@ def scorer_main(args: argparse.Namespace, backend: Literal["opf"]) -> int:
             "corpus_sha256": corpus_sha256,
             "fixture_count": len(fixtures),
             "metrics_by_mode": results,
+            "observations_by_mode": observations,
             "latency": latency.summary(len(fixtures), getattr(args, "device", "cpu")),
         },
         sys.stdout,

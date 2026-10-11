@@ -969,6 +969,13 @@ CI logs.
 Current status: `observer_residual_and_direct_run_v1`. Direct-detector and
 observer-residual cells are populated for the OpenAI Privacy Filter.
 
+Quality status (`scoring_provenance` on every snapshot cell and
+`strict_span_leak_rate_provenance` on each headline value): **scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending**.
+Original values, corpus and model pins remain intact. Per-fixture predictions
+and clean residual gold were not retained, so corrected values cannot be derived
+from these aggregates; model re-measurement is pending. This also applies to the
+snapshot printed by `safety_net_matrix.rs`. The performance snapshot is unaffected.
+
 ### Matrix shape
 
 The snapshot schema is version 2, keyed by backend, locale, and mode:
@@ -985,8 +992,8 @@ nullable `observer_residual_recall`, `agreement_with_rule_floor`,
 `expansion_fraction`, `contradiction_fraction`, and `novel_tp_over_rule_floor`.
 
 The top-level `strict_span_leak_rate` block is mode-independent and records one
-nullable headline field per backend-locale pair. It measures end-to-end
-fail-closed behavior rather than detector precision/recall.
+nullable headline field per backend-locale pair: one minus the direct detector's
+macro recall. It is a supplemental strict-span metric.
 
 Cells are populated from pinned local backend runs. Publishing claims without
 those pins would violate the axis-4 trust contract.
@@ -1041,6 +1048,12 @@ Measured 2026-05-15 on macOS 26.5 arm64, Apple M5 Max. The scorer used Python
 3.10.20 for the Tiny/Mobile/Mini candidates. Corpus: 150 fixtures, `target/coverage-report.json` SHA256
 `760f96163a68ce5f7dbc0409aa5109aa1a3ed190001536647e1881ba9d40a49c`.
 
+Quality status (`scoring_provenance` on every leaderboard snapshot cell):
+**scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending**. Both quality tables below
+retain their original values and provenance; no corrected values are available
+because per-fixture predictions and clean residual gold were not retained.
+Warm and subprocess latency numbers are unaffected.
+
 Macro averages are across the committed `Global`, `EnUs`, and `DeDe` locale
 cells. Warm p50 keeps the model/session loaded over the same 150 direct fixture
 texts.
@@ -1083,11 +1096,28 @@ enables Nym. The Kiji leaderboard rows and the Kiji int8, ORT, tract, and
 candle runtime measurements are readable at the
 [`v0.14.0` tag](https://github.com/CertaMesh/gaze/blob/v0.14.0/docs/reference/benchmarks/README.md#ner-model-leaderboard).
 
+The linked `v0.14.0` Kiji direct/observer quality rows were also **scored with the pre-fix pooled scorer; may overstate recall; re-measurement pending**. Their original tag remains intact;
+retained per-fixture predictions are unavailable. The Kiji warm/runtime timings
+and the separate 2,910-document canonical benchmark measurements above are
+unaffected. Canonical schema-v4 scorecards use a separate scorer and are unaffected.
+
 ### Runnable paths
 
 ```bash
 python3 scripts/bench/ner-bench-scorer.py --repo-root . --python python3 --mode all --model openobscure-tinybert4l-pii-ner-int8 --model mrm8488-mobilebert-ner --model osiria-minilm-italian-ner
 python3 scripts/bench/ner-warm-latency.py --repo-root .
+```
+
+New OPF and NER runs retain value-free per-fixture gold and prediction offsets
+and class labels in content-addressed `*.observations-<sha256>.json` files beside
+the selected snapshot, including with `--no-update`. Aggregate cells and command
+output reference each file and its SHA-256; earlier observation files are retained.
+These files contain no fixture text, span values, or original fixture identifiers.
+Direct gold uses raw-text coordinates; observer gold uses clean-text coordinates.
+To re-score a retained run without loading models:
+
+```bash
+python3 scripts/bench/rescore_safety_net.py path/to/snapshot.observations-<sha256>.json
 ```
 
 ---
