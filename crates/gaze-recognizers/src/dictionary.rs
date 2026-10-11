@@ -1,6 +1,4 @@
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeSet, HashMap};
-use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
@@ -32,7 +30,6 @@ pub struct DictionaryRecognizer {
     score: f32,
     priority: i32,
     compiled_dictionaries: Mutex<HashMap<DictionaryCacheKey, Arc<AhoCorasick>>>,
-    compiled_unicode: Mutex<HashMap<DictionaryCacheKey, Arc<AhoCorasick>>>,
     unicode_case_insensitive: bool,
     record_matching: bool,
     record_allowed_kinds: BTreeSet<RecordMatchKind>,
@@ -81,7 +78,6 @@ impl DictionaryRecognizer {
             score,
             priority,
             compiled_dictionaries: Mutex::new(HashMap::new()),
-            compiled_unicode: Mutex::new(HashMap::new()),
             unicode_case_insensitive: false,
             record_matching: false,
             record_allowed_kinds: BTreeSet::new(),
@@ -135,8 +131,23 @@ impl DictionaryRecognizer {
         self
     }
 
+    fn compilation_mode(&self, entry: &DictionaryEntry) -> CompilationMode {
+        if self.unicode_case_insensitive {
+            CompilationMode::UnicodeCaseFolded
+        } else if self.record_matching || entry.case_sensitive() {
+            // Record matching without Unicode folding has always used literal terms.
+            CompilationMode::Exact
+        } else {
+            CompilationMode::AsciiCaseInsensitive
+        }
+    }
+
     fn automaton_for(&self, entry: &DictionaryEntry) -> Arc<AhoCorasick> {
-        let key = DictionaryCacheKey::from_entry(entry);
+        let mode = self.compilation_mode(entry);
+        let key = DictionaryCacheKey {
+            mode,
+            terms: entry.terms().to_vec(),
+        };
         let mut compiled = self
             .compiled_dictionaries
             .lock()
@@ -147,42 +158,17 @@ impl DictionaryRecognizer {
         if compiled.len() >= self.cache_capacity {
             compiled.clear();
         }
+        let folded_terms = (mode == CompilationMode::UnicodeCaseFolded).then(|| {
+            entry
+                .terms()
+                .iter()
+                .map(|term| term.as_str().case_fold().collect::<String>())
+                .collect::<Vec<_>>()
+        });
         let automaton = Arc::new(
             AhoCorasickBuilder::new()
-                .ascii_case_insensitive(!entry.case_sensitive())
-                .build(entry.terms())
-                .expect("DictionaryEntry validates terms before automaton construction"),
-        );
-        compiled.insert(key, Arc::clone(&automaton));
-        automaton
-    }
-
-    fn unicode_automaton_for(&self, entry: &DictionaryEntry) -> Arc<AhoCorasick> {
-        let key = DictionaryCacheKey::from_entry(entry);
-        let mut compiled = self
-            .compiled_unicode
-            .lock()
-            .expect("dictionary Unicode cache poisoned");
-        if let Some(existing) = compiled.get(&key) {
-            return Arc::clone(existing);
-        }
-        if compiled.len() >= self.cache_capacity {
-            compiled.clear();
-        }
-        let folded_terms = entry
-            .terms()
-            .iter()
-            .map(|term| {
-                if self.unicode_case_insensitive {
-                    term.as_str().case_fold().collect::<String>()
-                } else {
-                    term.clone()
-                }
-            })
-            .collect::<Vec<_>>();
-        let automaton = Arc::new(
-            AhoCorasickBuilder::new()
-                .build(folded_terms)
+                .ascii_case_insensitive(mode == CompilationMode::AsciiCaseInsensitive)
+                .build(folded_terms.as_deref().unwrap_or(entry.terms()))
                 .expect("DictionaryEntry validates terms before automaton construction"),
         );
         compiled.insert(key, Arc::clone(&automaton));
@@ -191,20 +177,18 @@ impl DictionaryRecognizer {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct DictionaryCacheKey {
-    terms_hash: u64,
-    case_sensitive: bool,
+enum CompilationMode {
+    Exact,
+    AsciiCaseInsensitive,
+    UnicodeCaseFolded,
 }
 
-impl DictionaryCacheKey {
-    fn from_entry(entry: &DictionaryEntry) -> Self {
-        let mut hasher = DefaultHasher::new();
-        entry.terms().hash(&mut hasher);
-        Self {
-            terms_hash: hasher.finish(),
-            case_sensitive: entry.case_sensitive(),
-        }
-    }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct DictionaryCacheKey {
+    mode: CompilationMode,
+    // Equality checks the full ordered terms, even when their hashes collide.
+    // Pattern indices refer back to this order when emitting provenance.
+    terms: Vec<String>,
 }
 
 impl Recognizer for DictionaryRecognizer {
@@ -242,7 +226,7 @@ impl Recognizer for DictionaryRecognizer {
                 self.record_matching,
             );
             let hits = self
-                .unicode_automaton_for(entry)
+                .automaton_for(entry)
                 .find_iter(&folded)
                 .filter_map(|hit| {
                     Some((
@@ -567,6 +551,95 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].span, 0..raw.len());
         assert_eq!(hits[0].canonical_form.as_deref(), Some(raw));
+    }
+
+    #[test]
+    fn warmed_record_cache_matches_fresh_after_unicode_mode_switch() {
+        let context = TypedContext {
+            dictionaries: HashMap::from([(
+                "record-name".into(),
+                ContextDictionary {
+                    terms: vec!["JÖRG STRASSE".into()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
+        };
+        let bundle = dictionary_bundle_from_context(&context);
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+        let make_recognizer = || {
+            DictionaryRecognizer::new(
+                "context/record-name",
+                PiiClass::Name,
+                "record-name",
+                true,
+                "counter",
+            )
+            .with_record_matching()
+            .with_cache_capacity(1)
+        };
+        let raw = "JÖRG STRASSE";
+        let warmed = make_recognizer();
+        assert_eq!(warmed.detect(raw, &detect_context).unwrap().len(), 1);
+        let warmed = warmed.with_unicode_case_insensitive();
+        let fresh = make_recognizer().with_unicode_case_insensitive();
+        for text in [raw, "Jörg Straße", "Jörg\u{a0}Straße"] {
+            let expected = fresh.detect(text, &detect_context).unwrap();
+            assert_eq!(expected.len(), 1);
+            assert_eq!(expected[0].span, 0..text.len());
+            let actual = warmed.detect(text, &detect_context).unwrap();
+            assert_eq!(actual.len(), expected.len(), "warmed cache missed {text}");
+            assert_eq!(actual[0].span, expected[0].span);
+            assert_eq!(actual[0].source, expected[0].source);
+            assert_eq!(actual[0].canonical_form, expected[0].canonical_form);
+        }
+    }
+
+    #[test]
+    fn warmed_dictionary_preserves_provenance_after_ordered_terms_change() {
+        let recognizer = DictionaryRecognizer::new(
+            "dict/songs",
+            PiiClass::Custom("song".into()),
+            "songs",
+            true,
+            "counter",
+        )
+        .with_cache_capacity(1);
+        for (terms, expected_sources) in [
+            (
+                ["alpha-one", "bravo-two"],
+                ["dictionary:songs[#0]", "dictionary:songs[#1]"],
+            ),
+            (
+                ["bravo-two", "alpha-one"],
+                ["dictionary:songs[#1]", "dictionary:songs[#0]"],
+            ),
+        ] {
+            let context = TypedContext {
+                dictionaries: HashMap::from([(
+                    "songs".into(),
+                    ContextDictionary {
+                        terms: terms.into_iter().map(str::to_owned).collect(),
+                        case_sensitive: true,
+                    },
+                )]),
+                class_map: HashMap::new(),
+                fields: Map::new(),
+                record_match_kinds: Default::default(),
+                record_value_rejections: Default::default(),
+            };
+            let bundle = dictionary_bundle_from_context(&context);
+            let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+            let hits = recognizer
+                .detect("alpha-one then bravo-two", &detect_context)
+                .unwrap();
+            assert_eq!(hits.len(), 2);
+            assert_eq!(hits[0].source, expected_sources[0]);
+            assert_eq!(hits[1].source, expected_sources[1]);
+        }
     }
 
     #[test]
