@@ -2,6 +2,7 @@
 import hashlib
 import json
 import unittest
+import unicodedata
 from pathlib import Path
 
 import agentic_layers as api
@@ -13,6 +14,46 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class RecordIdOwnershipTests(unittest.TestCase):
+    def test_unicode_and_newline_ownership_cells_exist_with_exact_raw_boundaries(self):
+        for partition in api.PARTITIONS:
+            rows = cells.records(api, partition)
+            for family in cells.LABELS:
+                for shape in ("grouped_unicode_letters", "grouped_combining_marks",
+                              "quoted_unicode_escape", "adjacent_personal_same_newline",
+                              "adjacent_personal_different_newline"):
+                    selected = [r for r in rows if r.family == family and shape in r.surface]
+                    self.assertEqual({r.layer for r in selected}, {"A", "D", "R"}, (partition, family, shape))
+                    for row in selected:
+                        raw = row.text.encode()
+                        spans = row.gold if row.layer != "D" else row.decoys
+                        for span in spans:
+                            self.assertEqual(raw[span.start:span.end].decode(), span.value)
+                        if shape.startswith("grouped"):
+                            value = spans[0].value
+                            self.assertTrue(any(ord(c) > 127 and c.isalpha() for c in value)
+                                            if "letters" in shape else
+                                            any(unicodedata.category(c).startswith("M") for c in value))
+                            self.assertIn(" ", value.replace("\u00a0", " "))
+                        elif shape == "quoted_unicode_escape":
+                            value = spans[0].value
+                            self.assertIn("\\u", value)
+                            payload = json.loads(row.text.split("\nLookup ")[0])
+                            embedded = "embedded" in row.surface
+                            if embedded:
+                                payload = json.loads(payload["payload"])
+                                value = json.loads('"' + value + '"')
+                            decoded = next(iter(payload["arguments"].values()))
+                            self.assertEqual(json.loads('"' + value + '"'), decoded)
+                            self.assertTrue(any(unicodedata.category(c).startswith("M") for c in decoded))
+                            self.assertTrue(any(ord(c) > 127 and c.isalpha() for c in decoded))
+                        else:
+                            first, second = spans[:2]
+                            self.assertEqual(raw[first.end:first.end + 1], b"\n")
+                            self.assertNotIn("\n", first.value)
+                            self.assertNotIn("\n", second.value)
+                            if row.layer == "R":
+                                self.assertEqual(row.gold[1].value, row.gold[2].value)
+
     def test_previous_corpus_and_contract_remain_reconstructible(self):
         expected = {"dev": "3504fb17f9dd74834aa85d60c89c33ad9b9ece658f73d0839fc94fd875c1b607",
                     "test": "d6dac67a85d555f3997f0684a2e58a29570937a82fb16347daeadf4b63967622"}
