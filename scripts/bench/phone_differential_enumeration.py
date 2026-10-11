@@ -11,7 +11,7 @@ Fixture sources: BNetzA Mitteilung 148/2021, Ofcom drama mobile and London
 """
 from __future__ import annotations
 import json
-import subprocess
+from checked_daemon_batch import run_daemon_batch
 import sys
 import tempfile
 from pathlib import Path
@@ -59,17 +59,9 @@ def parse_responses(payload):
 
 
 def run(binary, rows, policy):
-    requests = ''.join(json.dumps({'session_id': str(i), 'text': text}, ensure_ascii=False) + '\n'
-                       for i, (_, text, _) in enumerate(rows))
-    result = subprocess.run([str(binary), 'daemon', '--policy', str(policy)], input=requests,
-                            text=True, capture_output=True, check=True, timeout=600)
-    responses = parse_responses(result.stdout)
-    if len(responses) != len(rows):
-        raise RuntimeError('response count')
+    responses = run_daemon_batch(binary, policy, [{'text': text} for _, text, _ in rows])
     coverage = []
     for (_, text, gold), response in zip(rows, responses, strict=True):
-        if 'error' in response:
-            raise RuntimeError(response['error'])
         phone = set()
         all_covered = set()
         clean = response['clean_text'].encode()

@@ -152,9 +152,6 @@ def main() -> int:
                 changed = []
                 by_country = defaultdict(int)
                 for doc, b, h in zip(docs, base, head):
-                    if b is None or h is None:
-                        stats["missing_response"] += 1
-                        continue
                     span = doc["iban_span"][1] - doc["iban_span"][0]
                     b_cls, b_bytes = base_enum.iban_view(b, doc["iban_span"])
                     h_cls, h_bytes = base_enum.iban_view(h, doc["iban_span"])

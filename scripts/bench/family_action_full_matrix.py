@@ -106,10 +106,8 @@ def policy_text(bundled: str, locale: str, iban: str, card: str, default: str, f
     return text + DEFAULT.format(action=default)
 
 
-def leaked(response: dict | None, doc: dict) -> int:
+def leaked(response: dict, doc: dict) -> int:
     """IBAN character positions still readable in the bytes that left the process."""
-    if response is None or response.get("clean_text") is None:
-        return doc["iban_span"][1] - doc["iban_span"][0]
     stripped = REPLACEMENT.sub("\x00", response["clean_text"])
     start, end = doc["iban_span"]
     iban = doc["text"].encode()[start:end].decode()
@@ -123,9 +121,9 @@ def leaked(response: dict | None, doc: dict) -> int:
     return sum(hit)
 
 
-def view(response: dict | None, doc: dict) -> tuple[str, int]:
+def view(response: dict, doc: dict) -> tuple[str, int]:
     """(classes covering the IBAN span per the manifest, or "raw"; leaked)."""
-    cls = "missing" if response is None else base_enum.iban_view(response, doc["iban_span"])[0]
+    cls = base_enum.iban_view(response, doc["iban_span"])[0]
     return cls, leaked(response, doc)
 
 
@@ -140,8 +138,7 @@ def select_subset(base_bin: str, docs: list[dict], tmp: Path) -> dict:
         family = sorted(
             i
             for i, (doc, response) in enumerate(zip(docs, responses))
-            if response is None
-            or FAMILY_TOKEN_CLASS in base_enum.iban_view(response, doc["iban_span"])[0].split("+")
+            if FAMILY_TOKEN_CLASS in base_enum.iban_view(response, doc["iban_span"])[0].split("+")
         )
         rng = random.Random(SUBSET_SEED)
         rest = [i for i in range(len(docs)) if i not in set(family)]
@@ -176,8 +173,6 @@ def score_arm(base_bin, head_bin, docs, tmp, loc, iban, card, default, family):
     transitions = Counter()
     changed, regressed = [], []
     for index, (doc, b, h) in enumerate(zip(docs, base, head)):
-        if b is None or h is None:
-            stats["missing_response"] += 1
         b_cls, b_leak = view(b, doc)
         h_cls, h_leak = view(h, doc)
         stats["base_leaked"] += b_leak

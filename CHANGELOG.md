@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Enumeration proof scripts now reject failed daemon batches before scoring:
+  bounded transport, checked child exit, exact session IDs, LF framing and
+  validated successful response shapes. Matching refusals can no longer
+  prove unchanged behavior, and reordered phone responses are joined by ID.
+
 ### Changed
 
 - `CorePipelineConfig` now resolves custom rulepack dictionaries through the

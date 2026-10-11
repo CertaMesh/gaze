@@ -226,13 +226,11 @@ def survives_raw(response: dict, span: tuple[int, int], value: str) -> bool:
     manifest's raw/clean spans and the clean text is read at the mapped
     position. A span the manifest covers only partly counts as surviving.
     """
-    clean = response.get("clean_text")
-    if clean is None:
-        return True
+    clean = response["clean_text"]
     start, end = span
     clean_bytes = clean.encode("utf-8")
     delta = 0
-    for entry in sorted(response.get("manifest", []), key=lambda e: e["raw_span"]["start"]):
+    for entry in sorted(response["manifest"], key=lambda e: e["raw_span"]["start"]):
         raw, mapped = entry["raw_span"], entry["clean_span"]
         if raw["end"] <= start:
             delta += (mapped["end"] - mapped["start"]) - (raw["end"] - raw["start"])
@@ -341,11 +339,8 @@ def main() -> int:
                         reasons = Counter()
                         changed = []
                         for doc, b, h in zip(docs, base, head):
-                            if b is None or h is None:
-                                stats["missing_response"] += 1
-                                continue
-                            doc_changed = shape(b.get("clean_text", "")) != shape(
-                                h.get("clean_text", "")
+                            doc_changed = shape(b["clean_text"]) != shape(
+                                h["clean_text"]
                             )
                             span_reasons = []
                             for span in doc["spans"]:
@@ -387,8 +382,8 @@ def main() -> int:
                                     {
                                         "source": doc["source"],
                                         "text": doc["text"],
-                                        "base_clean": shape(b.get("clean_text", "")),
-                                        "head_clean": shape(h.get("clean_text", "")),
+                                        "base_clean": shape(b["clean_text"]),
+                                        "head_clean": shape(h["clean_text"]),
                                         "spans": span_reasons,
                                     }
                                 )

@@ -7,7 +7,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from bench_subprocess import ProducerFailure
+from bench_subprocess import ProducerFailure, TransportLimits
+from checked_daemon_batch import run_daemon_batch
+import phone_differential_enumeration as phone
 import iban_trailing_word_enumeration as iban
 import collision_settled_enumeration as collision
 import family_action_policy_matrix as family
@@ -20,7 +22,7 @@ class CheckedDaemonTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.policy = self.root / 'policy.toml'
         self.policy.write_text('')
-        self.docs = [{'text': 'left\u2028right'}, {'text': 'second'}]
+        self.docs = [{'text': 'first'}, {'text': 'second'}]
 
     def daemon(self, mode):
         binary = self.root / 'daemon'
@@ -44,6 +46,18 @@ elif mode == 'manifest_entry': responses[0]['manifest'] = [{}]
 elif mode == 'no_manifest': del responses[0]['manifest']
 elif mode == 'no_clean': del responses[0]['clean_text']
 elif mode == 'reverse': responses.reverse()
+elif mode == 'bad_json':
+    print('PRIVATE_PAYLOAD')
+    sys.exit(0)
+elif mode == 'no_lf':
+    sys.stdout.write(json.dumps(responses[0]))
+    sys.exit(0)
+elif mode == 'duplicate_key':
+    print('{"session_id":"doc-0","session_id":"doc-0"}')
+    sys.exit(0)
+elif mode == 'deadline':
+    __import__('time').sleep(2)
+
 for response in responses: print(json.dumps(response, ensure_ascii=False), flush=True)
 if mode == 'nonzero':
     print('PRIVATE_STDERR', file=sys.stderr)
@@ -56,7 +70,7 @@ if mode == 'nonzero':
         for run in (iban.run, collision.run):
             for mode in ('error', 'error_success', 'missing', 'extra', 'duplicate', 'wrong',
                          'no_id', 'nonzero', 'clean_type', 'manifest_type', 'manifest_entry',
-                         'no_manifest', 'no_clean'):
+                         'no_manifest', 'no_clean', 'bad_json', 'no_lf', 'duplicate_key'):
                 with self.subTest(runner=run.__module__, mode=mode):
                     with self.assertRaises(ProducerFailure) as caught:
                         run(self.daemon(mode), self.policy, self.docs)
@@ -64,6 +78,7 @@ if mode == 'nonzero':
                     self.assertIsNone(caught.exception.__context__)
 
     def test_out_of_order_success_joins_by_id_and_keeps_unicode_separator(self):
+        self.docs[0]['text'] = 'left\u2028right'
         for run in (iban.run, collision.run):
             with self.subTest(runner=run.__module__):
                 responses = run(self.daemon('reverse'), self.policy, self.docs)
@@ -95,3 +110,23 @@ if mode == 'nonzero':
             with self.assertRaises(ProducerFailure):
                 family.main()
         self.assertFalse(output.exists())
+
+    def test_transport_limits_abort_without_payload_diagnostics(self):
+        for mode, limits, code in (
+            ('reverse', TransportLimits(request_bytes=16, chunk_bytes=16), 'input_limit'),
+            ('reverse', TransportLimits(stdout_bytes=16, chunk_bytes=16), 'output_limit'),
+            ('nonzero', TransportLimits(stderr_bytes=4, chunk_bytes=4), 'stderr_limit'),
+            ('deadline', TransportLimits(exchange_seconds=0.1), 'deadline'),
+        ):
+            with self.subTest(code=code):
+                with self.assertRaises(ProducerFailure) as caught:
+                    run_daemon_batch(self.daemon(mode), self.policy, self.docs, limits=limits)
+                self.assertEqual(caught.exception.code, code)
+                self.assertIsNone(caught.exception.__context__)
+
+    def test_phone_runner_joins_reordered_responses(self):
+        rows = [('fixture', 'first', {0}), ('fixture', 'second', {1, 2})]
+        self.assertEqual(phone.run(self.daemon('reverse'), rows, self.policy),
+                         [({0}, set(), {0}), ({1, 2}, set(), {1, 2})])
+        with self.assertRaises(ProducerFailure):
+            phone.run(self.daemon('error'), rows, self.policy)
