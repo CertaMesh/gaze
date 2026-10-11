@@ -7,6 +7,7 @@ scorer and response validator determine all reported metrics.
 import argparse
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 import agentic_layers as api
@@ -39,9 +40,18 @@ def main():
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--detector-root", required=True, type=Path)
     parser.add_argument("--policy", required=True, type=Path)
+    parser.add_argument("--binary-receipt", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
+    binding = json.loads(args.binary_receipt.read_text())
+    if (binding["binary_sha256"] != score.sha256_file(args.binary)
+            or binding["policy_sha256"] != score.sha256_file(args.policy)):
+        raise ValueError("binary/policy receipt does not match actual probe inputs")
+    revision = binding["revision"]
+    if subprocess.check_output(["git", "-C", str(args.detector_root), "diff", revision, "HEAD", "--",
+                                "crates", "Cargo.toml", "Cargo.lock"]):
+        raise ValueError("vocabulary checkout runtime differs from the receipt-bound binary source")
     rows = selected_rows("test")
     documents = [r.to_document() for r in rows]
     score.COMMITTED_SOURCE_ID_VOCABULARY = score.load_committed_source_id_vocabulary(args.detector_root)
@@ -72,7 +82,8 @@ def main():
     payload = {"schema_version": 1, "purpose": "Independent model-free pre-repair sensitivity; no gain claim",
                "generator_version": api.GENERATOR_VERSION,
                "generator_revision": score.git_metadata(root),
-               "detector_revision": score.git_metadata(args.detector_root),
+               "source_binding": binding,
+               "vocabulary_revision": score.git_metadata(args.detector_root),
                "binary_sha256": score.sha256_file(args.binary),
                "policy_sha256": score.sha256_file(args.policy),
                "selected_documents_sha256": hashlib.sha256(api.corpus_bytes(rows)).hexdigest(),

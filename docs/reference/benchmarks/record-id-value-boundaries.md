@@ -20,6 +20,13 @@ them adds false-positive bytes. Tests check exact UTF-8 gold boundaries,
 serialization round trips, presence of each connector/depth/line-break variant,
 disjoint partitions and canonical scorer sensitivity to each failure class.
 
+[Committed pre-repair probes](record-id-boundary-pre-fix-sensitivity.json) use
+the exact rules-only binary and policy from the earlier bound #773 measurement.
+The reproducible `check_record_id_boundaries.py` runner checks their receipt
+hashes and runtime-tree equivalence before running 54 canonical model-free
+probes. All five failures are visible in every family; these probes establish
+coverage sensitivity and do not claim benchmark gain.
+
 Unquoted sentence punctuation is not part of a repeat seed. Dotted examples
 include `AB.12.34.` followed by `AB.12.34`: the first occurrence's sentence
 period is excluded, while both internal periods remain gold. This mixed
