@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::ops::Range;
 
 use crate::normalize::NormalizedText;
@@ -5,6 +6,7 @@ use crate::resolver::{CandidatePool, ResolutionEvent, WholeCandidate};
 use crate::{Candidate, LocaleTag, RecognizerRegistry, Result};
 
 pub(super) struct WholePlan {
+    pub(super) family_emissions: BTreeMap<(usize, usize), crate::resolver::FamilyEmission>,
     pub(super) order: Vec<usize>,
     pub(super) evidence: super::occurrence::Segment,
     pub(super) primary: Vec<Candidate>,
@@ -34,6 +36,7 @@ pub(super) fn plan(
     let primary = registry.resolve_pool(&mut pool, &order, &normalized.text, locales);
     let mut consumed = vec![false; pool.originals().len()];
     let mut selections = Vec::new();
+    let mut family_emissions = BTreeMap::new();
     let primary = freeze(
         primary,
         &mut pool,
@@ -43,6 +46,7 @@ pub(super) fn plan(
         0..raw.len(),
         false,
         &mut selections,
+        &mut family_emissions,
     )?;
     let mut work = gaps(
         order.clone(),
@@ -65,6 +69,7 @@ pub(super) fn plan(
             gap.clone(),
             true,
             &mut selections,
+            &mut family_emissions,
         )?;
         if selected.is_empty() {
             return Err(super::clean_to_raw_mapping_error(
@@ -77,6 +82,7 @@ pub(super) fn plan(
     recovered.sort_by_key(|candidate| candidate.span.start);
     let events: std::sync::Arc<[ResolutionEvent]> = std::mem::take(&mut pool.events).into();
     Ok(WholePlan {
+        family_emissions,
         order,
         evidence: super::occurrence::Segment {
             originals: pool.take_originals(),
@@ -128,6 +134,7 @@ fn freeze(
     gap: Range<usize>,
     recovery: bool,
     selections: &mut Vec<super::occurrence::Selection>,
+    family_emissions: &mut BTreeMap<(usize, usize), crate::resolver::FamilyEmission>,
 ) -> Result<Vec<Candidate>> {
     let mut selected = Vec::with_capacity(nodes.len());
     let mut end = gap.start;
@@ -164,6 +171,9 @@ fn freeze(
             recovered: recovery,
             action: None,
         });
+        if let Some(emission) = node.family_emission {
+            family_emissions.insert((span.start, span.end), emission);
+        }
         selected.push(node.candidate.with_span(span));
     }
     Ok(selected)

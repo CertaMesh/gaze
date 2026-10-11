@@ -240,11 +240,30 @@ pub fn build_audit_query_sql(
     filter: &AuditFilter,
     present_columns: &PresentColumns,
 ) -> (String, Vec<Value>) {
-    let select_list = AUDIT_RESTRICTED_COLUMNS
+    build_redaction_query_sql(filter, present_columns, false)
+}
+
+pub(crate) fn build_entries_query_sql(present_columns: &PresentColumns) -> (String, Vec<Value>) {
+    build_redaction_query_sql(&AuditFilter::default(), present_columns, true)
+}
+
+fn build_redaction_query_sql(
+    filter: &AuditFilter,
+    present_columns: &PresentColumns,
+    include_private_sidecar: bool,
+) -> (String, Vec<Value>) {
+    let mut select_list = AUDIT_RESTRICTED_COLUMNS
         .iter()
         .map(|column| audit_select_expression(column, present_columns))
         .collect::<Vec<_>>()
         .join(", ");
+    if include_private_sidecar {
+        select_list.push_str(", ");
+        select_list.push_str(&audit_select_expression(
+            "backend_silently_dropped",
+            present_columns,
+        ));
+    }
     let mut sql = format!("SELECT {select_list} FROM redaction_log");
     let mut predicates = Predicates::default();
     let mut values = Vec::new();

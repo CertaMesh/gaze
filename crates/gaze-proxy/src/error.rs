@@ -1,5 +1,6 @@
 use std::fmt;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use http::StatusCode;
 
@@ -65,6 +66,10 @@ pub enum ProxyError {
     },
     #[error("daemon already running: pid {pid} ({pidfile})", pidfile = pidfile.display())]
     DaemonAlreadyRunning { pid: u32, pidfile: PathBuf },
+    /// Graceful termination did not complete within the configured timeout.
+    /// The live daemon retains its pidfile; the diagnostic carries no path or input.
+    #[error("daemon stop timed out after {timeout:?}: pid {pid}")]
+    DaemonStopTimeout { pid: u32, timeout: Duration },
     #[error("daemon is not running")]
     DaemonNotRunning,
     #[error("daemon pidfile stale: {pidfile}", pidfile = pidfile.display())]

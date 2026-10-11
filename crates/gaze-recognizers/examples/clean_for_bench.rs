@@ -1473,10 +1473,9 @@ mod tests {
     use gaze::{RawDocument, RecordMatchKind};
 
     #[test]
-    fn dictionary_switch_retains_the_warmed_baseline_cache() {
-        // Baseline-pinned guard: recreating/clearing the warmed recognizer hides
-        // this known cache defect. Update the expectation with the runtime repair
-        // and its fresh benchmark evidence, never to accommodate a harness reset.
+    fn dictionary_switch_protects_values_after_warming() {
+        // The same warmed recognizer must protect both case variants after the
+        // runtime repair. The adapter still warms before switching its mode.
         let request = Request {
             fixture_id: "dictionary-warm-bypass-guard".into(),
             locale_chain: vec!["global".into()],
@@ -1491,9 +1490,14 @@ mod tests {
         else {
             panic!("switch must complete");
         };
-        assert!(
-            response.manifest_spans.is_empty(),
-            "warmed baseline must expose the cache defect"
+        assert_eq!(
+            response
+                .manifest_spans
+                .iter()
+                .map(|span| (span.raw_start, span.raw_end))
+                .collect::<Vec<_>>(),
+            vec![(0, 10), (16, 26)],
+            "both configured values must be protected, leaving the benign twin raw"
         );
         assert!(response.restore.exact);
         assert_eq!(response.manifest_integrity.raw_value_mismatches, 0);

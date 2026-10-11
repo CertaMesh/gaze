@@ -63,8 +63,45 @@ pub(crate) struct ResolutionWork {
 pub(crate) struct WholeCandidate {
     pub(crate) candidate: Candidate,
     pub(crate) members: Vec<usize>,
+    /// All original evidence in this decision, including defeated rivals.
+    pub(crate) participants: Vec<usize>,
     pub(crate) node: usize,
     pub(crate) settlement: Settlement,
+    pub(crate) family_emission: Option<FamilyEmission>,
+}
+
+/// Why a family-level token was constructed, independent of the last overlap rung.
+#[derive(Clone, Debug)]
+pub(crate) struct FamilyEmission {
+    pub(crate) family: String,
+    pub(crate) reason: FamilyEmissionReason,
+    /// Indexes into this pool's immutable originals, never labels or synthetic IDs.
+    pub(crate) participants: Vec<usize>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FamilyEmissionReason {
+    PrecedenceTie,
+    NoAnchor,
+}
+
+impl FamilyEmission {
+    fn new(family: String, reason: FamilyEmissionReason, participants: Vec<usize>) -> Self {
+        let mut emission = Self {
+            family,
+            reason,
+            participants,
+        };
+        emission.participants.sort();
+        emission.participants.dedup();
+        emission
+    }
+
+    fn include(&mut self, participants: &[usize]) {
+        self.participants.extend_from_slice(participants);
+        self.participants.sort();
+        self.participants.dedup();
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -230,8 +267,10 @@ impl CandidatePool {
             let candidate = WholeCandidate {
                 candidate: self.originals[id].clone(),
                 members: vec![id],
+                participants: vec![id],
                 node: id,
                 settlement: Settlement::Open,
+                family_emission: None,
             };
             self.insert(&mut resolved, candidate, policy, anchor_ctx, mode);
         }
@@ -244,8 +283,17 @@ impl CandidatePool {
             resolved = resolved
                 .into_iter()
                 .map(|mut node| {
-                    node.candidate =
-                        apply_missing_anchor_fallback(node.candidate, node.settlement, policy, ctx);
+                    let (candidate, emission) = apply_missing_anchor_fallback(
+                        node.candidate,
+                        node.settlement,
+                        node.participants.clone(),
+                        policy,
+                        ctx,
+                    );
+                    node.candidate = candidate;
+                    if emission.is_some() {
+                        node.family_emission = emission;
+                    }
                     node
                 })
                 .collect();
@@ -280,28 +328,35 @@ impl CandidatePool {
         let result = self.next_node;
         self.next_node += 1;
         let mut removal = None;
-        let outcome = match arbitrate(
-            &held.candidate,
-            &candidate.candidate,
-            overlap,
-            policy,
-            anchor_ctx,
-            mode,
-        ) {
+        let outcome = match arbitrate(&held, &candidate, overlap, policy, anchor_ctx, mode) {
             Arbitration::Merge => {
                 held.members.extend(candidate.members);
+                held.participants.extend_from_slice(&candidate.participants);
+                if held.family_emission.is_none() {
+                    held.family_emission = candidate.family_emission;
+                }
+                if let Some(emission) = &mut held.family_emission {
+                    emission.include(&held.participants);
+                }
                 merge_same_span_same_class(&mut held.candidate, candidate.candidate);
                 PairOutcome::Merge
             }
             Arbitration::Family(tie) => {
                 held.members.extend(candidate.members);
-                held.candidate = *tie;
+                held.participants.extend(candidate.participants);
+                let (candidate, emission) = *tie;
+                held.candidate = candidate;
+                held.family_emission = Some(emission);
                 held.settlement = Settlement::CollisionPolicy;
                 removal = Some(ConflictTier::CollisionPolicy);
                 PairOutcome::Family
             }
             Arbitration::CandidateWins(tier) => {
                 let mut candidate = candidate;
+                candidate.participants.extend_from_slice(&held.participants);
+                if let Some(emission) = &mut candidate.family_emission {
+                    emission.include(&held.participants);
+                }
                 candidate
                     .candidate
                     .source_recognizer_ids
@@ -320,6 +375,10 @@ impl CandidatePool {
                 PairOutcome::Incoming(tier)
             }
             Arbitration::ExistingWins(tier) => {
+                held.participants.extend_from_slice(&candidate.participants);
+                if let Some(emission) = &mut held.family_emission {
+                    emission.include(&candidate.participants);
+                }
                 held.candidate
                     .source_recognizer_ids
                     .extend(candidate.candidate.source_recognizer_ids.iter().cloned());
@@ -542,7 +601,7 @@ enum Arbitration {
     Merge,
     /// Precedence tie inside one collision family: emit the family-level
     /// candidate in place of both rivals.
-    Family(Box<Candidate>),
+    Family(Box<(Candidate, FamilyEmission)>),
     /// `candidate` replaces `existing`; the tier names what decided it.
     CandidateWins(ConflictTier),
     /// `existing` keeps the slot; the tier names the rung that separated the
@@ -551,13 +610,15 @@ enum Arbitration {
 }
 
 fn arbitrate(
-    existing: &Candidate,
-    candidate: &Candidate,
+    existing_node: &WholeCandidate,
+    incoming_node: &WholeCandidate,
     overlap: Overlap,
     policy: &FamilyPolicyTable,
     anchor_ctx: Option<AnchorContext<'_>>,
     mode: ContainmentMode,
 ) -> Arbitration {
+    let existing = &existing_node.candidate;
+    let candidate = &incoming_node.candidate;
     // A same-class container covers every byte its enclosed candidate protected,
     // and adds more. Geometry settles this before family policy or the base ladder.
     if mode == ContainmentMode::Enclosing
@@ -573,7 +634,13 @@ fn arbitrate(
 
     // Exact-span family ties still collapse into one family token before the
     // same-class merge or base ladder.
-    if let Some(tie) = family_tie_candidate(candidate, existing, policy) {
+    if let Some(tie) = family_tie_candidate(
+        candidate,
+        existing,
+        &existing_node.participants,
+        &incoming_node.participants,
+        policy,
+    ) {
         return Arbitration::Family(Box::new(tie));
     }
     if overlap == Overlap::Exact && existing.class == candidate.class {
@@ -843,8 +910,10 @@ fn compare_base_ladder(candidate: &Candidate, existing: &Candidate) -> Option<Co
 fn family_tie_candidate(
     candidate: &Candidate,
     existing: &Candidate,
+    existing_participants: &[usize],
+    incoming_participants: &[usize],
     policy: &FamilyPolicyTable,
-) -> Option<Candidate> {
+) -> Option<(Candidate, FamilyEmission)> {
     let family = policy.precedence_tie_family(&candidate.recognizer_id, &existing.recognizer_id)?;
     let mut merged_sources = existing.merged_sources.clone();
     merged_sources.extend(candidate.merged_sources.iter().cloned());
@@ -852,7 +921,7 @@ fn family_tie_candidate(
     merged_sources.push(candidate.recognizer_id.clone());
     merged_sources.sort();
     merged_sources.dedup();
-    let source_recognizer_ids = existing
+    let source_recognizer_ids: Vec<_> = existing
         .source_recognizer_ids
         .iter()
         .chain(&candidate.source_recognizer_ids)
@@ -877,19 +946,37 @@ fn family_tie_candidate(
         ConflictTier::CollisionPolicy,
         merged_sources,
     );
+    let emission = FamilyEmission::new(
+        family.to_string(),
+        FamilyEmissionReason::PrecedenceTie,
+        existing_participants
+            .iter()
+            .chain(incoming_participants)
+            .copied()
+            .collect(),
+    );
     tied.source_recognizer_ids = source_recognizer_ids;
-    Some(tied.with_evidence(evidence))
+    Some((tied.with_evidence(evidence), emission))
 }
 
 fn apply_missing_anchor_fallback(
     candidate: Candidate,
     settlement: Settlement,
+    participants: Vec<usize>,
     policy: &FamilyPolicyTable,
     anchor_ctx: AnchorContext<'_>,
-) -> Candidate {
+) -> (Candidate, Option<FamilyEmission>) {
     match missing_anchor_family(&candidate, settlement, policy, anchor_ctx) {
-        Some(family) => family_fallback_candidate(candidate, family, ConflictTier::AnchoredContext),
-        None => candidate,
+        Some(family) => {
+            let (candidate, emission) = family_fallback_candidate(
+                candidate,
+                family,
+                participants,
+                ConflictTier::AnchoredContext,
+            );
+            (candidate, Some(emission))
+        }
+        None => (candidate, None),
     }
 }
 
@@ -941,8 +1028,9 @@ pub(crate) fn effective_view(
 fn family_fallback_candidate(
     candidate: Candidate,
     family: String,
+    participants: Vec<usize>,
     decided_by: ConflictTier,
-) -> Candidate {
+) -> (Candidate, FamilyEmission) {
     let original_recognizer_id = candidate.recognizer_id.clone();
     let mut merged_sources = candidate.merged_sources;
     if !merged_sources
@@ -965,8 +1053,9 @@ fn family_fallback_candidate(
         decided_by,
         merged_sources,
     );
+    let emission = FamilyEmission::new(family, FamilyEmissionReason::NoAnchor, participants);
     fallback.source_recognizer_ids = source_recognizer_ids;
-    fallback.with_evidence(evidence)
+    (fallback.with_evidence(evidence), emission)
 }
 
 #[cfg(test)]
@@ -1004,6 +1093,10 @@ fn remove_overlaps(
             replacing: winner.node,
             tier,
         });
+        winner.participants.extend_from_slice(&loser.participants);
+        if let Some(emission) = &mut winner.family_emission {
+            emission.include(&loser.participants);
+        }
         winner.candidate.merged_sources.push(loser.candidate.source);
         // Audit relabel only; `settlement` belongs to the winner and is
         // already correct for the pair it just won.
@@ -2647,8 +2740,10 @@ mod recovery_event_tests {
                             vec![],
                         ),
                         members: vec![id as usize],
+                        participants: vec![id as usize],
                         node: id as usize,
                         settlement: Settlement::Open,
+                        family_emission: None,
                     }
                 })
                 .collect()
@@ -2676,8 +2771,59 @@ mod recovery_event_tests {
         WholeCandidate {
             candidate: pool.originals[id].clone(),
             members: vec![id],
+            participants: vec![id],
             node: id,
             settlement: Settlement::Open,
+            family_emission: None,
+        }
+    }
+
+    #[test]
+    fn no_anchor_emission_survives_a_later_win_and_drops_after_defeat() {
+        for foreign_priority in [0, 20] {
+            let mut alpha = counter(0..8, PiiClass::Custom("alpha".into()), "alpha");
+            alpha.priority = 10;
+            let mut foreign = counter(4..12, PiiClass::Custom("foreign".into()), "foreign");
+            foreign.priority = foreign_priority;
+            let mut pool = CandidatePool::new(vec![alpha.clone(), foreign]);
+            let (candidate, emission) = family_fallback_candidate(
+                alpha,
+                "documents".into(),
+                vec![0],
+                ConflictTier::AnchoredContext,
+            );
+            let mut nodes = ResolvedSet::default();
+            nodes.push(WholeCandidate {
+                candidate,
+                members: vec![0],
+                participants: vec![0],
+                node: 0,
+                settlement: Settlement::Open,
+                family_emission: Some(emission),
+            });
+            let incoming = whole(&pool, 1);
+            pool.insert(
+                &mut nodes,
+                incoming,
+                &FamilyPolicyTable::EMPTY,
+                None,
+                ContainmentMode::Enclosing,
+            );
+            let selected = nodes.into_vec();
+            assert_eq!(selected.len(), 1);
+            assert_eq!(selected[0].candidate.decided_by, ConflictTier::RulePriority);
+            if foreign_priority == 0 {
+                let emission = selected[0]
+                    .family_emission
+                    .as_ref()
+                    .expect("surviving family provenance");
+                assert_eq!(emission.reason, FamilyEmissionReason::NoAnchor);
+                assert_eq!(emission.family, "documents");
+                assert_eq!(emission.participants, [0, 1]);
+            } else {
+                assert_eq!(selected[0].candidate.recognizer_id, "foreign");
+                assert!(selected[0].family_emission.is_none());
+            }
         }
     }
 
@@ -2789,15 +2935,19 @@ mod recovery_event_tests {
             nodes.push(WholeCandidate {
                 candidate: pool.originals[id].clone(),
                 members: vec![id],
+                participants: vec![id],
                 node: id,
                 settlement: Settlement::Open,
+                family_emission: None,
             });
         }
         let incoming = WholeCandidate {
             candidate: pool.originals[2].clone(),
             members: vec![2],
+            participants: vec![2],
             node: 2,
             settlement: Settlement::Open,
+            family_emission: None,
         };
         pool.insert(
             &mut nodes,

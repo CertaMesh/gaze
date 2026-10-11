@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Family-level tokens retain their ambiguity reason and original participant
+  identities after later overlap decisions. Primary and recovered audit entries
+  no longer infer family provenance from the last conflict tier or source labels;
+  detection, token emission and restore behavior are unchanged.
+
+- `SqliteLogger::entries()` now retains all eleven stored provenance fields
+  through the same metadata row decoder as `query()`. Typed reads reject negative
+  restore counters and phase masks outside `u32`; raw queries retain their signed
+  values and unknown enum/JSON spellings. The private backend routing sidecar
+  remains excluded from audit query and export output.
+
+- Proxy daemon graceful-stop timeouts now return `DaemonStopTimeout { pid, timeout }`
+  instead of `DaemonAlreadyRunning`. Restart preserves stop failures and starts
+  only after a successful stop or a not-running result; timeout keeps the live
+  daemon and its pidfile intact.
+
 - Supplemental OPF and NER benchmark scorers now match strict spans within
   each fixture before aggregating locale counts. Wrong-document predictions
   can no longer earn true positives. Future runs retain value-free per-fixture
@@ -55,11 +71,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Protect explicitly labelled customer, employee and person/member record identifiers
   in English/German prose, JSON and logs with exact reversible value capture.
   Generic record, order, invoice, issue, build and tracking IDs remain outside these rules.
+
+- Dictionary caches now distinguish compilation modes and exact ordered terms.
+  Enabling Unicode matching after warming a record dictionary no longer misses
+  configured values; term-order changes retain correct provenance.
+
 - Direct Anthropic proxy readiness now requires the original adapter allocation.
   Replacing or removing it from `ProxyConfig::adapters`, including a same-origin
   replacement, returns `ProxyError::DirectAdapterMismatch` before serving.
   Runtime settings and the codec come from one resolved adapter; compatibility
   constructors retain their frozen defaults.
+
 - Custom recognizers returning NaN or infinite confidence scores now fail closed
   with a sanitized `DetectError::Backend` (`invalid_score`) before score filtering.
   Finite negative scores still fall below the existing 0.0 admission floor.
