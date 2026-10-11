@@ -2,9 +2,11 @@
 import copy
 import json
 import unittest
+from pathlib import Path
 
 import agentic_layers as gate
 import dictionary_sequences as sequence
+import gaze_bench_score as score
 from test_agentic_layers import _scorecard
 
 
@@ -30,6 +32,15 @@ def card(leak=100):
 
 
 class GeneratorTests(unittest.TestCase):
+    def test_every_required_contract_covers_the_generated_labels(self):
+        docs = sequence.documents(sequence.generate(), "switch")
+        for version in (1, 2, 4):
+            contract = (score.SCORED_LABEL_CONTRACT_V1 if version == 1 else
+                        score.load_scored_label_contract(sequence.ROOT /
+                            f"docs/reference/benchmarks/scored-labels-v{version}.json"))
+            selected = score.apply_scored_label_contract(docs, contract)
+            self.assertEqual(sum(len(d.spans) for d in selected), sum(len(d.spans) for d in docs))
+
     def test_seed_and_partition_are_reproducible_and_independent(self):
         cases = sequence.generate()
         self.assertEqual(cases, sequence.generate())

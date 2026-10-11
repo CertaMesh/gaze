@@ -85,7 +85,7 @@ def generate(seed=SEED, partition="published"):
                             parts.extend([token, "; "])
                             offset = end + 2
                             if positive:
-                                gold.append(score.Span(start, end, "GIVENNAME"))
+                                gold.append(score.Span(start, end, "FIRSTNAME"))
                                 if token in terms:
                                     literal.append(gold[-1])
                     parts.append(suffix)
