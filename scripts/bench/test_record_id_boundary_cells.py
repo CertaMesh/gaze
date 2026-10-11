@@ -1,6 +1,7 @@
 """Independent raw field-boundary coverage, including canonical scorer sensitivity."""
 import hashlib
 import json
+import re
 import unittest
 
 import agentic_layers as api
@@ -65,6 +66,12 @@ class RecordIdBoundaryTests(unittest.TestCase):
                             if row.gold and relation != "public":
                                 self.assertLess(row.gold[0].end, row.gold[1].start)
                                 self.assertNotEqual(row.gold[0].value, row.gold[1].value)
+                                gap = row.text.encode()[row.gold[0].end:row.gold[1].start].decode()
+                                expected = {"colon": ": ", "equals": "=", "is": " is ",
+                                            "ist": " ist ", "lautet": " lautet ", "space": " "}[connector]
+                                self.assertTrue(gap.endswith(expected), gap)
+                                if connector == "space":
+                                    self.assertFalse(re.search(r"[:=]|\b(?:is|ist|lautet)\b", gap, re.I))
                             if relation == "public":
                                 self.assertTrue(any(d.label == "public_column" for d in row.decoys))
 
@@ -83,6 +90,10 @@ class RecordIdBoundaryTests(unittest.TestCase):
                                 payload = json.loads(payload["payload"])
                             value = next(iter(payload["arguments"].values()))
                             raw = row.gold[0].value if row.gold else row.decoys[0].value
+                            span = row.gold[0] if row.gold else row.decoys[0]
+                            prefix = row.text.encode()[:span.start]
+                            self.assertEqual(prefix[-1:], b'"')
+                            self.assertEqual(len(prefix[:-1]) - len(prefix[:-1].rstrip(b"\\")), (1 << depth) - 1)
                             for _ in range(depth + 1):
                                 raw = json.loads('"' + raw + '"')
                             self.assertEqual(raw, value)
@@ -105,6 +116,8 @@ class RecordIdBoundaryTests(unittest.TestCase):
                         for row in selected:
                             spans = row.gold if row.gold else row.decoys
                             self.assertTrue(spans[0].value.startswith("\n" if newline == "lf" else "\r\n"))
+                            scalar = row.gold[-1] if row.gold else row.decoys[0]
+                            self.assertEqual(row.text.encode()[scalar.start - 1:scalar.start], b'"')
                             if row.gold:
                                 self.assertTrue(any(d.label == "public_column" for d in row.decoys))
                                 self.assertLess(row.gold[-1].end, row.decoys[-1].start)
