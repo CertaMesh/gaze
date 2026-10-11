@@ -43,6 +43,7 @@
     "gaze-pii::contracts",
     "gaze-pii::custom_class_validation",
     "gaze-pii::evidence_containment",
+    "gaze-pii::family_emission",
     "gaze-pii::final_safety_admission",
     "gaze-pii::house_number_corroboration",
     "gaze-pii::manifest_sweep",
