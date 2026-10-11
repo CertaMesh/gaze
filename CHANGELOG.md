@@ -53,6 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Added an opt-in custom-policy benchmark arm for mixed collision-family
+  precedence, with generated identifier positives and benign no-tie,
+  same-variant and missing-membership controls. The shipped-default benchmark
+  population and headline remain unchanged.
+
 - `CorePipelineConfig` now resolves custom rulepack dictionaries through the
   policy input loader, and `CorePipeline::pseudonymize_text` passes their terms
   on every call. Unreadable `terms_file` inputs fail with a typed
