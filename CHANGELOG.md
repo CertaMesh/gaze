@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Direct Anthropic proxy readiness now requires the original adapter allocation.
+  Replacing or removing it from `ProxyConfig::adapters`, including a same-origin
+  replacement, returns `ProxyError::DirectAdapterMismatch` before serving.
+  Runtime settings and the codec come from one resolved adapter; compatibility
+  constructors retain their frozen defaults.
+
 - Tax and government identifiers cover additional cue connectors and grouped
   layouts, including slash Steuernummer, separated SSN, Swiss AHV and national
   identity values. Full English tax-identification fields preserve trusted
