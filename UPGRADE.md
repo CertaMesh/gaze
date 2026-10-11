@@ -35,6 +35,21 @@ Run `gaze setup --force` to regenerate an existing policy with credential
 protection, or add `"secrets"` to `[policy.rulepacks].bundled` in your policy.
 Existing policies keep their selected rulepacks until you update them.
 
+### Additive: typed proxy daemon stop timeout
+
+`gaze_proxy::ProxyError` adds `DaemonStopTimeout { pid: u32, timeout:
+std::time::Duration }`. Handle this variant when a graceful stop exceeds its
+configured timeout. `DaemonAlreadyRunning` remains the start-conflict error;
+`DaemonNotRunning` remains distinct. The timeout diagnostic contains only the
+PID and duration.
+
+`daemon::restart` and `gaze proxy restart` now preserve any stop failure except
+`DaemonNotRunning` and do not attempt a new start after such a failure. A
+graceful timeout leaves the live daemon and its pidfile intact. Resolve the
+stop failure before retrying, or explicitly choose `--force` when appropriate.
+Force-stop semantics and pidfile ownership fencing remain unchanged. Detection
+and restore behavior are unchanged.
+
 ### Action required: finite custom recognizer scores
 
 Custom recognizers must emit finite `Candidate.score` values. NaN, positive
