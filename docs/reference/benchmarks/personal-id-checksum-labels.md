@@ -25,7 +25,7 @@ identical hashes. Deliberately reverting one Aadhaar prose cell to benign fails
 the pinned corpus and cell-diff tests; restoring the source makes them pass.
 
 The existing personal national-ID checksum twins outside this coverage slice
-already carry gold. CNPJ company identifiers and ETH-address checksum decoys
+already carry gold. CNPJ company-ID checksum decoys and ETH-address checksum decoys
 remain benign. Public `caseId`, account-nested order/ticket references and
 `customer` / `batch_reference` coverage controls also remain benign. Inventory
 and batch reference twins keep their original labels even when their numeric

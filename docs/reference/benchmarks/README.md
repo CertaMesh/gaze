@@ -1964,16 +1964,17 @@ The preserved phone and cued-cell prose above describes the historical
 [v8 measurements](agentic-adjacency-v8-history.json), and the release
 statement of the CRLF and plate section the historical
 [v9 measurements](agentic-adjacency-v9-history.json). Their links lead to this
-current comparison, which has since been re-measured on v17 below.
+current comparison, which has since been re-measured on v18 below.
 
-The release rows below use generator v17's test partition and each release's
-setup policy, so they include the v5 to v17 cells (labelled lookalikes, address
+The release rows below use generator v18's test partition and each release's
+setup policy, so they include the v5 to v18 cells (labelled lookalikes, address
 blocks, phone shapes, cued ages, birth dates, short cards, postcodes, CRLF
 blocks and German plates, URLs in structured text, tax and government IDs,
 ZIP compression lookalikes, personal age wording and the shipped-class
-identifier, credential, name and phone cells, plus person-linked CRM/HR IDs, numeric JSON ID scalars, benign JSON keywords and whole-value field ownership).
+identifier, credential, name and phone cells, plus person-linked CRM/HR IDs, numeric JSON ID scalars, benign JSON keywords and whole-value field ownership, with labelled checksum-invalid Aadhaar/NIR now scored gold).
 The table is rendered from
-the [v17 ledger](agentic-adjacency-v17-history.json). The earlier
+the [v18 ledger](agentic-adjacency-v18-history.json). The earlier
+[v17 ledger](agentic-adjacency-v17-history.json) on corpus `8c62d499…`,
 [v16 ledger](agentic-adjacency-v16-history.json) on corpus `d6dac67a…`,
 [v15 ledger](agentic-adjacency-v15-history.json) on corpus `0a5f6576…`,
 [v13 ledger](agentic-adjacency-v13-history.json) on corpus `db3c3f36…`,
@@ -1990,7 +1991,7 @@ retained as historical data and do not feed this table.
 Record the past-release `agentic_layers.py measure` outputs with
 `render_agentic_adjacency_doc.py --record`, then render this table from its
 committed ledger. Do not edit the rows by hand. The renderer pins the
-generator version, so a later generator leaves these rows bound to v17 until
+generator version, so a later generator leaves these rows bound to v18 until
 they are re-measured.
 
 Generator v12 adds 80 postcode and age positives and 80 benign counterweights
@@ -2080,7 +2081,7 @@ The v16 corpus and contract remain frozen. Numeric repeat variants contain at
 least six digits; short repeats, typographic quotes and CSV linkage remain
 uncharacterized. These additions change the measurement, not runtime detection.
 
-All displayed release arms were re-measured on v17 using their own tagged code.
+For the v17 publication, all displayed release arms were re-measured using their own tagged code.
 [Bound observation replays](record-id-ownership-v17-contract-replay.json) verify identical
 A/D/R metrics under primary contracts v1, v2 and v4: these generated layers use
 the same fully scored agentic contract under each. Layer C inputs and its
@@ -2092,6 +2093,18 @@ Generator v14 scorecards, observation records, ledger and frozen contract are
 retired, retaining v15 as the previous version. Externally bound v4–v13 history
 and consumers remain untouched; their migration is separate contract-pruning
 work. The v14 corpus byte pin remains tested.
+
+Generator v18 corrects the explicitly labelled checksum-invalid Aadhaar and NIR
+coverage twins: a mistyped personal national ID remains PII. In each partition,
+60 documents move from benign D to gold A, adding 810 gold bytes; no inserted
+value or text changes. CNPJ company-ID and ETH-address decoys, public case/order/
+ticket references and customer-nested batch references remain benign. The
+[exact cell diff](personal-id-checksum-v18-cell-diff.json) is asserted by tests,
+and the v17 corpus and contract reconstruct byte-for-byte. The stricter scoring
+adds leaked bytes for every displayed release; any D FP reduction is a corpus
+correction, not a runtime precision gain. Fresh tag-bound v18 measurements and
+[canonical v1/v2/v4 replay](personal-id-checksum-v18-contract-replay.json) underpin
+the table below. [Ownership rationale](personal-id-checksum-labels.md).
 
 <!-- BEGIN GENERATED: agentic-adjacency -->
 
