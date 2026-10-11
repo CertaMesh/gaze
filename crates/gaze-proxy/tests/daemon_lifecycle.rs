@@ -130,11 +130,9 @@ impl Drop for OwnedChild {
 
 #[cfg(unix)]
 fn assert_stop_timeout(err: gaze_proxy::ProxyError, pid: u32, timeout: Duration) {
-    // Check the public error identity and payload even before the new variant exists.
-    assert_eq!(
-        format!("{err:?}"),
-        format!("DaemonStopTimeout {{ pid: {pid}, timeout: {timeout:?} }}")
-    );
+    assert!(matches!(err, gaze_proxy::ProxyError::DaemonStopTimeout {
+        pid: found_pid, timeout: found_timeout,
+    } if found_pid == pid && found_timeout == timeout));
 }
 
 #[cfg(unix)]
@@ -163,7 +161,8 @@ fn restart_propagates_stop_timeout_without_starting() {
         StartOptions::new(paths.clone(), DaemonConfig::default()),
         timeout,
         false,
-    ).unwrap_err();
+    )
+    .unwrap_err();
     assert_stop_timeout(err, child.0.id(), timeout);
     assert!(child.0.try_wait().unwrap().is_none());
     assert_eq!(std::fs::read(&paths.pidfile).unwrap(), record);

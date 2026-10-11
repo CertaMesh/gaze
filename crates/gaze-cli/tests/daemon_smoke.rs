@@ -2221,8 +2221,10 @@ fn isolated_proxy_paths(home: &Path) -> gaze_proxy::daemon::DaemonPaths {
     let (data, config) = (home.join(".local/share/gaze"), home.join(".config/gaze"));
     fs::create_dir_all(&data).unwrap();
     gaze_proxy::daemon::DaemonPaths::new(
-        data.join("proxy.pid"), config.join("proxy.toml"),
-        data.join("proxy.log"), data.join("proxy-stderr.log"),
+        data.join("proxy.pid"),
+        config.join("proxy.toml"),
+        data.join("proxy.log"),
+        data.join("proxy-stderr.log"),
     )
 }
 
@@ -2232,20 +2234,34 @@ fn isolated_proxy_paths(home: &Path) -> gaze_proxy::daemon::DaemonPaths {
 fn proxy_stop_and_restart_report_timeout_and_preserve_live_owner() {
     let home = tempdir().unwrap();
     let paths = isolated_proxy_paths(home.path());
-    let mut child = TermIgnoringChild(Command::new("/bin/sh")
-        .args(["-c", "trap '' TERM; printf 'ready\\n'; exec sleep 120"])
-        .stdout(Stdio::piped()).spawn().unwrap());
+    let mut child = TermIgnoringChild(
+        Command::new("/bin/sh")
+            .args(["-c", "trap '' TERM; printf 'ready\\n'; exec sleep 120"])
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
     let mut ready = String::new();
-    std::io::BufReader::new(child.0.stdout.take().unwrap()).read_line(&mut ready).unwrap();
+    std::io::BufReader::new(child.0.stdout.take().unwrap())
+        .read_line(&mut ready)
+        .unwrap();
     assert_eq!(ready, "ready\n");
     let record = format!("{}\n", child.0.id());
     fs::write(&paths.pidfile, &record).unwrap();
     for verb in ["stop", "restart"] {
         let output = gaze_with_home(home.path())
-            .args(["proxy", verb, "--timeout", "0s"]).output().unwrap();
-        assert_eq!(output.status.code(), Some(2));
+            .args(["proxy", verb, "--timeout", "0s"])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(7));
         let diagnostic = String::from_utf8_lossy(&output.stderr);
-        assert!(diagnostic.contains(&format!("daemon stop timed out after 0ns: pid {}", child.0.id())), "{diagnostic}");
+        assert!(
+            diagnostic.contains(&format!(
+                "daemon stop timed out after 0ns: pid {}",
+                child.0.id()
+            )),
+            "{diagnostic}"
+        );
         assert!(child.0.try_wait().unwrap().is_none());
         assert_eq!(fs::read_to_string(&paths.pidfile).unwrap(), record);
         assert!(!paths.config.exists());
@@ -2262,13 +2278,26 @@ fn proxy_restart_starts_when_not_running() {
     let mut config = gaze_proxy::daemon::DaemonConfig::default();
     config.bind = unused_local_addr();
     gaze_proxy::daemon::write_config(&paths, &config).unwrap();
-    let _guard = DaemonGuard { home: home.path().to_path_buf() };
-    let output = gaze_with_home(home.path()).args(["proxy", "restart"]).output().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let _guard = DaemonGuard {
+        home: home.path().to_path_buf(),
+    };
+    let output = gaze_with_home(home.path())
+        .args(["proxy", "restart"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let pid: u32 = stdout.split_once("gaze-proxy restarted (pid=")
+    let pid: u32 = stdout
+        .split_once("gaze-proxy restarted (pid=")
         .and_then(|(_, rest)| rest.split_once(','))
-        .unwrap().0.parse().unwrap();
+        .unwrap()
+        .0
+        .parse()
+        .unwrap();
     wait_until_serving(config.bind, || daemon_exited(pid, home.path()));
     assert_eq!(daemon_pid(home.path()), Some(pid));
 }

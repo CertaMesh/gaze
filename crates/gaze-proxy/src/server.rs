@@ -3267,6 +3267,7 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::Pipeline { .. } => "Pipeline",
         ProxyError::Server { .. } => "Server",
         ProxyError::DaemonAlreadyRunning { .. } => "DaemonAlreadyRunning",
+        ProxyError::DaemonStopTimeout { .. } => "DaemonStopTimeout",
         ProxyError::DaemonNotRunning => "DaemonNotRunning",
         ProxyError::DaemonPidfileStale { .. } => "DaemonPidfileStale",
         ProxyError::DaemonIo { .. } => "DaemonIo",
