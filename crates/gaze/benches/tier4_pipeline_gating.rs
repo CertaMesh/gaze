@@ -39,6 +39,7 @@ use tier4_recall::{EmailDetector, SlowSafetyNet};
 
 fn main() {
     tier4_recall::assert_required_positive();
+    tier4_recall::assert_observer_skips_preserve_semantics();
     let corpus = corpus();
     let baseline = run_config("baseline", PipelineOptimizationConfig::default(), &corpus);
     let skip_class = run_config(
@@ -109,7 +110,7 @@ fn run_config(
             .expect("clean");
         assert_eq!(
             report.stats.suspect_count, 0,
-            "recall-preserving empty report"
+            "benign timing corpus must have no suspects"
         );
     }
     BenchResult {

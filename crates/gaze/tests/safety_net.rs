@@ -2493,3 +2493,8 @@ mod tier4_recall;
 fn tier4_gating_preserves_required_positive() {
     tier4_recall::assert_required_positive();
 }
+
+#[test]
+fn tier4_observer_skips_preserve_benign_semantics() {
+    tier4_recall::assert_observer_skips_preserve_semantics();
+}

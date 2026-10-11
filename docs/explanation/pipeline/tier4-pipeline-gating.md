@@ -61,5 +61,16 @@ Historical prefix cache keystroke-style bench (unsafe reuse, now disabled):
 The historical prefix savings above do not apply to the current runtime. The
 current benchmark requires equal detector bytes with the flag on and off.
 
-The bench asserts zero SafetyNet suspects for every config, preserving the
-observer-mode recall baseline for the synthetic fixture set.
+The timed corpus is benign and has zero SafetyNet suspects. Before timing,
+the bench separately requires a deterministic positive: a synthetic residual
+must be protected under `Redact` and `Resolve`, with the same suspect count and
+protection outcome in baseline and gated configurations. `Resolve` must restore
+exactly. Benign observer fixtures separately prove the intended skips retain
+protection, restoration and report semantics.
+
+These proofs also run as `tier4_gating_preserves_required_positive` and
+`tier4_observer_skips_preserve_benign_semantics` in the `safety_net` integration
+test binary. CI executes that binary in the runtime workspace shard
+([roster](../../../scripts/ci/test-shards.json),
+[workflow](../../../.github/workflows/test.yml)). The timing target has
+`harness = false`, so ordinary workspace tests rely on these shared proofs.
