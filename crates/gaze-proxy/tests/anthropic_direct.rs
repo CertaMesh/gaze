@@ -465,6 +465,34 @@ fn sdk_client_request(
         .json(&sdk_request(stream))
 }
 
+#[tokio::test]
+async fn same_origin_adapter_replacement_fails_readiness_before_serving() {
+    let upstream = spawn_upstream().await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let resolver_called = Arc::new(AtomicBool::new(false));
+    let original = AnthropicAdapter::builder(upstream.origin.clone())
+        .allow_beta("tools-2025-01-01")
+        .unwrap()
+        .principal_resolver(Arc::new(RecordingResolver {
+            called: Arc::clone(&resolver_called),
+        }))
+        .build()
+        .unwrap();
+    let mut config = ProxyConfig::anthropic_direct(listener.local_addr().unwrap(), original);
+    // A default-deny replacement must never inherit the retained adapter's permissions.
+    config.adapters[0] = Arc::new(AnthropicAdapter::new(upstream.origin.clone()));
+    let result = tokio::time::timeout(
+        Duration::from_secs(1),
+        gaze_proxy::serve_with_listener(config, Arc::new(email_pipeline()), listener),
+    )
+    .await
+    .expect("replacement must fail readiness before accepting any request body");
+    assert!(result.is_err(), "replacement must be a readiness error");
+    assert!(!resolver_called.load(Ordering::SeqCst));
+    assert_eq!(upstream.connections.load(Ordering::SeqCst), 0);
+    assert!(upstream.captures.lock().await.is_empty());
+}
+
 #[test]
 fn direct_constructor_and_continuity_builder_defaults_are_pinned() {
     assert_eq!(DEFAULT_ANTHROPIC_UPSTREAM, "https://api.anthropic.com");
