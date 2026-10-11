@@ -839,12 +839,43 @@ fn field_value_char(ch: char) -> bool {
 
 fn assignment_starts(rest: &str) -> bool {
     static FIELD: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    FIELD
+    if FIELD
         .get_or_init(|| {
             Regex::new(r"\A[\p{L}_][\p{L}\p{N}\p{M}_.-]*[ \t\u{00A0}\u{202F}]*[:=]")
                 .expect("static assignment syntax")
         })
         .is_match(rest)
+    {
+        return true;
+    }
+    // Human labels may have several words; the terminal field noun supplies
+    // their semantics. Case and whitespace alone never terminate a value.
+    static PHRASE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let Some(caps) = PHRASE.get_or_init(|| {
+        Regex::new(r"\A([\p{L}\p{M}]+(?:[ \t\u{00A0}\u{202F}]+[\p{L}\p{M}-]+)+)[ \t\u{00A0}\u{202F}]*[:=]")
+            .expect("static worded assignment syntax")
+    }).captures(rest) else { return false; };
+    let label = caps.get(1).expect("assignment label capture").as_str();
+    matches!(
+        label
+            .split(|ch: char| ch.is_whitespace() || ch == '-')
+            .next_back()
+            .unwrap_or("")
+            .to_uppercase()
+            .as_str(),
+        "ID" | "NUMBER"
+            | "NUMMER"
+            | "NO"
+            | "NR"
+            | "KEY"
+            | "CODE"
+            | "REFERENCE"
+            | "DATE"
+            | "DATUM"
+            | "VALUE"
+            | "WERT"
+            | "VERSION"
+    )
 }
 
 fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
