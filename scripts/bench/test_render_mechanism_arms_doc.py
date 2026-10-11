@@ -87,8 +87,8 @@ def _released(ledger):
     """
     shown = copy.deepcopy(ledger)
     for entry in shown["mechanisms"]:
-        for measurement in entry["measurements"]:
-            measurement["release"] = "v0.15.0"
+        for index, measurement in enumerate(entry["measurements"]):
+            measurement["release"] = f"v0.15.{index}"
     return shown
 
 
@@ -239,6 +239,22 @@ class MechanismArmsTest(unittest.TestCase):
                 raise OSError("synthetic second copy failure")
             return real_copy(source, target, *args, **kwargs)
         with mock.patch.object(shutil, "copyfile", side_effect=fail_second):
+            self.assert_refusal_preserves(fixture, ledger, lambda: fixture.record(ledger), OSError)
+
+    def test_same_target_second_publish_failure_restores_ledger_and_evidence(self):
+        fixture = self.fresh()
+        ledger = mech.empty_ledger()
+        fixture.record(ledger)
+        self.rewrite_runs(fixture)
+        real_replace = mech.os.replace
+        calls = 0
+        def fail_second(source, target):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("synthetic second publish failure")
+            return real_replace(source, target)
+        with mock.patch.object(mech.os, "replace", side_effect=fail_second):
             self.assert_refusal_preserves(fixture, ledger, lambda: fixture.record(ledger), OSError)
 
     def test_duplicate_release_targets_are_rejected_on_load_and_render(self):
@@ -471,7 +487,8 @@ class MechanismArmsTest(unittest.TestCase):
         for entry in ledger["mechanisms"]:
             title = entry["title"]
             self.assertEqual(
-                body.count(f"| {title} | v0.15.0 |"),
+                sum(body.count(f"| {title} | v0.15.{index} |")
+                    for index in range(len(entry["measurements"]))),
                 4 * len(entry["measurements"]),
                 title,
             )

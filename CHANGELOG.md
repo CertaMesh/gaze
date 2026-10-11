@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Mechanism benchmark recording now rejects conflicting release revisions and
+  evidence filename aliases before publication. Failed validation or copying
+  preserves the ledger and its pinned observation records; summary and detail
+  tables use the same unambiguous measurement target.
+
 - Enumeration proof scripts now reject failed daemon batches before scoring:
   bounded transport, checked child exit, exact session IDs, LF framing and
   validated successful response shapes. Matching refusals can no longer

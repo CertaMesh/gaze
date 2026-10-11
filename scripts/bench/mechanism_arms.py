@@ -17,12 +17,14 @@ only adds.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
+import tempfile
 import tomllib
 from collections import Counter
 from pathlib import Path
@@ -424,49 +426,92 @@ def record_measurement(
     if set(arms) != {"base-v2", "candidate-v2", "base-v1", "candidate-v1"}:
         raise MechanismError("record needs base-v2, candidate-v2, base-v1 and candidate-v1")
     pair = check_pair(arms, delta)
+    validate(ledger, root)
+    indexes = _identity_index(ledger, root)
+    key = target_key({"release": release, "revision": pair["revision"]})
+    previous = indexes.get(mechanism, {}).get(key)
+    if previous is not None and previous["revision"] != pair["revision"]:
+        raise MechanismError(f"{mechanism}: release {release} already records another revision")
     crates_tree = crates_tree or git_crates_tree(pair["revision"])
-    evidence_dir.mkdir(parents=True, exist_ok=True)
-    stem = f"{mechanism}-{release or pair['revision'][:12]}"
-    files = {}
-    for arm in ("base", "candidate"):
-        target = evidence_dir / f"{stem}-{arm}.jsonl.gz"
-        shutil.copyfile(arms[f"{arm}-v2"][1], target)
-        files[arm] = {"file": target.relative_to(root).as_posix(), "sha256": sha256(target)}
-    derived = derive(evidence_dir / f"{stem}-base.jsonl.gz", evidence_dir / f"{stem}-candidate.jsonl.gz")
-    disagreeing = sorted(key for key, value in pair.items() if derived[key] != value)
-    if disagreeing:
-        raise MechanismError(f"the committed records re-derive other {disagreeing} than the runs")
-    measurement = {
-        "release": release,
-        "records": files,
-        **derived,
-        "attested": {
-            "binary_sha256": sha256(binary),
-            "crates_tree": crates_tree,
-            "machine": machine,
-            "note": ATTESTED_NOTE,
-        },
-    }
-    entry = next((item for item in ledger["mechanisms"] if item["id"] == mechanism), None)
+    candidate = copy.deepcopy(ledger)
+    entry = next((item for item in candidate["mechanisms"] if item["id"] == mechanism), None)
     delta_row = {"file": delta.relative_to(root).as_posix(), "sha256": sha256(delta)}
     if entry is None:
         entry = {"id": mechanism, "title": title, "added_in": added_in,
                  "policy_delta": delta_row, "measurements": []}
-        ledger["mechanisms"].append(entry)
+        candidate["mechanisms"].append(entry)
     elif entry["policy_delta"] != delta_row or entry["added_in"] != added_in:
         raise MechanismError(f"{mechanism} is already recorded with another delta or added_in")
-    # How it ships changes with a default flip; the newest record says so.
     entry["shipped"] = shipped
     if latency is not None:
         entry["latency"] = {
             "file": latency.resolve().relative_to(root).as_posix(), "sha256": sha256(latency)
         }
-    entry["measurements"] = [
-        item for item in entry["measurements"]
-        if (item["release"], item["revision"]) != (release, pair["revision"])
-    ] + [measurement]
-    validate(ledger, root)
+    stem = f"{mechanism}-{release or pair['revision'][:12]}"
+    targets = {arm: evidence_dir / f"{stem}-{arm}.jsonl.gz" for arm in ("base", "candidate")}
+    # Resolve paths before copying; evidence must stay under the repository root.
+    for target in targets.values():
+        target.relative_to(root)
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".mechanism-record-", dir=evidence_dir) as directory:
+        staging = Path(directory)
+        staged = {}
+        files = {}
+        for arm, target in targets.items():
+            path = staging / target.name
+            shutil.copyfile(arms[f"{arm}-v2"][1], path)
+            staged[target] = path
+            files[arm] = {"file": target.relative_to(root).as_posix(), "sha256": sha256(path)}
+        derived = derive(staged[targets["base"]], staged[targets["candidate"]])
+        disagreeing = sorted(key for key, value in pair.items() if derived[key] != value)
+        if disagreeing:
+            raise MechanismError(f"the committed records re-derive other {disagreeing} than the runs")
+        measurement = {
+            "release": release, "records": files, **derived,
+            "attested": {
+                "binary_sha256": sha256(binary), "crates_tree": crates_tree,
+                "machine": machine, "note": ATTESTED_NOTE,
+            },
+        }
+        entry["measurements"] = [
+            item for item in entry["measurements"] if target_key(item) != key
+        ] + [measurement]
+        # Check all rows and their final path identities against staged bytes.
+        # Never overwrite pinned files to discover that the candidate is invalid.
+        validate(candidate, root, staged_files=staged)
+        render(candidate, [], root)
+        _publish_evidence(staged, staging)
+    ledger.clear()
+    ledger.update(candidate)
     return measurement
+
+
+def _publish_evidence(staged: Mapping[Path, Path], staging: Path) -> None:
+    """Publish checked files, restoring old bytes if a later rename fails.
+
+    All copies (including rollback backups) finish before any pinned path is
+    replaced. This protects normal I/O failures, not process or machine crashes
+    between the individual atomic renames.
+    """
+    backups = {}
+    for index, target in enumerate(staged):
+        backup = staging / f"backup-{index}" if target.exists() else None
+        if backup is not None:
+            shutil.copyfile(target, backup)
+        backups[target] = backup
+    published = []
+    try:
+        for target, path in staged.items():
+            os.replace(path, target)
+            published.append(target)
+    except OSError:
+        for target in reversed(published):
+            backup = backups[target]
+            if backup is None:
+                target.unlink()
+            else:
+                os.replace(backup, target)
+        raise
 
 
 # --------------------------------------------------------------------------
@@ -485,17 +530,68 @@ def empty_ledger() -> dict[str, Any]:
     }
 
 
-def validate(ledger: Mapping[str, Any], root: Path = ROOT) -> None:
+def target_key(measurement: Mapping[str, Any]) -> tuple[str, str]:
+    """One target: the release tag when present, otherwise the full revision."""
+    revision, release = measurement.get("revision"), measurement.get("release")
+    if not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise MechanismError("measurement revision is missing or malformed")
+    if release is not None:
+        if not isinstance(release, str) or not release.strip():
+            raise MechanismError("measurement release is malformed")
+        return ("release", release)
+    return ("revision", revision)
+
+
+def _measurement_index(entry: Mapping[str, Any]) -> dict[tuple[str, str], Mapping[str, Any]]:
+    index = {}
+    for measurement in entry.get("measurements", []):
+        key = target_key(measurement)
+        if key in index:
+            raise MechanismError(f"{entry.get('id')}: duplicate measurement target {key[1]}")
+        index[key] = measurement
+    return index
+
+
+def _identity_index(ledger: Mapping[str, Any], root: Path = ROOT) -> dict:
+    """Reject ambiguous targets and pinned-path aliases without reading evidence."""
+    indexes = {}
+    owners = {}
+    for entry in ledger.get("mechanisms", []):
+        mechanism = entry.get("id")
+        if not isinstance(mechanism, str) or not MECHANISM_ID.fullmatch(mechanism):
+            raise MechanismError(f"mechanism {mechanism!r}: invalid id")
+        if mechanism in indexes:
+            raise MechanismError(f"mechanism {mechanism!r}: duplicate id")
+        index = _measurement_index(entry)
+        indexes[mechanism] = index
+        pins = [(entry.get(field), (mechanism, field)) for field in ("policy_delta", "latency")]
+        pins += [(row, (mechanism, key, arm)) for key, measurement in index.items()
+                 for arm, row in measurement.get("records", {}).items()]
+        for row, owner in pins:
+            if row is None:
+                continue
+            if not isinstance(row, dict) or not isinstance(row.get("file"), str):
+                raise MechanismError(f"{mechanism}: pinned file is missing")
+            path = (root / row["file"]).resolve()
+            # Metadata may share a file, but observation evidence must have
+            # one owner and must never overwrite a delta or latency pin.
+            if path in owners and owners[path] != owner and (
+                len(owner) == 3 or len(owners[path]) == 3
+            ):
+                raise MechanismError(f"{mechanism}: evidence path alias {row['file']}")
+            owners[path] = owner
+    return indexes
+
+
+def validate(
+    ledger: Mapping[str, Any], root: Path = ROOT, *,
+    staged_files: Mapping[Path, Path] | None = None,
+) -> None:
+    _identity_index(ledger, root)
     if ledger.get("schema_version") != SCHEMA_VERSION:
         raise MechanismError(f"ledger schema_version must be {SCHEMA_VERSION}")
-    seen: set[str] = set()
     for entry in ledger.get("mechanisms", []):
         where = f"mechanism {entry.get('id')!r}"
-        if not isinstance(entry.get("id"), str) or not MECHANISM_ID.fullmatch(entry["id"]):
-            raise MechanismError(f"{where}: invalid id")
-        if entry["id"] in seen:
-            raise MechanismError(f"{where}: duplicate id")
-        seen.add(entry["id"])
         if not isinstance(entry.get("added_in"), str) or not ADDED_IN.fullmatch(entry["added_in"]):
             raise MechanismError(f"{where}: invalid added_in")
         if entry.get("availability_basis", "mechanism") not in ("mechanism", "setup default"):
@@ -516,20 +612,26 @@ def validate(ledger: Mapping[str, Any], root: Path = ROOT) -> None:
         if not entry.get("measurements"):
             raise MechanismError(f"{where}: no measurement")
         for measurement in entry["measurements"]:
-            _validate_measurement(measurement, f"{where} @ {measurement.get('revision')}", root)
+            _validate_measurement(measurement, f"{where} @ {measurement.get('revision')}", root, staged_files)
 
 
-def _check_file(row: Any, where: str, root: Path) -> None:
+def _check_file(
+    row: Any, where: str, root: Path, staged_files: Mapping[Path, Path] | None = None,
+) -> None:
     if not isinstance(row, dict) or not isinstance(row.get("file"), str):
         raise MechanismError(f"{where}: file is missing")
     if not isinstance(row.get("sha256"), str) or not HEX64.fullmatch(row["sha256"]):
         raise MechanismError(f"{where}: sha256 is missing")
-    path = root / row["file"]
+    path = (root / row["file"]).resolve()
+    path = (staged_files or {}).get(path, path)
     if not path.is_file() or sha256(path) != row["sha256"]:
         raise MechanismError(f"{where}: {row['file']} is missing or differs from its SHA-256")
 
 
-def _validate_measurement(measurement: Mapping[str, Any], where: str, root: Path) -> None:
+def _validate_measurement(
+    measurement: Mapping[str, Any], where: str, root: Path,
+    staged_files: Mapping[Path, Path] | None = None,
+) -> None:
     sha1 = re.compile(r"^[0-9a-f]{40}$")
     attested = measurement.get("attested")
     if not isinstance(attested, dict):
@@ -549,7 +651,7 @@ def _validate_measurement(measurement: Mapping[str, Any], where: str, root: Path
     if not isinstance(attested.get("machine"), str) or not attested["machine"].strip():
         raise MechanismError(f"{where}: attested.machine is missing")
     for arm in ("base", "candidate"):
-        _check_file(measurement.get("records", {}).get(arm), f"{where} {arm} record", root)
+        _check_file(measurement.get("records", {}).get(arm), f"{where} {arm} record", root, staged_files)
     contracts = measurement.get("contracts", {})
     if not all(isinstance(key, str) and key.isdigit() for key in contracts) or not {
         str(version) for version in GATED_CONTRACTS
@@ -568,7 +670,9 @@ def measured_contracts(measurement: Mapping[str, Any]) -> list[int]:
 
 
 def load_ledger(path: Path = LEDGER) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else empty_ledger()
+    ledger = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else empty_ledger()
+    _identity_index(ledger)
+    return ledger
 
 
 def _signed(value: int) -> str:
@@ -592,10 +696,11 @@ def _before(version: str, added_in: str) -> bool:
 
 def release_cell(entry: Mapping[str, Any], version: str) -> str:
     """One mechanism's cell for a shipped release: numbers or an explicit reason."""
+    index = _measurement_index(entry)
     if _before(version, entry["added_in"]):
         basis = entry.get("availability_basis", "mechanism")
         return f"not available: {basis} added in {entry['added_in']}"
-    measured = next((m for m in entry["measurements"] if m["release"] == version), None)
+    measured = index.get(("release", version))
     if measured is None:
         return "not measured for this release"
     version = measured_contracts(measured)[0]
@@ -630,6 +735,7 @@ def _link(repo_path: str) -> str:
 
 
 def render(ledger: Mapping[str, Any], releases: Sequence[str], root: Path = ROOT) -> str:
+    indexes = _identity_index(ledger, root)
     lines = [
         "Each row runs the same binary, corpus and seed twice: once with the base policy, "
         "once with the base policy plus one mechanism's policy delta. Nothing else differs, "
@@ -642,7 +748,7 @@ def render(ledger: Mapping[str, Any], releases: Sequence[str], root: Path = ROOT
     shown = [
         (entry, measurement)
         for entry in ledger["mechanisms"]
-        for measurement in entry["measurements"]
+        for measurement in indexes[entry["id"]].values()
         if measurement["release"] and TAG.fullmatch(measurement["release"])
     ]
     hidden = sum(len(entry["measurements"]) for entry in ledger["mechanisms"]) - len(shown)
@@ -788,6 +894,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
+        original = DOC.read_text(encoding="utf-8")
+        apply(original, "")  # Refuse missing markers before a record publishes evidence.
         ledger = load_ledger()
         if args.command == "record":
             record_measurement(
@@ -804,7 +912,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             refresh(ledger)
             LEDGER.write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
         validate(ledger)
-        original = DOC.read_text(encoding="utf-8")
         rendered = apply(original, render(ledger, _released_versions(RELEASE_HISTORY)))
         if args.command == "check":
             check_evidence(ledger)
