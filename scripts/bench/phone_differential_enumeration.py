@@ -53,11 +53,6 @@ def cases():
     return cases
 
 
-def parse_responses(payload):
-    # JSONL uses LF boundaries. Unicode line separators can be string data.
-    return [json.loads(line) for line in payload.split('\n') if line]
-
-
 def run(binary, rows, policy):
     responses = run_daemon_batch(binary, policy, [{'text': text} for _, text, _ in rows])
     coverage = []

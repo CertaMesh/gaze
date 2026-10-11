@@ -98,7 +98,7 @@ if mode == 'nonzero':
         self.assertFalse(output.exists())
 
     def test_matching_error_arms_cannot_pass_family_gate(self):
-        doc = {'text': 'fixture', 'iban_span': (0, 7), 'country': 'fixture'}
+        doc = {'text': 'fixture', 'iban_span': (0, 7), 'country': 'fixture', 'prefix': '', 'trailer': ''}
         binary = self.daemon('error')
         output = self.root / 'report.json'
         with patch.object(iban, 'documents', return_value=[doc]), \
