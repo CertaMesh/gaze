@@ -1,0 +1,2586 @@
+{
+  "schema_version": 1,
+  "purpose": "Independent model-free pre-repair sensitivity; no gain claim",
+  "generator_version": 19,
+  "generator_revision": {
+    "revision": "ae26e4f5cc4a6f604c069475531626fcfb542f10",
+    "dirty": false
+  },
+  "detector_revision": {
+    "revision": "63240742ac8b1712bd0e9a5dab0fd68b32f2ef3a",
+    "dirty": false
+  },
+  "binary_sha256": "0cc16223d6076f1247dbd44fe352e9fc955414d0f38e2cecd280ec171d21fa4a",
+  "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
+  "selected_documents_sha256": "c95d7962aa24714c24e63f72d362aa0918a0d6b7f37261a267ce44554e3eeb6f",
+  "pipeline_availability": {
+    "attempted_documents": 54,
+    "completed_documents": 54,
+    "completion_rate": 1.0,
+    "failed_closed_documents": 0,
+    "errors": {},
+    "error_stages": {}
+  },
+  "pipeline_contract": {
+    "documents": 54,
+    "restore_exact_documents": 54,
+    "restore_exact_rate": 1.0,
+    "restore_success_decisions": 54,
+    "restore_success_decision_rate": 1.0,
+    "manifest_spans": 42,
+    "manifest_valid_documents": 54,
+    "manifest_valid_document_rate": 1.0,
+    "manifest_integrity_errors": {
+      "invalid_clean_bounds": 0,
+      "invalid_raw_bounds": 0,
+      "non_monotonic_raw_spans": 0,
+      "overlapping_clean_spans": 0,
+      "raw_value_mismatches": 0,
+      "token_restore_failures": 0
+    },
+    "initial_safety_net_suspects": 0,
+    "initial_actionable_suspects": 0,
+    "initial_class_mismatches": 0,
+    "strict_would_reject_documents": 0,
+    "strict_acceptance_rate": 1.0,
+    "post_policy_scanned_documents": 0,
+    "post_policy_suspects": 0,
+    "final_protection_trace_items": 42,
+    "tokenize_actions": 42,
+    "redact_actions": 0,
+    "documents_with_redact": 0,
+    "post_policy_zero_suspect_documents": 0,
+    "post_policy_zero_suspect_rate": null
+  },
+  "cases": [
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-punctuation_period",
+      "cell": "R|customer_id|recordids_boundary_punctuation_period|unchecked",
+      "utf8_bytes": {
+        "pii": 16,
+        "predicted": 9,
+        "true_positive": 8,
+        "false_positive": 1,
+        "leaked": 8,
+        "precision": 0.8888888888888888,
+        "recall": 0.5,
+        "leak_rate": 0.5,
+        "f1": 0.64,
+        "f2": 0.5479452054794521,
+        "false_positive_rate": 0.018867924528301886
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 11,
+          "raw_end": 20,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 11,
+                "raw_end": 20,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-punctuation_colon",
+      "cell": "R|customer_id|recordids_boundary_punctuation_colon|unchecked",
+      "utf8_bytes": {
+        "pii": 16,
+        "predicted": 9,
+        "true_positive": 8,
+        "false_positive": 1,
+        "leaked": 8,
+        "precision": 0.8888888888888888,
+        "recall": 0.5,
+        "leak_rate": 0.5,
+        "f1": 0.64,
+        "f2": 0.5479452054794521,
+        "false_positive_rate": 0.018867924528301886
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 11,
+          "raw_end": 20,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 11,
+                "raw_end": 20,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-punctuation_dotted",
+      "cell": "R|customer_id|recordids_boundary_punctuation_dotted|unchecked",
+      "utf8_bytes": {
+        "pii": 20,
+        "predicted": 11,
+        "true_positive": 10,
+        "false_positive": 1,
+        "leaked": 10,
+        "precision": 0.9090909090909091,
+        "recall": 0.5,
+        "leak_rate": 0.5,
+        "f1": 0.6451612903225806,
+        "f2": 0.5494505494505494,
+        "false_positive_rate": 0.018867924528301886
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 11,
+          "raw_end": 22,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 11,
+                "raw_end": 22,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-000-punctuation_short_dotted",
+      "cell": "R|customer_id|recordids_boundary_punctuation_short_dotted|unchecked",
+      "utf8_bytes": {
+        "pii": 16,
+        "predicted": 9,
+        "true_positive": 8,
+        "false_positive": 1,
+        "leaked": 8,
+        "precision": 0.8888888888888888,
+        "recall": 0.5,
+        "leak_rate": 0.5,
+        "f1": 0.64,
+        "f2": 0.5479452054794521,
+        "false_positive_rate": 0.01818181818181818
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 13,
+          "raw_end": 22,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 13,
+                "raw_end": 22,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-connectors_is_same",
+      "cell": "R|customer_id|recordids_boundary_connectors_is_same|unchecked",
+      "utf8_bytes": {
+        "pii": 24,
+        "predicted": 20,
+        "true_positive": 8,
+        "false_positive": 12,
+        "leaked": 16,
+        "precision": 0.4,
+        "recall": 0.3333333333333333,
+        "leak_rate": 0.6666666666666667,
+        "f1": 0.3636363636363636,
+        "f2": 0.3448275862068965,
+        "false_positive_rate": 0.27906976744186046
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 11,
+          "raw_end": 31,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 11,
+                "raw_end": 31,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-connectors_ist_same",
+      "cell": "R|customer_id|recordids_boundary_connectors_ist_same|unchecked",
+      "utf8_bytes": {
+        "pii": 24,
+        "predicted": 18,
+        "true_positive": 8,
+        "false_positive": 10,
+        "leaked": 16,
+        "precision": 0.4444444444444444,
+        "recall": 0.3333333333333333,
+        "leak_rate": 0.6666666666666667,
+        "f1": 0.380952380952381,
+        "f2": 0.3508771929824561,
+        "false_positive_rate": 0.23809523809523808
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 11,
+          "raw_end": 29,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 11,
+                "raw_end": 29,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-connectors_lautet_same",
+      "cell": "R|customer_id|recordids_boundary_connectors_lautet_same|unchecked",
+      "utf8_bytes": {
+        "pii": 24,
+        "predicted": 18,
+        "true_positive": 8,
+        "false_positive": 10,
+        "leaked": 16,
+        "precision": 0.4444444444444444,
+        "recall": 0.3333333333333333,
+        "leak_rate": 0.6666666666666667,
+        "f1": 0.380952380952381,
+        "f2": 0.3508771929824561,
+        "false_positive_rate": 0.2222222222222222
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 11,
+          "raw_end": 29,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 11,
+                "raw_end": 29,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-connectors_space_same",
+      "cell": "R|customer_id|recordids_boundary_connectors_space_same|unchecked",
+      "utf8_bytes": {
+        "pii": 24,
+        "predicted": 29,
+        "true_positive": 16,
+        "false_positive": 13,
+        "leaked": 8,
+        "precision": 0.5517241379310345,
+        "recall": 0.6666666666666666,
+        "leak_rate": 0.33333333333333337,
+        "f1": 0.6037735849056604,
+        "f2": 0.64,
+        "false_positive_rate": 0.325
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 11,
+          "raw_end": 40,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 11,
+                "raw_end": 40,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-serialized_depth2_unicode",
+      "cell": "R|customer_id|recordids_boundary_serialized_depth2_unicode|unchecked",
+      "utf8_bytes": {
+        "pii": 34,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 34,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-serialized_depth2_unicode_escape",
+      "cell": "R|customer_id|recordids_boundary_serialized_depth2_unicode_escape|unchecked",
+      "utf8_bytes": {
+        "pii": 70,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 70,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-serialized_depth3_quote",
+      "cell": "R|customer_id|recordids_boundary_serialized_depth3_quote|unchecked",
+      "utf8_bytes": {
+        "pii": 92,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 92,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-000-serialized_depth8_tab",
+      "cell": "R|customer_id|recordids_boundary_serialized_depth8_tab|unchecked",
+      "utf8_bytes": {
+        "pii": 542,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 542,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-000-serialized_depth9_unicode",
+      "cell": "R|customer_id|recordids_boundary_serialized_depth9_unicode|unchecked",
+      "utf8_bytes": {
+        "pii": 34,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 34,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-opening_lf_lf_malformed",
+      "cell": "R|customer_id|recordids_boundary_opening_lf_lf_malformed|unchecked",
+      "utf8_bytes": {
+        "pii": 36,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 36,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-opening_lf_crlf_malformed",
+      "cell": "R|customer_id|recordids_boundary_opening_lf_crlf_malformed|unchecked",
+      "utf8_bytes": {
+        "pii": 38,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 38,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-tab_group_unicode",
+      "cell": "R|customer_id|recordids_boundary_tab_group_unicode|unchecked",
+      "utf8_bytes": {
+        "pii": 34,
+        "predicted": 16,
+        "true_positive": 16,
+        "false_positive": 0,
+        "leaked": 18,
+        "precision": 1.0,
+        "recall": 0.47058823529411764,
+        "leak_rate": 0.5294117647058824,
+        "f1": 0.6399999999999999,
+        "f2": 0.5263157894736842,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 11,
+          "raw_end": 19,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 11,
+                "raw_end": 19,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        },
+        {
+          "raw_start": 63,
+          "raw_end": 71,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "manifest_sweep"
+            ],
+            "settlement": "sweep",
+            "contributions": [
+              {
+                "original": 1,
+                "recognizer_id": "manifest_sweep",
+                "role": "winner",
+                "raw_start": 63,
+                "raw_end": 71,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-tab_group_combining",
+      "cell": "R|customer_id|recordids_boundary_tab_group_combining|unchecked",
+      "utf8_bytes": {
+        "pii": 36,
+        "predicted": 16,
+        "true_positive": 16,
+        "false_positive": 0,
+        "leaked": 20,
+        "precision": 1.0,
+        "recall": 0.4444444444444444,
+        "leak_rate": 0.5555555555555556,
+        "f1": 0.6153846153846153,
+        "f2": 0.5,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 11,
+          "raw_end": 19,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 11,
+                "raw_end": 19,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        },
+        {
+          "raw_start": 64,
+          "raw_end": 72,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "manifest_sweep"
+            ],
+            "settlement": "sweep",
+            "contributions": [
+              {
+                "original": 1,
+                "recognizer_id": "manifest_sweep",
+                "role": "winner",
+                "raw_start": 64,
+                "raw_end": 72,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-customer_id-001-tab_group_ambiguous_column",
+      "cell": "R|customer_id|recordids_boundary_tab_group_ambiguous_column|unchecked",
+      "utf8_bytes": {
+        "pii": 34,
+        "predicted": 16,
+        "true_positive": 16,
+        "false_positive": 0,
+        "leaked": 18,
+        "precision": 1.0,
+        "recall": 0.47058823529411764,
+        "leak_rate": 0.5294117647058824,
+        "f1": 0.6399999999999999,
+        "f2": 0.5263157894736842,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 11,
+          "raw_end": 19,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "customer_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "customer_id.labelled",
+                "role": "winner",
+                "raw_start": 11,
+                "raw_end": 19,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        },
+        {
+          "raw_start": 41,
+          "raw_end": 49,
+          "class": "custom:customer_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "manifest_sweep"
+            ],
+            "settlement": "sweep",
+            "contributions": [
+              {
+                "original": 1,
+                "recognizer_id": "manifest_sweep",
+                "role": "winner",
+                "raw_start": 41,
+                "raw_end": 49,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-punctuation_period",
+      "cell": "R|employee_id|recordids_boundary_punctuation_period|unchecked",
+      "utf8_bytes": {
+        "pii": 16,
+        "predicted": 9,
+        "true_positive": 8,
+        "false_positive": 1,
+        "leaked": 8,
+        "precision": 0.8888888888888888,
+        "recall": 0.5,
+        "leak_rate": 0.5,
+        "f1": 0.64,
+        "f2": 0.5479452054794521,
+        "false_positive_rate": 0.017241379310344827
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 16,
+          "raw_end": 25,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 16,
+                "raw_end": 25,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-punctuation_colon",
+      "cell": "R|employee_id|recordids_boundary_punctuation_colon|unchecked",
+      "utf8_bytes": {
+        "pii": 16,
+        "predicted": 9,
+        "true_positive": 8,
+        "false_positive": 1,
+        "leaked": 8,
+        "precision": 0.8888888888888888,
+        "recall": 0.5,
+        "leak_rate": 0.5,
+        "f1": 0.64,
+        "f2": 0.5479452054794521,
+        "false_positive_rate": 0.017241379310344827
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 16,
+          "raw_end": 25,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 16,
+                "raw_end": 25,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-punctuation_dotted",
+      "cell": "R|employee_id|recordids_boundary_punctuation_dotted|unchecked",
+      "utf8_bytes": {
+        "pii": 20,
+        "predicted": 11,
+        "true_positive": 10,
+        "false_positive": 1,
+        "leaked": 10,
+        "precision": 0.9090909090909091,
+        "recall": 0.5,
+        "leak_rate": 0.5,
+        "f1": 0.6451612903225806,
+        "f2": 0.5494505494505494,
+        "false_positive_rate": 0.017241379310344827
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 16,
+          "raw_end": 27,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 16,
+                "raw_end": 27,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-000-punctuation_short_dotted",
+      "cell": "R|employee_id|recordids_boundary_punctuation_short_dotted|unchecked",
+      "utf8_bytes": {
+        "pii": 16,
+        "predicted": 9,
+        "true_positive": 8,
+        "false_positive": 1,
+        "leaked": 8,
+        "precision": 0.8888888888888888,
+        "recall": 0.5,
+        "leak_rate": 0.5,
+        "f1": 0.64,
+        "f2": 0.5479452054794521,
+        "false_positive_rate": 0.01818181818181818
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 13,
+          "raw_end": 22,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 13,
+                "raw_end": 22,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-connectors_is_same",
+      "cell": "R|employee_id|recordids_boundary_connectors_is_same|unchecked",
+      "utf8_bytes": {
+        "pii": 24,
+        "predicted": 20,
+        "true_positive": 8,
+        "false_positive": 12,
+        "leaked": 16,
+        "precision": 0.4,
+        "recall": 0.3333333333333333,
+        "leak_rate": 0.6666666666666667,
+        "f1": 0.3636363636363636,
+        "f2": 0.3448275862068965,
+        "false_positive_rate": 0.25
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 16,
+          "raw_end": 36,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 16,
+                "raw_end": 36,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-connectors_ist_same",
+      "cell": "R|employee_id|recordids_boundary_connectors_ist_same|unchecked",
+      "utf8_bytes": {
+        "pii": 24,
+        "predicted": 23,
+        "true_positive": 8,
+        "false_positive": 15,
+        "leaked": 16,
+        "precision": 0.34782608695652173,
+        "recall": 0.3333333333333333,
+        "leak_rate": 0.6666666666666667,
+        "f1": 0.3404255319148936,
+        "f2": 0.3361344537815126,
+        "false_positive_rate": 0.28846153846153844
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 16,
+          "raw_end": 39,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 16,
+                "raw_end": 39,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-connectors_lautet_same",
+      "cell": "R|employee_id|recordids_boundary_connectors_lautet_same|unchecked",
+      "utf8_bytes": {
+        "pii": 24,
+        "predicted": 23,
+        "true_positive": 8,
+        "false_positive": 15,
+        "leaked": 16,
+        "precision": 0.34782608695652173,
+        "recall": 0.3333333333333333,
+        "leak_rate": 0.6666666666666667,
+        "f1": 0.3404255319148936,
+        "f2": 0.3361344537815126,
+        "false_positive_rate": 0.2727272727272727
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 16,
+          "raw_end": 39,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 16,
+                "raw_end": 39,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-connectors_space_same",
+      "cell": "R|employee_id|recordids_boundary_connectors_space_same|unchecked",
+      "utf8_bytes": {
+        "pii": 24,
+        "predicted": 29,
+        "true_positive": 16,
+        "false_positive": 13,
+        "leaked": 8,
+        "precision": 0.5517241379310345,
+        "recall": 0.6666666666666666,
+        "leak_rate": 0.33333333333333337,
+        "f1": 0.6037735849056604,
+        "f2": 0.64,
+        "false_positive_rate": 0.28888888888888886
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 16,
+          "raw_end": 45,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 16,
+                "raw_end": 45,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-serialized_depth2_unicode",
+      "cell": "R|employee_id|recordids_boundary_serialized_depth2_unicode|unchecked",
+      "utf8_bytes": {
+        "pii": 34,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 34,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-serialized_depth2_unicode_escape",
+      "cell": "R|employee_id|recordids_boundary_serialized_depth2_unicode_escape|unchecked",
+      "utf8_bytes": {
+        "pii": 70,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 70,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-serialized_depth3_quote",
+      "cell": "R|employee_id|recordids_boundary_serialized_depth3_quote|unchecked",
+      "utf8_bytes": {
+        "pii": 92,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 92,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-000-serialized_depth8_tab",
+      "cell": "R|employee_id|recordids_boundary_serialized_depth8_tab|unchecked",
+      "utf8_bytes": {
+        "pii": 542,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 542,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-000-serialized_depth9_unicode",
+      "cell": "R|employee_id|recordids_boundary_serialized_depth9_unicode|unchecked",
+      "utf8_bytes": {
+        "pii": 34,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 34,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-opening_lf_lf_malformed",
+      "cell": "R|employee_id|recordids_boundary_opening_lf_lf_malformed|unchecked",
+      "utf8_bytes": {
+        "pii": 36,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 36,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-opening_lf_crlf_malformed",
+      "cell": "R|employee_id|recordids_boundary_opening_lf_crlf_malformed|unchecked",
+      "utf8_bytes": {
+        "pii": 38,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 38,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-tab_group_unicode",
+      "cell": "R|employee_id|recordids_boundary_tab_group_unicode|unchecked",
+      "utf8_bytes": {
+        "pii": 34,
+        "predicted": 16,
+        "true_positive": 16,
+        "false_positive": 0,
+        "leaked": 18,
+        "precision": 1.0,
+        "recall": 0.47058823529411764,
+        "leak_rate": 0.5294117647058824,
+        "f1": 0.6399999999999999,
+        "f2": 0.5263157894736842,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 16,
+          "raw_end": 24,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 16,
+                "raw_end": 24,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        },
+        {
+          "raw_start": 68,
+          "raw_end": 76,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "manifest_sweep"
+            ],
+            "settlement": "sweep",
+            "contributions": [
+              {
+                "original": 1,
+                "recognizer_id": "manifest_sweep",
+                "role": "winner",
+                "raw_start": 68,
+                "raw_end": 76,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-tab_group_combining",
+      "cell": "R|employee_id|recordids_boundary_tab_group_combining|unchecked",
+      "utf8_bytes": {
+        "pii": 36,
+        "predicted": 16,
+        "true_positive": 16,
+        "false_positive": 0,
+        "leaked": 20,
+        "precision": 1.0,
+        "recall": 0.4444444444444444,
+        "leak_rate": 0.5555555555555556,
+        "f1": 0.6153846153846153,
+        "f2": 0.5,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 16,
+          "raw_end": 24,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 16,
+                "raw_end": 24,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        },
+        {
+          "raw_start": 69,
+          "raw_end": 77,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "manifest_sweep"
+            ],
+            "settlement": "sweep",
+            "contributions": [
+              {
+                "original": 1,
+                "recognizer_id": "manifest_sweep",
+                "role": "winner",
+                "raw_start": 69,
+                "raw_end": 77,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-employee_id-001-tab_group_ambiguous_column",
+      "cell": "R|employee_id|recordids_boundary_tab_group_ambiguous_column|unchecked",
+      "utf8_bytes": {
+        "pii": 34,
+        "predicted": 16,
+        "true_positive": 16,
+        "false_positive": 0,
+        "leaked": 18,
+        "precision": 1.0,
+        "recall": 0.47058823529411764,
+        "leak_rate": 0.5294117647058824,
+        "f1": 0.6399999999999999,
+        "f2": 0.5263157894736842,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 16,
+          "raw_end": 24,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "employee_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "employee_id.labelled",
+                "role": "winner",
+                "raw_start": 16,
+                "raw_end": 24,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        },
+        {
+          "raw_start": 46,
+          "raw_end": 54,
+          "class": "custom:employee_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "manifest_sweep"
+            ],
+            "settlement": "sweep",
+            "contributions": [
+              {
+                "original": 1,
+                "recognizer_id": "manifest_sweep",
+                "role": "winner",
+                "raw_start": 46,
+                "raw_end": 54,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-punctuation_period",
+      "cell": "R|record_id|recordids_boundary_punctuation_period|unchecked",
+      "utf8_bytes": {
+        "pii": 16,
+        "predicted": 9,
+        "true_positive": 8,
+        "false_positive": 1,
+        "leaked": 8,
+        "precision": 0.8888888888888888,
+        "recall": 0.5,
+        "leak_rate": 0.5,
+        "f1": 0.64,
+        "f2": 0.5479452054794521,
+        "false_positive_rate": 0.01694915254237288
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 17,
+          "raw_end": 26,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 17,
+                "raw_end": 26,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-punctuation_colon",
+      "cell": "R|record_id|recordids_boundary_punctuation_colon|unchecked",
+      "utf8_bytes": {
+        "pii": 16,
+        "predicted": 9,
+        "true_positive": 8,
+        "false_positive": 1,
+        "leaked": 8,
+        "precision": 0.8888888888888888,
+        "recall": 0.5,
+        "leak_rate": 0.5,
+        "f1": 0.64,
+        "f2": 0.5479452054794521,
+        "false_positive_rate": 0.01694915254237288
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 17,
+          "raw_end": 26,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 17,
+                "raw_end": 26,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-punctuation_dotted",
+      "cell": "R|record_id|recordids_boundary_punctuation_dotted|unchecked",
+      "utf8_bytes": {
+        "pii": 20,
+        "predicted": 11,
+        "true_positive": 10,
+        "false_positive": 1,
+        "leaked": 10,
+        "precision": 0.9090909090909091,
+        "recall": 0.5,
+        "leak_rate": 0.5,
+        "f1": 0.6451612903225806,
+        "f2": 0.5494505494505494,
+        "false_positive_rate": 0.01694915254237288
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 17,
+          "raw_end": 28,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 17,
+                "raw_end": 28,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-000-punctuation_short_dotted",
+      "cell": "R|record_id|recordids_boundary_punctuation_short_dotted|unchecked",
+      "utf8_bytes": {
+        "pii": 16,
+        "predicted": 9,
+        "true_positive": 8,
+        "false_positive": 1,
+        "leaked": 8,
+        "precision": 0.8888888888888888,
+        "recall": 0.5,
+        "leak_rate": 0.5,
+        "f1": 0.64,
+        "f2": 0.5479452054794521,
+        "false_positive_rate": 0.018867924528301886
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 11,
+          "raw_end": 20,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 11,
+                "raw_end": 20,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-connectors_is_same",
+      "cell": "R|record_id|recordids_boundary_connectors_is_same|unchecked",
+      "utf8_bytes": {
+        "pii": 24,
+        "predicted": 18,
+        "true_positive": 8,
+        "false_positive": 10,
+        "leaked": 16,
+        "precision": 0.4444444444444444,
+        "recall": 0.3333333333333333,
+        "leak_rate": 0.6666666666666667,
+        "f1": 0.380952380952381,
+        "f2": 0.3508771929824561,
+        "false_positive_rate": 0.2127659574468085
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 17,
+          "raw_end": 35,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 17,
+                "raw_end": 35,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-connectors_ist_same",
+      "cell": "R|record_id|recordids_boundary_connectors_ist_same|unchecked",
+      "utf8_bytes": {
+        "pii": 24,
+        "predicted": 24,
+        "true_positive": 8,
+        "false_positive": 16,
+        "leaked": 16,
+        "precision": 0.3333333333333333,
+        "recall": 0.3333333333333333,
+        "leak_rate": 0.6666666666666667,
+        "f1": 0.3333333333333333,
+        "f2": 0.3333333333333333,
+        "false_positive_rate": 0.2962962962962963
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 17,
+          "raw_end": 41,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 17,
+                "raw_end": 41,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-connectors_lautet_same",
+      "cell": "R|record_id|recordids_boundary_connectors_lautet_same|unchecked",
+      "utf8_bytes": {
+        "pii": 24,
+        "predicted": 24,
+        "true_positive": 8,
+        "false_positive": 16,
+        "leaked": 16,
+        "precision": 0.3333333333333333,
+        "recall": 0.3333333333333333,
+        "leak_rate": 0.6666666666666667,
+        "f1": 0.3333333333333333,
+        "f2": 0.3333333333333333,
+        "false_positive_rate": 0.2807017543859649
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 17,
+          "raw_end": 41,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 17,
+                "raw_end": 41,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-connectors_space_same",
+      "cell": "R|record_id|recordids_boundary_connectors_space_same|unchecked",
+      "utf8_bytes": {
+        "pii": 24,
+        "predicted": 27,
+        "true_positive": 16,
+        "false_positive": 11,
+        "leaked": 8,
+        "precision": 0.5925925925925926,
+        "recall": 0.6666666666666666,
+        "leak_rate": 0.33333333333333337,
+        "f1": 0.627450980392157,
+        "f2": 0.6504065040650406,
+        "false_positive_rate": 0.25
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 17,
+          "raw_end": 44,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 17,
+                "raw_end": 44,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-serialized_depth2_unicode",
+      "cell": "R|record_id|recordids_boundary_serialized_depth2_unicode|unchecked",
+      "utf8_bytes": {
+        "pii": 34,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 34,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-serialized_depth2_unicode_escape",
+      "cell": "R|record_id|recordids_boundary_serialized_depth2_unicode_escape|unchecked",
+      "utf8_bytes": {
+        "pii": 70,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 70,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-serialized_depth3_quote",
+      "cell": "R|record_id|recordids_boundary_serialized_depth3_quote|unchecked",
+      "utf8_bytes": {
+        "pii": 92,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 92,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-000-serialized_depth8_tab",
+      "cell": "R|record_id|recordids_boundary_serialized_depth8_tab|unchecked",
+      "utf8_bytes": {
+        "pii": 542,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 542,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-000-serialized_depth9_unicode",
+      "cell": "R|record_id|recordids_boundary_serialized_depth9_unicode|unchecked",
+      "utf8_bytes": {
+        "pii": 34,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 34,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-opening_lf_lf_malformed",
+      "cell": "R|record_id|recordids_boundary_opening_lf_lf_malformed|unchecked",
+      "utf8_bytes": {
+        "pii": 36,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 36,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-opening_lf_crlf_malformed",
+      "cell": "R|record_id|recordids_boundary_opening_lf_crlf_malformed|unchecked",
+      "utf8_bytes": {
+        "pii": 38,
+        "predicted": 0,
+        "true_positive": 0,
+        "false_positive": 0,
+        "leaked": 38,
+        "precision": 1.0,
+        "recall": 0.0,
+        "leak_rate": 1.0,
+        "f1": 0.0,
+        "f2": 0.0,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": []
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-tab_group_unicode",
+      "cell": "R|record_id|recordids_boundary_tab_group_unicode|unchecked",
+      "utf8_bytes": {
+        "pii": 34,
+        "predicted": 16,
+        "true_positive": 16,
+        "false_positive": 0,
+        "leaked": 18,
+        "precision": 1.0,
+        "recall": 0.47058823529411764,
+        "leak_rate": 0.5294117647058824,
+        "f1": 0.6399999999999999,
+        "f2": 0.5263157894736842,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 17,
+          "raw_end": 25,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 17,
+                "raw_end": 25,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        },
+        {
+          "raw_start": 69,
+          "raw_end": 77,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "manifest_sweep"
+            ],
+            "settlement": "sweep",
+            "contributions": [
+              {
+                "original": 1,
+                "recognizer_id": "manifest_sweep",
+                "role": "winner",
+                "raw_start": 69,
+                "raw_end": 77,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-tab_group_combining",
+      "cell": "R|record_id|recordids_boundary_tab_group_combining|unchecked",
+      "utf8_bytes": {
+        "pii": 36,
+        "predicted": 16,
+        "true_positive": 16,
+        "false_positive": 0,
+        "leaked": 20,
+        "precision": 1.0,
+        "recall": 0.4444444444444444,
+        "leak_rate": 0.5555555555555556,
+        "f1": 0.6153846153846153,
+        "f2": 0.5,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 17,
+          "raw_end": 25,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 17,
+                "raw_end": 25,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        },
+        {
+          "raw_start": 70,
+          "raw_end": 78,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "manifest_sweep"
+            ],
+            "settlement": "sweep",
+            "contributions": [
+              {
+                "original": 1,
+                "recognizer_id": "manifest_sweep",
+                "role": "winner",
+                "raw_start": 70,
+                "raw_end": 78,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "agentic-test-R-boundary-record_id-001-tab_group_ambiguous_column",
+      "cell": "R|record_id|recordids_boundary_tab_group_ambiguous_column|unchecked",
+      "utf8_bytes": {
+        "pii": 34,
+        "predicted": 16,
+        "true_positive": 16,
+        "false_positive": 0,
+        "leaked": 18,
+        "precision": 1.0,
+        "recall": 0.47058823529411764,
+        "leak_rate": 0.5294117647058824,
+        "f1": 0.6399999999999999,
+        "f2": 0.5263157894736842,
+        "false_positive_rate": 0.0
+      },
+      "restore": {
+        "exact": true,
+        "decision": "success",
+        "unknown_token_count": 0,
+        "manifest_bypass_count": 0,
+        "fresh_pii_detected_count": 0,
+        "phase_execution_mask": 7
+      },
+      "final_protection_trace": [
+        {
+          "raw_start": 17,
+          "raw_end": 25,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "record_id.labelled"
+            ],
+            "settlement": "resolve",
+            "contributions": [
+              {
+                "original": 0,
+                "recognizer_id": "record_id.labelled",
+                "role": "winner",
+                "raw_start": 17,
+                "raw_end": 25,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        },
+        {
+          "raw_start": 47,
+          "raw_end": 55,
+          "class": "custom:record_id",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "primary_pipeline",
+            "decision": "policy",
+            "source_ids": [
+              "manifest_sweep"
+            ],
+            "settlement": "sweep",
+            "contributions": [
+              {
+                "original": 1,
+                "recognizer_id": "manifest_sweep",
+                "role": "winner",
+                "raw_start": 47,
+                "raw_end": 55,
+                "tier": null,
+                "defeat_kind": null,
+                "defeated_by": null
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
