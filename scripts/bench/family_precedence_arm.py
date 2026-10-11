@@ -155,7 +155,13 @@ def main(argv: list[str] | None = None) -> int:
     # The patched generator also supplies original gold to validator probing
     # and the observation writer; no alternate scoring path is introduced.
     with patch.object(agentic, "generate", extended_generate), patch.object(agentic, "manifest", extended_manifest):
-        return agentic.main(argv) if layers_only else runner.run(args)
+        if layers_only:
+            # Reuse the current full runner's pinned release validator probe;
+            # the measured detector binary is still the supplied tagged one.
+            with patch.object(agentic.score, "validator_probe_binary",
+                              lambda _root: ROOT / agentic.score.VALIDATOR_PROBE_TARGET / "release/validator-recall-probe"):
+                return agentic.main(argv)
+        return runner.run(args)
 
 
 if __name__ == "__main__":

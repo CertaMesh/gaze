@@ -1,0 +1,107 @@
+diff --git a/crates/gaze-recognizers/examples/clean_for_bench.rs b/crates/gaze-recognizers/examples/clean_for_bench.rs
+index e3f9ded4..b2ef3178 100644
+--- a/crates/gaze-recognizers/examples/clean_for_bench.rs
++++ b/crates/gaze-recognizers/examples/clean_for_bench.rs
+@@ -22,6 +22,7 @@ const BENCHMARK_ACTIVE_LOCALES: &[LocaleTag] = &[
+ 
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ enum BenchConfig {
++    PolicyFile,
+     RuleFloorCore,
+     RuleFloorExtended,
+     Pass2Ner,
+@@ -35,6 +36,7 @@ enum BenchConfig {
+ impl BenchConfig {
+     fn name(self) -> &'static str {
+         match self {
++            Self::PolicyFile => "policy-file",
+             Self::RuleFloorCore => "rule-floor-core",
+             Self::RuleFloorExtended => "rule-floor-extended",
+             Self::Pass2Ner => "pass2-ner",
+@@ -185,14 +187,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
+     let config = parse_config()?;
+     let stdin = io::stdin();
+     let mut stdout = io::BufWriter::new(io::stdout().lock());
+-    let full = build_pipeline(config)?;
++    let policy_run = if config == BenchConfig::PolicyFile {
++        Some(build_policy_run()?)
++    } else {
++        None
++    };
++    let full = match &policy_run {
++        Some((pipeline, _)) => pipeline,
++        None => &build_pipeline(config)?,
++    };
+ 
+     for line in stdin.lock().lines() {
+         let line = line?;
+         if line.trim().is_empty() {
+             continue;
+         }
+-        let request: Request = serde_json::from_str(&line)?;
++        let mut request: Request = serde_json::from_str(&line)?;
++        if let Some((_, locales)) = &policy_run {
++            request.locale_chain = locales.as_slice().iter().map(ToString::to_string).collect();
++        }
+         match handle_request(config, &full, request)? {
+             Outcome::Success(response) => {
+                 serde_json::to_writer(&mut stdout, &response)?;
+@@ -636,6 +649,7 @@ fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
+         if arg == "--config" {
+             let value = args.next().ok_or("--config requires a value")?;
+             config = match value.as_str() {
++                "policy-file" => BenchConfig::PolicyFile,
+                 "rule-floor-core" => BenchConfig::RuleFloorCore,
+                 "rule-floor-extended" => BenchConfig::RuleFloorExtended,
+                 "pass2-ner" => BenchConfig::Pass2Ner,
+@@ -659,7 +673,10 @@ fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError>
+     };
+     let mut pipeline = assemble_rule_floor(config, ner)?;
+     match config {
+-        BenchConfig::RuleFloorCore | BenchConfig::RuleFloorExtended | BenchConfig::Pass2Ner => {}
++        BenchConfig::PolicyFile
++        | BenchConfig::RuleFloorCore
++        | BenchConfig::RuleFloorExtended
++        | BenchConfig::Pass2Ner => {}
+         BenchConfig::FullStackKijiResolve => {
+             pipeline = register_kiji_ort(pipeline).map_err(|source| {
+                 BenchmarkBuildError::SafetyNetRegistration {
+@@ -704,6 +721,38 @@ fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError>
+     Ok(pipeline)
+ }
+ 
++// Transport-only bridge for the current custom-policy benchmark arm. Detection
++// and action resolution remain the release's unmodified library code.
++fn build_policy_run() -> Result<(Pipeline, LocaleChain), Box<dyn std::error::Error>> {
++    let path =
++        std::env::var_os("GAZE_BENCH_POLICY").ok_or("policy-file requires GAZE_BENCH_POLICY")?;
++    let policy = gaze::Policy::load_for_cli(std::path::Path::new(&path))?;
++    let mut rulepacks = Vec::new();
++    for bundle in &policy.rulepacks.bundled {
++        rulepacks.push(load_bundled_rulepack(bundle)?);
++    }
++    for path in &policy.rulepacks.paths {
++        rulepacks.push(Rulepack::load(RulepackSource::Path(path.clone()))?);
++    }
++    let mut defaults = Vec::new();
++    for pack in &rulepacks {
++        for locale in &pack.default_locales {
++            if !defaults.contains(locale) {
++                defaults.push(locale.clone());
++            }
++        }
++    }
++    let locales = LocaleChain::merge_cli_policy_rulepack_default(
++        None,
++        policy.locale.as_deref(),
++        Some(&defaults),
++    );
++    let threshold = policy.ner.as_ref().map(|ner| ner.threshold);
++    let pipeline =
++        gaze_assembly::build_pipeline(&policy, &empty_context(), &rulepacks, &locales, threshold)?;
++    Ok((pipeline, locales))
++}
++
+ fn ner_settings_from_env() -> Result<NerSettings, BenchmarkBuildError> {
+     let model_dir = std::env::var_os("GAZE_NER_MODEL_DIR")
+         .map(PathBuf::from)
