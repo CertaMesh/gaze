@@ -98,6 +98,34 @@ fn quoted_personal_scalars_preserve_every_raw_byte() {
 }
 
 #[test]
+fn adjacent_personal_fields_keep_their_own_values_and_repeat_seeds() {
+    let core = CorePipelineConfig::new().build().unwrap();
+    for (first_cue, first_class, next_cue, second_class) in [
+        ("customer ID", "customer_id", "customer ID", "customer_id"),
+        ("customer ID", "customer_id", "CUSTOMER ID", "customer_id"),
+        ("employee ID", "employee_id", "person record ID", "record_id"),
+        ("member ID", "record_id", "employeeId", "employee_id"),
+        ("Personalnummer", "employee_id", "Kunden-ID", "customer_id"),
+    ] {
+        for separator in [" ", "; ", "\n"] {
+            let first = "FABLE984321";
+            let second = "VIOLET976543";
+            let input = format!("{first_cue}: {first}{separator}{next_cue}={second}; later lookup {second}");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else { panic!("text") };
+            let entries = session.snapshot_entries();
+            assert_eq!(entries.len(), 2, "field boundary swallowed: {input:?} -> {clean:?}");
+            let a = entries.iter().find(|entry| entry.raw == first).expect("first owned value");
+            let b = entries.iter().find(|entry| entry.raw == second).expect("second owned value");
+            assert_eq!(a.class, PiiClass::custom(first_class).unwrap());
+            assert_eq!(b.class, PiiClass::custom(second_class).unwrap());
+            assert_eq!(clean, format!("{first_cue}: {}{separator}{next_cue}={}; later lookup {}", a.token, b.token, b.token));
+            assert_eq!(core.pipeline().restore_strict_text(&session, &clean).unwrap(), input);
+        }
+    }
+}
+
+#[test]
 fn labelled_person_ids_capture_only_whole_values_and_restore() {
     let core = CorePipelineConfig::new().build().unwrap();
     for (input, value, class) in [
