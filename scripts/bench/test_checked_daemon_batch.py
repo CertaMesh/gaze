@@ -74,6 +74,9 @@ if mode == 'nonzero':
                 with self.subTest(runner=run.__module__, mode=mode):
                     with self.assertRaises(ProducerFailure) as caught:
                         run(self.daemon(mode), self.policy, self.docs)
+                    if mode == 'nonzero':
+                        self.assertEqual((caught.exception.code, caught.exception.phase),
+                                         ('producer_exit', 'finish'))
                     self.assertNotIn('PRIVATE', str(caught.exception))
                     self.assertIsNone(caught.exception.__context__)
 
