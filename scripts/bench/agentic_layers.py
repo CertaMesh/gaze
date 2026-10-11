@@ -30,6 +30,7 @@ import base64
 import copy
 import hashlib
 import json
+import re
 import sys
 import tomllib
 from collections import defaultdict
@@ -4913,6 +4914,55 @@ def coverage_grid(scorecard: Mapping[str, object], config: str | None = None) ->
 
 
 GATE_LAYERS = ("C", LAYER_IDENTIFIERS, LAYER_LOOKALIKES, LAYER_REPEATS)
+DICTIONARY_SEQUENCE_LAYERS = ("K", "B")
+
+
+def dictionary_sequence_identity(scorecard):
+    """Validate the one supported library-only extension, without changing old gates."""
+    extension = scorecard.get("dictionary_sequence")
+    if extension is None:
+        return None
+    expected = {f"{sequence}/{layer}" for sequence in ("switch", "fresh", "literal")
+                for layer in DICTIONARY_SEQUENCE_LAYERS}
+    if (not isinstance(extension, dict) or set(extension.get("runs", {})) != expected
+            or set(extension.get("evidence", {})) != expected):
+        raise LayerError("incomplete dictionary sequence extension")
+    identity = extension.get("identity")
+    if (not isinstance(identity, dict) or identity.get("version") != 1
+            or identity.get("layers") != list(DICTIONARY_SEQUENCE_LAYERS)
+            or identity.get("sequences") != ["switch", "fresh", "literal"]
+            or identity.get("partition") != "published"
+            or type(identity.get("seed")) is not int):
+        raise LayerError("invalid dictionary sequence identity")
+    for key in ("adapter_sha256", "generator_sha256", "corpus_sha256"):
+        if not re.fullmatch(r"[0-9a-f]{64}", str(identity.get(key, ""))):
+            raise LayerError(f"invalid dictionary sequence {key}")
+    if extension.get("runtime") != scorecard.get("gaze"):
+        raise LayerError("dictionary sequence runtime differs from ordinary layers")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(extension.get("binary_sha256", ""))):
+        raise LayerError("invalid dictionary sequence binary digest")
+    if extension.get("contract") != scorecard["layers"]["scored_label_contract"]["file_sha256"]:
+        raise LayerError("dictionary sequence contract differs from ordinary layers")
+    for key in expected:
+        evidence = extension["evidence"][key]
+        if not isinstance(evidence, dict) or not re.fullmatch(r"[0-9a-f]{64}", str(evidence.get("sha256", ""))):
+            raise LayerError("invalid dictionary sequence evidence")
+        run = extension["runs"][key]
+        if run.get("config") != "rule-floor-core":
+            raise LayerError("dictionary sequence has unexpected producer config")
+        availability = run.get("pipeline_availability", {})
+        if type(availability.get("attempted_documents")) is not int or availability["attempted_documents"] <= 0:
+            raise LayerError("dictionary sequence has empty or missing population")
+        if evidence.get("observations") != availability["attempted_documents"]:
+            raise LayerError("dictionary sequence population differs from evidence")
+    return {"identity": identity, "contract": extension["contract"],
+            "controls": {
+                key: {field: extension["runs"][key][field]
+                      for field in ("metrics", "pipeline_contract", "pipeline_availability")}
+                for key in sorted(expected) if not key.startswith("switch/")
+            },
+            "populations": {key: extension["runs"][key]["pipeline_availability"]["attempted_documents"]
+                            for key in sorted(expected)}}
 
 DEPENDENCY_OWNERS = {
     "policy.rulepacks.paths": "policy",
@@ -5086,6 +5136,9 @@ def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
             f"scorecard has no gate identity for {', '.join(missing)}; "
             "measure the base again on this harness"
         )
+    extension = dictionary_sequence_identity(scorecard)
+    if extension is not None:
+        identity["dictionary_sequence"] = extension
     return identity
 
 
@@ -5133,8 +5186,10 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
         raise LayerError("scorecard layers carry no integer generator_version")
     required_guard_families = guard_families(version)
     totals: dict[str, dict[str, int]] = {}
-    for layer in GATE_LAYERS:
-        run = _layer_run(scorecard, layer, config)
+    extension = dictionary_sequence_identity(scorecard)
+    for layer in GATE_LAYERS + (DICTIONARY_SEQUENCE_LAYERS if extension is not None else ()):
+        run = (scorecard["dictionary_sequence"]["runs"][f"switch/{layer}"]
+               if layer in DICTIONARY_SEQUENCE_LAYERS else _layer_run(scorecard, layer, config))
         utf8 = run["metrics"]["utf8_bytes"]
         contract = run.get("pipeline_contract")
         if not isinstance(contract, dict):
@@ -5233,6 +5288,13 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
     leaked-byte decrease. With no leak change, an FP-only fix passes when the
     summed FP bytes fall.
     """
+    layers = GATE_LAYERS
+    if set(base) != set(candidate):
+        raise LayerError("gate layer sets differ")
+    if set(base) == set(GATE_LAYERS + DICTIONARY_SEQUENCE_LAYERS):
+        layers += DICTIONARY_SEQUENCE_LAYERS
+    elif set(base) != set(GATE_LAYERS):
+        raise LayerError("unsupported gate layer set")
     rows = {
         layer: {
             "attempted_base": base[layer]["attempted"],
@@ -5258,7 +5320,7 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
             "manifest_invalid_base": base[layer]["documents"] - base[layer]["manifest_valid"],
             "manifest_invalid_candidate": candidate[layer]["documents"] - candidate[layer]["manifest_valid"],
         }
-        for layer in GATE_LAYERS
+        for layer in layers
     }
     # Any rise fails, on the gated bytes or on the headline (all gold): a
     # regression must not hide inside gold the gate leaves out.
@@ -5501,8 +5563,8 @@ def gate(
             "policy_delta_path": str(policy_delta),
         }
     differing = sorted(
-        key for key in base_identity
-        if base_identity[key] != candidate_identity[key]
+        key for key in base_identity.keys() | candidate_identity.keys()
+        if base_identity.get(key) != candidate_identity.get(key)
         and (key != "policy_sha256" or policy_delta is None)
         and (key != "ner_threshold" or "ner" not in added_sections)
     )

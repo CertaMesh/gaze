@@ -16,6 +16,9 @@ use gaze_recognizers::embedded;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+#[path = "support/dictionary_sequence.rs"]
+mod dictionary_sequence;
+
 const BENCHMARK_ACTIVE_LOCALES: &[LocaleTag] = &[
     LocaleTag::EnUs,
     LocaleTag::DeDe,
@@ -284,13 +287,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         let request: Request = serde_json::from_str(&line)?;
-        match handle_request_with_policy(
-            config,
-            full,
-            request,
-            policy_run.as_ref(),
-            std::env::var_os("GAZE_BENCH_KNOWN_RECORD_ARM").is_some(),
-        )? {
+        let outcome = if let Ok(sequence) = std::env::var("GAZE_BENCH_DICTIONARY_SEQUENCE") {
+            dictionary_sequence::handle(&sequence, request)?
+        } else {
+            handle_request_with_policy(
+                config,
+                full,
+                request,
+                policy_run.as_ref(),
+                std::env::var_os("GAZE_BENCH_KNOWN_RECORD_ARM").is_some(),
+            )?
+        };
+        match outcome {
             Outcome::Success(mut response) => {
                 response.audit_rows = audit_rows.as_ref().map(AuditRows::drain);
                 serde_json::to_writer(&mut stdout, &response)?;
