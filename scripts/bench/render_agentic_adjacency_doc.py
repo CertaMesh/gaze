@@ -225,7 +225,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--record", type=Path, action="append", default=[])
     parser.add_argument('--generator-version', type=int, default=GENERATOR_VERSION,
-                        choices=sorted({12, 13, 14, GENERATOR_VERSION, agentic_layers.GENERATOR_VERSION}),
+                        choices=sorted({12, 13, 15, GENERATOR_VERSION, agentic_layers.GENERATOR_VERSION}),
                         help='keep measured history frozen by default; select the current corpus for new measurements')
     args = parser.parse_args()
     try:

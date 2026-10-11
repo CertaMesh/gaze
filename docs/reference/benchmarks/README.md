@@ -1936,7 +1936,6 @@ ZIP compression lookalikes, personal age wording and the shipped-class
 identifier, credential, name and phone cells, plus person-linked CRM/HR IDs, numeric JSON ID scalars and benign JSON keywords).
 The table is rendered from
 the [v15 ledger](agentic-adjacency-v15-history.json). The earlier
-[v14 ledger](agentic-adjacency-v14-history.json) on corpus `1e07150b…`,
 [v13 ledger](agentic-adjacency-v13-history.json) on corpus `db3c3f36…`,
 [v12 ledger](agentic-adjacency-v12-history.json) on corpus `0748ced8…`,
 [v11 ledger](agentic-adjacency-v11-history.json) on corpus `bab908df…`,

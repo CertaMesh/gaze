@@ -19,7 +19,10 @@ This correction can remove false-positive bytes for any recognizer that treats
 customer numbers as personal data. Such a decrease is a corpus correction, not
 a runtime precision improvement. No record-ID recognizer changes here. The
 historical reconstruction reverses the label substitution for v3–v15, whose
-corpus byte hashes remain pinned.
+corpus byte hashes remain pinned. Generator v14 scorecards, observations, ledger
+and frozen contract are retired; v15 remains the previous retained version.
+Older v4–v13 history and contracts remain temporarily because external consumers
+still bind them; migrating those consumers is separate contract-pruning work.
 
 ## Benign-cell audit
 

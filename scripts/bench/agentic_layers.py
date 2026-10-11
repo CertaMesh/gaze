@@ -4492,7 +4492,6 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
     15: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v15.json"),
-    14: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v14.json"),
     13: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v13.json"),
     12: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v12.json"),
     11: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v11.json"),
