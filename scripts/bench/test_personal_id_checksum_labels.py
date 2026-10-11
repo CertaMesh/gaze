@@ -83,8 +83,11 @@ class PersonalIdChecksumLabelTests(unittest.TestCase):
                         (r.family in ("cnpj", "eth_address") and r.surface.endswith("_invalid"))
                         or (r.surface == "coverage_json" and r.layer == "D")
                         or (r.family == "ref_number_10" and r.layer == "D")
-                        or r.surface in ("order_json_entries_array", "order_json_type_above")]
+                        or r.family in ("order_json_entries_array", "order_json_type_above")]
             self.assertTrue(selected)
+            account_controls = [r for r in selected if r.family in ("order_json_entries_array", "order_json_type_above")]
+            self.assertEqual(Counter(r.family for r in account_controls),
+                             {"order_json_entries_array": 4, "order_json_type_above": 4})
             self.assertTrue(all(r.layer == "D" and not r.gold for r in selected))
             # Inventory/batch-owned twins remain benign even for personal-ID shapes.
             public = [r for r in rows if r.family in ("aadhaar", "nir") and r.layer == "D"]
