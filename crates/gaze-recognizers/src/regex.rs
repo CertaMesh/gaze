@@ -1,6 +1,7 @@
 use gaze_types::{
-    Candidate, ConflictTier, DetectContext, Detection, Detector, LabelledValueScanReason,
-    LocaleBasis, LocaleTag, PiiClass, Recognizer, ValidatorKind, ValidatorOnFail,
+    Candidate, ConflictTier, DetectContext, Detection, Detector, LabelledValueMode,
+    LabelledValueScanReason, LocaleBasis, LocaleTag, PiiClass, Recognizer, ValidatorKind,
+    ValidatorOnFail,
 };
 use regex::Regex;
 
@@ -53,6 +54,7 @@ pub struct RegexDetector {
     token_family: String,
     capture_groups: Option<Vec<u32>>,
     complete_labelled_value: bool,
+    labelled_value_mode: LabelledValueMode,
     exclusions: Vec<String>,
     reject_match_regex: Option<Regex>,
     reject_unquoted_capture_regex: Option<Regex>,
@@ -123,6 +125,7 @@ impl RegexDetector {
             token_family: token_family.to_string(),
             capture_groups,
             complete_labelled_value: false,
+            labelled_value_mode: LabelledValueMode::Grouped,
             exclusions: exclusions
                 .into_iter()
                 .map(|value| value.to_ascii_lowercase())
@@ -261,6 +264,7 @@ impl RegexDetector {
                 );
                 candidate.labelled_value_scan_reason = scan.reason;
                 candidate.labelled_value_capture_end = (self.complete_labelled_value
+                    && self.labelled_value_mode == LabelledValueMode::Grouped
                     || (self.phone_validator_enabled()
                         && self.validator_on_fail == ValidatorOnFail::Record))
                     .then_some(scan.extension.start);
@@ -330,6 +334,12 @@ impl RegexDetector {
         self
     }
 
+    /// Select field ownership without changing legacy grouped-value rules.
+    pub fn with_labelled_value_mode(mut self, mode: LabelledValueMode) -> Self {
+        self.labelled_value_mode = mode;
+        self
+    }
+
     /// The candidate spans in `input`: pattern matches that pass the boundary checks, or for a
     /// card-run recognizer the cards in each run plus the Luhn-failing pattern windows that hold
     /// none, so validator veto still records those.
@@ -366,6 +376,9 @@ impl RegexDetector {
                     .or(captured);
                 let span = captured.clone().map(|span| {
                     if self.complete_labelled_value {
+                        if self.labelled_value_mode == LabelledValueMode::FieldOwned {
+                            return scan_field_owned_value(input, span);
+                        }
                         // Only these new fallbacks may trim a field cue inside their broad
                         // capture. Existing cue rules must retain every originally matched byte.
                         let trim_internal_field_boundary = matches!(
@@ -398,7 +411,7 @@ impl RegexDetector {
                 {
                     // The guard judges only the regex evidence, never groups found later by the
                     // scanner. A rejected capture still reaches the audit veto path.
-                    span.rejected = self.reject_match_regex.as_ref().is_some_and(|guard| {
+                    span.rejected |= self.reject_match_regex.as_ref().is_some_and(|guard| {
                         let checked = if self.complete_labelled_value {
                             &input[full.start()..span.capture.end]
                         } else {
@@ -414,7 +427,13 @@ impl RegexDetector {
                                 .chars()
                                 .next_back()
                                 .is_some_and(|ch| matches!(ch, '\"' | '\''));
-                            !value_quoted && guard.is_match(&input[span.capture.clone()])
+                            let checked =
+                                if self.labelled_value_mode == LabelledValueMode::FieldOwned {
+                                    span.span.clone()
+                                } else {
+                                    span.capture.clone()
+                                };
+                            !value_quoted && guard.is_match(&input[checked])
                         });
                     span.rejected |= unquoted_capture_rejected;
                     if unquoted_capture_rejected && span.capture.end > full.start() {
@@ -810,6 +829,87 @@ struct LabelledValueScan {
     span: std::ops::Range<usize>,
     reason: Option<LabelledValueScanReason>,
     rejected: bool,
+}
+
+fn field_value_char(ch: char) -> bool {
+    ch.is_alphanumeric()
+        || unicode_normalization::char::is_combining_mark(ch)
+        || matches!(ch, '+' | '/' | '_' | '=' | '-' | '.' | ':' | '\\')
+}
+
+fn assignment_starts(rest: &str) -> bool {
+    static FIELD: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    FIELD
+        .get_or_init(|| {
+            Regex::new(r"\A[\p{L}_][\p{L}\p{N}\p{M}_.-]*[ \t\u{00A0}\u{202F}]*[:=]")
+                .expect("static assignment syntax")
+        })
+        .is_match(rest)
+}
+
+fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
+    // The quoted contract is handled separately; grouped completion must not change it.
+    if input[..capture.start]
+        .chars()
+        .next_back()
+        .is_some_and(|ch| matches!(ch, '\"' | '\''))
+    {
+        return scan_labelled_value(input, capture, false);
+    }
+    let mut end = capture.start;
+    let mut reason = None;
+    loop {
+        let group_start = end;
+        end += input[end..]
+            .chars()
+            .take_while(|ch| field_value_char(*ch))
+            .map(char::len_utf8)
+            .sum::<usize>();
+        if end == group_start {
+            break;
+        }
+        let spaces = input[end..]
+            .chars()
+            .take_while(|ch| matches!(ch, ' ' | '\u{00a0}' | '\u{202f}'))
+            .map(char::len_utf8)
+            .sum::<usize>();
+        if spaces == 0 {
+            break;
+        }
+        let next = end + spaces;
+        if assignment_starts(&input[next..]) {
+            reason = Some(LabelledValueScanReason::LabelBoundary);
+            break;
+        }
+        if starts_with_date(&input[next..]) {
+            reason = Some(LabelledValueScanReason::DateBoundary);
+            break;
+        }
+        let group: String = input[next..]
+            .chars()
+            .take_while(|ch| field_value_char(*ch))
+            .collect();
+        let value_like = group.chars().any(char::is_numeric)
+            || (group.chars().any(char::is_alphabetic)
+                && group
+                    .chars()
+                    .filter(|ch| ch.is_alphabetic())
+                    .all(char::is_uppercase));
+        if !value_like {
+            break;
+        }
+        end = next;
+    }
+    let span = capture.start..end;
+    LabelledValueScan {
+        capture: capture.start..capture.end.min(end),
+        extension: capture.end.min(end)..end,
+        reason: labelled_value_over_limit(&input[span.clone()])
+            .then_some(LabelledValueScanReason::LimitExceeded)
+            .or(reason),
+        rejected: span.is_empty(),
+        span,
+    }
 }
 
 fn scan_labelled_value(

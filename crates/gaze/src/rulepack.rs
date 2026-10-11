@@ -53,6 +53,8 @@ pub enum RawMatch {
         capture_groups: Option<Vec<u32>>,
         #[serde(default)]
         complete_labelled_value: bool,
+        #[serde(default)]
+        labelled_value_mode: gaze_types::LabelledValueMode,
     },
     Dictionary {
         #[serde(default)]

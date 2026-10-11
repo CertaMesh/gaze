@@ -19,11 +19,20 @@ fn grouped_personal_identifiers_keep_the_complete_owned_value() {
             panic!("text")
         };
         let entries = session.snapshot_entries();
-        assert_eq!(entries.len(), 1, "whole value leaked: {input:?} -> {clean:?}");
+        assert_eq!(
+            entries.len(),
+            1,
+            "whole value leaked: {input:?} -> {clean:?}"
+        );
         assert_eq!(entries[0].raw, value);
         assert_eq!(entries[0].class, PiiClass::custom(class).unwrap());
         assert_eq!(clean, format!("{cue}: {}; status=active", entries[0].token));
-        assert_eq!(core.pipeline().restore_strict_text(&session, &clean).unwrap(), input);
+        assert_eq!(
+            core.pipeline()
+                .restore_strict_text(&session, &clean)
+                .unwrap(),
+            input
+        );
     }
 }
 

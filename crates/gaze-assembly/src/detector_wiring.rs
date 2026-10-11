@@ -144,6 +144,7 @@ pub(crate) fn register_rulepack_recognizers(
                 pattern_template,
                 capture_groups,
                 complete_labelled_value,
+                labelled_value_mode,
             } => {
                 let pattern =
                     lower_regex_pattern(&recognizer.id, pattern, pattern_template, locale_vocab)?;
@@ -192,6 +193,7 @@ pub(crate) fn register_rulepack_recognizers(
                             .and_then(|context| context.reject_unquoted_capture_regex.as_deref()),
                     )?
                     .with_complete_labelled_value(complete_labelled_value)
+                    .with_labelled_value_mode(labelled_value_mode)
                     .with_locale_basis(recognizer.locale_basis)
                     .with_validator_on_fail(
                         recognizer

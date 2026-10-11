@@ -439,6 +439,7 @@ fn assembled(
             pattern_template: None,
             capture_groups: None,
             complete_labelled_value: false,
+            labelled_value_mode: Default::default(),
         };
         spec.scoring.priority = *priority;
         pack.recognizers.push(spec);
