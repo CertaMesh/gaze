@@ -1,5 +1,5 @@
 //! Synthetic CRM/HR identifiers. No shape alone proves a person linkage.
-use gaze::{CleanDocument, PiiClass, Scope, Session};
+use gaze::{CleanDocument, DictionaryBundle, LocaleTag, PiiClass, SafetyNetPolicy, Scope, Session};
 use gaze_assembly::CorePipelineConfig;
 
 #[test]
@@ -15,9 +15,24 @@ fn grouped_personal_identifiers_keep_the_complete_owned_value() {
     ] {
         let input = format!("{cue}: {value}; status=active");
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else {
+        let (clean, spans, _, trace, _) = core
+            .pipeline()
+            .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
+                &session,
+                &input,
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .unwrap();
+        let CleanDocument::Text(clean) = clean else {
             panic!("text")
         };
+        assert_eq!(spans.len(), 1);
+        assert_eq!(&input[spans[0].raw_span.clone()], value);
+        assert_eq!(trace.len(), 1);
+        assert_eq!(trace[0].source_ids(), &[format!("{class}.labelled")]);
+        assert_eq!(trace[0].class(), &PiiClass::custom(class).unwrap());
         let entries = session.snapshot_entries();
         assert_eq!(
             entries.len(),
@@ -152,6 +167,44 @@ fn adjacent_personal_fields_keep_their_own_values_and_repeat_seeds() {
                     .unwrap(),
                 input
             );
+        }
+    }
+}
+
+#[test]
+fn public_assignments_and_word_only_schema_values_stay_outside_personal_fields() {
+    let core = CorePipelineConfig::new().build().unwrap();
+    for cue in ["customer ID", "employee ID", "member ID"] {
+        for key in [
+            "ORDER_ID",
+            "version",
+            "sensorAlias",
+            "InventarCode",
+            "PUBLIC KEY",
+        ] {
+            let input = format!("{cue}: FABLE984321 {key}=BENCH976543");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap()
+            else {
+                panic!("text")
+            };
+            let entries = session.snapshot_entries();
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].raw, "FABLE984321");
+            assert_eq!(
+                clean,
+                format!("{cue}: {} {key}=BENCH976543", entries[0].token)
+            );
+        }
+        for value in ["FABLE VIOLET", "token", "", "\"\""] {
+            let input = format!("{cue}: {value}; ORDER_ID=BENCH976543");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap()
+            else {
+                panic!("text")
+            };
+            assert_eq!(clean, input);
+            assert!(session.snapshot_entries().is_empty());
         }
     }
 }
