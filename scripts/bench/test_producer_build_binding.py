@@ -163,6 +163,12 @@ class SnapshotTests(unittest.TestCase):
         # Header plus payload is 9,728 bytes. End markers need another record.
         self.assert_snapshot({'Cargo.lock': b'#'+b'x'*8704})
 
+    def test_snapshot_just_under_128_mib(self):
+        # The last complete 10 KiB tar record below 128 MiB, with one header
+        # and two end markers. The payload is synthetic, not a Cargo input.
+        size = self.assert_snapshot({'Cargo.lock': b'x' * 134214144})
+        self.assertEqual(size, 134215680)
+
     def assert_snapshot(self, files):
         rows = []
         stream = io.BytesIO()
@@ -188,6 +194,7 @@ class SnapshotTests(unittest.TestCase):
             result, _ = binding.snapshot(Path(temp), 'b'*40, dest, time.monotonic()+30)
             self.assertEqual(set(result), set(files))
             self.assertEqual((dest/'Cargo.lock').stat().st_mode & 0o777, 0o644)
+        return len(stream.getvalue())
 
     def test_config_presence_without_reading_contents(self):
         with tempfile.TemporaryDirectory() as temp:
