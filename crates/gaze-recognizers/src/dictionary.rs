@@ -511,6 +511,65 @@ mod tests {
 
     use super::*;
 
+    // Force every bucket hash to collide; equality must still compare ordered terms.
+    #[derive(Default)]
+    struct CollisionHasher;
+
+    impl std::hash::Hasher for CollisionHasher {
+        fn finish(&self) -> u64 {
+            0
+        }
+        fn write(&mut self, _: &[u8]) {}
+    }
+
+    #[test]
+    fn colliding_cache_keys_keep_unequal_ordered_terms_independent() {
+        let key = |terms: &[&str]| DictionaryCacheKey {
+            mode: CompilationMode::Exact,
+            terms: terms.iter().map(|term| (*term).to_owned()).collect(),
+        };
+        let first = key(&["alpha-one", "bravo-two"]);
+        let reordered = key(&["bravo-two", "alpha-one"]);
+        let different = key(&["charlie-three", "delta-four"]);
+        assert_ne!(first, reordered);
+        assert_ne!(first, different);
+        let mut cache =
+            HashMap::with_hasher(std::hash::BuildHasherDefault::<CollisionHasher>::default());
+        for (key, terms) in [
+            (first.clone(), ["alpha-one", "bravo-two"]),
+            (reordered.clone(), ["bravo-two", "alpha-one"]),
+            (different.clone(), ["charlie-three", "delta-four"]),
+        ] {
+            cache.insert(key, AhoCorasick::new(terms).unwrap());
+        }
+        assert_eq!(cache.len(), 3);
+        assert_eq!(
+            cache[&first]
+                .find("alpha-one")
+                .unwrap()
+                .pattern()
+                .as_usize(),
+            0
+        );
+        assert_eq!(
+            cache[&reordered]
+                .find("alpha-one")
+                .unwrap()
+                .pattern()
+                .as_usize(),
+            1
+        );
+        assert!(cache[&different].find("alpha-one").is_none());
+        assert_eq!(
+            cache[&different]
+                .find("delta-four")
+                .unwrap()
+                .pattern()
+                .as_usize(),
+            1
+        );
+    }
+
     #[test]
     fn full_fold_does_not_create_partial_original_character_spans() {
         let (folded, starts, ends) = fold_with_original_offsets("AßB", true, false);
