@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Benchmark generator v18 scores explicitly labelled checksum-invalid Aadhaar
+  and NIR values as personal data. The v17 corpus and contract stay frozen;
+  every displayed release is freshly measured with the stricter gold labels.
+  Company/wallet decoys and public-reference controls remain benign.
+
 - Family-level tokens retain their ambiguity reason and original participant
   identities after later overlap decisions. Primary and recovered audit entries
   no longer infer family provenance from the last conflict tier or source labels;

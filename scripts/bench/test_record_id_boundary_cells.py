@@ -24,13 +24,22 @@ class RecordIdBoundaryTests(unittest.TestCase):
                 for span in (*row.gold, *row.decoys):
                     self.assertEqual(row.text.encode()[span.start:span.end].decode(), span.value)
 
-    def test_partition_values_and_previous_v17_inputs_stay_disjoint_and_frozen(self):
+    def test_partition_values_and_previous_inputs_stay_disjoint_and_frozen(self):
         values = [{g.value for r in cells.records(api, p) for g in r.gold} for p in api.PARTITIONS]
         self.assertFalse(values[0] & values[1])
         pins = {"dev": "7c205507728f13b54e6ad299f2e414e7bdf37ad9a144c265bd839dee98359a83",
                 "test": "8c62d49926fa90107fa538b03b39aed6d76a2ad9f2d38e38d14cb3e8b1706725"}
         for partition, digest in pins.items():
             self.assertEqual(hashlib.sha256(api.corpus_bytes(api.records_as_of(17, api.generate(partition)))).hexdigest(), digest)
+        v18_pins = {"dev": "3dfd64aa881c3ccb0aec0860aa83246f0e423716af4066b5e6197cd790a3af6b",
+                    "test": "56c7bbd0d9a0eeb290d595de5deac1d07273e7ff28b431039abb2d83bd71618c"}
+        for partition, digest in v18_pins.items():
+            self.assertEqual(hashlib.sha256(api.corpus_bytes(api.records_as_of(18, api.generate(partition)))).hexdigest(), digest)
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[2]
+        for version, digest in ((17, "a13af8a9773195adc0f8dee2a2ef0aa53a838158d876748b03a26cdfbb3a173a"),
+                                (18, "5a638e5ff857d43c918a8840867c72d6d322f097964b8f946a5f4e310dac2dc6")):
+            self.assertEqual(hashlib.sha256((root / api.HISTORICAL_CONTRACTS[version]).read_bytes()).hexdigest(), digest)
 
     def test_terminal_internal_and_quoted_punctuation_own_different_bytes(self):
         for partition in api.PARTITIONS:

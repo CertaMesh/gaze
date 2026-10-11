@@ -25,8 +25,8 @@ class BsnTwinLabelTests(unittest.TestCase):
 
     def test_only_the_twenty_person_linked_labels_change_per_partition(self):
         for partition in agentic.PARTITIONS:
-            current = agentic.generate(partition)
-            self.assertEqual(agentic.corpus_bytes(current), agentic.corpus_bytes(agentic.generate(partition)))
+            current = agentic.records_as_of(16, agentic.generate(partition))
+            self.assertEqual(agentic.corpus_bytes(current), agentic.corpus_bytes(agentic.records_as_of(16, agentic.generate(partition))))
             previous = agentic.records_as_of(15, current)
             changes = [(old, new) for old, new in zip(previous, current) if old != new]
             self.assertEqual(len(changes), 20)

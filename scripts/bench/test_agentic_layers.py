@@ -28,7 +28,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # A generator change must bump GENERATOR_VERSION, the contract's
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
-PINNED_CORPUS_SHA256 = {'dev': '161f89303546ff6801a85ccba885f07f9c43696b0c6ceb5b2f3128fb82988342', 'test': '031885ded4bb3b0cf8fc76c8da0fbe6ca3f631c17399cff4df33d4e5f976a190'}
+PINNED_CORPUS_SHA256 = {
+    "dev": "1bef59f4bff3a1660600407d70ed3132228d07d6c5edefb0609d9b648acbead1",
+    "test": "4f096686fdea809eb6089060e468de99147770160a208219aac1b4406f058813"
+}
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
     "dev": "6e1b24bf66f672e45d69b6f38f56db3da0d085ea0cd4241f5d7310bfddcdf0d1",
@@ -2960,12 +2963,13 @@ class ShippedClassCoverageTests(unittest.TestCase):
             records = agentic._coverage_records(partition)
             self.assertEqual(len(records),680)
             for family in agentic.COVERAGE_CHECKSUM_FAMILIES:
-                positives = [r for r in records if r.family == family and r.layer == "A"]
+                positives = [r for r in records if r.family == family and r.layer == "A" and not r.surface.endswith("_invalid")]
                 twins = {r.uid.replace("-D-","-A-").removesuffix("_invalid"): r for r in records if r.family == family and r.surface.endswith("_invalid")}
                 self.assertEqual(len(positives),30)
                 for record in positives:
                     value = record.gold[0].value
-                    bad = twins[record.uid].decoys[0].value
+                    twin = twins[record.uid]
+                    bad = (twin.gold or twin.decoys)[0].value
                     self.assertEqual(len(value),len(bad))
                     self.assertNotEqual(value,bad)
                     if family == "aadhaar":
