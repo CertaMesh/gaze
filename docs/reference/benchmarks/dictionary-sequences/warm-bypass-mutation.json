@@ -1,0 +1,6 @@
+{
+  "mutation": "bypass warming before mode switch",
+  "unchanged_runtime_with_mutation_tokens": 2,
+  "real_sequence_tokens": 0,
+  "result": "bypassing warmup hides the baseline defect"
+}

@@ -1,0 +1,171 @@
+{
+  "contract": "v4",
+  "committed_pair": "4504dfd695aed14bfcfcd76b3f1d30b4e02d55c1",
+  "original_gate": "bf15433eb5bebfe6543a0ff4111f396c092ce576",
+  "replay_matches_committed_counts": true,
+  "decision_byte_identical": true,
+  "gate": {
+    "config": "policy-file",
+    "credit_guard": {
+      "card_twin_grouped_ref_csv": {
+        "base": 0,
+        "candidate": 0
+      },
+      "card_twin_order": {
+        "base": 0,
+        "candidate": 0
+      },
+      "card_twin_reader_serial": {
+        "base": 0,
+        "candidate": 0
+      },
+      "card_twin_timestamp_log": {
+        "base": 0,
+        "candidate": 0
+      },
+      "card_twin_transaction_json": {
+        "base": 0,
+        "candidate": 0
+      },
+      "gov_near_tax_eleven": {
+        "base": 0,
+        "candidate": 0
+      },
+      "gov_near_tax_grouped": {
+        "base": 0,
+        "candidate": 0
+      },
+      "gov_twin_tax_eleven": {
+        "base": 0,
+        "candidate": 0
+      },
+      "gov_twin_tax_grouped": {
+        "base": 0,
+        "candidate": 0
+      },
+      "ref_number_10": {
+        "base": 0,
+        "candidate": 0
+      },
+      "ref_number_11": {
+        "base": 30,
+        "candidate": 30
+      },
+      "ref_number_16": {
+        "base": 0,
+        "candidate": 0
+      },
+      "ref_number_9": {
+        "base": 0,
+        "candidate": 0
+      }
+    },
+    "gate_credit_version": 2,
+    "layers": {
+      "A": {
+        "attempted_base": 3728,
+        "attempted_candidate": 3728,
+        "documents_base": 3728,
+        "documents_candidate": 3728,
+        "failed_closed_base": 0,
+        "failed_closed_candidate": 0,
+        "false_positive_base": 1915,
+        "false_positive_candidate": 1915,
+        "headline_leaked_base": 13825,
+        "headline_leaked_candidate": 13825,
+        "leaked_base": 13433,
+        "leaked_candidate": 13433,
+        "manifest_invalid_base": 0,
+        "manifest_invalid_candidate": 0,
+        "manifest_valid_base": 3728,
+        "manifest_valid_candidate": 3728,
+        "restore_exact_base": 3728,
+        "restore_exact_candidate": 3728,
+        "restore_failures_base": 0,
+        "restore_failures_candidate": 0,
+        "twin_leaked_base": 392,
+        "twin_leaked_candidate": 392
+      },
+      "C": {
+        "attempted_base": 2910,
+        "attempted_candidate": 2910,
+        "documents_base": 2910,
+        "documents_candidate": 2910,
+        "failed_closed_base": 0,
+        "failed_closed_candidate": 0,
+        "false_positive_base": 26890,
+        "false_positive_candidate": 26890,
+        "headline_leaked_base": 9813,
+        "headline_leaked_candidate": 9813,
+        "leaked_base": 9813,
+        "leaked_candidate": 9813,
+        "manifest_invalid_base": 0,
+        "manifest_invalid_candidate": 0,
+        "manifest_valid_base": 2910,
+        "manifest_valid_candidate": 2910,
+        "restore_exact_base": 2910,
+        "restore_exact_candidate": 2910,
+        "restore_failures_base": 0,
+        "restore_failures_candidate": 0,
+        "twin_leaked_base": 0,
+        "twin_leaked_candidate": 0
+      },
+      "D": {
+        "attempted_base": 2144,
+        "attempted_candidate": 2144,
+        "documents_base": 2144,
+        "documents_candidate": 2144,
+        "failed_closed_base": 0,
+        "failed_closed_candidate": 0,
+        "false_positive_base": 6874,
+        "false_positive_candidate": 6874,
+        "headline_leaked_base": 0,
+        "headline_leaked_candidate": 0,
+        "leaked_base": 0,
+        "leaked_candidate": 0,
+        "manifest_invalid_base": 0,
+        "manifest_invalid_candidate": 0,
+        "manifest_valid_base": 2144,
+        "manifest_valid_candidate": 2144,
+        "restore_exact_base": 2144,
+        "restore_exact_candidate": 2144,
+        "restore_failures_base": 0,
+        "restore_failures_candidate": 0,
+        "twin_leaked_base": 0,
+        "twin_leaked_candidate": 0
+      },
+      "R": {
+        "attempted_base": 280,
+        "attempted_candidate": 280,
+        "documents_base": 280,
+        "documents_candidate": 280,
+        "failed_closed_base": 0,
+        "failed_closed_candidate": 0,
+        "false_positive_base": 479,
+        "false_positive_candidate": 479,
+        "headline_leaked_base": 9806,
+        "headline_leaked_candidate": 9806,
+        "leaked_base": 9806,
+        "leaked_candidate": 9806,
+        "manifest_invalid_base": 0,
+        "manifest_invalid_candidate": 0,
+        "manifest_valid_base": 280,
+        "manifest_valid_candidate": 280,
+        "restore_exact_base": 280,
+        "restore_exact_candidate": 280,
+        "restore_failures_base": 0,
+        "restore_failures_candidate": 0,
+        "twin_leaked_base": 0,
+        "twin_leaked_candidate": 0
+      }
+    },
+    "reason": "no layer's leaked bytes fell and FP bytes did not fall",
+    "summary": {
+      "false_positive_bytes_increase": 0,
+      "leaked_bytes_decrease": 0
+    },
+    "verdict": "fail"
+  },
+  "candidate_gate_source_sha256": "440273914ff0d18415ded8d2580e54a23a11f9e4782a67698e3e72bb64d8ab98",
+  "candidate_code_revision": "a6449e2f15563326e7ab9b76e5c9654148acd1e0"
+}
