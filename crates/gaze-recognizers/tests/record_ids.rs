@@ -113,6 +113,62 @@ fn quoted_personal_scalars_preserve_every_raw_byte() {
 }
 
 #[test]
+fn quoted_log_values_and_unterminated_values_never_leave_a_partial_suffix() {
+    let core = CorePipelineConfig::new().build().unwrap();
+    for cue in ["customer ID", "Personalnummer", "Mitgliedsnummer"] {
+        for quote in ['\"', '\''] {
+            let value = "LILAC é984321";
+            let input =
+                format!("{cue}: {quote}{value}{quote}; ORDER_ID=BENCH976543; repeat {value}");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap()
+            else {
+                panic!("text")
+            };
+            let entries = session.snapshot_entries();
+            assert_eq!(entries.len(), 1, "{input:?} -> {clean:?}");
+            assert_eq!(entries[0].raw, value);
+            assert_eq!(
+                clean,
+                format!(
+                    "{cue}: {quote}{}{quote}; ORDER_ID=BENCH976543; repeat {}",
+                    entries[0].token, entries[0].token
+                )
+            );
+            assert_eq!(
+                core.pipeline()
+                    .restore_strict_text(&session, &clean)
+                    .unwrap(),
+                input
+            );
+            let CleanDocument::Text(repeated) = core.pseudonymize_text(&session, &input).unwrap()
+            else {
+                panic!("text")
+            };
+            assert_eq!(repeated, clean);
+        }
+        // Without a closing delimiter, ownership conservatively reaches the end.
+        // No prefix token may leave the malformed scalar's remaining bytes raw.
+        let raw = "LILAC é984321; ORDER_ID=BENCH976543";
+        let input = format!("{cue}: \"{raw}");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else {
+            panic!("text")
+        };
+        let entries = session.snapshot_entries();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].raw, raw);
+        assert_eq!(clean, format!("{cue}: \"{}", entries[0].token));
+        assert_eq!(
+            core.pipeline()
+                .restore_strict_text(&session, &clean)
+                .unwrap(),
+            input
+        );
+    }
+}
+
+#[test]
 fn adjacent_personal_fields_keep_their_own_values_and_repeat_seeds() {
     let core = CorePipelineConfig::new().build().unwrap();
     for (first_cue, first_class, next_cue, second_class) in [
@@ -206,6 +262,50 @@ fn public_assignments_and_word_only_schema_values_stay_outside_personal_fields()
             assert_eq!(clean, input);
             assert!(session.snapshot_entries().is_empty());
         }
+    }
+}
+
+#[test]
+fn bounded_placeholders_keep_typed_veto_evidence_and_leave_next_cues_visible() {
+    let core = CorePipelineConfig::new().build().unwrap();
+    for (cue, class) in [
+        ("customer ID", "customer_id"),
+        ("employee ID", "employee_id"),
+        ("member ID", "record_id"),
+    ] {
+        let input = format!("{cue}: FABLE VIOLET; {cue}=LILAC984321");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let (clean, spans, _, trace, events) = core
+            .pipeline()
+            .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
+                &session,
+                &input,
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .unwrap();
+        let CleanDocument::Text(clean) = clean else {
+            panic!("text")
+        };
+        assert_eq!(spans.len(), 1);
+        assert_eq!(&input[spans[0].raw_span.clone()], "LILAC984321");
+        assert_eq!(trace[0].source_ids(), &[format!("{class}.labelled")]);
+        let veto = events
+            .iter()
+            .find(|event| {
+                matches!(
+                    event.outcome,
+                    gaze::CandidateOutcome::Vetoed {
+                        reason: gaze_types::ValidatorFailReason::RegexGuardRejected
+                    }
+                )
+            })
+            .expect("placeholder guard remains auditable");
+        assert_eq!(veto.recognizer_id, format!("{class}.labelled"));
+        assert_eq!(&input[veto.raw_span.clone()], "FABLE VIOLET");
+        let entry = &session.snapshot_entries()[0];
+        assert_eq!(clean, format!("{cue}: FABLE VIOLET; {cue}={}", entry.token));
     }
 }
 
