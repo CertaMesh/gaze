@@ -50,7 +50,7 @@ class AdjacencyHistoryTests(unittest.TestCase):
             for layer in ("A", "D", "R"):
                 self.assertEqual(row["layers"][layer]["restore_exact"], 99)
                 self.assertEqual(row["layers"][layer]["valid_manifests"], 99)
-                self.assertEqual(row["layers"][layer]["restore_failures"], 0)
+                self.assertEqual(row["layers"][layer]["restore_failures"], 1)
                 self.assertEqual(row["layers"][layer]["invalid_manifests"], 1)
             for bad in (None, True, -1, 101):
                 value["layers"]["A"]["runs"][0]["pipeline_contract"]["restore_exact_documents"] = bad
@@ -156,7 +156,9 @@ class AdjacencyHistoryTests(unittest.TestCase):
             path = Path(temporary) / "scorecard.json"
             path.write_text(json.dumps(scorecard()), encoding="utf-8")
             (row,) = render.rows_from_scorecard(path)
-            self.assertEqual(row["layers"]["A"], {"gold": 100, "leaked": 20, "false_positive": 3})
+            self.assertEqual(row["layers"]["A"], {"gold": 100, "leaked": 20, "false_positive": 3,
+                "documents": 100, "restore_exact": 99, "restore_failures": 1,
+                "valid_manifests": 99, "invalid_manifests": 1})
             self.assertEqual(row["scorecard_sha256"], render.sha256(path))
             path.write_text(json.dumps(scorecard("c" * 64)), encoding="utf-8")
             with self.assertRaisesRegex(render.HistoryError, f"pinned v{render.GENERATOR_VERSION} test corpus"):
@@ -169,7 +171,9 @@ class AdjacencyHistoryTests(unittest.TestCase):
                 "scorecard_sha256": "b" * 64,
                 "policy_sha256": render.release_policy_sha256(version, render.MEASURED_INPUTS),
                 "refused": {layer: 0 for layer in ("A", "D", "R")},
-                "layers": {layer: {"gold": 100, "leaked": 20, "false_positive": 3}
+                "layers": {layer: {"gold": 100, "leaked": 20, "false_positive": 3,
+                    "documents": 100, "restore_exact": 99, "restore_failures": 1,
+                    "valid_manifests": 99, "invalid_manifests": 1}
                            for layer in ("A", "D", "R")},
             }
             for version, arm in render.EXPECTED_ROWS
