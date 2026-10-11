@@ -1,0 +1,668 @@
+{
+  "schema_version": 1,
+  "release": "v0.14.0",
+  "arm": "full-stack-kiji-resolve",
+  "binary_revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
+  "binary_sha256": "c2de4dd80b59d3df3c12913af7d2e4b037d62194fc54554aeac542a3f6b6473f",
+  "old_observations_sha256": "ad85ce6f2024c39184c26a12fc6c322fb5e14d044802ee606f2bf876eea5dec5",
+  "new_observations_sha256": "5adc0f8c86e7f058c068f044d0bc9285b3c12ffa274f05dd5added3dc7bc61c0",
+  "semantics": "The tagged benchmark producer hashes fixture_id into a fixed four-byte session prefix. D-to-A document identity changes alter the prefix. Two repeated controlled probes per old/new identity hold text and locales constant and reproduce all trace/restore/fallback fields from both recorded runs. Every changed response lies inside the relabelled NIR cells; unchanged documents have identical compared fields. This is a producer-identity sensitivity effect, not random run-to-run noise or a runtime gain.",
+  "changed_responses": 8,
+  "controlled_requests": 32,
+  "repetitions_per_identity": 2,
+  "controlled_responses_match_records": true,
+  "false_positive_byte_drift": 2,
+  "exact_restore_failure_drift": 2,
+  "rows": [
+    {
+      "old_document_id": "agentic-test-D-nir-000-coverage_prose_invalid",
+      "new_document_id": "agentic-test-A-nir-000-coverage_prose_invalid",
+      "old_session_hex": "41c1a662",
+      "new_session_hex": "6fe8a595",
+      "text_sha256": "77268854840fdb8b0d181a701f2c80036bffbb729b83aa07682a953452d5d4cf",
+      "old_trace": [
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "new_trace": [
+        {
+          "raw_start": 25,
+          "raw_end": 27,
+          "class": "name",
+          "action": "redact",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "fallback_redact",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "old_exact_restore": true,
+      "new_exact_restore": false
+    },
+    {
+      "old_document_id": "agentic-test-D-nir-003-coverage_json_invalid",
+      "new_document_id": "agentic-test-A-nir-003-coverage_json_invalid",
+      "old_session_hex": "2b6dddc6",
+      "new_session_hex": "ab3e9efc",
+      "text_sha256": "286283d2a4a059040d1e1d5862eedf351b7716c787e1a5c9d9fcfc12697e6d33",
+      "old_trace": [
+        {
+          "raw_start": 26,
+          "raw_end": 29,
+          "class": "name",
+          "action": "redact",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "fallback_redact",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 29,
+          "raw_end": 31,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 34,
+          "raw_end": 36,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "new_trace": [
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "redact",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "fallback_redact",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 29,
+          "raw_end": 31,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 34,
+          "raw_end": 36,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "old_exact_restore": false,
+      "new_exact_restore": false
+    },
+    {
+      "old_document_id": "agentic-test-D-nir-004-coverage_prose_invalid",
+      "new_document_id": "agentic-test-A-nir-004-coverage_prose_invalid",
+      "old_session_hex": "a2c4b016",
+      "new_session_hex": "10095212",
+      "text_sha256": "107e85a9ce363c07d3b2c52a5ab057827f1ada7486556db6b55c30a10d9d5925",
+      "old_trace": [
+        {
+          "raw_start": 25,
+          "raw_end": 27,
+          "class": "name",
+          "action": "redact",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "fallback_redact",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "new_trace": [
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "old_exact_restore": false,
+      "new_exact_restore": true
+    },
+    {
+      "old_document_id": "agentic-test-D-nir-005-coverage_prose_invalid",
+      "new_document_id": "agentic-test-A-nir-005-coverage_prose_invalid",
+      "old_session_hex": "ae4610ee",
+      "new_session_hex": "d5ea3993",
+      "text_sha256": "c08beeea3311a9e022902863fd33a9396bfee605171af81ebe32716a550c2923",
+      "old_trace": [
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "new_trace": [
+        {
+          "raw_start": 25,
+          "raw_end": 27,
+          "class": "name",
+          "action": "redact",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "fallback_redact",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "old_exact_restore": true,
+      "new_exact_restore": false
+    },
+    {
+      "old_document_id": "agentic-test-D-nir-006-coverage_prose_invalid",
+      "new_document_id": "agentic-test-A-nir-006-coverage_prose_invalid",
+      "old_session_hex": "04f115ff",
+      "new_session_hex": "d1577026",
+      "text_sha256": "1cebc4affd75c1ed21e3acc90905c61508eacd64b349b6a23ca6314f77cb8c29",
+      "old_trace": [
+        {
+          "raw_start": 25,
+          "raw_end": 27,
+          "class": "name",
+          "action": "redact",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "fallback_redact",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "new_trace": [
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "old_exact_restore": false,
+      "new_exact_restore": true
+    },
+    {
+      "old_document_id": "agentic-test-D-nir-007-coverage_prose_invalid",
+      "new_document_id": "agentic-test-A-nir-007-coverage_prose_invalid",
+      "old_session_hex": "3c085173",
+      "new_session_hex": "497b04c7",
+      "text_sha256": "e865e2000a498125790eaa125cb8ebc6accbd8ca06848cbfe2f208fd7999433c",
+      "old_trace": [
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "new_trace": [
+        {
+          "raw_start": 25,
+          "raw_end": 27,
+          "class": "name",
+          "action": "redact",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "fallback_redact",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "old_exact_restore": true,
+      "new_exact_restore": false
+    },
+    {
+      "old_document_id": "agentic-test-D-nir-008-coverage_prose_invalid",
+      "new_document_id": "agentic-test-A-nir-008-coverage_prose_invalid",
+      "old_session_hex": "2612ea09",
+      "new_session_hex": "792b8ccb",
+      "text_sha256": "76d91a8652f499adc26dd4f0be75c3f4130e86db6be3c64ae498eaccd2e8521e",
+      "old_trace": [
+        {
+          "raw_start": 24,
+          "raw_end": 27,
+          "class": "name",
+          "action": "redact",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "fallback_redact",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "new_trace": [
+        {
+          "raw_start": 25,
+          "raw_end": 27,
+          "class": "name",
+          "action": "redact",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "fallback_redact",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "old_exact_restore": false,
+      "new_exact_restore": false
+    },
+    {
+      "old_document_id": "agentic-test-D-nir-009-coverage_prose_invalid",
+      "new_document_id": "agentic-test-A-nir-009-coverage_prose_invalid",
+      "old_session_hex": "19c85e7c",
+      "new_session_hex": "a64b5ae0",
+      "text_sha256": "5210876672e1f5133f305b65ec286ef69ef6e2f0775eae94eda3b8cf9b4ae040",
+      "old_trace": [
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "new_trace": [
+        {
+          "raw_start": 25,
+          "raw_end": 27,
+          "class": "name",
+          "action": "redact",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "fallback_redact",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 27,
+          "raw_end": 29,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        },
+        {
+          "raw_start": 32,
+          "raw_end": 34,
+          "class": "name",
+          "action": "tokenize",
+          "provenance": {
+            "stage": "safety_net",
+            "decision": "resolve",
+            "source_ids": [
+              "kiji-distilbert-ort"
+            ]
+          }
+        }
+      ],
+      "old_exact_restore": true,
+      "new_exact_restore": false
+    }
+  ]
+}
