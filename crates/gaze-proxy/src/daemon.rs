@@ -401,9 +401,9 @@ pub fn stop(options: StopOptions) -> Result<(), ProxyError> {
         }
         Ok(())
     } else {
-        Err(ProxyError::DaemonAlreadyRunning {
+        Err(ProxyError::DaemonStopTimeout {
             pid: status.pid,
-            pidfile: options.paths.pidfile,
+            timeout: options.timeout,
         })
     }
 }
@@ -414,10 +414,10 @@ pub fn restart(options: StartOptions, timeout: Duration, force: bool) -> Result<
         timeout,
         force,
     });
-    if !matches!(stop_result, Ok(()) | Err(ProxyError::DaemonNotRunning)) {
-        cleanup_stale(&options.paths)?;
+    match stop_result {
+        Ok(()) | Err(ProxyError::DaemonNotRunning) => start(options),
+        Err(error) => Err(error),
     }
-    start(options)
 }
 
 pub fn status(paths: &DaemonPaths) -> Result<Option<DaemonStatus>, ProxyError> {
