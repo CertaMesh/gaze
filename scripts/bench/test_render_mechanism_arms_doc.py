@@ -11,6 +11,7 @@ import copy
 import functools
 import gzip
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -208,6 +209,77 @@ class MechanismArmsTest(unittest.TestCase):
             self.assertEqual(path.read_bytes(), before)
             self.assertEqual({name: mech.sha256(fixture.root / name) for name in pins}, pins)
             self.assertEqual(ledger, in_memory)
+
+    def publication_fixture(self):
+        fixture = self.fresh()
+        ledger = mech.empty_ledger()
+        fixture.record(ledger, release="v0.16.0")
+        path = fixture.root / "ledger.json"
+        path.write_text(json.dumps(ledger), encoding="utf-8")
+        before = path.read_bytes()
+        self.rewrite_runs(fixture)
+        return fixture, ledger, path, before
+
+    def assert_persisted_pins_unchanged(self, fixture, path, before):
+        self.assertEqual(path.read_bytes(), before)
+        old = json.loads(path.read_text(encoding="utf-8"))
+        for entry in old["mechanisms"]:
+            pins = [entry["policy_delta"]]
+            if "latency" in entry:
+                pins.append(entry["latency"])
+            pins += [row for measurement in entry["measurements"]
+                     for row in measurement["records"].values()]
+            for row in pins:
+                self.assertEqual(mech.sha256(fixture.root / row["file"]), row["sha256"])
+        mech.validate(old, fixture.root)
+
+    @unittest.skipUnless(hasattr(os, "fork"), "crash boundary requires fork")
+    def test_crash_after_evidence_publish_preserves_persisted_pins(self):
+        fixture, ledger, path, before = self.publication_fixture()
+        original = mech._publish_evidence
+        child = os.fork()
+        if child == 0:
+            def publish_then_die(*args):
+                original(*args)
+                os._exit(77)
+            with mock.patch.object(mech, "_publish_evidence", side_effect=publish_then_die):
+                fixture.record(ledger, release="v0.16.0")
+            os._exit(99)
+        _, status = os.waitpid(child, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 77)
+        self.assert_persisted_pins_unchanged(fixture, path, before)
+
+    def test_cli_ledger_write_failure_preserves_persisted_pins(self):
+        fixture, ledger, path, before = self.publication_fixture()
+        original_record = mech.record_measurement
+        original_write = Path.write_text
+        original_replace = os.replace
+        def record_in_fixture(ledger, **kwargs):
+            return original_record(ledger, **kwargs, root=fixture.root,
+                                   evidence_dir=fixture.root / "evidence", crates_tree="d" * 40)
+        def fail_write(target, *args, **kwargs):
+            if target == path:
+                raise OSError("synthetic ledger write failure")
+            return original_write(target, *args, **kwargs)
+        def fail_replace(source, target):
+            if Path(target) == path:
+                raise OSError("synthetic ledger write failure")
+            return original_replace(source, target)
+        args = ["record", "--mechanism", "synthetic-drop", "--title", "Synthetic drop",
+                "--added-in", "v0.16", "--shipped", "test only", "--machine", "test host",
+                "--policy-delta", str(fixture.delta), "--binary", str(fixture.binary),
+                "--release", "v0.16.0"]
+        for name, directory in fixture.runs.items():
+            args += ["--" + name, str(directory)]
+        with mock.patch.object(mech, "LEDGER", path), \
+             mock.patch.object(mech, "load_ledger", return_value=ledger), \
+             mock.patch.object(mech, "record_measurement", side_effect=record_in_fixture), \
+             mock.patch.object(Path, "write_text", fail_write), \
+             mock.patch.object(os, "replace", side_effect=fail_replace):
+            with self.assertRaises(SystemExit) as raised:
+                mech.main(args)
+            self.assertEqual(raised.exception.code, 2)
+        self.assert_persisted_pins_unchanged(fixture, path, before)
 
     def test_release_revision_conflict_preserves_ledger_and_evidence(self):
         fixture = self.fresh()
