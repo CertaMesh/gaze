@@ -4941,6 +4941,14 @@ def dictionary_sequence_identity(scorecard):
         raise LayerError("dictionary sequence runtime differs from ordinary layers")
     if not re.fullmatch(r"[0-9a-f]{64}", str(extension.get("binary_sha256", ""))):
         raise LayerError("invalid dictionary sequence binary digest")
+    binding = extension.get("producer_binding")
+    if (not isinstance(binding, dict) or binding.get("fresh_locked_build") is not True
+            or not str(binding.get("toolchain", "")).startswith("rustc 1.96.0 ")
+            or binding.get("profile") not in ("debug", "release")):
+        raise LayerError("dictionary sequence has no pinned producer build binding")
+    for key in ("example_source_sha256", "cargo_lock_sha256"):
+        if not re.fullmatch(r"[0-9a-f]{64}", str(binding.get(key, ""))):
+            raise LayerError("dictionary sequence has invalid producer source binding")
     if extension.get("contract") != scorecard["layers"]["scored_label_contract"]["file_sha256"]:
         raise LayerError("dictionary sequence contract differs from ordinary layers")
     for key in expected:

@@ -118,10 +118,30 @@ def identity(cases, seed, partition, adapter_root=ROOT):
 
 
 def capture(repo, binary, probe, output, seed=SEED, partition="published"):
+    # Bind the observations to a fresh build of this checkout, rather than trusting
+    # a caller-supplied executable that may predate the adapter or runtime changes.
+    profile = binary.parent.parent.name
+    if (binary.name != "clean_for_bench" or binary.parent.name != "examples"
+            or profile not in ("debug", "release") or not binary.is_relative_to(repo)):
+        raise ValueError("producer must be a checkout-owned debug/release example")
+    command = ["rustup", "run", "1.96.0", "cargo", "build", "--locked",
+               "-p", "gaze-recognizers", "--example", "clean_for_bench", "--all-features",
+               "--target-dir", str(binary.parents[2])]
+    if profile == "release":
+        command.append("--release")
+    subprocess.run(command, cwd=repo, check=True)
     cases = generate(seed, partition)
     manifest = {"identity": identity(cases, seed, partition),
                 "runtime": score.git_metadata(repo),
                 "binary_sha256": score.sha256_file(binary), "records": {}}
+    manifest["producer_binding"] = {
+        "toolchain": subprocess.check_output(
+            ["rustup", "run", "1.96.0", "rustc", "--version"], text=True).strip(),
+        "profile": profile, "fresh_locked_build": True,
+        "example_source_sha256": score.sha256_file(repo /
+            "crates/gaze-recognizers/examples/clean_for_bench.rs"),
+        "cargo_lock_sha256": score.sha256_file(repo / "Cargo.lock"),
+    }
     # A historical overlay must be byte-identical to the committed adapter.
     if score.sha256_file(repo / RUST_ADAPTER) != manifest["identity"]["adapter_sha256"]:
         raise ValueError("runtime adapter differs from the committed harness")
@@ -175,6 +195,7 @@ def replay(directory, contract):
               "contract": score.scored_label_contract_report(contract, [])["file_sha256"],
               "runtime": manifest["runtime"], "binary_sha256": manifest["binary_sha256"],
               "runs": {}, "evidence": manifest["records"]}
+    result["producer_binding"] = manifest["producer_binding"]
     for key, evidence in manifest["records"].items():
         path = directory / evidence["file"]
         if score.sha256_file(path) != evidence["sha256"]:

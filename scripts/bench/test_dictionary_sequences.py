@@ -17,6 +17,9 @@ def card(leak=100):
         "identity": sequence.identity(sequence.generate(), sequence.SEED, "published"),
         "contract": "a", "runtime": result["gaze"],
         "binary_sha256": "b" * 64, "runs": {}, "evidence": {},
+        "producer_binding": {"fresh_locked_build": True, "toolchain": "rustc 1.96.0 test",
+                             "profile": "debug", "example_source_sha256": "d" * 64,
+                             "cargo_lock_sha256": "e" * 64},
     }
     for mode in sequence.SEQUENCES:
         for layer in sequence.LAYERS:
@@ -81,14 +84,16 @@ class ExtensionGateTests(unittest.TestCase):
         self.assertEqual(gate.gate(base, changed)["verdict"], "not_comparable")
 
     def test_bad_evidence_and_runtime_are_rejected(self):
-        for mutation in ("population", "runtime", "run"):
+        for mutation in ("population", "runtime", "run", "binding"):
             changed = card()
             if mutation == "population":
                 changed["dictionary_sequence"]["evidence"]["switch/K"]["observations"] = 0
             elif mutation == "runtime":
                 changed["dictionary_sequence"]["runtime"] = {}
-            else:
+            elif mutation == "run":
                 del changed["dictionary_sequence"]["runs"]["fresh/K"]
+            else:
+                changed["dictionary_sequence"]["producer_binding"]["fresh_locked_build"] = False
             with self.assertRaises(gate.LayerError):
                 gate.gate(card(), changed)
 
