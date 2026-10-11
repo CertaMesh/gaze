@@ -4918,6 +4918,22 @@ GATE_LAYERS = ("C", LAYER_IDENTIFIERS, LAYER_LOOKALIKES, LAYER_REPEATS)
 DICTIONARY_SEQUENCE_LAYERS = ("K", "B")
 
 
+def dictionary_sequence_primary_contract(scorecard):
+    """Resolve the primary v1/v2/v4 identity; generated layers do not rule on FIRSTNAME."""
+    try:
+        declared = score.scorecard_scored_label_contract_identity(scorecard)
+        if type(declared[1]) is not int or declared[1] not in (1, 2, 4):
+            raise ValueError("unsupported contract")
+        contract = (score.SCORED_LABEL_CONTRACT_V1 if declared[1] == 1 else
+                    score.load_scored_label_contract(Path(__file__).resolve().parents[2] /
+                        f"docs/reference/benchmarks/scored-labels-v{declared[1]}.json"))
+        if declared != (contract.contract_id, contract.version, contract.sha256):
+            raise ValueError("unknown contract identity")
+    except (ValueError, OSError):
+        raise LayerError("dictionary sequence has unknown primary scored-label contract") from None
+    return contract.sha256
+
+
 def dictionary_sequence_identity(scorecard):
     """Validate the one supported library-only extension, without changing old gates."""
     extension = scorecard.get("dictionary_sequence")
@@ -4954,8 +4970,8 @@ def dictionary_sequence_identity(scorecard):
     for key in ("example_source_sha256", "cargo_lock_sha256"):
         if not re.fullmatch(r"[0-9a-f]{64}", str(binding.get(key, ""))):
             raise LayerError("dictionary sequence has invalid producer source binding")
-    if extension.get("contract") != scorecard["layers"]["scored_label_contract"]["file_sha256"]:
-        raise LayerError("dictionary sequence contract differs from ordinary layers")
+    if "contract" not in extension or extension["contract"] != dictionary_sequence_primary_contract(scorecard):
+        raise LayerError("dictionary sequence contract differs from primary scoring")
     for key in expected:
         evidence = extension["evidence"][key]
         if not isinstance(evidence, dict) or not re.fullmatch(r"[0-9a-f]{64}", str(evidence.get("sha256", ""))):

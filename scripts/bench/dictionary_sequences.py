@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import patch
 
+import agentic_layers as agentic
 import gaze_bench_score as score
 import scorecard_record as records
 from dictionary_sequence_generators import (
@@ -270,9 +271,9 @@ def attach(full, extension):
     result = copy.deepcopy(full)
     if result["gaze"] != extension["runtime"]:
         raise ValueError("extension runtime differs from ordinary scorecard")
-    expected = result["layers"]["scored_label_contract"]["file_sha256"]
-    if expected != extension["contract"]:
-        raise ValueError("extension contract differs from ordinary layers")
+    expected = agentic.dictionary_sequence_primary_contract(result)
+    if "contract" not in extension or expected != extension["contract"]:
+        raise ValueError("extension contract differs from primary scoring")
     result["dictionary_sequence"] = extension
     return result
 
