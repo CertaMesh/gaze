@@ -1,0 +1,539 @@
+{
+  "schema_version": 1,
+  "comment": "Fresh base and candidate correctness observations on each side's own gaze setup policy; these cells do not exercise a warmed record-cache builder transition. Neutral results are not a benchmark-gain pass.",
+  "base": {
+    "revision": "bcf501f41929b24fd6c03994e4fd23211e376e47",
+    "record": "docs/reference/benchmarks/gates/dictionary-cache-identity/base-observations.jsonl.gz",
+    "record_sha256": "20bba24ee960bb7ae8ae66d5d62f352c69331dd9a8954e54ae716f3abab7f998",
+    "scorecards": {
+      "1": {
+        "file": "docs/reference/benchmarks/gates/dictionary-cache-identity/base-v1.json.gz",
+        "sha256": "f7eb716e5e82dc26b48f253b267b9fca894adcea99cf1b073c4c08aa25613e90"
+      },
+      "2": {
+        "file": "docs/reference/benchmarks/gates/dictionary-cache-identity/base-v2.json.gz",
+        "sha256": "a62378340bf5ae5cf70b114aab3e0585e8897f84bd00149f2d6f1d051fefbf4d"
+      },
+      "4": {
+        "file": "docs/reference/benchmarks/gates/dictionary-cache-identity/base-v4.json.gz",
+        "sha256": "1cc9d97ef9eba1f97b60f80ec2070eb20426d18bf35b13825beebc376a7ca13a"
+      }
+    }
+  },
+  "candidate": {
+    "revision": "222c73a22b5c18fca3e5e543648a75ef64f726b2",
+    "record": "docs/reference/benchmarks/gates/dictionary-cache-identity/candidate-observations.jsonl.gz",
+    "record_sha256": "1d950202d2eea5cd5afab3895a8d3e1c87a165b14b6e090f5d66d99fc82077e9",
+    "scorecards": {
+      "1": {
+        "file": "docs/reference/benchmarks/gates/dictionary-cache-identity/candidate-v1.json.gz",
+        "sha256": "e64ac077d7ed554e999dbbb6af544797d42969d7a2ecc3e3ab7ef47be1ca48fa"
+      },
+      "2": {
+        "file": "docs/reference/benchmarks/gates/dictionary-cache-identity/candidate-v2.json.gz",
+        "sha256": "bb367b84c786cbbf55cee3577f1c9f825c8a5b2e93aacf7d01379eb51f195973"
+      },
+      "4": {
+        "file": "docs/reference/benchmarks/gates/dictionary-cache-identity/candidate-v4.json.gz",
+        "sha256": "839d23e2f18b448cc1be1167d19b8a965f3cc70a95337ae0e142db135cfb9905"
+      }
+    }
+  },
+  "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+  "sampling_seed": 20260710,
+  "generator_version": 15,
+  "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
+  "timing_claim": false,
+  "fresh_observations": true,
+  "measurement_cache": false,
+  "coverage": "Shipped assembly configures before warming. Warm-cache mode transitions are invisible to these benchmark cells; unit and mutation tests cover the repair. Generated transition coverage remains a follow-up.",
+  "replay": "uv run --project scripts/bench python scripts/bench/scorecard_record.py <side>-observations.jsonl.gz --scored-labels docs/reference/benchmarks/scored-labels-v<N>.json --output scorecard.json (omit --scored-labels for v1); agentic_layers.py gate --base <base-card> --candidate <candidate-card>",
+  "results": {
+    "1": {
+      "verdict": "fail",
+      "reason": "no layer's leaked bytes fell and FP bytes did not fall",
+      "summary": {
+        "leaked_bytes_decrease": 0,
+        "false_positive_bytes_increase": 0
+      },
+      "layers": {
+        "C": {
+          "attempted_base": 2910,
+          "attempted_candidate": 2910,
+          "documents_base": 2910,
+          "documents_candidate": 2910,
+          "headline_leaked_base": 9813,
+          "headline_leaked_candidate": 9813,
+          "leaked_base": 9813,
+          "leaked_candidate": 9813,
+          "twin_leaked_base": 0,
+          "twin_leaked_candidate": 0,
+          "false_positive_base": 26890,
+          "false_positive_candidate": 26890,
+          "failed_closed_base": 0,
+          "failed_closed_candidate": 0,
+          "restore_exact_base": 2910,
+          "restore_exact_candidate": 2910,
+          "restore_failures_base": 0,
+          "restore_failures_candidate": 0,
+          "manifest_valid_base": 2910,
+          "manifest_valid_candidate": 2910,
+          "manifest_invalid_base": 0,
+          "manifest_invalid_candidate": 0
+        },
+        "A": {
+          "attempted_base": 3728,
+          "attempted_candidate": 3728,
+          "documents_base": 3728,
+          "documents_candidate": 3728,
+          "headline_leaked_base": 13825,
+          "headline_leaked_candidate": 13825,
+          "leaked_base": 13433,
+          "leaked_candidate": 13433,
+          "twin_leaked_base": 392,
+          "twin_leaked_candidate": 392,
+          "false_positive_base": 1915,
+          "false_positive_candidate": 1915,
+          "failed_closed_base": 0,
+          "failed_closed_candidate": 0,
+          "restore_exact_base": 3728,
+          "restore_exact_candidate": 3728,
+          "restore_failures_base": 0,
+          "restore_failures_candidate": 0,
+          "manifest_valid_base": 3728,
+          "manifest_valid_candidate": 3728,
+          "manifest_invalid_base": 0,
+          "manifest_invalid_candidate": 0
+        },
+        "D": {
+          "attempted_base": 2144,
+          "attempted_candidate": 2144,
+          "documents_base": 2144,
+          "documents_candidate": 2144,
+          "headline_leaked_base": 0,
+          "headline_leaked_candidate": 0,
+          "leaked_base": 0,
+          "leaked_candidate": 0,
+          "twin_leaked_base": 0,
+          "twin_leaked_candidate": 0,
+          "false_positive_base": 6874,
+          "false_positive_candidate": 6874,
+          "failed_closed_base": 0,
+          "failed_closed_candidate": 0,
+          "restore_exact_base": 2144,
+          "restore_exact_candidate": 2144,
+          "restore_failures_base": 0,
+          "restore_failures_candidate": 0,
+          "manifest_valid_base": 2144,
+          "manifest_valid_candidate": 2144,
+          "manifest_invalid_base": 0,
+          "manifest_invalid_candidate": 0
+        },
+        "R": {
+          "attempted_base": 280,
+          "attempted_candidate": 280,
+          "documents_base": 280,
+          "documents_candidate": 280,
+          "headline_leaked_base": 9806,
+          "headline_leaked_candidate": 9806,
+          "leaked_base": 9806,
+          "leaked_candidate": 9806,
+          "twin_leaked_base": 0,
+          "twin_leaked_candidate": 0,
+          "false_positive_base": 479,
+          "false_positive_candidate": 479,
+          "failed_closed_base": 0,
+          "failed_closed_candidate": 0,
+          "restore_exact_base": 280,
+          "restore_exact_candidate": 280,
+          "restore_failures_base": 0,
+          "restore_failures_candidate": 0,
+          "manifest_valid_base": 280,
+          "manifest_valid_candidate": 280,
+          "manifest_invalid_base": 0,
+          "manifest_invalid_candidate": 0
+        }
+      },
+      "gate_credit_version": 2,
+      "credit_guard": {
+        "ref_number_9": {
+          "base": 0,
+          "candidate": 0
+        },
+        "ref_number_11": {
+          "base": 30,
+          "candidate": 30
+        },
+        "card_twin_grouped_ref_csv": {
+          "base": 0,
+          "candidate": 0
+        },
+        "card_twin_order": {
+          "base": 0,
+          "candidate": 0
+        },
+        "card_twin_reader_serial": {
+          "base": 0,
+          "candidate": 0
+        },
+        "card_twin_timestamp_log": {
+          "base": 0,
+          "candidate": 0
+        },
+        "card_twin_transaction_json": {
+          "base": 0,
+          "candidate": 0
+        },
+        "ref_number_16": {
+          "base": 0,
+          "candidate": 0
+        },
+        "ref_number_10": {
+          "base": 0,
+          "candidate": 0
+        },
+        "gov_twin_tax_eleven": {
+          "base": 0,
+          "candidate": 0
+        },
+        "gov_near_tax_eleven": {
+          "base": 0,
+          "candidate": 0
+        },
+        "gov_twin_tax_grouped": {
+          "base": 0,
+          "candidate": 0
+        },
+        "gov_near_tax_grouped": {
+          "base": 0,
+          "candidate": 0
+        }
+      },
+      "config": "policy-file"
+    },
+    "2": {
+      "verdict": "fail",
+      "reason": "no layer's leaked bytes fell and FP bytes did not fall",
+      "summary": {
+        "leaked_bytes_decrease": 0,
+        "false_positive_bytes_increase": 0
+      },
+      "layers": {
+        "C": {
+          "attempted_base": 2910,
+          "attempted_candidate": 2910,
+          "documents_base": 2910,
+          "documents_candidate": 2910,
+          "headline_leaked_base": 6748,
+          "headline_leaked_candidate": 6748,
+          "leaked_base": 6748,
+          "leaked_candidate": 6748,
+          "twin_leaked_base": 0,
+          "twin_leaked_candidate": 0,
+          "false_positive_base": 26873,
+          "false_positive_candidate": 26873,
+          "failed_closed_base": 0,
+          "failed_closed_candidate": 0,
+          "restore_exact_base": 2910,
+          "restore_exact_candidate": 2910,
+          "restore_failures_base": 0,
+          "restore_failures_candidate": 0,
+          "manifest_valid_base": 2910,
+          "manifest_valid_candidate": 2910,
+          "manifest_invalid_base": 0,
+          "manifest_invalid_candidate": 0
+        },
+        "A": {
+          "attempted_base": 3728,
+          "attempted_candidate": 3728,
+          "documents_base": 3728,
+          "documents_candidate": 3728,
+          "headline_leaked_base": 13825,
+          "headline_leaked_candidate": 13825,
+          "leaked_base": 13433,
+          "leaked_candidate": 13433,
+          "twin_leaked_base": 392,
+          "twin_leaked_candidate": 392,
+          "false_positive_base": 1915,
+          "false_positive_candidate": 1915,
+          "failed_closed_base": 0,
+          "failed_closed_candidate": 0,
+          "restore_exact_base": 3728,
+          "restore_exact_candidate": 3728,
+          "restore_failures_base": 0,
+          "restore_failures_candidate": 0,
+          "manifest_valid_base": 3728,
+          "manifest_valid_candidate": 3728,
+          "manifest_invalid_base": 0,
+          "manifest_invalid_candidate": 0
+        },
+        "D": {
+          "attempted_base": 2144,
+          "attempted_candidate": 2144,
+          "documents_base": 2144,
+          "documents_candidate": 2144,
+          "headline_leaked_base": 0,
+          "headline_leaked_candidate": 0,
+          "leaked_base": 0,
+          "leaked_candidate": 0,
+          "twin_leaked_base": 0,
+          "twin_leaked_candidate": 0,
+          "false_positive_base": 6874,
+          "false_positive_candidate": 6874,
+          "failed_closed_base": 0,
+          "failed_closed_candidate": 0,
+          "restore_exact_base": 2144,
+          "restore_exact_candidate": 2144,
+          "restore_failures_base": 0,
+          "restore_failures_candidate": 0,
+          "manifest_valid_base": 2144,
+          "manifest_valid_candidate": 2144,
+          "manifest_invalid_base": 0,
+          "manifest_invalid_candidate": 0
+        },
+        "R": {
+          "attempted_base": 280,
+          "attempted_candidate": 280,
+          "documents_base": 280,
+          "documents_candidate": 280,
+          "headline_leaked_base": 9806,
+          "headline_leaked_candidate": 9806,
+          "leaked_base": 9806,
+          "leaked_candidate": 9806,
+          "twin_leaked_base": 0,
+          "twin_leaked_candidate": 0,
+          "false_positive_base": 479,
+          "false_positive_candidate": 479,
+          "failed_closed_base": 0,
+          "failed_closed_candidate": 0,
+          "restore_exact_base": 280,
+          "restore_exact_candidate": 280,
+          "restore_failures_base": 0,
+          "restore_failures_candidate": 0,
+          "manifest_valid_base": 280,
+          "manifest_valid_candidate": 280,
+          "manifest_invalid_base": 0,
+          "manifest_invalid_candidate": 0
+        }
+      },
+      "gate_credit_version": 2,
+      "credit_guard": {
+        "ref_number_9": {
+          "base": 0,
+          "candidate": 0
+        },
+        "ref_number_11": {
+          "base": 30,
+          "candidate": 30
+        },
+        "card_twin_grouped_ref_csv": {
+          "base": 0,
+          "candidate": 0
+        },
+        "card_twin_order": {
+          "base": 0,
+          "candidate": 0
+        },
+        "card_twin_reader_serial": {
+          "base": 0,
+          "candidate": 0
+        },
+        "card_twin_timestamp_log": {
+          "base": 0,
+          "candidate": 0
+        },
+        "card_twin_transaction_json": {
+          "base": 0,
+          "candidate": 0
+        },
+        "ref_number_16": {
+          "base": 0,
+          "candidate": 0
+        },
+        "ref_number_10": {
+          "base": 0,
+          "candidate": 0
+        },
+        "gov_twin_tax_eleven": {
+          "base": 0,
+          "candidate": 0
+        },
+        "gov_near_tax_eleven": {
+          "base": 0,
+          "candidate": 0
+        },
+        "gov_twin_tax_grouped": {
+          "base": 0,
+          "candidate": 0
+        },
+        "gov_near_tax_grouped": {
+          "base": 0,
+          "candidate": 0
+        }
+      },
+      "config": "policy-file"
+    },
+    "4": {
+      "verdict": "fail",
+      "reason": "no layer's leaked bytes fell and FP bytes did not fall",
+      "summary": {
+        "leaked_bytes_decrease": 0,
+        "false_positive_bytes_increase": 0
+      },
+      "layers": {
+        "C": {
+          "attempted_base": 2910,
+          "attempted_candidate": 2910,
+          "documents_base": 2910,
+          "documents_candidate": 2910,
+          "headline_leaked_base": 9813,
+          "headline_leaked_candidate": 9813,
+          "leaked_base": 9813,
+          "leaked_candidate": 9813,
+          "twin_leaked_base": 0,
+          "twin_leaked_candidate": 0,
+          "false_positive_base": 26890,
+          "false_positive_candidate": 26890,
+          "failed_closed_base": 0,
+          "failed_closed_candidate": 0,
+          "restore_exact_base": 2910,
+          "restore_exact_candidate": 2910,
+          "restore_failures_base": 0,
+          "restore_failures_candidate": 0,
+          "manifest_valid_base": 2910,
+          "manifest_valid_candidate": 2910,
+          "manifest_invalid_base": 0,
+          "manifest_invalid_candidate": 0
+        },
+        "A": {
+          "attempted_base": 3728,
+          "attempted_candidate": 3728,
+          "documents_base": 3728,
+          "documents_candidate": 3728,
+          "headline_leaked_base": 13825,
+          "headline_leaked_candidate": 13825,
+          "leaked_base": 13433,
+          "leaked_candidate": 13433,
+          "twin_leaked_base": 392,
+          "twin_leaked_candidate": 392,
+          "false_positive_base": 1915,
+          "false_positive_candidate": 1915,
+          "failed_closed_base": 0,
+          "failed_closed_candidate": 0,
+          "restore_exact_base": 3728,
+          "restore_exact_candidate": 3728,
+          "restore_failures_base": 0,
+          "restore_failures_candidate": 0,
+          "manifest_valid_base": 3728,
+          "manifest_valid_candidate": 3728,
+          "manifest_invalid_base": 0,
+          "manifest_invalid_candidate": 0
+        },
+        "D": {
+          "attempted_base": 2144,
+          "attempted_candidate": 2144,
+          "documents_base": 2144,
+          "documents_candidate": 2144,
+          "headline_leaked_base": 0,
+          "headline_leaked_candidate": 0,
+          "leaked_base": 0,
+          "leaked_candidate": 0,
+          "twin_leaked_base": 0,
+          "twin_leaked_candidate": 0,
+          "false_positive_base": 6874,
+          "false_positive_candidate": 6874,
+          "failed_closed_base": 0,
+          "failed_closed_candidate": 0,
+          "restore_exact_base": 2144,
+          "restore_exact_candidate": 2144,
+          "restore_failures_base": 0,
+          "restore_failures_candidate": 0,
+          "manifest_valid_base": 2144,
+          "manifest_valid_candidate": 2144,
+          "manifest_invalid_base": 0,
+          "manifest_invalid_candidate": 0
+        },
+        "R": {
+          "attempted_base": 280,
+          "attempted_candidate": 280,
+          "documents_base": 280,
+          "documents_candidate": 280,
+          "headline_leaked_base": 9806,
+          "headline_leaked_candidate": 9806,
+          "leaked_base": 9806,
+          "leaked_candidate": 9806,
+          "twin_leaked_base": 0,
+          "twin_leaked_candidate": 0,
+          "false_positive_base": 479,
+          "false_positive_candidate": 479,
+          "failed_closed_base": 0,
+          "failed_closed_candidate": 0,
+          "restore_exact_base": 280,
+          "restore_exact_candidate": 280,
+          "restore_failures_base": 0,
+          "restore_failures_candidate": 0,
+          "manifest_valid_base": 280,
+          "manifest_valid_candidate": 280,
+          "manifest_invalid_base": 0,
+          "manifest_invalid_candidate": 0
+        }
+      },
+      "gate_credit_version": 2,
+      "credit_guard": {
+        "ref_number_9": {
+          "base": 0,
+          "candidate": 0
+        },
+        "ref_number_11": {
+          "base": 30,
+          "candidate": 30
+        },
+        "card_twin_grouped_ref_csv": {
+          "base": 0,
+          "candidate": 0
+        },
+        "card_twin_order": {
+          "base": 0,
+          "candidate": 0
+        },
+        "card_twin_reader_serial": {
+          "base": 0,
+          "candidate": 0
+        },
+        "card_twin_timestamp_log": {
+          "base": 0,
+          "candidate": 0
+        },
+        "card_twin_transaction_json": {
+          "base": 0,
+          "candidate": 0
+        },
+        "ref_number_16": {
+          "base": 0,
+          "candidate": 0
+        },
+        "ref_number_10": {
+          "base": 0,
+          "candidate": 0
+        },
+        "gov_twin_tax_eleven": {
+          "base": 0,
+          "candidate": 0
+        },
+        "gov_near_tax_eleven": {
+          "base": 0,
+          "candidate": 0
+        },
+        "gov_twin_tax_grouped": {
+          "base": 0,
+          "candidate": 0
+        },
+        "gov_near_tax_grouped": {
+          "base": 0,
+          "candidate": 0
+        }
+      },
+      "config": "policy-file"
+    }
+  }
+}
