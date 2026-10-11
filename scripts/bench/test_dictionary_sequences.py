@@ -40,6 +40,14 @@ def card(leak=100):
 
 
 class GeneratorTests(unittest.TestCase):
+    def test_registered_generator_constructs_capture_context(self):
+        generator = sequence.resolve_generator(sequence.DEFAULT_GENERATOR)
+        cases = generator.generate()
+        for case in cases:
+            context = json.loads(case.context())
+            self.assertEqual(context["dictionaries"]["sequence"]["terms"], list(case.terms))
+        self.assertEqual(len(generator.documents(cases, "switch")), 648)
+
     def test_every_required_contract_covers_the_generated_labels(self):
         docs = sequence.documents(sequence.generate(), "switch")
         for version in (1, 2, 4):

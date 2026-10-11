@@ -8,6 +8,7 @@ from __future__ import annotations
 import ast
 import gzip
 import hashlib
+import json
 import random
 import sys
 import zlib
@@ -52,7 +53,7 @@ def resolve(generator_sha256):
                 isinstance(target, ast.Name) and target.id in names for target in node.targets):
             definitions.append(node)
     isolated = ModuleType("_gaze_dictionary_generator")
-    isolated.__dict__.update(score=score, random=random, dataclass=dataclass)
+    isolated.__dict__.update(score=score, random=random, json=json, dataclass=dataclass)
     # Dataclasses consult their defining module while processing annotations.
     previous = sys.modules.get(isolated.__name__)
     sys.modules[isolated.__name__] = isolated
