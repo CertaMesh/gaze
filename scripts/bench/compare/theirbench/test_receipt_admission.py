@@ -1,6 +1,7 @@
 """Every publication route binds the displayed score to independently measured predictions."""
 import copy
 import json
+import sys
 import unittest
 import tempfile
 from pathlib import Path
@@ -82,7 +83,6 @@ class ReceiptAdmissionTest(unittest.TestCase):
         self.assertEqual(verified, 5)
 
     def test_receipt_status_marks_only_explicit_legacy_rows(self):
-        entry = fixtures.synthetic()['benchmarks']['presidio-research']
         baseline = render.render(fixtures.synthetic())
         state = fixtures.synthetic()
         state['benchmarks']['presidio-research']['receipt_status'] = {'presidio-en': 'pre-receipt'}
@@ -99,3 +99,27 @@ class ReceiptAdmissionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             render.add_tuned(state, report, own, fixtures.VendorTunedRowTest().declaration())
         self.assertEqual(state, before)
+
+    def test_untagged_gaze_measurement_records_its_prediction_file_digest(self):
+        from unittest import mock
+        import theirbench
+
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            output, predictions, policy = root / 'report.json', root / 'predictions', root / 'policy.toml'
+            policy.write_text('[policy]\n')
+
+            def empty_measurement(name, args, policy, splits, mapping, common, directory, diagnostics):
+                (directory / f'{name}.test.jsonl').write_bytes(b'')
+                return {'test': fixtures.row(0)}
+
+            argv = ['theirbench.py', '--benchmark', 'presidio-research', '--tool', 'gaze-full',
+                    '--gaze-binary', str(root / 'binary'), '--gaze-model-dir', str(root / 'models'),
+                    '--gaze-policy', str(policy), '--predictions-dir', str(predictions), '--output', str(output)]
+            with mock.patch.object(sys, 'argv', argv), \
+                 mock.patch.object(theirbench, 'load_benchmark', return_value=({'test': []}, {'sha256': 'd' * 64})), \
+                 mock.patch.object(theirbench, 'measure_gaze', side_effect=empty_measurement):
+                self.assertEqual(theirbench.main(), 0)
+            provenance = json.loads(output.read_text())['provenance']['gaze-full']
+            self.assertEqual(provenance['prediction_sha256'],
+                             'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')

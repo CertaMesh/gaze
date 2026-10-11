@@ -238,12 +238,14 @@ def add_tool(data: dict[str, Any], report_path: Path, own_path: Path, tool: str)
     if own.get("smoke_limit") or own["system"] != tool:
         raise ValueError(f"{own_path}: not a full own-scorer result for {tool}")
     bundle = checked_row_bundle(report["benchmark"], entry, report, tool, own)
-    install_row_bundle(entry, tool, bundle)
-    entry["typed_hold"] = sorted(set(entry["typed_hold"]) | set(report["typed_hold"]))
-    entry.setdefault("rows_measured_separately", {})[tool] = {
+    typed_hold = sorted(set(entry["typed_hold"]) | set(report["typed_hold"]))
+    measurement = {
         "harness_revision": report["harness_revision"], "gaze_crates_tree": report["gaze_crates_tree"],
         "comparison_revision": report["comparison_revision"], "label_maps_sha256": report["label_maps_sha256"],
         "rescored_with": report["rescored_with"]}
+    install_row_bundle(entry, tool, bundle)
+    entry["typed_hold"] = typed_hold
+    entry.setdefault("rows_measured_separately", {})[tool] = measurement
 
 
 def add_benchmark(data: dict[str, Any], report_path: Path, own_path: Path, tool: str) -> None:
@@ -412,9 +414,8 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
         previous_cpu = entry.get("provenance", {}).get(row, {}).get("cpu")
         if previous_cpu is not None:
             published_provenance["cpu"] = previous_cpu
-    install_row_bundle(entry, row, RowBundle(published_row, published_provenance, published_score))
     reproduced = release["reproduces"]
-    entry.setdefault("tagged_measurements", {})[row] = {
+    measurement = {
         "harness_revision": report["harness_revision"], "harness_dirty": False,
         "comparison_revision": report["comparison_revision"],
         "comparison_sha256": report["comparison_sha256"],
@@ -426,6 +427,8 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
              "harness_revision": release["measured_with"]["harness_revision"]},
         ],
     }
+    install_row_bundle(entry, row, RowBundle(published_row, published_provenance, published_score))
+    entry.setdefault("tagged_measurements", {})[row] = measurement
     return row
 
 
