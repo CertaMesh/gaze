@@ -2172,6 +2172,25 @@ The literal control scores only literal configured occurrences as gold.
 Benign twins alter each word so the real pipeline's name-component sweep does
 not turn an unchanged word into another declared name.
 
+Unicode equivalence means **full, non-Turkic Unicode case folding**, with no
+NFC/NFD/NFKC/NFKD normalization: canonically equivalent spellings are not
+implicitly equal. The runtime's pinned `unicode-casefold` 0.2.0 tables cover
+Unicode 9.0.0. The generator's Python `lower()`/`upper()` produce variants and
+`casefold()` independently checks positive equivalence and benign exclusions;
+these are Unicode-data-version dependent (the locked Python 3.13 environment
+uses Unicode 15.1.0). This vocabulary uses mappings shared by those versions,
+including sharp-s expansion; it does not claim coverage of newer mappings or
+locale-sensitive casing. New vocabulary must independently verify agreement
+with the runtime's pinned folding version; Python casefold is not an oracle for
+all future Unicode characters.
+
+Replay regenerates every sequence/layer's corpus, IDs, gold inventory and
+population before scoring observations. A digest-valid record from another
+arm or layer is rejected with a value-free `ReplayBindingError`. Historical
+captures keep their original source hashes and measurements; the history check
+pins the original generator source to its committed revision while validating
+its generated inputs with the current replay.
+
 Each of six layer/control captures has 324 documents. Every response goes
 through the real pipeline's clean, restore, manifest and protection-trace
 paths. The canonical scorer and observation recorder measure it; standalone
