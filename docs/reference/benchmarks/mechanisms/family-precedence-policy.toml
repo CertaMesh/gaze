@@ -1,0 +1,310 @@
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.false_tie_gold.alpha"
+pattern = '\bzzref-false_tie_gold-[0-9]{6}\b'
+class = "custom:bench_effective_false_tie_gold_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-false-tie-gold"
+variant = "alpha"
+precedence = 10
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.false_tie_gold.calibration"
+pattern = '\bzzcal-false_tie_gold-[0-9]{6}\b'
+class = "custom:bench_effective_false_tie_gold_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-false-tie-gold"
+variant = "alpha"
+precedence = 5
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.false_tie_gold.beta"
+pattern = '\bzzref-false_tie_gold-[0-9]{6}\b'
+class = "custom:bench_effective_false_tie_gold_beta"
+[policy.custom_recognizers.collision]
+family = "bench-effective-false-tie-gold"
+variant = "beta"
+precedence = 10
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.missed_tie_gold.alpha"
+pattern = '\bzzref-missed_tie_gold-[0-9]{6}\b'
+class = "custom:bench_effective_missed_tie_gold_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-missed-tie-gold"
+variant = "alpha"
+precedence = 10
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.missed_tie_gold.calibration"
+pattern = '\bzzcal-missed_tie_gold-[0-9]{6}\b'
+class = "custom:bench_effective_missed_tie_gold_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-missed-tie-gold"
+variant = "alpha"
+precedence = 5
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.missed_tie_gold.beta"
+pattern = '\bzzref-missed_tie_gold-[0-9]{6}\b'
+class = "custom:bench_effective_missed_tie_gold_beta"
+[policy.custom_recognizers.collision]
+family = "bench-effective-missed-tie-gold"
+variant = "beta"
+precedence = 5
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.no_tie_gold.alpha"
+pattern = '\bzzref-no_tie_gold-[0-9]{6}\b'
+class = "custom:bench_effective_no_tie_gold_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-no-tie-gold"
+variant = "alpha"
+precedence = 10
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.no_tie_gold.calibration"
+pattern = '\bzzcal-no_tie_gold-[0-9]{6}\b'
+class = "custom:bench_effective_no_tie_gold_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-no-tie-gold"
+variant = "alpha"
+precedence = 5
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.no_tie_gold.beta"
+pattern = '\bzzref-no_tie_gold-[0-9]{6}\b'
+class = "custom:bench_effective_no_tie_gold_beta"
+[policy.custom_recognizers.collision]
+family = "bench-effective-no-tie-gold"
+variant = "beta"
+precedence = 20
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.false_tie_benign.alpha"
+pattern = '\bzzref-false_tie_benign-[0-9]{6}\b'
+class = "custom:bench_effective_false_tie_benign_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-false-tie-benign"
+variant = "alpha"
+precedence = 10
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.false_tie_benign.calibration"
+pattern = '\bzzcal-false_tie_benign-[0-9]{6}\b'
+class = "custom:bench_effective_false_tie_benign_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-false-tie-benign"
+variant = "alpha"
+precedence = 5
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.false_tie_benign.beta"
+pattern = '\bzzref-false_tie_benign-[0-9]{6}\b'
+class = "custom:bench_effective_false_tie_benign_beta"
+[policy.custom_recognizers.collision]
+family = "bench-effective-false-tie-benign"
+variant = "beta"
+precedence = 10
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.no_tie_benign.alpha"
+pattern = '\bzzref-no_tie_benign-[0-9]{6}\b'
+class = "custom:bench_effective_no_tie_benign_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-no-tie-benign"
+variant = "alpha"
+precedence = 10
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.no_tie_benign.calibration"
+pattern = '\bzzcal-no_tie_benign-[0-9]{6}\b'
+class = "custom:bench_effective_no_tie_benign_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-no-tie-benign"
+variant = "alpha"
+precedence = 5
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.no_tie_benign.beta"
+pattern = '\bzzref-no_tie_benign-[0-9]{6}\b'
+class = "custom:bench_effective_no_tie_benign_beta"
+[policy.custom_recognizers.collision]
+family = "bench-effective-no-tie-benign"
+variant = "beta"
+precedence = 20
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.same_variant.alpha"
+pattern = '\bzzref-same_variant-[0-9]{6}\b'
+class = "custom:bench_effective_same_variant_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-same-variant"
+variant = "alpha"
+precedence = 10
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.same_variant.calibration"
+pattern = '\bzzcal-same_variant-[0-9]{6}\b'
+class = "custom:bench_effective_same_variant_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-same-variant"
+variant = "alpha"
+precedence = 5
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.same_variant.beta"
+pattern = '\bzzref-same_variant-[0-9]{6}\b'
+class = "custom:bench_effective_same_variant_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-same-variant"
+variant = "alpha"
+precedence = 10
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.absent_id.alpha"
+pattern = '\bzzref-absent_id-[0-9]{6}\b'
+class = "custom:bench_effective_absent_id_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-absent-id"
+variant = "alpha"
+precedence = 10
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.absent_id.calibration"
+pattern = '\bzzcal-absent_id-[0-9]{6}\b'
+class = "custom:bench_effective_absent_id_alpha"
+[policy.custom_recognizers.collision]
+family = "bench-effective-absent-id"
+variant = "alpha"
+precedence = 5
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "bench.effective.absent_id.beta"
+pattern = '\bzzref-absent_id-[0-9]{6}\b'
+class = "custom:bench_effective_absent_id_beta"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_false_tie_gold_alpha"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_false_tie_gold_beta"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:family:bench-effective-false-tie-gold"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_missed_tie_gold_alpha"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_missed_tie_gold_beta"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:family:bench-effective-missed-tie-gold"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_no_tie_gold_alpha"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_no_tie_gold_beta"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:family:bench-effective-no-tie-gold"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_false_tie_benign_alpha"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_false_tie_benign_beta"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:family:bench-effective-false-tie-benign"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_no_tie_benign_alpha"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_no_tie_benign_beta"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:family:bench-effective-no-tie-benign"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_same_variant_alpha"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_same_variant_beta"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:family:bench-effective-same-variant"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_absent_id_alpha"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:bench_effective_absent_id_beta"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:family:bench-effective-absent-id"
+action = "tokenize"
