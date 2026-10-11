@@ -3,6 +3,31 @@ use gaze::{CleanDocument, PiiClass, Scope, Session};
 use gaze_assembly::CorePipelineConfig;
 
 #[test]
+fn grouped_personal_identifiers_keep_the_complete_owned_value() {
+    let core = CorePipelineConfig::new().build().unwrap();
+    for (cue, value, class) in [
+        ("customer ID", "FABLE 407", "customer_id"),
+        ("Kundennummer", "FÄBEL\u{00a0}407", "customer_id"),
+        ("employee ID", "VIOLET 508", "employee_id"),
+        ("Personalnummer", "VIOLE\u{0301}T 508", "employee_id"),
+        ("member ID", "BRONZE 609", "record_id"),
+        ("Mitgliedsnummer", "BRÖNZE 609", "record_id"),
+    ] {
+        let input = format!("{cue}: {value}; status=active");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else {
+            panic!("text")
+        };
+        let entries = session.snapshot_entries();
+        assert_eq!(entries.len(), 1, "whole value leaked: {input:?} -> {clean:?}");
+        assert_eq!(entries[0].raw, value);
+        assert_eq!(entries[0].class, PiiClass::custom(class).unwrap());
+        assert_eq!(clean, format!("{cue}: {}; status=active", entries[0].token));
+        assert_eq!(core.pipeline().restore_strict_text(&session, &clean).unwrap(), input);
+    }
+}
+
+#[test]
 fn labelled_person_ids_capture_only_whole_values_and_restore() {
     let core = CorePipelineConfig::new().build().unwrap();
     for (input, value, class) in [
