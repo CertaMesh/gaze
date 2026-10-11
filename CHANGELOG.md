@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   replacement, returns `ProxyError::DirectAdapterMismatch` before serving.
   Runtime settings and the codec come from one resolved adapter; compatibility
   constructors retain their frozen defaults.
+- Custom recognizers returning NaN or infinite confidence scores now fail closed
+  with a sanitized `DetectError::Backend` (`invalid_score`) before score filtering.
+  Finite negative scores still fall below the existing 0.0 admission floor.
 
 - Tax and government identifiers cover additional cue connectors and grouped
   layouts, including slash Steuernummer, separated SSN, Swiss AHV and national
