@@ -23,15 +23,22 @@ separate policy ablation. They contain every core recognizer except the three ID
 rules and those three rules unchanged, respectively. That policy ablation is not
 measured here and receives no gain credit.
 
-Known limitations: generator v15 does not characterize short unlabelled numeric
+Known limitations: generator v16 does not characterize short unlabelled numeric
 repeats, typographic value quotes or rejected placeholders followed by valid ID
 cues. Independent positive, repeat and benign counterweight cells are deferred.
 
-Both measured source comparisons fail v1, v2 and v4. The `ref_number_9`
-benign-counterweight guard rises from 0 to 180 false-positive bytes. Its JSON and
-log keys are `customerNumber`; the protection trace attributes these spans to
-`customer_id.labelled`, not to the BSN recognizer. The current gate failure is
-retained without a scoring exception or a detection change.
+Both measured source comparisons pass v1, v2 and v4 on generator v16. The
+full-policy pair removes 19,030 gated leaked bytes and adds 14 net false-positive
+bytes; the rules-only pair removes 19,120 and adds 16, respectively. No layer's
+leaked bytes or refusals rise, and exact restores and valid manifests remain
+complete. Restore failures and invalid manifests remain zero. Layer D
+false-positive bytes are unchanged in both pairs.
+
+The measured base is `7464d8158845bed59755176928c475434270f68d`; the candidate is
+`d9e705152d87277c6ff5298e3bb992d964a1f445`. Generator v16 corrects the earlier
+BSN benign twins to use non-person labels. The customer-number cue remains
+unchanged: a bare customer number is personal data. The failed v15 measurements
+remain available in this directory's Git history.
 
 Scorecards use deterministic gzip archives. Regenerate an ordinary JSON
 scorecard from its bound observations with `scripts/bench/rescore.py`, or unpack

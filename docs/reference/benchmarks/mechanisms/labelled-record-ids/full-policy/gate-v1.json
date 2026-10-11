@@ -1,9 +1,9 @@
 {
-  "verdict": "fail",
-  "reason": "credit guard: FP bytes rose on ['ref_number_9 (BSN: 0 -> 180)'], the benign twin of credited checksum-invalid gold; no net-bytes gain offsets it",
+  "verdict": "pass",
+  "reason": "leaked bytes fell by 19030, FP bytes changed by +14",
   "summary": {
     "leaked_bytes_decrease": 19030,
-    "false_positive_bytes_increase": 194
+    "false_positive_bytes_increase": 14
   },
   "layers": {
     "C": {
@@ -65,8 +65,8 @@
       "leaked_candidate": 0,
       "twin_leaked_base": 0,
       "twin_leaked_candidate": 0,
-      "false_positive_base": 6874,
-      "false_positive_candidate": 7054,
+      "false_positive_base": 6892,
+      "false_positive_candidate": 6892,
       "failed_closed_base": 0,
       "failed_closed_candidate": 0,
       "restore_exact_base": 2144,
@@ -106,8 +106,8 @@
   "gate_credit_version": 2,
   "credit_guard": {
     "ref_number_9": {
-      "base": 0,
-      "candidate": 180
+      "base": 18,
+      "candidate": 18
     },
     "ref_number_11": {
       "base": 30,
