@@ -1,52 +1,53 @@
 #!/usr/bin/env python3
-"""Reproduce the ordinary gate and the unresolved extension attachment binding."""
+"""Replay retained ordinary and dictionary observations through the combined gate."""
 import argparse
+import gzip
 import json
+import subprocess
 import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[5]
-sys.path.insert(0, str(ROOT / "scripts/bench"))
-import agentic_layers as agentic
-import dictionary_sequences as dictionary
-import gaze_bench_score as score
-import scorecard_record as records
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--repo", type=Path)
+    parser.add_argument("--evidence", type=Path)
     args = parser.parse_args()
-    evidence = Path(__file__).resolve().parent
+    root = args.repo or Path(__file__).resolve().parents[5]
+    evidence = args.evidence or Path(__file__).resolve().parent
+    sys.path.insert(0, str(root / "scripts/bench"))
+    import dictionary_sequences as dictionary
+    import gaze_bench_score as score
+    import scorecard_record as records
     args.output.mkdir(parents=True, exist_ok=True)
+    reports = {}
     for version in (1, 2, 4):
         contract = (score.SCORED_LABEL_CONTRACT_V1 if version == 1 else
-                    score.load_scored_label_contract(ROOT / f"docs/reference/benchmarks/scored-labels-v{version}.json"))
-        cards = {}
-        extension_counts = {}
+                    score.load_scored_label_contract(
+                        root / f"docs/reference/benchmarks/scored-labels-v{version}.json",
+                        display_path=f"docs/reference/benchmarks/scored-labels-v{version}.json"))
+        paths = {}
         for side in ("base", "candidate"):
-            card = records.rescore(evidence / f"{side}-observations.jsonl.gz", contract, max_workers=4)
+            record = (f"{side}-observations-v1.jsonl.gz" if version == 1 else f"{side}-observations.jsonl.gz")
+            card = records.rescore(evidence / record, contract, max_workers=4)
             extension = dictionary.replay(evidence / f"{side}-dictionary-sequence", contract)
-            try:
-                dictionary.attach(card, extension)
-            except ValueError as error:
-                if str(error) != "extension contract differs from ordinary layers":
-                    raise
-            else:
-                raise AssertionError("The recorded attachment blocker no longer reproduces")
-            cards[side] = card
-            extension_counts[side] = {
-                arm: {"bytes": run["metrics"]["utf8_bytes"],
-                      "availability": run["pipeline_availability"],
-                      "contract": run["pipeline_contract"]}
-                for arm, run in extension["runs"].items()
-            }
-        result = {"workflow_status": "blocked",
-                  "attachment_error": "extension contract differs from ordinary layers",
-                  "ordinary_gate": agentic.gate(cards["base"], cards["candidate"]),
-                  "dictionary_counts": extension_counts}
-        (args.output / f"v{version}.json").write_text(json.dumps(result, indent=2) + "\n")
-        print(f"v{version}: combined gate blocked; ordinary gate {result['ordinary_gate']['verdict']}")
+            combined = dictionary.attach(card, extension)
+            paths[side] = args.output / f"{side}-v{version}.json"
+            paths[side].write_text(json.dumps(combined, indent=2) + "\n")
+            (args.output / f"{side}-v{version}.json.gz").write_bytes(
+                gzip.compress(paths[side].read_bytes(), mtime=0))
+            (args.output / f"{side}-dictionary-v{version}.json.gz").write_bytes(
+                gzip.compress((json.dumps(extension, indent=2) + "\n").encode(), mtime=0))
+        report = args.output / f"gate-v{version}.json"
+        result = subprocess.run([sys.executable, str(root / "scripts/bench/agentic_layers.py"),
+                                 "gate", "--base", str(paths["base"]), "--candidate", str(paths["candidate"]),
+                                 "--output", str(report)], cwd=root, check=False)
+        reports[f"v{version}"] = json.loads(report.read_text())
+        print(f"v{version}: combined gate {reports[f'v{version}']['verdict']} (exit {result.returncode})")
+        if result.returncode != 0 or reports[f"v{version}"]["verdict"] != "pass":
+            raise SystemExit(result.returncode or 1)
+    (args.output / "gate.json").write_text(json.dumps(reports, indent=2) + "\n")
 
 
 if __name__ == "__main__":

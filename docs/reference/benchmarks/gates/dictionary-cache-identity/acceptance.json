@@ -1,0 +1,37 @@
+{
+  "rust_toolchain": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+  "python": "Python 3.13.13",
+  "fmt": "pass",
+  "workspace_clippy_all_features_all_targets_deny_warnings": "pass",
+  "recognizers": {
+    "passed": 728,
+    "failed": 0,
+    "ignored": 10
+  },
+  "core": {
+    "passed": 816,
+    "failed": 0,
+    "ignored": 0
+  },
+  "example": {
+    "passed": 18,
+    "failed": 0,
+    "ignored": 1
+  },
+  "unittest": {
+    "executed": 1067,
+    "skipped": 1,
+    "status": "pass"
+  },
+  "ci_python": {
+    "executed": 18,
+    "skipped": 0,
+    "status": "pass"
+  },
+  "pytest_summary": "285 passed, 1 skipped, 62 subtests passed in 41.28s",
+  "policy_cli_equivalence": {
+    "documents": 6,
+    "seed": 20260710,
+    "mismatches": []
+  }
+}

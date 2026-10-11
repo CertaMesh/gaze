@@ -1,14 +1,15 @@
 {
-  "base": "816f4be632c459ee9eb51281554b297681752c01",
-  "candidate": "ddbf050ca7779d472c5443c93380033cf53bd290",
-  "production_example_sha256": "7df530a5d6f683dcd34661d81688f5d082403605a053a1c529f3dc4052767cc3",
+  "base": "65f3d6aa599c235231b6c0c21ea46f77c38773c4",
+  "candidate": "9f87f1996c4f1b1aa15b0918b036e2bc5b0a1638",
+  "production_example_sha256": "ff1fc4fdeeca97ad9ab467992a02b68826bf05dd81107efeff49a0e4fe540382",
   "identical_harness_files": {
     "crates/gaze-recognizers/examples/support/dictionary_sequence.rs": "cd3a47b248a524e28639c92fe509f64f668bc3f393ab57bb0242c1bc35369ed8",
-    "scripts/bench/dictionary_sequences.py": "d43b7fc2c185cf75dfc1d7ee0646ea314a41bd307bc10a0e28966570a4690d83",
+    "scripts/bench/dictionary_sequences.py": "6c7b5bad1f385da94e2c29b2ef0ccacd4f07d3e414c2ae274f98d7cfb9129e9a",
     "scripts/bench/dictionary_sequence_generators.py": "5b16b437dd4f08776ec0029da2759ce32e3774396662bbf76fba0c7144262a55",
-    "scripts/bench/agentic_layers.py": "7d67a9cdc2d0d3b8acfe4be682e0ef89ac44cddd2c724be8b2ae5c32f12fee83",
+    "scripts/bench/agentic_layers.py": "5247862335a54966f6d0d30081332ba277a3ea50d3a2f9da7d60cfabcdeff1e1",
     "scripts/bench/gaze_bench_score.py": "27bf262c5382e3d80adc8204357fb3939c4d634261d294ac1650b26ca22c2403",
-    "scripts/bench/scorecard_record.py": "f67e5128869b1f9062f9cf1faf41b57ef2754960fd9485a3105d41294ab7d6a0"
+    "scripts/bench/scorecard_record.py": "f67e5128869b1f9062f9cf1faf41b57ef2754960fd9485a3105d41294ab7d6a0",
+    "docs/reference/benchmarks/scored-labels-agentic.json": "177cdd59eb82ec1700ffc3983261d6b459644f3b8499d4f828dd9f29c8cf1317"
   },
   "example_test_delta": "Only cfg(test) baseline assertion now checks the repaired warm-switch spans; production example bytes are identical."
 }
