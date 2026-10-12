@@ -779,8 +779,9 @@ impl Session {
     /// `preview-redacted.png`) plus owner-only `<base>-owner/manifest.bin`. The supplied
     /// [`DocumentExtension`] is serialized inside the signed snapshot payload, so its hashes and
     /// codec audit rows become the integrity root for the agent-facing files. Text-only adopters
-    /// should use [`Session::export`]. Current snapshots emit v6 so older readers fail closed
-    /// before restore while the signature binds the emitted envelope bytes.
+    /// should use [`Session::export`]. Snapshots use v6 without repeat-seed metadata and v7
+    /// when that metadata is present. Older readers reject unsupported envelopes, and the
+    /// signature binds the emitted version and payload bytes.
     ///
     /// ```rust
     /// use gaze::{
