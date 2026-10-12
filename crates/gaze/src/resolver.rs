@@ -1346,6 +1346,66 @@ mod tests {
         );
     }
 
+    #[test]
+    fn effective_family_precedence_exact_span_does_not_emit_a_false_family_token() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "a",
+                crate::CollisionMembership::new("tenant-document", "alpha", 10, None),
+            )
+            .register_collision(
+                "a2",
+                crate::CollisionMembership::new("tenant-document", "alpha", 5, None),
+            )
+            .register_collision(
+                "b",
+                crate::CollisionMembership::new("tenant-document", "beta", 10, None),
+            )
+            .build();
+        let a = candidate(0..5, PiiClass::custom("alpha").unwrap(), 0.7, "a");
+        let b = candidate(0..5, PiiClass::custom("beta").unwrap(), 0.7, "b");
+        for originals in [vec![a.clone(), b.clone()], vec![b, a]] {
+            let resolved = resolve_candidates_with_policy(originals, registry.family_policy());
+            assert_eq!(resolved.len(), 1);
+            assert_eq!(resolved[0].recognizer_id, "a");
+            assert_eq!(resolved[0].class, PiiClass::custom("alpha").unwrap());
+            assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
+        }
+    }
+
+    #[test]
+    fn effective_family_precedence_exact_span_emits_a_real_effective_tie() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "a",
+                crate::CollisionMembership::new("tenant-document", "alpha", 10, None),
+            )
+            .register_collision(
+                "a2",
+                crate::CollisionMembership::new("tenant-document", "alpha", 5, None),
+            )
+            .register_collision(
+                "b",
+                crate::CollisionMembership::new("tenant-document", "beta", 5, None),
+            )
+            .build();
+        let a = candidate(0..5, PiiClass::custom("alpha").unwrap(), 0.7, "a");
+        let b = candidate(0..5, PiiClass::custom("beta").unwrap(), 0.7, "b");
+        for originals in [vec![a.clone(), b.clone()], vec![b, a]] {
+            let resolved = resolve_candidates_with_policy(originals, registry.family_policy());
+            assert_eq!(resolved.len(), 1);
+            assert_eq!(
+                resolved[0].recognizer_id,
+                "collision-family:tenant-document"
+            );
+            assert_eq!(
+                resolved[0].class,
+                PiiClass::Custom("family:tenant-document".to_string())
+            );
+            assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
+        }
+    }
+
     /// `arbitrate` probes the family tie *before* the exact same-class merge.
     /// Both rivals here report the same class, so a merge that ran first would
     /// swallow the tie and emit an ordinary merged candidate instead of the

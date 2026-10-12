@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and NIR values as personal data. The v17 corpus and contract stay frozen;
   every displayed release is freshly measured with the stricter gold labels.
   Company/wallet decoys and public-reference controls remain benign.
+- Collision-family tie detection now uses each variant's effective minimum
+  precedence, matching winner selection. Adopter policies with mixed precedence
+  within a variant no longer create false family tokens or miss effective ties;
+  declared membership values and legacy recovery behavior remain consistent.
 
 - Family-level tokens retain their ambiguity reason and original participant
   identities after later overlap decisions. Primary and recovered audit entries
