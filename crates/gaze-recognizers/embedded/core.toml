@@ -2182,7 +2182,7 @@ labelled_value_mode = "field_owned"
 [recognizers.context]
 # An unquoted prose word is a schema placeholder, not identifier evidence.
 # Quoted field scalars may be opaque alphabetic application keys.
-reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+(?:[ \t\u{00A0}\u{202F}]+[\p{L}\p{M}]+)*$'''
+reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+(?:[ _\t\u{00A0}\u{202F}]+[\p{L}\p{M}]+)*$'''
 
 [recognizers.scoring]
 base = 0.90
@@ -2212,7 +2212,7 @@ labelled_value_mode = "field_owned"
 [recognizers.context]
 # An unquoted prose word is a schema placeholder, not identifier evidence.
 # Quoted field scalars may be opaque alphabetic application keys.
-reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+(?:[ \t\u{00A0}\u{202F}]+[\p{L}\p{M}]+)*$'''
+reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+(?:[ _\t\u{00A0}\u{202F}]+[\p{L}\p{M}]+)*$'''
 
 [recognizers.scoring]
 base = 0.90
@@ -2242,7 +2242,7 @@ labelled_value_mode = "field_owned"
 [recognizers.context]
 # An unquoted prose word is a schema placeholder, not identifier evidence.
 # Quoted field scalars may be opaque alphabetic application keys.
-reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+(?:[ \t\u{00A0}\u{202F}]+[\p{L}\p{M}]+)*$'''
+reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+(?:[ _\t\u{00A0}\u{202F}]+[\p{L}\p{M}]+)*$'''
 
 [recognizers.scoring]
 base = 0.90

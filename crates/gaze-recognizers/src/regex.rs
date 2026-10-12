@@ -894,7 +894,7 @@ fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> Label
         }
         let spaces = input[end..]
             .chars()
-            .take_while(|ch| matches!(ch, ' ' | '\u{00a0}' | '\u{202f}'))
+            .take_while(|ch| matches!(ch, ' ' | '\t' | '\u{00a0}' | '\u{202f}'))
             .map(char::len_utf8)
             .sum::<usize>();
         if spaces == 0 {
