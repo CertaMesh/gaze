@@ -139,6 +139,17 @@ impl gaze::Detector for LegacyDetector {
     }
 }
 
+struct OtherLegacyDetector;
+impl gaze::Detector for OtherLegacyDetector {
+    fn detect(&self, input: &str) -> Vec<gaze::Detection> {
+        vec![gaze::Detection::new(
+            0..input.len(),
+            gaze::PiiClass::Name,
+            "third-source",
+        )]
+    }
+}
+
 #[test]
 fn repeated_legacy_adapters_have_stable_distinct_ids_and_keep_provenance() {
     for _ in 0..2 {
@@ -149,6 +160,7 @@ fn repeated_legacy_adapters_have_stable_distinct_ids_and_keep_provenance() {
                 source: "named-source",
             })
             .detector(LegacyDetector("second-source"))
+            .detector(OtherLegacyDetector)
             .build()
             .unwrap();
         let ids = pipeline
@@ -157,9 +169,14 @@ fn repeated_legacy_adapters_have_stable_distinct_ids_and_keep_provenance() {
             .collect::<std::collections::BTreeSet<_>>();
         assert_eq!(
             ids,
-            ["legacy-detector", "legacy-detector/1", "named"]
-                .into_iter()
-                .collect()
+            [
+                "legacy-detector",
+                "legacy-detector/1",
+                "legacy-detector/2",
+                "named"
+            ]
+            .into_iter()
+            .collect()
         );
         let dictionaries = gaze::DictionaryBundle::default();
         let candidates = pipeline
@@ -171,10 +188,16 @@ fn repeated_legacy_adapters_have_stable_distinct_ids_and_keep_provenance() {
                 .iter()
                 .map(|c| c.source.as_str())
                 .collect::<Vec<_>>(),
-            ["first-source", "named-source", "second-source"]
+            [
+                "first-source",
+                "named-source",
+                "second-source",
+                "third-source"
+            ]
         );
         assert_eq!(candidates[0].recognizer_id, "first-source");
         assert_eq!(candidates[2].recognizer_id, "second-source");
+        assert_eq!(candidates[3].recognizer_id, "third-source");
     }
 }
 
