@@ -606,7 +606,6 @@ enum LifecycleStateV1 {
 struct RuntimeInner {
     lifecycle: LifecycleStateV1,
     queue: VecDeque<QueuedInspectionEventV1>,
-    closed: bool,
     sink_panics: u64,
     sink_rejections: u64,
 }
@@ -671,9 +670,7 @@ impl RegistrationState {
             Err(TryLockError::WouldBlock) => Err(InspectionDropCodeV1::QueueContended),
             Err(TryLockError::Poisoned(poisoned)) => {
                 let mut inner = poisoned.into_inner();
-                inner.lifecycle = LifecycleStateV1::Disabled;
-                inner.closed = true;
-                inner.queue.clear();
+                terminate(&mut inner, &self.changed);
                 Err(InspectionDropCodeV1::Disabled)
             }
         }
@@ -684,12 +681,15 @@ impl RegistrationState {
         if matches!(inner.lifecycle, LifecycleStateV1::Disabled) {
             return InspectionDisableOutcomeV1::AlreadyDisabled;
         }
-        inner.lifecycle = LifecycleStateV1::Disabled;
-        inner.closed = true;
-        inner.queue.clear();
-        self.changed.notify_all();
+        terminate(&mut inner, &self.changed);
         InspectionDisableOutcomeV1::Disabled
     }
+}
+
+fn terminate(inner: &mut RuntimeInner, changed: &Condvar) {
+    inner.lifecycle = LifecycleStateV1::Disabled;
+    inner.queue.clear();
+    changed.notify_all();
 }
 
 fn lock_without_recovery<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -791,7 +791,6 @@ pub fn install_inspection_v1(
         inner: Mutex::new(RuntimeInner {
             lifecycle: LifecycleStateV1::Running(0),
             queue: VecDeque::new(),
-            closed: false,
             sink_panics: 0,
             sink_rejections: 0,
         }),
@@ -837,7 +836,7 @@ fn dispatcher_loop(state: Arc<RegistrationState>, sink: Arc<dyn InspectionSink>)
     loop {
         let queued = {
             let mut inner = lock_without_recovery(&state.inner);
-            while inner.queue.is_empty() && !inner.closed {
+            while inner.queue.is_empty() && !matches!(inner.lifecycle, LifecycleStateV1::Disabled) {
                 #[cfg(test)]
                 if let Some(ready) = lock_without_recovery(&state.hooks).before_wait.take() {
                     let _ = ready.send(());
@@ -860,7 +859,7 @@ fn dispatcher_loop(state: Arc<RegistrationState>, sink: Arc<dyn InspectionSink>)
             let inner = lock_without_recovery(&state.inner);
             matches!(
                 inner.lifecycle,
-                LifecycleStateV1::Running(epoch) if epoch == queued.epoch && !inner.closed
+                LifecycleStateV1::Running(epoch) if epoch == queued.epoch
             )
         };
         if !permit {
@@ -930,10 +929,7 @@ impl InstalledInspectionProducerV1 {
         }
         let inner = self.state.inner.lock().map_err(|poisoned| {
             let mut inner = poisoned.into_inner();
-            inner.lifecycle = LifecycleStateV1::Disabled;
-            inner.closed = true;
-            inner.queue.clear();
-            self.state.changed.notify_all();
+            terminate(&mut inner, &self.state.changed);
             InspectionBeginLogicalErrorV1::Disabled
         })?;
         self.logical_from_inner(inner)
@@ -944,11 +940,9 @@ impl InstalledInspectionProducerV1 {
         inner: MutexGuard<'_, RuntimeInner>,
     ) -> Result<InspectionLogicalEmitterV1, InspectionBeginLogicalErrorV1> {
         match inner.lifecycle {
-            LifecycleStateV1::Running(_) if !inner.closed => {}
+            LifecycleStateV1::Running(_) => {}
             LifecycleStateV1::Purging { .. } => return Err(InspectionBeginLogicalErrorV1::Purging),
-            LifecycleStateV1::Disabled | LifecycleStateV1::Running(_) => {
-                return Err(InspectionBeginLogicalErrorV1::Disabled)
-            }
+            LifecycleStateV1::Disabled => return Err(InspectionBeginLogicalErrorV1::Disabled),
         }
         drop(inner);
         let logical_id = next_bounded_id(&NEXT_LOGICAL_ID)
@@ -1119,10 +1113,7 @@ impl InspectionLogicalEmitterV1 {
         }
         let inner = self.state.try_inner()?;
         match inner.lifecycle {
-            LifecycleStateV1::Running(epoch) if !inner.closed => {
-                Ok((epoch, self.state.descriptor.captures(domain)))
-            }
-            LifecycleStateV1::Running(_) => Err(InspectionDropCodeV1::QueueClosed),
+            LifecycleStateV1::Running(epoch) => Ok((epoch, self.state.descriptor.captures(domain))),
             LifecycleStateV1::Purging { .. } => Err(InspectionDropCodeV1::Purging),
             LifecycleStateV1::Disabled => Err(InspectionDropCodeV1::Disabled),
         }
@@ -1147,10 +1138,7 @@ impl InspectionLogicalEmitterV1 {
             Err(drop) => return InspectionAdmissionOutcomeV1::Dropped(drop),
         };
         match inner.lifecycle {
-            LifecycleStateV1::Running(epoch) if epoch == expected_epoch && !inner.closed => {}
-            LifecycleStateV1::Running(_) if inner.closed => {
-                return InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::QueueClosed)
-            }
+            LifecycleStateV1::Running(epoch) if epoch == expected_epoch => {}
             LifecycleStateV1::Running(_) => {
                 return InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::StaleEpoch)
             }
@@ -1221,10 +1209,7 @@ impl ActivatedInspectionConsumerV1 {
             LifecycleStateV1::Running(from) => match from.checked_add(1) {
                 Some(to) => (from, to),
                 None => {
-                    inner.lifecycle = LifecycleStateV1::Disabled;
-                    inner.closed = true;
-                    inner.queue.clear();
-                    self.state.changed.notify_all();
+                    terminate(&mut inner, &self.state.changed);
                     return Err(InspectionPurgeErrorV1::EpochOverflow);
                 }
             },
@@ -1408,10 +1393,7 @@ impl Drop for InspectionPurgeGuardV1 {
             inner.lifecycle,
             LifecycleStateV1::Purging { from, to } if from == self.from && to == self.to
         ) {
-            inner.lifecycle = LifecycleStateV1::Disabled;
-            inner.closed = true;
-            inner.queue.clear();
-            self.state.changed.notify_all();
+            terminate(&mut inner, &self.state.changed);
         }
     }
 }
@@ -1448,7 +1430,6 @@ mod tests {
             inner: Mutex::new(RuntimeInner {
                 lifecycle: LifecycleStateV1::Running(0),
                 queue: VecDeque::new(),
-                closed: false,
                 sink_panics: 0,
                 sink_rejections: 0,
             }),
@@ -1488,7 +1469,6 @@ mod tests {
             {
                 let mut inner = lock_without_recovery(&self.state.inner);
                 inner.lifecycle = LifecycleStateV1::Disabled;
-                inner.closed = true;
                 inner.queue.clear();
                 self.state.changed.notify_all();
             }
