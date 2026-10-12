@@ -1,0 +1,1232 @@
+{
+  "schema_version": 1,
+  "before_generator_version": 17,
+  "after_generator_version": 18,
+  "semantics": "Only explicitly labelled checksum-invalid Aadhaar and NIR coverage cells change from benign D decoys to invalid A gold. All text and inserted values remain byte-identical.",
+  "partitions": {
+    "dev": {
+      "before_corpus_sha256": "7c205507728f13b54e6ad299f2e414e7bdf37ad9a144c265bd839dee98359a83",
+      "after_corpus_sha256": "3dfd64aa881c3ccb0aec0860aa83246f0e423716af4066b5e6197cd790a3af6b",
+      "changed_documents": 60,
+      "changed_documents_by_class": {
+        "AADHAAR": 30,
+        "NIR": 30
+      },
+      "new_gold_bytes": 810,
+      "changes": [
+        {
+          "old_id": "agentic-dev-D-aadhaar-000-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-aadhaar-000-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 9,
+          "gold_end": 21,
+          "text_sha256": "53722b28b052c3228426510c7ab75e363bd8b9d778cafc367c5f8b86282c840f"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-000-coverage_log_invalid",
+          "new_id": "agentic-dev-A-aadhaar-000-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 8,
+          "gold_end": 20,
+          "text_sha256": "a25808c1db1785b05b671b3bde762044b39fb35b65ac98db204e714a6b1e97d6"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-000-coverage_json_invalid",
+          "new_id": "agentic-dev-A-aadhaar-000-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 13,
+          "gold_end": 25,
+          "text_sha256": "dc07cb5430f6857b36a450a6d42ce0f3ba029791c69b1c828c246bcdf2244396"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-001-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-aadhaar-001-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 9,
+          "gold_end": 21,
+          "text_sha256": "f9a5c7e811b335b7ce407559e065845d001f4c04857c6ce3af6d7b11d26ba45a"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-001-coverage_log_invalid",
+          "new_id": "agentic-dev-A-aadhaar-001-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 8,
+          "gold_end": 20,
+          "text_sha256": "70eb56b05a88f22deec063a044186a1d3e279849cf450795487e05e063cfff3d"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-001-coverage_json_invalid",
+          "new_id": "agentic-dev-A-aadhaar-001-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 13,
+          "gold_end": 25,
+          "text_sha256": "185920eafe084c1f57e7adcb03bd24f0c5e96d56be54f7897af9f67928c2e407"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-002-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-aadhaar-002-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 9,
+          "gold_end": 21,
+          "text_sha256": "8a93fb1b0a4dd29a1382687333b7d56882a380c76dea66ded50f93118b39ac22"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-002-coverage_log_invalid",
+          "new_id": "agentic-dev-A-aadhaar-002-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 8,
+          "gold_end": 20,
+          "text_sha256": "bb28da88d6a38cb68bbfb0b6e5a4403678263102a33da1d120d79185a07a9dd3"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-002-coverage_json_invalid",
+          "new_id": "agentic-dev-A-aadhaar-002-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 13,
+          "gold_end": 25,
+          "text_sha256": "e5b30cfe194d2a28809de613454897e5e2ff4462f207568d64820999848f3780"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-003-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-aadhaar-003-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 9,
+          "gold_end": 21,
+          "text_sha256": "f970eb70c26914b54d79592e717f8f6fdb7915ab360d1e40ebb950db71084817"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-003-coverage_log_invalid",
+          "new_id": "agentic-dev-A-aadhaar-003-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 8,
+          "gold_end": 20,
+          "text_sha256": "2c21bb22d699b33a1daa412e1f3f78d691cf6c81bfdad5339ab9b678cde3df3c"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-003-coverage_json_invalid",
+          "new_id": "agentic-dev-A-aadhaar-003-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 13,
+          "gold_end": 25,
+          "text_sha256": "365960cb8d9427f9fca3c236c74286b994177bf44b93a95ce2704517a038659e"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-004-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-aadhaar-004-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 9,
+          "gold_end": 21,
+          "text_sha256": "4eb28c7ac1a53087ac644ac61b9c159d969eb1efd98e896ddd8143d2d1036b83"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-004-coverage_log_invalid",
+          "new_id": "agentic-dev-A-aadhaar-004-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 8,
+          "gold_end": 20,
+          "text_sha256": "e9e08272e3ff9209bc05b30ca41e850114c383f66006ee6032e8981cba411dd5"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-004-coverage_json_invalid",
+          "new_id": "agentic-dev-A-aadhaar-004-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 13,
+          "gold_end": 25,
+          "text_sha256": "c5abced6c8d648be12758420c3968e5b94a41581000ab08abc33e56edb6ef6db"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-005-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-aadhaar-005-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 9,
+          "gold_end": 21,
+          "text_sha256": "eb8e475f7266c7447364dc6d4584a6f333578519ffae1a59df4de5395f9dffac"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-005-coverage_log_invalid",
+          "new_id": "agentic-dev-A-aadhaar-005-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 8,
+          "gold_end": 20,
+          "text_sha256": "0adbe34f87ea2726eba04911ae2531ec357c1337228ef1cc4c32c7963eb128c8"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-005-coverage_json_invalid",
+          "new_id": "agentic-dev-A-aadhaar-005-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 13,
+          "gold_end": 25,
+          "text_sha256": "ba5c88bb0e7db7d9705a9cc78aeaaa15ca03ff0660480c486462bd4fcaff9c13"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-006-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-aadhaar-006-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 9,
+          "gold_end": 21,
+          "text_sha256": "972e7397d17fdef0fefd9aef4b8587bfeb00d62beca9c7611681d93427d14efb"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-006-coverage_log_invalid",
+          "new_id": "agentic-dev-A-aadhaar-006-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 8,
+          "gold_end": 20,
+          "text_sha256": "ae8af3e34cad9ed32687bd9cc0f8486575554a147c242e9a94690c5e58dabca1"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-006-coverage_json_invalid",
+          "new_id": "agentic-dev-A-aadhaar-006-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 13,
+          "gold_end": 25,
+          "text_sha256": "721497ebdef6022f374a79e56dfacb546875d6ab693dfc90f8b799e4f9d1457a"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-007-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-aadhaar-007-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 9,
+          "gold_end": 21,
+          "text_sha256": "051f04d988de0d650fc8e449c4817f3c1ca997af00e53d2b048eab57fdf0aa58"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-007-coverage_log_invalid",
+          "new_id": "agentic-dev-A-aadhaar-007-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 8,
+          "gold_end": 20,
+          "text_sha256": "1c17b5626bdc62ae0d2acd720388a899c81edef96d7734c98dc09099adf477f5"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-007-coverage_json_invalid",
+          "new_id": "agentic-dev-A-aadhaar-007-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 13,
+          "gold_end": 25,
+          "text_sha256": "a332f1ce5fa0a38303f6261f3c0493d2a3886206280f6b31af8cbebe1c6e57b6"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-008-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-aadhaar-008-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 9,
+          "gold_end": 21,
+          "text_sha256": "c35b38010f4f3e81afa1a4e5d220bef659f5fac7b649432ac267fc059433b51d"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-008-coverage_log_invalid",
+          "new_id": "agentic-dev-A-aadhaar-008-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 8,
+          "gold_end": 20,
+          "text_sha256": "3fb9d6c62bdda62ced20534b1ec068bd728d26b2e0b755fdc5eeb11cee059b5d"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-008-coverage_json_invalid",
+          "new_id": "agentic-dev-A-aadhaar-008-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 13,
+          "gold_end": 25,
+          "text_sha256": "500206b753628b4768de84e605ff72d8fc5a8917858c1262fa6f2ab2e2a41531"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-009-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-aadhaar-009-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 9,
+          "gold_end": 21,
+          "text_sha256": "18b6a20f7e99f4e379865501267c64df92a8050acb44a56fba0b5d6af92cd731"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-009-coverage_log_invalid",
+          "new_id": "agentic-dev-A-aadhaar-009-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 8,
+          "gold_end": 20,
+          "text_sha256": "4212ee6498ab63457183c6a24d3d9eae8b35b799b54a4f9072b2a94d14f5f131"
+        },
+        {
+          "old_id": "agentic-dev-D-aadhaar-009-coverage_json_invalid",
+          "new_id": "agentic-dev-A-aadhaar-009-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 13,
+          "gold_end": 25,
+          "text_sha256": "b576e95a9c1f1a3a3999c33a3c64d3b00b8222e6f7a0b44bda0b6a36e1e4c8fe"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-000-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-nir-000-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 5,
+          "gold_end": 20,
+          "text_sha256": "1957b7bb2f881905b61ab2c3f059eaed61a8cb766cadf32b57275606d285fb8f"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-000-coverage_log_invalid",
+          "new_id": "agentic-dev-A-nir-000-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 4,
+          "gold_end": 19,
+          "text_sha256": "c6417eee95846d117b7e140d6d150fc42071539572ae5f6ce53fd7dff09533c7"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-000-coverage_json_invalid",
+          "new_id": "agentic-dev-A-nir-000-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 9,
+          "gold_end": 24,
+          "text_sha256": "0c91f371c62b014e647ea38f9949767744a98f76a5222e2f2c4f0cdd13960c2e"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-001-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-nir-001-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 5,
+          "gold_end": 20,
+          "text_sha256": "1eb932ade0852d96a09cf80c6a96a3bf4b920869abffe9416b6a04e66e53b801"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-001-coverage_log_invalid",
+          "new_id": "agentic-dev-A-nir-001-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 4,
+          "gold_end": 19,
+          "text_sha256": "d85108b545ab3a1b21acf7c4a6431620994aea0d0a6004810f3abaaf8826439c"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-001-coverage_json_invalid",
+          "new_id": "agentic-dev-A-nir-001-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 9,
+          "gold_end": 24,
+          "text_sha256": "553058284b5143ed0ef88100b7b787f3c70f022efa9fe703d00d398168b18d48"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-002-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-nir-002-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 5,
+          "gold_end": 20,
+          "text_sha256": "70c1802669e9a62a2a851af1e0651250fbd71a9b27314a544862be6e4d15b15d"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-002-coverage_log_invalid",
+          "new_id": "agentic-dev-A-nir-002-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 4,
+          "gold_end": 19,
+          "text_sha256": "4ff81efcce86f7af02af91074e0844adabe72c231a66269fc42d7e44fc4127c1"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-002-coverage_json_invalid",
+          "new_id": "agentic-dev-A-nir-002-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 9,
+          "gold_end": 24,
+          "text_sha256": "2761a3ceeda612ac6e42c96276905901027290a275d77818f289f7b45aef2209"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-003-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-nir-003-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 5,
+          "gold_end": 20,
+          "text_sha256": "032556fb1808d0cae0bdf32064642002196758178ea0791c714ea41c35616f5d"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-003-coverage_log_invalid",
+          "new_id": "agentic-dev-A-nir-003-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 4,
+          "gold_end": 19,
+          "text_sha256": "6dff63091aa9e2a0f9d72daa7bd1ae3485baf87ad3142cd7d24dac5f68807aa1"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-003-coverage_json_invalid",
+          "new_id": "agentic-dev-A-nir-003-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 9,
+          "gold_end": 24,
+          "text_sha256": "97c818455f92e94c408b4ecb8004bf941e338046cbdd0bb8ceff1c46a167a095"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-004-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-nir-004-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 5,
+          "gold_end": 20,
+          "text_sha256": "ab3b9b15d7f46bb37408830484f90c4338d6e50bed93ec45440d7e1c6e7d8d48"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-004-coverage_log_invalid",
+          "new_id": "agentic-dev-A-nir-004-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 4,
+          "gold_end": 19,
+          "text_sha256": "e3dc4c1600292b601ab5c3c5f883e8c77cf8bc9c29f6d6fba0adcf498c625c42"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-004-coverage_json_invalid",
+          "new_id": "agentic-dev-A-nir-004-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 9,
+          "gold_end": 24,
+          "text_sha256": "5be215037ab8be2d9412eceb41773d90fe0191b50f82f1a02d040de4206b846d"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-005-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-nir-005-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 5,
+          "gold_end": 20,
+          "text_sha256": "213b44b36c43aca53fa8cb5d1a059d7a5129457533a800d5670c744290c77161"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-005-coverage_log_invalid",
+          "new_id": "agentic-dev-A-nir-005-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 4,
+          "gold_end": 19,
+          "text_sha256": "46dbcae3d1841e1d0b20869ed8e5635df50338957772f8d4ce2892f309fbaaad"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-005-coverage_json_invalid",
+          "new_id": "agentic-dev-A-nir-005-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 9,
+          "gold_end": 24,
+          "text_sha256": "8e4e74f8a0462dd0e4551cec8e032140edf2d95968b8652bcf4ac75d5dfb56b8"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-006-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-nir-006-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 5,
+          "gold_end": 20,
+          "text_sha256": "0212f42bd0a955699ba79a82eb18da2e745168b639a45e51d0314cd7bb110416"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-006-coverage_log_invalid",
+          "new_id": "agentic-dev-A-nir-006-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 4,
+          "gold_end": 19,
+          "text_sha256": "5a4683e355c898c4313bee3f376075a1e2e25a986f567ba5e24a85eb9877a079"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-006-coverage_json_invalid",
+          "new_id": "agentic-dev-A-nir-006-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 9,
+          "gold_end": 24,
+          "text_sha256": "33a0b47edba3e3a0c1188b02361dacf2c37015b4212d5b97a9ee135b18cb348e"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-007-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-nir-007-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 5,
+          "gold_end": 20,
+          "text_sha256": "46516dbebba30dc60babd4fa36f0f65e0c7c9a8ed3780ab9ba8bc01c2efc2fcb"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-007-coverage_log_invalid",
+          "new_id": "agentic-dev-A-nir-007-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 4,
+          "gold_end": 19,
+          "text_sha256": "ea1c16a1a7411a7db14ae01b7c03c1c1f6e2b1115b04e9df0300424c7e0d3a55"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-007-coverage_json_invalid",
+          "new_id": "agentic-dev-A-nir-007-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 9,
+          "gold_end": 24,
+          "text_sha256": "8e8ae91e28f3981dfd87b10767e735eb21f18517784b9c4c6f561aef542a42ea"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-008-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-nir-008-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 5,
+          "gold_end": 20,
+          "text_sha256": "b25d4e3a4224e441b1deb45e59b698e0ef7c93a2e9d6fe49f8b170791e301410"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-008-coverage_log_invalid",
+          "new_id": "agentic-dev-A-nir-008-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 4,
+          "gold_end": 19,
+          "text_sha256": "dae01a4e00482ee281a834b61913fe4cce8601c2ff0c651117f7173585e910fc"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-008-coverage_json_invalid",
+          "new_id": "agentic-dev-A-nir-008-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 9,
+          "gold_end": 24,
+          "text_sha256": "319594814fd56d31750fcb8cf99d51b7f9877e87c24b011314cbfe6bfbe7d15b"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-009-coverage_prose_invalid",
+          "new_id": "agentic-dev-A-nir-009-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 5,
+          "gold_end": 20,
+          "text_sha256": "d221dfeb43c64c55957f617633f7636f3d7842849196b6e587075e942b5588cb"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-009-coverage_log_invalid",
+          "new_id": "agentic-dev-A-nir-009-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 4,
+          "gold_end": 19,
+          "text_sha256": "1a0b5d6ea348e3048ef3d9f5e04b49288e081592a866921c1b3fb618fba53e4f"
+        },
+        {
+          "old_id": "agentic-dev-D-nir-009-coverage_json_invalid",
+          "new_id": "agentic-dev-A-nir-009-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 9,
+          "gold_end": 24,
+          "text_sha256": "966de874a507f412bf25c57f665bc40442dfefe37cc808d2a5e1d303cde290ee"
+        }
+      ]
+    },
+    "test": {
+      "before_corpus_sha256": "8c62d49926fa90107fa538b03b39aed6d76a2ad9f2d38e38d14cb3e8b1706725",
+      "after_corpus_sha256": "56c7bbd0d9a0eeb290d595de5deac1d07273e7ff28b431039abb2d83bd71618c",
+      "changed_documents": 60,
+      "changed_documents_by_class": {
+        "AADHAAR": 30,
+        "NIR": 30
+      },
+      "new_gold_bytes": 810,
+      "changes": [
+        {
+          "old_id": "agentic-test-D-aadhaar-000-coverage_prose_invalid",
+          "new_id": "agentic-test-A-aadhaar-000-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 20,
+          "gold_end": 32,
+          "text_sha256": "7a963e8db4b8a10e5e44efdd0e5207b2b2b44c6f93422a2ab4ee4487549e355b"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-000-coverage_log_invalid",
+          "new_id": "agentic-test-A-aadhaar-000-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 6,
+          "gold_end": 18,
+          "text_sha256": "44ff7697c31bf0fac55948fb223e4aa5f6031698a079b323f6ce04e41a52d87a"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-000-coverage_json_invalid",
+          "new_id": "agentic-test-A-aadhaar-000-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 22,
+          "gold_end": 34,
+          "text_sha256": "effa0c0dd6fbd82443791b0e7a62944e78bfb2f89bc9d31f7cbe4ff9877a2ed4"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-001-coverage_prose_invalid",
+          "new_id": "agentic-test-A-aadhaar-001-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 20,
+          "gold_end": 32,
+          "text_sha256": "3bd96337f158db59a2b38d4eb9f710efeb3ac88f7c7043bdb383c7ccd52e2cfc"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-001-coverage_log_invalid",
+          "new_id": "agentic-test-A-aadhaar-001-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 6,
+          "gold_end": 18,
+          "text_sha256": "edcaad39ed59e67ee0b161981d4dbf20d5f65ebce11bebea5e988f88fa3f5b00"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-001-coverage_json_invalid",
+          "new_id": "agentic-test-A-aadhaar-001-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 22,
+          "gold_end": 34,
+          "text_sha256": "cf4bd0ed7b34f89695b3644e76a6682031944ae40c5557b5a1bb673044ce347e"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-002-coverage_prose_invalid",
+          "new_id": "agentic-test-A-aadhaar-002-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 20,
+          "gold_end": 32,
+          "text_sha256": "91e75af235d54d58cf2b8fee59341c3d7fa70fa6c782ed179e6a32e49c80461e"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-002-coverage_log_invalid",
+          "new_id": "agentic-test-A-aadhaar-002-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 6,
+          "gold_end": 18,
+          "text_sha256": "58154b7dda7154e2a30c8fea568e64954406916f32ddd945943f8e8441d17398"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-002-coverage_json_invalid",
+          "new_id": "agentic-test-A-aadhaar-002-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 22,
+          "gold_end": 34,
+          "text_sha256": "146534ecc6d6be885cb752153d6ab699c8bc35935c817d2b22bb781771a77061"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-003-coverage_prose_invalid",
+          "new_id": "agentic-test-A-aadhaar-003-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 20,
+          "gold_end": 32,
+          "text_sha256": "515149fcfbe7fc2b561a7998f760ada2e7d6ea16cc81159db3ae2849485e3f0a"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-003-coverage_log_invalid",
+          "new_id": "agentic-test-A-aadhaar-003-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 6,
+          "gold_end": 18,
+          "text_sha256": "9407b2dde88453167fdc847327f2fafe6f085c2d5e5c24c36cae264ceb79de1c"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-003-coverage_json_invalid",
+          "new_id": "agentic-test-A-aadhaar-003-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 22,
+          "gold_end": 34,
+          "text_sha256": "174be5e9a5eccb91af736b488a94b9edee340b2cf1476bac2de6c94b2fa3cf82"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-004-coverage_prose_invalid",
+          "new_id": "agentic-test-A-aadhaar-004-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 20,
+          "gold_end": 32,
+          "text_sha256": "034cdad23028a7fc061f88e24e2d9110eefc09e850f332d07c1d64d23869e8c2"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-004-coverage_log_invalid",
+          "new_id": "agentic-test-A-aadhaar-004-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 6,
+          "gold_end": 18,
+          "text_sha256": "5cb281f57f46ebf31bf9a099e9c27ae32f27d7f461db75705eed74360179a717"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-004-coverage_json_invalid",
+          "new_id": "agentic-test-A-aadhaar-004-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 22,
+          "gold_end": 34,
+          "text_sha256": "06898f4fc8fd92537a839f3dccc08b745e13f5001b8c1c739b145a712fc5831b"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-005-coverage_prose_invalid",
+          "new_id": "agentic-test-A-aadhaar-005-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 20,
+          "gold_end": 32,
+          "text_sha256": "e61af06bc615ace752a4f178b78b1df26314223976dd316e8513e8557f493375"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-005-coverage_log_invalid",
+          "new_id": "agentic-test-A-aadhaar-005-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 6,
+          "gold_end": 18,
+          "text_sha256": "9366ce6100e9cdb6659915ada06936e838e9489eb6acf7c9aa929846924d0748"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-005-coverage_json_invalid",
+          "new_id": "agentic-test-A-aadhaar-005-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 22,
+          "gold_end": 34,
+          "text_sha256": "d24bbf0c56981c0caaaab2cdae7c22dee1a2754a1db18e47176a9691a7a6fa00"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-006-coverage_prose_invalid",
+          "new_id": "agentic-test-A-aadhaar-006-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 20,
+          "gold_end": 32,
+          "text_sha256": "1d13734f05fc3ae296c695bb9fd6241c4dc71a2453c37fa1ef3fe82d66982906"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-006-coverage_log_invalid",
+          "new_id": "agentic-test-A-aadhaar-006-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 6,
+          "gold_end": 18,
+          "text_sha256": "58372d1cf75cdfb214d678779715ccfbdbdb6775d173832de27572cc41757ca7"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-006-coverage_json_invalid",
+          "new_id": "agentic-test-A-aadhaar-006-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 22,
+          "gold_end": 34,
+          "text_sha256": "dd3f5a6387e8859f7269a1188995b93df260b79df2b0718a6a66d30d2cd395b1"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-007-coverage_prose_invalid",
+          "new_id": "agentic-test-A-aadhaar-007-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 20,
+          "gold_end": 32,
+          "text_sha256": "52aaa83e84c5ddd8d83c6fca86c15382215be6ba77d6588d18c6c9be82dcf930"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-007-coverage_log_invalid",
+          "new_id": "agentic-test-A-aadhaar-007-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 6,
+          "gold_end": 18,
+          "text_sha256": "fcc081440953793da4f8a79bc6c95b75e6e7b712f21edf126bc120a9fbab173b"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-007-coverage_json_invalid",
+          "new_id": "agentic-test-A-aadhaar-007-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 22,
+          "gold_end": 34,
+          "text_sha256": "317edfd05ce58679167c5be4baa6569141b287ba737ef00387d7926155abbc59"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-008-coverage_prose_invalid",
+          "new_id": "agentic-test-A-aadhaar-008-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 20,
+          "gold_end": 32,
+          "text_sha256": "66f7237c4647e2ac31675ebb5bc72ebc10f97ded31327a66616934723464718e"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-008-coverage_log_invalid",
+          "new_id": "agentic-test-A-aadhaar-008-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 6,
+          "gold_end": 18,
+          "text_sha256": "3107fbd3e1c329a28938ea319092f8b406834feecc2afa277819c982d958e6fe"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-008-coverage_json_invalid",
+          "new_id": "agentic-test-A-aadhaar-008-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 22,
+          "gold_end": 34,
+          "text_sha256": "5ddc2cbaa25fe538bc2bdf6ffee334bf6b1a307214a55bd16af514b2ae3cf3e6"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-009-coverage_prose_invalid",
+          "new_id": "agentic-test-A-aadhaar-009-coverage_prose_invalid",
+          "old_cell": "D|aadhaar|coverage_prose_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_prose_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 20,
+          "gold_end": 32,
+          "text_sha256": "f77d7eb3b93488567e04924b0e6fe61e6d8828cc77f85ffba6dcfa530525b1b6"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-009-coverage_log_invalid",
+          "new_id": "agentic-test-A-aadhaar-009-coverage_log_invalid",
+          "old_cell": "D|aadhaar|coverage_log_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_log_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 6,
+          "gold_end": 18,
+          "text_sha256": "f99f961f4ad9f8ad278b869902cb58e5b18a0719cd39358c9062248d357ab5aa"
+        },
+        {
+          "old_id": "agentic-test-D-aadhaar-009-coverage_json_invalid",
+          "new_id": "agentic-test-A-aadhaar-009-coverage_json_invalid",
+          "old_cell": "D|aadhaar|coverage_json_invalid|benign",
+          "new_cell": "A|aadhaar|coverage_json_invalid|invalid",
+          "gold_label": "AADHAAR",
+          "gold_start": 22,
+          "gold_end": 34,
+          "text_sha256": "1473e4afbe993cfbcbdfe95159ce90e8aec0a4498f3da37e6bbe46df21c91d34"
+        },
+        {
+          "old_id": "agentic-test-D-nir-000-coverage_prose_invalid",
+          "new_id": "agentic-test-A-nir-000-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 46,
+          "gold_end": 61,
+          "text_sha256": "77268854840fdb8b0d181a701f2c80036bffbb729b83aa07682a953452d5d4cf"
+        },
+        {
+          "old_id": "agentic-test-D-nir-000-coverage_log_invalid",
+          "new_id": "agentic-test-A-nir-000-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 32,
+          "gold_end": 47,
+          "text_sha256": "9790087230e599e291478371d37f882d950d6b5d0dae69711b8c4116c9a87b2e"
+        },
+        {
+          "old_id": "agentic-test-D-nir-000-coverage_json_invalid",
+          "new_id": "agentic-test-A-nir-000-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 48,
+          "gold_end": 63,
+          "text_sha256": "fa5dc2add9b39541c71c655741a73e57bd44ff330c280930765fed568c5cc280"
+        },
+        {
+          "old_id": "agentic-test-D-nir-001-coverage_prose_invalid",
+          "new_id": "agentic-test-A-nir-001-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 46,
+          "gold_end": 61,
+          "text_sha256": "9d229bf89bec54bbf05b4b3915ff89d77eebfef30c475c0c991d6c5f23f6c510"
+        },
+        {
+          "old_id": "agentic-test-D-nir-001-coverage_log_invalid",
+          "new_id": "agentic-test-A-nir-001-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 32,
+          "gold_end": 47,
+          "text_sha256": "67bd861eff96d8877d0cf9f79fe3e01174ddd95c051ade64ffe6a9788dc11450"
+        },
+        {
+          "old_id": "agentic-test-D-nir-001-coverage_json_invalid",
+          "new_id": "agentic-test-A-nir-001-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 48,
+          "gold_end": 63,
+          "text_sha256": "4cf492a04c76ca11cad7332d42bb1deb57b7c38d2b0be5f40ebf6aa55c3e6582"
+        },
+        {
+          "old_id": "agentic-test-D-nir-002-coverage_prose_invalid",
+          "new_id": "agentic-test-A-nir-002-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 46,
+          "gold_end": 61,
+          "text_sha256": "01737222ee3904229e3719e0c1cc64eca8aa03caa6d54248f81c5ba0c3c7651e"
+        },
+        {
+          "old_id": "agentic-test-D-nir-002-coverage_log_invalid",
+          "new_id": "agentic-test-A-nir-002-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 32,
+          "gold_end": 47,
+          "text_sha256": "29ddb9f129a6df42688f2af281a9ece853ec3552b7769c2441f7de06f2b22cf9"
+        },
+        {
+          "old_id": "agentic-test-D-nir-002-coverage_json_invalid",
+          "new_id": "agentic-test-A-nir-002-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 48,
+          "gold_end": 63,
+          "text_sha256": "69c17f47131663249c65d0f1ea2078a7f1ff51f57a54130b6ade703624d47b06"
+        },
+        {
+          "old_id": "agentic-test-D-nir-003-coverage_prose_invalid",
+          "new_id": "agentic-test-A-nir-003-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 46,
+          "gold_end": 61,
+          "text_sha256": "84cc7f6787f6b41bc4ca67512966fb38abd7df3d1153f96d3e6b20f20dab22a1"
+        },
+        {
+          "old_id": "agentic-test-D-nir-003-coverage_log_invalid",
+          "new_id": "agentic-test-A-nir-003-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 32,
+          "gold_end": 47,
+          "text_sha256": "afffb4c6fb4627d183f9b1edbd9e423aa109c75df1de3ca96d6ef4fd37054d2a"
+        },
+        {
+          "old_id": "agentic-test-D-nir-003-coverage_json_invalid",
+          "new_id": "agentic-test-A-nir-003-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 48,
+          "gold_end": 63,
+          "text_sha256": "286283d2a4a059040d1e1d5862eedf351b7716c787e1a5c9d9fcfc12697e6d33"
+        },
+        {
+          "old_id": "agentic-test-D-nir-004-coverage_prose_invalid",
+          "new_id": "agentic-test-A-nir-004-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 46,
+          "gold_end": 61,
+          "text_sha256": "107e85a9ce363c07d3b2c52a5ab057827f1ada7486556db6b55c30a10d9d5925"
+        },
+        {
+          "old_id": "agentic-test-D-nir-004-coverage_log_invalid",
+          "new_id": "agentic-test-A-nir-004-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 32,
+          "gold_end": 47,
+          "text_sha256": "8bc1615c141eb07aa2079c32634679937a07ca90ce936c69d6f0af363536d398"
+        },
+        {
+          "old_id": "agentic-test-D-nir-004-coverage_json_invalid",
+          "new_id": "agentic-test-A-nir-004-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 48,
+          "gold_end": 63,
+          "text_sha256": "9c977339a7c7697e9a722c272cbc98d7049859ad7c863b6a42edd9f3d055adde"
+        },
+        {
+          "old_id": "agentic-test-D-nir-005-coverage_prose_invalid",
+          "new_id": "agentic-test-A-nir-005-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 46,
+          "gold_end": 61,
+          "text_sha256": "c08beeea3311a9e022902863fd33a9396bfee605171af81ebe32716a550c2923"
+        },
+        {
+          "old_id": "agentic-test-D-nir-005-coverage_log_invalid",
+          "new_id": "agentic-test-A-nir-005-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 32,
+          "gold_end": 47,
+          "text_sha256": "66f325cb470c356fc800de7b7ba0d25cd550d5409a7f340360196f955fc1db16"
+        },
+        {
+          "old_id": "agentic-test-D-nir-005-coverage_json_invalid",
+          "new_id": "agentic-test-A-nir-005-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 48,
+          "gold_end": 63,
+          "text_sha256": "74672687ddfb27d00a83424e83aef3783d3945e6f7c3622236c07b3f4626cdf5"
+        },
+        {
+          "old_id": "agentic-test-D-nir-006-coverage_prose_invalid",
+          "new_id": "agentic-test-A-nir-006-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 46,
+          "gold_end": 61,
+          "text_sha256": "1cebc4affd75c1ed21e3acc90905c61508eacd64b349b6a23ca6314f77cb8c29"
+        },
+        {
+          "old_id": "agentic-test-D-nir-006-coverage_log_invalid",
+          "new_id": "agentic-test-A-nir-006-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 32,
+          "gold_end": 47,
+          "text_sha256": "31a7572fc3c8e81dc0332aaf43a26b7480e139ceba51a10566176fddb3a5f285"
+        },
+        {
+          "old_id": "agentic-test-D-nir-006-coverage_json_invalid",
+          "new_id": "agentic-test-A-nir-006-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 48,
+          "gold_end": 63,
+          "text_sha256": "3cf5b857b1fe31bf03123b6d2794cc38739352468bd7e28e43628686050fd980"
+        },
+        {
+          "old_id": "agentic-test-D-nir-007-coverage_prose_invalid",
+          "new_id": "agentic-test-A-nir-007-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 46,
+          "gold_end": 61,
+          "text_sha256": "e865e2000a498125790eaa125cb8ebc6accbd8ca06848cbfe2f208fd7999433c"
+        },
+        {
+          "old_id": "agentic-test-D-nir-007-coverage_log_invalid",
+          "new_id": "agentic-test-A-nir-007-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 32,
+          "gold_end": 47,
+          "text_sha256": "899bf0f4ddbbf810fe1858b67592ece4d646ea3e4c5b5df3de0cf187eb27860d"
+        },
+        {
+          "old_id": "agentic-test-D-nir-007-coverage_json_invalid",
+          "new_id": "agentic-test-A-nir-007-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 48,
+          "gold_end": 63,
+          "text_sha256": "aa45487ee6dc4e5e2e93c69a308953f004cda6fe5ad878548c3aa7b233c44d33"
+        },
+        {
+          "old_id": "agentic-test-D-nir-008-coverage_prose_invalid",
+          "new_id": "agentic-test-A-nir-008-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 46,
+          "gold_end": 61,
+          "text_sha256": "76d91a8652f499adc26dd4f0be75c3f4130e86db6be3c64ae498eaccd2e8521e"
+        },
+        {
+          "old_id": "agentic-test-D-nir-008-coverage_log_invalid",
+          "new_id": "agentic-test-A-nir-008-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 32,
+          "gold_end": 47,
+          "text_sha256": "517b499fd15e79acb851d7d6cdb714f4a02b9023de2780772d77dc6170aab8e4"
+        },
+        {
+          "old_id": "agentic-test-D-nir-008-coverage_json_invalid",
+          "new_id": "agentic-test-A-nir-008-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 48,
+          "gold_end": 63,
+          "text_sha256": "f1cd25939ab0e28f5bf934b27e5ad23aaaa366345328531fe736ff2be162cd03"
+        },
+        {
+          "old_id": "agentic-test-D-nir-009-coverage_prose_invalid",
+          "new_id": "agentic-test-A-nir-009-coverage_prose_invalid",
+          "old_cell": "D|nir|coverage_prose_invalid|benign",
+          "new_cell": "A|nir|coverage_prose_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 46,
+          "gold_end": 61,
+          "text_sha256": "5210876672e1f5133f305b65ec286ef69ef6e2f0775eae94eda3b8cf9b4ae040"
+        },
+        {
+          "old_id": "agentic-test-D-nir-009-coverage_log_invalid",
+          "new_id": "agentic-test-A-nir-009-coverage_log_invalid",
+          "old_cell": "D|nir|coverage_log_invalid|benign",
+          "new_cell": "A|nir|coverage_log_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 32,
+          "gold_end": 47,
+          "text_sha256": "940ed8b7146d4065f36e9175d00b60e46ec4d3fbd79eb48e14e52a9d59abbe29"
+        },
+        {
+          "old_id": "agentic-test-D-nir-009-coverage_json_invalid",
+          "new_id": "agentic-test-A-nir-009-coverage_json_invalid",
+          "old_cell": "D|nir|coverage_json_invalid|benign",
+          "new_cell": "A|nir|coverage_json_invalid|invalid",
+          "gold_label": "NIR",
+          "gold_start": 48,
+          "gold_end": 63,
+          "text_sha256": "a968cdf3ec41ea23d9307e3adbe294b66b527c9c81a03f50e94aa72649b68e66"
+        }
+      ]
+    }
+  }
+}
