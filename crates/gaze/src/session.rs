@@ -4158,7 +4158,16 @@ mod tests {
             }],
         };
         let blob = |version, payload: &SnapshotPayload| {
-            signed_snapshot_bytes(version, &serde_json::to_vec(payload).unwrap())
+            let bytes = serde_json::to_vec(payload).unwrap();
+            let key = SessionKey::generate().unwrap();
+            let signer = key.signing_key();
+            let public = signer.verifying_key().to_bytes();
+            let signature = signer.sign(&snapshot_signing_preimage(version, &public, &bytes));
+            let mut envelope = vec![version];
+            envelope.extend_from_slice(&public);
+            envelope.extend_from_slice(&signature.to_bytes());
+            envelope.extend_from_slice(&bytes);
+            SensitiveSnapshot::from(envelope)
         };
         assert!(Session::import(blob(SNAPSHOT_VERSION_V7, &payload)).is_ok());
         assert!(matches!(
