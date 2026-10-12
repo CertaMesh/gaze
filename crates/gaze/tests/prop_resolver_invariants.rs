@@ -113,19 +113,19 @@ fn specs_and_permutation() -> impl Strategy<Value = (Vec<Spec>, Vec<Spec>)> {
 fn family_registry() -> FamilyPolicyTable {
     FamilyPolicyTable::from_memberships(std::collections::HashMap::from([
         (
-            recognizer_id(4).into(),
+            recognizer_id(4),
             CollisionMembership::new("payment-card-or-iban", "iban", 10, None),
         ),
         (
-            recognizer_id(5).into(),
+            recognizer_id(5),
             CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
         ),
         (
-            recognizer_id(2).into(),
+            recognizer_id(2),
             CollisionMembership::new("tenant-document", "alpha", 10, None),
         ),
         (
-            recognizer_id(3).into(),
+            recognizer_id(3),
             CollisionMembership::new("tenant-document", "beta", 10, None),
         ),
     ]))
