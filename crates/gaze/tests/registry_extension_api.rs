@@ -43,3 +43,14 @@ fn public_extension_paths_and_accessors_remain_compatible() {
     assert!(validators.is_empty());
     assert!(canonicalizers.is_empty());
 }
+
+#[test]
+#[should_panic(expected = "invalid recognizer registration")]
+fn compatibility_build_rejects_orphan_membership() {
+    RecognizerRegistryBuilder::default()
+        .register_collision(
+            "missing",
+            gaze::CollisionMembership::new("class_alpha", "alpha", 0, None),
+        )
+        .build();
+}
