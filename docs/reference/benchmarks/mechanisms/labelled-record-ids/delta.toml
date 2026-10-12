@@ -1,0 +1,2 @@
+[mechanism_delta]
+append_rulepack_paths = ["docs/reference/benchmarks/mechanisms/labelled-record-ids/mechanism.toml"]

@@ -1,6 +1,7 @@
 use gaze_types::{
-    Candidate, ConflictTier, DetectContext, Detection, Detector, LabelledValueScanReason,
-    LocaleBasis, LocaleTag, PiiClass, Recognizer, ValidatorKind, ValidatorOnFail,
+    Candidate, ConflictTier, DetectContext, Detection, Detector, LabelledValueMode,
+    LabelledValueScanReason, LocaleBasis, LocaleTag, PiiClass, Recognizer, ValidatorKind,
+    ValidatorOnFail,
 };
 use regex::Regex;
 
@@ -53,8 +54,10 @@ pub struct RegexDetector {
     token_family: String,
     capture_groups: Option<Vec<u32>>,
     complete_labelled_value: bool,
+    labelled_value_mode: LabelledValueMode,
     exclusions: Vec<String>,
     reject_match_regex: Option<Regex>,
+    reject_unquoted_capture_regex: Option<Regex>,
     validator_kind: Option<ValidatorKind>,
     validator_on_fail: ValidatorOnFail,
     normalizer_kind: Option<NormalizerKind>,
@@ -122,11 +125,13 @@ impl RegexDetector {
             token_family: token_family.to_string(),
             capture_groups,
             complete_labelled_value: false,
+            labelled_value_mode: LabelledValueMode::Grouped,
             exclusions: exclusions
                 .into_iter()
                 .map(|value| value.to_ascii_lowercase())
                 .collect(),
             reject_match_regex: None,
+            reject_unquoted_capture_regex: None,
             validator_kind,
             validator_on_fail: ValidatorOnFail::Veto,
             normalizer_kind,
@@ -259,6 +264,7 @@ impl RegexDetector {
                 );
                 candidate.labelled_value_scan_reason = scan.reason;
                 candidate.labelled_value_capture_end = (self.complete_labelled_value
+                    && self.labelled_value_mode == LabelledValueMode::Grouped
                     || (self.phone_validator_enabled()
                         && self.validator_on_fail == ValidatorOnFail::Record))
                     .then_some(scan.extension.start);
@@ -311,10 +317,26 @@ impl RegexDetector {
         Ok(self)
     }
 
+    /// Refuse matching capture text when the value itself has no opening quote. Quotes on
+    /// a JSON key or prose label cannot exempt an unquoted value from this guard.
+    pub fn with_unquoted_capture_rejection(mut self, pattern: Option<&str>) -> Result<Self> {
+        self.reject_unquoted_capture_regex = pattern
+            .map(Regex::new)
+            .transpose()
+            .map_err(RecognizerError::InvalidRegex)?;
+        Ok(self)
+    }
+
     /// Extend the captured value through adjacent identifier-like groups. This closes the gap
     /// where a bounded regex can otherwise emit only a prefix of a labelled value.
     pub fn with_complete_labelled_value(mut self, enabled: bool) -> Self {
         self.complete_labelled_value = enabled;
+        self
+    }
+
+    /// Select field ownership without changing legacy grouped-value rules.
+    pub fn with_labelled_value_mode(mut self, mode: LabelledValueMode) -> Self {
+        self.labelled_value_mode = mode;
         self
     }
 
@@ -354,6 +376,9 @@ impl RegexDetector {
                     .or(captured);
                 let span = captured.clone().map(|span| {
                     if self.complete_labelled_value {
+                        if self.labelled_value_mode == LabelledValueMode::FieldOwned {
+                            return scan_field_owned_value(input, span);
+                        }
                         // Only these new fallbacks may trim a field cue inside their broad
                         // capture. Existing cue rules must retain every originally matched byte.
                         let trim_internal_field_boundary = matches!(
@@ -386,7 +411,7 @@ impl RegexDetector {
                 {
                     // The guard judges only the regex evidence, never groups found later by the
                     // scanner. A rejected capture still reaches the audit veto path.
-                    span.rejected = self.reject_match_regex.as_ref().is_some_and(|guard| {
+                    span.rejected |= self.reject_match_regex.as_ref().is_some_and(|guard| {
                         let checked = if self.complete_labelled_value {
                             &input[full.start()..span.capture.end]
                         } else {
@@ -394,6 +419,29 @@ impl RegexDetector {
                         };
                         guard.is_match(checked)
                     });
+                    let unquoted_capture_rejected = self
+                        .reject_unquoted_capture_regex
+                        .as_ref()
+                        .is_some_and(|guard| {
+                            let value_quoted = input[..span.capture.start]
+                                .chars()
+                                .next_back()
+                                .is_some_and(|ch| matches!(ch, '\"' | '\''));
+                            let checked =
+                                if self.labelled_value_mode == LabelledValueMode::FieldOwned {
+                                    span.span.clone()
+                                } else {
+                                    span.capture.clone()
+                                };
+                            !value_quoted && guard.is_match(&input[checked])
+                        });
+                    span.rejected |= unquoted_capture_rejected;
+                    if unquoted_capture_rejected && span.capture.end > full.start() {
+                        // A rejected placeholder cannot own scanner extensions: an uppercase
+                        // group may be the next field's cue. Retain the audit veto, but scan
+                        // again from the original capture end so that cue remains visible.
+                        search_at = Some(span.capture.end);
+                    }
                     span.rejected |= self.ipv4_phone_tail(input, &span.span);
                     return Some(match phone_parts {
                         None => vec![span],
@@ -783,6 +831,153 @@ struct LabelledValueScan {
     rejected: bool,
 }
 
+fn field_value_char(ch: char) -> bool {
+    ch.is_alphanumeric()
+        || unicode_normalization::char::is_combining_mark(ch)
+        || matches!(ch, '+' | '/' | '_' | '=' | '-' | '.' | ':' | '\\')
+}
+
+fn assignment_starts(rest: &str) -> bool {
+    static FIELD: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    if FIELD
+        .get_or_init(|| {
+            Regex::new(r"\A[\p{L}_][\p{L}\p{N}\p{M}_.-]*[ \t\u{00A0}\u{202F}]*[:=]")
+                .expect("static assignment syntax")
+        })
+        .is_match(rest)
+    {
+        return true;
+    }
+    // Human labels may have several words; the terminal field noun supplies
+    // their semantics. Case and whitespace alone never terminate a value.
+    static PHRASE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let Some(caps) = PHRASE.get_or_init(|| {
+        Regex::new(r"\A([\p{L}\p{M}]+(?:[ \t\u{00A0}\u{202F}]+[\p{L}\p{M}-]+)+)[ \t\u{00A0}\u{202F}]*[:=]")
+            .expect("static worded assignment syntax")
+    }).captures(rest) else { return false; };
+    let label = caps.get(1).expect("assignment label capture").as_str();
+    matches!(
+        label
+            .split(|ch: char| ch.is_whitespace() || ch == '-')
+            .next_back()
+            .unwrap_or("")
+            .to_uppercase()
+            .as_str(),
+        "ID" | "NUMBER"
+            | "NUMMER"
+            | "NO"
+            | "NR"
+            | "KEY"
+            | "CODE"
+            | "REFERENCE"
+            | "DATE"
+            | "DATUM"
+            | "VALUE"
+            | "WERT"
+            | "VERSION"
+    )
+}
+
+fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
+    if input[..capture.start]
+        .chars()
+        .next_back()
+        .is_some_and(|ch| matches!(ch, '\"' | '\''))
+    {
+        return scan_quoted_field_value(input, capture);
+    }
+    let mut end = capture.start;
+    let mut reason = None;
+    loop {
+        let group_start = end;
+        end += input[end..]
+            .chars()
+            .take_while(|ch| field_value_char(*ch))
+            .map(char::len_utf8)
+            .sum::<usize>();
+        if end == group_start {
+            break;
+        }
+        let spaces = input[end..]
+            .chars()
+            .take_while(|ch| matches!(ch, ' ' | '\u{00a0}' | '\u{202f}'))
+            .map(char::len_utf8)
+            .sum::<usize>();
+        if spaces == 0 {
+            break;
+        }
+        let next = end + spaces;
+        if assignment_starts(&input[next..]) {
+            reason = Some(LabelledValueScanReason::LabelBoundary);
+            break;
+        }
+        if starts_with_date(&input[next..]) {
+            reason = Some(LabelledValueScanReason::DateBoundary);
+            break;
+        }
+        let group: String = input[next..]
+            .chars()
+            .take_while(|ch| field_value_char(*ch))
+            .collect();
+        let value_like = group.chars().any(char::is_numeric)
+            || (group.chars().any(char::is_alphabetic)
+                && group
+                    .chars()
+                    .filter(|ch| ch.is_alphabetic())
+                    .all(char::is_uppercase));
+        if !value_like {
+            break;
+        }
+        end = next;
+    }
+    let span = capture.start..end;
+    LabelledValueScan {
+        capture: capture.start..capture.end.min(end),
+        extension: capture.end.min(end)..end,
+        reason: labelled_value_over_limit(&input[span.clone()])
+            .then_some(LabelledValueScanReason::LimitExceeded)
+            .or(reason),
+        rejected: span.is_empty(),
+        span,
+    }
+}
+
+fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
+    let quote = input.as_bytes()[capture.start - 1];
+    let opening_escapes = input[..capture.start - 1]
+        .bytes()
+        .rev()
+        .take_while(|byte| *byte == b'\\')
+        .count();
+    // A JSON string embedded in another JSON string doubles its content escapes.
+    // Closing syntax has the opener's escape residue; an escaped content quote does not.
+    let stride = opening_escapes.saturating_add(1).saturating_mul(2);
+    let end = input[capture.start..]
+        .char_indices()
+        .find_map(|(offset, ch)| {
+            if ch as u32 != quote as u32 {
+                return None;
+            }
+            let at = capture.start + offset;
+            let escapes = input[capture.start..at]
+                .bytes()
+                .rev()
+                .take_while(|byte| *byte == b'\\')
+                .count();
+            (escapes % stride == opening_escapes).then(|| at - opening_escapes)
+        })
+        .unwrap_or(input.len());
+    let span = capture.start..end;
+    LabelledValueScan {
+        capture: capture.start..capture.end.min(end),
+        extension: capture.end.min(end)..end,
+        reason: labelled_value_over_limit(&input[span.clone()])
+            .then_some(LabelledValueScanReason::LimitExceeded),
+        rejected: span.is_empty(),
+        span,
+    }
+}
+
 fn scan_labelled_value(
     input: &str,
     capture: std::ops::Range<usize>,
@@ -1098,6 +1293,82 @@ mod tests {
         assert_eq!(&input[scans[0].capture.clone()], "AB12 CD3456");
         assert_eq!(&input[scans[0].span.clone()], "AB12 CD3456 XYZ123456");
         assert!(!scans[0].rejected, "guard must not inspect the extension");
+    }
+
+    #[test]
+    fn unquoted_capture_guard_owns_only_the_value_quote_and_preserves_audit_vetoes() {
+        let detector = RegexDetector::with_rulepack_fields(
+            r#"(?:"field"|field)[: ]+["']?([A-Za-z0-9]+)"#,
+            PiiClass::custom("synthetic").unwrap(),
+            "synthetic.labelled",
+            vec![LocaleTag::Global],
+            0.9,
+            100,
+            "counter",
+            Some(vec![1]),
+            Vec::new(),
+            None,
+            None,
+        )
+        .unwrap()
+        .with_unquoted_capture_rejection(Some(r"^[\p{L}\p{M}]+$"))
+        .unwrap();
+        for (input, rejected) in [
+            (r#""field":null"#, true),
+            (r#""field":true"#, true),
+            (r#""field":false"#, true),
+            (r#""field" placeholder"#, true),
+            (r#""field":"opaque""#, false),
+            ("field: 'opaque'", false),
+            (r#""field":600123"#, false),
+        ] {
+            let scans = detector.scanned_spans(input, None);
+            assert_eq!(scans.len(), 1, "{input}");
+            assert_eq!(scans[0].rejected, rejected, "{input}");
+            let dictionaries = gaze_types::DictionaryBundle::default();
+            let locales = [LocaleTag::Global];
+            let ctx = DetectContext::new(&locales, &dictionaries);
+            let audit = Recognizer::detect_for_registry(&detector, input, &ctx).unwrap();
+            assert_eq!(audit.len(), 1, "{input}");
+            assert_eq!(audit[0].regex_guard_rejected, rejected, "{input}");
+        }
+        assert!(detector.with_unquoted_capture_rejection(Some("[")).is_err());
+    }
+
+    #[test]
+    fn rejected_unquoted_capture_resumes_before_scanner_extension() {
+        let detector = RegexDetector::with_rulepack_fields(
+            r"(?i:field)[ :=]+([A-Za-z0-9]+)",
+            PiiClass::custom("synthetic").unwrap(),
+            "synthetic.labelled",
+            vec![LocaleTag::Global],
+            0.9,
+            100,
+            "counter",
+            Some(vec![1]),
+            Vec::new(),
+            None,
+            None,
+        )
+        .unwrap()
+        .with_complete_labelled_value(true)
+        .with_unquoted_capture_rejection(Some(r"^[\p{L}\p{M}]+$"))
+        .unwrap();
+        let input = "field token FIELD=801234";
+        let dictionaries = gaze_types::DictionaryBundle::default();
+        let locales = [LocaleTag::Global];
+        let ctx = DetectContext::new(&locales, &dictionaries);
+        let scans = detector.scanned_spans(input, None);
+        assert_eq!(scans.len(), 2);
+        assert_eq!(&input[scans[0].capture.clone()], "token");
+        assert!(scans[0].rejected);
+        assert_eq!(&input[scans[1].span.clone()], "801234");
+        assert!(!scans[1].rejected);
+        let audit = Recognizer::detect_for_registry(&detector, input, &ctx).unwrap();
+        assert_eq!(audit.len(), 2);
+        assert!(audit[0].regex_guard_rejected);
+        assert!(!audit[1].regex_guard_rejected);
+        assert_eq!(Recognizer::detect(&detector, input, &ctx).unwrap().len(), 1);
     }
 
     #[test]

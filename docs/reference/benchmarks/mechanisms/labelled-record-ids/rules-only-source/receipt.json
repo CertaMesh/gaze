@@ -1,0 +1,53 @@
+{
+  "comparison": "rules-only source pair",
+  "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5",
+  "sampling_seed": 20260710,
+  "rust_toolchain": "1.96.0-aarch64-apple-darwin",
+  "policy": "policy.toml",
+  "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
+  "ner_enabled": false,
+  "nym_enabled": false,
+  "arms": {
+    "base": {
+      "revision": "0fcfef14f9846ab1e85c723217fd67a4cae4fc86",
+      "binary_sha256": "a62eca126ab894223228c921b5e9a7d6dfa0e24e1ac622345cd46cf07ee24ef4",
+      "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
+      "observations": "observations-base.jsonl.gz",
+      "observations_sha256": "23d37cc79eb13a9fca100c6e68779d8808eab8a3b0689ce0076f5cd54a6defa9",
+      "scorecards": {
+        "2": "scorecard-base-v2.json.gz",
+        "1": "scorecard-base-v1.json.gz",
+        "4": "scorecard-base-v4.json.gz"
+      },
+      "crates_tree": "6f7104cb68fca556635811951910b7a4cda35260"
+    },
+    "candidate": {
+      "revision": "ebce7063b2667119e923c5969aae6ee6b4210567",
+      "binary_sha256": "0cc16223d6076f1247dbd44fe352e9fc955414d0f38e2cecd280ec171d21fa4a",
+      "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
+      "observations": "observations-candidate.jsonl.gz",
+      "observations_sha256": "1e5dcfb7d7756f4e0c8befda1d80eefaafb50b044a1006c05a170864da8447a4",
+      "scorecards": {
+        "2": "scorecard-candidate-v2.json.gz",
+        "1": "scorecard-candidate-v1.json.gz",
+        "4": "scorecard-candidate-v4.json.gz"
+      },
+      "crates_tree": "0538e701e0ef555dbeb36e1446def92f09fdd0e5"
+    }
+  },
+  "gates": [
+    "gate-v2.json",
+    "gate-v1.json",
+    "gate-v4.json"
+  ],
+  "policy_derivation": {
+    "derived_from_revision": "ebce7063b2667119e923c5969aae6ee6b4210567",
+    "setup_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+    "rules_policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
+    "removed_sections": [
+      "ner",
+      "safety_net"
+    ],
+    "remaining_policy_unchanged": true
+  }
+}

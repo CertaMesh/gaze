@@ -1,0 +1,18 @@
+schema_version = "0.1.0"
+
+[session]
+scope = "conversation"
+
+[locale]
+active = ["en-US", "de-DE", "de-AT", "de-CH", "en-GB", "en-IE", "en-AU", "en-CA", "en-IN", "hi-IN", "fr-FR", "es-ES", "nl-NL", "pt-BR"]
+
+[address_blocks]
+enabled = true
+
+[policy.rulepacks]
+paths = ["docs/reference/benchmarks/mechanisms/labelled-record-ids/base-core.toml", "docs/reference/benchmarks/mechanisms/labelled-record-ids/mechanism.toml"]
+bundled = ["locale-de", "locale-en", "locale-br", "locale-fr", "locale-in", "locale-nl", "locale-uk", "secrets"]
+
+[[rule]]
+kind = "default"
+action = "tokenize"

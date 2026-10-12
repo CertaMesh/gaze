@@ -93,6 +93,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Protect explicitly labelled customer, employee and person/member record identifiers
+  in English/German prose, JSON and logs with exact reversible value capture.
+  Generic record, order, invoice, issue, build and tracking IDs remain outside these rules.
+
 - Dictionary caches now distinguish compilation modes and exact ordered terms.
   Enabling Unicode matching after warming a record dictionary no longer misses
   configured values; term-order changes retain correct provenance.

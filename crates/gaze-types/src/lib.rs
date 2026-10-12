@@ -715,6 +715,18 @@ impl ValidatorFailReason {
 /// Field separators that the bundled labelled identifier rules must all accept.
 pub const LABELLED_FIELD_CONNECTORS: &[char] = &[':', '=', '|', '\t', ',', ';', '-'];
 
+/// Ownership contract for completing a labelled regex value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum LabelledValueMode {
+    /// Preserve the legacy identifier-group and cross-recognizer arbitration contract.
+    #[default]
+    Grouped,
+    /// An explicit field owns its value separately from following assignments.
+    FieldOwned,
+}
+
 /// Why a labelled identifier scan stopped or exceeded its usual precision bound.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
