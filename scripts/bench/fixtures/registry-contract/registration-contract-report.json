@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "acceptance": "P census plus construction admission",
+  "census": {
+    "default": {
+      "identical": true,
+      "registrations": 57
+    },
+    "family_precedence": {
+      "identical": true,
+      "registrations": 78
+    }
+  },
+  "admission": {
+    "base": {
+      "rows": [
+        {
+          "case": "valid",
+          "entrypoint": "build",
+          "observed": {
+            "construction_scans": 0,
+            "first_wins": true,
+            "lookup_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "scan_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "status": "admitted"
+          }
+        },
+        {
+          "case": "valid",
+          "entrypoint": "try_build",
+          "observed": {
+            "construction_scans": 0,
+            "status": "entrypoint_unavailable"
+          }
+        },
+        {
+          "case": "forward",
+          "entrypoint": "build",
+          "observed": {
+            "construction_scans": 0,
+            "first_wins": true,
+            "lookup_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "scan_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "status": "admitted"
+          }
+        },
+        {
+          "case": "forward",
+          "entrypoint": "try_build",
+          "observed": {
+            "construction_scans": 0,
+            "status": "entrypoint_unavailable"
+          }
+        },
+        {
+          "case": "orphan",
+          "entrypoint": "build",
+          "observed": {
+            "construction_scans": 0,
+            "first_wins": false,
+            "lookup_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "scan_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "status": "admitted"
+          }
+        },
+        {
+          "case": "orphan",
+          "entrypoint": "try_build",
+          "observed": {
+            "construction_scans": 0,
+            "status": "entrypoint_unavailable"
+          }
+        },
+        {
+          "case": "duplicate",
+          "entrypoint": "build",
+          "observed": {
+            "construction_scans": 0,
+            "first_wins": null,
+            "lookup_sources": [
+              "second-source",
+              "second-source"
+            ],
+            "scan_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "status": "admitted"
+          }
+        },
+        {
+          "case": "duplicate",
+          "entrypoint": "try_build",
+          "observed": {
+            "construction_scans": 0,
+            "status": "entrypoint_unavailable"
+          }
+        }
+      ],
+      "schema_version": 1,
+      "scope": "construction admission; no corpus refusal or leak credit"
+    },
+    "candidate": {
+      "rows": [
+        {
+          "case": "valid",
+          "entrypoint": "build",
+          "observed": {
+            "construction_scans": 0,
+            "first_wins": true,
+            "lookup_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "scan_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "status": "admitted"
+          }
+        },
+        {
+          "case": "valid",
+          "entrypoint": "try_build",
+          "observed": {
+            "construction_scans": 0,
+            "first_wins": true,
+            "lookup_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "scan_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "status": "admitted"
+          }
+        },
+        {
+          "case": "forward",
+          "entrypoint": "build",
+          "observed": {
+            "construction_scans": 0,
+            "first_wins": true,
+            "lookup_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "scan_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "status": "admitted"
+          }
+        },
+        {
+          "case": "forward",
+          "entrypoint": "try_build",
+          "observed": {
+            "construction_scans": 0,
+            "first_wins": true,
+            "lookup_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "scan_sources": [
+              "first-source",
+              "second-source"
+            ],
+            "status": "admitted"
+          }
+        },
+        {
+          "case": "orphan",
+          "entrypoint": "build",
+          "observed": {
+            "construction_scans": 0,
+            "status": "fixed_panic"
+          }
+        },
+        {
+          "case": "orphan",
+          "entrypoint": "try_build",
+          "observed": {
+            "construction_scans": 0,
+            "status": "orphan_membership"
+          }
+        },
+        {
+          "case": "duplicate",
+          "entrypoint": "build",
+          "observed": {
+            "construction_scans": 0,
+            "status": "fixed_panic"
+          }
+        },
+        {
+          "case": "duplicate",
+          "entrypoint": "try_build",
+          "observed": {
+            "construction_scans": 0,
+            "status": "duplicate_id"
+          }
+        }
+      ],
+      "schema_version": 1,
+      "scope": "construction admission; no corpus refusal or leak credit"
+    }
+  },
+  "inputs": [
+    {
+      "name": "base-default-census.json",
+      "sha256": "09e875ed7e6da3d653d7444681c45bdb5b15bdfc3f676fe92999ea8894bcfd13"
+    },
+    {
+      "name": "candidate-default-census.json",
+      "sha256": "09e875ed7e6da3d653d7444681c45bdb5b15bdfc3f676fe92999ea8894bcfd13"
+    },
+    {
+      "name": "base-arm-census.json",
+      "sha256": "5cf82603494386a3b6518f0f724c85446be7414a33617488165ce01088c1e546"
+    },
+    {
+      "name": "candidate-arm-census.json",
+      "sha256": "5cf82603494386a3b6518f0f724c85446be7414a33617488165ce01088c1e546"
+    },
+    {
+      "name": "base-admission.json",
+      "sha256": "4941b400d21d5bf3b3da1084e0cd5247a3d3bd62a03eeab05801449b5e742b37"
+    },
+    {
+      "name": "candidate-admission.json",
+      "sha256": "002d9c8eb489a42811c1744bdecb3b8c00bbc4665efcfc205fcdb5dc6eac9ed5"
+    }
+  ]
+}
