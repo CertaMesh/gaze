@@ -66,7 +66,9 @@ the bench separately requires a deterministic positive: a synthetic residual
 must be protected under `Redact` and `Resolve`, with the same suspect count and
 protection outcome in baseline and gated configurations. `Resolve` must restore
 exactly. Benign observer fixtures separately prove the intended skips retain
-protection, restoration and report semantics.
+protection, restoration and report semantics. A separate capitalized observer
+positive must retain one suspect and the strict caller-boundary refusal signal
+in every configuration.
 
 These proofs also run as `tier4_gating_preserves_required_positive` and
 `tier4_observer_skips_preserve_benign_semantics` in the `safety_net` integration

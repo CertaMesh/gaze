@@ -154,11 +154,11 @@ fn configs() -> [PipelineOptimizationConfig; 4] {
     ]
 }
 
-/// The timed corpus has no residual: observer gates may skip the net here.
-/// Compare output, restore and reports while proving each intended skip occurs.
+/// Benign timing fixtures may skip the net; a capitalized positive must not.
+/// Compare protection, restore and strict-boundary refusal signals across configs.
 pub(crate) fn assert_observer_skips_preserve_semantics() {
     let mut baseline = None;
-    for (config, expected_calls) in configs().into_iter().zip([3, 2, 1, 0]) {
+    for (config, expected_calls) in configs().into_iter().zip([4, 3, 2, 1]) {
         let calls = Arc::new(AtomicUsize::new(0));
         let pipeline = Pipeline::builder()
             .detector(EmailDetector)
@@ -171,10 +171,11 @@ pub(crate) fn assert_observer_skips_preserve_semantics() {
             .build()
             .expect("pipeline");
         let mut outcomes = Vec::new();
-        for (input, expected_spans) in [
-            ("Reach alice@example.invalid about case 0", 1),
-            ("lowercase status update number 0", 0),
-            ("20260515-0000-0000-999999", 0),
+        for (input, expected_spans, expected_suspects) in [
+            ("Reach alice@example.invalid about case 0", 1, 0),
+            ("lowercase status update number 0", 0, 0),
+            ("20260515-0000-0000-999999", 0, 0),
+            ("lowercase Marker class_alpha_secret", 0, 1),
         ] {
             let session = Session::new(Scope::Ephemeral).expect("session");
             let (clean, manifest, report) = pipeline
@@ -185,7 +186,7 @@ pub(crate) fn assert_observer_skips_preserve_semantics() {
                     &DictionaryBundle::default(),
                     SafetyNetPolicy::new(SafetyNetMode::Strict, SafetyNetFallback::Redact),
                 )
-                .expect("benign observer fixture");
+                .expect("observer fixture");
             let CleanDocument::Text(text) = clean else {
                 panic!("text fixture")
             };
@@ -194,12 +195,21 @@ pub(crate) fn assert_observer_skips_preserve_semantics() {
                 "email must remain protected"
             );
             assert_eq!(manifest.len(), expected_spans);
-            assert_eq!(report.stats.suspect_count, 0);
+            assert_eq!(report.stats.suspect_count, expected_suspects);
+            // Strict is observer-only in this API: the caller owns refusal.
+            // A positive must still require refusal instead of silently shipping.
+            let boundary_refuses = !report.suspects.is_empty();
+            assert_eq!(boundary_refuses, expected_suspects != 0);
             let restored = pipeline
                 .restore_strict_text(&session, &text)
                 .expect("restore");
             assert_eq!(restored, input);
-            outcomes.push((restored, manifest.len(), report.stats.suspect_count));
+            outcomes.push((
+                restored,
+                manifest.len(),
+                report.stats.suspect_count,
+                boundary_refuses,
+            ));
         }
         assert_eq!(
             calls.load(Ordering::SeqCst),
