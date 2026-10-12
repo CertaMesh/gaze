@@ -250,6 +250,21 @@ impl RegexDetector {
             })
             .map(|(scan, matched)| {
                 let canonical_form = self.canonical_form(matched);
+                let repeat_seed = scan.repeat_seed.filter(|seed| {
+                    let scanner_prepended_wrapper = self.complete_labelled_value
+                        && self.labelled_value_mode == LabelledValueMode::Grouped
+                        && scan.span.start.checked_add(1) == Some(scan.capture.start)
+                        && input.get(scan.span.start..scan.capture.start) == Some("<")
+                        && seed.kind == gaze_types::LabelledValueRepeatSeedKind::UncertainPrefix;
+                    // Recognizers see pipeline-normalized input, the same domain
+                    // used by the sweep. Only a scanner-prepended wrapper is
+                    // excluded from the eligibility query; eligible seed bytes
+                    // and the whole primary owner retain their original geometry.
+                    !scanner_prepended_wrapper
+                        || self
+                            .class
+                            .clears_repeat_floor(input[scan.capture.start..seed.span.end].trim())
+                });
                 let mut candidate = Candidate::new(
                     scan.span,
                     self.class.clone(),
@@ -263,7 +278,7 @@ impl RegexDetector {
                     Vec::new(),
                 );
                 candidate.labelled_value_scan_reason = scan.reason;
-                candidate.labelled_value_repeat_seed = scan.repeat_seed;
+                candidate.labelled_value_repeat_seed = repeat_seed;
                 candidate.labelled_value_capture_end = (self.complete_labelled_value
                     && self.labelled_value_mode == LabelledValueMode::Grouped
                     || (self.phone_validator_enabled()

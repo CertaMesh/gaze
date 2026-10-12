@@ -47,15 +47,6 @@ use crate::normalize::normalize;
 /// Recognizer id, source label and audit stage of a swept copy.
 pub(crate) const SWEEP_ID: &str = "manifest_sweep";
 
-/// Precision floors, one per [`ValueShape`]. Whole values below their floor
-/// are left to their own recognizers.
-const MIN_VALUE_CHARS: usize = 4;
-/// A digit run needs this many digits. Short numbers (a four-digit AT/CH
-/// postcode, a bare five-digit postal code) are found only through the cue or
-/// city next to them, and that anchor is their whole precision: bare `\d{4}`
-/// is 19 % precise. Copying the digits alone would tokenize years and room
-/// numbers (`2024 Neuchâtel` then `Im Jahr 2024`).
-const MIN_DIGIT_RUN: usize = 6;
 /// Name parts need at least this many letters.
 const MIN_PART_LETTERS: usize = 3;
 /// Runs of parts are built only for names of at most this many parts, which
@@ -477,14 +468,13 @@ pub(crate) fn select(mut hits: Vec<SweepHit>) -> Vec<SweepHit> {
 /// was found with; each variant now owns its floor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ValueShape {
-    /// A collision-family value: byte-exact, at least [`MIN_VALUE_CHARS`].
+    /// A collision-family value: byte-exact.
     Family,
-    /// Digits and separators only: folded, at least [`MIN_DIGIT_RUN`] digits.
+    /// Digits and separators only: folded.
     DigitRun,
-    /// One alphabetic word: its spellings, at least [`MIN_VALUE_CHARS`].
+    /// One alphabetic word: its spellings.
     Word,
-    /// Anything else: folded, at least [`MIN_VALUE_CHARS`] non-space
-    /// characters, plus title-case parts of a `Name`.
+    /// Anything else: folded, plus title-case parts of a `Name`.
     MultiWord,
 }
 
@@ -504,15 +494,6 @@ impl ValueShape {
             Self::MultiWord
         }
     }
-
-    fn clears_floor(self, value: &str) -> bool {
-        match self {
-            Self::DigitRun => value.chars().filter(char::is_ascii_digit).count() >= MIN_DIGIT_RUN,
-            Self::Family | Self::Word | Self::MultiWord => {
-                value.chars().filter(|ch| !ch.is_whitespace()).count() >= MIN_VALUE_CHARS
-            }
-        }
-    }
 }
 
 fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Pattern>) {
@@ -527,7 +508,7 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
             link,
         })
     };
-    if shape.clears_floor(value) {
+    if source.class.clears_repeat_floor(value) {
         match shape {
             ValueShape::Family => push(PatternKind::Exact, value.to_string(), SweepLink::Exact),
             ValueShape::Word => {
@@ -543,7 +524,7 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
     if let Some(seed) = &source.repeat_seed {
         let raw = normalize(&seed.raw).text;
         let body = raw.trim();
-        if ValueShape::of(&source.class, body).clears_floor(body) {
+        if source.class.clears_repeat_floor(body) {
             let uncertain = matches!(
                 seed.kind,
                 gaze_types::LabelledValueRepeatSeedKind::UncertainPrefix
@@ -980,8 +961,8 @@ mod tests {
             ValueShape::of(&PiiClass::family("id"), "2024"),
             ValueShape::Family
         );
-        assert!(!ValueShape::DigitRun.clears_floor("10115"));
-        assert!(ValueShape::DigitRun.clears_floor("101 150"));
+        assert!(!custom.clears_repeat_floor("10115"));
+        assert!(custom.clears_repeat_floor("101 150"));
     }
 
     #[test]
@@ -1005,12 +986,12 @@ mod tests {
             ("A\u{202f}B C D", true, true),
         ] {
             assert_eq!(
-                ValueShape::of(&ordinary, body).clears_floor(body),
+                ordinary.clears_repeat_floor(body),
                 ordinary_expected,
                 "ordinary {body:?}"
             );
             assert_eq!(
-                ValueShape::of(&family, body).clears_floor(body),
+                family.clears_repeat_floor(body),
                 family_expected,
                 "family {body:?}"
             );

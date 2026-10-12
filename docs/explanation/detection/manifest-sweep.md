@@ -166,3 +166,5 @@ return `Error::ManifestSweep`. Never emit unswept text.
 - [Session contract](../core/session-contract.md)
 - [How Gaze works](../how-gaze-works.md)
 - Tests: `crates/gaze/tests/manifest_sweep.rs`, `crates/gaze-cli/tests/manifest_sweep.rs`, `crates/gaze-proxy/tests/manifest_sweep.rs`
+
+A wrapper prepended by the legacy labelled-value scanner does not count toward a conservative prefix seed's precision floor. The recognizer evaluates its normalized prefix body with the same pure floor query as the sweep, then retains the original wrapper bytes and same-start geometry only when eligible. Below-floor prefixes omit the extra seed; the full declaration remains owned and restorable. Original captures that themselves include a wrapper keep their existing behavior.

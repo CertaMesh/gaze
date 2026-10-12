@@ -284,6 +284,33 @@ impl CollisionMembership {
 }
 
 impl PiiClass {
+    /// Whether a value meets the existing manifest-repeat precision floor.
+    ///
+    /// The caller supplies the pipeline-normalized value. This pure query does
+    /// not normalize, choose a pattern, or strip content wrappers. Non-family
+    /// ASCII digits with only whitespace and `-./` separators need six digits;
+    /// collision-family and other values need four non-whitespace characters.
+    pub fn clears_repeat_floor(&self, normalized_value: &str) -> bool {
+        let digit_run = self.as_family_name().is_none()
+            && normalized_value.chars().any(|ch| ch.is_ascii_digit())
+            && normalized_value
+                .chars()
+                .all(|ch| ch.is_ascii_digit() || ch.is_whitespace() || "-./".contains(ch));
+        if digit_run {
+            normalized_value
+                .chars()
+                .filter(char::is_ascii_digit)
+                .count()
+                >= 6
+        } else {
+            normalized_value
+                .chars()
+                .filter(|ch| !ch.is_whitespace())
+                .count()
+                >= 4
+        }
+    }
+
     /// Parses a policy class name into the shared class vocabulary.
     pub fn from_policy_name(input: &str) -> Option<Self> {
         let trimmed = input.trim();
