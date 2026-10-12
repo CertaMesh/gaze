@@ -62,6 +62,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Benchmark generator v19 adds labelled CRM/HR value-boundary positives,
+  repeat cases and public controls for punctuation, adjacent cues, serialized
+  payloads, opening line breaks and tab groups. Earlier v17/v18 inputs stay
+  frozen, and every displayed release is freshly measured on the extended corpus.
+
 - Added an opt-in custom-policy benchmark arm for mixed collision-family
   precedence, with generated identifier positives and benign no-tie,
   same-variant and missing-membership controls. The shipped-default benchmark

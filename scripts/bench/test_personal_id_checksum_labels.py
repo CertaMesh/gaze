@@ -22,8 +22,8 @@ V18_HASHES = {
 class PersonalIdChecksumLabelTests(unittest.TestCase):
     def test_frozen_v17_and_deterministic_v18_match_byte_pins(self):
         for partition in api.PARTITIONS:
-            current = api.generate(partition)
-            self.assertEqual(api.corpus_bytes(current), api.corpus_bytes(api.generate(partition)))
+            current = api.records_as_of(18, api.generate(partition))
+            self.assertEqual(api.corpus_bytes(current), api.corpus_bytes(api.records_as_of(18, api.generate(partition))))
             self.assertEqual(hashlib.sha256(api.corpus_bytes(current)).hexdigest(), V18_HASHES[partition])
             old = api.records_as_of(17, current)
             self.assertEqual(hashlib.sha256(api.corpus_bytes(old)).hexdigest(), V17_HASHES[partition])
@@ -35,7 +35,7 @@ class PersonalIdChecksumLabelTests(unittest.TestCase):
         expected = Counter({(family, surface): 10 for family in ("aadhaar", "nir")
                             for surface in ("coverage_prose_invalid", "coverage_log_invalid", "coverage_json_invalid")})
         for partition in api.PARTITIONS:
-            current = api.generate(partition)
+            current = api.records_as_of(18, api.generate(partition))
             old = api.records_as_of(17, current)
             self.assertEqual(len(old), len(current))
             changes = [(before, after) for before, after in zip(old, current, strict=True) if before != after]
@@ -61,7 +61,7 @@ class PersonalIdChecksumLabelTests(unittest.TestCase):
     def test_committed_cell_diff_matches_every_changed_record(self):
         evidence = json.loads((ROOT / "docs/reference/benchmarks/personal-id-checksum-v18-cell-diff.json").read_text())
         for partition in api.PARTITIONS:
-            current = api.generate(partition)
+            current = api.records_as_of(18, api.generate(partition))
             old = api.records_as_of(17, current)
             changes = evidence["partitions"][partition]
             self.assertEqual(changes["changed_documents_by_class"], {"AADHAAR": 30, "NIR": 30})
