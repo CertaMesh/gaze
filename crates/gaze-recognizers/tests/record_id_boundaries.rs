@@ -459,6 +459,103 @@ fn complete_licence_cues_leave_the_next_value_fully_protected() {
     }
 }
 
+#[test]
+fn legacy_german_licence_tails_preserve_raw_values_at_every_connector() {
+    let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+    for prior in ["driver license", "tax number", "identity card"] {
+        for next in ["FÜHRERSCHEIN", "FU\u{0308}HRERSCHEIN"] {
+            for connector in [": ", "=", " is ", " ist ", " lautet "] {
+                let input = format!("{prior}: Q7312845 {next}{connector}EF34 GH5678");
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap()
+                else {
+                    panic!("text")
+                };
+                let entries = session.snapshot_entries();
+                let mut visible = clean.clone();
+                for entry in &entries {
+                    let start = input.find(&entry.raw).expect("exact original raw bytes");
+                    assert!(input.is_char_boundary(start + entry.raw.len()));
+                    visible = visible.replace(&entry.token, "");
+                }
+                for value in ["Q7312845", "EF34", "GH5678"] {
+                    assert!(
+                        !visible.contains(value),
+                        "German private tail leaked: {input:?} -> {clean:?}"
+                    );
+                }
+                assert!(
+                    entries
+                        .iter()
+                        .any(|entry| entry.raw.contains("EF34 GH5678")),
+                    "complete next value missing: {entries:?}"
+                );
+                assert!(
+                    entries.iter().any(|entry| entry.raw.contains("Q7312845")),
+                    "earlier capture missing: {entries:?}"
+                );
+                assert_eq!(
+                    core.pipeline()
+                        .restore_strict_text(&session, &clean)
+                        .unwrap(),
+                    input
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn legacy_unicode_groups_require_numeric_or_cased_uppercase_evidence() {
+    let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+    for suffix in ["ÉTAGE 204", "E\u{0301}TAGE 204", "ЖА 204"] {
+        let value = format!("Q7312845 {suffix}");
+        let input = format!("driver license: {value}; checked.");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else {
+            panic!("text")
+        };
+        assert!(
+            session
+                .snapshot_entries()
+                .iter()
+                .any(|entry| entry.raw == value),
+            "Unicode value lost original bytes: {input:?} -> {clean:?}"
+        );
+        assert_eq!(
+            core.pipeline()
+                .restore_strict_text(&session, &clean)
+                .unwrap(),
+            input
+        );
+    }
+    for suffix in [
+        "étiquette validée",
+        "Étiquette validée",
+        "東京 状態",
+        "\u{0301}\u{0308} only",
+        "release VERSION FRAME",
+    ] {
+        let input = format!("driver license: Q7312845 {suffix}");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else {
+            panic!("text")
+        };
+        let first = session
+            .snapshot_entries()
+            .into_iter()
+            .find(|entry| entry.raw == "Q7312845")
+            .expect("prose never extends the identifier");
+        assert_eq!(clean, format!("driver license: {} {suffix}", first.token));
+        assert_eq!(
+            core.pipeline()
+                .restore_strict_text(&session, &clean)
+                .unwrap(),
+            input
+        );
+    }
+}
+
 #[derive(Clone, Default)]
 struct ScanReasons(std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>);
 
