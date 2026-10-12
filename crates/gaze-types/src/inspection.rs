@@ -910,6 +910,100 @@ impl InspectionEventMetaV1 {
 mod tests {
     use super::*;
 
+    // Each row checks both admission paths against the existing wire format.
+    macro_rules! projection_cap_test {
+        ($name:ident, $projection:ty, $max:expr, $entry:expr, $wire_entry:literal,
+         $field:literal, $suffix:literal, $construct:expr, $entries:ident) => {
+            #[test]
+            fn $name() {
+                for count in [0, $max, $max + 1] {
+                    let entries = vec![$entry; count];
+                    let constructed: Result<$projection, InspectionValueErrorV1> =
+                        ($construct)(entries);
+                    let wire = format!(
+                        "{{\"{}\":[{}]{}}}",
+                        $field,
+                        vec![$wire_entry; count].join(","),
+                        $suffix,
+                    );
+                    let deserialized = serde_json::from_str::<$projection>(&wire);
+                    if count > $max {
+                        assert_eq!(constructed, Err(InspectionValueErrorV1::EntryLimit));
+                        assert!(deserialized.is_err(), "accepted {count} entries");
+                        assert!(deserialized
+                            .unwrap_err()
+                            .to_string()
+                            .contains("inspection_projection_entry_limit"));
+                    } else {
+                        let constructed = constructed.unwrap();
+                        let deserialized = deserialized.unwrap();
+                        assert_eq!(constructed.$entries().len(), count);
+                        assert_eq!(deserialized, constructed);
+                        assert_eq!(serde_json::to_string(&constructed).unwrap(), wire);
+                        assert_eq!(serde_json::to_string(&deserialized).unwrap(), wire);
+                    }
+                }
+            }
+        };
+    }
+
+    projection_cap_test!(
+        json_shape_projection_caps_construct_and_deserialize,
+        JsonShapeSummaryV1,
+        MAX_JSON_SHAPE_NODES_V1,
+        JsonShapeNodeV1::new(JsonNodeOrdinalV1::new(0), JsonTypeCodeV1::Null),
+        r#"{"ordinal":0,"type_code":"null"}"#,
+        "nodes",
+        r#","truncation":"complete""#,
+        |nodes| JsonShapeSummaryV1::try_new(nodes, JsonShapeTruncationCodeV1::Complete),
+        nodes
+    );
+    projection_cap_test!(
+        sse_timeline_projection_caps_construct_and_deserialize,
+        SseTimelineMetaV1,
+        MAX_SSE_TIMELINE_ENTRIES_V1,
+        SseTimelineEntryV1::new(
+            SseEntryOrdinalV1::new(0),
+            SseEventKindV1::ContentBlockDelta,
+            ProjectionAvailabilityV1::Present(SseDeltaKindV1::Text),
+            ProjectionAvailabilityV1::Present(ContentBlockIndexV1::new(2)),
+        ),
+        r#"{"ordinal":0,"event_kind":"content_block_delta","delta_kind":{"present":"text"},"content_block":{"present":2}}"#,
+        "entries",
+        "",
+        SseTimelineMetaV1::try_new,
+        entries
+    );
+    projection_cap_test!(
+        pii_summary_projection_caps_construct_and_deserialize,
+        PiiSummaryV1,
+        MAX_PII_SUMMARY_ENTRIES_V1,
+        PiiCountV1::new(PiiClassCodeV1::Email, 3, 2),
+        r#"{"class":"email","detected":3,"pseudonymized":2}"#,
+        "entries",
+        "",
+        PiiSummaryV1::try_new,
+        entries
+    );
+    projection_cap_test!(
+        decision_trace_projection_caps_construct_and_deserialize,
+        DecisionTraceV1,
+        MAX_DECISION_TRACE_ENTRIES_V1,
+        DecisionTraceEntryV1::new(
+            DecisionEngineCodeV1::DeterministicRecognizer,
+            DecisionOutcomeCodeV1::RanFindings,
+            InspectionSurfaceRefV1::WholeBody,
+            ProjectionAvailabilityV1::Present(PiiClassCodeV1::Email),
+            3,
+            2,
+        ),
+        r#"{"engine":"deterministic_recognizer","outcome":"ran_findings","surface":"whole_body","pii_class":{"present":"email"},"detected":3,"pseudonymized":2}"#,
+        "entries",
+        "",
+        DecisionTraceV1::try_new,
+        entries
+    );
+
     #[test]
     fn stage_domain_matrix_is_exhaustive_and_rejects_invalid_pairs() {
         let valid = [
