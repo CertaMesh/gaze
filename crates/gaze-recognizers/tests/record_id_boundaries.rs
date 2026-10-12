@@ -1,0 +1,246 @@
+//! Independent application-owned byte ranges from the v19 boundary corpus.
+//! Observe only public pipeline, manifest, trace, and strict restore contracts.
+use gaze::{
+    Action, CleanDocument, Context, DictionaryBundle, LocaleTag, PiiClass, Pipeline, Policy,
+    RuleSpec, SafetyNetPolicy, Scope, Session,
+};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct Fixture {
+    generator_version: u32,
+    records: Vec<Case>,
+}
+
+#[derive(Deserialize)]
+struct Case {
+    id: String,
+    family: String,
+    surface: String,
+    text: String,
+    gold: Vec<Gold>,
+}
+
+#[derive(Deserialize)]
+struct Gold {
+    start: usize,
+    end: usize,
+    label: String,
+}
+
+fn record_pipeline() -> Pipeline {
+    // Retain bundled assembly and recognizers, while observing only the three
+    // record classes in scope. The full-policy gate accounts for other classes.
+    let mut policy = Policy::default();
+    policy.rulepacks.bundled = vec!["core".to_owned()];
+    policy.rules = ["customer_id", "employee_id", "record_id"]
+        .into_iter()
+        .map(|class| RuleSpec::Class {
+            class: PiiClass::custom(class).unwrap(),
+            action: Action::Tokenize,
+        })
+        .chain([RuleSpec::Default {
+            action: Action::Preserve,
+        }])
+        .collect();
+    let inputs = gaze_assembly::resolve_policy_inputs(&policy, None, None, None).unwrap();
+    let context = Context {
+        dictionaries: Default::default(),
+        class_map: Default::default(),
+        fields: Default::default(),
+        record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
+    };
+    gaze_assembly::build_pipeline(
+        &policy,
+        &context,
+        &inputs.rulepacks,
+        &inputs.locale_chain,
+        None,
+    )
+    .unwrap()
+}
+
+fn check_cells(family: &str, surface_prefix: &str) {
+    check_selected_cells(family, surface_prefix, false);
+}
+
+fn check_selected_cells(family: &str, surface_prefix: &str, benign_only: bool) {
+    let fixture: Fixture =
+        serde_json::from_str(include_str!("fixtures/record_id_boundaries_v19.json")).unwrap();
+    assert_eq!(fixture.generator_version, 19);
+    let pipeline = record_pipeline();
+    let mut checked = 0;
+    for case in fixture.records.iter().filter(|case| {
+        case.family == family
+            && case.surface.starts_with(surface_prefix)
+            && (!benign_only || case.gold.is_empty())
+    }) {
+        checked += 1;
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let (clean, spans, _, trace, _) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
+                &session,
+                &case.text,
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .unwrap();
+        let CleanDocument::Text(clean) = clean else {
+            panic!("text")
+        };
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &clean).unwrap(),
+            case.text,
+            "{}: exact restore",
+            case.id
+        );
+        let entries = session.snapshot_entries();
+        // The producer still marks only private bytes as gold. These three
+        // ambiguous surfaces intentionally permit conservative public coverage;
+        // the byte scorer measures its cost separately from protection/restore.
+        let conservative = !case.gold.is_empty()
+            && (case
+                .surface
+                .starts_with("recordids_boundary_serialized_depth9_")
+                || case.surface.ends_with("_malformed")
+                || case.surface.ends_with("tab_group_ambiguous_column"));
+        let mut expected = case.text.clone();
+        for gold in case.gold.iter().rev() {
+            let value = &case.text[gold.start..gold.end];
+            let class = match gold.label.as_str() {
+                "CUSTOMER_ID" => "customer_id",
+                "EMPLOYEE_ID" => "employee_id",
+                "RECORD_ID" => "record_id",
+                label => panic!("unexpected gold class {label}"),
+            };
+            let class = PiiClass::custom(class).unwrap();
+            assert!(
+                spans.iter().zip(&trace).any(|(span, evidence)| {
+                    span.raw_span.start <= gold.start
+                        && span.raw_span.end >= gold.end
+                        && evidence.class() == &class
+                }),
+                "{}: complete typed gold leaked: {:?} -> {clean:?}",
+                case.id,
+                value
+            );
+            if conservative {
+                assert!(
+                    entries
+                        .iter()
+                        .any(|entry| entry.class == class && entry.raw.contains(value)),
+                    "{}: complete original missing from manifest",
+                    case.id
+                );
+                continue;
+            }
+            let entry = entries
+                .iter()
+                .find(|entry| entry.raw == value && entry.class == class)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{}: punctuation or public bytes entered the manifest: {:?}",
+                        case.id, value
+                    )
+                });
+            expected.replace_range(gold.start..gold.end, &entry.token);
+        }
+        if !conservative {
+            assert_eq!(clean, expected, "{}: public bytes changed", case.id);
+        }
+    }
+    assert!(checked > 0, "missing independently authored cells");
+}
+
+#[test]
+fn public_keys_headers_placeholders_and_tsv_counterweights_stay_raw() {
+    for family in ["customer_id", "employee_id", "record_id"] {
+        check_selected_cells(family, "recordids_boundary_", true);
+    }
+}
+
+#[test]
+fn customer_punctuation_preserves_public_bytes_and_repeat_seeds() {
+    check_cells("customer_id", "recordids_boundary_punctuation_");
+}
+
+#[test]
+fn employee_punctuation_preserves_public_bytes_and_repeat_seeds() {
+    check_cells("employee_id", "recordids_boundary_punctuation_");
+}
+
+#[test]
+fn member_punctuation_preserves_public_bytes_and_repeat_seeds() {
+    check_cells("record_id", "recordids_boundary_punctuation_");
+}
+
+macro_rules! boundary_test {
+    ($name:ident, $family:literal, $surface:literal) => {
+        #[test]
+        fn $name() {
+            check_cells($family, concat!("recordids_boundary_", $surface));
+        }
+    };
+}
+
+boundary_test!(
+    customer_dotted_sentence_repeat,
+    "customer_id",
+    "punctuation_short_dotted"
+);
+boundary_test!(
+    employee_dotted_sentence_repeat,
+    "employee_id",
+    "punctuation_short_dotted"
+);
+boundary_test!(
+    member_dotted_sentence_repeat,
+    "record_id",
+    "punctuation_short_dotted"
+);
+boundary_test!(
+    customer_connector_field_boundaries,
+    "customer_id",
+    "connectors_"
+);
+boundary_test!(
+    employee_connector_field_boundaries,
+    "employee_id",
+    "connectors_"
+);
+boundary_test!(
+    member_connector_field_boundaries,
+    "record_id",
+    "connectors_"
+);
+boundary_test!(
+    customer_serialized_raw_scalars,
+    "customer_id",
+    "serialized_"
+);
+boundary_test!(
+    employee_serialized_raw_scalars,
+    "employee_id",
+    "serialized_"
+);
+boundary_test!(member_serialized_raw_scalars, "record_id", "serialized_");
+boundary_test!(customer_opening_newlines, "customer_id", "opening_lf_");
+boundary_test!(employee_opening_newlines, "employee_id", "opening_lf_");
+boundary_test!(member_opening_newlines, "record_id", "opening_lf_");
+boundary_test!(
+    customer_tab_groups_and_public_columns,
+    "customer_id",
+    "tab_group_"
+);
+boundary_test!(
+    employee_tab_groups_and_public_columns,
+    "employee_id",
+    "tab_group_"
+);
+boundary_test!(
+    member_tab_groups_and_public_columns,
+    "record_id",
+    "tab_group_"
+);
