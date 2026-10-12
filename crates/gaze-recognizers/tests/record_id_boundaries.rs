@@ -373,7 +373,16 @@ fn over_depth_and_inconsistent_quotes_own_the_tail_with_audit_reasons() {
         let reasons = ScanReasons::default();
         let pipeline = record_pipeline().with_redaction_logger(reasons.clone());
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let CleanDocument::Text(clean) = pipeline.pseudonymize_text(&session, &case.text).unwrap()
+        let CleanDocument::Text(clean) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
+                &session,
+                &case.text,
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .unwrap()
+            .0
         else {
             panic!("text")
         };
@@ -402,7 +411,16 @@ fn over_depth_and_inconsistent_quotes_own_the_tail_with_audit_reasons() {
         let reasons = ScanReasons::default();
         let pipeline = record_pipeline().with_redaction_logger(reasons.clone());
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let CleanDocument::Text(clean) = pipeline.pseudonymize_text(&session, &input).unwrap()
+        let CleanDocument::Text(clean) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
+                &session,
+                &input,
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .unwrap()
+            .0
         else {
             panic!("text")
         };
