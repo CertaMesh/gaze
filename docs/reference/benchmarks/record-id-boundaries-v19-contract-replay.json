@@ -1,0 +1,724 @@
+{
+  "schema_version": 1,
+  "generator_version": 19,
+  "corpus_sha256": "4f096686fdea809eb6089060e468de99147770160a208219aac1b4406f058813",
+  "agentic_contract_sha256": "c23c3a978df0bb5b7d002eaf2e4e3759d7b41851f12201cf9a70371621bc356a",
+  "semantics": "Fresh tagged-release A/D/R measurements replayed by canonical rescore.py under primary contracts v1/v2/v4. All generated layers use the same fully scored agentic contract. Layer C inputs and published scores are unchanged.",
+  "rows": [
+    {
+      "release": "v0.16.0",
+      "arm": "policy-file",
+      "binary_revision": "5a7dac0fa198f20a628ed6b7fa2b5c9d41a91eb0",
+      "binary_sha256": "afe7a2000945126cd08363c3dcc5203c1a7a1e89d121bb6c743d98ac0356e2b4",
+      "observation_record": "observations-agentic-v19-v0.16.0.jsonl.gz",
+      "observation_sha256": "f7d943b08c8610dcfe0515a5ffa8024c065da66b163063446de22d0396f7981b",
+      "replays": [
+        {
+          "primary_contract_version": 1,
+          "layer_metrics_identical": true
+        },
+        {
+          "primary_contract_version": 2,
+          "layer_metrics_identical": true
+        },
+        {
+          "primary_contract_version": 4,
+          "layer_metrics_identical": true
+        }
+      ],
+      "layers": {
+        "A": {
+          "pii": 139275,
+          "predicted": 66146,
+          "true_positive": 63831,
+          "false_positive": 2315,
+          "leaked": 75444,
+          "precision": 0.9650016629879358,
+          "recall": 0.4583091007000539,
+          "leak_rate": 0.5416908992999461,
+          "f1": 0.6214651861299478,
+          "f2": 0.5120851156686125,
+          "false_positive_rate": 0.005104200657923748,
+          "refused": 0,
+          "documents": 6545,
+          "exact_restores": 6545,
+          "valid_manifests": 6545,
+          "restore_failures": 0,
+          "invalid_manifests": 0
+        },
+        "D": {
+          "pii": 0,
+          "predicted": 9132,
+          "true_positive": 0,
+          "false_positive": 9132,
+          "leaked": 0,
+          "precision": 0.0,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "f1": 0.0,
+          "f2": 0.0,
+          "false_positive_rate": 0.019090025399015397,
+          "refused": 0,
+          "documents": 4931,
+          "exact_restores": 4931,
+          "valid_manifests": 4931,
+          "restore_failures": 0,
+          "invalid_manifests": 0
+        },
+        "R": {
+          "pii": 132696,
+          "predicted": 13258,
+          "true_positive": 12380,
+          "false_positive": 878,
+          "leaked": 120316,
+          "precision": 0.9337758334590436,
+          "recall": 0.09329595466329053,
+          "leak_rate": 0.9067040453367095,
+          "f1": 0.16964249009962043,
+          "f2": 0.11377798037651506,
+          "false_positive_rate": 0.00271802222091515,
+          "refused": 0,
+          "documents": 2917,
+          "exact_restores": 2917,
+          "valid_manifests": 2917,
+          "restore_failures": 0,
+          "invalid_manifests": 0
+        }
+      },
+      "boundary_public_byte_costs": {
+        "depth_above_supported_bound": {
+          "A": {
+            "documents": 12,
+            "pii": 10971,
+            "leaked": 10971,
+            "false_positive": 0
+          },
+          "D": {
+            "documents": 12,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 12,
+            "pii": 21942,
+            "leaked": 21870,
+            "false_positive": 0
+          }
+        },
+        "malformed_quoted_tail": {
+          "A": {
+            "documents": 60,
+            "pii": 1110,
+            "leaked": 1110,
+            "false_positive": 0
+          },
+          "D": {
+            "documents": 60,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 60,
+            "pii": 2220,
+            "leaked": 2064,
+            "false_positive": 0
+          }
+        },
+        "ambiguous_untyped_tab_column": {
+          "A": {
+            "documents": 30,
+            "pii": 510,
+            "leaked": 510,
+            "false_positive": 0
+          },
+          "D": {
+            "documents": 30,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 30,
+            "pii": 1020,
+            "leaked": 1020,
+            "false_positive": 0
+          }
+        }
+      }
+    },
+    {
+      "release": "v0.15.1",
+      "arm": "policy-file",
+      "binary_revision": "4927f7c0a862ece2cdcd8c00df34538a510d008e",
+      "binary_sha256": "76faf0ab4088f8c1b321522ed651ce05fd8b6191022de586ef3234d99fb49a20",
+      "observation_record": "observations-agentic-v19-v0.15.1.jsonl.gz",
+      "observation_sha256": "e3d3920fe434c7dd66539819d13ef0cb240504b79a94ee8cc94c9f88a8a0b251",
+      "replays": [
+        {
+          "primary_contract_version": 1,
+          "layer_metrics_identical": true
+        },
+        {
+          "primary_contract_version": 2,
+          "layer_metrics_identical": true
+        },
+        {
+          "primary_contract_version": 4,
+          "layer_metrics_identical": true
+        }
+      ],
+      "layers": {
+        "A": {
+          "pii": 139275,
+          "predicted": 50536,
+          "true_positive": 47548,
+          "false_positive": 2988,
+          "leaked": 91727,
+          "precision": 0.9408738325154345,
+          "recall": 0.3413965176808472,
+          "leak_rate": 0.6586034823191528,
+          "f1": 0.5010036299266112,
+          "f2": 0.3912539744188955,
+          "false_positive_rate": 0.0065880568319119474,
+          "refused": 0,
+          "documents": 6545,
+          "exact_restores": 6535,
+          "valid_manifests": 6535,
+          "restore_failures": 10,
+          "invalid_manifests": 10
+        },
+        "D": {
+          "pii": 0,
+          "predicted": 10220,
+          "true_positive": 0,
+          "false_positive": 10220,
+          "leaked": 0,
+          "precision": 0.0,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "f1": 0.0,
+          "f2": 0.0,
+          "false_positive_rate": 0.021364439287991387,
+          "refused": 0,
+          "documents": 4931,
+          "exact_restores": 4931,
+          "valid_manifests": 4931,
+          "restore_failures": 0,
+          "invalid_manifests": 0
+        },
+        "R": {
+          "pii": 132696,
+          "predicted": 12469,
+          "true_positive": 11781,
+          "false_positive": 688,
+          "leaked": 120915,
+          "precision": 0.9448231614403722,
+          "recall": 0.08878187737384699,
+          "leak_rate": 0.911218122626153,
+          "f1": 0.16231185203044812,
+          "f2": 0.10843014212530809,
+          "false_positive_rate": 0.0021298397357512795,
+          "refused": 0,
+          "documents": 2917,
+          "exact_restores": 2917,
+          "valid_manifests": 2917,
+          "restore_failures": 0,
+          "invalid_manifests": 0
+        }
+      },
+      "boundary_public_byte_costs": {
+        "depth_above_supported_bound": {
+          "A": {
+            "documents": 12,
+            "pii": 10971,
+            "leaked": 10971,
+            "false_positive": 0
+          },
+          "D": {
+            "documents": 12,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 12,
+            "pii": 21942,
+            "leaked": 21870,
+            "false_positive": 0
+          }
+        },
+        "malformed_quoted_tail": {
+          "A": {
+            "documents": 60,
+            "pii": 1110,
+            "leaked": 1110,
+            "false_positive": 0
+          },
+          "D": {
+            "documents": 60,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 60,
+            "pii": 2220,
+            "leaked": 2064,
+            "false_positive": 0
+          }
+        },
+        "ambiguous_untyped_tab_column": {
+          "A": {
+            "documents": 30,
+            "pii": 510,
+            "leaked": 510,
+            "false_positive": 0
+          },
+          "D": {
+            "documents": 30,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 30,
+            "pii": 1020,
+            "leaked": 1020,
+            "false_positive": 0
+          }
+        }
+      }
+    },
+    {
+      "release": "v0.15.0",
+      "arm": "policy-file",
+      "binary_revision": "5127788b089f0f6f4e3b8bcf176503953744be01",
+      "binary_sha256": "d3696c1483cdb7fa8066afd7930a06067c124470e5d43fff806d72de34e9ea50",
+      "observation_record": "observations-agentic-v19-v0.15.0.jsonl.gz",
+      "observation_sha256": "dd2ead6692834aad969cfd91f303f987ccd499f43a5a653a461eb6ca1eaad33a",
+      "replays": [
+        {
+          "primary_contract_version": 1,
+          "layer_metrics_identical": true
+        },
+        {
+          "primary_contract_version": 2,
+          "layer_metrics_identical": true
+        },
+        {
+          "primary_contract_version": 4,
+          "layer_metrics_identical": true
+        }
+      ],
+      "layers": {
+        "A": {
+          "pii": 139275,
+          "predicted": 50363,
+          "true_positive": 47375,
+          "false_positive": 2988,
+          "leaked": 91900,
+          "precision": 0.9406707304965948,
+          "recall": 0.34015437084903966,
+          "leak_rate": 0.6598456291509603,
+          "f1": 0.4996361488731162,
+          "f2": 0.3899414449933576,
+          "false_positive_rate": 0.0065880568319119474,
+          "refused": 0,
+          "documents": 6545,
+          "exact_restores": 6535,
+          "valid_manifests": 6535,
+          "restore_failures": 10,
+          "invalid_manifests": 10
+        },
+        "D": {
+          "pii": 0,
+          "predicted": 10220,
+          "true_positive": 0,
+          "false_positive": 10220,
+          "leaked": 0,
+          "precision": 0.0,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "f1": 0.0,
+          "f2": 0.0,
+          "false_positive_rate": 0.021364439287991387,
+          "refused": 0,
+          "documents": 4931,
+          "exact_restores": 4931,
+          "valid_manifests": 4931,
+          "restore_failures": 0,
+          "invalid_manifests": 0
+        },
+        "R": {
+          "pii": 132696,
+          "predicted": 12469,
+          "true_positive": 11781,
+          "false_positive": 688,
+          "leaked": 120915,
+          "precision": 0.9448231614403722,
+          "recall": 0.08878187737384699,
+          "leak_rate": 0.911218122626153,
+          "f1": 0.16231185203044812,
+          "f2": 0.10843014212530809,
+          "false_positive_rate": 0.0021298397357512795,
+          "refused": 0,
+          "documents": 2917,
+          "exact_restores": 2917,
+          "valid_manifests": 2917,
+          "restore_failures": 0,
+          "invalid_manifests": 0
+        }
+      },
+      "boundary_public_byte_costs": {
+        "depth_above_supported_bound": {
+          "A": {
+            "documents": 12,
+            "pii": 10971,
+            "leaked": 10971,
+            "false_positive": 0
+          },
+          "D": {
+            "documents": 12,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 12,
+            "pii": 21942,
+            "leaked": 21870,
+            "false_positive": 0
+          }
+        },
+        "malformed_quoted_tail": {
+          "A": {
+            "documents": 60,
+            "pii": 1110,
+            "leaked": 1110,
+            "false_positive": 0
+          },
+          "D": {
+            "documents": 60,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 60,
+            "pii": 2220,
+            "leaked": 2064,
+            "false_positive": 0
+          }
+        },
+        "ambiguous_untyped_tab_column": {
+          "A": {
+            "documents": 30,
+            "pii": 510,
+            "leaked": 510,
+            "false_positive": 0
+          },
+          "D": {
+            "documents": 30,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 30,
+            "pii": 1020,
+            "leaked": 1020,
+            "false_positive": 0
+          }
+        }
+      }
+    },
+    {
+      "release": "v0.14.0",
+      "arm": "full-stack-kiji-resolve",
+      "binary_revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
+      "binary_sha256": "c2de4dd80b59d3df3c12913af7d2e4b037d62194fc54554aeac542a3f6b6473f",
+      "observation_record": "observations-agentic-v19-v0.14.0.jsonl.gz",
+      "observation_sha256": "40427a2eb713d71426ae9daace268508c050787a4beef837904bc5695cfb52be",
+      "replays": [
+        {
+          "primary_contract_version": 1,
+          "layer_metrics_identical": true
+        },
+        {
+          "primary_contract_version": 2,
+          "layer_metrics_identical": true
+        },
+        {
+          "primary_contract_version": 4,
+          "layer_metrics_identical": true
+        }
+      ],
+      "layers": {
+        "A": {
+          "pii": 139275,
+          "predicted": 49648,
+          "true_positive": 35450,
+          "false_positive": 14198,
+          "leaked": 103825,
+          "precision": 0.714026748308089,
+          "recall": 0.2545323999281996,
+          "leak_rate": 0.7454676000718004,
+          "f1": 0.3752851690900526,
+          "f2": 0.29213116483284657,
+          "false_positive_rate": 0.03130429414306755,
+          "refused": 0,
+          "documents": 6545,
+          "exact_restores": 6387,
+          "valid_manifests": 6545,
+          "restore_failures": 158,
+          "invalid_manifests": 0
+        },
+        "D": {
+          "pii": 0,
+          "predicted": 10521,
+          "true_positive": 0,
+          "false_positive": 10521,
+          "leaked": 0,
+          "precision": 0.0,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "f1": 0.0,
+          "f2": 0.0,
+          "false_positive_rate": 0.021993665924555518,
+          "refused": 0,
+          "documents": 4931,
+          "exact_restores": 4925,
+          "valid_manifests": 4931,
+          "restore_failures": 6,
+          "invalid_manifests": 0
+        },
+        "R": {
+          "pii": 132696,
+          "predicted": 13685,
+          "true_positive": 9737,
+          "false_positive": 3948,
+          "leaked": 122959,
+          "precision": 0.7115089514066496,
+          "recall": 0.07337824802556218,
+          "leak_rate": 0.9266217519744379,
+          "f1": 0.13303639133494102,
+          "f2": 0.08941739566439962,
+          "false_positive_rate": 0.012221812902247166,
+          "refused": 0,
+          "documents": 2917,
+          "exact_restores": 2826,
+          "valid_manifests": 2917,
+          "restore_failures": 91,
+          "invalid_manifests": 0
+        }
+      },
+      "boundary_public_byte_costs": {
+        "depth_above_supported_bound": {
+          "A": {
+            "documents": 12,
+            "pii": 10971,
+            "leaked": 10971,
+            "false_positive": 0
+          },
+          "D": {
+            "documents": 12,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 12,
+            "pii": 21942,
+            "leaked": 21942,
+            "false_positive": 0
+          }
+        },
+        "malformed_quoted_tail": {
+          "A": {
+            "documents": 60,
+            "pii": 1110,
+            "leaked": 1110,
+            "false_positive": 140
+          },
+          "D": {
+            "documents": 60,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 60,
+            "pii": 2220,
+            "leaked": 2220,
+            "false_positive": 170
+          }
+        },
+        "ambiguous_untyped_tab_column": {
+          "A": {
+            "documents": 30,
+            "pii": 510,
+            "leaked": 510,
+            "false_positive": 67
+          },
+          "D": {
+            "documents": 30,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 30,
+            "pii": 1020,
+            "leaked": 1020,
+            "false_positive": 65
+          }
+        }
+      }
+    },
+    {
+      "release": "v0.14.0",
+      "arm": "pass2-ner",
+      "binary_revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
+      "binary_sha256": "c2de4dd80b59d3df3c12913af7d2e4b037d62194fc54554aeac542a3f6b6473f",
+      "observation_record": "observations-agentic-v19-v0.14.0.jsonl.gz",
+      "observation_sha256": "40427a2eb713d71426ae9daace268508c050787a4beef837904bc5695cfb52be",
+      "replays": [
+        {
+          "primary_contract_version": 1,
+          "layer_metrics_identical": true
+        },
+        {
+          "primary_contract_version": 2,
+          "layer_metrics_identical": true
+        },
+        {
+          "primary_contract_version": 4,
+          "layer_metrics_identical": true
+        }
+      ],
+      "layers": {
+        "A": {
+          "pii": 139275,
+          "predicted": 35282,
+          "true_positive": 32901,
+          "false_positive": 2381,
+          "leaked": 106374,
+          "precision": 0.9325151635394819,
+          "recall": 0.23623047926763596,
+          "leak_rate": 0.763769520732364,
+          "f1": 0.37696569029027766,
+          "f2": 0.2777008754486125,
+          "false_positive_rate": 0.005249719985536261,
+          "refused": 0,
+          "documents": 6545,
+          "exact_restores": 6545,
+          "valid_manifests": 6545,
+          "restore_failures": 0,
+          "invalid_manifests": 0
+        },
+        "D": {
+          "pii": 0,
+          "predicted": 6133,
+          "true_positive": 0,
+          "false_positive": 6133,
+          "leaked": 0,
+          "precision": 0.0,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "f1": 0.0,
+          "f2": 0.0,
+          "false_positive_rate": 0.012820754026736906,
+          "refused": 0,
+          "documents": 4931,
+          "exact_restores": 4931,
+          "valid_manifests": 4931,
+          "restore_failures": 0,
+          "invalid_manifests": 0
+        },
+        "R": {
+          "pii": 132696,
+          "predicted": 7535,
+          "true_positive": 7110,
+          "false_positive": 425,
+          "leaked": 125586,
+          "precision": 0.9435965494359655,
+          "recall": 0.05358111774281064,
+          "leak_rate": 0.9464188822571894,
+          "f1": 0.10140411178698007,
+          "f2": 0.06603891001432237,
+          "false_positive_rate": 0.0013156713483928688,
+          "refused": 0,
+          "documents": 2917,
+          "exact_restores": 2917,
+          "valid_manifests": 2917,
+          "restore_failures": 0,
+          "invalid_manifests": 0
+        }
+      },
+      "boundary_public_byte_costs": {
+        "depth_above_supported_bound": {
+          "A": {
+            "documents": 12,
+            "pii": 10971,
+            "leaked": 10971,
+            "false_positive": 0
+          },
+          "D": {
+            "documents": 12,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 12,
+            "pii": 21942,
+            "leaked": 21942,
+            "false_positive": 0
+          }
+        },
+        "malformed_quoted_tail": {
+          "A": {
+            "documents": 60,
+            "pii": 1110,
+            "leaked": 1110,
+            "false_positive": 0
+          },
+          "D": {
+            "documents": 60,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 60,
+            "pii": 2220,
+            "leaked": 2220,
+            "false_positive": 0
+          }
+        },
+        "ambiguous_untyped_tab_column": {
+          "A": {
+            "documents": 30,
+            "pii": 510,
+            "leaked": 510,
+            "false_positive": 0
+          },
+          "D": {
+            "documents": 30,
+            "pii": 0,
+            "leaked": 0,
+            "false_positive": 0
+          },
+          "R": {
+            "documents": 30,
+            "pii": 1020,
+            "leaked": 1020,
+            "false_positive": 0
+          }
+        }
+      }
+    }
+  ]
+}

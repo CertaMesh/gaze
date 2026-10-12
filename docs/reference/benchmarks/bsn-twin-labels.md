@@ -56,13 +56,14 @@ sets are unchanged by this generator.
 | Record-ID JSON `null`, `true`, `false`, ten per class/keyword/partition | No gold; keyword is a typed JSON decoy | Retain: these keywords supply no identifier |
 | Public-resource record-ID prose, ten per class/shape/partition | No gold; inserted public-resource ID is a decoy | Retain: value belongs to `order_id`/`orderId`; customer ID explicitly belongs in a separate field |
 | R `id_repeats`, dev IBAN/phone/tax-ID, ten per family | Identity repeats are gold; batch digits are decoys | Retain: the batch is explicitly unrelated to the customer |
-| `ref_number_10`, test log/JSON, ten each | No gold; every protected byte is FP | Ambiguous: `caseId` does not specify a person or a case domain; retain pending ruling |
-| `order_json_entries_array`, four per partition | No gold; every protected byte is FP | Ambiguous: public order/ticket codes nested inside `account`; retain pending ruling |
-| `order_json_type_above`, four test documents | No gold; every protected byte is FP | Ambiguous: a ticket reference described as belonging to an account; retain pending ruling |
-| `coverage_json`, seven test identifier families, ten each | No gold; `batch_reference` values are decoys | Ambiguous: non-person label nested under `customer`; retain pending ruling |
-| `coverage_json_invalid`, test Aadhaar/CNPJ/ETH/NIR, ten each | No gold; checksum-invalid labelled identifiers are decoys | Ambiguous: explicit identifier labels under `customer`; retain pending ruling |
+| `ref_number_10`, test log/JSON, ten each | No gold; every protected byte is FP | Ambiguous: `caseId` does not specify a person or a case domain; retain benign by the subsequent ownership decision |
+| `order_json_entries_array`, four per partition | No gold; every protected byte is FP | Ambiguous: public order/ticket codes nested inside `account`; retain benign by the subsequent ownership decision |
+| `order_json_type_above`, four test documents | No gold; every protected byte is FP | Ambiguous: a ticket reference described as belonging to an account; retain benign by the subsequent ownership decision |
+| `coverage_json`, seven test identifier families, ten each | No gold; `batch_reference` values are decoys | Ambiguous: non-person label nested under `customer`; retain benign by the subsequent ownership decision |
+| `coverage_json_invalid`, test Aadhaar/CNPJ/ETH/NIR, ten each | No gold; checksum-invalid labelled identifiers are decoys | V18: personal Aadhaar/NIR twins become gold; CNPJ and ETH decoys stay benign |
 
-The ambiguous cells need a separate scope/scoring decision. This audit does not
-claim that they are safe non-person references. Placeholder and keyword
+The subsequent ownership decision retains case/order/ticket and customer-nested
+batch references as benign. [Generator v18](personal-id-checksum-labels.md)
+corrects the labelled personal national-ID checksum twins identified above. Placeholder and keyword
 counterweights intentionally retain person-linked labels to price false positives
 on absent identifiers.

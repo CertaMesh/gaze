@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "7c205507728f13b54e6ad299f2e414e7bdf37ad9a144c265bd839dee98359a83",
-    "test": "8c62d49926fa90107fa538b03b39aed6d76a2ad9f2d38e38d14cb3e8b1706725",
+    "dev": "1bef59f4bff3a1660600407d70ed3132228d07d6c5edefb0609d9b648acbead1",
+    "test": "4f096686fdea809eb6089060e468de99147770160a208219aac1b4406f058813"
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -2963,12 +2963,13 @@ class ShippedClassCoverageTests(unittest.TestCase):
             records = agentic._coverage_records(partition)
             self.assertEqual(len(records),680)
             for family in agentic.COVERAGE_CHECKSUM_FAMILIES:
-                positives = [r for r in records if r.family == family and r.layer == "A"]
+                positives = [r for r in records if r.family == family and r.layer == "A" and not r.surface.endswith("_invalid")]
                 twins = {r.uid.replace("-D-","-A-").removesuffix("_invalid"): r for r in records if r.family == family and r.surface.endswith("_invalid")}
                 self.assertEqual(len(positives),30)
                 for record in positives:
                     value = record.gold[0].value
-                    bad = twins[record.uid].decoys[0].value
+                    twin = twins[record.uid]
+                    bad = (twin.gold or twin.decoys)[0].value
                     self.assertEqual(len(value),len(bad))
                     self.assertNotEqual(value,bad)
                     if family == "aadhaar":

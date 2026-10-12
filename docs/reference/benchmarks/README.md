@@ -1964,16 +1964,18 @@ The preserved phone and cued-cell prose above describes the historical
 [v8 measurements](agentic-adjacency-v8-history.json), and the release
 statement of the CRLF and plate section the historical
 [v9 measurements](agentic-adjacency-v9-history.json). Their links lead to this
-current comparison, which has since been re-measured on v17 below.
+current comparison, which has since been re-measured on v19 below.
 
-The release rows below use generator v17's test partition and each release's
-setup policy, so they include the v5 to v17 cells (labelled lookalikes, address
+The release rows below use generator v19's test partition and each release's
+setup policy, so they include the v5 to v19 cells (labelled lookalikes, address
 blocks, phone shapes, cued ages, birth dates, short cards, postcodes, CRLF
 blocks and German plates, URLs in structured text, tax and government IDs,
 ZIP compression lookalikes, personal age wording and the shipped-class
-identifier, credential, name and phone cells, plus person-linked CRM/HR IDs, numeric JSON ID scalars, benign JSON keywords and whole-value field ownership).
+identifier, credential, name and phone cells, plus person-linked CRM/HR IDs, numeric JSON ID scalars, benign JSON keywords and whole-value field ownership, with labelled checksum-invalid Aadhaar/NIR scored gold and CRM/HR value-boundary cells for punctuation, adjacent cues, serialized payloads, opening line breaks and tabs).
 The table is rendered from
-the [v17 ledger](agentic-adjacency-v17-history.json). The earlier
+the [v19 ledger](agentic-adjacency-v19-history.json). The earlier
+[v18 ledger](agentic-adjacency-v18-history.json) on corpus `56c7bbd0…`,
+[v17 ledger](agentic-adjacency-v17-history.json) on corpus `8c62d499…`,
 [v16 ledger](agentic-adjacency-v16-history.json) on corpus `d6dac67a…`,
 [v15 ledger](agentic-adjacency-v15-history.json) on corpus `0a5f6576…`,
 [v13 ledger](agentic-adjacency-v13-history.json) on corpus `db3c3f36…`,
@@ -1990,7 +1992,7 @@ retained as historical data and do not feed this table.
 Record the past-release `agentic_layers.py measure` outputs with
 `render_agentic_adjacency_doc.py --record`, then render this table from its
 committed ledger. Do not edit the rows by hand. The renderer pins the
-generator version, so a later generator leaves these rows bound to v17 until
+generator version, so a later generator leaves these rows bound to v19 until
 they are re-measured.
 
 Generator v12 adds 80 postcode and age positives and 80 benign counterweights
@@ -2080,7 +2082,7 @@ The v16 corpus and contract remain frozen. Numeric repeat variants contain at
 least six digits; short repeats, typographic quotes and CSV linkage remain
 uncharacterized. These additions change the measurement, not runtime detection.
 
-All displayed release arms were re-measured on v17 using their own tagged code.
+For the v17 publication, all displayed release arms were re-measured using their own tagged code.
 [Bound observation replays](record-id-ownership-v17-contract-replay.json) verify identical
 A/D/R metrics under primary contracts v1, v2 and v4: these generated layers use
 the same fully scored agentic contract under each. Layer C inputs and its
@@ -2093,33 +2095,77 @@ retired, retaining v15 as the previous version. Externally bound v4–v13 histor
 and consumers remain untouched; their migration is separate contract-pruning
 work. The v14 corpus byte pin remains tested.
 
+Generator v18 corrects the explicitly labelled checksum-invalid Aadhaar and NIR
+coverage twins: a mistyped personal national ID remains PII. In each partition,
+60 documents move from benign D to gold A, adding 810 gold bytes; no inserted
+value or text changes. CNPJ company-ID and ETH-address decoys, public case/order/
+ticket references and customer-nested batch references remain benign. The
+[exact cell diff](personal-id-checksum-v18-cell-diff.json) is asserted by tests,
+and the v17 corpus and contract reconstruct byte-for-byte. The stricter scoring
+adds leaked bytes for every displayed release; any D FP reduction is a corpus
+correction, not a runtime precision gain. Fresh tag-bound v18 measurements and
+[canonical v1/v2/v4 replay](personal-id-checksum-v18-contract-replay.json) underpin
+the frozen v18 ledger. [Ownership rationale](personal-id-checksum-labels.md).
+
+V0.14.0 Kiji also shows a deterministic producer-identity effect: moving D to A
+changes the document ID and its derived session-token prefix. Eight NIR cells
+add two false-positive bytes and two restore failures beyond the layer migration.
+The [controlled identity audit](personal-id-checksum-v18-kiji-identity-diff.json)
+reproduces all eight old/new traces twice with text and locales held fixed.
+
+Generator v19 adds 1,527 A positives, 1,617 D counterweights and 1,527 R
+repeat documents per partition, with independently seeded customer, employee
+and record IDs. [Value-boundary coverage](record-id-value-boundaries.md) spans
+terminal sentence punctuation, complete adjacent cue connectors, raw JSON
+payloads through nine wrappers, LF/CRLF after opening quotes and tab groups.
+Gold is the producer's raw UTF-8 value, including encoded bytes; public suffixes,
+JSON syntax and public columns remain non-gold. The frozen v17 and v18 corpora
+and contracts reproduce byte-for-byte. Fresh tag-bound measurements and
+[canonical v1/v2/v4 replays](record-id-boundaries-v19-contract-replay.json)
+compare aggregate and per-cell metrics, refusals, restores and manifests. The
+cost controls retain separate public-byte counts for excessive depth, malformed
+quoted tails and ambiguous tab columns; the subsequent runtime repair must
+measure any conservative protection cost against them.
+
+V0.15.0 and v0.15.1 each retain their nine v18 restore failures and expose one
+additional failure on a tab-grouped record ID containing a combining mark.
+Those cases report success decisions, while exact-byte comparisons fail and
+manifest integrity records token restore failures. The table counts exact output and
+manifest integrity separately from success decisions.
+
+The v0.14.0 Kiji arm retains its older failures and adds 77 A, two D and 54 R
+exact-restore failures on the new boundary cells, bringing totals to 158 / 6 / 91.
+Its manifests remain valid. The NER-only arm restores every new document exactly;
+v0.16.0 restores every measured document exactly. These are coverage results
+from unchanged tagged runtime code, not detection gains from the generator.
+
 <!-- BEGIN GENERATED: agentic-adjacency -->
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.16.0` `policy-file` | 34,829 / 96,645 | 2,032 | 7,244 | 43,795 / 51,936 | 503 |
-| `v0.15.1` `policy-file` | 51,112 / 96,645 | 2,889 | 8,332 | 44,274 / 51,936 | 479 |
-| `v0.15.0` `policy-file` | 51,285 / 96,645 | 2,889 | 8,332 | 44,274 / 51,936 | 479 |
-| `v0.14.0` `full-stack-kiji-resolve` | 61,204 / 96,645 | 10,714 | 10,697 | 42,208 / 51,936 | 943 |
-| `v0.14.0` `pass2-ner` | 63,744 / 96,645 | 2,282 | 6,133 | 44,830 / 51,936 | 216 |
+| `v0.16.0` `policy-file` | 75,444 / 139,275 | 2,315 | 9,132 | 120,316 / 132,696 | 878 |
+| `v0.15.1` `policy-file` | 91,727 / 139,275 | 2,988 | 10,220 | 120,915 / 132,696 | 688 |
+| `v0.15.0` `policy-file` | 91,900 / 139,275 | 2,988 | 10,220 | 120,915 / 132,696 | 688 |
+| `v0.14.0` `full-stack-kiji-resolve` | 103,825 / 139,275 | 14,198 | 10,521 | 122,959 / 132,696 | 3,948 |
+| `v0.14.0` `pass2-ner` | 106,374 / 139,275 | 2,381 | 6,133 | 125,586 / 132,696 | 425 |
 
 | Release and arm | Refused A / D / R | Leaked on all processed A / D / R B |
 | --- | ---: | ---: |
-| `v0.16.0` `policy-file` | 0 / 0 / 0 | 34,829 / 0 / 43,795 |
-| `v0.15.1` `policy-file` | 0 / 0 / 0 | 51,112 / 0 / 44,274 |
-| `v0.15.0` `policy-file` | 0 / 0 / 0 | 51,285 / 0 / 44,274 |
-| `v0.14.0` `full-stack-kiji-resolve` | 0 / 0 / 0 | 61,204 / 0 / 42,208 |
-| `v0.14.0` `pass2-ner` | 0 / 0 / 0 | 63,744 / 0 / 44,830 |
+| `v0.16.0` `policy-file` | 0 / 0 / 0 | 75,444 / 0 / 120,316 |
+| `v0.15.1` `policy-file` | 0 / 0 / 0 | 91,727 / 0 / 120,915 |
+| `v0.15.0` `policy-file` | 0 / 0 / 0 | 91,900 / 0 / 120,915 |
+| `v0.14.0` `full-stack-kiji-resolve` | 0 / 0 / 0 | 103,825 / 0 / 122,959 |
+| `v0.14.0` `pass2-ner` | 0 / 0 / 0 | 106,374 / 0 / 125,586 |
 
 | Release and arm | Exact restores A / D / R | Valid manifests A / D / R | Restore failures A / D / R | Invalid manifests A / D / R |
 | --- | ---: | ---: | ---: | ---: |
-| `v0.16.0` `policy-file` | 4,958 / 3,374 / 1,390 | 4,958 / 3,374 / 1,390 | 0 / 0 / 0 | 0 / 0 / 0 |
-| `v0.15.1` `policy-file` | 4,949 / 3,374 / 1,390 | 4,949 / 3,374 / 1,390 | 9 / 0 / 0 | 9 / 0 / 0 |
-| `v0.15.0` `policy-file` | 4,949 / 3,374 / 1,390 | 4,949 / 3,374 / 1,390 | 9 / 0 / 0 | 9 / 0 / 0 |
-| `v0.14.0` `full-stack-kiji-resolve` | 4,890 / 3,359 / 1,353 | 4,958 / 3,374 / 1,390 | 68 / 15 / 37 | 0 / 0 / 0 |
-| `v0.14.0` `pass2-ner` | 4,958 / 3,374 / 1,390 | 4,958 / 3,374 / 1,390 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.16.0` `policy-file` | 6,545 / 4,931 / 2,917 | 6,545 / 4,931 / 2,917 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.15.1` `policy-file` | 6,535 / 4,931 / 2,917 | 6,535 / 4,931 / 2,917 | 10 / 0 / 0 | 10 / 0 / 0 |
+| `v0.15.0` `policy-file` | 6,535 / 4,931 / 2,917 | 6,535 / 4,931 / 2,917 | 10 / 0 / 0 | 10 / 0 / 0 |
+| `v0.14.0` `full-stack-kiji-resolve` | 6,387 / 4,925 / 2,826 | 6,545 / 4,931 / 2,917 | 158 / 6 / 91 | 0 / 0 / 0 |
+| `v0.14.0` `pass2-ner` | 6,545 / 4,931 / 2,917 | 6,545 / 4,931 / 2,917 | 0 / 0 / 0 | 0 / 0 / 0 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v17-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v17, test corpus `8c62d49926fa…`. Each release uses its own setup policy; v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`; v0.14.0 retains the v0.15.x model settings.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v19-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v19, test corpus `4f096686fdea…`. Each release uses its own setup policy; v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`; v0.14.0 retains the v0.15.x model settings.
 
 <!-- END GENERATED: agentic-adjacency -->
 
@@ -2130,15 +2176,16 @@ files match its tag. Its `clean_for_bench` was rebuilt with Rust 1.96.0
 Pro, Apple M5 Max (18 cores, 64 GB, macOS 26.5). Each v0.15.x and v0.16.0 release uses
 its own fresh `gaze setup --non-interactive --force` policy; v0.15.x has digest
 `f909a23a…` and v0.16.0 `65cd6aa5…`. The v0.14.0 arms use the v0.15.x policy's common model settings;
-`full-stack-kiji-resolve` also requires its Kiji model directory environment
-variable. Both v0.14.0 arms retain tokenize-only manifest semantics and
+`full-stack-kiji-resolve` is built with its shipped `safety-net-kiji` feature and
+requires its Kiji model directory environment variable. Both v0.14.0 arms retain tokenize-only manifest semantics and
 composite-source splitting. The ledger records binary revisions, digests
 and these legacy semantics. These are byte measurements; concurrent benchmark
 slots provide no latency evidence. Earlier machine and policy bindings stay
 in their historical ledgers.
 
-All historical arms completed without refusals. Their restoration and
-manifest limits are recorded separately from byte recall and precision:
+The following frozen [v16 ledger](agentic-adjacency-v16-history.json) counts
+retain earlier restoration and manifest limits. Current v18 counts are in the
+generated tables above; both measurements completed without refusals:
 
 | Release / arm | Non-exact restores A / D / R | Invalid manifests A / D / R |
 | --- | ---: | ---: |

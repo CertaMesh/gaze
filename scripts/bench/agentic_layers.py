@@ -45,9 +45,10 @@ import government_id_cells as government_ids
 import record_id_cells as record_ids
 import record_id_syntax_cells as record_id_syntax
 import record_id_ownership_cells as record_id_ownership
+import record_id_boundary_cells as record_id_boundary
 
 
-GENERATOR_VERSION = 17
+GENERATOR_VERSION = 19
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -4078,6 +4079,8 @@ COVERAGE_CLASSES = (
     ("vat_es", "VATID", "es", "ES", "NIF", "VAT ID"),
 )
 COVERAGE_CHECKSUM_FAMILIES = frozenset(("aadhaar", "cnpj", "nir", "eth_address"))
+# A mistyped, explicitly labelled personal national ID still identifies a person.
+PERSONAL_CHECKSUM_TWIN_LABELS = {"aadhaar": "AADHAAR", "nir": "NIR"}
 
 
 def _coverage_identifier(family: str, rng: Rng, partition: str, index: int) -> str:
@@ -4231,7 +4234,7 @@ def _coverage_records(partition: str) -> list[Record]:
                     records.append(
                         _coverage_record(
                             partition,
-                            "D",
+                            "A" if family in PERSONAL_CHECKSUM_TWIN_LABELS else "D",
                             family,
                             surface + "_invalid",
                             index,
@@ -4240,11 +4243,12 @@ def _coverage_records(partition: str) -> list[Record]:
                                 "C": (cell_cue, None),
                                 "V": (
                                     _coverage_invalid(family, value),
-                                    DECOY_PREFIX + family,
+                                    PERSONAL_CHECKSUM_TWIN_LABELS.get(family, DECOY_PREFIX + family),
                                 ),
                             },
                             language,
                             region,
+                            INVALID,
                         )
                     )
     # Natural agent/email text, independent of the deterministic name patterns.
@@ -4455,7 +4459,7 @@ def _coverage_records(partition: str) -> list[Record]:
 
 # The surface prefix each generator version added. Every earlier document stays
 # byte identical, so an older corpus is a filter of the current one, with
-# the v16 label correction reversed for the two historical BSN twin surfaces.
+# the v16 BSN label and v18 personal-ID gold corrections reversed.
 GENERATOR_ADDITIONS = {
     4: "adjacent_",
     5: "lookalike_",
@@ -4470,6 +4474,7 @@ GENERATOR_ADDITIONS = {
     14: "recordids_",
     15: "recordids_syntax_",
     17: "recordids_ownership_",
+    19: "recordids_boundary_",
 }
 
 
@@ -4479,6 +4484,16 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
         raise LayerError(f"generator version {version} cannot be rebuilt from version {GENERATOR_VERSION}")
     later = tuple(prefix for added, prefix in GENERATOR_ADDITIONS.items() if added > version)
     selected = [record for record in records if not record.surface.startswith(later)] if later else list(records)
+    if version < 18:
+        selected = [
+            replace(record, uid=record.uid.replace("-A-", "-D-", 1),
+                    layer=LAYER_LOOKALIKES, validity=BENIGN, gold=(),
+                    decoys=tuple(replace(span, label=record.family)
+                                 for span in record.gold))
+            if record.layer == LAYER_IDENTIFIERS and record.family in PERSONAL_CHECKSUM_TWIN_LABELS
+            and record.surface in ("coverage_prose_invalid", "coverage_log_invalid", "coverage_json_invalid")
+            else record for record in selected
+        ]
     if version < 16:
         selected = [
             replace(record, text=record.text.replace(
@@ -4493,6 +4508,8 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    18: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v18.json"),
+    17: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v17.json"),
     16: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v16.json"),
     15: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v15.json"),
     13: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v13.json"),
@@ -4755,6 +4772,7 @@ def generate(partition: str) -> list[Record]:
         + record_ids.records(sys.modules[__name__], partition)
         + record_id_syntax.records(sys.modules[__name__], partition)
         + record_id_ownership.records(sys.modules[__name__], partition)
+        + record_id_boundary.records(sys.modules[__name__], partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)

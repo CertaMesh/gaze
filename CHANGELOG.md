@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Benchmark generator v18 scores explicitly labelled checksum-invalid Aadhaar
+  and NIR values as personal data. The v17 corpus and contract stay frozen;
+  every displayed release is freshly measured with the stricter gold labels.
+  Company/wallet decoys and public-reference controls remain benign.
+- Collision-family tie detection now uses each variant's effective minimum
+  precedence, matching winner selection. Adopter policies with mixed precedence
+  within a variant no longer create false family tokens or miss effective ties;
+  declared membership values and legacy recovery behavior remain consistent.
+
 - Family-level tokens retain their ambiguity reason and original participant
   identities after later overlap decisions. Primary and recovered audit entries
   no longer infer family provenance from the last conflict tier or source labels;
@@ -52,6 +61,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prove unchanged behavior, and reordered phone responses are joined by ID.
 
 ### Changed
+
+- Benchmark generator v19 adds labelled CRM/HR value-boundary positives,
+  repeat cases and public controls for punctuation, adjacent cues, serialized
+  payloads, opening line breaks and tab groups. Earlier v17/v18 inputs stay
+  frozen, and every displayed release is freshly measured on the extended corpus.
+
+- Added an opt-in custom-policy benchmark arm for mixed collision-family
+  precedence, with generated identifier positives and benign no-tie,
+  same-variant and missing-membership controls. The shipped-default benchmark
+  population and headline remain unchanged.
 
 - `CorePipelineConfig` now resolves custom rulepack dictionaries through the
   policy input loader, and `CorePipeline::pseudonymize_text` passes their terms
