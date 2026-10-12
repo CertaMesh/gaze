@@ -4,33 +4,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use gaze::{
-    Action, ClassRule, DefaultRule, Detection, Detector, DictionaryBundle, LeakSuspect, Pipeline,
-    PipelineOptimizationConfig, RawDocument, SafetyNet, SafetyNetContext, SafetyNetError,
-    SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope, Session,
+    Action, ClassRule, DefaultRule, Detection, Detector, DictionaryBundle, Pipeline,
+    PipelineOptimizationConfig, RawDocument, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
+    Scope, Session,
 };
-
-#[derive(Clone)]
-struct EmailDetector;
-
-impl Detector for EmailDetector {
-    fn detect(&self, input: &str) -> Vec<Detection> {
-        input
-            .find("alice@example.invalid")
-            .map(|start| {
-                Detection::new(
-                    start..start + "alice@example.invalid".len(),
-                    gaze::PiiClass::Email,
-                    "bench.email",
-                )
-            })
-            .into_iter()
-            .collect()
-    }
-}
-
-struct SlowSafetyNet {
-    calls: Arc<AtomicUsize>,
-}
 
 struct SlowNameDetector {
     bytes: Arc<AtomicUsize>,
@@ -56,27 +33,13 @@ impl Detector for SlowNameDetector {
     }
 }
 
-impl SafetyNet for SlowSafetyNet {
-    fn id(&self) -> &str {
-        "bench-slow"
-    }
-
-    fn supported_locales(&self) -> &[gaze::LocaleTag] {
-        &[gaze::LocaleTag::Global]
-    }
-
-    fn check(
-        &self,
-        _clean_text: &str,
-        _context: SafetyNetContext<'_>,
-    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
-        self.calls.fetch_add(1, Ordering::SeqCst);
-        thread::sleep(Duration::from_micros(100));
-        Ok(Vec::new())
-    }
-}
+#[path = "support/tier4_recall.rs"]
+mod tier4_recall;
+use tier4_recall::{EmailDetector, SlowSafetyNet};
 
 fn main() {
+    tier4_recall::assert_required_positive();
+    tier4_recall::assert_observer_skips_preserve_semantics();
     let corpus = corpus();
     let baseline = run_config("baseline", PipelineOptimizationConfig::default(), &corpus);
     let skip_class = run_config(
@@ -147,7 +110,7 @@ fn run_config(
             .expect("clean");
         assert_eq!(
             report.stats.suspect_count, 0,
-            "recall-preserving empty report"
+            "benign timing corpus must have no suspects"
         );
     }
     BenchResult {
