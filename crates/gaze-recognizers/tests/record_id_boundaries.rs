@@ -341,6 +341,85 @@ fn licence_identifier_keeps_its_value_and_stops_at_complete_next_cues() {
 }
 
 #[test]
+fn legacy_public_metadata_cues_require_a_recognized_namespace() {
+    let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+    for cue in ["identity card", "tax number", "driver license"] {
+        for namespace in [
+            "release", "schema", "protocol", "runtime", "format", "API", "package",
+        ] {
+            for connector in ["=", ": ", " is ", " ist ", " lautet ", " "] {
+                let input = format!("{cue}: Q7312845 {namespace} version{connector}FRAME");
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap()
+                else {
+                    panic!("text")
+                };
+                let entry = session
+                    .snapshot_entries()
+                    .into_iter()
+                    .find(|entry| entry.raw == "Q7312845")
+                    .unwrap_or_else(|| {
+                        panic!("public metadata cue swallowed: {input:?} -> {clean:?}")
+                    });
+                assert_eq!(
+                    clean,
+                    format!("{cue}: {} {namespace} version{connector}FRAME", entry.token)
+                );
+                assert_eq!(
+                    core.pipeline()
+                        .restore_strict_text(&session, &clean)
+                        .unwrap(),
+                    input
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn legacy_private_and_unknown_cues_never_expose_an_unclaimed_value() {
+    let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+    for cue in ["identity card", "tax number", "driver license"] {
+        for next in [
+            "PASSPORT",
+            "FOO",
+            "BUILD ID",
+            "RELEASE NUMBER",
+            "SCHEMA REFERENCE",
+            "RUNTIME VALUE",
+            "SECRET VERSION",
+            "NOTBUILD VERSION",
+            "BUILD VERSIONX",
+        ] {
+            for connector in [": ", "="] {
+                let input = format!("{cue}: Q7312845 {next}{connector}EF34 GH5678");
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap()
+                else {
+                    panic!("text")
+                };
+                let mut visible = clean.clone();
+                for entry in session.snapshot_entries() {
+                    visible = visible.replace(&entry.token, "");
+                }
+                for value in ["Q7312845", "EF34", "GH5678"] {
+                    assert!(
+                        !visible.contains(value),
+                        "unclaimed private bytes exposed: {input:?} -> {clean:?}"
+                    );
+                }
+                assert_eq!(
+                    core.pipeline()
+                        .restore_strict_text(&session, &clean)
+                        .unwrap(),
+                    input
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn complete_licence_cues_leave_the_next_value_fully_protected() {
     let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
     for cue in ["DRIVER LICENSE", "DRIVER LICENCE", "FÜHRERSCHEIN"] {
