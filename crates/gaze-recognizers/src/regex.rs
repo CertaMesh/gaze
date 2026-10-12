@@ -943,30 +943,49 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
         .rev()
         .take_while(|byte| *byte == b'\\')
         .count();
-    // A JSON string embedded in another JSON string doubles its content escapes.
-    // Closing syntax has the opener's escape residue; an escaped content quote does not.
-    let stride = opening_escapes.saturating_add(1).saturating_mul(2);
-    let end = input[capture.start..]
-        .char_indices()
-        .find_map(|(offset, ch)| {
-            if ch as u32 != quote as u32 {
-                return None;
+    // Direct JSON and eight wrappers have delimiter runs 0, 1, 3, ..., 255.
+    // Never decode source bytes: closing quotes and content quotes have distinct
+    // escape residues. Uncertain syntax owns the tail rather than a prefix.
+    let width = opening_escapes.checked_add(1);
+    let stride = width.and_then(|width| width.checked_mul(2));
+    let mut end = input.len();
+    let mut reason = Some(LabelledValueScanReason::UncertainQuoteBoundary);
+    if opening_escapes > 255 {
+        reason = Some(LabelledValueScanReason::SerializationDepthExceeded);
+    } else if let Some(stride) = stride.filter(|_| width.is_some_and(usize::is_power_of_two)) {
+        let mut escapes = 0usize;
+        for (offset, byte) in input[capture.start..].bytes().enumerate() {
+            if byte == b'\\' {
+                let Some(next) = escapes.checked_add(1) else {
+                    break;
+                };
+                escapes = next;
+                continue;
             }
-            let at = capture.start + offset;
-            let escapes = input[capture.start..at]
-                .bytes()
-                .rev()
-                .take_while(|byte| *byte == b'\\')
-                .count();
-            (escapes % stride == opening_escapes).then(|| at - opening_escapes)
-        })
-        .unwrap_or(input.len());
+            if byte == quote {
+                let residue = escapes % stride;
+                if residue == opening_escapes {
+                    if let Some(close) = (capture.start + offset).checked_sub(opening_escapes) {
+                        end = close;
+                        reason = None;
+                    }
+                    break;
+                }
+                if residue != stride - 1 {
+                    break;
+                }
+            }
+            escapes = 0;
+        }
+    }
     let span = capture.start..end;
     LabelledValueScan {
         capture: capture.start..capture.end.min(end),
         extension: capture.end.min(end)..end,
-        reason: labelled_value_over_limit(&input[span.clone()])
-            .then_some(LabelledValueScanReason::LimitExceeded),
+        reason: reason.or_else(|| {
+            labelled_value_over_limit(&input[span.clone()])
+                .then_some(LabelledValueScanReason::LimitExceeded)
+        }),
         rejected: span.is_empty(),
         span,
     }

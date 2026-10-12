@@ -740,6 +740,10 @@ pub enum LabelledValueScanReason {
     LabelBoundary,
     /// A different recognizer claims the following value.
     OtherClassBoundary,
+    /// Raw quote delimiters exceed eight JSON serialization wrappers; the tail is owned.
+    SerializationDepthExceeded,
+    /// Quote delimiters are inconsistent or unclosed; the remaining tail is owned.
+    UncertainQuoteBoundary,
 }
 
 /// Typed validator outcome used by the pre-resolver validator-veto phase.
