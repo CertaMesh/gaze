@@ -985,6 +985,39 @@ mod tests {
     }
 
     #[test]
+    fn repeat_floor_independent_truth_table() {
+        let ordinary = PiiClass::custom("synthetic_identifier").unwrap();
+        let family = PiiClass::family("synthetic_identifier");
+        for (body, ordinary_expected, family_expected) in [
+            ("", false, false),
+            ("   ", false, false),
+            ("12345", false, true),
+            ("123456", true, true),
+            ("12-3./45", false, true),
+            ("12-3./456", true, true),
+            ("12 345", false, true),
+            ("12\u{a0}3456", true, true),
+            ("１２３４５", true, true),
+            ("١٢٣٤٥", true, true),
+            ("ABC", false, false),
+            ("ABCD", true, true),
+            ("A B C", false, false),
+            ("A\u{202f}B C D", true, true),
+        ] {
+            assert_eq!(
+                ValueShape::of(&ordinary, body).clears_floor(body),
+                ordinary_expected,
+                "ordinary {body:?}"
+            );
+            assert_eq!(
+                ValueShape::of(&family, body).clears_floor(body),
+                family_expected,
+                "family {body:?}"
+            );
+        }
+    }
+
+    #[test]
     fn all_caps_single_word_sweeps_its_byte_exact_copy() {
         let source = SweepSource {
             family: "counter".into(),

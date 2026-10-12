@@ -1027,3 +1027,172 @@ fn legacy_uncertain_seed_uses_earliest_cue_and_charges_public_copy_bytes() {
         );
     }
 }
+
+fn wrapper_floor_check(
+    raw_body: &str,
+    normalized_body: &str,
+    class: PiiClass,
+    wrapped: bool,
+    eligible: bool,
+) {
+    let pattern = format!(
+        "short code: {}({})",
+        if wrapped { "<" } else { "" },
+        regex::escape(normalized_body)
+    );
+    let detector = gaze_recognizers::RegexDetector::with_rulepack_fields(
+        &pattern,
+        class,
+        "synthetic.wrapper.floor",
+        vec![LocaleTag::Global],
+        0.9,
+        100,
+        "synthetic.counter",
+        Some(vec![1]),
+        vec![],
+        None,
+        None,
+    )
+    .unwrap()
+    .with_complete_labelled_value(true);
+    let reasons = ScanReasons::default();
+    let pipeline = Pipeline::builder()
+        .recognizer(detector)
+        .rule(gaze::DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap()
+        .with_redaction_logger(reasons.clone());
+    let declaration = format!(
+        "{}{raw_body} Fu\u{0308}hrerschein is EF34 GH5678{}",
+        if wrapped { "<" } else { "" },
+        if wrapped { ">" } else { "" }
+    );
+    let repeat = format!("{}{raw_body}", if wrapped { "<" } else { "" });
+    let input = format!(
+        "short code: {declaration}; visible copy: {repeat}{}.",
+        if wrapped { ">" } else { "" }
+    );
+    let session = Session::new(Scope::Conversation("synthetic-wrapper-floor".into())).unwrap();
+    let clean = public_clean(&pipeline, &session, &input);
+    assert!(
+        session
+            .snapshot_entries()
+            .iter()
+            .any(|entry| entry.raw == declaration),
+        "whole owner lost: {input:?} -> {clean:?}"
+    );
+    let imported = Session::import(session.export().unwrap()).unwrap();
+    assert_eq!(
+        pipeline.restore_strict_text(&imported, &clean).unwrap(),
+        input
+    );
+    let protected = session
+        .snapshot_entries()
+        .iter()
+        .any(|entry| entry.raw == repeat);
+    assert_eq!(
+        protected, eligible,
+        "wrapper/body floor differs: {input:?} -> {clean:?}"
+    );
+    assert_eq!(
+        reasons
+            .0
+            .lock()
+            .unwrap()
+            .contains(&serde_json::json!("uncertain_repeat_prefix")),
+        eligible
+    );
+    if !eligible {
+        assert!(clean.ends_with(&format!(
+            "visible copy: {repeat}{}.",
+            if wrapped { ">" } else { "" }
+        )));
+    }
+}
+
+#[test]
+fn scanner_prepended_wrapper_cannot_lower_numeric_repeat_floor() {
+    for wrapped in [false, true] {
+        for (body, eligible) in [
+            ("12345", false),
+            ("123456", true),
+            ("12345678", true),
+            ("12 345", false),
+            ("12 3456", true),
+        ] {
+            wrapper_floor_check(
+                body,
+                body,
+                PiiClass::custom("synthetic_identifier").unwrap(),
+                wrapped,
+                eligible,
+            );
+        }
+    }
+}
+
+#[test]
+fn wrapper_floor_uses_pipeline_normalization_domain() {
+    for (raw, normalized, eligible) in [
+        ("１２３４５", "12345", false),
+        ("１２３４５６", "123456", true),
+        ("12\u{200d}345", "12345", false),
+        ("12\u{200d}3456", "123456", true),
+        ("12\u{a0}345", "12 345", false),
+        ("12\u{202f}3456", "12 3456", true),
+        ("ABＣ", "ABC", false),
+        ("ABＣＤ", "ABCD", true),
+        ("E\u{0301}TA", "E\u{0301}TA", true),
+        ("東京", "東京", false),
+    ] {
+        wrapper_floor_check(
+            raw,
+            normalized,
+            PiiClass::custom("synthetic_identifier").unwrap(),
+            true,
+            eligible,
+        );
+    }
+    wrapper_floor_check(
+        "12345",
+        "12345",
+        PiiClass::family("synthetic_identifier"),
+        true,
+        true,
+    );
+}
+
+#[test]
+fn content_wrapper_is_not_a_scanner_prepended_wrapper() {
+    let detector = gaze_recognizers::RegexDetector::with_rulepack_fields(
+        r"short code: (<12345)",
+        PiiClass::custom("synthetic_identifier").unwrap(),
+        "synthetic.content.wrapper",
+        vec![LocaleTag::Global],
+        0.9,
+        100,
+        "synthetic.counter",
+        Some(vec![1]),
+        vec![],
+        None,
+        None,
+    )
+    .unwrap()
+    .with_complete_labelled_value(true);
+    let pipeline = Pipeline::builder()
+        .recognizer(detector)
+        .rule(gaze::DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap();
+    let input = "short code: <12345>; visible copy: <12345>.";
+    let session = Session::new(Scope::Conversation("synthetic-content-wrapper".into())).unwrap();
+    let clean = public_clean(&pipeline, &session, input);
+    // An original capture includes the wrapper; its existing whole-value
+    // pattern is outside the scanner-prepended seed eligibility guard.
+    assert!(!clean.contains("12345"));
+    let imported = Session::import(session.export().unwrap()).unwrap();
+    assert_eq!(
+        pipeline.restore_strict_text(&imported, &clean).unwrap(),
+        input
+    );
+}
