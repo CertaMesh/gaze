@@ -86,7 +86,7 @@
 //! ```
 
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use crate::address_block::{AddressGrammar, AddressVocabulary};
@@ -162,7 +162,8 @@ impl FamilyPolicyTable {
         inner: FamilyPolicyTableInner::Empty,
     };
 
-    pub(crate) fn from_memberships(by_recognizer: HashMap<String, CollisionMembership>) -> Self {
+    /// Compiles metadata for standalone resolution, without admitting recognizers.
+    pub fn from_memberships(by_recognizer: HashMap<String, CollisionMembership>) -> Self {
         if by_recognizer.is_empty() {
             return Self::EMPTY;
         }
@@ -1087,6 +1088,9 @@ mod tests {
     #[test]
     fn registry_builder_compiles_family_policy_table() {
         let registry = RecognizerRegistry::builder()
+            .register(PolicyMember("tenant.alpha"))
+            .register(PolicyMember("tenant.beta"))
+            .register(PolicyMember("tenant.gamma"))
             .register_collision(
                 "tenant.alpha",
                 CollisionMembership::new("tenant-doc", "alpha", 10, None),
@@ -1201,49 +1205,47 @@ mod tests {
         }
     }
 
-    // Dangling memberships can change real variants' precedence through min aggregation.
-    // Assembly must register collision metadata only after building its recognizer.
     #[test]
-    fn dangling_collision_membership_flips_family_precedence() {
-        let clean = RecognizerRegistry::builder()
-            .register_collision(
-                "ssn.de_cue",
-                CollisionMembership::new("government-id", "ssn", 10, None),
+    fn dangling_collision_membership_is_rejected_before_precedence_compiles() {
+        let builder = RecognizerRegistry::builder()
+            .register_with_membership(
+                PolicyMember("a"),
+                Some(CollisionMembership::new("class_alpha", "alpha", 10, None)),
+            )
+            .register_with_membership(
+                PolicyMember("b"),
+                Some(CollisionMembership::new("class_alpha", "beta", 20, None)),
             )
             .register_collision(
-                "tax_number.cue_anchored",
-                CollisionMembership::new("government-id", "tax-number", 20, None),
-            )
-            .build();
-
+                "missing",
+                CollisionMembership::new("class_alpha", "beta", 5, None),
+            );
         assert_eq!(
-            clean
-                .family_policy()
-                .compare("tax_number.cue_anchored", "ssn.de_cue"),
-            Some(false)
+            builder.try_build().unwrap_err(),
+            RegistryBuildError::OrphanCollisionMembership {
+                recognizer_id: "missing".into()
+            }
         );
+    }
 
-        let polluted = RecognizerRegistry::builder()
-            .register_collision(
-                "ssn.de_cue",
-                CollisionMembership::new("government-id", "ssn", 10, None),
-            )
-            .register_collision(
-                "tax_number.cue_anchored",
-                CollisionMembership::new("government-id", "tax-number", 20, None),
-            )
-            .register_collision(
-                "custom.name_marker",
-                CollisionMembership::new("government-id", "tax-number", 5, None),
-            )
-            .build();
-
-        assert_eq!(
-            polluted
-                .family_policy()
-                .compare("tax_number.cue_anchored", "ssn.de_cue"),
-            Some(true)
-        );
+    struct PolicyMember(&'static str);
+    impl Recognizer for PolicyMember {
+        fn id(&self) -> &str {
+            self.0
+        }
+        fn supported_class(&self) -> &PiiClass {
+            &PiiClass::Name
+        }
+        fn token_family(&self) -> &str {
+            "counter"
+        }
+        fn detect(
+            &self,
+            _input: &str,
+            _ctx: &DetectContext<'_>,
+        ) -> Result<Vec<Candidate>, DetectError> {
+            Ok(Vec::new())
+        }
     }
 }
 
@@ -1701,9 +1703,9 @@ impl RecognizerRegistry {
         self.recognizers_by_id.get(id)
     }
 
-    /// IDs of recognizers admitted to this registry.
+    /// IDs of admitted recognizers in scan order.
     pub fn recognizer_ids(&self) -> impl Iterator<Item = &str> {
-        self.recognizers_by_id.keys().map(String::as_str)
+        self.entries.iter().map(|recognizer| recognizer.id())
     }
 
     pub fn validators(&self) -> &HashMap<String, Arc<dyn Validator>> {
@@ -1738,23 +1740,58 @@ fn min_score(_class: &PiiClass) -> f32 {
     0.0
 }
 
+/// A construction-time registration error. Display diagnostics omit adopter IDs.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum RegistryBuildError {
+    #[error("duplicate recognizer identifier")]
+    DuplicateRecognizerId { recognizer_id: String },
+    #[error("orphan collision membership")]
+    OrphanCollisionMembership { recognizer_id: String },
+}
+
+struct Registration {
+    recognizer: Arc<dyn Recognizer>,
+    collision: Option<CollisionMembership>,
+}
+
 #[derive(Default)]
 pub struct RecognizerRegistryBuilder {
-    entries: Vec<Arc<dyn Recognizer>>,
-    collision_memberships: HashMap<String, CollisionMembership>,
+    registrations: Vec<Registration>,
+    pending_memberships: BTreeMap<String, CollisionMembership>,
     anchor_resolver: AnchorResolver,
     street_lexicon: StreetLexicon,
     address_grammar: AddressGrammar,
 }
 
 impl RecognizerRegistryBuilder {
-    pub fn register<R: Recognizer + 'static>(mut self, r: R) -> Self {
-        self.entries.push(Arc::new(r));
-        self
+    pub fn register<R: Recognizer + 'static>(self, r: R) -> Self {
+        self.register_with_membership(r, None)
     }
 
-    pub fn register_arc(mut self, r: Arc<dyn Recognizer>) -> Self {
-        self.entries.push(r);
+    pub fn register_arc(self, r: Arc<dyn Recognizer>) -> Self {
+        self.register_arc_with_membership(r, None)
+    }
+
+    /// Stages a recognizer and its optional collision declaration together.
+    pub fn register_with_membership<R: Recognizer + 'static>(
+        self,
+        recognizer: R,
+        collision: Option<CollisionMembership>,
+    ) -> Self {
+        self.register_arc_with_membership(Arc::new(recognizer), collision)
+    }
+
+    /// Arc counterpart of [`Self::register_with_membership`].
+    pub fn register_arc_with_membership(
+        mut self,
+        recognizer: Arc<dyn Recognizer>,
+        collision: Option<CollisionMembership>,
+    ) -> Self {
+        let pending = self.pending_memberships.remove(recognizer.id());
+        self.registrations.push(Registration {
+            recognizer,
+            collision: collision.or(pending),
+        });
         self
     }
 
@@ -1763,8 +1800,17 @@ impl RecognizerRegistryBuilder {
         recognizer_id: impl Into<String>,
         membership: CollisionMembership,
     ) -> Self {
-        self.collision_memberships
-            .insert(recognizer_id.into(), membership);
+        let id = recognizer_id.into();
+        if let Some(record) = self
+            .registrations
+            .iter_mut()
+            .rev()
+            .find(|record| record.recognizer.id() == id)
+        {
+            record.collision = Some(membership);
+        } else {
+            self.pending_memberships.insert(id, membership);
+        }
         self
     }
 
@@ -1804,21 +1850,59 @@ impl RecognizerRegistryBuilder {
         self
     }
 
+    /// Builds a registry, panicking with a fixed message on invalid admission.
+    /// Use [`Self::try_build`] to handle construction errors.
     pub fn build(self) -> RecognizerRegistry {
+        self.try_build()
+            .unwrap_or_else(|_| panic!("invalid recognizer registration"))
+    }
+
+    /// Validates the whole batch before constructing any runtime indexes.
+    pub fn try_build(self) -> Result<RecognizerRegistry, RegistryBuildError> {
+        let mut seen = BTreeSet::new();
+        for record in &self.registrations {
+            if !seen.insert(record.recognizer.id()) {
+                return Err(RegistryBuildError::DuplicateRecognizerId {
+                    recognizer_id: record.recognizer.id().to_string(),
+                });
+            }
+        }
+        if let Some((recognizer_id, _)) = self.pending_memberships.into_iter().next() {
+            return Err(RegistryBuildError::OrphanCollisionMembership { recognizer_id });
+        }
         let recognizers_by_id = self
-            .entries
+            .registrations
             .iter()
-            .map(|recognizer| (recognizer.id().to_string(), Arc::clone(recognizer)))
+            .map(|record| {
+                (
+                    record.recognizer.id().to_string(),
+                    Arc::clone(&record.recognizer),
+                )
+            })
             .collect();
-        RecognizerRegistry {
-            entries: self.entries,
+        let memberships = self
+            .registrations
+            .iter()
+            .filter_map(|record| {
+                record
+                    .collision
+                    .clone()
+                    .map(|membership| (record.recognizer.id().to_string(), membership))
+            })
+            .collect();
+        Ok(RecognizerRegistry {
+            entries: self
+                .registrations
+                .into_iter()
+                .map(|record| record.recognizer)
+                .collect(),
             recognizers_by_id,
             validators: HashMap::new(),
             canonicalizers: HashMap::new(),
-            family_policy: FamilyPolicyTable::from_memberships(self.collision_memberships),
+            family_policy: FamilyPolicyTable::from_memberships(memberships),
             anchor_resolver: self.anchor_resolver,
             street_lexicon: self.street_lexicon,
             address_grammar: self.address_grammar,
-        }
+        })
     }
 }

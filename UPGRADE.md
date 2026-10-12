@@ -35,6 +35,34 @@ Run `gaze setup --force` to regenerate an existing policy with credential
 protection, or add `"secrets"` to `[policy.rulepacks].bundled` in your policy.
 Existing policies keep their selected rulepacks until you update them.
 
+### Action required: valid recognizer registration
+
+Every recognizer ID must be unique, and each collision membership must name an
+admitted recognizer. `RecognizerRegistryBuilder::try_build()` returns
+`RegistryBuildError::DuplicateRecognizerId` or
+`RegistryBuildError::OrphanCollisionMembership` for an invalid batch.
+`RecognizerRegistryBuilder::build()` keeps its signature but now panics with
+`invalid recognizer registration` instead of admitting that batch.
+`PipelineBuilder::build()` returns `Error::RegistryBuild`; assembly preserves
+that error as `BuildError::Pipeline`. No registry or document is returned.
+
+Prefer `register_with_membership(recognizer, membership)` (or its Arc
+counterpart) and `PipelineBuilder::recognizer_with_membership` to attach optional
+metadata in the same call. Existing separate setters still work before or after
+registration, and the last declaration wins. Standalone resolver callers can
+compile metadata with `FamilyPolicyTable::from_memberships` without constructing
+a runtime registry.
+
+Multiple `RegexDetector::new` recognizers share the ID `regex`. Give each an
+explicit unique ID with `RegexDetector::with_source` when registering them as
+recognizers.
+
+Legacy `PipelineBuilder::detector()` adapters now have builder-local IDs:
+`legacy-detector`, `legacy-detector/1`, `legacy-detector/2`, and so on.
+Detection sources and public candidate provenance stay unchanged. A collision
+declaration for `legacy-detector` binds only the first adapter; declare the
+specific later ID when needed, or migrate to named recognizers.
+
 ### Additive: typed proxy daemon stop timeout
 
 `gaze_proxy::ProxyError` adds `DaemonStopTimeout { pid: u32, timeout:

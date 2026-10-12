@@ -79,6 +79,8 @@ pub enum Error {
     Rulepack(#[from] RulepackError),
     #[error("safety net error: {0}")]
     SafetyNet(#[from] SafetyNetError),
+    #[error("invalid recognizer registration: {0}")]
+    RegistryBuild(#[from] crate::RegistryBuildError),
     #[error("recognizer detection failed: {0}")]
     RecognizerDetect(#[from] gaze_types::DetectError),
     #[error("redaction log error: {0}")]
@@ -4762,11 +4764,8 @@ fn replace_clean_span_checked(
 /// `gaze_assembly::CorePipelineConfig` instead.
 #[derive(Default)]
 pub struct PipelineBuilder {
-    recognizers: Vec<Arc<dyn Recognizer>>,
-    collision_memberships: Vec<(String, CollisionMembership)>,
-    anchor_cue_bundles: Vec<(crate::LocaleTag, String, Vec<String>, Option<u16>)>,
-    street_lexicons: Vec<(crate::LocaleTag, crate::StreetNumberOrder, Vec<String>)>,
-    address_vocabularies: Vec<(crate::LocaleTag, crate::AddressVocabulary, Vec<String>)>,
+    registry: crate::RecognizerRegistryBuilder,
+    legacy_detector_count: usize,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     safety_nets: Vec<Arc<dyn SafetyNet>>,
     #[cfg(feature = "bundled-recognizers")]
@@ -4781,8 +4780,15 @@ impl PipelineBuilder {
     where
         D: Detector + 'static,
     {
-        self.recognizers
-            .push(Arc::new(DetectorRecognizer::new(detector)));
+        let id = if self.legacy_detector_count == 0 {
+            "legacy-detector".to_string()
+        } else {
+            format!("legacy-detector/{}", self.legacy_detector_count)
+        };
+        self.legacy_detector_count += 1;
+        self.registry = self
+            .registry
+            .register(DetectorRecognizer::new(detector, id));
         self
     }
 
@@ -4790,7 +4796,22 @@ impl PipelineBuilder {
     where
         R: Recognizer + 'static,
     {
-        self.recognizers.push(Arc::new(recognizer));
+        self.registry = self.registry.register(recognizer);
+        self
+    }
+
+    /// Registers a recognizer and its optional collision declaration together.
+    pub fn recognizer_with_membership<R>(
+        mut self,
+        recognizer: R,
+        membership: Option<CollisionMembership>,
+    ) -> Self
+    where
+        R: Recognizer + 'static,
+    {
+        self.registry = self
+            .registry
+            .register_with_membership(recognizer, membership);
         self
     }
 
@@ -4799,8 +4820,7 @@ impl PipelineBuilder {
         recognizer_id: impl Into<String>,
         membership: CollisionMembership,
     ) -> Self {
-        self.collision_memberships
-            .push((recognizer_id.into(), membership));
+        self.registry = self.registry.register_collision(recognizer_id, membership);
         self
     }
 
@@ -4811,8 +4831,9 @@ impl PipelineBuilder {
         names: Vec<String>,
         window_chars: Option<u16>,
     ) -> Self {
-        self.anchor_cue_bundles
-            .push((locale, anchor_key.into(), names, window_chars));
+        self.registry =
+            self.registry
+                .register_anchor_cue_bundle(locale, anchor_key, names, window_chars);
         self
     }
 
@@ -4825,7 +4846,7 @@ impl PipelineBuilder {
         order: crate::StreetNumberOrder,
         names: Vec<String>,
     ) -> Self {
-        self.street_lexicons.push((locale, order, names));
+        self.registry = self.registry.register_street_lexicon(locale, order, names);
         self
     }
 
@@ -4838,7 +4859,9 @@ impl PipelineBuilder {
         vocabulary: crate::AddressVocabulary,
         names: Vec<String>,
     ) -> Self {
-        self.address_vocabularies.push((locale, vocabulary, names));
+        self.registry = self
+            .registry
+            .register_address_vocabulary(locale, vocabulary, names);
         self
     }
 
@@ -4904,24 +4927,8 @@ impl PipelineBuilder {
     }
 
     pub fn build(self) -> Result<Pipeline> {
-        let mut registry = RecognizerRegistry::builder();
-        for recognizer in self.recognizers {
-            registry = registry.register_arc(recognizer);
-        }
-        for (recognizer_id, membership) in self.collision_memberships {
-            registry = registry.register_collision(recognizer_id, membership);
-        }
-        for (locale, anchor_key, names, window_chars) in self.anchor_cue_bundles {
-            registry = registry.register_anchor_cue_bundle(locale, anchor_key, names, window_chars);
-        }
-        for (locale, order, names) in self.street_lexicons {
-            registry = registry.register_street_lexicon(locale, order, names);
-        }
-        for (locale, vocabulary, names) in self.address_vocabularies {
-            registry = registry.register_address_vocabulary(locale, vocabulary, names);
-        }
         Ok(Pipeline {
-            registry: Arc::new(registry.build()),
+            registry: Arc::new(self.registry.try_build()?),
             redaction_loggers: self.redaction_loggers,
             safety_nets: self.safety_nets,
             #[cfg(feature = "bundled-recognizers")]
@@ -5648,13 +5655,15 @@ fn indexed_detection_from_candidate(
 
 struct DetectorRecognizer<D> {
     detector: D,
+    id: String,
     class: crate::PiiClass,
 }
 
 impl<D> DetectorRecognizer<D> {
-    fn new(detector: D) -> Self {
+    fn new(detector: D, id: String) -> Self {
         Self {
             detector,
+            id,
             class: crate::PiiClass::Custom("__legacy_detector__".to_string()),
         }
     }
@@ -5665,7 +5674,7 @@ where
     D: Detector + Send + Sync + 'static,
 {
     fn id(&self) -> &str {
-        "legacy-detector"
+        &self.id
     }
 
     fn evidence(&self) -> crate::EvidenceKind {

@@ -19,7 +19,7 @@
 
 use gaze::{
     resolve_candidates, resolve_candidates_with_policy, Candidate, CollisionMembership,
-    ConflictTier, PiiClass, RecognizerRegistry,
+    ConflictTier, FamilyPolicyTable, PiiClass,
 };
 use proptest::prelude::*;
 use proptest::test_runner::Config as ProptestConfig;
@@ -110,25 +110,25 @@ fn specs_and_permutation() -> impl Strategy<Value = (Vec<Spec>, Vec<Spec>)> {
 /// `rec4`/`rec5` share a family with distinct precedence (policy decides),
 /// `rec2`/`rec3` share a family with equal precedence (precedence tie emits a
 /// family-level token).
-fn family_registry() -> RecognizerRegistry {
-    RecognizerRegistry::builder()
-        .register_collision(
-            recognizer_id(4),
+fn family_registry() -> FamilyPolicyTable {
+    FamilyPolicyTable::from_memberships(std::collections::HashMap::from([
+        (
+            recognizer_id(4).into(),
             CollisionMembership::new("payment-card-or-iban", "iban", 10, None),
-        )
-        .register_collision(
-            recognizer_id(5),
+        ),
+        (
+            recognizer_id(5).into(),
             CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
-        )
-        .register_collision(
-            recognizer_id(2),
+        ),
+        (
+            recognizer_id(2).into(),
             CollisionMembership::new("tenant-document", "alpha", 10, None),
-        )
-        .register_collision(
-            recognizer_id(3),
+        ),
+        (
+            recognizer_id(3).into(),
             CollisionMembership::new("tenant-document", "beta", 10, None),
-        )
-        .build()
+        ),
+    ]))
 }
 
 fn assert_disjoint_and_sorted(resolved: &[Candidate]) {
@@ -198,7 +198,7 @@ proptest! {
     ) {
         let registry = family_registry();
         check_invariants(&specs, &permuted, |candidates| {
-            resolve_candidates_with_policy(candidates, registry.family_policy())
+            resolve_candidates_with_policy(candidates, &registry)
         });
     }
 

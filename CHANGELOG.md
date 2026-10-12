@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Recognizers and collision memberships are admitted together. Registry
+  construction rejects orphan memberships and duplicate recognizer IDs before
+  scanning. `try_build()` returns a typed error; the compatibility `build()`
+  panics on invalid registration. Legacy detector adapters have stable distinct
+  internal IDs while retaining their detection provenance.
+
 - Benchmark generator v18 scores explicitly labelled checksum-invalid Aadhaar
   and NIR values as personal data. The v17 corpus and contract stay frozen;
   every displayed release is freshly measured with the stricter gold labels.
