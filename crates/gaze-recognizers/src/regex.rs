@@ -864,7 +864,10 @@ fn assignment_starts(rest: &str) -> bool {
         let words = format!(r"[\p{{L}}\p{{M}}_-]+(?:{horizontal}+[\p{{L}}\p{{M}}_-]+)*?{horizontal}+{noun}");
         let compound = format!(r"(?:[\p{{L}}\p{{M}}]+[_-]{noun}|(?:customer|kunden|employee|personnel|personal|mitarbeiter|person|contact|member|membership|mitglieds|personen|kontakt)(?:[_-]?(?:record|datensatz))?[_-]?{noun})");
         let connector = format!(r"(?:{horizontal}*[:=]{horizontal}*|{horizontal}+(?:(?:is|ist|lautet){horizontal}+)?)");
-        Regex::new(&format!(r"(?i)\A(?:{words}|{compound}){connector}"))
+        // These licence labels have their own grouped-value recognizers. Their
+        // explicit connectors prove the entire label, not its final word alone.
+        let licence = format!(r"(?:(?:driver'?s?|driving){horizontal}+licen[cs]e|f[uü]hrerschein)(?:{horizontal}*[:=|,;\t-]{horizontal}*|{horizontal}+(?:is|ist|lautet){horizontal}+)");
+        Regex::new(&format!(r"(?i)\A(?:(?:{words}|{compound}){connector}|{licence})"))
             .expect("static complete field cue grammar")
     }).is_match(rest)
 }
@@ -1319,12 +1322,12 @@ mod tests {
     }
 
     #[test]
-    fn uppercase_field_boundary_waits_for_a_verified_next_value() {
+    fn complete_licence_boundary_preserves_other_uppercase_value_groups() {
         for separator in gaze_types::LABELLED_FIELD_CONNECTORS {
             let input = format!("AB12 CD3456 DRIVER LICENSE{separator} EF34 GH5678");
             let scan = scan_labelled_value(&input, 0..11, true);
             assert!(is_uppercase_field_boundary(&input["AB12 CD3456 ".len()..]));
-            assert_eq!(&input[scan.span], input, "{input:?}");
+            assert_eq!(&input[scan.span], "AB12 CD3456", "{input:?}");
         }
         let input = "AB12 CD3456 XYZ123456";
         assert!(!is_uppercase_field_boundary(&input["AB12 CD3456 ".len()..]));

@@ -340,6 +340,46 @@ fn licence_identifier_keeps_its_value_and_stops_at_complete_next_cues() {
     check_legacy_cue_ownership("driver license", "driver_license");
 }
 
+#[test]
+fn complete_licence_cues_leave_the_next_value_fully_protected() {
+    let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+    for cue in ["DRIVER LICENSE", "DRIVER LICENCE", "FÜHRERSCHEIN"] {
+        for connector in [": ", "=", " is ", " ist ", " lautet "] {
+            let input = format!("customer ID: AB12 CD3456 {cue}{connector}EF34 GH5678");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap()
+            else {
+                panic!("text")
+            };
+            let entries = session.snapshot_entries();
+            let first = entries
+                .iter()
+                .find(|entry| entry.raw == "AB12 CD3456")
+                .unwrap_or_else(|| panic!("complete cue swallowed: {input:?}; {entries:?}"));
+            let next = entries
+                .iter()
+                .find(|entry| {
+                    entry.raw == "EF34 GH5678"
+                        && entry.class == PiiClass::custom("driver_license").unwrap()
+                })
+                .unwrap_or_else(|| panic!("next licence value leaked: {input:?}; {entries:?}"));
+            assert_eq!(
+                clean,
+                format!(
+                    "customer ID: {} {cue}{connector}{}",
+                    first.token, next.token
+                )
+            );
+            assert_eq!(
+                core.pipeline()
+                    .restore_strict_text(&session, &clean)
+                    .unwrap(),
+                input
+            );
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 struct ScanReasons(std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>);
 
