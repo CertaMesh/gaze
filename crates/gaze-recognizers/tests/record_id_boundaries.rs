@@ -439,3 +439,85 @@ fn over_depth_and_inconsistent_quotes_own_the_tail_with_audit_reasons() {
         );
     }
 }
+
+fn public_clean(pipeline: &Pipeline, session: &Session, input: &str) -> String {
+    let (CleanDocument::Text(clean), _, _, _, _) = pipeline
+        .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
+            session,
+            input,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+            SafetyNetPolicy::default(),
+        )
+        .unwrap()
+    else {
+        panic!("text")
+    };
+    assert_eq!(
+        pipeline.restore_strict_text(session, &clean).unwrap(),
+        input
+    );
+    clean
+}
+
+#[test]
+fn field_owned_repeat_seeds_survive_later_turns_and_signed_snapshots() {
+    let pipeline = record_pipeline();
+    for cue in ["customer ID", "employee ID", "member ID"] {
+        for (value, declaration) in [
+            (
+                "\nNX731284 É842395",
+                format!("{cue}: \"\nNX731284 É842395\"; public_version=FRAME"),
+            ),
+            (
+                "\nNX731284 É842395",
+                format!("{cue}: \"\nNX731284 É842395; public_version=FRAME"),
+            ),
+            (
+                "NX731284\tÉ842395",
+                format!("{cue}: NX731284\tÉ842395\tONYX"),
+            ),
+        ] {
+            let session =
+                Session::new(Scope::Conversation("synthetic-repeat-contract".into())).unwrap();
+            public_clean(&pipeline, &session, &declaration);
+            let imported = Session::import(session.export().unwrap()).unwrap();
+            let input = format!("Lookup {value} again.");
+            let clean = public_clean(&pipeline, &imported, &input);
+            let entries = imported.snapshot_entries();
+            let entry = entries
+                .iter()
+                .find(|entry| entry.raw == value)
+                .expect("complete raw repeat is mapped");
+            assert_eq!(clean, format!("Lookup {} again.", entry.token));
+        }
+    }
+}
+
+#[test]
+fn uncertain_repeat_prefixes_keep_the_numeric_floor_and_public_cue_bytes() {
+    let pipeline = record_pipeline();
+    for declaration in [
+        "customer ID: \"1234; public_version=FRAME",
+        "customer ID: 1234\tONYX",
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let input = format!("Lookup 1234 again.\n{declaration}");
+        let clean = public_clean(&pipeline, &session, &input);
+        assert!(
+            clean.starts_with("Lookup 1234 again.\n"),
+            "short numeric prefix must not sweep"
+        );
+    }
+    // The apparent following label must never enter a conservative prefix seed.
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    public_clean(
+        &pipeline,
+        &session,
+        "customer ID: \"NX731284 É842395; public_version=FRAME",
+    );
+    assert_eq!(
+        public_clean(&pipeline, &session, "public_version=FRAME"),
+        "public_version=FRAME"
+    );
+}
