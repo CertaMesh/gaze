@@ -898,6 +898,22 @@ fn conservative_assignment_prefix_end(rest: &str) -> Option<usize> {
     assignment_prefix_end(rest).or_else(|| unicode_licence_prefix_end(rest))
 }
 
+fn legacy_complete_seed_cue_end(rest: &str) -> Option<usize> {
+    conservative_assignment_prefix_end(rest).or_else(|| {
+        // Existing private labels can end in nouns outside the general cue
+        // grammar. Recognize the complete label for seed geometry only: this
+        // does not consume another byte or infer a public boundary.
+        static CUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+        CUE.get_or_init(|| {
+            let horizontal = LABELLED_CUE_HORIZONTAL;
+            let connector = labelled_licence_connector();
+            Regex::new(&format!(
+                r"(?i)\A(?:national{horizontal}+insurance|(?:id|identity){horizontal}+card){connector}"
+            )).expect("static complete legacy seed cues")
+        }).find(rest).map(|matched| matched.end())
+    })
+}
+
 fn unicode_licence_prefix_end(rest: &str) -> Option<usize> {
     static LICENCE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
     LICENCE
@@ -1223,12 +1239,13 @@ fn scan_labelled_value(
         if !value_like {
             break;
         }
-        if let Some(prefix_end) = conservative_assignment_prefix_end(&input[next_start..]) {
-            let cue_end = next_start + prefix_end;
-            if seed_separator {
-                uncertain_prefix.get_or_insert((separator_start, cue_end));
+        if seed_separator {
+            if let Some(cue_end) = legacy_complete_seed_cue_end(&input[next_start..]) {
+                uncertain_prefix.get_or_insert((separator_start, next_start + cue_end));
             }
-            assignment_connector_end = Some(cue_end);
+        }
+        if let Some(prefix_end) = conservative_assignment_prefix_end(&input[next_start..]) {
+            assignment_connector_end = Some(next_start + prefix_end);
         }
         end = next_start;
         debug_assert!(end > separator_start);

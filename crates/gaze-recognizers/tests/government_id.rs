@@ -1268,7 +1268,7 @@ fn labelled_next_field_connector_matrix_protects_values_and_restores() {
                     &chain,
                     &DictionaryBundle::default(),
                 )
-                .unwrap();
+                .unwrap_or_else(|error| panic!("complete connector failed: {input:?}: {error:?}"));
             let CleanDocument::Text(cleaned) = clean else {
                 panic!("expected text")
             };
