@@ -697,6 +697,12 @@ fn translator_allows_raw_collision_with_minted_ordinal() {
         .expect("raw confined to a minted token must be allowed");
     let tokens = session.tokens();
     assert_eq!(tokens.len(), 1);
-    assert_eq!(translated[0].snippet, format!("Applicant age: {}", tokens[0]));
-    assert_eq!(session.resolve_token(&tokens[0]).unwrap(), (class, "1".to_string()));
+    assert_eq!(
+        translated[0].snippet,
+        format!("Applicant age: {}", tokens[0])
+    );
+    assert_eq!(
+        session.resolve_token(&tokens[0]).unwrap(),
+        (class, "1".to_string())
+    );
 }
