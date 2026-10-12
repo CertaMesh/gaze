@@ -898,6 +898,14 @@ fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> Label
         if end == group_start {
             break;
         }
+        // A period or colon between components belongs to the identifier; at
+        // the end of an unquoted group it is prose syntax. Quoted scalars use
+        // their delimiter instead and retain every punctuation byte.
+        let value_end = group_start + input[group_start..end].trim_end_matches(['.', ':']).len();
+        if value_end != end {
+            end = value_end;
+            break;
+        }
         let spaces = input[end..]
             .chars()
             .take_while(|ch| matches!(ch, ' ' | '\u{00a0}' | '\u{202f}'))
