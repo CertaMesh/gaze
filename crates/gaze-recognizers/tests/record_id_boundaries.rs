@@ -249,7 +249,8 @@ fn check_legacy_cue_ownership(cue: &str, class: &str) {
     use gaze_assembly::CorePipelineConfig;
     let core = CorePipelineConfig::new().build().unwrap();
     for connector in ["=", ": ", " is ", " ist ", " lautet ", " "] {
-        let input = format!("{cue}: Q731284 BUILD VERSION{connector}FRAME; lookup Q731284 again.");
+        let input =
+            format!("{cue}: Q7312845 BUILD VERSION{connector}FRAME; lookup Q7312845 again.");
         let session = Session::new(Scope::Ephemeral).unwrap();
         let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else {
             panic!("text")
@@ -257,7 +258,9 @@ fn check_legacy_cue_ownership(cue: &str, class: &str) {
         let entries = session.snapshot_entries();
         let entry = entries
             .iter()
-            .find(|entry| entry.class == PiiClass::custom(class).unwrap() && entry.raw == "Q731284")
+            .find(|entry| {
+                entry.class == PiiClass::custom(class).unwrap() && entry.raw == "Q7312845"
+            })
             .unwrap_or_else(|| {
                 panic!("legacy next cue swallowed: {input:?} -> {clean:?}; {entries:?}")
             });
@@ -275,9 +278,28 @@ fn check_legacy_cue_ownership(cue: &str, class: &str) {
             input
         );
     }
+    // A broader legacy regex can already prove a group that resembles a cue.
+    // The extension fix must never trim that original capture.
+    let input = format!("{cue}: Q731284 BUILD VERSION=FRAME");
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else {
+        panic!("text")
+    };
+    let entries = session.snapshot_entries();
+    let entry = entries
+        .iter()
+        .find(|entry| entry.raw == "Q731284 BUILD")
+        .expect("original capture retained");
+    assert_eq!(clean, format!("{cue}: {} VERSION=FRAME", entry.token));
+    assert_eq!(
+        core.pipeline()
+            .restore_strict_text(&session, &clean)
+            .unwrap(),
+        input
+    );
     // Uppercase and horizontal grouping alone never prove a next-field cue.
     // Every coherent value suffix must be protected, including numeric groups.
-    for value in ["Q731284 ABCD 204", "Q731284 842395", "AB 204 731284"] {
+    for value in ["Q731284 ABCD 204", "Q731284 842395", "AB 204731 284"] {
         let input = format!("{cue}: {value}; lookup {value} again.");
         let session = Session::new(Scope::Ephemeral).unwrap();
         let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else {

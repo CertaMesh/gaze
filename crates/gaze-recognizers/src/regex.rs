@@ -848,34 +848,20 @@ fn assignment_starts(rest: &str) -> bool {
     {
         return true;
     }
-    // Human labels may have several words; the terminal field noun supplies
-    // their semantics. Case and whitespace alone never terminate a value.
-    static PHRASE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    let Some(caps) = PHRASE.get_or_init(|| {
-        Regex::new(r"\A([\p{L}\p{M}]+(?:[ \t\u{00A0}\u{202F}]+[\p{L}\p{M}-]+)+)[ \t\u{00A0}\u{202F}]*[:=]")
-            .expect("static worded assignment syntax")
-    }).captures(rest) else { return false; };
-    let label = caps.get(1).expect("assignment label capture").as_str();
-    matches!(
-        label
-            .split(|ch: char| ch.is_whitespace() || ch == '-')
-            .next_back()
-            .unwrap_or("")
-            .to_uppercase()
-            .as_str(),
-        "ID" | "NUMBER"
-            | "NUMMER"
-            | "NO"
-            | "NR"
-            | "KEY"
-            | "CODE"
-            | "REFERENCE"
-            | "DATE"
-            | "DATUM"
-            | "VALUE"
-            | "WERT"
-            | "VERSION"
-    )
+    // Complete human cue phrases use a field noun plus the same same-line
+    // connectors as labelled seeds. An arbitrary uppercase word is no cue.
+    // Check from the first label byte so neither labels nor their values join
+    // the preceding identifier. Explicit machine assignments above remain open.
+    static CUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    CUE.get_or_init(|| {
+        let horizontal = r"[ \t\u{00A0}\u{202F}]";
+        let noun = r"(?:id|number|nummer|no\.?|nr\.?|key|code|reference|date|datum|value|wert|version)";
+        let words = format!(r"[\p{{L}}\p{{M}}_-]+(?:{horizontal}+[\p{{L}}\p{{M}}_-]+)*?{horizontal}+{noun}");
+        let compound = format!(r"(?:[\p{{L}}\p{{M}}]+[_-]{noun}|(?:customer|kunden|employee|personnel|personal|mitarbeiter|person|contact|member|membership|mitglieds|personen|kontakt)(?:[_-]?(?:record|datensatz))?[_-]?{noun})");
+        let connector = format!(r"(?:{horizontal}*[:=]{horizontal}*|{horizontal}+(?:(?:is|ist|lautet){horizontal}+)?)");
+        Regex::new(&format!(r"(?i)\A(?:{words}|{compound}){connector}"))
+            .expect("static complete field cue grammar")
+    }).is_match(rest)
 }
 
 fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
@@ -1043,6 +1029,10 @@ fn scan_labelled_value(
         // Dates never cut a proven capture. A following uppercase field stays covered until
         // another recognizer actually claims its value; the registry then exposes the label.
         let beyond_capture = next_start >= capture.end;
+        if beyond_capture && assignment_starts(&input[next_start..]) {
+            stop_reason = Some(LabelledValueScanReason::LabelBoundary);
+            break;
+        }
         if beyond_capture && starts_with_date(&input[next_start..]) {
             stop_reason = Some(LabelledValueScanReason::DateBoundary);
             break;
