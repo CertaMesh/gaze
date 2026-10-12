@@ -107,7 +107,7 @@ initial LF/CRLF and terminal punctuation. Its exact repeat pattern includes raw
 whitespace fringes; ordinary spelling variants retain their previous behavior.
 The existing length floor is evaluated on the value body, never on whitespace.
 
-Two uncertain shapes also license a typed conservative prefix seed. An unclosed
+Uncertain ownership also licenses a typed conservative prefix seed. An unclosed
 quoted tail can use the prefix before an apparent delimiter followed by a
 complete next-field cue. An ambiguous tab group can use numeric-bearing groups
 before its final alphabetic-only group. The whole tail or grouped value stays
@@ -115,7 +115,14 @@ owned. This seed never declares a public boundary or includes following label
 bytes. It can protect extra public prefix copies; benchmark evidence reports
 that cost alongside conservative whole-tail and tab-column costs.
 
-These seeds belong only to field-owned values found by deterministic rules.
+A legacy grouped owner can also retain one earliest prefix before a complete
+next-field cue consumed inside its conservative tail. The original capture and
+whole tail stay protected. Unconsumed cues, prose and record separators never
+license this seed; it does not declare any following namespace public. Its start
+matches the owner, including a leading angle wrapper, and its end precedes the
+separator and label at a UTF-8 boundary.
+
+These seeds belong only to values found by deterministic rules.
 They pass through the existing resolver and policy checks; NER-only values never
 license them. A seed is an offset and kind bound to the minted owner value, so it
 survives later turns and snapshot import without a separate persisted raw-value
@@ -133,7 +140,7 @@ matcher rebuilds when sweepability or repeat-seed metadata changes; it uses the 
 without another raw-value store.
 
 Ordinary `session_blob` snapshots remain v6 and carry evidence. A snapshot with
-field-owned repeat metadata uses v7. A reader supporting only v6 or earlier
+deterministic repeat metadata uses v7. A reader supporting only v6 or earlier
 rejects v7 with `InvalidSnapshotVersion(7)`; the new reader imports v2–v7.
 Signatures bind the envelope version, and import rejects invalid seed offsets,
 missing deterministic evidence, or seed metadata under an older envelope.
@@ -144,7 +151,7 @@ evidence is unknown.
 
 Copies record `recognizer_id = manifest_sweep`, `provenance_stage = manifest_sweep`,
 `decided_by = manifest_sweep` (`ConflictTier::ManifestSweep`), and
-`provenance_merged_from = manifest_sweep:exact`, `:variant`, `:part` (parts/runs), or `:uncertain_prefix` (conservative field-owned seeds).
+`provenance_merged_from = manifest_sweep:exact`, `:variant`, `:part` (parts/runs), or `:uncertain_prefix` (conservative typed prefix seeds).
 Conservative prefix copies also carry `uncertain_repeat_prefix` as their typed
 labelled-value reason. Rows never contain source tokens/values. Daemon overwrites the stage with
 `daemon`; `decided_by` still identifies the sweep.

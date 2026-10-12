@@ -38,7 +38,9 @@ Existing policies keep their selected rulepacks until you update them.
 ### Action required: conditional `session_blob` version 7
 
 Field-owned record identifiers now retain exact scalar whitespace and conservative
-repeat prefixes for malformed quotes and ambiguous tab groups. A signed snapshot
+repeat prefixes for malformed quotes, ambiguous tab groups and complete cues
+inside conservative legacy owners. Legacy prefixes never shorten the original
+capture or declare the next field public; their ordinary length floor is unchanged. A signed snapshot
 with this metadata uses envelope v7; ordinary snapshots remain v6. Readers that
 support only v6 and earlier reject v7 with `InvalidSnapshotVersion(7)`.
 

@@ -9,12 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Signed session snapshots with field-owned repeat-seed metadata use envelope
+- Signed session snapshots with deterministic repeat-seed metadata use envelope
   v7; ordinary snapshots remain v6. New readers restore v2–v7. Older readers
   reject v7 rather than silently dropping repeat protection; upgrade all readers
   before exchanging these snapshots.
 
 ### Fixed
+
+- Preserve first-value repeats when a complete private or unknown cue remains
+  inside a conservative legacy identifier owner, including raw NFC/NFD licence
+  labels. One typed prefix seed retains the owned tail and existing length floor;
+  conservative protection of public prefix copies remains a measured cost.
 
 - Labelled customer, employee and member IDs preserve terminal prose punctuation,
   stop at complete next-field cues, and protect raw quoted scalars through eight
