@@ -845,8 +845,14 @@ fn legacy_uncertain_complete_cues_keep_first_value_repeats_and_provenance() {
                     .pipeline()
                     .clone()
                     .with_redaction_logger(reasons.clone());
-                let session = Session::new(Scope::Ephemeral).unwrap();
+                let session =
+                    Session::new(Scope::Conversation("synthetic-legacy-seed".into())).unwrap();
                 let clean = public_clean(&pipeline, &session, &input);
+                let imported = Session::import(session.export().unwrap()).unwrap();
+                assert_eq!(
+                    pipeline.restore_strict_text(&imported, &clean).unwrap(),
+                    input
+                );
                 let entries = session.snapshot_entries();
                 let mut visible = clean.clone();
                 for entry in &entries {
@@ -876,28 +882,66 @@ fn legacy_uncertain_complete_cues_keep_first_value_repeats_and_provenance() {
 #[test]
 fn legacy_uncertain_prefix_geometry_retains_wrappers_floor_and_long_values() {
     let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
-    for value in ["Q9176243".to_owned(), format!("Q{}", "9176243".repeat(9))] {
+    for value in [
+        "Q9176243".to_owned(),
+        "Q9176243 AB2345 CD6789 EF1234 GH5678 IJ9012 KL3456".to_owned(),
+    ] {
         for wrapped in [false, true] {
             let declaration = if wrapped {
                 format!("<{value} Fu\u{0308}hrerschein is EF34 GH5678>")
             } else {
                 format!("{value} SECRET VERSION is EF34 GH5678")
             };
-            let input = format!("driver license: {declaration}; lookup {value} again.");
+            let repeat = if wrapped {
+                format!("<{value}")
+            } else {
+                value.clone()
+            };
+            let closing = if wrapped { ">" } else { "" };
+            let input = format!("driver license: {declaration}; lookup {repeat}{closing} again.");
             let reasons = ScanReasons::default();
-            let pipeline = core
-                .pipeline()
-                .clone()
-                .with_redaction_logger(reasons.clone());
-            let session = Session::new(Scope::Ephemeral).unwrap();
+            let pipeline = if wrapped {
+                // The adopter recognizer admits a wrapper through the public
+                // seam, exercising scanner geometry independently of cue seeds.
+                let detector = gaze_recognizers::RegexDetector::with_rulepack_fields(
+                    r"driver license: <(Q[0-9]+)",
+                    PiiClass::custom("driver_license").unwrap(),
+                    "synthetic.wrapped.licence",
+                    vec![LocaleTag::Global],
+                    0.9,
+                    100,
+                    "driver_license.counter",
+                    Some(vec![1]),
+                    vec![],
+                    None,
+                    None,
+                )
+                .unwrap()
+                .with_complete_labelled_value(true);
+                Pipeline::builder()
+                    .recognizer(detector)
+                    .rule(gaze::DefaultRule::new(Action::Tokenize))
+                    .build()
+                    .unwrap()
+            } else {
+                core.pipeline().clone()
+            }
+            .with_redaction_logger(reasons.clone());
+            let session =
+                Session::new(Scope::Conversation("synthetic-legacy-seed".into())).unwrap();
             let clean = public_clean(&pipeline, &session, &input);
+            let imported = Session::import(session.export().unwrap()).unwrap();
+            assert_eq!(
+                pipeline.restore_strict_text(&imported, &clean).unwrap(),
+                input
+            );
             let entries = session.snapshot_entries();
             assert!(
                 entries.iter().any(|entry| entry.raw == declaration),
                 "whole wrapped/long declaration owner lost: {input:?} -> {clean:?}"
             );
             assert!(
-                entries.iter().any(|entry| entry.raw == value),
+                entries.iter().any(|entry| entry.raw == repeat),
                 "raw repeat lost: {input:?} -> {clean:?}"
             );
             assert!(reasons
@@ -908,7 +952,7 @@ fn legacy_uncertain_prefix_geometry_retains_wrappers_floor_and_long_values() {
         }
     }
     let input = "driver license: Q1234 Fu\u{0308}hrerschein is EF34 GH5678; lookup Q1234 again.";
-    let session = Session::new(Scope::Ephemeral).unwrap();
+    let session = Session::new(Scope::Conversation("synthetic-legacy-seed".into())).unwrap();
     let clean = public_clean(core.pipeline(), &session, input);
     assert!(
         clean.ends_with("lookup Q1234 again."),
@@ -934,7 +978,7 @@ fn legacy_rejected_or_public_cues_do_not_license_uncertain_prefixes() {
             .pipeline()
             .clone()
             .with_redaction_logger(reasons.clone());
-        let session = Session::new(Scope::Ephemeral).unwrap();
+        let session = Session::new(Scope::Conversation("synthetic-legacy-seed".into())).unwrap();
         public_clean(&pipeline, &session, &input);
         assert!(
             !reasons
@@ -943,6 +987,43 @@ fn legacy_rejected_or_public_cues_do_not_license_uncertain_prefixes() {
                 .unwrap()
                 .contains(&serde_json::json!("uncertain_repeat_prefix")),
             "unconsumed/public cue licensed uncertainty: {input:?}"
+        );
+    }
+}
+
+#[test]
+fn legacy_uncertain_seed_uses_earliest_cue_and_charges_public_copy_bytes() {
+    let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+    for cue in ["identity card", "tax number", "driver license"] {
+        let owned = "Q9176243 PASSPORT: EF34 GH5678 SECRET VERSION is ZX98 KL7654";
+        let input = format!("{cue}: {owned}; lookup Q9176243 again.\nOperational inventory: public artifact reference Q9176243.");
+        let reasons = ScanReasons::default();
+        let pipeline = core
+            .pipeline()
+            .clone()
+            .with_redaction_logger(reasons.clone());
+        let session =
+            Session::new(Scope::Conversation("synthetic-legacy-prefix-cost".into())).unwrap();
+        let clean = public_clean(&pipeline, &session, &input);
+        let entries = session.snapshot_entries();
+        assert!(entries.iter().any(|entry| entry.raw == owned));
+        let repeat = entries
+            .iter()
+            .find(|entry| entry.raw == "Q9176243")
+            .expect("earliest prefix survives later complete cues");
+        assert!(clean.ends_with(&format!("public artifact reference {}.", repeat.token)));
+        // The independently public artifact copy is non-gold: exactly eight
+        // extra protected bytes, charged as a conservative precision cost.
+        assert_eq!(repeat.raw.len(), 8);
+        assert!(reasons
+            .0
+            .lock()
+            .unwrap()
+            .contains(&serde_json::json!("uncertain_repeat_prefix")));
+        let imported = Session::import(session.export().unwrap()).unwrap();
+        assert_eq!(
+            pipeline.restore_strict_text(&imported, &clean).unwrap(),
+            input
         );
     }
 }

@@ -1126,6 +1126,7 @@ fn scan_labelled_value(
     let mut end = capture.start;
     let mut stop_reason = None;
     let mut assignment_connector_end = None;
+    let mut uncertain_prefix = None;
     let initial_lowercase = input[capture.start..]
         .chars()
         .next()
@@ -1162,6 +1163,7 @@ fn scan_labelled_value(
             break;
         }
         let next_start = end + separator_len;
+        let seed_separator = !input[separator_start..next_start].contains([';', '\n', '\r']);
         let next_len = labelled_group_byte_len(&input[next_start..]);
         if next_len == 0 {
             break;
@@ -1197,7 +1199,11 @@ fn scan_labelled_value(
             .then(|| unicode_licence_prefix_end(&input[next_start..]))
             .flatten()
         {
-            end = next_start + prefix_end;
+            let cue_end = next_start + prefix_end;
+            if seed_separator {
+                uncertain_prefix.get_or_insert((separator_start, cue_end));
+            }
+            end = cue_end;
             continue;
         }
         let uppercase_label = is_uppercase_field_boundary(&input[next_start..])
@@ -1218,7 +1224,11 @@ fn scan_labelled_value(
             break;
         }
         if let Some(prefix_end) = conservative_assignment_prefix_end(&input[next_start..]) {
-            assignment_connector_end = Some(next_start + prefix_end);
+            let cue_end = next_start + prefix_end;
+            if seed_separator {
+                uncertain_prefix.get_or_insert((separator_start, cue_end));
+            }
+            assignment_connector_end = Some(cue_end);
         }
         end = next_start;
         debug_assert!(end > separator_start);
@@ -1240,8 +1250,20 @@ fn scan_labelled_value(
         .count();
     let extension = capture.end..end;
     let span = start..end;
+    // Only a complete cue retained inside the final owner licenses extra
+    // prefix protection. The original capture and conservative tail stay
+    // untouched. Wrapper bytes share the owner's start, preserving the
+    // existing same-start translation and snapshot geometry.
+    let repeat_seed = uncertain_prefix.and_then(|(prefix_end, cue_end)| {
+        (start < prefix_end && prefix_end < end && cue_end < end).then_some(
+            gaze_types::LabelledValueRepeatSeed {
+                span: start..prefix_end,
+                kind: gaze_types::LabelledValueRepeatSeedKind::UncertainPrefix,
+            },
+        )
+    });
     LabelledValueScan {
-        repeat_seed: None,
+        repeat_seed,
         reason: labelled_value_over_limit(&input[span.clone()])
             .then_some(LabelledValueScanReason::LimitExceeded)
             .or(stop_reason),

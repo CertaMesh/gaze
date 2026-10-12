@@ -744,7 +744,7 @@ pub enum LabelledValueScanReason {
     SerializationDepthExceeded,
     /// Quote delimiters are inconsistent or unclosed; the remaining tail is owned.
     UncertainQuoteBoundary,
-    /// A repeat was protected from a conservative field-owned prefix seed.
+    /// A repeat was protected from a conservative typed prefix seed.
     UncertainRepeatPrefix,
 }
 
