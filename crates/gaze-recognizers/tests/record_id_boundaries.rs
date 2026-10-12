@@ -826,3 +826,123 @@ fn legacy_complete_connector_state_expires_before_unrelated_text_or_next_record(
         }
     }
 }
+
+#[test]
+fn legacy_uncertain_complete_cues_keep_first_value_repeats_and_provenance() {
+    let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+    for cue in ["identity card", "tax number", "driver license"] {
+        for next in [
+            "Fu\u{0308}hrerschein",
+            "FU\u{0308}HRERSCHEIN",
+            "Führerschein",
+            "FÜHRERSCHEIN",
+        ] {
+            for connector in [": ", "=", " is ", " ist ", " lautet "] {
+                let input =
+                    format!("{cue}: Q9176243 {next}{connector}EF34 GH5678; lookup Q9176243 again.");
+                let reasons = ScanReasons::default();
+                let pipeline = core
+                    .pipeline()
+                    .clone()
+                    .with_redaction_logger(reasons.clone());
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let clean = public_clean(&pipeline, &session, &input);
+                let entries = session.snapshot_entries();
+                let mut visible = clean.clone();
+                for entry in &entries {
+                    visible = visible.replace(&entry.token, "");
+                }
+                for private in ["Q9176243", "EF34", "GH5678"] {
+                    assert!(
+                        !visible.contains(private),
+                        "legacy first-value repeat leaked: {input:?} -> {clean:?}"
+                    );
+                }
+                if next == "Fu\u{0308}hrerschein" {
+                    assert!(
+                        reasons
+                            .0
+                            .lock()
+                            .unwrap()
+                            .contains(&serde_json::json!("uncertain_repeat_prefix")),
+                        "uncertain repeat must retain provenance"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn legacy_uncertain_prefix_geometry_retains_wrappers_floor_and_long_values() {
+    let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+    for value in ["Q9176243".to_owned(), format!("Q{}", "9176243".repeat(9))] {
+        for wrapped in [false, true] {
+            let declaration = if wrapped {
+                format!("<{value} Fu\u{0308}hrerschein is EF34 GH5678>")
+            } else {
+                format!("{value} SECRET VERSION is EF34 GH5678")
+            };
+            let input = format!("driver license: {declaration}; lookup {value} again.");
+            let reasons = ScanReasons::default();
+            let pipeline = core
+                .pipeline()
+                .clone()
+                .with_redaction_logger(reasons.clone());
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let clean = public_clean(&pipeline, &session, &input);
+            let entries = session.snapshot_entries();
+            assert!(
+                entries.iter().any(|entry| entry.raw == declaration),
+                "whole wrapped/long declaration owner lost: {input:?} -> {clean:?}"
+            );
+            assert!(
+                entries.iter().any(|entry| entry.raw == value),
+                "raw repeat lost: {input:?} -> {clean:?}"
+            );
+            assert!(reasons
+                .0
+                .lock()
+                .unwrap()
+                .contains(&serde_json::json!("uncertain_repeat_prefix")));
+        }
+    }
+    let input = "driver license: Q1234 Fu\u{0308}hrerschein is EF34 GH5678; lookup Q1234 again.";
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let clean = public_clean(core.pipeline(), &session, input);
+    assert!(
+        clean.ends_with("lookup Q1234 again."),
+        "short prefix cannot lower the existing repeat floor"
+    );
+}
+
+#[test]
+fn legacy_rejected_or_public_cues_do_not_license_uncertain_prefixes() {
+    let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+    for tail in [
+        "verified is PUBLIC",
+        "action=lookup",
+        "2027-04-12",
+        "RELEASE VERSION=FRAME",
+        "SECRET VERSION verified is PUBLIC",
+        "; SECRET VERSION is PUBLIC",
+        "\nSECRET VERSION is PUBLIC",
+    ] {
+        let input = format!("driver license: Q9176243 {tail}; lookup Q9176243 again.");
+        let reasons = ScanReasons::default();
+        let pipeline = core
+            .pipeline()
+            .clone()
+            .with_redaction_logger(reasons.clone());
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        public_clean(&pipeline, &session, &input);
+        assert!(
+            !reasons
+                .0
+                .lock()
+                .unwrap()
+                .contains(&serde_json::json!("uncertain_repeat_prefix")),
+            "unconsumed/public cue licensed uncertainty: {input:?}"
+        );
+    }
+}
