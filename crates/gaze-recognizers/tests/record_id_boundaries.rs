@@ -345,10 +345,10 @@ fn legacy_public_metadata_cues_require_a_recognized_namespace() {
     let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
     for cue in ["identity card", "tax number", "driver license"] {
         for namespace in [
-            "release", "schema", "protocol", "runtime", "format", "API", "package",
+            "RELEASE", "SCHEMA", "PROTOCOL", "RUNTIME", "FORMAT", "API", "PACKAGE", "SOFTWARE",
         ] {
             for connector in ["=", ": ", " is ", " ist ", " lautet ", " "] {
-                let input = format!("{cue}: Q7312845 {namespace} version{connector}FRAME");
+                let input = format!("{cue}: Q7312845 {namespace} VERSION{connector}FRAME");
                 let session = Session::new(Scope::Ephemeral).unwrap();
                 let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap()
                 else {
@@ -363,7 +363,7 @@ fn legacy_public_metadata_cues_require_a_recognized_namespace() {
                     });
                 assert_eq!(
                     clean,
-                    format!("{cue}: {} {namespace} version{connector}FRAME", entry.token)
+                    format!("{cue}: {} {namespace} VERSION{connector}FRAME", entry.token)
                 );
                 assert_eq!(
                     core.pipeline()

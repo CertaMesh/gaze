@@ -842,6 +842,13 @@ fn field_value_char(ch: char) -> bool {
         || matches!(ch, '+' | '/' | '_' | '=' | '-' | '.' | ':' | '\\')
 }
 
+const LABELLED_CUE_HORIZONTAL: &str = r"[ \t\u{00A0}\u{202F}]";
+
+fn labelled_assignment_connector() -> String {
+    let horizontal = LABELLED_CUE_HORIZONTAL;
+    format!(r"(?:{horizontal}*[:=]{horizontal}*|{horizontal}+(?:(?:is|ist|lautet){horizontal}+)?)")
+}
+
 fn assignment_starts(rest: &str) -> bool {
     static FIELD: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
     if FIELD
@@ -859,17 +866,34 @@ fn assignment_starts(rest: &str) -> bool {
     // the preceding identifier. Explicit machine assignments above remain open.
     static CUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
     CUE.get_or_init(|| {
-        let horizontal = r"[ \t\u{00A0}\u{202F}]";
+        let horizontal = LABELLED_CUE_HORIZONTAL;
         let noun = r"(?:id|number|nummer|no\.?|nr\.?|key|code|reference|date|datum|value|wert|version)";
         let words = format!(r"[\p{{L}}\p{{M}}_-]+(?:{horizontal}+[\p{{L}}\p{{M}}_-]+)*?{horizontal}+{noun}");
         let compound = format!(r"(?:[\p{{L}}\p{{M}}]+[_-]{noun}|(?:customer|kunden|employee|personnel|personal|mitarbeiter|person|contact|member|membership|mitglieds|personen|kontakt)(?:[_-]?(?:record|datensatz))?[_-]?{noun})");
-        let connector = format!(r"(?:{horizontal}*[:=]{horizontal}*|{horizontal}+(?:(?:is|ist|lautet){horizontal}+)?)");
+        let connector = labelled_assignment_connector();
         // These licence labels have their own grouped-value recognizers. Their
         // explicit connectors prove the entire label, not its final word alone.
         let licence = format!(r"(?:(?:driver'?s?|driving){horizontal}+licen[cs]e|f[uü]hrerschein)(?:{horizontal}*[:=|,;\t-]{horizontal}*|{horizontal}+(?:is|ist|lautet){horizontal}+)");
         Regex::new(&format!(r"(?i)\A(?:(?:{words}|{compound}){connector}|{licence})"))
             .expect("static complete field cue grammar")
     }).is_match(rest)
+}
+
+fn public_metadata_assignment_starts(rest: &str) -> bool {
+    // Only these complete operational metadata namespaces establish public
+    // text. Private and unknown assignments need the registry's existing proof
+    // from an actual next recognizer before their conservative tail can shrink.
+    static CUE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    CUE.get_or_init(|| {
+        let horizontal = LABELLED_CUE_HORIZONTAL;
+        let namespace = r"(?:build|release|schema|protocol|runtime|format|api|package|software)";
+        let connector = labelled_assignment_connector();
+        Regex::new(&format!(
+            r"(?i)\A{namespace}(?:{horizontal}+|[_-])version{connector}"
+        ))
+        .expect("static public metadata cue grammar")
+    })
+    .is_match(rest)
 }
 
 fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
@@ -1096,7 +1120,10 @@ fn scan_labelled_value(
         // Dates never cut a proven capture. A following uppercase field stays covered until
         // another recognizer actually claims its value; the registry then exposes the label.
         let beyond_capture = next_start >= capture.end;
-        if beyond_capture && assignment_starts(&input[next_start..]) {
+        if beyond_capture
+            && (public_metadata_assignment_starts(&input[next_start..])
+                || public_metadata_assignment_starts(&input[group_start..]))
+        {
             end = end.max(capture.end);
             stop_reason = Some(LabelledValueScanReason::LabelBoundary);
             break;
@@ -1322,12 +1349,12 @@ mod tests {
     }
 
     #[test]
-    fn complete_licence_boundary_preserves_other_uppercase_value_groups() {
+    fn unverified_licence_boundary_preserves_the_complete_tail() {
         for separator in gaze_types::LABELLED_FIELD_CONNECTORS {
             let input = format!("AB12 CD3456 DRIVER LICENSE{separator} EF34 GH5678");
             let scan = scan_labelled_value(&input, 0..11, true);
             assert!(is_uppercase_field_boundary(&input["AB12 CD3456 ".len()..]));
-            assert_eq!(&input[scan.span], "AB12 CD3456", "{input:?}");
+            assert_eq!(&input[scan.span], input, "{input:?}");
         }
         let input = "AB12 CD3456 XYZ123456";
         assert!(!is_uppercase_field_boundary(&input["AB12 CD3456 ".len()..]));
