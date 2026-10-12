@@ -5,7 +5,7 @@
 //! startup-authorized domain projection; [`InspectionEventMetaV1`] is the hostile-sink-safe
 //! metadata surface.
 
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 /// Maximum JSON-shape nodes in one authorized projection.
@@ -29,6 +29,73 @@ pub enum InspectionValueErrorV1 {
     /// A strictly monotonic sequence would overflow.
     #[error("inspection_sequence_overflow")]
     SequenceOverflow,
+}
+
+// Both constructor and wire admission keep the same collection invariant.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(transparent)]
+struct BoundedEntries<T, const MAX: usize>(Vec<T>);
+
+impl<T, const MAX: usize> BoundedEntries<T, MAX> {
+    const fn empty() -> Self {
+        Self(Vec::new())
+    }
+
+    fn as_slice(&self) -> &[T] {
+        self.0.as_slice()
+    }
+}
+
+impl<T, const MAX: usize> TryFrom<Vec<T>> for BoundedEntries<T, MAX> {
+    type Error = InspectionValueErrorV1;
+
+    fn try_from(entries: Vec<T>) -> Result<Self, Self::Error> {
+        if entries.len() > MAX {
+            return Err(InspectionValueErrorV1::EntryLimit);
+        }
+        Ok(Self(entries))
+    }
+}
+
+impl<'de, T: Deserialize<'de>, const MAX: usize> Deserialize<'de> for BoundedEntries<T, MAX> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct EntriesVisitor<T, const MAX: usize>(std::marker::PhantomData<T>);
+
+        struct RejectExcess;
+
+        impl<'de> de::DeserializeSeed<'de> for RejectExcess {
+            type Value = ();
+
+            fn deserialize<D: Deserializer<'de>>(self, _deserializer: D) -> Result<(), D::Error> {
+                Err(de::Error::custom(InspectionValueErrorV1::EntryLimit))
+            }
+        }
+
+        impl<'de, T: Deserialize<'de>, const MAX: usize> de::Visitor<'de> for EntriesVisitor<T, MAX> {
+            type Value = BoundedEntries<T, MAX>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(formatter, "a sequence with at most {MAX} entries")
+            }
+
+            fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                // A size hint is neither an allocation budget nor proof of the actual length.
+                let mut entries = Vec::new();
+                while entries.len() < MAX {
+                    match seq.next_element()? {
+                        Some(entry) => entries.push(entry),
+                        None => return Ok(BoundedEntries(entries)),
+                    }
+                }
+                // An empty remainder succeeds; an excess value fails before its contents
+                // are consumed, including deeply nested values of any wire type.
+                seq.next_element_seed(RejectExcess)?;
+                Ok(BoundedEntries(entries))
+            }
+        }
+
+        deserializer.deserialize_seq(EntriesVisitor::<T, MAX>(std::marker::PhantomData))
+    }
 }
 
 macro_rules! ordinal_newtype {
@@ -463,7 +530,7 @@ pub enum JsonShapeTruncationCodeV1 {
 /// Bounded JSON ordinal/type summary.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct JsonShapeSummaryV1 {
-    nodes: Vec<JsonShapeNodeV1>,
+    nodes: BoundedEntries<JsonShapeNodeV1, MAX_JSON_SHAPE_NODES_V1>,
     truncation: JsonShapeTruncationCodeV1,
 }
 
@@ -472,15 +539,15 @@ impl JsonShapeSummaryV1 {
         nodes: Vec<JsonShapeNodeV1>,
         truncation: JsonShapeTruncationCodeV1,
     ) -> Result<Self, InspectionValueErrorV1> {
-        if nodes.len() > MAX_JSON_SHAPE_NODES_V1 {
-            return Err(InspectionValueErrorV1::EntryLimit);
-        }
-        Ok(Self { nodes, truncation })
+        Ok(Self {
+            nodes: nodes.try_into()?,
+            truncation,
+        })
     }
 
     #[must_use]
     pub fn nodes(&self) -> &[JsonShapeNodeV1] {
-        &self.nodes
+        self.nodes.as_slice()
     }
 
     #[must_use]
@@ -550,20 +617,19 @@ impl SseTimelineEntryV1 {
 /// Bounded SSE timeline without bytes or timing.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SseTimelineMetaV1 {
-    entries: Vec<SseTimelineEntryV1>,
+    entries: BoundedEntries<SseTimelineEntryV1, MAX_SSE_TIMELINE_ENTRIES_V1>,
 }
 
 impl SseTimelineMetaV1 {
     pub fn try_new(entries: Vec<SseTimelineEntryV1>) -> Result<Self, InspectionValueErrorV1> {
-        if entries.len() > MAX_SSE_TIMELINE_ENTRIES_V1 {
-            return Err(InspectionValueErrorV1::EntryLimit);
-        }
-        Ok(Self { entries })
+        Ok(Self {
+            entries: entries.try_into()?,
+        })
     }
 
     #[must_use]
     pub fn entries(&self) -> &[SseTimelineEntryV1] {
-        &self.entries
+        self.entries.as_slice()
     }
 }
 
@@ -603,27 +669,26 @@ impl PiiCountV1 {
 /// Bounded PII summary retained only inside an authorized domain projection.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PiiSummaryV1 {
-    entries: Vec<PiiCountV1>,
+    entries: BoundedEntries<PiiCountV1, MAX_PII_SUMMARY_ENTRIES_V1>,
 }
 
 impl PiiSummaryV1 {
     #[must_use]
     pub const fn empty() -> Self {
         Self {
-            entries: Vec::new(),
+            entries: BoundedEntries::empty(),
         }
     }
 
     pub fn try_new(entries: Vec<PiiCountV1>) -> Result<Self, InspectionValueErrorV1> {
-        if entries.len() > MAX_PII_SUMMARY_ENTRIES_V1 {
-            return Err(InspectionValueErrorV1::EntryLimit);
-        }
-        Ok(Self { entries })
+        Ok(Self {
+            entries: entries.try_into()?,
+        })
     }
 
     #[must_use]
     pub fn entries(&self) -> &[PiiCountV1] {
-        &self.entries
+        self.entries.as_slice()
     }
 }
 
@@ -685,27 +750,26 @@ impl DecisionTraceEntryV1 {
 /// Bounded decision trace retained only inside an authorized domain projection.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DecisionTraceV1 {
-    entries: Vec<DecisionTraceEntryV1>,
+    entries: BoundedEntries<DecisionTraceEntryV1, MAX_DECISION_TRACE_ENTRIES_V1>,
 }
 
 impl DecisionTraceV1 {
     #[must_use]
     pub const fn empty() -> Self {
         Self {
-            entries: Vec::new(),
+            entries: BoundedEntries::empty(),
         }
     }
 
     pub fn try_new(entries: Vec<DecisionTraceEntryV1>) -> Result<Self, InspectionValueErrorV1> {
-        if entries.len() > MAX_DECISION_TRACE_ENTRIES_V1 {
-            return Err(InspectionValueErrorV1::EntryLimit);
-        }
-        Ok(Self { entries })
+        Ok(Self {
+            entries: entries.try_into()?,
+        })
     }
 
     #[must_use]
     pub fn entries(&self) -> &[DecisionTraceEntryV1] {
-        &self.entries
+        self.entries.as_slice()
     }
 }
 
@@ -909,6 +973,180 @@ impl InspectionEventMetaV1 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_entries_ignore_size_hints_and_stop_at_first_excess_entry() {
+        struct HintSequence {
+            entries: std::vec::IntoIter<serde_json::Value>,
+            hint: Option<usize>,
+            read: usize,
+        }
+
+        impl<'de> de::SeqAccess<'de> for &mut HintSequence {
+            type Error = serde_json::Error;
+
+            fn next_element_seed<T: de::DeserializeSeed<'de>>(
+                &mut self,
+                seed: T,
+            ) -> Result<Option<T::Value>, Self::Error> {
+                self.read += 1;
+                self.entries
+                    .next()
+                    .map(|entry| seed.deserialize(entry))
+                    .transpose()
+            }
+
+            fn size_hint(&self) -> Option<usize> {
+                self.hint
+            }
+        }
+
+        for hint in [None, Some(0), Some(usize::MAX)] {
+            for count in [0, 2, 3, 4] {
+                let mut sequence = HintSequence {
+                    entries: vec![serde_json::json!(7); count].into_iter(),
+                    hint,
+                    read: 0,
+                };
+                let result = BoundedEntries::<u8, 2>::deserialize(
+                    de::value::SeqAccessDeserializer::new(&mut sequence),
+                );
+                if count > 2 {
+                    assert!(result
+                        .unwrap_err()
+                        .to_string()
+                        .contains("inspection_projection_entry_limit"));
+                    assert_eq!(sequence.read, 3);
+                    assert_eq!(sequence.entries.len(), count - 3);
+                } else {
+                    assert_eq!(result.unwrap().as_slice(), vec![7; count]);
+                }
+            }
+        }
+        // The overflow probe must not deserialize a third typed entry.
+        let error =
+            serde_json::from_str::<BoundedEntries<u8, 2>>(r#"[1,2,"overflow"]"#).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("inspection_projection_entry_limit"));
+        assert!(serde_json::from_str::<BoundedEntries<u8, 0>>("[]").is_ok());
+        assert!(serde_json::from_str::<BoundedEntries<u8, 0>>("[1]").is_err());
+    }
+
+    // Each row checks both admission paths against the existing wire format.
+    macro_rules! projection_cap_test {
+        ($name:ident, $projection:ty, $max:expr, $entry:expr, $wire_entry:literal,
+         $field:literal, $suffix:literal, $construct:expr, $entries:ident) => {
+            #[test]
+            fn $name() {
+                for count in [0, $max, $max + 1] {
+                    let entries = vec![$entry; count];
+                    let constructed: Result<$projection, InspectionValueErrorV1> =
+                        ($construct)(entries);
+                    let wire = format!(
+                        "{{\"{}\":[{}]{}}}",
+                        $field,
+                        vec![$wire_entry; count].join(","),
+                        $suffix,
+                    );
+                    let deserialized = serde_json::from_str::<$projection>(&wire);
+                    if count > $max {
+                        assert_eq!(constructed, Err(InspectionValueErrorV1::EntryLimit));
+                        assert!(deserialized.is_err(), "accepted {count} entries");
+                        assert!(deserialized
+                            .unwrap_err()
+                            .to_string()
+                            .contains("inspection_projection_entry_limit"));
+                    } else {
+                        let constructed = constructed.unwrap();
+                        let deserialized = deserialized.unwrap();
+                        assert_eq!(constructed.$entries().len(), count);
+                        assert_eq!(deserialized, constructed);
+                        assert_eq!(serde_json::to_string(&constructed).unwrap(), wire);
+                        assert_eq!(serde_json::to_string(&deserialized).unwrap(), wire);
+                    }
+                }
+
+                // Public wire admission must reject at the first excess value, before
+                // walking attacker-controlled nesting inside it.
+                let prefix = format!("{{\"{}\":[{},", $field, vec![$wire_entry; $max].join(","));
+                for depth in [100_000, 1] {
+                    let wire = format!(
+                        "{prefix}{}0{}]{}}}",
+                        "[".repeat(depth),
+                        "]".repeat(depth),
+                        $suffix,
+                    );
+                    let error = serde_json::from_str::<$projection>(&wire).unwrap_err();
+                    assert!(error
+                        .to_string()
+                        .contains("inspection_projection_entry_limit"));
+                    assert_eq!(error.line(), 1);
+                    assert!(
+                        (prefix.len()..=prefix.len() + 1).contains(&error.column()),
+                        "consumed excess value at depth {depth}: {error}",
+                    );
+                }
+            }
+        };
+    }
+
+    projection_cap_test!(
+        json_shape_projection_caps_construct_and_deserialize,
+        JsonShapeSummaryV1,
+        MAX_JSON_SHAPE_NODES_V1,
+        JsonShapeNodeV1::new(JsonNodeOrdinalV1::new(0), JsonTypeCodeV1::Null),
+        r#"{"ordinal":0,"type_code":"null"}"#,
+        "nodes",
+        r#","truncation":"complete""#,
+        |nodes| JsonShapeSummaryV1::try_new(nodes, JsonShapeTruncationCodeV1::Complete),
+        nodes
+    );
+    projection_cap_test!(
+        sse_timeline_projection_caps_construct_and_deserialize,
+        SseTimelineMetaV1,
+        MAX_SSE_TIMELINE_ENTRIES_V1,
+        SseTimelineEntryV1::new(
+            SseEntryOrdinalV1::new(0),
+            SseEventKindV1::ContentBlockDelta,
+            ProjectionAvailabilityV1::Present(SseDeltaKindV1::Text),
+            ProjectionAvailabilityV1::Present(ContentBlockIndexV1::new(2)),
+        ),
+        r#"{"ordinal":0,"event_kind":"content_block_delta","delta_kind":{"present":"text"},"content_block":{"present":2}}"#,
+        "entries",
+        "",
+        SseTimelineMetaV1::try_new,
+        entries
+    );
+    projection_cap_test!(
+        pii_summary_projection_caps_construct_and_deserialize,
+        PiiSummaryV1,
+        MAX_PII_SUMMARY_ENTRIES_V1,
+        PiiCountV1::new(PiiClassCodeV1::Email, 3, 2),
+        r#"{"class":"email","detected":3,"pseudonymized":2}"#,
+        "entries",
+        "",
+        PiiSummaryV1::try_new,
+        entries
+    );
+    projection_cap_test!(
+        decision_trace_projection_caps_construct_and_deserialize,
+        DecisionTraceV1,
+        MAX_DECISION_TRACE_ENTRIES_V1,
+        DecisionTraceEntryV1::new(
+            DecisionEngineCodeV1::DeterministicRecognizer,
+            DecisionOutcomeCodeV1::RanFindings,
+            InspectionSurfaceRefV1::WholeBody,
+            ProjectionAvailabilityV1::Present(PiiClassCodeV1::Email),
+            3,
+            2,
+        ),
+        r#"{"engine":"deterministic_recognizer","outcome":"ran_findings","surface":"whole_body","pii_class":{"present":"email"},"detected":3,"pseudonymized":2}"#,
+        "entries",
+        "",
+        DecisionTraceV1::try_new,
+        entries
+    );
 
     #[test]
     fn stage_domain_matrix_is_exhaustive_and_rejects_invalid_pairs() {

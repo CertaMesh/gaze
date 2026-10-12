@@ -27,9 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remain protected with typed audit reasons. Conservative malformed/tab prefixes
   protect repeats under unchanged length floors, including later session turns;
   their public-byte cost is disclosed in benchmark evidence.
-- Legacy grouped identifier extensions stop at recognized complete next-field
-  cues without trimming their original regex capture. This prevents public labels
-  from contaminating manifest values and repeat seeds.
+- Legacy grouped identifier extensions stop at positively recognized complete
+  operational metadata cues without trimming their original regex capture.
+  Private and unknown tails retain conservative ownership until an independent
+  recognizer supplies existing boundary proof. Unicode groups and complete
+  licence connectors retain their original bytes.
+- Inspection JSON-shape, SSE-timeline, PII-summary and decision-trace projections
+  now enforce their entry caps during deserialization as well as construction.
+  Oversized projections fail without truncation; valid wire shapes are unchanged.
+  The first excess value is rejected before traversing its contents, including
+  deeply nested values.
 
 - Benchmark generator v18 scores explicitly labelled checksum-invalid Aadhaar
   and NIR values as personal data. The v17 corpus and contract stay frozen;
