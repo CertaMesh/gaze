@@ -647,6 +647,7 @@ struct QueuedInspectionEventV1 {
 #[cfg(test)]
 #[derive(Default)]
 struct DispatchHooks {
+    before_wait: Option<std::sync::mpsc::Sender<()>>,
     after_dequeue: Option<Arc<std::sync::Barrier>>,
     after_permit: Option<Arc<std::sync::Barrier>>,
 }
@@ -837,6 +838,10 @@ fn dispatcher_loop(state: Arc<RegistrationState>, sink: Arc<dyn InspectionSink>)
         let queued = {
             let mut inner = lock_without_recovery(&state.inner);
             while inner.queue.is_empty() && !inner.closed {
+                #[cfg(test)]
+                if let Some(ready) = lock_without_recovery(&state.hooks).before_wait.take() {
+                    let _ = ready.send(());
+                }
                 inner = state
                     .changed
                     .wait(inner)
@@ -1434,6 +1439,125 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Barrier, Condvar, Mutex};
     use std::time::{Duration, Instant};
+
+    fn isolated_registration() -> Arc<RegistrationState> {
+        Arc::new(RegistrationState {
+            _identity: RegistrationIdentity { _nonce: 0 },
+            descriptor: DashboardCaptureDescriptorV1::new(CaptureDomainsV1::ProviderVisible),
+            limits: InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+            inner: Mutex::new(RuntimeInner {
+                lifecycle: LifecycleStateV1::Running(0),
+                queue: VecDeque::new(),
+                closed: false,
+                sink_panics: 0,
+                sink_rejections: 0,
+            }),
+            changed: Condvar::new(),
+            accounting: Arc::new(QueueAccounting {
+                items: AtomicUsize::new(0),
+                bytes: AtomicUsize::new(0),
+            }),
+            producer_open: AtomicBool::new(true),
+            hooks: Mutex::new(DispatchHooks::default()),
+        })
+    }
+
+    struct OwnedDispatcher {
+        state: Arc<RegistrationState>,
+        thread: Option<std::thread::JoinHandle<()>>,
+        done: std::sync::mpsc::Receiver<()>,
+    }
+
+    impl OwnedDispatcher {
+        fn start(state: Arc<RegistrationState>, sink: Arc<dyn InspectionSink>) -> Self {
+            let (done, receiver) = std::sync::mpsc::channel();
+            let mut dispatcher = Self {
+                state: state.clone(),
+                thread: None,
+                done: receiver,
+            };
+            dispatcher.thread = Some(std::thread::spawn(move || {
+                dispatcher_loop(state, sink);
+                let _ = done.send(());
+            }));
+            dispatcher
+        }
+
+        fn finish(&mut self) -> std::thread::Result<()> {
+            // Independent rescue: a missing production notification must not strand the test.
+            {
+                let mut inner = lock_without_recovery(&self.state.inner);
+                inner.lifecycle = LifecycleStateV1::Disabled;
+                inner.closed = true;
+                inner.queue.clear();
+                self.state.changed.notify_all();
+            }
+            match self.thread.take() {
+                Some(thread) => {
+                    let joined = thread.join();
+                    eprintln!("owned dispatcher cleanup joined");
+                    joined
+                }
+                None => Ok(()),
+            }
+        }
+    }
+
+    impl Drop for OwnedDispatcher {
+        fn drop(&mut self) {
+            let _ = self.finish();
+        }
+    }
+
+    #[test]
+    fn nonblocking_poison_disables_and_wakes_waiting_dispatcher() {
+        let state = isolated_registration();
+        let producer = InstalledInspectionProducerV1 {
+            state: state.clone(),
+        };
+        let (ready, waiting) = std::sync::mpsc::channel();
+        lock_without_recovery(&state.hooks).before_wait = Some(ready);
+        let mut dispatcher =
+            OwnedDispatcher::start(state.clone(), Arc::new(RecordingSink::default()));
+        let observed = waiting.recv_timeout(Duration::from_secs(10)).map(|()| {
+            // Readiness was sent under inner; acquiring it proves wait released the lock.
+            let poisoned = catch_unwind(AssertUnwindSafe(|| {
+                let _inner = lock_without_recovery(&state.inner);
+                panic!("synthetic registration poison");
+            }));
+            let deadline = Instant::now() + Duration::from_secs(10);
+            let begin = loop {
+                let result = producer.begin_logical().err();
+                if result != Some(InspectionBeginLogicalErrorV1::Contended)
+                    || Instant::now() >= deadline
+                {
+                    break result;
+                }
+                std::thread::yield_now();
+            };
+            let exited = dispatcher.done.recv_timeout(Duration::from_secs(2));
+            let inner = lock_without_recovery(&state.inner);
+            (
+                poisoned.is_err(),
+                begin,
+                exited,
+                matches!(inner.lifecycle, LifecycleStateV1::Disabled),
+                inner.queue.is_empty(),
+            )
+        });
+        let joined = dispatcher.finish();
+        assert!(joined.is_ok(), "dispatcher cleanup must join successfully");
+        let (poisoned, begin, exited, disabled, empty) =
+            observed.expect("dispatcher wait readiness");
+        assert!(poisoned);
+        assert_eq!(begin, Some(InspectionBeginLogicalErrorV1::Disabled));
+        assert!(
+            exited.is_ok(),
+            "poison disable must wake the waiting dispatcher: {exited:?}"
+        );
+        assert!(disabled && empty);
+        assert_eq!(state.disable(), InspectionDisableOutcomeV1::AlreadyDisabled);
+    }
 
     #[derive(Default)]
     struct RecordingSink {
