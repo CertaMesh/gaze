@@ -122,7 +122,7 @@ fn check_selected_cells(family: &str, surface_prefix: &str, benign_only: bool) {
                         && span.raw_span.end >= gold.end
                         && evidence.class() == &class
                 }),
-                "{}: complete typed gold leaked: {:?} -> {clean:?}",
+                "{}: complete typed gold leaked: {:?} -> {clean:?}; entries={entries:?}; trace={trace:?}",
                 case.id,
                 value
             );
@@ -244,3 +244,76 @@ boundary_test!(
     "record_id",
     "tab_group_"
 );
+
+fn check_legacy_cue_ownership(cue: &str, class: &str) {
+    use gaze_assembly::CorePipelineConfig;
+    let core = CorePipelineConfig::new().build().unwrap();
+    for connector in ["=", ": ", " is ", " ist ", " lautet ", " "] {
+        let input = format!("{cue}: Q731284 BUILD VERSION{connector}FRAME; lookup Q731284 again.");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else {
+            panic!("text")
+        };
+        let entries = session.snapshot_entries();
+        let entry = entries
+            .iter()
+            .find(|entry| entry.class == PiiClass::custom(class).unwrap() && entry.raw == "Q731284")
+            .unwrap_or_else(|| {
+                panic!("legacy next cue swallowed: {input:?} -> {clean:?}; {entries:?}")
+            });
+        assert_eq!(
+            clean,
+            format!(
+                "{cue}: {} BUILD VERSION{connector}FRAME; lookup {} again.",
+                entry.token, entry.token
+            )
+        );
+        assert_eq!(
+            core.pipeline()
+                .restore_strict_text(&session, &clean)
+                .unwrap(),
+            input
+        );
+    }
+    // Uppercase and horizontal grouping alone never prove a next-field cue.
+    // Every coherent value suffix must be protected, including numeric groups.
+    for value in ["Q731284 ABCD 204", "Q731284 842395", "AB 204 731284"] {
+        let input = format!("{cue}: {value}; lookup {value} again.");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else {
+            panic!("text")
+        };
+        let entries = session.snapshot_entries();
+        let entry = entries
+            .iter()
+            .find(|entry| entry.raw == value)
+            .unwrap_or_else(|| {
+                panic!("legacy value suffix leaked: {input:?} -> {clean:?}; {entries:?}")
+            });
+        assert_eq!(
+            clean,
+            format!("{cue}: {}; lookup {} again.", entry.token, entry.token)
+        );
+        assert_eq!(
+            core.pipeline()
+                .restore_strict_text(&session, &clean)
+                .unwrap(),
+            input
+        );
+    }
+}
+
+#[test]
+fn national_identifier_keeps_its_value_and_stops_at_complete_next_cues() {
+    check_legacy_cue_ownership("identity card", "national_id");
+}
+
+#[test]
+fn tax_identifier_keeps_its_value_and_stops_at_complete_next_cues() {
+    check_legacy_cue_ownership("tax number", "tax_number");
+}
+
+#[test]
+fn licence_identifier_keeps_its_value_and_stops_at_complete_next_cues() {
+    check_legacy_cue_ownership("driver license", "driver_license");
+}
