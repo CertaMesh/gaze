@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   panics on invalid registration. Legacy detector adapters have stable distinct
   internal IDs while retaining their detection provenance.
 
+- Inspection JSON-shape, SSE-timeline, PII-summary and decision-trace projections
+  now enforce their entry caps during deserialization as well as construction.
+  Oversized projections fail without truncation; valid wire shapes are unchanged.
+  The first excess value is rejected before traversing its contents, including
+  deeply nested values.
+
 - Benchmark generator v18 scores explicitly labelled checksum-invalid Aadhaar
   and NIR values as personal data. The v17 corpus and contract stay frozen;
   every displayed release is freshly measured with the stricter gold labels.
