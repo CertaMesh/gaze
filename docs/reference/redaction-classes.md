@@ -136,7 +136,16 @@ output against its committed corpus snapshot.
 The three CRM/HR rules protect `custom:customer_id`, `custom:employee_id` and
 `custom:record_id` through the opt-in `field_owned` complete-value scanner.
 It protects whole ASCII-quoted scalars and bounds unquoted grouped values before
-following field assignments. The placeholder guard sees the entire owned value.
+following complete field cues (`:`, `=`, `is`, `ist`, `lautet`, or same-line
+whitespace). Terminal unquoted periods/colons remain outside the value; internal
+punctuation and quoted punctuation remain restorable value bytes. Raw JSON supports
+eight serialization wrappers. Deeper, inconsistent or unclosed quote contexts own
+the remaining tail with typed reasons. An initial LF/CRLF is admitted only inside
+quotes. Tabs group coherent identifiers; header-to-cell linkage is not inferred.
+The placeholder guard sees the entire owned value, including schema underscores.
+Conservative malformed/tab prefix seeds preserve repeats under unchanged floors;
+public-byte costs are measured. See the [repeat contract](../explanation/detection/manifest-sweep.md).
+
 Customer and employee
 labels establish their respective classes; person/contact/member identifiers
 establish the record class. Bare `id`, `record_id` and `unique_id` do not establish

@@ -100,6 +100,27 @@ sub-six-digit runs, earlier proxy fields, model-only sources, honorific names
 made solely of common words, and all-caps surnames in mixed-case names.
 `VAN DER BERG` has no distinctive part and relies on NER for changed-case copies.
 
+## Field-owned scalar repeats
+
+The opt-in CRM/HR scanner preserves every byte of a quoted scalar, including an
+initial LF/CRLF and terminal punctuation. Its exact repeat pattern includes raw
+whitespace fringes; ordinary spelling variants retain their previous behavior.
+The existing length floor is evaluated on the value body, never on whitespace.
+
+Two uncertain shapes also license a typed conservative prefix seed. An unclosed
+quoted tail can use the prefix before an apparent delimiter followed by a
+complete next-field cue. An ambiguous tab group can use numeric-bearing groups
+before its final alphabetic-only group. The whole tail or grouped value stays
+owned. This seed never declares a public boundary or includes following label
+bytes. It can protect extra public prefix copies; benchmark evidence reports
+that cost alongside conservative whole-tail and tab-column costs.
+
+These seeds belong only to field-owned values found by deterministic rules.
+They pass through the existing resolver and policy checks; NER-only values never
+license them. A seed is an offset and kind bound to the minted owner value, so it
+survives later turns and snapshot import without a separate persisted raw-value
+store. Each protected prefix copy gets its own reversible mapping.
+
 ## Token identity and restore
 
 Byte-identical copies reuse the source token. Changed spelling or a name part
@@ -108,19 +129,24 @@ gets a sibling in the same class/family. Each token maps to one exact byte strin
 ## Session state
 
 Entries retain the strongest evidence tier seen. One cached multi-pattern
-matcher rebuilds only when sweepability changes; it uses the existing manifest,
+matcher rebuilds when sweepability or repeat-seed metadata changes; it uses the existing manifest,
 without another raw-value store.
 
-`session_blob` envelope v6 carries evidence. Readers through v0.15 reject it with
-`InvalidSnapshotVersion(6)`. Blobs v5 and older import/restore but cannot seed
-sweeps because their evidence is unknown.
+Ordinary `session_blob` snapshots remain v6 and carry evidence. A snapshot with
+field-owned repeat metadata uses v7. A reader supporting only v6 or earlier
+rejects v7 with `InvalidSnapshotVersion(7)`; the new reader imports v2–v7.
+Signatures bind the envelope version, and import rejects invalid seed offsets,
+missing deterministic evidence, or seed metadata under an older envelope.
+Blobs v5 and older still import/restore but cannot seed sweeps because their
+evidence is unknown.
 
 ## Audit
 
 Copies record `recognizer_id = manifest_sweep`, `provenance_stage = manifest_sweep`,
 `decided_by = manifest_sweep` (`ConflictTier::ManifestSweep`), and
-`provenance_merged_from = manifest_sweep:exact`, `:variant`, or `:part` (parts/runs).
-Rows never contain source tokens/values. Daemon overwrites the stage with
+`provenance_merged_from = manifest_sweep:exact`, `:variant`, `:part` (parts/runs), or `:uncertain_prefix` (conservative field-owned seeds).
+Conservative prefix copies also carry `uncertain_repeat_prefix` as their typed
+labelled-value reason. Rows never contain source tokens/values. Daemon overwrites the stage with
 `daemon`; `decided_by` still identifies the sweep.
 
 ## Failure

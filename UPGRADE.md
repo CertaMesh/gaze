@@ -35,6 +35,20 @@ Run `gaze setup --force` to regenerate an existing policy with credential
 protection, or add `"secrets"` to `[policy.rulepacks].bundled` in your policy.
 Existing policies keep their selected rulepacks until you update them.
 
+### Action required: conditional `session_blob` version 7
+
+Field-owned record identifiers now retain exact scalar whitespace and conservative
+repeat prefixes for malformed quotes and ambiguous tab groups. A signed snapshot
+with this metadata uses envelope v7; ordinary snapshots remain v6. Readers that
+support only v6 and earlier reject v7 with `InvalidSnapshotVersion(7)`.
+
+Upgrade every reader before importing newly written v7 snapshots. The new reader
+imports and restores v2–v7 without re-tokenizing old manifests. Seed offsets bind
+to the existing owner value; invalid geometry, missing deterministic evidence,
+and seed metadata in an older envelope are rejected. Whole-value ownership and
+strict restore remain intact. Conservative prefix matches can protect public
+bytes, and retain the existing repeat-length floors.
+
 ### Additive: typed proxy daemon stop timeout
 
 `gaze_proxy::ProxyError` adds `DaemonStopTimeout { pid: u32, timeout:

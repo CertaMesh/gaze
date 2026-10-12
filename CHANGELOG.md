@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Signed session snapshots with field-owned repeat-seed metadata use envelope
+  v7; ordinary snapshots remain v6. New readers restore v2–v7. Older readers
+  reject v7 rather than silently dropping repeat protection; upgrade all readers
+  before exchanging these snapshots.
+
 ### Fixed
+
+- Labelled customer, employee and member IDs preserve terminal prose punctuation,
+  stop at complete next-field cues, and protect raw quoted scalars through eight
+  serialization wrappers, initial newlines and tab groups. Uncertain/deeper tails
+  remain protected with typed audit reasons. Conservative malformed/tab prefixes
+  protect repeats under unchanged length floors, including later session turns;
+  their public-byte cost is disclosed in benchmark evidence.
+- Legacy grouped identifier extensions stop at recognized complete next-field
+  cues without trimming their original regex capture. This prevents public labels
+  from contaminating manifest values and repeat seeds.
 
 - Benchmark generator v18 scores explicitly labelled checksum-invalid Aadhaar
   and NIR values as personal data. The v17 corpus and contract stay frozen;
