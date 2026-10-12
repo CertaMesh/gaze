@@ -1057,6 +1057,31 @@ mod tests {
                         assert_eq!(serde_json::to_string(&deserialized).unwrap(), wire);
                     }
                 }
+
+                // Public wire admission must reject at the first excess value, before
+                // walking attacker-controlled nesting inside it.
+                let prefix = format!(
+                    "{{\"{}\":[{},",
+                    $field,
+                    vec![$wire_entry; $max].join(","),
+                );
+                for depth in [100_000, 1] {
+                    let wire = format!(
+                        "{prefix}{}0{}]{}}}",
+                        "[".repeat(depth),
+                        "]".repeat(depth),
+                        $suffix,
+                    );
+                    let error = serde_json::from_str::<$projection>(&wire).unwrap_err();
+                    assert!(error
+                        .to_string()
+                        .contains("inspection_projection_entry_limit"));
+                    assert_eq!(error.line(), 1);
+                    assert!(
+                        (prefix.len()..=prefix.len() + 1).contains(&error.column()),
+                        "consumed excess value at depth {depth}: {error}",
+                    );
+                }
             }
         };
     }
