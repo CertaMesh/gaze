@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "measured_base_sha": "319eb4319d09827c80013c58c08648f742725b59",
+  "measured_candidate_sha": "42fd3a9759c48c37cc6d3e27ec090e014707a9ee",
+  "receipt_only_head_sha": "7f2a4afa96fd53587d3f6614147dd7872a5c3d1a",
+  "integrated_source_sha": "780dcffd354ae5a90e6467636d97d6ab849e6ee8",
+  "merge_parents": [
+    "7f2a4afa96fd53587d3f6614147dd7872a5c3d1a",
+    "e8188c124ebd6b90c766d79ae57cc97a359137cd"
+  ],
+  "integrated_crates_tree": "1f88850a78d065bc979d9d649fe137284ce7d54d",
+  "capture_on_integrated_head": false,
+  "additional_physical_runs": 0,
+  "preserved_measurement_receipt_sha256": "f56ae3df12cacdb961299a8ef45a24055eeafeae0f963e5f2de7a63d53d5e9b8",
+  "source_delta_from_receipt_head": [
+    "CHANGELOG.md",
+    "crates/gaze-types/src/inspection.rs"
+  ],
+  "source_classification": {
+    "CHANGELOG.md": "Preserves registry validation and independent inspection cap entries.",
+    "crates/gaze-types/src/inspection.rs": "Unrelated inspection projection deserialization caps from main. Valid constructors and serialized wire shapes remain unchanged; no detection, resolver, registry, corpus, policy, Cargo or scorer changes."
+  },
+  "proof_applicability": "The frozen four physical captures remain measurements of the original base and candidate, never of the integrated head. Bench inference and validator probe do not use inspection projections. Detection crate trees and canonical harness pins are unchanged. Bounded integrated inspection/core/assembly tests and actual SDK/censuses pass; independent review must confirm applicability.",
+  "rust_toolchain": "1.96.0",
+  "bounded_integration_checks": {
+    "integration-fmt": {
+      "exit": 0,
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ]
+    },
+    "integration-inspection": {
+      "exit": 0,
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "gaze-types",
+        "--all-features",
+        "--locked",
+        "inspection"
+      ]
+    },
+    "integration-sdk": {
+      "exit": 0,
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "gaze-pii",
+        "--test",
+        "registry_extension_api",
+        "--all-features",
+        "--locked"
+      ]
+    },
+    "integration-core": {
+      "exit": 0,
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "gaze-pii",
+        "--lib",
+        "--all-features",
+        "--locked"
+      ]
+    },
+    "integration-assembly": {
+      "exit": 0,
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "gaze-assembly",
+        "--all-features",
+        "--locked"
+      ]
+    },
+    "integration-example": {
+      "exit": 0,
+      "command": [
+        "cargo",
+        "build",
+        "-p",
+        "gaze-assembly",
+        "--features",
+        "safety-net-nym",
+        "--example",
+        "registry_contract",
+        "--locked"
+      ]
+    },
+    "integration-scrub": {
+      "exit": 0,
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "scrub-public-text",
+        "--published",
+        "UPGRADE.md",
+        "scripts/bench/fixtures/registry-contract/README.md"
+      ]
+    }
+  },
+  "unchanged_detection_trees": {
+    "crates/gaze": {
+      "measured": "3b179a0b3f8db70683b30b4e4de99027d813b1dc",
+      "integrated": "3b179a0b3f8db70683b30b4e4de99027d813b1dc",
+      "identical": true
+    },
+    "crates/gaze-recognizers": {
+      "measured": "c812f4671bc45c01aa210b7aab542fc7acf9e4d4",
+      "integrated": "c812f4671bc45c01aa210b7aab542fc7acf9e4d4",
+      "identical": true
+    },
+    "crates/gaze-assembly": {
+      "measured": "59226db242c1020381f200462f89a19b32a9602d",
+      "integrated": "59226db242c1020381f200462f89a19b32a9602d",
+      "identical": true
+    }
+  },
+  "harness_pins": {
+    "scripts/bench/run_no_opf_benchmark.py": "d1bc6f1c55ab74df51c457d577dd82128439073f45fa8c57bd9478d4bcfedf44",
+    "scripts/bench/family_precedence_arm.py": "4b67c884f07bba4557ee84dd9b064d6be1324337722ebe1ee33532a6bf0111e5",
+    "scripts/bench/scorecard_record.py": "f67e5128869b1f9062f9cf1faf41b57ef2754960fd9485a3105d41294ab7d6a0",
+    "scripts/bench/agentic_layers.py": "667572c39a4fce5f5684702c6e81589bd01b929713cdd25b01d235b86ea4a2b6",
+    "docs/reference/benchmarks/scored-labels-v2.json": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
+    "docs/reference/benchmarks/scored-labels-v4.json": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632"
+  },
+  "integrated_census_and_admission": {
+    "integrated-default-census.json": {
+      "sha256": "09e875ed7e6da3d653d7444681c45bdb5b15bdfc3f676fe92999ea8894bcfd13",
+      "identical_to_measured_candidate": true
+    },
+    "integrated-arm-census.json": {
+      "sha256": "5cf82603494386a3b6518f0f724c85446be7414a33617488165ce01088c1e546",
+      "identical_to_measured_candidate": true
+    },
+    "integrated-admission.json": {
+      "sha256": "002d9c8eb489a42811c1744bdecb3b8c00bbc4665efcfc205fcdb5dc6eac9ed5",
+      "identical_to_measured_candidate": true
+    }
+  }
+}
