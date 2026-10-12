@@ -667,3 +667,36 @@ fn filter_field_outside_handle_allowlist_denies() {
 
     assert_eq!(reason, DenyReason::NoMatchingAllowRule);
 }
+
+// Synthetic owner-side entities for the public translator provenance contract.
+fn provenance_entity(class: PiiClass, raw: &str, fingerprint: &str) -> IndexEntity {
+    IndexEntity {
+        domain_alias: domain_alias(&class, fingerprint),
+        raw_value: raw.to_string(),
+        index_ref: IndexedEntityRef {
+            domain_id: CUSTOMER_DOMAIN.to_string(),
+            key_id: "synthetic-provenance-key".to_string(),
+            entity_class: class.clone(),
+            fingerprint_hex: fingerprint.to_string(),
+        },
+        class,
+    }
+}
+
+#[test]
+fn translator_allows_raw_collision_with_minted_ordinal() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let class = PiiClass::custom("age").unwrap();
+    let entity = provenance_entity(class.clone(), "1", &"a".repeat(64));
+    let hit = IndexSearchHit {
+        doc_id: "synthetic-provenance-doc".to_string(),
+        snippet: format!("Applicant age: {}", entity.domain_alias),
+        entities: vec![entity],
+    };
+    let translated = SessionResponseTranslator::translate(&session, vec![hit])
+        .expect("raw confined to a minted token must be allowed");
+    let tokens = session.tokens();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(translated[0].snippet, format!("Applicant age: {}", tokens[0]));
+    assert_eq!(session.resolve_token(&tokens[0]).unwrap(), (class, "1".to_string()));
+}
