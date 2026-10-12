@@ -849,16 +849,23 @@ fn labelled_assignment_connector() -> String {
     format!(r"(?:{horizontal}*[:=]{horizontal}*|{horizontal}+(?:(?:is|ist|lautet){horizontal}+)?)")
 }
 
-fn assignment_starts(rest: &str) -> bool {
+fn labelled_licence_connector() -> String {
+    let horizontal = LABELLED_CUE_HORIZONTAL;
+    format!(r"(?:{horizontal}*[:=|,;\t-]{horizontal}*|{horizontal}+(?:is|ist|lautet){horizontal}+)")
+}
+
+fn assignment_prefix_end(rest: &str) -> Option<usize> {
     static FIELD: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    if FIELD
+    if let Some(matched) = FIELD
         .get_or_init(|| {
-            Regex::new(r"\A[\p{L}_][\p{L}\p{N}\p{M}_.-]*[ \t\u{00A0}\u{202F}]*[:=]")
-                .expect("static assignment syntax")
+            Regex::new(
+                r"\A[\p{L}_][\p{L}\p{N}\p{M}_.-]*[ \t\u{00A0}\u{202F}]*[:=][ \t\u{00A0}\u{202F}]*",
+            )
+            .expect("static assignment syntax")
         })
-        .is_match(rest)
+        .find(rest)
     {
-        return true;
+        return Some(matched.end());
     }
     // Complete human cue phrases use a field noun plus the same same-line
     // connectors as labelled seeds. An arbitrary uppercase word is no cue.
@@ -873,10 +880,54 @@ fn assignment_starts(rest: &str) -> bool {
         let connector = labelled_assignment_connector();
         // These licence labels have their own grouped-value recognizers. Their
         // explicit connectors prove the entire label, not its final word alone.
-        let licence = format!(r"(?:(?:driver'?s?|driving){horizontal}+licen[cs]e|f[uü]hrerschein)(?:{horizontal}*[:=|,;\t-]{horizontal}*|{horizontal}+(?:is|ist|lautet){horizontal}+)");
+        let licence_connector = labelled_licence_connector();
+        let licence = format!(r"(?:(?:driver'?s?|driving){horizontal}+licen[cs]e|f[uü]hrerschein){licence_connector}");
         Regex::new(&format!(r"(?i)\A(?:(?:{words}|{compound}){connector}|{licence})"))
             .expect("static complete field cue grammar")
-    }).is_match(rest)
+    }).find(rest).map(|matched| matched.end())
+}
+
+fn assignment_starts(rest: &str) -> bool {
+    assignment_prefix_end(rest).is_some()
+}
+
+fn conservative_assignment_prefix_end(rest: &str) -> Option<usize> {
+    // A decomposed German label proves conservative ownership only. It does
+    // not establish a public boundary for field-owned values whose independent
+    // next recognizer may not support that spelling.
+    assignment_prefix_end(rest).or_else(|| {
+        static DECOMPOSED_LICENCE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+        DECOMPOSED_LICENCE
+            .get_or_init(|| {
+                let connector = labelled_licence_connector();
+                Regex::new(&format!(r"(?i)\Afu\u{{0308}}hrerschein{connector}"))
+                    .expect("static decomposed conservative licence cue")
+            })
+            .find(rest)
+            .map(|matched| matched.end())
+    })
+}
+
+fn labelled_group_byte_len(rest: &str) -> usize {
+    rest.char_indices()
+        .take_while(|(_, ch)| {
+            ch.is_alphanumeric() || unicode_normalization::char::is_combining_mark(*ch)
+        })
+        .last()
+        .map_or(0, |(at, ch)| at + ch.len_utf8())
+}
+
+fn labelled_group_is_uppercase(group: &str) -> bool {
+    let mut uppercase_letter = false;
+    for ch in group.chars() {
+        if ch.is_uppercase() {
+            uppercase_letter = true;
+        } else if !unicode_normalization::char::is_combining_mark(ch) {
+            return false;
+        }
+    }
+    // Marks-only and uncased scripts never become uppercase vacuously.
+    uppercase_letter
 }
 
 fn public_metadata_assignment_starts(rest: &str) -> bool {
@@ -1076,10 +1127,7 @@ fn scan_labelled_value(
         .is_some_and(|ch| ch.is_ascii_lowercase());
     loop {
         let group_start = end;
-        end += input[end..]
-            .bytes()
-            .take_while(u8::is_ascii_alphanumeric)
-            .count();
+        end += labelled_group_byte_len(&input[end..]);
         if end == group_start {
             break;
         }
@@ -1109,10 +1157,7 @@ fn scan_labelled_value(
             break;
         }
         let next_start = end + separator_len;
-        let next_len = input[next_start..]
-            .bytes()
-            .take_while(u8::is_ascii_alphanumeric)
-            .count();
+        let next_len = labelled_group_byte_len(&input[next_start..]);
         if next_len == 0 {
             break;
         }
@@ -1132,6 +1177,16 @@ fn scan_labelled_value(
             stop_reason = Some(LabelledValueScanReason::DateBoundary);
             break;
         }
+        if let Some(prefix_end) = beyond_capture
+            .then(|| conservative_assignment_prefix_end(&input[next_start..]))
+            .flatten()
+        {
+            // A complete assignment licenses protection through its connector,
+            // including a recognized is/ist/lautet phrase. It never exposes its
+            // label or claims that the next value is public.
+            end = next_start + prefix_end;
+            continue;
+        }
         let uppercase_label = is_uppercase_field_boundary(&input[next_start..])
             || is_uppercase_field_boundary(&input[group_start..]);
         if (beyond_capture || trim_internal_field_boundary)
@@ -1141,8 +1196,8 @@ fn scan_labelled_value(
             stop_reason = Some(LabelledValueScanReason::LabelBoundary);
             break;
         }
-        let value_like = next.bytes().any(|byte| byte.is_ascii_digit())
-            || next.bytes().all(|byte| byte.is_ascii_uppercase())
+        let value_like = next.chars().any(char::is_numeric)
+            || labelled_group_is_uppercase(next)
             || (initial_lowercase
                 && next_len <= 2
                 && next.bytes().all(|byte| byte.is_ascii_lowercase()));

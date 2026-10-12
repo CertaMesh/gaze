@@ -533,6 +533,7 @@ fn legacy_unicode_groups_require_numeric_or_cased_uppercase_evidence() {
         "étiquette validée",
         "Étiquette validée",
         "東京 状態",
+        "公開バージョン FRAME",
         "\u{0301}\u{0308} only",
         "release VERSION FRAME",
     ] {
