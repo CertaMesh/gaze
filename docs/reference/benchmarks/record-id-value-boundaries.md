@@ -51,5 +51,22 @@ Known limitations: this extension does not infer person linkage from CSV/TSV
 headers, add typographic value quotes, lower the short digit-run repeat floor,
 or promise a public boundary for ambiguous untyped columns. The earlier
 generators and contracts remain reconstructible by their committed pins.
-Historical releases must be freshly measured with the new harness before this
-version becomes the published benchmark table.
+The four displayed releases are freshly measured with the committed v19 harness
+and their own tagged code and setup policies. The [measurement ledger](agentic-adjacency-v19-history.json)
+and [canonical replay](record-id-boundaries-v19-contract-replay.json) retain
+leaks, public-byte costs, refusals, exact restores and manifest validity.
+
+## Historical public-byte cost controls
+
+These are false-positive bytes on the three cost-control groups in released
+recognizers, shown as A / D / R. They establish the baseline for the later
+conservative boundary repair; its added public-byte protection must be measured
+on these same cells.
+
+| Release and arm | Depth above eight wrappers FP B | Malformed quoted tail FP B | Ambiguous tab column FP B |
+| --- | ---: | ---: | ---: |
+| `v0.16.0` `policy-file` | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.15.1` `policy-file` | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.15.0` `policy-file` | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.14.0` `full-stack-kiji-resolve` | 0 / 0 / 0 | 140 / 0 / 170 | 67 / 0 / 65 |
+| `v0.14.0` `pass2-ner` | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
