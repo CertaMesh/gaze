@@ -1,0 +1,39 @@
+diff --git a/crates/gaze/src/registry.rs b/crates/gaze/src/registry.rs
+--- a/crates/gaze/src/registry.rs
++++ b/crates/gaze/src/registry.rs
+@@ -1703,7 +1703,7 @@
+ 
+     /// IDs of recognizers admitted to this registry.
+     pub fn recognizer_ids(&self) -> impl Iterator<Item = &str> {
+-        self.recognizers_by_id.keys().map(String::as_str)
++        self.entries.iter().map(|recognizer| recognizer.id())
+     }
+ 
+     pub fn validators(&self) -> &HashMap<String, Arc<dyn Validator>> {
+diff --git a/crates/gaze-assembly/examples/registry_contract.rs b/crates/gaze-assembly/examples/registry_contract.rs
+--- a/crates/gaze-assembly/examples/registry_contract.rs
++++ b/crates/gaze-assembly/examples/registry_contract.rs
+@@ -6,7 +6,7 @@
+ 
+ use gaze::{
+     Candidate, CollisionMembership, ConflictTier, DetectContext, DetectError, DictionaryBundle,
+-    PiiClass, Recognizer, RecognizerRegistry, RecognizerRegistryBuilder, RegistryBuildError,
++    PiiClass, Recognizer, RecognizerRegistry, RecognizerRegistryBuilder,
+ };
+ use serde_json::{json, Value};
+ 
+@@ -136,11 +136,9 @@
+     json!({"schema_version": 1, "scope": "construction admission; no corpus refusal or leak credit", "rows": rows})
+ }
+ 
+-fn fallible_build(builder: RecognizerRegistryBuilder) -> Result<RecognizerRegistry, &'static str> {
+-    builder.try_build().map_err(|error| match error {
+-        RegistryBuildError::DuplicateRecognizerId { .. } => "duplicate_id",
+-        RegistryBuildError::OrphanCollisionMembership { .. } => "orphan_membership",
+-    })
++fn fallible_build(_builder: RecognizerRegistryBuilder) -> Result<RecognizerRegistry, &'static str> {
++    // This entrypoint did not exist at the baseline; no fabricated API result.
++    Err("entrypoint_unavailable")
+ }
+ 
+ fn census(path: &std::path::Path) -> Result<Value, Box<dyn std::error::Error>> {
