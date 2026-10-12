@@ -1,0 +1,832 @@
+{
+  "ordered_registrations": [
+    {
+      "class": "Custom(\"aadhaar\")",
+      "classes": [
+        "Custom(\"aadhaar\")"
+      ],
+      "id": "aadhaar.in",
+      "locale_basis": "Format",
+      "locales": [
+        "en-IN",
+        "hi-IN"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"age\")",
+      "classes": [
+        "Custom(\"age\")"
+      ],
+      "id": "age.cue",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"age\")",
+      "classes": [
+        "Custom(\"age\")"
+      ],
+      "id": "age.phrase",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"birth_date\")",
+      "classes": [
+        "Custom(\"birth_date\")"
+      ],
+      "id": "birth_date.answer",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"birth_date\")",
+      "classes": [
+        "Custom(\"birth_date\")"
+      ],
+      "id": "birth_date.cue",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"bsn\")",
+      "classes": [
+        "Custom(\"bsn\")"
+      ],
+      "id": "bsn.nl",
+      "locale_basis": "Format",
+      "locales": [
+        "nl-NL"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"credit_card\")",
+      "classes": [
+        "Custom(\"credit_card\")"
+      ],
+      "id": "card.cued",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"credit_card\")",
+      "classes": [
+        "Custom(\"credit_card\")"
+      ],
+      "id": "card.cued_short",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"credit_card\")",
+      "classes": [
+        "Custom(\"credit_card\")"
+      ],
+      "id": "card.structural",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": {
+        "family": "payment-card-or-iban",
+        "mandatory_anchor": null,
+        "precedence": 20,
+        "variant": "pan"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"cnpj\")",
+      "classes": [
+        "Custom(\"cnpj\")"
+      ],
+      "id": "cnpj.br",
+      "locale_basis": "Format",
+      "locales": [
+        "pt-BR"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"cpf\")",
+      "classes": [
+        "Custom(\"cpf\")"
+      ],
+      "id": "cpf.br",
+      "locale_basis": "Format",
+      "locales": [
+        "pt-BR"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"driver_license\")",
+      "classes": [
+        "Custom(\"driver_license\")"
+      ],
+      "id": "driver_license.cue_anchored",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"driver_license\")",
+      "classes": [
+        "Custom(\"driver_license\")"
+      ],
+      "id": "driver_license.labelled",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Email",
+      "classes": [
+        "Email"
+      ],
+      "id": "email.global",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Name",
+      "classes": [
+        "Name"
+      ],
+      "id": "email.header.name",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Name",
+      "classes": [
+        "Name"
+      ],
+      "id": "email.header.name.paren",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "name.counter"
+    },
+    {
+      "class": "Custom(\"eth_address\")",
+      "classes": [
+        "Custom(\"eth_address\")"
+      ],
+      "id": "eth.address",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"iban\")",
+      "classes": [
+        "Custom(\"iban\")"
+      ],
+      "id": "iban.cued",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"iban\")",
+      "classes": [
+        "Custom(\"iban\")"
+      ],
+      "id": "iban.structural",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": {
+        "family": "payment-card-or-iban",
+        "mandatory_anchor": "iban",
+        "precedence": 10,
+        "variant": "iban"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"national_id\")",
+      "classes": [
+        "Custom(\"national_id\")"
+      ],
+      "id": "id_card.labelled",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": {
+        "family": "government-id",
+        "mandatory_anchor": null,
+        "precedence": 30,
+        "variant": "national-id"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"ip_address\")",
+      "classes": [
+        "Custom(\"ip_address\")"
+      ],
+      "id": "ip.v4",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"ip_address\")",
+      "classes": [
+        "Custom(\"ip_address\")"
+      ],
+      "id": "ip.v6",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Name",
+      "classes": [
+        "Name"
+      ],
+      "id": "name.agent_recipient",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "name.counter"
+    },
+    {
+      "class": "Name",
+      "classes": [
+        "Name"
+      ],
+      "id": "name.auto_footer",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "name.counter"
+    },
+    {
+      "class": "Name",
+      "classes": [
+        "Name"
+      ],
+      "id": "name.forward_marker",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "name.counter"
+    },
+    {
+      "class": "Custom(\"national_id\")",
+      "classes": [
+        "Custom(\"national_id\")"
+      ],
+      "id": "national_id.cue_anchored",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": {
+        "family": "government-id",
+        "mandatory_anchor": null,
+        "precedence": 30,
+        "variant": "national-id"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"nhs_number\")",
+      "classes": [
+        "Custom(\"nhs_number\")"
+      ],
+      "id": "nhs.uk",
+      "locale_basis": "Format",
+      "locales": [
+        "en-GB"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"nino\")",
+      "classes": [
+        "Custom(\"nino\")"
+      ],
+      "id": "nino.uk",
+      "locale_basis": "Format",
+      "locales": [
+        "en-GB"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"nir\")",
+      "classes": [
+        "Custom(\"nir\")"
+      ],
+      "id": "nir.fr",
+      "locale_basis": "Format",
+      "locales": [
+        "fr-FR"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"pan\")",
+      "classes": [
+        "Custom(\"pan\")"
+      ],
+      "id": "pan.in",
+      "locale_basis": "Format",
+      "locales": [
+        "en-IN",
+        "hi-IN"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"passport\")",
+      "classes": [
+        "Custom(\"passport\")"
+      ],
+      "id": "passport.cue_anchored",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": {
+        "family": "government-id",
+        "mandatory_anchor": null,
+        "precedence": 15,
+        "variant": "passport"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"password\")",
+      "classes": [
+        "Custom(\"password\")"
+      ],
+      "id": "password.field",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"phone\")",
+      "classes": [
+        "Custom(\"phone\")"
+      ],
+      "id": "phone.e164.spaced",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": {
+        "family": "phone-or-imei",
+        "mandatory_anchor": null,
+        "precedence": 10,
+        "variant": "phone"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"phone\")",
+      "classes": [
+        "Custom(\"phone\")"
+      ],
+      "id": "phone.e164.spaced.cued",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": {
+        "family": "phone-or-imei",
+        "mandatory_anchor": null,
+        "precedence": 10,
+        "variant": "phone"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"phone\")",
+      "classes": [
+        "Custom(\"phone\")"
+      ],
+      "id": "phone.national.de",
+      "locale_basis": "Document",
+      "locales": [
+        "de-DE",
+        "de-AT",
+        "de-CH"
+      ],
+      "membership": {
+        "family": "phone-or-imei",
+        "mandatory_anchor": null,
+        "precedence": 10,
+        "variant": "phone"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"phone\")",
+      "classes": [
+        "Custom(\"phone\")"
+      ],
+      "id": "phone.national.us",
+      "locale_basis": "Format",
+      "locales": [
+        "en-US"
+      ],
+      "membership": {
+        "family": "phone-or-imei",
+        "mandatory_anchor": null,
+        "precedence": 10,
+        "variant": "phone"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"phone\")",
+      "classes": [
+        "Custom(\"phone\")"
+      ],
+      "id": "phone.national.us.cued",
+      "locale_basis": "Format",
+      "locales": [
+        "en-US"
+      ],
+      "membership": {
+        "family": "phone-or-imei",
+        "mandatory_anchor": null,
+        "precedence": 10,
+        "variant": "phone"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"phone\")",
+      "classes": [
+        "Custom(\"phone\")"
+      ],
+      "id": "phone.structural",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": {
+        "family": "phone-or-imei",
+        "mandatory_anchor": null,
+        "precedence": 10,
+        "variant": "phone"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"postal_code\")",
+      "classes": [
+        "Custom(\"postal_code\")"
+      ],
+      "id": "postal.at_ch",
+      "locale_basis": "Document",
+      "locales": [
+        "de-AT",
+        "de-CH"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"postal_code\")",
+      "classes": [
+        "Custom(\"postal_code\")"
+      ],
+      "id": "postal.au",
+      "locale_basis": "Document",
+      "locales": [
+        "en-AU"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"postal_code\")",
+      "classes": [
+        "Custom(\"postal_code\")"
+      ],
+      "id": "postal.ca",
+      "locale_basis": "Format",
+      "locales": [
+        "en-CA"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"postal_code\")",
+      "classes": [
+        "Custom(\"postal_code\")"
+      ],
+      "id": "postal.cued_four_digit",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"postal_code\")",
+      "classes": [
+        "Custom(\"postal_code\")"
+      ],
+      "id": "postal.cued_short",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"postal_code\")",
+      "classes": [
+        "Custom(\"postal_code\")"
+      ],
+      "id": "postal.de",
+      "locale_basis": "Document",
+      "locales": [
+        "de-DE"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"postal_code\")",
+      "classes": [
+        "Custom(\"postal_code\")"
+      ],
+      "id": "postal.gb",
+      "locale_basis": "Format",
+      "locales": [
+        "en-GB"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"postal_code\")",
+      "classes": [
+        "Custom(\"postal_code\")"
+      ],
+      "id": "postal.ie",
+      "locale_basis": "Format",
+      "locales": [
+        "en-IE"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"postal_code\")",
+      "classes": [
+        "Custom(\"postal_code\")"
+      ],
+      "id": "postal.us",
+      "locale_basis": "Document",
+      "locales": [
+        "en-US"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"security_token\")",
+      "classes": [
+        "Custom(\"security_token\")"
+      ],
+      "id": "security_token.anchored",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"ssn\")",
+      "classes": [
+        "Custom(\"ssn\")"
+      ],
+      "id": "ssn.de_cue",
+      "locale_basis": "Format",
+      "locales": [
+        "de-DE",
+        "de-AT",
+        "de-CH"
+      ],
+      "membership": {
+        "family": "government-id",
+        "mandatory_anchor": null,
+        "precedence": 10,
+        "variant": "ssn"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"ssn\")",
+      "classes": [
+        "Custom(\"ssn\")"
+      ],
+      "id": "ssn.us",
+      "locale_basis": "Format",
+      "locales": [
+        "en-US"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"steuer_id\")",
+      "classes": [
+        "Custom(\"steuer_id\")"
+      ],
+      "id": "steuer_id.de",
+      "locale_basis": "Format",
+      "locales": [
+        "de-DE",
+        "de-AT",
+        "de-CH"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"tax_number\")",
+      "classes": [
+        "Custom(\"tax_number\")"
+      ],
+      "id": "tax_number.cue_anchored",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": {
+        "family": "government-id",
+        "mandatory_anchor": null,
+        "precedence": 20,
+        "variant": "tax-number"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"tax_number\")",
+      "classes": [
+        "Custom(\"tax_number\")"
+      ],
+      "id": "tax_number.labelled",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": {
+        "family": "government-id",
+        "mandatory_anchor": null,
+        "precedence": 20,
+        "variant": "tax-number"
+      },
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"url\")",
+      "classes": [
+        "Custom(\"url\")"
+      ],
+      "id": "url.anchored",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"vat_id\")",
+      "classes": [
+        "Custom(\"vat_id\")"
+      ],
+      "id": "vat.de",
+      "locale_basis": "Format",
+      "locales": [
+        "de-DE",
+        "de-AT",
+        "de-CH"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Custom(\"vat_id\")",
+      "classes": [
+        "Custom(\"vat_id\")"
+      ],
+      "id": "vat.es",
+      "locale_basis": "Format",
+      "locales": [
+        "es-ES"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    },
+    {
+      "class": "Name",
+      "classes": [
+        "Location",
+        "Organization",
+        "Name",
+        "Location",
+        "Organization",
+        "Name"
+      ],
+      "id": "ner",
+      "locale_basis": "Document",
+      "locales": [
+        "global"
+      ],
+      "membership": null,
+      "token_family": "counter"
+    }
+  ],
+  "schema_version": 1
+}
