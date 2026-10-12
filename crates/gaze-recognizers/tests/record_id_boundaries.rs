@@ -339,3 +339,85 @@ fn tax_identifier_keeps_its_value_and_stops_at_complete_next_cues() {
 fn licence_identifier_keeps_its_value_and_stops_at_complete_next_cues() {
     check_legacy_cue_ownership("driver license", "driver_license");
 }
+
+#[derive(Clone, Default)]
+struct ScanReasons(std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>);
+
+impl gaze::RedactionLogger for ScanReasons {
+    fn log(&self, entry: &gaze::RedactionEntry) -> Result<(), gaze::RedactionLogError> {
+        if !entry.conflict_loser && entry.action == Action::Tokenize {
+            self.0
+                .lock()
+                .unwrap()
+                .push(serde_json::to_value(entry.labelled_value_scan_reason).unwrap());
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn over_depth_and_inconsistent_quotes_own_the_tail_with_audit_reasons() {
+    let fixture: Fixture =
+        serde_json::from_str(include_str!("fixtures/record_id_boundaries_v19.json")).unwrap();
+    for family in ["customer_id", "employee_id", "record_id"] {
+        let case = fixture
+            .records
+            .iter()
+            .find(|case| {
+                case.family == family
+                    && case.surface == "recordids_boundary_serialized_depth9_unicode"
+                    && case.id.contains("-A-")
+            })
+            .unwrap();
+        let gold = &case.gold[0];
+        let reasons = ScanReasons::default();
+        let pipeline = record_pipeline().with_redaction_logger(reasons.clone());
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = pipeline.pseudonymize_text(&session, &case.text).unwrap()
+        else {
+            panic!("text")
+        };
+        assert!(
+            session
+                .snapshot_entries()
+                .iter()
+                .any(|entry| entry.raw == case.text[gold.start..]),
+            "over-depth scalar must own the tail"
+        );
+        assert!(reasons
+            .0
+            .lock()
+            .unwrap()
+            .contains(&serde_json::json!("serialization_depth_exceeded")));
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &clean).unwrap(),
+            case.text
+        );
+    }
+    for cue in ["customer ID", "employee ID", "member ID"] {
+        let input = format!(
+            "{cue}: {}\"Q731284\\\"; public_version=FRAME",
+            "\\".repeat(3)
+        );
+        let reasons = ScanReasons::default();
+        let pipeline = record_pipeline().with_redaction_logger(reasons.clone());
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = pipeline.pseudonymize_text(&session, &input).unwrap()
+        else {
+            panic!("text")
+        };
+        assert!(session
+            .snapshot_entries()
+            .iter()
+            .any(|entry| entry.raw == "Q731284\\\"; public_version=FRAME"));
+        assert!(reasons
+            .0
+            .lock()
+            .unwrap()
+            .contains(&serde_json::json!("uncertain_quote_boundary")));
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &clean).unwrap(),
+            input
+        );
+    }
+}
