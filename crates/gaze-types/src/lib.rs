@@ -744,6 +744,26 @@ pub enum LabelledValueScanReason {
     SerializationDepthExceeded,
     /// Quote delimiters are inconsistent or unclosed; the remaining tail is owned.
     UncertainQuoteBoundary,
+    /// A repeat was protected from a conservative field-owned prefix seed.
+    UncertainRepeatPrefix,
+}
+
+/// How an explicitly owned scalar licenses a repeat seed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum LabelledValueRepeatSeedKind {
+    /// Preserve the scalar's exact whitespace fringes as well as ordinary variants.
+    ExactScalar,
+    /// Extra protection from an uncertain prefix; the whole value remains owned.
+    UncertainPrefix,
+}
+
+/// Repeat evidence in the same byte coordinates as its candidate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelledValueRepeatSeed {
+    pub span: Range<usize>,
+    pub kind: LabelledValueRepeatSeedKind,
 }
 
 /// Typed validator outcome used by the pre-resolver validator-veto phase.
@@ -4677,6 +4697,8 @@ pub struct Candidate {
     pub labelled_value_scan_reason: Option<LabelledValueScanReason>,
     /// End of the original labelled-value capture before extension, for cross-class trimming.
     pub labelled_value_capture_end: Option<usize>,
+    /// Optional field-owned scalar or conservative-prefix repeat evidence.
+    pub labelled_value_repeat_seed: Option<LabelledValueRepeatSeed>,
     /// The recognizer's match guard vetoed the original capture.
     pub regex_guard_rejected: bool,
 }
@@ -4714,6 +4736,7 @@ impl Candidate {
             validator_fail_reason: None,
             labelled_value_scan_reason: None,
             labelled_value_capture_end: None,
+            labelled_value_repeat_seed: None,
             regex_guard_rejected: false,
         }
     }

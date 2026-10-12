@@ -199,6 +199,13 @@ pub(crate) struct SweepSource {
     pub(crate) family: String,
     pub(crate) class: PiiClass,
     pub(crate) raw: String,
+    pub(crate) repeat_seed: Option<RepeatSeed>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub(crate) struct RepeatSeed {
+    pub(crate) raw: String,
+    pub(crate) kind: gaze_types::LabelledValueRepeatSeedKind,
 }
 
 /// How a swept copy relates to the value it was found from. Audit rows carry
@@ -211,6 +218,8 @@ pub(crate) enum SweepLink {
     Variant,
     /// A part, or a run of parts, of a multi-word name.
     Part,
+    /// A conservative prefix of a field-owned value, not its complete manifest raw.
+    UncertainPrefix,
 }
 
 impl SweepLink {
@@ -219,6 +228,7 @@ impl SweepLink {
             Self::Exact => "manifest_sweep:exact",
             Self::Variant => "manifest_sweep:variant",
             Self::Part => "manifest_sweep:part",
+            Self::UncertainPrefix => "manifest_sweep:uncertain_prefix",
         }
     }
 }
@@ -252,6 +262,10 @@ impl SweepHit {
             Vec::new(),
         );
         candidate.source_recognizer_ids = vec![SWEEP_ID.to_string()];
+        if self.link == SweepLink::UncertainPrefix {
+            candidate.labelled_value_scan_reason =
+                Some(gaze_types::LabelledValueScanReason::UncertainRepeatPrefix);
+        }
         // A copy of a rule-found value is itself rule evidence.
         candidate.with_evidence(EvidenceKind::Rule)
     }
@@ -392,6 +406,7 @@ impl SweepMatcher {
         }
         let link = match link {
             SweepLink::Part => SweepLink::Part,
+            SweepLink::UncertainPrefix => SweepLink::UncertainPrefix,
             _ if normalize(&source.raw).text == text[span.clone()] => SweepLink::Exact,
             _ => SweepLink::Variant,
         };
@@ -522,6 +537,29 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
             }
             ValueShape::DigitRun | ValueShape::MultiWord => {
                 push(PatternKind::Folded, fold(value).text, SweepLink::Exact)
+            }
+        }
+    }
+    if let Some(seed) = &source.repeat_seed {
+        let raw = normalize(&seed.raw).text;
+        let body = raw.trim();
+        if ValueShape::of(&source.class, body).clears_floor(body) {
+            let uncertain = matches!(
+                seed.kind,
+                gaze_types::LabelledValueRepeatSeedKind::UncertainPrefix
+            );
+            let link = if uncertain {
+                SweepLink::UncertainPrefix
+            } else {
+                SweepLink::Exact
+            };
+            if uncertain {
+                push(PatternKind::Folded, fold(body).text, link);
+            }
+            // Exact raw scalar bytes retain leading/trailing whitespace. The
+            // floor is still evaluated on the body, never on those fringes.
+            if raw != value {
+                push(PatternKind::Exact, raw, link);
             }
         }
     }
@@ -794,6 +832,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Name,
             raw: raw.into(),
+            repeat_seed: None,
         }
     }
 
@@ -873,6 +912,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::family("id"),
             raw: "AB12-CD34".into(),
+            repeat_seed: None,
         };
         assert_eq!(found(vec![family.clone()], "x AB12-CD34 y"), ["AB12-CD34"]);
         assert!(found(vec![family], "x ab12-cd34 y").is_empty());
@@ -908,12 +948,14 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Custom("postal_code".into()),
             raw: "2024".into(),
+            repeat_seed: None,
         };
         assert!(SweepMatcher::build(vec![postcode]).unwrap().is_none());
         let long = SweepSource {
             family: "counter".into(),
             class: PiiClass::Custom("id".into()),
             raw: "123 456".into(),
+            repeat_seed: None,
         };
         assert_eq!(found(vec![long], "ref 123\n456 ok"), ["123\n456"]);
     }
@@ -948,6 +990,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Name,
             raw: "KOWALSKI".into(),
+            repeat_seed: None,
         };
         assert_eq!(found(vec![source.clone()], "x KOWALSKI y"), ["KOWALSKI"]);
         assert_eq!(found(vec![source], "x Kowalski y"), ["Kowalski"]);
@@ -997,6 +1040,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Name,
             raw: "Kowalski".into(),
+            repeat_seed: None,
         };
         assert_eq!(found(vec![single], "x KOWALSKI y"), ["KOWALSKI"]);
     }
@@ -1025,6 +1069,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Custom("id".into()),
             raw: "AB12CD".into(),
+            repeat_seed: None,
         };
         assert_eq!(found(vec![id], "x AB12CD-extra y"), ["AB12CD"]);
     }
@@ -1146,6 +1191,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Name,
             raw: "GitHub".into(),
+            repeat_seed: None,
         };
         assert!(found(vec![hub.clone()], "GITHUB outage").is_empty());
         assert_eq!(found(vec![hub], "GitHub outage"), ["GitHub"]);
@@ -1177,6 +1223,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Custom("id".into()),
             raw: format!("ID-{i:08}"),
+            repeat_seed: None,
         });
         assert_eq!(
             SweepMatcher::build(sources).err(),

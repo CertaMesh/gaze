@@ -146,6 +146,7 @@
     "gaze-recognizers::postal_at_ch",
     "gaze-recognizers::postal_au",
     "gaze-recognizers::postal_international",
+    "gaze-recognizers::record_id_boundaries",
     "gaze-recognizers::record_ids",
     "gaze-recognizers::review580_diagnostics",
     "gaze-recognizers::rulepack_lint",

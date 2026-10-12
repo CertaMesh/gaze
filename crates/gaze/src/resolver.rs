@@ -863,6 +863,10 @@ fn merge_same_span_same_class(existing: &mut Candidate, candidate: Candidate) {
     existing.labelled_value_scan_reason = existing
         .labelled_value_scan_reason
         .or(candidate.labelled_value_scan_reason);
+    existing.labelled_value_repeat_seed = existing
+        .labelled_value_repeat_seed
+        .clone()
+        .or(candidate.labelled_value_repeat_seed);
     existing.decided_by = ConflictTier::Merged;
     existing.merged_sources.push(candidate.source);
 }

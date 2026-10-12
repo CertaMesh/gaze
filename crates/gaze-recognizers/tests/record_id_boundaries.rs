@@ -481,7 +481,18 @@ fn field_owned_repeat_seeds_survive_later_turns_and_signed_snapshots() {
             let session =
                 Session::new(Scope::Conversation("synthetic-repeat-contract".into())).unwrap();
             public_clean(&pipeline, &session, &declaration);
-            let imported = Session::import(session.export().unwrap()).unwrap();
+            let snapshot = session.export().unwrap().into_bytes();
+            assert_eq!(
+                snapshot[0], 7,
+                "new seed metadata requires a fail-closed envelope"
+            );
+            let mut downgraded = snapshot.clone();
+            downgraded[0] = 6;
+            assert!(matches!(
+                Session::import(downgraded.into()),
+                Err(gaze::Error::InvalidSnapshotSignature)
+            ));
+            let imported = Session::import(snapshot.into()).unwrap();
             let input = format!("Lookup {value} again.");
             let clean = public_clean(&pipeline, &imported, &input);
             let entries = imported.snapshot_entries();

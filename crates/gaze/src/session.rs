@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 
 use crate::detector::PiiClass;
 use crate::policy::{Policy, SessionScope};
-use crate::sweep::{ManifestEvidence, SweepMatcher, SweepSource};
+use crate::sweep::{ManifestEvidence, RepeatSeed, SweepMatcher, SweepSource};
 use crate::{Error, Result};
 use gaze_types::{
     DocumentExtension, RestoreDecision, RestorePolicy, RestoreTelemetry,
@@ -32,6 +32,7 @@ const SNAPSHOT_VERSION_V5: u8 = 5;
 /// readers reject it as an unknown version instead of silently dropping the
 /// field and sweeping nothing.
 const SNAPSHOT_VERSION_V6: u8 = 6;
+const SNAPSHOT_VERSION_V7: u8 = 7;
 
 pub type RestoreError = Error;
 
@@ -145,6 +146,12 @@ struct TokenKey {
     raw: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct StoredRepeatSeed {
+    end: usize,
+    kind: gaze_types::LabelledValueRepeatSeedKind,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SnapshotEntry {
     class: PiiClass,
@@ -156,6 +163,8 @@ struct SnapshotEntry {
     /// carry none and are never swept: their tier is unknown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     evidence: Option<ManifestEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    repeat_seed: Option<StoredRepeatSeed>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -194,6 +203,7 @@ struct SessionState {
     token_by_value: HashMap<TokenKey, String>,
     value_by_token: HashMap<String, String>,
     evidence_by_value: HashMap<TokenKey, ManifestEvidence>,
+    repeat_seeds_by_value: HashMap<TokenKey, StoredRepeatSeed>,
     restore_regex_cache: Option<(u64, Arc<Regex>)>,
     /// Matcher over the sweepable values. Cleared whenever a value's evidence
     /// changes, like the restore regex cache when a token is minted.
@@ -208,6 +218,7 @@ impl SessionState {
             token_by_value: HashMap::new(),
             value_by_token: HashMap::new(),
             evidence_by_value: HashMap::new(),
+            repeat_seeds_by_value: HashMap::new(),
             restore_regex_cache: None,
             sweep_matcher_cache: None,
         }
@@ -576,6 +587,21 @@ impl Session {
         })
     }
 
+    pub(crate) fn record_repeat_seed(
+        &self,
+        family: Option<&str>,
+        class: &PiiClass,
+        raw: &str,
+        seed: RepeatSeed,
+    ) {
+        self.mutate_state(|state| {
+            (
+                (),
+                record_repeat_seed_in_state(state, family, class, raw, seed),
+            )
+        })
+    }
+
     /// Matcher over this session's sweepable values, or `None` when it holds
     /// none. Built once per state change and cached.
     pub(crate) fn sweep_matcher(&self) -> Result<Option<Arc<SweepMatcher>>> {
@@ -829,6 +855,7 @@ impl Session {
                     raw: key.raw.clone(),
                     token: token.clone(),
                     evidence: state.evidence_by_value.get(key).copied(),
+                    repeat_seed: state.repeat_seeds_by_value.get(key).cloned(),
                 })
                 .collect(),
             next_by_class: state
@@ -840,7 +867,11 @@ impl Session {
             document,
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(Error::SnapshotDecode)?;
-        let version = SNAPSHOT_VERSION_V6;
+        let version = if state.repeat_seeds_by_value.is_empty() {
+            SNAPSHOT_VERSION_V6
+        } else {
+            SNAPSHOT_VERSION_V7
+        };
         let signing_key = self.identity.signing_key.signing_key();
         let verifying_key = signing_key.verifying_key();
         let verifying_key_bytes = verifying_key.to_bytes();
@@ -867,6 +898,7 @@ impl Session {
             && version != SNAPSHOT_VERSION_V4
             && version != SNAPSHOT_VERSION_V5
             && version != SNAPSHOT_VERSION_V6
+            && version != SNAPSHOT_VERSION_V7
         {
             return Err(Error::InvalidSnapshotVersion(version));
         }
@@ -900,6 +932,14 @@ impl Session {
 
         let payload = decode_snapshot_payload(payload_bytes)?;
         validate_entry_prefixes(&payload)?;
+        if version < SNAPSHOT_VERSION_V7
+            && payload
+                .entries
+                .iter()
+                .any(|entry| entry.repeat_seed.is_some())
+        {
+            return Err(Error::InvalidSnapshotPayload);
+        }
         let session_hex = session_hex_bytes(&payload.session_hex)?;
         let scope = scope_from_snapshot(payload.scope);
         let issued_at = payload.issued_at;
@@ -931,6 +971,9 @@ impl Session {
             };
             if let Some(evidence) = entry.evidence {
                 state.evidence_by_value.insert(key.clone(), evidence);
+            }
+            if let Some(seed) = entry.repeat_seed {
+                state.repeat_seeds_by_value.insert(key.clone(), seed);
             }
             state.token_by_value.insert(key, entry.token.clone());
             state.value_by_token.insert(entry.token.clone(), entry.raw);
@@ -1002,6 +1045,16 @@ impl<'session> SessionTransaction<'session> {
         evidence: ManifestEvidence,
     ) {
         record_evidence_in_state(&mut self.staged, family, class, raw, evidence);
+    }
+
+    pub(crate) fn record_repeat_seed(
+        &mut self,
+        family: Option<&str>,
+        class: &PiiClass,
+        raw: &str,
+        seed: RepeatSeed,
+    ) {
+        record_repeat_seed_in_state(&mut self.staged, family, class, raw, seed);
     }
 
     pub(crate) fn sweep_matcher(&mut self) -> Result<Option<Arc<SweepMatcher>>> {
@@ -1334,6 +1387,40 @@ fn record_evidence_in_state(
     true
 }
 
+fn record_repeat_seed_in_state(
+    state: &mut SessionState,
+    family: Option<&str>,
+    class: &PiiClass,
+    raw: &str,
+    seed: RepeatSeed,
+) -> bool {
+    // Ordinary exact values already have their complete sweep pattern.
+    if matches!(
+        seed.kind,
+        gaze_types::LabelledValueRepeatSeedKind::ExactScalar
+    ) && raw.trim() == raw
+    {
+        return false;
+    }
+    let seed = StoredRepeatSeed {
+        end: seed.raw.len(),
+        kind: seed.kind,
+    };
+    let key = TokenKey {
+        family: family.unwrap_or(DEFAULT_COUNTER_FAMILY).to_string(),
+        class: class.clone(),
+        raw: raw.to_string(),
+    };
+    if !state.token_by_value.contains_key(&key)
+        || state.repeat_seeds_by_value.get(&key) == Some(&seed)
+    {
+        return false;
+    }
+    state.repeat_seeds_by_value.insert(key, seed);
+    state.sweep_matcher_cache = None;
+    true
+}
+
 fn build_sweep_matcher(state: &SessionState) -> Result<Option<Arc<SweepMatcher>>> {
     let sources = state
         .evidence_by_value
@@ -1343,6 +1430,10 @@ fn build_sweep_matcher(state: &SessionState) -> Result<Option<Arc<SweepMatcher>>
             family: key.family.clone(),
             class: key.class.clone(),
             raw: key.raw.clone(),
+            repeat_seed: state.repeat_seeds_by_value.get(key).map(|seed| RepeatSeed {
+                raw: key.raw[..seed.end].to_string(),
+                kind: seed.kind,
+            }),
         });
     Ok(SweepMatcher::build(sources)?.map(Arc::new))
 }
@@ -2200,6 +2291,18 @@ fn validate_entry_prefixes(payload: &SnapshotPayload) -> Result<()> {
     let mut tokens_by_value = HashMap::<TokenKey, String>::new();
     let mut values_by_token = HashMap::<String, TokenKey>::new();
     for entry in &payload.entries {
+        if entry.repeat_seed.as_ref().is_some_and(|seed| {
+            seed.end == 0
+                || seed.end > entry.raw.len()
+                || !entry.raw.is_char_boundary(seed.end)
+                || !entry.evidence.is_some_and(ManifestEvidence::propagates)
+                || (matches!(
+                    seed.kind,
+                    gaze_types::LabelledValueRepeatSeedKind::ExactScalar
+                ) && seed.end != entry.raw.len())
+        }) {
+            return Err(Error::InvalidSnapshotPayload);
+        }
         if !entry_token_matches_session(&entry.token, &payload.session_hex)
             || !crate::token_shape::starts_with_session_prefix(&entry.token)
         {
@@ -2479,6 +2582,7 @@ mod tests {
                 raw: "Dr. Schmidt".to_string(),
                 token: "deadbeef:name_1".to_string(),
                 evidence: None,
+                repeat_seed: None,
             }],
             issued_at: 0,
             next_by_class: Vec::new(),
@@ -2499,6 +2603,7 @@ mod tests {
             raw: "Dr. Schmidt".to_string(),
             token: "<a7f3b8e2:Name_1>".to_string(),
             evidence: None,
+            repeat_seed: None,
         };
         let duplicate_token = SnapshotEntry {
             family: "tool".to_string(),
@@ -2506,6 +2611,7 @@ mod tests {
             raw: "Synthetic Colleague".to_string(),
             token: first.token.clone(),
             evidence: None,
+            repeat_seed: None,
         };
         let duplicate_value = SnapshotEntry {
             token: "<a7f3b8e2:Name_2>".to_string(),
@@ -2623,6 +2729,7 @@ mod tests {
                 raw: "Maria Schneider".to_string(),
                 token: "<a7f3b8e2:Name_1>".to_string(),
                 evidence: None,
+                repeat_seed: None,
             }],
             issued_at: 0,
             next_by_class: Vec::new(),
@@ -4029,6 +4136,56 @@ mod tests {
         assert!(transaction.validate_token_shapes(&would_be_fake).is_err());
         assert!(transaction.tokens().is_empty());
         assert!(session.tokens().is_empty());
+    }
+    #[test]
+    fn v7_seed_geometry_and_evidence_fail_closed_at_import() {
+        let payload = SnapshotPayload {
+            scope: SnapshotScope::Conversation("synthetic-seed".into()),
+            session_hex: "01234567".into(),
+            issued_at: 0,
+            next_by_class: Vec::new(),
+            document: None,
+            entries: vec![SnapshotEntry {
+                family: "counter".into(),
+                class: PiiClass::custom("customer_id").unwrap(),
+                raw: "É731284; public_version=FRAME".into(),
+                token: "<01234567:Custom:customer_id_1>".into(),
+                evidence: Some(ManifestEvidence::Pattern),
+                repeat_seed: Some(StoredRepeatSeed {
+                    end: 8,
+                    kind: gaze_types::LabelledValueRepeatSeedKind::UncertainPrefix,
+                }),
+            }],
+        };
+        let blob = |version, payload: &SnapshotPayload| {
+            signed_snapshot_bytes(version, &serde_json::to_vec(payload).unwrap())
+        };
+        assert!(Session::import(blob(SNAPSHOT_VERSION_V7, &payload)).is_ok());
+        assert!(matches!(
+            Session::import(blob(SNAPSHOT_VERSION_V6, &payload)),
+            Err(Error::InvalidSnapshotPayload)
+        ));
+        for end in [0, 1, 1000] {
+            let mut changed = payload.clone();
+            changed.entries[0].repeat_seed.as_mut().unwrap().end = end;
+            assert!(matches!(
+                Session::import(blob(SNAPSHOT_VERSION_V7, &changed)),
+                Err(Error::InvalidSnapshotPayload)
+            ));
+        }
+        let mut changed = payload.clone();
+        changed.entries[0].evidence = None;
+        assert!(matches!(
+            Session::import(blob(SNAPSHOT_VERSION_V7, &changed)),
+            Err(Error::InvalidSnapshotPayload)
+        ));
+        changed = payload.clone();
+        changed.entries[0].repeat_seed.as_mut().unwrap().kind =
+            gaze_types::LabelledValueRepeatSeedKind::ExactScalar;
+        assert!(matches!(
+            Session::import(blob(SNAPSHOT_VERSION_V7, &changed)),
+            Err(Error::InvalidSnapshotPayload)
+        ));
     }
 }
 

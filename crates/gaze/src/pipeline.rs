@@ -350,6 +350,19 @@ impl ProtectionTarget<'_, '_> {
         }
     }
 
+    fn record_repeat_seed(
+        &mut self,
+        family: Option<&str>,
+        class: &PiiClass,
+        raw: &str,
+        seed: crate::sweep::RepeatSeed,
+    ) {
+        match self {
+            Self::Live(session) => session.record_repeat_seed(family, class, raw, seed),
+            Self::Staged(transaction) => transaction.record_repeat_seed(family, class, raw, seed),
+        }
+    }
+
     fn sweep_matcher(&mut self) -> Result<Option<Arc<SweepMatcher>>> {
         match self {
             Self::Live(session) => session.sweep_matcher(),
@@ -1260,6 +1273,13 @@ impl Pipeline {
             }
             self.log_entry(target, &detection, field_name, document_kind, action, false)?;
 
+            let repeat_seed = detection
+                .repeat_seed
+                .as_ref()
+                .map(|seed| crate::sweep::RepeatSeed {
+                    raw: text[seed.span.clone()].to_string(),
+                    kind: seed.kind,
+                });
             let replacement = match action {
                 Action::Tokenize => {
                     let token = target.tokenize_with_family(
@@ -1273,6 +1293,14 @@ impl Pipeline {
                         &raw,
                         detection.evidence,
                     );
+                    if let Some(seed) = repeat_seed.clone() {
+                        target.record_repeat_seed(
+                            Some(&detection.family),
+                            &detection.detection.class,
+                            &raw,
+                            seed,
+                        );
+                    }
                     Some(token)
                 }
                 Action::Redact => Some("[REDACTED]".to_string()),
@@ -1284,6 +1312,9 @@ impl Pipeline {
                         &raw,
                         detection.evidence,
                     );
+                    if let Some(seed) = repeat_seed.clone() {
+                        target.record_repeat_seed(None, &detection.detection.class, &raw, seed);
+                    }
                     Some(fake)
                 }
                 Action::Generalize => Some(generalize_token(&detection.detection.class)),
@@ -1514,6 +1545,12 @@ impl Pipeline {
                 family: winner.token_family.clone(),
                 class: winner.class.clone(),
                 raw: text[winner.span.clone()].to_string(),
+                repeat_seed: winner.labelled_value_repeat_seed.as_ref().map(|seed| {
+                    crate::sweep::RepeatSeed {
+                        raw: text[seed.span.clone()].to_string(),
+                        kind: seed.kind,
+                    }
+                }),
             });
         let mut hits = Vec::new();
         if let Some(matcher) = SweepMatcher::build(own_values)? {
@@ -3105,6 +3142,7 @@ struct IndexedDetection {
     /// Set when the value was kept although its checksum failed (`ValidatorOnFail::Record`).
     validator_fail_reason: Option<ValidatorFailReason>,
     labelled_value_scan_reason: Option<LabelledValueScanReason>,
+    repeat_seed: Option<gaze_types::LabelledValueRepeatSeed>,
 }
 
 struct CleanText {
@@ -5379,7 +5417,15 @@ fn walk_structured_value(
 }
 
 fn translate_candidate(candidate: Candidate, spans: &[(usize, usize)]) -> Option<Candidate> {
-    crate::normalize::raw_range(candidate.span.clone(), spans).map(|span| candidate.with_span(span))
+    let raw = crate::normalize::raw_range(candidate.span.clone(), spans)?;
+    let mut candidate = candidate;
+    if let Some(seed) = &mut candidate.labelled_value_repeat_seed {
+        seed.span = crate::normalize::raw_range(seed.span.clone(), spans)?;
+        if seed.span.start != raw.start || seed.span.end > raw.end {
+            return None;
+        }
+    }
+    Some(candidate.with_span(raw))
 }
 
 fn translate_vetoed_candidate(
@@ -5596,6 +5642,7 @@ fn merged_losers(resolved: &[Candidate], registry: &RecognizerRegistry) -> Vec<I
                     sweep_link: None,
                     validator_fail_reason: None,
                     labelled_value_scan_reason: None,
+                    repeat_seed: None,
                 }
             })
         })
@@ -5643,6 +5690,7 @@ fn indexed_detection_from_candidate(
         sweep_link: None,
         validator_fail_reason: candidate.validator_fail_reason,
         labelled_value_scan_reason: candidate.labelled_value_scan_reason,
+        repeat_seed: candidate.labelled_value_repeat_seed,
     }
 }
 

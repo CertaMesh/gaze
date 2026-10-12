@@ -263,6 +263,7 @@ impl RegexDetector {
                     Vec::new(),
                 );
                 candidate.labelled_value_scan_reason = scan.reason;
+                candidate.labelled_value_repeat_seed = scan.repeat_seed;
                 candidate.labelled_value_capture_end = (self.complete_labelled_value
                     && self.labelled_value_mode == LabelledValueMode::Grouped
                     || (self.phone_validator_enabled()
@@ -391,6 +392,7 @@ impl RegexDetector {
                             capture: span.clone(),
                             extension: span.clone(),
                             span,
+                            repeat_seed: None,
                             reason: None,
                             rejected: false,
                         }
@@ -451,6 +453,7 @@ impl RegexDetector {
                                 capture: part.clone(),
                                 extension: part.clone(),
                                 span: part,
+                                repeat_seed: None,
                                 reason: span.reason,
                                 rejected: span.rejected,
                             })
@@ -473,6 +476,7 @@ impl RegexDetector {
                 spans
                     .into_iter()
                     .map(|span| LabelledValueScan {
+                        repeat_seed: None,
                         capture: span.clone(),
                         extension: span.clone(),
                         span,
@@ -828,6 +832,7 @@ struct LabelledValueScan {
     extension: std::ops::Range<usize>,
     span: std::ops::Range<usize>,
     reason: Option<LabelledValueScanReason>,
+    repeat_seed: Option<gaze_types::LabelledValueRepeatSeed>,
     rejected: bool,
 }
 
@@ -925,7 +930,21 @@ fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> Label
         end = next;
     }
     let span = capture.start..end;
+    let repeat_seed = input[span.clone()]
+        .rsplit_once('\t')
+        .and_then(|(prefix, last)| {
+            (prefix.chars().any(char::is_numeric)
+                && last.chars().any(char::is_alphabetic)
+                && last.chars().all(|ch| {
+                    ch.is_alphabetic() || unicode_normalization::char::is_combining_mark(ch)
+                }))
+            .then_some(gaze_types::LabelledValueRepeatSeed {
+                span: span.start..span.start + prefix.len(),
+                kind: gaze_types::LabelledValueRepeatSeedKind::UncertainPrefix,
+            })
+        });
     LabelledValueScan {
+        repeat_seed,
         capture: capture.start..capture.end.min(end),
         extension: capture.end.min(end)..end,
         reason: labelled_value_over_limit(&input[span.clone()])
@@ -934,6 +953,19 @@ fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> Label
         rejected: span.is_empty(),
         span,
     }
+}
+
+// Apparent syntax licenses extra protection, never a smaller owned tail.
+fn uncertain_field_prefix_end(input: &str, span: std::ops::Range<usize>) -> Option<usize> {
+    input[span.clone()].char_indices().find_map(|(offset, ch)| {
+        if !matches!(ch, ';' | ',' | '\n' | '\r') {
+            return None;
+        }
+        let at = span.start + offset;
+        let rest =
+            input[at + ch.len_utf8()..].trim_start_matches([' ', '\t', '\u{00a0}', '\u{202f}']);
+        (at > span.start && assignment_starts(rest)).then_some(at)
+    })
 }
 
 fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
@@ -979,7 +1011,20 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
         }
     }
     let span = capture.start..end;
+    let uncertain_end = (reason == Some(LabelledValueScanReason::UncertainQuoteBoundary))
+        .then(|| uncertain_field_prefix_end(input, span.clone()))
+        .flatten();
+    let repeat_span = span.start..uncertain_end.unwrap_or(span.end);
+    let repeat_seed = (!repeat_span.is_empty()).then_some(gaze_types::LabelledValueRepeatSeed {
+        span: repeat_span,
+        kind: if uncertain_end.is_some() {
+            gaze_types::LabelledValueRepeatSeedKind::UncertainPrefix
+        } else {
+            gaze_types::LabelledValueRepeatSeedKind::ExactScalar
+        },
+    });
     LabelledValueScan {
+        repeat_seed,
         capture: capture.start..capture.end.min(end),
         extension: capture.end.min(end)..end,
         reason: reason.or_else(|| {
@@ -1049,6 +1094,7 @@ fn scan_labelled_value(
         // another recognizer actually claims its value; the registry then exposes the label.
         let beyond_capture = next_start >= capture.end;
         if beyond_capture && assignment_starts(&input[next_start..]) {
+            end = end.max(capture.end);
             stop_reason = Some(LabelledValueScanReason::LabelBoundary);
             break;
         }
@@ -1094,6 +1140,7 @@ fn scan_labelled_value(
     let extension = capture.end..end;
     let span = start..end;
     LabelledValueScan {
+        repeat_seed: None,
         reason: labelled_value_over_limit(&input[span.clone()])
             .then_some(LabelledValueScanReason::LimitExceeded)
             .or(stop_reason),
