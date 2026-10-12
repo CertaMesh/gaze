@@ -1193,9 +1193,7 @@ fn scan_labelled_value(
             end = assignment_connector_end.take().expect("checked connector");
             continue;
         }
-        if let Some(prefix_end) = next
-            .chars()
-            .any(|ch| !ch.is_ascii())
+        if let Some(prefix_end) = (!next.is_ascii())
             .then(|| unicode_licence_prefix_end(&input[next_start..]))
             .flatten()
         {
