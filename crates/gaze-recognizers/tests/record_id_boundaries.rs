@@ -749,3 +749,80 @@ fn uncertain_repeat_prefixes_keep_the_numeric_floor_and_public_cue_bytes() {
         "public_version=FRAME"
     );
 }
+
+#[test]
+fn legacy_lowercase_actions_and_repeat_markers_keep_scalar_repeat_protection() {
+    let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+    for cue in ["identity card", "tax number", "driver license"] {
+        for action in [
+            "action=lookup",
+            "action: lookup",
+            "verified is PUBLIC",
+            "checked ist PUBLIC",
+            "reviewed lautet PUBLIC",
+        ] {
+            let input = format!("{cue}: Q7312845 {action}; repeat: Q7312845");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap()
+            else {
+                panic!("text")
+            };
+            let entry = session
+                .snapshot_entries()
+                .into_iter()
+                .find(|entry| entry.raw == "Q7312845")
+                .unwrap_or_else(|| {
+                    panic!("lowercase action consumed scalar: {input:?} -> {clean:?}")
+                });
+            assert_eq!(
+                clean,
+                format!("{cue}: {} {action}; repeat: {}", entry.token, entry.token)
+            );
+            assert_eq!(
+                core.pipeline()
+                    .restore_strict_text(&session, &clean)
+                    .unwrap(),
+                input
+            );
+        }
+    }
+}
+
+#[test]
+fn legacy_complete_connector_state_expires_before_unrelated_text_or_next_record() {
+    let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+    for cue in ["identity card", "tax number", "driver license"] {
+        for connector in ["is", "ist", "lautet"] {
+            for boundary in [";", "\n"] {
+                let tail = format!(
+                    "verified {connector} PUBLIC{boundary} driver license: Q8423956 action=lookup"
+                );
+                let input =
+                    format!("{cue}: Q7312845 SECRET VERSION {connector} EF34 GH5678 {tail}");
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap()
+                else {
+                    panic!("text")
+                };
+                let entries = session.snapshot_entries();
+                let private = format!("Q7312845 SECRET VERSION {connector} EF34 GH5678");
+                assert!(
+                    entries.iter().any(|entry| entry.raw == private),
+                    "complete private cue lost: {input:?} -> {clean:?}"
+                );
+                assert!(
+                    clean.contains(&format!("verified {connector} PUBLIC{boundary}")),
+                    "expired connector consumed public text: {input:?} -> {clean:?}"
+                );
+                assert!(clean.ends_with(" action=lookup"));
+                assert!(entries.iter().any(|entry| entry.raw == "Q8423956"));
+                assert_eq!(
+                    core.pipeline()
+                        .restore_strict_text(&session, &clean)
+                        .unwrap(),
+                    input
+                );
+            }
+        }
+    }
+}
