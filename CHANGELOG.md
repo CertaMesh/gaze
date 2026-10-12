@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Inspection JSON-shape, SSE-timeline, PII-summary and decision-trace projections
+  now enforce their entry caps during deserialization as well as construction.
+  Oversized projections fail without truncation; valid wire shapes are unchanged.
+
 - Benchmark generator v18 scores explicitly labelled checksum-invalid Aadhaar
   and NIR values as personal data. The v17 corpus and contract stay frozen;
   every displayed release is freshly measured with the stricter gold labels.
