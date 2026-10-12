@@ -61,6 +61,16 @@ impl<'de, T: Deserialize<'de>, const MAX: usize> Deserialize<'de> for BoundedEnt
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct EntriesVisitor<T, const MAX: usize>(std::marker::PhantomData<T>);
 
+        struct RejectExcess;
+
+        impl<'de> de::DeserializeSeed<'de> for RejectExcess {
+            type Value = ();
+
+            fn deserialize<D: Deserializer<'de>>(self, _deserializer: D) -> Result<(), D::Error> {
+                Err(de::Error::custom(InspectionValueErrorV1::EntryLimit))
+            }
+        }
+
         impl<'de, T: Deserialize<'de>, const MAX: usize> de::Visitor<'de> for EntriesVisitor<T, MAX> {
             type Value = BoundedEntries<T, MAX>;
 
@@ -77,10 +87,9 @@ impl<'de, T: Deserialize<'de>, const MAX: usize> Deserialize<'de> for BoundedEnt
                         None => return Ok(BoundedEntries(entries)),
                     }
                 }
-                // Probe for overflow without deserializing or retaining another T.
-                if seq.next_element::<de::IgnoredAny>()?.is_some() {
-                    return Err(de::Error::custom(InspectionValueErrorV1::EntryLimit));
-                }
+                // An empty remainder succeeds; an excess value fails before its contents
+                // are consumed, including deeply nested values of any wire type.
+                seq.next_element_seed(RejectExcess)?;
                 Ok(BoundedEntries(entries))
             }
         }
@@ -1060,11 +1069,7 @@ mod tests {
 
                 // Public wire admission must reject at the first excess value, before
                 // walking attacker-controlled nesting inside it.
-                let prefix = format!(
-                    "{{\"{}\":[{},",
-                    $field,
-                    vec![$wire_entry; $max].join(","),
-                );
+                let prefix = format!("{{\"{}\":[{},", $field, vec![$wire_entry; $max].join(","));
                 for depth in [100_000, 1] {
                     let wire = format!(
                         "{prefix}{}0{}]{}}}",
