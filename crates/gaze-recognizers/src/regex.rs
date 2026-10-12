@@ -895,17 +895,21 @@ fn conservative_assignment_prefix_end(rest: &str) -> Option<usize> {
     // A decomposed German label proves conservative ownership only. It does
     // not establish a public boundary for field-owned values whose independent
     // next recognizer may not support that spelling.
-    assignment_prefix_end(rest).or_else(|| {
-        static DECOMPOSED_LICENCE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-        DECOMPOSED_LICENCE
-            .get_or_init(|| {
-                let connector = labelled_licence_connector();
-                Regex::new(&format!(r"(?i)\Afu\u{{0308}}hrerschein{connector}"))
-                    .expect("static decomposed conservative licence cue")
-            })
-            .find(rest)
-            .map(|matched| matched.end())
-    })
+    assignment_prefix_end(rest).or_else(|| unicode_licence_prefix_end(rest))
+}
+
+fn unicode_licence_prefix_end(rest: &str) -> Option<usize> {
+    static LICENCE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    LICENCE
+        .get_or_init(|| {
+            let connector = labelled_licence_connector();
+            Regex::new(&format!(
+                r"(?i)\Af(?:u\u{{0308}}|[uü])hrerschein{connector}"
+            ))
+            .expect("static conservative Unicode licence cue")
+        })
+        .find(rest)
+        .map(|matched| matched.end())
 }
 
 fn labelled_group_byte_len(rest: &str) -> usize {
@@ -1121,6 +1125,7 @@ fn scan_labelled_value(
 ) -> LabelledValueScan {
     let mut end = capture.start;
     let mut stop_reason = None;
+    let mut assignment_connector_end = None;
     let initial_lowercase = input[capture.start..]
         .chars()
         .next()
@@ -1177,13 +1182,23 @@ fn scan_labelled_value(
             stop_reason = Some(LabelledValueScanReason::DateBoundary);
             break;
         }
-        if let Some(prefix_end) = beyond_capture
-            .then(|| conservative_assignment_prefix_end(&input[next_start..]))
+        if assignment_connector_end.is_some_and(|until| next_start < until)
+            && ["is", "ist", "lautet"]
+                .iter()
+                .any(|word| next.eq_ignore_ascii_case(word))
+        {
+            // Only a connector of an already accepted complete cue may bridge
+            // lowercase text. Ordinary action/repeat assignments keep the
+            // baseline value-group checks and never join the previous value.
+            end = assignment_connector_end.take().expect("checked connector");
+            continue;
+        }
+        if let Some(prefix_end) = next
+            .chars()
+            .any(|ch| !ch.is_ascii())
+            .then(|| unicode_licence_prefix_end(&input[next_start..]))
             .flatten()
         {
-            // A complete assignment licenses protection through its connector,
-            // including a recognized is/ist/lautet phrase. It never exposes its
-            // label or claims that the next value is public.
             end = next_start + prefix_end;
             continue;
         }
@@ -1203,6 +1218,9 @@ fn scan_labelled_value(
                 && next.bytes().all(|byte| byte.is_ascii_lowercase()));
         if !value_like {
             break;
+        }
+        if let Some(prefix_end) = conservative_assignment_prefix_end(&input[next_start..]) {
+            assignment_connector_end = Some(next_start + prefix_end);
         }
         end = next_start;
         debug_assert!(end > separator_start);
