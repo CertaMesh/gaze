@@ -42,7 +42,10 @@ positives; break equal-recall ties in favor of the higher threshold.
 | SURNAME | 0.99 | 36 | 0 |
 
 These are calibration results from before name-part joining, not benchmark
-gains. The other four op-B thresholds remain unchanged. An explicit
+gains. Replaying after joining recovers 189 SURNAME bytes at 0.5: the extra byte
+is an internal separator. Model pieces are identical, all controls still have
+zero false positives, and the selected thresholds are unchanged.
+The other four op-B thresholds remain unchanged. An explicit
 `[safety_net.nym]` allowlist replaces the default; adopters can exclude or raise
 either personal-name threshold without changing the model bundle.
 
