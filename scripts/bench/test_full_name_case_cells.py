@@ -29,11 +29,15 @@ class FullNameCaseTests(unittest.TestCase):
                             for r in selected:
                                 self.assertEqual(len(r.gold), size * (2 if r.layer == 'R' else 1))
                                 self.assertEqual([g.label for g in r.gold[:size]],
-                                                 ["FIRSTNAME"] * (size - 1) + ["SURNAME"])
+                                                 ["GIVENNAME"] * (size - 1) + ["SURNAME"])
                                 if r.layer == 'R':
                                     self.assertEqual([g.value for g in r.gold[size:]],
                                                      [cells.CASES[case](g.value) for g in r.gold[:size]])
                                     self.assertEqual(r.text.startswith('reply to '), r.surface.endswith('rule_seed'))
+
+    def test_current_contract_accepts_all_new_gold(self):
+        prepared = api.prepare(Path(__file__).resolve().parents[2])
+        self.assertEqual(prepared.manifest["generator_version"], 20)
 
     def test_raw_unicode_offsets_and_tool_argument_strings(self):
         for partition in api.PARTITIONS:
@@ -82,11 +86,11 @@ class FullNameCaseTests(unittest.TestCase):
             self.assertEqual(metrics['leaked']>0,row.layer!='D')
             if row.layer=='D':
                 accumulator=score.MetricAccumulator()
-                accumulator.add(doc,[score.Span(d.start,d.end,'FIRSTNAME') for d in row.decoys])
+                accumulator.add(doc,[score.Span(d.start,d.end,'GIVENNAME') for d in row.decoys])
                 self.assertGreater(accumulator.result()['utf8_bytes']['false_positive'],0)
             else:
                 accumulator=score.MetricAccumulator()
-                accumulator.add(doc,[score.Span(g.start,g.end,g.label) for g in row.gold if g.label=='FIRSTNAME'])
+                accumulator.add(doc,[score.Span(g.start,g.end,g.label) for g in row.gold if g.label=='GIVENNAME'])
                 self.assertGreater(accumulator.result()['utf8_bytes']['leaked'],0)
 
 

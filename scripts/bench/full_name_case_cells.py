@@ -59,7 +59,7 @@ def records(api, partition):
         for position, part in enumerate(parts):
             marker = f"N{position}"
             markers.append("{" + marker + "}")
-            label = "SURNAME" if position == len(parts) - 1 else "FIRSTNAME"
+            label = "SURNAME" if position == len(parts) - 1 else "GIVENNAME"
             fields[marker] = (CASES[case](part), "decoy:service_phrase" if benign else label)
         rendered = template.replace("{V}", " ".join(markers))
         if mode != "first":
@@ -67,7 +67,7 @@ def records(api, partition):
             for position, part in enumerate(parts):
                 marker = f"S{position}"
                 seed.append("{" + marker + "}")
-                label = "SURNAME" if position == len(parts) - 1 else "FIRSTNAME"
+                label = "SURNAME" if position == len(parts) - 1 else "GIVENNAME"
                 fields[marker] = (part, "decoy:service_phrase" if benign else label)
             prefix = "reply to " + " ".join(seed) + ", please.\n" if mode == "rule_seed" else " ".join(seed) + "\n"
             rendered = prefix + rendered
