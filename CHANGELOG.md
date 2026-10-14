@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Owner-index response translation accepts raw-value substrings confined to
+  current-session tokens inserted by alias replacement, including collisions
+  with token namespaces, class labels, or ordinals. Raw prose, pre-existing token
+  literals containing raw values, and matches crossing token boundaries still
+  fail closed; empty or overlapping aliases now deny. Token reuse and owner-side
+  restore mappings are preserved.
+
 - Recognizers and collision memberships are admitted together. Registry
   construction rejects orphan memberships and duplicate recognizer IDs before
   scanning. `try_build()` returns a typed error; the compatibility `build()`

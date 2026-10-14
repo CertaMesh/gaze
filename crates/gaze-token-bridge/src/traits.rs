@@ -47,7 +47,9 @@ pub trait SearchAdapter {
 
 /// Translate owner-side hits into the active session namespace, minting
 /// fresh session tokens for newly-discovered entities. MUST fail closed if any domain
-/// alias or raw value would remain in the output.
+/// alias or raw value outside session-token bytes inserted by this translation
+/// would remain in the output. Pre-existing token literals do not authorize raw
+/// occurrences, and an occurrence crossing a token boundary MUST be denied.
 pub trait ResponseTranslator {
     fn translate(
         session: &RedactionSession,

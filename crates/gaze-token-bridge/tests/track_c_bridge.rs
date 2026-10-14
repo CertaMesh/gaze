@@ -667,3 +667,302 @@ fn filter_field_outside_handle_allowlist_denies() {
 
     assert_eq!(reason, DenyReason::NoMatchingAllowRule);
 }
+
+// Synthetic owner-side entities for the public translator provenance contract.
+fn provenance_entity(class: PiiClass, raw: &str, fingerprint: &str) -> IndexEntity {
+    IndexEntity {
+        domain_alias: domain_alias(&class, fingerprint),
+        raw_value: raw.to_string(),
+        index_ref: IndexedEntityRef {
+            domain_id: CUSTOMER_DOMAIN.to_string(),
+            key_id: "synthetic-provenance-key".to_string(),
+            entity_class: class.clone(),
+            fingerprint_hex: fingerprint.to_string(),
+        },
+        class,
+    }
+}
+
+#[test]
+fn translator_allows_raw_collision_with_minted_ordinal() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let class = PiiClass::custom("age").unwrap();
+    let entity = provenance_entity(class.clone(), "1", &"a".repeat(64));
+    let hit = IndexSearchHit {
+        doc_id: "synthetic-provenance-doc".to_string(),
+        snippet: format!("Applicant age: {}", entity.domain_alias),
+        entities: vec![entity],
+    };
+    let translated = SessionResponseTranslator::translate(&session, vec![hit])
+        .expect("raw confined to a minted token must be allowed");
+    let tokens = session.tokens();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(
+        translated[0].snippet,
+        format!("Applicant age: {}", tokens[0])
+    );
+    assert_eq!(
+        session.resolve_token(&tokens[0]).unwrap(),
+        (class, "1".to_string())
+    );
+}
+
+#[test]
+fn translator_allows_raw_collision_with_learned_namespace() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let probe = session.tokenize(&PiiClass::Name, "Dr. Schmidt").unwrap();
+    let namespace = probe.strip_prefix('<').unwrap().split_once(':').unwrap().0;
+    assert_eq!(namespace.len(), 8);
+    let entity = provenance_entity(PiiClass::Email, namespace, &"b".repeat(64));
+    let hit = IndexSearchHit {
+        doc_id: "synthetic-namespace-doc".to_string(),
+        snippet: format!("Contact: {}", entity.domain_alias),
+        entities: vec![entity],
+    };
+    let translated = SessionResponseTranslator::translate(&session, vec![hit])
+        .expect("raw confined to the learned minted namespace must be allowed");
+    let tokens = session.tokens();
+    assert_eq!(tokens.len(), 2);
+    let token = tokens.iter().find(|token| **token != probe).unwrap();
+    assert_eq!(translated[0].snippet, format!("Contact: {token}"));
+    assert_eq!(
+        session.resolve_token(token).unwrap(),
+        (PiiClass::Email, namespace.to_string())
+    );
+    assert_eq!(
+        session.resolve_token(&probe).unwrap(),
+        (PiiClass::Name, "Dr. Schmidt".to_string())
+    );
+}
+
+fn provenance_hit(snippet: String, entities: Vec<IndexEntity>) -> IndexSearchHit {
+    IndexSearchHit {
+        doc_id: "synthetic-provenance-doc".to_string(),
+        snippet,
+        entities,
+    }
+}
+
+fn provenance_denies(session: &RedactionSession, hit: IndexSearchHit) {
+    assert_eq!(
+        SessionResponseTranslator::translate(session, vec![hit]),
+        Err(DenyReason::TranslatorFailed)
+    );
+}
+
+#[test]
+fn translator_control_raw_prose_beside_alias_is_denied() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let entity = provenance_entity(PiiClass::custom("age").unwrap(), "1", &"a".repeat(64));
+    provenance_denies(
+        &session,
+        provenance_hit(format!("{} value 1", entity.domain_alias), vec![entity]),
+    );
+}
+
+#[test]
+fn translator_control_raw_crossing_token_end_is_denied() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let entity = provenance_entity(PiiClass::Name, ">tail", &"a".repeat(64));
+    provenance_denies(
+        &session,
+        provenance_hit(format!("{}tail", entity.domain_alias), vec![entity]),
+    );
+}
+
+#[test]
+fn translator_control_raw_spanning_adjacent_tokens_is_denied() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let first = provenance_entity(PiiClass::Name, "><", &"a".repeat(64));
+    let second = provenance_entity(PiiClass::Email, "alice@example.invalid", &"b".repeat(64));
+    provenance_denies(
+        &session,
+        provenance_hit(
+            format!("{}{}", first.domain_alias, second.domain_alias),
+            vec![first, second],
+        ),
+    );
+}
+
+#[test]
+fn translator_control_forged_copy_of_current_token_is_denied() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let class = PiiClass::custom("age").unwrap();
+    let token = session.tokenize(&class, "1").unwrap();
+    let entity = provenance_entity(class, "1", &"a".repeat(64));
+    provenance_denies(
+        &session,
+        provenance_hit(
+            format!("{} copied {token}", entity.domain_alias),
+            vec![entity],
+        ),
+    );
+}
+
+#[test]
+fn translator_control_remaining_alias_is_denied() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let entity = provenance_entity(PiiClass::Email, "alice@example.invalid", &"a".repeat(64));
+    provenance_denies(
+        &session,
+        provenance_hit(
+            format!("{} <Name_UNKNOWN>", entity.domain_alias),
+            vec![entity],
+        ),
+    );
+}
+
+#[test]
+fn translator_control_empty_raw_is_denied_without_an_alias() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let entity = provenance_entity(PiiClass::Name, "", &"a".repeat(64));
+    provenance_denies(
+        &session,
+        provenance_hit("ordinary prose".to_string(), vec![entity]),
+    );
+    assert!(session.tokens().is_empty());
+}
+
+#[test]
+fn translator_control_multibyte_raw_prose_is_denied_without_panicking() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let entity = provenance_entity(PiiClass::Name, "Élodie", &"a".repeat(64));
+    provenance_denies(
+        &session,
+        provenance_hit(format!("前 {} — Élodie", entity.domain_alias), vec![entity]),
+    );
+}
+
+#[test]
+fn translator_control_repeated_alias_reuses_one_token_and_preserves_prose() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let entity = provenance_entity(PiiClass::Name, "Dr. Schmidt", &"a".repeat(64));
+    let result = SessionResponseTranslator::translate(
+        &session,
+        vec![provenance_hit(
+            format!("前 {} — {} 終", entity.domain_alias, entity.domain_alias),
+            vec![entity],
+        )],
+    )
+    .unwrap();
+    let tokens = session.tokens();
+    assert_eq!(
+        tokens.len(),
+        1,
+        "one entity must have one current-session restore mapping"
+    );
+    assert_eq!(
+        result[0].snippet,
+        format!("前 {} — {} 終", tokens[0], tokens[0])
+    );
+    assert_eq!(
+        session.resolve_token(&tokens[0]).unwrap(),
+        (PiiClass::Name, "Dr. Schmidt".to_string())
+    );
+}
+
+#[test]
+fn translator_control_two_classes_sharing_raw_keep_separate_tokens() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let first = provenance_entity(PiiClass::Name, "Dr. Schmidt", &"a".repeat(64));
+    let second = provenance_entity(PiiClass::Organization, "Dr. Schmidt", &"b".repeat(64));
+    let result = SessionResponseTranslator::translate(
+        &session,
+        vec![provenance_hit(
+            format!("{} / {}", first.domain_alias, second.domain_alias),
+            vec![first, second],
+        )],
+    )
+    .unwrap();
+    assert_eq!(session.tokens().len(), 2);
+    let tokens: Vec<_> = result[0].snippet.split(" / ").collect();
+    assert_eq!(tokens.len(), 2);
+    assert_ne!(tokens[0], tokens[1]);
+    assert_eq!(
+        session.resolve_token(tokens[0]).unwrap(),
+        (PiiClass::Name, "Dr. Schmidt".to_string())
+    );
+    assert_eq!(
+        session.resolve_token(tokens[1]).unwrap(),
+        (PiiClass::Organization, "Dr. Schmidt".to_string())
+    );
+}
+
+#[test]
+fn translator_control_overlapping_raw_occurrences_include_the_straddle() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    // Public enum validation permits delimiters. The first >_1> is inside the
+    // minted token; its closing > also starts the overlapping prose straddle.
+    let entity = provenance_entity(
+        PiiClass::Custom("class_alpha>".to_string()),
+        ">_1>",
+        &"a".repeat(64),
+    );
+    provenance_denies(
+        &session,
+        provenance_hit(format!("{}_1>", entity.domain_alias), vec![entity]),
+    );
+}
+
+#[test]
+fn translator_control_entity_order_and_duplicate_alias_keep_first_mapping() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let first = provenance_entity(PiiClass::Name, "Dr. Schmidt", &"a".repeat(64));
+    let second = provenance_entity(PiiClass::Name, "Prof. Weber", &"b".repeat(64));
+    let mut duplicate = first.clone();
+    duplicate.raw_value = "Synthetic Other".to_string();
+    let result = SessionResponseTranslator::translate(
+        &session,
+        vec![provenance_hit(
+            format!("{} / {}", second.domain_alias, first.domain_alias),
+            vec![first, second, duplicate],
+        )],
+    )
+    .unwrap();
+    let tokens: Vec<_> = result[0].snippet.split(" / ").collect();
+    assert!(tokens[0].ends_with(":Name_2>"));
+    assert!(tokens[1].ends_with(":Name_1>"));
+    assert_eq!(session.tokens().len(), 2);
+    assert_eq!(
+        session.resolve_token(tokens[0]).unwrap(),
+        (PiiClass::Name, "Prof. Weber".to_string())
+    );
+    assert_eq!(
+        session.resolve_token(tokens[1]).unwrap(),
+        (PiiClass::Name, "Dr. Schmidt".to_string())
+    );
+}
+
+#[test]
+fn translator_control_unicode_class_and_alias_preserve_restore() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let class = PiiClass::Custom("class_ä".to_string());
+    let entity = provenance_entity(class.clone(), "synthetic-value", &"a".repeat(64));
+    let result = SessionResponseTranslator::translate(
+        &session,
+        vec![provenance_hit(
+            format!("前 {} 終", entity.domain_alias),
+            vec![entity],
+        )],
+    )
+    .unwrap();
+    let tokens = session.tokens();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(result[0].snippet, format!("前 {} 終", tokens[0]));
+    assert_eq!(
+        session.resolve_token(&tokens[0]).unwrap(),
+        (class, "synthetic-value".to_string())
+    );
+}
+
+#[test]
+fn translator_rejects_ambiguous_overlapping_aliases() {
+    let session = RedactionSession::ephemeral_for("synthetic-principal").unwrap();
+    let first = provenance_entity(PiiClass::Name, "Dr. Schmidt", &"a".repeat(64));
+    let mut second = provenance_entity(PiiClass::Email, "alice@example.invalid", &"b".repeat(64));
+    second.domain_alias = first.domain_alias.trim_start_matches('<').to_string();
+    provenance_denies(
+        &session,
+        provenance_hit(first.domain_alias.clone(), vec![first, second]),
+    );
+}
