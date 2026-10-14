@@ -878,8 +878,8 @@ backend = "nym"
 
 [safety_net.nym]
 model_dir = "/absolute/path/to/nym-small-int8"
-labels = ["BUILDING_NUMBER", "DATE_OF_BIRTH", "LICENSE_PLATE", "USERNAME"]
-threshold = { BUILDING_NUMBER = 0.5, DATE_OF_BIRTH = 0.9, LICENSE_PLATE = 0.5, USERNAME = 0.5 }
+labels = ["BUILDING_NUMBER", "DATE_OF_BIRTH", "GIVEN_NAME", "LICENSE_PLATE", "SURNAME", "USERNAME"]
+threshold = { BUILDING_NUMBER = 0.5, DATE_OF_BIRTH = 0.9, GIVEN_NAME = 0.5, LICENSE_PLATE = 0.5, SURNAME = 0.5, USERNAME = 0.5 }
 ```
 
 The labels and thresholds shown are op-B, also used when they are omitted.
@@ -889,8 +889,10 @@ uses the policy path or an explicit override argument, without reading the
 environment.
 
 - `labels` is the allowlist. Only `BUILDING_NUMBER`, `DATE_OF_BIRTH`,
-  `LICENSE_PLATE`, `TAX_ID`, `USERNAME` and `ZIP_CODE` have a Gaze class. Any
-  other of the 40 Nym labels (for example `GIVEN_NAME`) fails at load, as does a
+  `GIVEN_NAME`, `LICENSE_PLATE`, `SURNAME`, `TAX_ID`, `USERNAME` and `ZIP_CODE`
+  have a Gaze class. The two personal-name labels explicitly map to `Name`;
+  adjacent parts form one restorable value. Any other of the 40 Nym labels
+  (for example `CITY`) fails at load, as does a
   spelling that is not a Nym label, an empty list, or a repeated label.
 - `threshold` needs exactly one entry per listed label, each in `(0, 1]`. A
   missing threshold or a threshold for an unlisted label fails at load.

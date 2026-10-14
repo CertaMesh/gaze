@@ -183,15 +183,18 @@ pub struct NymOperatingPoint {
 }
 
 impl NymOperatingPoint {
-    /// The shipped default, measured as op-B on the 2,910-document benchmark: building number,
-    /// licence plate and username at 0.5, date of birth at 0.9. Tax ID and ZIP code stay off
-    /// (tax ID precision was 0.23 to 0.26; ZIP code flagged the invalid-identifier decoys).
+    /// Op-B with personal-name support: the original building number, licence plate and username
+    /// thresholds stay at 0.5 and date of birth stays at 0.9. GIVEN_NAME and SURNAME use 0.5,
+    /// selected on an offline synthetic sweep, independently of the benchmark test corpus.
+    /// Tax ID and ZIP code stay off (tax ID precision was 0.23 to 0.26; ZIP code flagged decoys).
     pub fn op_b() -> Self {
         Self {
             thresholds: BTreeMap::from([
                 (NymLabel::BuildingNumber, 0.5),
                 (NymLabel::DateOfBirth, 0.9),
+                (NymLabel::GivenName, 0.5),
                 (NymLabel::LicensePlate, 0.5),
+                (NymLabel::Surname, 0.5),
                 (NymLabel::Username, 0.5),
             ]),
         }
@@ -342,13 +345,16 @@ mod tests {
             vec![
                 (NymLabel::BuildingNumber, 0.5),
                 (NymLabel::DateOfBirth, 0.9),
+                (NymLabel::GivenName, 0.5),
                 (NymLabel::LicensePlate, 0.5),
+                (NymLabel::Surname, 0.5),
                 (NymLabel::Username, 0.5),
             ]
         );
         assert_eq!(op_b.threshold(NymLabel::TaxId), None);
         assert_eq!(op_b.threshold(NymLabel::ZipCode), None);
-        assert_eq!(op_b.threshold(NymLabel::GivenName), None);
+        assert_eq!(op_b.threshold(NymLabel::GivenName), Some(0.5));
+        assert_eq!(op_b.threshold(NymLabel::Surname), Some(0.5));
     }
 
     fn policy(

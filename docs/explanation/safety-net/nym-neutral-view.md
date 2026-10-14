@@ -25,3 +25,8 @@ findings remain unchanged; the pagination-key guard is separate.
 Only Nym uses the second view. With verified tokens, it may infer twice per
 pass; either failure fails closed. Other nets receive one stable scan.
 Adoption requires benchmark gain and per-label review, not only model replays.
+
+Within each view, adjacent personal-name parts join before manifest correlation.
+The join preserves each contributing label and threshold. Projection still
+splits crossing findings into exposed gaps, so a new name finding cannot
+replace an earlier rule or NER token.

@@ -388,6 +388,77 @@ fn default_runs_never_load_nym_even_with_a_bundle_dir_set() {
 
 #[test]
 #[ignore = "needs GAZE_NYM_MODEL_DIR pointing at the pinned bundle"]
+fn live_person_name_is_one_restorable_token_with_thresholds_in_audit() {
+    let model_dir = std::env::var("GAZE_NYM_MODEL_DIR").unwrap();
+    let (dir, policy) = policy(
+        "\n[safety_net.nym]\nlabels = [\"GIVEN_NAME\", \"SURNAME\"]\nthreshold = { GIVEN_NAME = 0.5, SURNAME = 0.5 }\n",
+    );
+    let audit = dir.path().join("audit.sqlite");
+    let raw = "The fictional caller Nelia Quillmere requested an update.";
+    let out = clean(
+        &[
+            "--policy",
+            path_str(&policy),
+            "--safety-net",
+            "nym",
+            "--nym-model-dir",
+            &model_dir,
+            "--audit-db",
+            path_str(&audit),
+        ],
+        raw,
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let result: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let text = result["clean_text"].as_str().unwrap();
+    assert!(text.contains(":Name_1>"), "{text}");
+    assert!(
+        !text.contains("Name_2") && !text.contains("Quillmere") && !text.contains("Nelia"),
+        "{text}"
+    );
+    let restore = Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("restore")
+        .write_stdin(
+            serde_json::json!({"session_blob": result["session_blob"], "text": text}).to_string(),
+        )
+        .output()
+        .unwrap();
+    assert_eq!(
+        restore.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&restore.stderr)
+    );
+    let restored: Value = serde_json::from_slice(&restore.stdout).unwrap();
+    assert_eq!(restored["text"], raw);
+    let rows = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "safety-net",
+            "query",
+            "--audit-db",
+            path_str(&audit),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(rows.status.code(), Some(0));
+    let rows = String::from_utf8(rows.stdout).unwrap();
+    assert!(rows.contains("GIVEN_NAME>=0.5;SURNAME>=0.5"), "{rows}");
+    assert!(
+        !rows.contains("Nelia") && !rows.contains("Quillmere"),
+        "{rows}"
+    );
+}
+
+#[test]
+#[ignore = "needs GAZE_NYM_MODEL_DIR pointing at the pinned bundle"]
 fn live_nym_net_tokenizes_a_plate_the_rules_miss() {
     let model_dir = std::env::var("GAZE_NYM_MODEL_DIR").expect("GAZE_NYM_MODEL_DIR");
     let (_dir, policy) = policy("");
