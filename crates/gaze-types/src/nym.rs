@@ -102,8 +102,10 @@ impl fmt::Display for NymLabel {
 
 /// Maps a Nym label into the closed safety-net class set.
 ///
-/// Six labels carry a class. Every other label is `Unsupported`: it can never be enabled, and it
-/// is never folded into a generic class such as `Name`.
+/// Eight labels carry a class. `GIVEN_NAME` and `SURNAME` explicitly map to `Name` so the
+/// backstop can protect person names regardless of capitalization. This is a deliberate
+/// extension of the former six-label map, not a generic fallback: every other unsupported
+/// label still fails policy loading rather than being folded into `Name`.
 pub fn nym_label_to_safety_net_class(label: NymLabel) -> Result<SafetyNetPiiClass, NymConfigError> {
     match label {
         NymLabel::BuildingNumber => Ok(SafetyNetPiiClass::BuildingNumber),
@@ -112,6 +114,7 @@ pub fn nym_label_to_safety_net_class(label: NymLabel) -> Result<SafetyNetPiiClas
         NymLabel::DateOfBirth => Ok(SafetyNetPiiClass::Date),
         NymLabel::ZipCode => Ok(SafetyNetPiiClass::PostalCode),
         NymLabel::TaxId => Ok(SafetyNetPiiClass::TaxId),
+        NymLabel::GivenName | NymLabel::Surname => Ok(SafetyNetPiiClass::Name),
         unsupported => Err(NymConfigError::UnsupportedLabel {
             label: unsupported.as_str().to_string(),
         }),
@@ -272,6 +275,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn personal_name_labels_can_be_configured_as_name() {
+        let op = NymOperatingPoint::new([(NymLabel::GivenName, 0.7), (NymLabel::Surname, 0.9)])
+            .expect("personal-name labels carry the Name class");
+        assert_eq!(
+            nym_label_to_pii_class(NymLabel::GivenName),
+            Ok(PiiClass::Name)
+        );
+        assert_eq!(
+            nym_label_to_pii_class(NymLabel::Surname),
+            Ok(PiiClass::Name)
+        );
+        assert_eq!(op.threshold(NymLabel::GivenName), Some(0.7));
+        assert_eq!(op.threshold(NymLabel::Surname), Some(0.9));
+    }
+
+    #[test]
     fn label_order_matches_the_pinned_id2label() {
         assert_eq!(NymLabel::ALL.len(), 40);
         let mut sorted = NymLabel::ALL.iter().map(|l| l.as_str()).collect::<Vec<_>>();
@@ -285,7 +304,7 @@ mod tests {
     }
 
     #[test]
-    fn class_map_is_closed_and_never_generic() {
+    fn class_map_is_closed_with_explicit_person_name_labels() {
         let mapped = NymLabel::ALL
             .iter()
             .filter_map(|label| {
@@ -299,16 +318,18 @@ mod tests {
             vec![
                 ("BUILDING_NUMBER", "custom:building_number".to_string()),
                 ("DATE_OF_BIRTH", "custom:date".to_string()),
+                ("GIVEN_NAME", "name".to_string()),
                 ("LICENSE_PLATE", "custom:license_plate".to_string()),
+                ("SURNAME", "name".to_string()),
                 ("TAX_ID", "custom:tax_id".to_string()),
                 ("USERNAME", "custom:username".to_string()),
                 ("ZIP_CODE", "custom:postal_code".to_string()),
             ]
         );
         assert_eq!(
-            nym_label_to_safety_net_class(NymLabel::GivenName),
+            nym_label_to_safety_net_class(NymLabel::City),
             Err(NymConfigError::UnsupportedLabel {
-                label: "GIVEN_NAME".to_string()
+                label: "CITY".to_string()
             })
         );
     }
@@ -360,7 +381,7 @@ mod tests {
             Err(NymConfigError::UnknownLabel { .. })
         ));
         assert!(matches!(
-            policy(&["GIVEN_NAME"], &[("GIVEN_NAME", 0.5)]),
+            policy(&["CITY"], &[("CITY", 0.5)]),
             Err(NymConfigError::UnsupportedLabel { .. })
         ));
         assert!(matches!(

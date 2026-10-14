@@ -319,7 +319,7 @@ fn cli_model_dir_precedes_environment_and_policy() {
 #[test]
 fn nym_policy_with_an_unmapped_label_fails_at_load() {
     let (_dir, policy) =
-        policy("\n[safety_net.nym]\nlabels = [\"GIVEN_NAME\"]\nthreshold = { GIVEN_NAME = 0.5 }\n");
+        policy("\n[safety_net.nym]\nlabels = [\"CITY\"]\nthreshold = { CITY = 0.5 }\n");
     let out = clean(
         &["--policy", path_str(&policy), "--safety-net", "nym"],
         PLATE_PROSE,
@@ -332,7 +332,7 @@ fn nym_policy_with_an_unmapped_label_fails_at_load() {
     );
     assert!(out.stdout.is_empty());
     assert!(String::from_utf8_lossy(&out.stderr).contains("invalid [safety_net.nym]"));
-    assert!(!String::from_utf8_lossy(&out.stderr).contains("GIVEN_NAME"));
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("CITY"));
 }
 
 #[test]
