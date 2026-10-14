@@ -12,7 +12,10 @@ flowchart LR
     Translate --> Agent
 ```
 
-Raw values, index aliases, and restore manifests stay owner-side. Contracts: [`src/lib.rs`](src/lib.rs) and [`src/model.rs`](src/model.rs).
+Raw values, index aliases, and restore manifests stay owner-side. Translation
+permits a raw-value substring only when the entire occurrence lies within one
+current-session token inserted by alias replacement. Raw prose, boundary-crossing
+occurrences, and pre-existing token literals containing raw values are denied. Contracts: [`src/lib.rs`](src/lib.rs) and [`src/model.rs`](src/model.rs).
 
 ## Install
 
@@ -61,7 +64,7 @@ Core [residual coverage](../../docs/reference/redaction-classes.md#residual-cove
 
 On ingest, `build_index_hit` in [`src/ingest.rs`](src/ingest.rs) replaces fragments with class-derived placeholders. It stores no raw bytes, fingerprint, ingest-session token, `CanonicalEntity`, `IndexEntity`, or posting. Fragments cannot be searched by value/fingerprint and do not appear in `hit.entities`; whole entities remain searchable.
 
-Do not index fragments as entities. `translate` rejects output containing an entity’s raw value; a fragment can be one space or quote and would reject ordinary prose.
+Do not index fragments as entities. `translate` rejects an entity’s raw value outside inserted session-token bytes; a fragment can be one space or quote and would reject ordinary prose.
 
 ## Bring your own data
 

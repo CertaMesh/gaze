@@ -1,0 +1,106 @@
+{
+  "rows": [
+    {
+      "case": "valid",
+      "entrypoint": "build",
+      "observed": {
+        "construction_scans": 0,
+        "first_wins": true,
+        "lookup_sources": [
+          "first-source",
+          "second-source"
+        ],
+        "scan_sources": [
+          "first-source",
+          "second-source"
+        ],
+        "status": "admitted"
+      }
+    },
+    {
+      "case": "valid",
+      "entrypoint": "try_build",
+      "observed": {
+        "construction_scans": 0,
+        "first_wins": true,
+        "lookup_sources": [
+          "first-source",
+          "second-source"
+        ],
+        "scan_sources": [
+          "first-source",
+          "second-source"
+        ],
+        "status": "admitted"
+      }
+    },
+    {
+      "case": "forward",
+      "entrypoint": "build",
+      "observed": {
+        "construction_scans": 0,
+        "first_wins": true,
+        "lookup_sources": [
+          "first-source",
+          "second-source"
+        ],
+        "scan_sources": [
+          "first-source",
+          "second-source"
+        ],
+        "status": "admitted"
+      }
+    },
+    {
+      "case": "forward",
+      "entrypoint": "try_build",
+      "observed": {
+        "construction_scans": 0,
+        "first_wins": true,
+        "lookup_sources": [
+          "first-source",
+          "second-source"
+        ],
+        "scan_sources": [
+          "first-source",
+          "second-source"
+        ],
+        "status": "admitted"
+      }
+    },
+    {
+      "case": "orphan",
+      "entrypoint": "build",
+      "observed": {
+        "construction_scans": 0,
+        "status": "fixed_panic"
+      }
+    },
+    {
+      "case": "orphan",
+      "entrypoint": "try_build",
+      "observed": {
+        "construction_scans": 0,
+        "status": "orphan_membership"
+      }
+    },
+    {
+      "case": "duplicate",
+      "entrypoint": "build",
+      "observed": {
+        "construction_scans": 0,
+        "status": "fixed_panic"
+      }
+    },
+    {
+      "case": "duplicate",
+      "entrypoint": "try_build",
+      "observed": {
+        "construction_scans": 0,
+        "status": "duplicate_id"
+      }
+    }
+  ],
+  "schema_version": 1,
+  "scope": "construction admission; no corpus refusal or leak credit"
+}

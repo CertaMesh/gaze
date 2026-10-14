@@ -53,10 +53,12 @@ fn value() -> impl Strategy<Value = (PiiClass, &'static str, Spelling)> {
 }
 
 fn email_card_pipeline() -> Pipeline {
-    let email = RegexDetector::new(r"[a-z]+@example\.invalid", PiiClass::Email).expect("email");
-    let card = RegexDetector::new(
+    let email = RegexDetector::with_source(r"[a-z]+@example\.invalid", PiiClass::Email, "email")
+        .expect("email");
+    let card = RegexDetector::with_source(
         r"4111111111111111",
         PiiClass::custom("credit_card").expect("class"),
+        "card",
     )
     .expect("card");
     Pipeline::builder()

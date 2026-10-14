@@ -4,6 +4,25 @@ const RAW: &str = "password: \"left right\"\nmarker";
 
 #[derive(Clone)]
 struct Fixed(Vec<Candidate>);
+struct Member(&'static str, PiiClass);
+impl crate::Recognizer for Member {
+    fn id(&self) -> &str {
+        self.0
+    }
+    fn supported_class(&self) -> &PiiClass {
+        &self.1
+    }
+    fn token_family(&self) -> &str {
+        "counter"
+    }
+    fn detect(
+        &self,
+        _: &str,
+        _: &DetectContext<'_>,
+    ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
+        Ok(Vec::new())
+    }
+}
 impl crate::Recognizer for Fixed {
     fn id(&self) -> &str {
         "synthetic.fixed"
@@ -609,6 +628,8 @@ fn actual_collision_bypass_and_conservative_original_fallback_are_distinct() {
             candidate(0..5, a.clone(), "synthetic.a"),
             candidate(3..8, b, "synthetic.b"),
         ]))
+        .recognizer(Member("synthetic.a", a.clone()))
+        .recognizer(Member("synthetic.b", PiiClass::custom("beta").unwrap()))
         .register_collision(
             "synthetic.a",
             crate::CollisionMembership::new("document", "a", 10, Some("cue".into())),
@@ -648,6 +669,8 @@ fn actual_collision_bypass_and_conservative_original_fallback_are_distinct() {
             candidate(0..5, a.clone(), "synthetic.a"),
             candidate(3..8, PiiClass::custom("beta").unwrap(), "synthetic.b"),
         ]))
+        .recognizer(Member("synthetic.a", a.clone()))
+        .recognizer(Member("synthetic.b", PiiClass::custom("beta").unwrap()))
         .register_collision(
             "synthetic.a",
             crate::CollisionMembership::new("document", "a", 10, None),

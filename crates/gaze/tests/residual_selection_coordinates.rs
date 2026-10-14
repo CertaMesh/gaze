@@ -10,6 +10,26 @@ struct Fixed {
     candidates: Vec<Candidate>,
 }
 
+struct Member(&'static str, PiiClass);
+impl Recognizer for Member {
+    fn id(&self) -> &str {
+        self.0
+    }
+    fn supported_class(&self) -> &PiiClass {
+        &self.1
+    }
+    fn token_family(&self) -> &str {
+        "counter"
+    }
+    fn detect(
+        &self,
+        _: &str,
+        _: &DetectContext<'_>,
+    ) -> Result<Vec<Candidate>, gaze_types::DetectError> {
+        Ok(Vec::new())
+    }
+}
+
 impl Recognizer for Fixed {
     fn id(&self) -> &str {
         "synthetic.fixed"
@@ -137,6 +157,11 @@ fn mixed_selection_classes_keep_family_tie_policy_and_residual_class() {
                     candidate(15, 20, field.clone(), "synthetic.field"),
                 ],
             })
+            .recognizer(Member(
+                "synthetic.alpha",
+                PiiClass::custom("alpha").unwrap(),
+            ))
+            .recognizer(Member("synthetic.beta", PiiClass::custom("beta").unwrap()))
             .register_collision(
                 "synthetic.alpha",
                 CollisionMembership::new("document", "alpha", 10, None),
