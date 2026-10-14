@@ -46,9 +46,10 @@ import record_id_cells as record_ids
 import record_id_syntax_cells as record_id_syntax
 import record_id_ownership_cells as record_id_ownership
 import record_id_boundary_cells as record_id_boundary
+import full_name_case_cells as full_name_case
 
 
-GENERATOR_VERSION = 19
+GENERATOR_VERSION = 20
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -4475,6 +4476,7 @@ GENERATOR_ADDITIONS = {
     15: "recordids_syntax_",
     17: "recordids_ownership_",
     19: "recordids_boundary_",
+    20: "fullnames_",
 }
 
 
@@ -4508,6 +4510,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    19: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v19.json"),
     18: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v18.json"),
     17: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v17.json"),
     16: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v16.json"),
@@ -4773,6 +4776,7 @@ def generate(partition: str) -> list[Record]:
         + record_id_syntax.records(sys.modules[__name__], partition)
         + record_id_ownership.records(sys.modules[__name__], partition)
         + record_id_boundary.records(sys.modules[__name__], partition)
+        + full_name_case.records(sys.modules[__name__], partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)
