@@ -106,6 +106,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Update the locked rustls dependency from 0.23.45 to 0.23.46, fixing TLS
+  session-secret exposure in Debug output, application-data disclosure after ECH
+  rejection, excessive Brotli certificate allocation, and unauthenticated
+  key-exchange prediction downgrades (RUSTSEC-2026-0346 through RUSTSEC-2026-0349).
+
 - Dictionary caches now distinguish compilation modes and exact ordered terms.
   Enabling Unicode matching after warming a record dictionary no longer misses
   configured values; term-order changes retain correct provenance.
@@ -225,6 +230,12 @@ The release-candidate benchmark meets all three improvement targets versus v0.15
   Ephemeral scope remains valid for the proxy. See [UPGRADE.md](UPGRADE.md).
 
 ### Added
+
+- Benchmark generator v20 covers invented lowercase and UPPERCASE full person
+  names, title controls, first occurrences and rule/NER-seeded repeats across
+  EN/DE/FR agent surfaces. Service phrases and surname-shaped common nouns
+  price false positives. All displayed releases were freshly re-measured;
+  frozen v19 inputs and earlier evidence remain unchanged. No runtime change.
 
 - **Caller-known record controls.** Selected class and match-kind defaults
   follow the record oracle; unsafe short values are skipped individually with
