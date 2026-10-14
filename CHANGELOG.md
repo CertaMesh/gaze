@@ -106,6 +106,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Update the locked rustls dependency from 0.23.45 to 0.23.46, fixing TLS
+  session-secret exposure in Debug output, application-data disclosure after ECH
+  rejection, excessive Brotli certificate allocation, and unauthenticated
+  key-exchange prediction downgrades (RUSTSEC-2026-0346 through RUSTSEC-2026-0349).
+
 - Dictionary caches now distinguish compilation modes and exact ordered terms.
   Enabling Unicode matching after warming a record dictionary no longer misses
   configured values; term-order changes retain correct provenance.
