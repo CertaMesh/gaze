@@ -1964,16 +1964,17 @@ The preserved phone and cued-cell prose above describes the historical
 [v8 measurements](agentic-adjacency-v8-history.json), and the release
 statement of the CRLF and plate section the historical
 [v9 measurements](agentic-adjacency-v9-history.json). Their links lead to this
-current comparison, which has since been re-measured on v19 below.
+current comparison, which has since been re-measured on v20 below.
 
-The release rows below use generator v19's test partition and each release's
-setup policy, so they include the v5 to v19 cells (labelled lookalikes, address
+The release rows below use generator v20's test partition and each release's
+setup policy, so they include the v5 to v20 cells (labelled lookalikes, address
 blocks, phone shapes, cued ages, birth dates, short cards, postcodes, CRLF
 blocks and German plates, URLs in structured text, tax and government IDs,
 ZIP compression lookalikes, personal age wording and the shipped-class
-identifier, credential, name and phone cells, plus person-linked CRM/HR IDs, numeric JSON ID scalars, benign JSON keywords and whole-value field ownership, with labelled checksum-invalid Aadhaar/NIR scored gold and CRM/HR value-boundary cells for punctuation, adjacent cues, serialized payloads, opening line breaks and tabs).
+identifier, credential, name and phone cells, plus person-linked CRM/HR IDs, numeric JSON ID scalars, benign JSON keywords and whole-value field ownership, with labelled checksum-invalid Aadhaar/NIR scored gold and CRM/HR value-boundary cells for punctuation, adjacent cues, serialized payloads, opening line breaks and tabs, plus full person names across letter case).
 The table is rendered from
-the [v19 ledger](agentic-adjacency-v19-history.json). The earlier
+the [v20 ledger](agentic-adjacency-v20-history.json). The earlier
+[v19 ledger](agentic-adjacency-v19-history.json) on corpus `4f096686…`,
 [v18 ledger](agentic-adjacency-v18-history.json) on corpus `56c7bbd0…`,
 [v17 ledger](agentic-adjacency-v17-history.json) on corpus `8c62d499…`,
 [v16 ledger](agentic-adjacency-v16-history.json) on corpus `d6dac67a…`,
@@ -1992,7 +1993,7 @@ retained as historical data and do not feed this table.
 Record the past-release `agentic_layers.py measure` outputs with
 `render_agentic_adjacency_doc.py --record`, then render this table from its
 committed ledger. Do not edit the rows by hand. The renderer pins the
-generator version, so a later generator leaves these rows bound to v19 until
+generator version, so a later generator leaves these rows bound to v20 until
 they are re-measured.
 
 Generator v12 adds 80 postcode and age positives and 80 benign counterweights
@@ -2139,33 +2140,52 @@ Its manifests remain valid. The NER-only arm restores every new document exactly
 v0.16.0 restores every measured document exactly. These are coverage results
 from unchanged tagged runtime code, not detection gains from the generator.
 
+Generator v20 adds 72 A first-occurrence documents, 144 R repeat documents and
+261 D benign counterweights per partition for full person names. Independently
+authored EN, DE and FR inputs cover two and three parts, lowercase, UPPERCASE
+and title controls in chat, serialized tool-call arguments, form fields and
+email greetings. Each given-name part and surname is separately gold, including
+both the title seed and its repeat; whitespace remains non-gold. Rule-cued and
+uncued NER seed inputs are distinct, without assuming a detector caught either.
+Service/team/customer phrases after the same cues, plus common nouns with
+surname readings, carry no gold and price false-positive protection. The
+[cell definitions](full-name-case-coverage.md), [canonical contract replays](full-name-case-v20-contract-replay.json)
+and [separate current-code baseline receipt](full-name-case-v20-main-baseline.json)
+retain the scope and evidence. All earlier corpora and contracts remain frozen.
+The test partition is now A 6,617 / D 5,192 / R 3,061 documents. These additions
+expose case-dependent name leakage; they do not repair detection. The Kiji
+v0.14.0 arm adds four A, six D and seventeen R non-exact restores on these
+new cells, for totals 162 / 12 / 108; its manifests remain valid under its
+legacy semantics. Every new v0.15.x and v0.16.0 cell restores exactly; the
+older v0.15.x ten A restore/manifest failures remain visible.
+
 <!-- BEGIN GENERATED: agentic-adjacency -->
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.16.0` `policy-file` | 75,444 / 139,275 | 2,315 | 9,132 | 120,316 / 132,696 | 878 |
-| `v0.15.1` `policy-file` | 91,727 / 139,275 | 2,988 | 10,220 | 120,915 / 132,696 | 688 |
-| `v0.15.0` `policy-file` | 91,900 / 139,275 | 2,988 | 10,220 | 120,915 / 132,696 | 688 |
-| `v0.14.0` `full-stack-kiji-resolve` | 103,825 / 139,275 | 14,198 | 10,521 | 122,959 / 132,696 | 3,948 |
-| `v0.14.0` `pass2-ner` | 106,374 / 139,275 | 2,381 | 6,133 | 125,586 / 132,696 | 425 |
+| `v0.16.0` `policy-file` | 75,887 / 140,547 | 2,407 | 9,290 | 120,826 / 137,784 | 1,243 |
+| `v0.15.1` `policy-file` | 92,214 / 140,547 | 3,056 | 10,336 | 121,831 / 137,784 | 1,026 |
+| `v0.15.0` `policy-file` | 92,387 / 140,547 | 3,056 | 10,336 | 121,831 / 137,784 | 1,026 |
+| `v0.14.0` `full-stack-kiji-resolve` | 104,235 / 140,547 | 14,664 | 12,399 | 123,814 / 137,784 | 5,098 |
+| `v0.14.0` `pass2-ner` | 107,113 / 140,547 | 2,430 | 6,225 | 127,115 / 137,784 | 696 |
 
 | Release and arm | Refused A / D / R | Leaked on all processed A / D / R B |
 | --- | ---: | ---: |
-| `v0.16.0` `policy-file` | 0 / 0 / 0 | 75,444 / 0 / 120,316 |
-| `v0.15.1` `policy-file` | 0 / 0 / 0 | 91,727 / 0 / 120,915 |
-| `v0.15.0` `policy-file` | 0 / 0 / 0 | 91,900 / 0 / 120,915 |
-| `v0.14.0` `full-stack-kiji-resolve` | 0 / 0 / 0 | 103,825 / 0 / 122,959 |
-| `v0.14.0` `pass2-ner` | 0 / 0 / 0 | 106,374 / 0 / 125,586 |
+| `v0.16.0` `policy-file` | 0 / 0 / 0 | 75,887 / 0 / 120,826 |
+| `v0.15.1` `policy-file` | 0 / 0 / 0 | 92,214 / 0 / 121,831 |
+| `v0.15.0` `policy-file` | 0 / 0 / 0 | 92,387 / 0 / 121,831 |
+| `v0.14.0` `full-stack-kiji-resolve` | 0 / 0 / 0 | 104,235 / 0 / 123,814 |
+| `v0.14.0` `pass2-ner` | 0 / 0 / 0 | 107,113 / 0 / 127,115 |
 
 | Release and arm | Exact restores A / D / R | Valid manifests A / D / R | Restore failures A / D / R | Invalid manifests A / D / R |
 | --- | ---: | ---: | ---: | ---: |
-| `v0.16.0` `policy-file` | 6,545 / 4,931 / 2,917 | 6,545 / 4,931 / 2,917 | 0 / 0 / 0 | 0 / 0 / 0 |
-| `v0.15.1` `policy-file` | 6,535 / 4,931 / 2,917 | 6,535 / 4,931 / 2,917 | 10 / 0 / 0 | 10 / 0 / 0 |
-| `v0.15.0` `policy-file` | 6,535 / 4,931 / 2,917 | 6,535 / 4,931 / 2,917 | 10 / 0 / 0 | 10 / 0 / 0 |
-| `v0.14.0` `full-stack-kiji-resolve` | 6,387 / 4,925 / 2,826 | 6,545 / 4,931 / 2,917 | 158 / 6 / 91 | 0 / 0 / 0 |
-| `v0.14.0` `pass2-ner` | 6,545 / 4,931 / 2,917 | 6,545 / 4,931 / 2,917 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.16.0` `policy-file` | 6,617 / 5,192 / 3,061 | 6,617 / 5,192 / 3,061 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.15.1` `policy-file` | 6,607 / 5,192 / 3,061 | 6,607 / 5,192 / 3,061 | 10 / 0 / 0 | 10 / 0 / 0 |
+| `v0.15.0` `policy-file` | 6,607 / 5,192 / 3,061 | 6,607 / 5,192 / 3,061 | 10 / 0 / 0 | 10 / 0 / 0 |
+| `v0.14.0` `full-stack-kiji-resolve` | 6,455 / 5,180 / 2,953 | 6,617 / 5,192 / 3,061 | 162 / 12 / 108 | 0 / 0 / 0 |
+| `v0.14.0` `pass2-ner` | 6,617 / 5,192 / 3,061 | 6,617 / 5,192 / 3,061 | 0 / 0 / 0 | 0 / 0 / 0 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v19-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v19, test corpus `4f096686fdea…`. Each release uses its own setup policy; v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`; v0.14.0 retains the v0.15.x model settings.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v20-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v20, test corpus `ca2932826893…`. Each release uses its own setup policy; v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`; v0.14.0 retains the v0.15.x model settings.
 
 <!-- END GENERATED: agentic-adjacency -->
 
@@ -2184,7 +2204,7 @@ slots provide no latency evidence. Earlier machine and policy bindings stay
 in their historical ledgers.
 
 The following frozen [v16 ledger](agentic-adjacency-v16-history.json) counts
-retain earlier restoration and manifest limits. Current v18 counts are in the
+retain earlier restoration and manifest limits. Current v20 counts are in the
 generated tables above; both measurements completed without refusals:
 
 | Release / arm | Non-exact restores A / D / R | Invalid manifests A / D / R |

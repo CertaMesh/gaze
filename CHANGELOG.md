@@ -226,6 +226,12 @@ The release-candidate benchmark meets all three improvement targets versus v0.15
 
 ### Added
 
+- Benchmark generator v20 covers invented lowercase and UPPERCASE full person
+  names, title controls, first occurrences and rule/NER-seeded repeats across
+  EN/DE/FR agent surfaces. Service phrases and surname-shaped common nouns
+  price false positives. All displayed releases were freshly re-measured;
+  frozen v19 inputs and earlier evidence remain unchanged. No runtime change.
+
 - **Caller-known record controls.** Selected class and match-kind defaults
   follow the record oracle; unsafe short values are skipped individually with
   typed reasons, and duplicate fields share a source. Callers can opt into
