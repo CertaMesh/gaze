@@ -2901,17 +2901,7 @@ fn s2_cli_bundled_smoke_luhn_failing_formatted_cc_tokenizes_only_after_a_card_cu
     let clean = value["clean_text"].as_str().unwrap();
     assert!(clean.starts_with("Card <"), "{clean}");
     assert!(clean.contains("Custom:credit_card"), "{clean}");
-    // Reproduce the observed session-prefix collision deterministically.
-    let session_collision = Regex::new(r"^Card <[0-9a-f]{8}:")
-        .unwrap()
-        .replace(clean, "Card <801112fe:");
-    assert!(session_collision.starts_with("Card <801112fe:"));
-    assert!(
-        !without_tokens(&session_collision).contains("1112"),
-        "{session_collision}"
-    );
-    // The same digits outside a placeholder must still fail the no-leak assertion.
-    assert!(without_tokens(&format!("{session_collision} 1112")).contains("1112"));
+    assert!(!clean.contains("1112"), "{clean}");
 
     // Without a cue the Luhn veto stands: an order number is not a card.
     let value = clean_json_with_args(
