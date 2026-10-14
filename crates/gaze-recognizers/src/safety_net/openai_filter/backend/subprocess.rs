@@ -17,6 +17,12 @@ use sha2::{Digest, Sha256};
 use super::{normalize_raw_spans, OpenAiFilterBackend, RawSpan};
 use crate::safety_net::openai_filter::class_map::map_openai_label;
 
+#[cfg(test)]
+thread_local! {
+    static BEFORE_DEADLINE: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_MAX_INPUT_BYTES: usize = 1024 * 1024;
 const DEFAULT_MAX_STDOUT_BYTES: usize = 4 * 1024 * 1024;
@@ -297,6 +303,10 @@ impl SubprocessOpenAiFilterBackend {
         let stdout_thread = thread::spawn(move || read_bounded(stdout, max_stdout_bytes));
         let stderr_thread = stderr.map(|stderr| thread::spawn(move || read_stderr(stderr)));
 
+        #[cfg(test)]
+        if let Some(ready_then_arm) = BEFORE_DEADLINE.with(|hook| hook.borrow_mut().take()) {
+            ready_then_arm();
+        }
         let deadline = Instant::now() + self.config.timeout;
         let mut stdin_thread = Some(stdin_thread);
         let mut stdout_thread = Some(stdout_thread);
@@ -905,6 +915,188 @@ fn sanitize_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    mod deadline {
+        use super::*;
+        use std::fs;
+        use std::net::Shutdown;
+        use std::os::unix::{fs::PermissionsExt, net::UnixListener, net::UnixStream};
+        use std::sync::mpsc::{self, Receiver};
+
+        const STARTUP_GUARD: Duration = Duration::from_secs(30);
+        const TIMEOUT: Duration = Duration::from_secs(1);
+        const POST_ARM_BOUND: Duration = Duration::from_secs(11);
+        const RESCUE_BOUND: Duration = Duration::from_secs(10);
+
+        // The descendant is reparented, so its control socket reaching EOF is
+        // the exit proof. Keep the fixture directory until both threads join.
+        struct Rescue {
+            socket: PathBuf,
+            release: Receiver<UnixStream>,
+            worker: Option<thread::JoinHandle<()>>,
+            accept: Option<thread::JoinHandle<()>>,
+            _dir: tempfile::TempDir,
+        }
+
+        impl Rescue {
+            fn finish(&mut self) -> Vec<String> {
+                if self.worker.is_none() && self.accept.is_none() {
+                    return Vec::new();
+                }
+                let mut errors = Vec::new();
+                // Wake accept even when the child exits before connecting.
+                let _ = UnixStream::connect(&self.socket);
+                match self.release.recv_timeout(STARTUP_GUARD + RESCUE_BOUND) {
+                    Ok(mut stream) => {
+                        let _ = stream.set_write_timeout(Some(RESCUE_BOUND));
+                        let _ = stream.write_all(b"r");
+                        let _ = stream.shutdown(Shutdown::Write);
+                        let eof = stream
+                            .set_read_timeout(Some(RESCUE_BOUND))
+                            .and_then(|()| stream.read_to_end(&mut Vec::new()));
+                        if let Err(error) = eof {
+                            errors.push(format!(
+                                "descendant did not close its control socket: {error}"
+                            ));
+                        }
+                    }
+                    Err(error) => errors.push(format!("no descendant release stream: {error}")),
+                }
+                if let Some(worker) = self.worker.take() {
+                    let _ = worker
+                        .join()
+                        .map_err(|_| errors.push("infer worker panicked".into()));
+                }
+                if let Some(accept) = self.accept.take() {
+                    let _ = accept
+                        .join()
+                        .map_err(|_| errors.push("accept thread panicked".into()));
+                }
+                errors
+            }
+        }
+
+        impl Drop for Rescue {
+            fn drop(&mut self) {
+                let _ = self.finish();
+            }
+        }
+
+        #[test]
+        #[serial_test::file_serial(gaze_subprocess)]
+        fn deadline_does_not_wait_for_a_descendant_holding_only_stderr() {
+            let script = r#"#!/usr/bin/env python3
+import errno, os, socket, sys
+sys.stdin.buffer.read()
+if os.fork() == 0:
+    os.close(0)
+    os.close(1)
+    for fd in (0, 1):
+        try:
+            os.fstat(fd)
+        except OSError as error:
+            if error.errno != errno.EBADF:
+                raise
+        else:
+            raise RuntimeError("descendant still owns stdin or stdout")
+    os.fstat(2)
+    control = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    control.settimeout(30)
+    control.connect(sys.argv[0] + ".sock")
+    control.sendall(b'ready')
+    os.write(2, b'w' * (2 * 1024 * 1024))
+    control.recv(1)
+    os._exit(0)
+os.write(1, b'[]')
+os._exit(0)
+"#;
+            let dir = tempfile::tempdir().unwrap();
+            let command = dir.path().join("backend");
+            fs::write(&command, script).unwrap();
+            fs::set_permissions(&command, fs::Permissions::from_mode(0o700)).unwrap();
+            let backend = SubprocessOpenAiFilterBackend::new(
+                SubprocessOpenAiFilterConfig::new(&command)
+                    .with_timeout(TIMEOUT)
+                    .with_stderr_diagnostics(true),
+            )
+            .unwrap();
+            let socket = command.with_extension("sock");
+            let listener = UnixListener::bind(&socket).unwrap();
+            let (accepted_tx, accepted_rx) = mpsc::channel();
+            let (release_tx, release_rx) = mpsc::channel();
+            let (armed_tx, armed_rx) = mpsc::channel();
+            let (result_tx, result_rx) = mpsc::channel();
+            let mut rescue = Rescue {
+                socket: socket.clone(),
+                release: release_rx,
+                worker: None,
+                accept: None,
+                _dir: dir,
+            };
+            rescue.accept = Some(thread::spawn(move || {
+                let _ = accepted_tx.send(listener.accept().map(|(stream, _)| stream));
+            }));
+            rescue.worker = Some(thread::spawn(move || {
+                BEFORE_DEADLINE.with(|hook| {
+                    *hook.borrow_mut() = Some(Box::new(move || {
+                        let start = Instant::now();
+                        let ready = accepted_rx
+                            .recv_timeout(STARTUP_GUARD)
+                            .map_err(|error| error.to_string())
+                            .and_then(|stream| stream.map_err(|error| error.to_string()))
+                            .and_then(|mut stream| {
+                                let mut bytes = [0; 5];
+                                let remaining = STARTUP_GUARD
+                                    .saturating_sub(start.elapsed())
+                                    .max(Duration::from_nanos(1));
+                                let read = stream
+                                    .set_read_timeout(Some(remaining))
+                                    .and_then(|()| stream.read_exact(&mut bytes))
+                                    .map_err(|error| error.to_string());
+                                let _ = release_tx.send(stream);
+                                read.and_then(|()| {
+                                    if &bytes == b"ready" {
+                                        Ok(())
+                                    } else {
+                                        Err("invalid readiness message".into())
+                                    }
+                                })
+                            });
+                        if ready.is_err() {
+                            let _ = UnixStream::connect(&socket);
+                        }
+                        let _ = armed_tx.send((ready, Instant::now()));
+                    }));
+                });
+                let _ = result_tx.send(backend.infer("clean"));
+            }));
+
+            // Startup has only a liveness guard. The behavior bound begins at
+            // the one-shot hook immediately before the runtime arms its timer.
+            let armed = armed_rx.recv_timeout(STARTUP_GUARD + RESCUE_BOUND);
+            let result = armed.as_ref().ok().map(|(_, armed_at)| {
+                result_rx.recv_timeout(POST_ARM_BOUND.saturating_sub(armed_at.elapsed()))
+            });
+            // Release, prove EOF, and join independently of every assertion,
+            // including when cancellation is removed or readiness never arrives.
+            let cleanup_errors = rescue.finish();
+            eprintln!("deadline rescue finished: {cleanup_errors:?}");
+            let (ready, _) = armed.expect("infer worker never reached the deadline hook");
+            assert!(ready.is_ok(), "no readiness within guard: {ready:?}");
+            let result = result
+                .expect("deadline was not armed")
+                .expect("deadline waited for descendant-held stderr");
+            assert!(
+                matches!(&result, Err(SafetyNetError::Runtime { message }) if message.contains("timed out")),
+                "{result:?}"
+            );
+            assert!(
+                cleanup_errors.is_empty(),
+                "rescue failed: {cleanup_errors:?}"
+            );
+        }
+    }
 
     #[test]
     fn private_fields_do_not_debug() {
