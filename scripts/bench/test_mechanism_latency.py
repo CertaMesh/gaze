@@ -30,12 +30,12 @@ class CandidatePolicyTest(unittest.TestCase):
     def test_explicit_name_arm_is_validated_against_the_same_delta_as_the_gate(self) -> None:
         self.base.write_text('[safety_net]\nbackend="nym"\n[safety_net.nym]\n'
                              'model_dir="~/models/nym"\nlabels=["USERNAME"]\n'
-                             'thresholds={USERNAME=0.5}\n', encoding="utf-8")
+                             'threshold={USERNAME=0.5}\n', encoding="utf-8")
         candidate = self.root / "explicit-candidate.toml"
         candidate.write_text(self.base.read_text().replace('labels=["USERNAME"]',
                              'labels=["USERNAME", "GIVEN_NAME", "SURNAME"]').replace(
-                             'thresholds={USERNAME=0.5}',
-                             'thresholds={USERNAME=0.5, GIVEN_NAME=0.5, SURNAME=0.5}'))
+                             'threshold={USERNAME=0.5}',
+                             'threshold={USERNAME=0.5, GIVEN_NAME=0.5, SURNAME=0.5}'))
         delta = self.root / "delta.toml"
         delta.write_text('[mechanism_delta]\nappend_nym_labels={GIVEN_NAME=0.5, SURNAME=0.5}\n')
         out = mechanism_latency.candidate_policy(self.base, delta, self.root / "out.toml",

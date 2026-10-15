@@ -5544,9 +5544,12 @@ def append_nym_labels_policy(base: dict[str, object], appended: object) -> dict[
         if safety_net["backend"] != "nym":
             raise LayerError("base safety-net backend must be nym")
         nym = safety_net["nym"]
-        labels, thresholds = nym["labels"], nym["thresholds"]
+        # The policy TOML field is singular, unlike the internal operating-point map.
+        labels, thresholds = nym["labels"], nym["threshold"]
     except (KeyError, TypeError) as error:
         raise LayerError("base Nym labels and thresholds must be explicit") from error
+    if set(nym) - {"labels", "threshold", "model_dir"}:
+        raise LayerError("base Nym table has unsupported fields; use the TOML threshold field")
     if (not isinstance(labels, list) or not labels
             or any(not isinstance(label, str) for label in labels)
             or len(set(labels)) != len(labels)

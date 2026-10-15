@@ -1736,8 +1736,8 @@ their recorded paths until the gate runs.
 
 For the Nym personal-name arm, `[mechanism_delta] append_nym_labels =
 { GIVEN_NAME = 0.5, SURNAME = 0.5 }` appends only the named labels and their
-thresholds. The base must already use Nym and explicitly declare unique labels
-with one threshold each; the appended labels must be absent. Every other policy
+thresholds. The base must already use Nym and explicitly declare unique `labels`
+and a `threshold` table with one entry each; the appended labels must be absent. Every other policy
 value and every model/dependency digest must remain equal. This comparison-only
 operation changes no corpus, scoring arithmetic, release row or headline, so
 existing historical measurements remain unchanged. To time the same ablation,

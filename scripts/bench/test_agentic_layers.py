@@ -2692,11 +2692,11 @@ class PolicyDeltaGateTests(unittest.TestCase):
     def test_declared_nym_name_append_changes_only_explicit_labels_and_thresholds(self) -> None:
         base = ('[safety_net]\nbackend="nym"\n[safety_net.nym]\n'
                 'model_dir="~/models/nym"\nlabels=["USERNAME"]\n'
-                'thresholds={USERNAME=0.5}\n')
+                'threshold={USERNAME=0.5}\n')
         candidate = base.replace('labels=["USERNAME"]',
                                  'labels=["USERNAME", "GIVEN_NAME", "SURNAME"]')
-        candidate = candidate.replace('thresholds={USERNAME=0.5}',
-                                      'thresholds={USERNAME=0.5, GIVEN_NAME=0.5, SURNAME=0.5}')
+        candidate = candidate.replace('threshold={USERNAME=0.5}',
+                                      'threshold={USERNAME=0.5, GIVEN_NAME=0.5, SURNAME=0.5}')
         delta = '[mechanism_delta]\nappend_nym_labels={GIVEN_NAME=0.5, SURNAME=0.5}\n'
         result = self.compare(base, candidate, delta)
         self.assertEqual(result["verdict"], "pass")
@@ -2709,8 +2709,10 @@ class PolicyDeltaGateTests(unittest.TestCase):
             with self.subTest(delta=bad):
                 rejected = self.compare(base, candidate, '[mechanism_delta]\nappend_nym_labels=' + bad)
                 self.assertEqual(rejected["verdict"], "not_comparable")
-        for implicit in (base.replace('labels=["USERNAME"]\n', ''),
-                         base.replace('thresholds={USERNAME=0.5}\n', ''),
+        for implicit in (base.replace('threshold={', 'thresholds={'),
+                         base.replace('threshold={', 'thresholds={}\nthreshold={'),
+                         base.replace('labels=["USERNAME"]\n', ''),
+                         base.replace('threshold={USERNAME=0.5}\n', ''),
                          base.replace('backend="nym"', 'backend="none"')):
             with self.subTest(base=implicit):
                 self.assertEqual(self.compare(implicit, candidate, delta)["verdict"], "not_comparable")
