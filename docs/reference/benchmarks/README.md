@@ -727,7 +727,7 @@ guard version.
 
 Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v4 headline counts false-positive bytes after gold-gap credit.
 
-7 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
+8 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
 
 Shipped releases, one column per release:
 
@@ -738,6 +738,7 @@ Shipped releases, one column per release:
 | Davlan NER | not measured for this release | not measured for this release | not measured for this release | not available: setup default added in v0.15 |
 | Address-block growth | not measured for this release | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
 | Credential rulepack | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
+| Nym personal-name labels | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
 
 <!-- END GENERATED: mechanism-arms -->
 
