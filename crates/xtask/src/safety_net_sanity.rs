@@ -96,7 +96,7 @@ fn suites() -> Vec<Suite> {
             features: &["safety-net-nym", "test-support"],
             required_tests: &[
                 "captured_plate_in_prose_is_one_suspect",
-                "captured_salutation_sentence_has_no_suspects",
+                "captured_salutation_protects_surname_but_not_unsupported_secret",
                 "captured_multibyte_offsets_land_on_whole_words",
                 "captured_long_document_flags_the_tail",
             ],
@@ -146,7 +146,7 @@ fn run_live_nym_pass(suites: &[Suite]) -> Result<()> {
     // A filter that matched nothing exits 0; require every live test by name.
     for required in [
         "live_plate_in_prose_is_a_suspect",
-        "live_salutation_sentence_has_no_suspects",
+        "live_salutation_protects_surname_but_not_unsupported_secret",
         "live_long_document_is_scanned_to_the_end",
         "live_capture_matches_the_committed_fixture",
     ] {

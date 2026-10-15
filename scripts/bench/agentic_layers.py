@@ -5531,6 +5531,37 @@ def normalize_home_path(value: str) -> str:
     return str(Path("~") / relative)
 
 
+def append_nym_labels_policy(base: dict[str, object], appended: object) -> dict[str, object]:
+    """Materialize an explicit Name-only ablation without relaxing model identity."""
+    if (not isinstance(appended, dict) or not appended
+            or not set(appended) <= {"GIVEN_NAME", "SURNAME"}):
+        raise LayerError("append_nym_labels must declare GIVEN_NAME and/or SURNAME thresholds")
+    if any(type(value) not in (int, float) or not 0 < value <= 1 for value in appended.values()):
+        raise LayerError("appended Nym thresholds must be finite numbers in (0, 1]")
+    expected = copy.deepcopy(base)
+    try:
+        safety_net = expected["safety_net"]
+        if safety_net["backend"] != "nym":
+            raise LayerError("base safety-net backend must be nym")
+        nym = safety_net["nym"]
+        # The policy TOML field is singular, unlike the internal operating-point map.
+        labels, thresholds = nym["labels"], nym["threshold"]
+    except (KeyError, TypeError) as error:
+        raise LayerError("base Nym labels and thresholds must be explicit") from error
+    if set(nym) - {"labels", "threshold", "model_dir"}:
+        raise LayerError("base Nym table has unsupported fields; use the TOML threshold field")
+    if (not isinstance(labels, list) or not labels
+            or any(not isinstance(label, str) for label in labels)
+            or len(set(labels)) != len(labels)
+            or not isinstance(thresholds, dict) or set(thresholds) != set(labels)):
+        raise LayerError("base Nym labels must be unique with one explicit threshold per label")
+    if any(label in labels for label in appended):
+        raise LayerError("appended Nym labels must be absent from the base")
+    labels.extend(appended)
+    thresholds.update(appended)
+    return expected
+
+
 def _policy_delta_comparison(
     base: Mapping[str, object], candidate: Mapping[str, object], delta_path: Path
 ) -> tuple[bool, str, dict[str, str], set[str]]:
@@ -5553,6 +5584,15 @@ def _policy_delta_comparison(
         return False, "policy delta must declare at least one TOML section", digests, set()
     if set(delta) == {"mechanism_delta"}:
         descriptor = delta["mechanism_delta"]
+        if set(descriptor) == {"append_nym_labels"}:
+            try:
+                expected = append_nym_labels_policy(base_policy, descriptor["append_nym_labels"])
+            except LayerError as error:
+                return False, str(error), digests, set()
+            if not _toml_equal(candidate_policy, expected):
+                return False, "candidate policy differs beyond the declared Nym-label append", digests, set()
+            # No new model inputs: every dependency hash remains strictly equal.
+            return True, "candidate policy equals base plus appended Nym labels", digests, set()
         if set(descriptor) == {"append_rulepack_paths"}:
             appended = descriptor["append_rulepack_paths"]
             if (not isinstance(appended, list) or not appended

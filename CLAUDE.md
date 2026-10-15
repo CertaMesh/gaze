@@ -103,7 +103,7 @@ The browser-MITM project is separate (formerly in-tree `debug-proxy`).
   process via `ort` behind `safety-net-nym`; SHA-pinned bundle (`NYM_SMALL_INT8_BUNDLE_SHA256`)
   installed by `gaze setup --safety-net nym`; op-B allowlist/thresholds in
   `gaze_types::nym::NymOperatingPoint`, overridable by `[safety_net.nym]` (configures, never
-  activates); word-aligned via the shared `gaze_types::is_inside_word`; 512/64 chunking with a
+  activates); explicit GIVEN_NAME/SURNAME → Name mapping at 0.5 (offline synthetic calibration), with adjacent parts joined reversibly and both labels audited; word-aligned via the shared `gaze_types::is_inside_word`; 512/64 chunking with a
   coverage error; `raw_label = "LABEL>=THRESHOLD"`; bench arm `full-stack-nym-resolve`. The `gaze setup` policy enables Nym; a policy without `[safety_net]` runs no net.
 - GLiNER DOB judge: `[dob_judge]` scores rule-found, unclaimed dates with the SHA-pinned
   `gliner-multi-pii-dob-int8` bundle (`GLINER_DOB_BUNDLE_SHA256`); fail-closed on a missing or

@@ -1354,6 +1354,178 @@
         }
       ],
       "shipped": "default-on in newly generated gaze setup policies; explicit in hand-authored policies"
+    },
+    {
+      "id": "nym-person-name-labels",
+      "title": "Nym personal-name labels",
+      "added_in": "v0.17",
+      "policy_delta": {
+        "file": "scripts/bench/mechanisms/nym-person-name-labels.toml",
+        "sha256": "f97ea2b287b68c4d7831de8ee7b54e21746f936a2870d218a0d82d17ec2e0f43"
+      },
+      "measurements": [
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/1975d597e89e788a23dc15bbd301b3d2001626a285e618b52e868801f6e1a8b4/base-64ce02e75eaa32ca0536b8af1e06eeee627d576f1e80b0670257fdc3c185fcb8.jsonl.gz",
+              "sha256": "64ce02e75eaa32ca0536b8af1e06eeee627d576f1e80b0670257fdc3c185fcb8"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/1975d597e89e788a23dc15bbd301b3d2001626a285e618b52e868801f6e1a8b4/candidate-179dc2156749f5d541c3fdb39e8c324486a59ff7bf5629135febd86a314c8119.jsonl.gz",
+              "sha256": "179dc2156749f5d541c3fdb39e8c324486a59ff7bf5629135febd86a314c8119"
+            }
+          },
+          "revision": "eb0b2bdf993ea126a8a04e1957ac27aabcdcfc45",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "6375621a56ec573f1e0f0843dd53f0c664dd9ac6b1ff31f6e322ae1a361dd459",
+          "candidate_policy_sha256": "6d44dd5e3c2fc1f7e08544de070eeea417a1db00b92704bfdd54847a6a7555e6",
+          "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9813,
+                "false_positive": 15112,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "COUNTRY": -7,
+                "FIRSTNAME": -29,
+                "STREET": -20,
+                "SURNAME": -40
+              }
+            },
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6748,
+                "false_positive": 15112,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "COUNTRY": -7,
+                "FIRSTNAME": -29,
+                "STREET": -20,
+                "SURNAME": -40
+              }
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6748,
+                "false_positive": 26873,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "COUNTRY": -7,
+                "FIRSTNAME": -29,
+                "STREET": -20,
+                "SURNAME": -40
+              },
+              "false_positive_by_class_delta": {
+                "name": 131
+              }
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9813,
+                "false_positive": 26890,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "COUNTRY": -7,
+                "FIRSTNAME": -29,
+                "STREET": -20,
+                "SURNAME": -40
+              },
+              "false_positive_by_class_delta": {
+                "name": 131
+              }
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 71375,
+                "false_positive": 2356,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 71130,
+                "false_positive": 2489,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 9266,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 9328,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 120738,
+                "false_positive": 1243,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 120476,
+                "false_positive": 1277,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 603, FP bytes changed by +360"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 603, FP bytes changed by +360"
+            }
+          },
+          "attested": {
+            "binary_sha256": "7ed727ebfc2f1dfe4af48ee52bb04369eeac78e30567e243b84393810b47e833",
+            "crates_tree": "383f1c2bbc4859afc2d25e0ebfc4837b92b5f833",
+            "machine": "Apple M5 Max; 18 physical/logical cores; 64 GiB; macOS 26.5 (25F71); arm64",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
+          }
+        }
+      ],
+      "shipped": "default-on in the policy from gaze setup"
     }
   ]
 }

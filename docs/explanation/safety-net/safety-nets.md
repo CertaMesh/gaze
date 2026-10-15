@@ -280,8 +280,10 @@ passes (the net is opt-in), present-but-invalid fails.
 
 ### Which labels can fire
 
-The model labels 40 entity types. Six carry a Gaze class; the other 34 can
-never be enabled, and none is folded into a generic class such as `Name`.
+The model labels 40 entity types. Eight carry a Gaze class; the other 32 can
+never be enabled. `GIVEN_NAME` and `SURNAME` explicitly map to `Name`; this
+extends the earlier six-label contract to protect person names across case
+forms. Unsupported labels still have no generic fallback.
 
 | Nym label | Gaze class | op-B default |
 |---|---|---|
@@ -289,6 +291,8 @@ never be enabled, and none is folded into a generic class such as `Name`.
 | `LICENSE_PLATE` | `custom:license_plate` | on, `>= 0.5` |
 | `USERNAME` | `custom:username` | on, `>= 0.5` |
 | `DATE_OF_BIRTH` | `custom:date` | on, `>= 0.9` |
+| `GIVEN_NAME` | `Name` | on, `>= 0.5` |
+| `SURNAME` | `Name` | on, `>= 0.5` |
 | `TAX_ID` | `custom:tax_id` | off |
 | `ZIP_CODE` | `custom:postal_code` | off |
 
@@ -300,6 +304,11 @@ threshold for a label that is not enabled, or a threshold outside `(0, 1]` fails
 at policy load. TAX_ID stays off because its precision was 0.23 to 0.26 at every
 threshold; ZIP_CODE stays off because it flagged the invalid-identifier decoys
 in the negative corpus (op-A precision 0.572 on the gate set).
+
+Personal-name thresholds were selected in an [offline synthetic sweep](nym-person-names.md),
+separately from the benchmark test corpus. Neural name decisions are less
+explainable than deterministic rules, and lowercase common words remain the
+main precision risk. Rule and NER winners keep their existing manifest tokens.
 
 ### Decoding
 
@@ -326,6 +335,12 @@ only narrows a span and never widens it; the new edges border a structural
 character, so they never cut a word, and a span that is syntax alone is
 dropped. Inner punctuation stays: `M-AB 1234` keeps its hyphen and space.
 
+Adjacent decoded given-name and surname parts join over inline whitespace
+into one `Name` value, including multi-part names. Punctuation, line breaks,
+unlabelled words and intervening manifest tokens prevent a join. The exact
+original bytes, including internal whitespace, remain restorable. Joined
+suspects retain every contributing label/threshold and the minimum confidence.
+
 ### Every byte is scanned
 
 Input is tokenized without truncation and scored in windows of 512 pieces that
@@ -338,7 +353,9 @@ above `--safety-net-input-limit-bytes` is `InputTooLarge`.
 
 Every suspect carries `safety_net_id = "nym-small-int8"`, the score, and
 `raw_label = "LABEL>=THRESHOLD"` (for example `LICENSE_PLATE>=0.5`), so the row
-records which rule fired without a schema change. For that reason Nym is not
+records which rule fired without a schema change. A joined name records, for
+example, `GIVEN_NAME>=0.5;SURNAME>=0.5`, followed by the usual view metadata.
+For that reason Nym is not
 available through `--safety-net-registry`: registry dispatch reports a model
 span's class, not its label and threshold, and the CLI refuses the combination.
 

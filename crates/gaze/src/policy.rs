@@ -1232,8 +1232,8 @@ action = "tokenize"
                 "unknown nym label `PLATE`",
             ),
             (
-                "[safety_net.nym]\nlabels = [\"GIVEN_NAME\"]\nthreshold = { GIVEN_NAME = 0.5 }\n",
-                "nym label `GIVEN_NAME` has no gaze class",
+                "[safety_net.nym]\nlabels = [\"CITY\"]\nthreshold = { CITY = 0.5 }\n",
+                "nym label `CITY` has no gaze class",
             ),
             (
                 "[safety_net.nym]\nlabels = [\"USERNAME\"]\n",
@@ -1251,6 +1251,23 @@ action = "tokenize"
             nym_policy("[safety_net.nym]\nlabels = []\nmodel = \"x\"\n"),
             Err(PolicyError::TomlParse(_))
         ));
+    }
+
+    #[test]
+    fn nym_person_name_thresholds_can_be_overridden_without_activation() {
+        let policy = nym_policy(
+            "[safety_net.nym]\nlabels = [\"GIVEN_NAME\", \"SURNAME\"]\nthreshold = { GIVEN_NAME = 0.7, SURNAME = 0.99 }\n",
+        )
+        .unwrap();
+        assert_eq!(policy.safety_net.backend, SafetyNetPolicyBackend::None);
+        let op = policy.safety_net.nym.unwrap();
+        assert_eq!(
+            op.iter().collect::<Vec<_>>(),
+            vec![
+                (gaze_types::nym::NymLabel::GivenName, 0.7),
+                (gaze_types::nym::NymLabel::Surname, 0.99),
+            ]
+        );
     }
 
     #[test]

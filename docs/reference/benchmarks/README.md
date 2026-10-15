@@ -727,7 +727,7 @@ guard version.
 
 Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v4 headline counts false-positive bytes after gold-gap credit.
 
-7 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
+8 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
 
 Shipped releases, one column per release:
 
@@ -738,6 +738,7 @@ Shipped releases, one column per release:
 | Davlan NER | not measured for this release | not measured for this release | not measured for this release | not available: setup default added in v0.15 |
 | Address-block growth | not measured for this release | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
 | Credential rulepack | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
+| Nym personal-name labels | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
 
 <!-- END GENERATED: mechanism-arms -->
 
@@ -1733,6 +1734,16 @@ sections; edits to existing sections or undeclared keys are not comparable
 (exit `2`). The gate names the delta file in the verdict and prints the base,
 candidate and delta file SHA-256 digests for review. Keep both policy files at
 their recorded paths until the gate runs.
+
+For the Nym personal-name arm, `[mechanism_delta] append_nym_labels =
+{ GIVEN_NAME = 0.5, SURNAME = 0.5 }` appends only the named labels and their
+thresholds. The base must already use Nym and explicitly declare unique `labels`
+and a `threshold` table with one entry each; the appended labels must be absent. Every other policy
+value and every model/dependency digest must remain equal. This comparison-only
+operation changes no corpus, scoring arithmetic, release row or headline, so
+existing historical measurements remain unchanged. To time the same ablation,
+pass `--candidate-policy <file.toml>` to `mechanism_latency.py`; it validates
+that explicit policy against the same delta before timing either arm.
 
 `runner_provenance.policy_dependencies` records SHA-256 for external rulepacks,
 their referenced dictionary term files, policy dictionary term files, and every

@@ -1,0 +1,744 @@
+{
+  "provenance": "Invented names and benign ordinary language; offline threshold calibration only; separate from all benchmark corpora.",
+  "thresholds": [
+    0.5,
+    0.7,
+    0.9,
+    0.95,
+    0.99
+  ],
+  "cases": [
+    {
+      "id": "nelia-title-prose",
+      "text": "The fictional caller Nelia Quillmere requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "nelia-title-chat",
+      "text": "user: please contact Nelia Quillmere tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "nelia-title-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"Nelia Quillmere\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "nelia-lower-prose",
+      "text": "The fictional caller nelia quillmere requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "nelia-lower-chat",
+      "text": "user: please contact nelia quillmere tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "nelia-lower-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"nelia quillmere\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "nelia-upper-prose",
+      "text": "The fictional caller NELIA QUILLMERE requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "nelia-upper-chat",
+      "text": "user: please contact NELIA QUILLMERE tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "nelia-upper-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"NELIA QUILLMERE\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "torvin-title-prose",
+      "text": "The fictional caller Torvin Moosfarn requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "torvin-title-chat",
+      "text": "user: please contact Torvin Moosfarn tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "torvin-title-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"Torvin Moosfarn\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "torvin-lower-prose",
+      "text": "The fictional caller torvin moosfarn requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "torvin-lower-chat",
+      "text": "user: please contact torvin moosfarn tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "torvin-lower-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"torvin moosfarn\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "torvin-upper-prose",
+      "text": "The fictional caller TORVIN MOOSFARN requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "torvin-upper-chat",
+      "text": "user: please contact TORVIN MOOSFARN tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "torvin-upper-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"TORVIN MOOSFARN\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "élia-title-prose",
+      "text": "The fictional caller Élia Briselune requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "élia-title-chat",
+      "text": "user: please contact Élia Briselune tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "élia-title-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"Élia Briselune\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "élia-lower-prose",
+      "text": "The fictional caller élia briselune requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "élia-lower-chat",
+      "text": "user: please contact élia briselune tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "élia-lower-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"élia briselune\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "élia-upper-prose",
+      "text": "The fictional caller ÉLIA BRISELUNE requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "élia-upper-chat",
+      "text": "user: please contact ÉLIA BRISELUNE tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "élia-upper-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"ÉLIA BRISELUNE\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "miro-title-prose",
+      "text": "The fictional caller Miro Ventaclara requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "miro-title-chat",
+      "text": "user: please contact Miro Ventaclara tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "miro-title-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"Miro Ventaclara\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "miro-lower-prose",
+      "text": "The fictional caller miro ventaclara requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "miro-lower-chat",
+      "text": "user: please contact miro ventaclara tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "miro-lower-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"miro ventaclara\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "miro-upper-prose",
+      "text": "The fictional caller MIRO VENTACLARA requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "miro-upper-chat",
+      "text": "user: please contact MIRO VENTACLARA tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "miro-upper-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"MIRO VENTACLARA\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "anika-title-prose",
+      "text": "The fictional caller Anika Liora Sternenau requested an update.",
+      "gold": [
+        21,
+        42
+      ]
+    },
+    {
+      "id": "anika-title-chat",
+      "text": "user: please contact Anika Liora Sternenau tomorrow.",
+      "gold": [
+        21,
+        42
+      ]
+    },
+    {
+      "id": "anika-title-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"Anika Liora Sternenau\"}}",
+      "gold": [
+        52,
+        73
+      ]
+    },
+    {
+      "id": "anika-lower-prose",
+      "text": "The fictional caller anika liora sternenau requested an update.",
+      "gold": [
+        21,
+        42
+      ]
+    },
+    {
+      "id": "anika-lower-chat",
+      "text": "user: please contact anika liora sternenau tomorrow.",
+      "gold": [
+        21,
+        42
+      ]
+    },
+    {
+      "id": "anika-lower-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"anika liora sternenau\"}}",
+      "gold": [
+        52,
+        73
+      ]
+    },
+    {
+      "id": "anika-upper-prose",
+      "text": "The fictional caller ANIKA LIORA STERNENAU requested an update.",
+      "gold": [
+        21,
+        42
+      ]
+    },
+    {
+      "id": "anika-upper-chat",
+      "text": "user: please contact ANIKA LIORA STERNENAU tomorrow.",
+      "gold": [
+        21,
+        42
+      ]
+    },
+    {
+      "id": "anika-upper-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"ANIKA LIORA STERNENAU\"}}",
+      "gold": [
+        52,
+        73
+      ]
+    },
+    {
+      "id": "oren-title-prose",
+      "text": "The fictional caller Oren Flintgrove requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "oren-title-chat",
+      "text": "user: please contact Oren Flintgrove tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "oren-title-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"Oren Flintgrove\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "oren-lower-prose",
+      "text": "The fictional caller oren flintgrove requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "oren-lower-chat",
+      "text": "user: please contact oren flintgrove tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "oren-lower-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"oren flintgrove\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "oren-upper-prose",
+      "text": "The fictional caller OREN FLINTGROVE requested an update.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "oren-upper-chat",
+      "text": "user: please contact OREN FLINTGROVE tomorrow.",
+      "gold": [
+        21,
+        36
+      ]
+    },
+    {
+      "id": "oren-upper-json",
+      "text": "{\"tool\": \"notify\", \"arguments\": {\"recipient_name\": \"OREN FLINTGROVE\"}}",
+      "gold": [
+        52,
+        67
+      ]
+    },
+    {
+      "id": "benign-0-prose",
+      "text": "contact technical support.",
+      "gold": null
+    },
+    {
+      "id": "benign-0-chat",
+      "text": "user: contact technical support.",
+      "gold": null
+    },
+    {
+      "id": "benign-0-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"contact technical support\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-1-prose",
+      "text": "please contact the service desk tomorrow.",
+      "gold": null
+    },
+    {
+      "id": "benign-1-chat",
+      "text": "user: please contact the service desk tomorrow.",
+      "gold": null
+    },
+    {
+      "id": "benign-1-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"please contact the service desk tomorrow\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-2-prose",
+      "text": "fetch the brown paper.",
+      "gold": null
+    },
+    {
+      "id": "benign-2-chat",
+      "text": "user: fetch the brown paper.",
+      "gold": null
+    },
+    {
+      "id": "benign-2-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"fetch the brown paper\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-3-prose",
+      "text": "a baker kneads dough.",
+      "gold": null
+    },
+    {
+      "id": "benign-3-chat",
+      "text": "user: a baker kneads dough.",
+      "gold": null
+    },
+    {
+      "id": "benign-3-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"a baker kneads dough\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-4-prose",
+      "text": "the miller grinds flour.",
+      "gold": null
+    },
+    {
+      "id": "benign-4-chat",
+      "text": "user: the miller grinds flour.",
+      "gold": null
+    },
+    {
+      "id": "benign-4-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"the miller grinds flour\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-5-prose",
+      "text": "a young cook warmed the pot.",
+      "gold": null
+    },
+    {
+      "id": "benign-5-chat",
+      "text": "user: a young cook warmed the pot.",
+      "gold": null
+    },
+    {
+      "id": "benign-5-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"a young cook warmed the pot\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-6-prose",
+      "text": "a white rose grows here.",
+      "gold": null
+    },
+    {
+      "id": "benign-6-chat",
+      "text": "user: a white rose grows here.",
+      "gold": null
+    },
+    {
+      "id": "benign-6-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"a white rose grows here\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-7-prose",
+      "text": "we may mark the page.",
+      "gold": null
+    },
+    {
+      "id": "benign-7-chat",
+      "text": "user: we may mark the page.",
+      "gold": null
+    },
+    {
+      "id": "benign-7-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"we may mark the page\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-8-prose",
+      "text": "will the summer rain end.",
+      "gold": null
+    },
+    {
+      "id": "benign-8-chat",
+      "text": "user: will the summer rain end.",
+      "gold": null
+    },
+    {
+      "id": "benign-8-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"will the summer rain end\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-9-prose",
+      "text": "please read the green book.",
+      "gold": null
+    },
+    {
+      "id": "benign-9-chat",
+      "text": "user: please read the green book.",
+      "gold": null
+    },
+    {
+      "id": "benign-9-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"please read the green book\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-10-prose",
+      "text": "the carpenter and the smith work here.",
+      "gold": null
+    },
+    {
+      "id": "benign-10-chat",
+      "text": "user: the carpenter and the smith work here.",
+      "gold": null
+    },
+    {
+      "id": "benign-10-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"the carpenter and the smith work here\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-11-prose",
+      "text": "a reed bends in the wind.",
+      "gold": null
+    },
+    {
+      "id": "benign-11-chat",
+      "text": "user: a reed bends in the wind.",
+      "gold": null
+    },
+    {
+      "id": "benign-11-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"a reed bends in the wind\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-12-prose",
+      "text": "the gray wolf crossed the hill.",
+      "gold": null
+    },
+    {
+      "id": "benign-12-chat",
+      "text": "user: the gray wolf crossed the hill.",
+      "gold": null
+    },
+    {
+      "id": "benign-12-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"the gray wolf crossed the hill\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-13-prose",
+      "text": "the long bridge spans the river.",
+      "gold": null
+    },
+    {
+      "id": "benign-13-chat",
+      "text": "user: the long bridge spans the river.",
+      "gold": null
+    },
+    {
+      "id": "benign-13-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"the long bridge spans the river\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-14-prose",
+      "text": "the rose may bloom in spring.",
+      "gold": null
+    },
+    {
+      "id": "benign-14-chat",
+      "text": "user: the rose may bloom in spring.",
+      "gold": null
+    },
+    {
+      "id": "benign-14-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"the rose may bloom in spring\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-15-prose",
+      "text": "brown sugar and white flour.",
+      "gold": null
+    },
+    {
+      "id": "benign-15-chat",
+      "text": "user: brown sugar and white flour.",
+      "gold": null
+    },
+    {
+      "id": "benign-15-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"brown sugar and white flour\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-16-prose",
+      "text": "the little cook serves dinner.",
+      "gold": null
+    },
+    {
+      "id": "benign-16-chat",
+      "text": "user: the little cook serves dinner.",
+      "gold": null
+    },
+    {
+      "id": "benign-16-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"the little cook serves dinner\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-17-prose",
+      "text": "the hunter found a stone.",
+      "gold": null
+    },
+    {
+      "id": "benign-17-chat",
+      "text": "user: the hunter found a stone.",
+      "gold": null
+    },
+    {
+      "id": "benign-17-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"the hunter found a stone\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-18-prose",
+      "text": "the bell rang in the hall.",
+      "gold": null
+    },
+    {
+      "id": "benign-18-chat",
+      "text": "user: the bell rang in the hall.",
+      "gold": null
+    },
+    {
+      "id": "benign-18-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"the bell rang in the hall\"}}",
+      "gold": null
+    },
+    {
+      "id": "benign-19-prose",
+      "text": "the king and queen are chess pieces.",
+      "gold": null
+    },
+    {
+      "id": "benign-19-chat",
+      "text": "user: the king and queen are chess pieces.",
+      "gold": null
+    },
+    {
+      "id": "benign-19-json",
+      "text": "{\"tool\": \"describe\", \"arguments\": {\"text\": \"the king and queen are chess pieces\"}}",
+      "gold": null
+    }
+  ]
+}
