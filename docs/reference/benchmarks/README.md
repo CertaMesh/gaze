@@ -1734,6 +1734,16 @@ sections; edits to existing sections or undeclared keys are not comparable
 candidate and delta file SHA-256 digests for review. Keep both policy files at
 their recorded paths until the gate runs.
 
+For the Nym personal-name arm, `[mechanism_delta] append_nym_labels =
+{ GIVEN_NAME = 0.5, SURNAME = 0.5 }` appends only the named labels and their
+thresholds. The base must already use Nym and explicitly declare unique labels
+with one threshold each; the appended labels must be absent. Every other policy
+value and every model/dependency digest must remain equal. This comparison-only
+operation changes no corpus, scoring arithmetic, release row or headline, so
+existing historical measurements remain unchanged. To time the same ablation,
+pass `--candidate-policy <file.toml>` to `mechanism_latency.py`; it validates
+that explicit policy against the same delta before timing either arm.
+
 `runner_provenance.policy_dependencies` records SHA-256 for external rulepacks,
 their referenced dictionary term files, policy dictionary term files, and every
 non-hidden regular file under active model directories. Local dotfiles are ignored.

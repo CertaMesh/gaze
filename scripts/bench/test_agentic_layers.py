@@ -2537,6 +2537,7 @@ class PolicyDeltaGateTests(unittest.TestCase):
         remove_delta: bool = False,
         wrong_digest: tuple[str, str] | None = None,
         ner_thresholds: tuple[float | None, float | None] = (0.3, 0.3),
+        nym_model_digests: tuple[str, str] | None = None,
     ) -> dict:
         with tempfile.TemporaryDirectory() as directory:
             paths = {name: Path(directory) / f"{name}.toml" for name in ("base", "candidate", "delta")}
@@ -2546,6 +2547,11 @@ class PolicyDeltaGateTests(unittest.TestCase):
             candidate = _scorecard({**self.BASE_LEAKS, "R": 10})
             base["parameters"]["ner_threshold"], candidate["parameters"]["ner_threshold"] = ner_thresholds
             for label, card in (("base", base), ("candidate", candidate)):
+                if nym_model_digests:
+                    card["runner_provenance"]["model_bundles"] = [{
+                        "model_id": "nym-small-int8",
+                        "observed_sha256": nym_model_digests[0 if label == "base" else 1],
+                    }]
                 digest = hashlib.sha256(paths[label].read_bytes()).hexdigest()
                 card["parameters"]["policy_sha256"] = digest
                 card["runner_provenance"]["policy"] = {"path": str(paths[label]), "sha256": digest}
@@ -2682,6 +2688,39 @@ class PolicyDeltaGateTests(unittest.TestCase):
             delta,
         )
         self.assertEqual(result["verdict"], "not_comparable")
+
+    def test_declared_nym_name_append_changes_only_explicit_labels_and_thresholds(self) -> None:
+        base = ('[safety_net]\nbackend="nym"\n[safety_net.nym]\n'
+                'model_dir="~/models/nym"\nlabels=["USERNAME"]\n'
+                'thresholds={USERNAME=0.5}\n')
+        candidate = base.replace('labels=["USERNAME"]',
+                                 'labels=["USERNAME", "GIVEN_NAME", "SURNAME"]')
+        candidate = candidate.replace('thresholds={USERNAME=0.5}',
+                                      'thresholds={USERNAME=0.5, GIVEN_NAME=0.5, SURNAME=0.5}')
+        delta = '[mechanism_delta]\nappend_nym_labels={GIVEN_NAME=0.5, SURNAME=0.5}\n'
+        result = self.compare(base, candidate, delta)
+        self.assertEqual(result["verdict"], "pass")
+        changed_model = self.compare(base, candidate, delta, nym_model_digests=("a" * 64, "b" * 64))
+        self.assertEqual(changed_model["verdict"], "not_comparable")
+        self.assertIn("model bundle nym-small-int8", changed_model["differing"])
+        for bad in ('{}', '{CITY=0.5}', '{GIVEN_NAME=true}', '{GIVEN_NAME=0}',
+                    '{GIVEN_NAME=1.1}', '{GIVEN_NAME=nan}', '{GIVEN_NAME=inf}',
+                    '{USERNAME=0.5}'):
+            with self.subTest(delta=bad):
+                rejected = self.compare(base, candidate, '[mechanism_delta]\nappend_nym_labels=' + bad)
+                self.assertEqual(rejected["verdict"], "not_comparable")
+        for implicit in (base.replace('labels=["USERNAME"]\n', ''),
+                         base.replace('thresholds={USERNAME=0.5}\n', ''),
+                         base.replace('backend="nym"', 'backend="none"')):
+            with self.subTest(base=implicit):
+                self.assertEqual(self.compare(implicit, candidate, delta)["verdict"], "not_comparable")
+        for changed in (
+            candidate.replace('USERNAME=0.5', 'USERNAME=0.7'),
+            candidate.replace('~/models/nym', '~/models/other'),
+            candidate + '[ner]\nthreshold=0.7\n',
+        ):
+            with self.subTest(changed=changed):
+                self.assertEqual(self.compare(base, changed, delta)["verdict"], "not_comparable")
 
     def test_missing_policy_identity_on_both_sides_is_refused(self) -> None:
         for field in (

@@ -1,0 +1,4 @@
+# Isolate personal-name recovery with Nym already active. The base arm must
+# explicitly pin its existing labels and thresholds; model bytes stay identical.
+[mechanism_delta]
+append_nym_labels = { GIVEN_NAME = 0.5, SURNAME = 0.5 }

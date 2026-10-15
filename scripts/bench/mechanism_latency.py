@@ -27,6 +27,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+import agentic_layers as agentic
 import dataiku_en_de_gaze_bench as dataiku
 import gaze_bench_score as score
 
@@ -37,10 +38,26 @@ cli_latency = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(cli_latency)
 
 
-def candidate_policy(base: Path, delta: Path, out: Path) -> Path:
-    """Base plus delta, refused if the delta touches a section the base has."""
+def candidate_policy(base: Path, delta: Path, out: Path, *, candidate: Path | None = None) -> Path:
+    """Base plus new sections, or an explicit candidate checked against a Name delta."""
     base_data = tomllib.loads(base.read_text(encoding="utf-8"))
     delta_data = tomllib.loads(delta.read_text(encoding="utf-8"))
+    if candidate is not None:
+        if (set(delta_data) != {"mechanism_delta"}
+                or not isinstance(delta_data["mechanism_delta"], dict)
+                or set(delta_data["mechanism_delta"]) != {"append_nym_labels"}):
+            raise SystemExit("an explicit candidate requires an append_nym_labels delta")
+        try:
+            expected = agentic.append_nym_labels_policy(
+                base_data, delta_data["mechanism_delta"]["append_nym_labels"])
+        except agentic.LayerError as error:
+            raise SystemExit(str(error)) from error
+        if not agentic._toml_equal(tomllib.loads(candidate.read_text(encoding="utf-8")), expected):
+            raise SystemExit("candidate policy differs beyond the declared Nym-label append")
+        out.write_text(candidate.read_text(encoding="utf-8"), encoding="utf-8")
+        return out
+    if "mechanism_delta" in delta_data:
+        raise SystemExit("a mechanism delta requires --candidate-policy for exact validation")
     overlap = sorted(base_data.keys() & delta_data.keys())
     if not delta_data or overlap:
         raise SystemExit(f"policy delta must add new sections only; overlapping: {overlap}")
@@ -54,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-policy", type=Path, required=True)
     parser.add_argument("--policy-delta", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--candidate-policy", type=Path,
+                        help="explicit Name-arm policy, validated against --policy-delta")
     parser.add_argument("--documents", type=int, default=200)
     parser.add_argument("--rounds", type=int, default=3)
     parser.add_argument("--dataset", type=Path,
@@ -88,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         policies = {
             "base": args.base_policy,
             "candidate": candidate_policy(args.base_policy, args.policy_delta,
-                                          Path(scratch) / "candidate.toml"),
+                                          Path(scratch) / "candidate.toml", candidate=args.candidate_policy),
         }
         result["policy_sha256"] = {arm: cli_latency.sha256_file(path) for arm, path in policies.items()}
         rounds: dict[str, list[dict[str, object]]] = {arm: [] for arm in policies}
