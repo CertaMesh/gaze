@@ -14,6 +14,7 @@ import json
 import os
 import shutil
 import tempfile
+import tarfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -342,6 +343,20 @@ class MechanismArmsTest(unittest.TestCase):
             mech.render(ledger, ["v0.16.0"])
         with self.assertRaises(mech.MechanismError):
             mech.release_cell(entry, "v0.16.0")
+
+    def test_new_record_paths_fit_ustar_without_losing_full_hash(self):
+        fixture = self.fresh()
+        for mechanism in ("x", "nym-person-name-labels"):
+            measurement = fixture.record(mech.empty_ledger(), mechanism=mechanism)
+            for row in measurement["records"].values():
+                path = Path(row["file"])
+                self.assertLessEqual(len(path.name.encode("utf-8")), 100)
+                self.assertIn(row["sha256"], path.name)
+                if mechanism == "x":
+                    self.assertEqual(path.parent, Path("evidence"))
+                # The private producer snapshot permits USTAR, never PAX path extensions.
+                tarfile.TarInfo(path.as_posix()).tobuf(format=tarfile.USTAR_FORMAT)
+                self.assertEqual(mech.sha256(fixture.root / path), row["sha256"])
 
     def test_two_untagged_revisions_remain_distinct(self):
         fixture = self.fresh()

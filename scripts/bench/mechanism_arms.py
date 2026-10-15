@@ -16,7 +16,9 @@ only adds.
 Evidence filename scheme: existing schema-1 paths remain readable and are never
 migrated or rewritten. New recordings append the full SHA-256 of each record to
 its mechanism/target/arm stem. Changed bytes get a new path; identical bytes can
-reuse a verified path. Legacy short revision-prefix aliases remain refused.
+reuse a verified path. If that basename would exceed USTAR's 100-byte field,
+new records use a SHA-256 namespace of the full stem and an arm/full-record-hash
+basename instead. Existing paths stay readable. Legacy revision aliases remain refused.
 Old evidence is retained, including after ledger publication; no automatic GC.
 The CLI fsyncs new evidence before atomically replacing and fsyncing the ledger.
 A crash before ledger publication can leave unreferenced files, never broken pins.
@@ -463,7 +465,7 @@ def record_measurement(
                 raise MechanismError(f"{mechanism}: short revision-prefix alias")
     stem = f"{mechanism}-{release or pair['revision'][:12]}"
     targets = {
-        arm: evidence_dir / f"{stem}-{arm}-{sha256(arms[f'{arm}-v2'][1])}.jsonl.gz"
+        arm: _evidence_path(evidence_dir, stem, arm, sha256(arms[f"{arm}-v2"][1]))
         for arm in ("base", "candidate")
     }
     # Resolve paths before copying; evidence must stay under the repository root.
@@ -504,6 +506,15 @@ def record_measurement(
     return measurement
 
 
+def _evidence_path(directory: Path, stem: str, arm: str, digest: str) -> Path:
+    name = f"{stem}-{arm}-{digest}.jsonl.gz"
+    if len(name.encode("utf-8")) <= 100:
+        return directory / name
+    # Keep full identities without PAX path extensions in private source snapshots.
+    namespace = hashlib.sha256(stem.encode("utf-8")).hexdigest()
+    return directory / namespace / f"{arm}-{digest}.jsonl.gz"
+
+
 def _publish_evidence(staged: Mapping[Path, Path], staging: Path) -> None:
     """Publish durable immutable evidence; never replace an existing pin.
 
@@ -515,9 +526,11 @@ def _publish_evidence(staged: Mapping[Path, Path], staging: Path) -> None:
             if sha256(target) != sha256(path):
                 raise MechanismError(f"immutable evidence differs: {target.name}")
             continue
+        target.parent.mkdir(parents=True, exist_ok=True)
         with path.open("rb") as stream:
             os.fsync(stream.fileno())
         os.replace(path, target)
+        _fsync_directory(target.parent)
     _fsync_directory(staging.parent)
 
 

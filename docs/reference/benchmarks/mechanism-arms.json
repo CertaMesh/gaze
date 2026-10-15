@@ -1368,11 +1368,11 @@
           "release": null,
           "records": {
             "base": {
-              "file": "docs/reference/benchmarks/mechanisms/nym-person-name-labels-eb0b2bdf993e-base-64ce02e75eaa32ca0536b8af1e06eeee627d576f1e80b0670257fdc3c185fcb8.jsonl.gz",
+              "file": "docs/reference/benchmarks/mechanisms/1975d597e89e788a23dc15bbd301b3d2001626a285e618b52e868801f6e1a8b4/base-64ce02e75eaa32ca0536b8af1e06eeee627d576f1e80b0670257fdc3c185fcb8.jsonl.gz",
               "sha256": "64ce02e75eaa32ca0536b8af1e06eeee627d576f1e80b0670257fdc3c185fcb8"
             },
             "candidate": {
-              "file": "docs/reference/benchmarks/mechanisms/nym-person-name-labels-eb0b2bdf993e-candidate-179dc2156749f5d541c3fdb39e8c324486a59ff7bf5629135febd86a314c8119.jsonl.gz",
+              "file": "docs/reference/benchmarks/mechanisms/1975d597e89e788a23dc15bbd301b3d2001626a285e618b52e868801f6e1a8b4/candidate-179dc2156749f5d541c3fdb39e8c324486a59ff7bf5629135febd86a314c8119.jsonl.gz",
               "sha256": "179dc2156749f5d541c3fdb39e8c324486a59ff7bf5629135febd86a314c8119"
             }
           },
