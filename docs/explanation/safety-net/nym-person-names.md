@@ -8,7 +8,9 @@ some lowercase names, without downloading another model.
 
 Adjacent name parts join over inline whitespace into one value. This includes
 multiple given names and surnames. Line breaks, punctuation, unlabelled words
-and intervening tokens prevent a join. The existing shared word rule still
+and intervening tokens prevent a join. The same record barrier applies before
+same-label BIO `I-` continuation, so model continuation labels cannot swallow
+line breaks (LF, CR, NEL, line separator or paragraph separator). The existing shared word rule still
 expands partial-word findings. The manifest keeps the exact original bytes;
 the audit label keeps every contributing `LABEL>=THRESHOLD`, and confidence is
 the minimum over the contributing parts. Rule and NER tokens keep precedence.
@@ -80,3 +82,36 @@ prose. Neural decisions are deterministic for the pinned model and input but
 less explainable than rules. Default adoption requires the separate mechanism
 arm and both benchmark gain contracts, including benign counterweights,
 refusals and exact restore. Thresholds must not be tuned on that test corpus.
+
+## Record-boundary verification
+
+The Name record barrier runs before BIO continuation as well as before joining
+adjacent parts. Decoder and public-pipeline regressions cover same-label B/I,
+same-label B/B and mixed-label B/B across LF, CR, CRLF, NEL, line separator and
+paragraph separator; clean output retains the separator and restore is exact.
+A direct backend assertion also checks that a fully manifest-covered Name token
+produces no suspect before the pipeline's independent ownership guard.
+
+The [read-only audit](../../../scripts/bench/audit_name_record_boundaries.py)
+reconstructs the corpus and verifies its hashes against each measured record.
+The [pinned result](nym-name-record-boundary-audit.json) enumerates all eight
+ordinary/own-arm v2/v1 records and both committed own-arm records: each has
+17,780 documents. Candidate records have 4,335 Name spans, including 129 from
+Nym; **zero Nym Name spans cross a record separator**. Each record also contains
+the same 18 pre-existing primary NER Name spans across LF, explicitly listed in
+the result. Those spans are unchanged by this Nym-only fix. Thus no measured
+arm exercises the narrowed Nym continuation path; the reported gain is retained
+without another inference run. This is an impact enumeration, not a new benchmark
+measurement or a general claim that Name spans never cross line breaks.
+
+Run with the local pinned dataset (no models or benchmark lease required):
+
+```sh
+uv run --project scripts/bench python scripts/bench/audit_name_record_boundaries.py \
+  --record base=PATH_TO_BASE_OBSERVATIONS.jsonl.gz \
+  --record candidate=PATH_TO_CANDIDATE_OBSERVATIONS.jsonl.gz --out audit.json
+```
+
+Repeat `--record LABEL=PATH` for every arm to enumerate. The output records each
+observation file's SHA-256, the corpus hashes and the audit script's SHA-256,
+without copying any document values.

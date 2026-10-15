@@ -283,7 +283,14 @@ pub(crate) fn decode_pieces(
                 .fold(f32::INFINITY, f32::min),
         };
         match open.as_mut() {
-            Some(span) if !first.is_begin && span.label == current.label => {
+            Some(span)
+                if !first.is_begin
+                    && span.label == current.label
+                    && (!is_person_name(span.label)
+                        || text
+                            .get(span.end..current.start)
+                            .is_some_and(|gap| !gap.chars().any(is_record_separator))) =>
+            {
                 span.end = current.end;
                 span.score = span.score.min(current.score);
             }
@@ -299,22 +306,28 @@ pub(crate) fn decode_pieces(
     ))
 }
 
+fn is_person_name(label: NymLabel) -> bool {
+    matches!(label, NymLabel::GivenName | NymLabel::Surname)
+}
+
+fn is_record_separator(ch: char) -> bool {
+    matches!(ch, '\n' | '\r' | '\u{85}' | '\u{2028}' | '\u{2029}')
+}
+
 /// A model marks given names and surnames separately. Adjacent parts separated only by inline
 /// whitespace form one restorable value, including multi-part given names and family names.
 /// Punctuation, record boundaries and unlabelled words prevent a join. Other labels are untouched.
 fn join_person_name_parts(text: &str, spans: Vec<NymSpan>) -> Vec<NymSpan> {
-    let is_name = |label| matches!(label, NymLabel::GivenName | NymLabel::Surname);
     let mut joined: Vec<NymSpan> = Vec::with_capacity(spans.len());
     for span in spans {
         if let Some(previous) = joined.last_mut() {
             let inline_gap = text.get(previous.end..span.start).is_some_and(|gap| {
                 !gap.is_empty()
-                    && gap.chars().all(|ch| {
-                        ch.is_whitespace()
-                            && !matches!(ch, '\n' | '\r' | '\u{85}' | '\u{2028}' | '\u{2029}')
-                    })
+                    && gap
+                        .chars()
+                        .all(|ch| ch.is_whitespace() && !is_record_separator(ch))
             });
-            if is_name(previous.label) && is_name(span.label) && inline_gap {
+            if is_person_name(previous.label) && is_person_name(span.label) && inline_gap {
                 previous.end = span.end;
                 previous.score = previous.score.min(span.score);
                 for label in std::iter::once(span.label).chain(span.additional_labels) {

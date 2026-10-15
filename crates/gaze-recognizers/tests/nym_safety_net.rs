@@ -295,6 +295,98 @@ fn person_name_join_respects_record_and_json_boundaries() {
     }
 }
 
+/// Invented names with one scored piece per word exercise both BIO assembly and name joining.
+fn record_separated_name_cases() -> Vec<Case> {
+    let mut cases = Vec::new();
+    for separator in ["\n", "\r", "\r\n", "\u{85}", "\u{2028}", "\u{2029}"] {
+        for (first_label, second_label, second_begin) in [
+            (NymLabel::GivenName, NymLabel::GivenName, false),
+            (NymLabel::Surname, NymLabel::Surname, false),
+            (NymLabel::GivenName, NymLabel::GivenName, true),
+            (NymLabel::GivenName, NymLabel::Surname, true),
+            (NymLabel::Surname, NymLabel::GivenName, true),
+        ] {
+            let text = format!("Nelia{separator}Liora");
+            let offsets = (0..text.chars().count())
+                .map(|i| (i, i + 1))
+                .collect::<Vec<_>>();
+            let mut scores = vec![
+                PieceScore {
+                    label: NymLabel::Age,
+                    mass: 0.0,
+                    is_begin: true,
+                };
+                offsets.len()
+            ];
+            scores[1] = PieceScore {
+                label: first_label,
+                mass: 0.99,
+                is_begin: true,
+            };
+            scores[6 + separator.chars().count()] = PieceScore {
+                label: second_label,
+                mass: 0.99,
+                is_begin: second_begin,
+            };
+            cases.push(Case {
+                text,
+                offsets,
+                scores,
+            });
+        }
+    }
+    cases
+}
+
+#[test]
+fn person_name_bio_continuations_preserve_record_boundaries() {
+    for case in record_separated_name_cases() {
+        let spans = decode_captured(
+            &case.text,
+            &case.offsets,
+            &case.scores,
+            &NymOperatingPoint::default(),
+        )
+        .unwrap();
+        assert_eq!(spans.len(), 2, "{:?}: {spans:?}", case.text);
+        assert_eq!(spans[0].0, 0..5);
+        assert_eq!(spans[1].0, case.text.len() - 5..case.text.len());
+    }
+}
+
+#[test]
+fn person_name_pipeline_preserves_record_boundaries_and_restores() {
+    use gaze::{Action, CleanDocument, DefaultRule, Pipeline, RawDocument, Scope, Session};
+    for case in record_separated_name_cases() {
+        let raw = case.text.clone();
+        let separator = &raw[5..raw.len() - 5];
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .register_safety_net(CapturedNameNet(case))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let (CleanDocument::Text(clean), manifest, _) = pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &session,
+                RawDocument::Text(raw.clone()),
+                &[LocaleTag::Global],
+                &gaze::DictionaryBundle::default(),
+                gaze::SafetyNetPolicy::default(),
+            )
+            .unwrap()
+        else {
+            panic!("text");
+        };
+        assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+        assert!(
+            clean.contains(separator),
+            "record boundary disappeared: raw={raw:?}, clean={clean:?}, manifest={manifest:?}"
+        );
+        assert_eq!(manifest.len(), 2, "{raw:?}: {manifest:?}");
+    }
+}
+
 #[test]
 fn captured_person_names_are_enabled_by_default_with_auditable_thresholds() {
     let cases = name_cases();
@@ -818,4 +910,22 @@ fn offline_capture_person_name_calibration() {
         "{}",
         serde_json::to_string_pretty(&output["summary"]).unwrap()
     );
+}
+
+#[test]
+fn covered_name_emits_no_suspect_before_pipeline_filtering() {
+    let text = "<deadbeef:Name_1>";
+    let manifest = Manifest::from_spans(vec![gaze_types::EmittedTokenSpan::new(
+        0..text.len(),
+        0.."Nelia Quillmere".len(),
+        gaze_types::PiiClass::Name,
+    )]);
+    let context = SafetyNetContext::new(
+        &manifest,
+        &[LocaleTag::Global],
+        DocumentKind::Text,
+        None,
+        None,
+    );
+    assert!(OwnedTokenNameNet.check(text, context).unwrap().is_empty());
 }
