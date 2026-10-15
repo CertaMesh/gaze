@@ -311,7 +311,10 @@ fn is_person_name(label: NymLabel) -> bool {
 }
 
 fn is_record_separator(ch: char) -> bool {
-    matches!(ch, '\n' | '\r' | '\u{85}' | '\u{2028}' | '\u{2029}')
+    matches!(
+        ch,
+        '\n' | '\r' | '\u{b}' | '\u{c}' | '\u{85}' | '\u{2028}' | '\u{2029}'
+    )
 }
 
 /// A model marks given names and surnames separately. Adjacent parts separated only by inline

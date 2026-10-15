@@ -298,7 +298,9 @@ fn person_name_join_respects_record_and_json_boundaries() {
 /// Invented names with one scored piece per word exercise both BIO assembly and name joining.
 fn record_separated_name_cases() -> Vec<Case> {
     let mut cases = Vec::new();
-    for separator in ["\n", "\r", "\r\n", "\u{85}", "\u{2028}", "\u{2029}"] {
+    for separator in [
+        "\n", "\r", "\r\n", "\u{b}", "\u{c}", "\u{85}", "\u{2028}", "\u{2029}",
+    ] {
         for (first_label, second_label, second_begin) in [
             (NymLabel::GivenName, NymLabel::GivenName, false),
             (NymLabel::Surname, NymLabel::Surname, false),
@@ -340,6 +342,7 @@ fn record_separated_name_cases() -> Vec<Case> {
 
 #[test]
 fn person_name_bio_continuations_preserve_record_boundaries() {
+    let mut crossings = Vec::new();
     for case in record_separated_name_cases() {
         let spans = decode_captured(
             &case.text,
@@ -348,15 +351,18 @@ fn person_name_bio_continuations_preserve_record_boundaries() {
             &NymOperatingPoint::default(),
         )
         .unwrap();
-        assert_eq!(spans.len(), 2, "{:?}: {spans:?}", case.text);
-        assert_eq!(spans[0].0, 0..5);
-        assert_eq!(spans[1].0, case.text.len() - 5..case.text.len());
+        let ranges = spans.iter().map(|span| span.0.clone()).collect::<Vec<_>>();
+        if ranges != [0..5, case.text.len() - 5..case.text.len()] {
+            crossings.push(format!("{:?}: {spans:?}", case.text));
+        }
     }
+    assert!(crossings.is_empty(), "record crossings: {crossings:#?}");
 }
 
 #[test]
 fn person_name_pipeline_preserves_record_boundaries_and_restores() {
     use gaze::{Action, CleanDocument, DefaultRule, Pipeline, RawDocument, Scope, Session};
+    let mut crossings = Vec::new();
     for case in record_separated_name_cases() {
         let raw = case.text.clone();
         let separator = &raw[5..raw.len() - 5];
@@ -379,12 +385,13 @@ fn person_name_pipeline_preserves_record_boundaries_and_restores() {
             panic!("text");
         };
         assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
-        assert!(
-            clean.contains(separator),
-            "record boundary disappeared: raw={raw:?}, clean={clean:?}, manifest={manifest:?}"
-        );
-        assert_eq!(manifest.len(), 2, "{raw:?}: {manifest:?}");
+        if !clean.contains(separator) || manifest.len() != 2 {
+            crossings.push(format!(
+                "raw={raw:?}, clean={clean:?}, manifest={manifest:?}"
+            ));
+        }
     }
+    assert!(crossings.is_empty(), "record crossings: {crossings:#?}");
 }
 
 #[test]

@@ -18,7 +18,7 @@ import agentic_layers as agentic
 import dataiku_en_de_gaze_bench as dataiku
 import run_no_opf_benchmark as runner
 
-SEPARATORS = frozenset("\n\r\u0085\u2028\u2029")
+SEPARATORS = frozenset("\n\r\u000b\u000c\u0085\u2028\u2029")
 
 
 def audit(path: Path, documents: dict, corpus_sha256: str, generated_sha256: str) -> dict:

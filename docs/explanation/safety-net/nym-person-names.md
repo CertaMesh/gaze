@@ -10,7 +10,7 @@ Adjacent name parts join over inline whitespace into one value. This includes
 multiple given names and surnames. Line breaks, punctuation, unlabelled words
 and intervening tokens prevent a join. The same record barrier applies before
 same-label BIO `I-` continuation, so model continuation labels cannot swallow
-line breaks (LF, CR, NEL, line separator or paragraph separator). The existing shared word rule still
+line breaks (LF, CR, VT, FF, NEL, line separator or paragraph separator). The existing shared word rule still
 expands partial-word findings. The manifest keeps the exact original bytes;
 the audit label keeps every contributing `LABEL>=THRESHOLD`, and confidence is
 the minimum over the contributing parts. Rule and NER tokens keep precedence.
@@ -87,7 +87,7 @@ refusals and exact restore. Thresholds must not be tuned on that test corpus.
 
 The Name record barrier runs before BIO continuation as well as before joining
 adjacent parts. Decoder and public-pipeline regressions cover same-label B/I,
-same-label B/B and mixed-label B/B across LF, CR, CRLF, NEL, line separator and
+same-label B/B and mixed-label B/B across LF, CR, CRLF, VT, FF, NEL, line separator and
 paragraph separator; clean output retains the separator and restore is exact.
 A direct backend assertion also checks that a fully manifest-covered Name token
 produces no suspect before the pipeline's independent ownership guard.
@@ -98,7 +98,8 @@ The [pinned result](nym-name-record-boundary-audit.json) enumerates all eight
 ordinary/own-arm v2/v1 records and both committed own-arm records: each has
 17,780 documents. Candidate records have 4,335 Name spans, including 129 from
 Nym; **zero Nym Name spans cross a record separator**. Each record also contains
-the same 18 pre-existing primary NER Name spans across LF, explicitly listed in
+the same 21 pre-existing primary NER Name spans (18 across LF and three across
+VT), explicitly listed in
 the result. Those spans are unchanged by this Nym-only fix. Thus no measured
 arm exercises the narrowed Nym continuation path; the reported gain is retained
 without another inference run. This is an impact enumeration, not a new benchmark
