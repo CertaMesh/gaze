@@ -606,7 +606,6 @@ enum LifecycleStateV1 {
 struct RuntimeInner {
     lifecycle: LifecycleStateV1,
     queue: VecDeque<QueuedInspectionEventV1>,
-    closed: bool,
     sink_panics: u64,
     sink_rejections: u64,
 }
@@ -647,6 +646,7 @@ struct QueuedInspectionEventV1 {
 #[cfg(test)]
 #[derive(Default)]
 struct DispatchHooks {
+    before_wait: Option<std::sync::mpsc::Sender<()>>,
     after_dequeue: Option<Arc<std::sync::Barrier>>,
     after_permit: Option<Arc<std::sync::Barrier>>,
 }
@@ -670,9 +670,7 @@ impl RegistrationState {
             Err(TryLockError::WouldBlock) => Err(InspectionDropCodeV1::QueueContended),
             Err(TryLockError::Poisoned(poisoned)) => {
                 let mut inner = poisoned.into_inner();
-                inner.lifecycle = LifecycleStateV1::Disabled;
-                inner.closed = true;
-                inner.queue.clear();
+                terminate(&mut inner, &self.changed);
                 Err(InspectionDropCodeV1::Disabled)
             }
         }
@@ -683,12 +681,15 @@ impl RegistrationState {
         if matches!(inner.lifecycle, LifecycleStateV1::Disabled) {
             return InspectionDisableOutcomeV1::AlreadyDisabled;
         }
-        inner.lifecycle = LifecycleStateV1::Disabled;
-        inner.closed = true;
-        inner.queue.clear();
-        self.changed.notify_all();
+        terminate(&mut inner, &self.changed);
         InspectionDisableOutcomeV1::Disabled
     }
+}
+
+fn terminate(inner: &mut RuntimeInner, changed: &Condvar) {
+    inner.lifecycle = LifecycleStateV1::Disabled;
+    inner.queue.clear();
+    changed.notify_all();
 }
 
 fn lock_without_recovery<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -790,7 +791,6 @@ pub fn install_inspection_v1(
         inner: Mutex::new(RuntimeInner {
             lifecycle: LifecycleStateV1::Running(0),
             queue: VecDeque::new(),
-            closed: false,
             sink_panics: 0,
             sink_rejections: 0,
         }),
@@ -836,7 +836,11 @@ fn dispatcher_loop(state: Arc<RegistrationState>, sink: Arc<dyn InspectionSink>)
     loop {
         let queued = {
             let mut inner = lock_without_recovery(&state.inner);
-            while inner.queue.is_empty() && !inner.closed {
+            while inner.queue.is_empty() && !matches!(inner.lifecycle, LifecycleStateV1::Disabled) {
+                #[cfg(test)]
+                if let Some(ready) = lock_without_recovery(&state.hooks).before_wait.take() {
+                    let _ = ready.send(());
+                }
                 inner = state
                     .changed
                     .wait(inner)
@@ -855,7 +859,7 @@ fn dispatcher_loop(state: Arc<RegistrationState>, sink: Arc<dyn InspectionSink>)
             let inner = lock_without_recovery(&state.inner);
             matches!(
                 inner.lifecycle,
-                LifecycleStateV1::Running(epoch) if epoch == queued.epoch && !inner.closed
+                LifecycleStateV1::Running(epoch) if epoch == queued.epoch
             )
         };
         if !permit {
@@ -925,10 +929,7 @@ impl InstalledInspectionProducerV1 {
         }
         let inner = self.state.inner.lock().map_err(|poisoned| {
             let mut inner = poisoned.into_inner();
-            inner.lifecycle = LifecycleStateV1::Disabled;
-            inner.closed = true;
-            inner.queue.clear();
-            self.state.changed.notify_all();
+            terminate(&mut inner, &self.state.changed);
             InspectionBeginLogicalErrorV1::Disabled
         })?;
         self.logical_from_inner(inner)
@@ -939,11 +940,9 @@ impl InstalledInspectionProducerV1 {
         inner: MutexGuard<'_, RuntimeInner>,
     ) -> Result<InspectionLogicalEmitterV1, InspectionBeginLogicalErrorV1> {
         match inner.lifecycle {
-            LifecycleStateV1::Running(_) if !inner.closed => {}
+            LifecycleStateV1::Running(_) => {}
             LifecycleStateV1::Purging { .. } => return Err(InspectionBeginLogicalErrorV1::Purging),
-            LifecycleStateV1::Disabled | LifecycleStateV1::Running(_) => {
-                return Err(InspectionBeginLogicalErrorV1::Disabled)
-            }
+            LifecycleStateV1::Disabled => return Err(InspectionBeginLogicalErrorV1::Disabled),
         }
         drop(inner);
         let logical_id = next_bounded_id(&NEXT_LOGICAL_ID)
@@ -1114,10 +1113,7 @@ impl InspectionLogicalEmitterV1 {
         }
         let inner = self.state.try_inner()?;
         match inner.lifecycle {
-            LifecycleStateV1::Running(epoch) if !inner.closed => {
-                Ok((epoch, self.state.descriptor.captures(domain)))
-            }
-            LifecycleStateV1::Running(_) => Err(InspectionDropCodeV1::QueueClosed),
+            LifecycleStateV1::Running(epoch) => Ok((epoch, self.state.descriptor.captures(domain))),
             LifecycleStateV1::Purging { .. } => Err(InspectionDropCodeV1::Purging),
             LifecycleStateV1::Disabled => Err(InspectionDropCodeV1::Disabled),
         }
@@ -1142,10 +1138,7 @@ impl InspectionLogicalEmitterV1 {
             Err(drop) => return InspectionAdmissionOutcomeV1::Dropped(drop),
         };
         match inner.lifecycle {
-            LifecycleStateV1::Running(epoch) if epoch == expected_epoch && !inner.closed => {}
-            LifecycleStateV1::Running(_) if inner.closed => {
-                return InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::QueueClosed)
-            }
+            LifecycleStateV1::Running(epoch) if epoch == expected_epoch => {}
             LifecycleStateV1::Running(_) => {
                 return InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::StaleEpoch)
             }
@@ -1216,10 +1209,7 @@ impl ActivatedInspectionConsumerV1 {
             LifecycleStateV1::Running(from) => match from.checked_add(1) {
                 Some(to) => (from, to),
                 None => {
-                    inner.lifecycle = LifecycleStateV1::Disabled;
-                    inner.closed = true;
-                    inner.queue.clear();
-                    self.state.changed.notify_all();
+                    terminate(&mut inner, &self.state.changed);
                     return Err(InspectionPurgeErrorV1::EpochOverflow);
                 }
             },
@@ -1403,10 +1393,7 @@ impl Drop for InspectionPurgeGuardV1 {
             inner.lifecycle,
             LifecycleStateV1::Purging { from, to } if from == self.from && to == self.to
         ) {
-            inner.lifecycle = LifecycleStateV1::Disabled;
-            inner.closed = true;
-            inner.queue.clear();
-            self.state.changed.notify_all();
+            terminate(&mut inner, &self.state.changed);
         }
     }
 }
@@ -1434,6 +1421,306 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Barrier, Condvar, Mutex};
     use std::time::{Duration, Instant};
+
+    fn isolated_registration() -> Arc<RegistrationState> {
+        Arc::new(RegistrationState {
+            _identity: RegistrationIdentity { _nonce: 0 },
+            descriptor: DashboardCaptureDescriptorV1::new(CaptureDomainsV1::ProviderVisible),
+            limits: InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+            inner: Mutex::new(RuntimeInner {
+                lifecycle: LifecycleStateV1::Running(0),
+                queue: VecDeque::new(),
+                sink_panics: 0,
+                sink_rejections: 0,
+            }),
+            changed: Condvar::new(),
+            accounting: Arc::new(QueueAccounting {
+                items: AtomicUsize::new(0),
+                bytes: AtomicUsize::new(0),
+            }),
+            producer_open: AtomicBool::new(true),
+            hooks: Mutex::new(DispatchHooks::default()),
+        })
+    }
+
+    struct OwnedDispatcher {
+        state: Arc<RegistrationState>,
+        thread: Option<std::thread::JoinHandle<()>>,
+        done: std::sync::mpsc::Receiver<()>,
+        release_sink: Option<Arc<BlockingSink>>,
+    }
+
+    impl OwnedDispatcher {
+        fn start(state: Arc<RegistrationState>, sink: Arc<dyn InspectionSink>) -> Self {
+            let (done, receiver) = std::sync::mpsc::channel();
+            let mut dispatcher = Self {
+                state: state.clone(),
+                thread: None,
+                done: receiver,
+                release_sink: None,
+            };
+            dispatcher.thread = Some(std::thread::spawn(move || {
+                dispatcher_loop(state, sink);
+                let _ = done.send(());
+            }));
+            dispatcher
+        }
+
+        fn finish(&mut self) -> std::thread::Result<()> {
+            if let Some(sink) = &self.release_sink {
+                sink.release();
+            }
+            // Independent rescue: a missing production notification must not strand the test.
+            {
+                let mut inner = lock_without_recovery(&self.state.inner);
+                inner.lifecycle = LifecycleStateV1::Disabled;
+                inner.queue.clear();
+                self.state.changed.notify_all();
+            }
+            match self.thread.take() {
+                Some(thread) => {
+                    let joined = thread.join();
+                    eprintln!("owned dispatcher cleanup joined");
+                    joined
+                }
+                None => Ok(()),
+            }
+        }
+    }
+
+    impl Drop for OwnedDispatcher {
+        fn drop(&mut self) {
+            let _ = self.finish();
+        }
+    }
+
+    #[test]
+    fn nonblocking_poison_disables_and_wakes_waiting_dispatcher() {
+        let state = isolated_registration();
+        let producer = InstalledInspectionProducerV1 {
+            state: state.clone(),
+        };
+        let (ready, waiting) = std::sync::mpsc::channel();
+        lock_without_recovery(&state.hooks).before_wait = Some(ready);
+        let mut dispatcher =
+            OwnedDispatcher::start(state.clone(), Arc::new(RecordingSink::default()));
+        let observed = waiting.recv_timeout(Duration::from_secs(10)).map(|()| {
+            // Readiness was sent under inner; acquiring it proves wait released the lock.
+            let poisoned = catch_unwind(AssertUnwindSafe(|| {
+                let _inner = lock_without_recovery(&state.inner);
+                panic!("synthetic registration poison");
+            }));
+            let deadline = Instant::now() + Duration::from_secs(10);
+            let begin = loop {
+                let result = producer.begin_logical().err();
+                if result != Some(InspectionBeginLogicalErrorV1::Contended)
+                    || Instant::now() >= deadline
+                {
+                    break result;
+                }
+                std::thread::yield_now();
+            };
+            let exited = dispatcher.done.recv_timeout(Duration::from_secs(2));
+            let inner = lock_without_recovery(&state.inner);
+            (
+                poisoned.is_err(),
+                begin,
+                exited,
+                matches!(inner.lifecycle, LifecycleStateV1::Disabled),
+                inner.queue.is_empty(),
+            )
+        });
+        let joined = dispatcher.finish();
+        assert!(joined.is_ok(), "dispatcher cleanup must join successfully");
+        let (poisoned, begin, exited, disabled, empty) =
+            observed.expect("dispatcher wait readiness");
+        assert!(poisoned);
+        assert_eq!(begin, Some(InspectionBeginLogicalErrorV1::Disabled));
+        assert!(
+            exited.is_ok(),
+            "poison disable must wake the waiting dispatcher: {exited:?}"
+        );
+        assert!(disabled && empty);
+        assert_eq!(state.disable(), InspectionDisableOutcomeV1::AlreadyDisabled);
+    }
+
+    fn probed_provider_projection(probe: Arc<AtomicBool>) -> ProviderVisibleProjectionV1 {
+        ProviderVisibleProjectionV1::new(
+            ProjectionAvailabilityV1::Present(ProviderVisiblePayloadV1::capture_with_probe(
+                b"<Email_1>".to_vec(),
+                probe,
+            )),
+            ProjectionAvailabilityV1::Present(InspectionMeasurementV1::new(9, 1)),
+            ProjectionAvailabilityV1::Omitted(ProjectionOmissionReasonV1::UnsupportedFormat),
+            ProjectionAvailabilityV1::Omitted(ProjectionOmissionReasonV1::NotApplicable),
+            ProjectionAvailabilityV1::Present(PiiSummaryV1::empty()),
+            ProjectionAvailabilityV1::Present(DecisionTraceV1::empty()),
+            ProjectionAvailabilityV1::Present(AttestationTraceV1::NotApplicable),
+        )
+    }
+
+    #[test]
+    fn terminal_paths_zeroize_queued_payloads_and_preserve_in_flight_reservations() {
+        for path in [
+            "nonblocking poison",
+            "blocking poison",
+            "disable",
+            "overflow",
+            "guard drop",
+        ] {
+            let state = isolated_registration();
+            let producer = InstalledInspectionProducerV1 {
+                state: state.clone(),
+            };
+            let mut consumer = ActivatedInspectionConsumerV1 {
+                state: state.clone(),
+                _single_owner: PhantomData,
+            };
+            let mut logical = begin_logical_for_test(&producer);
+            let in_flight_zeroized = Arc::new(AtomicBool::new(false));
+            let queued_zeroized = Arc::new(AtomicBool::new(false));
+            for probe in [&in_flight_zeroized, &queued_zeroized] {
+                assert!(matches!(
+                    logical.try_emit_provider_request(safe_fields(), || {
+                        ProjectionAvailabilityV1::Present(probed_provider_projection(probe.clone()))
+                    }),
+                    InspectionAdmissionOutcomeV1::Accepted { .. }
+                ));
+            }
+            let in_flight = lock_without_recovery(&state.inner)
+                .queue
+                .pop_front()
+                .unwrap();
+            match path {
+                "nonblocking poison" | "blocking poison" => {
+                    let poisoned = catch_unwind(AssertUnwindSafe(|| {
+                        let _inner = lock_without_recovery(&state.inner);
+                        panic!("synthetic registration poison");
+                    }));
+                    assert!(poisoned.is_err());
+                    let error = if path == "nonblocking poison" {
+                        producer.begin_logical().err()
+                    } else {
+                        producer.begin_logical_blocking().err()
+                    };
+                    assert_eq!(error, Some(InspectionBeginLogicalErrorV1::Disabled));
+                }
+                "disable" => assert_eq!(consumer.disable(), InspectionDisableOutcomeV1::Disabled),
+                "overflow" => {
+                    lock_without_recovery(&state.inner).lifecycle =
+                        LifecycleStateV1::Running(u64::MAX);
+                    assert!(matches!(
+                        consumer.begin_purge(),
+                        Err(InspectionPurgeErrorV1::EpochOverflow)
+                    ));
+                }
+                "guard drop" => {
+                    // Seed a queued payload to check defensive drain even in a purging fixture.
+                    lock_without_recovery(&state.inner).lifecycle =
+                        LifecycleStateV1::Purging { from: 0, to: 1 };
+                    drop(InspectionPurgeGuardV1 {
+                        state: state.clone(),
+                        from: 0,
+                        to: 1,
+                        completed: false,
+                    });
+                }
+                _ => unreachable!(),
+            }
+            assert!(
+                matches!(
+                    lock_without_recovery(&state.inner).lifecycle,
+                    LifecycleStateV1::Disabled
+                ),
+                "{path}"
+            );
+            assert!(
+                lock_without_recovery(&state.inner).queue.is_empty(),
+                "{path}"
+            );
+            assert!(queued_zeroized.load(Ordering::SeqCst), "{path}");
+            assert!(!in_flight_zeroized.load(Ordering::SeqCst), "{path}");
+            assert_eq!(state.accounting.items.load(Ordering::Acquire), 1, "{path}");
+            assert_eq!(state.accounting.bytes.load(Ordering::Acquire), 9, "{path}");
+            assert_eq!(
+                consumer.disable(),
+                InspectionDisableOutcomeV1::AlreadyDisabled,
+                "{path}"
+            );
+            assert!(state.producer_open.load(Ordering::Acquire), "{path}");
+            drop(in_flight);
+            assert!(in_flight_zeroized.load(Ordering::SeqCst), "{path}");
+            assert_eq!(state.accounting.items.load(Ordering::Acquire), 0, "{path}");
+            assert_eq!(state.accounting.bytes.load(Ordering::Acquire), 0, "{path}");
+        }
+    }
+
+    #[test]
+    fn producer_drop_rejects_new_projection_but_drains_accepted_delivery() {
+        struct DrainSink {
+            blocking: Arc<BlockingSink>,
+            delivered: std::sync::mpsc::Sender<()>,
+        }
+        impl InspectionSink for DrainSink {
+            fn try_emit(&self, event: InspectionEventV1) -> Result<(), InspectionSinkErrorV1> {
+                self.blocking.try_emit(event)?;
+                let _ = self.delivered.send(());
+                Ok(())
+            }
+        }
+        let state = isolated_registration();
+        let producer = InstalledInspectionProducerV1 {
+            state: state.clone(),
+        };
+        let mut logical = begin_logical_for_test(&producer);
+        let blocking = Arc::new(BlockingSink::default());
+        let (delivered, deliveries) = std::sync::mpsc::channel();
+        let sink = Arc::new(DrainSink {
+            blocking: blocking.clone(),
+            delivered,
+        });
+        let mut dispatcher = OwnedDispatcher::start(state.clone(), sink);
+        dispatcher.release_sink = Some(blocking.clone());
+        let accepted_first = logical.try_emit_provider_request_for_test(safe_fields(), || {
+            ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
+        });
+        blocking.wait_until_entered();
+        let accepted_queued = logical.try_emit_provider_request_for_test(safe_fields(), || {
+            ProjectionAvailabilityV1::Present(provider_projection(b"<Email_2>"))
+        });
+        drop(producer);
+        let calls = AtomicUsize::new(0);
+        let rejected = logical.try_emit_provider_request(safe_fields(), || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            ProjectionAvailabilityV1::Present(provider_projection(b"<Email_3>"))
+        });
+        let still_running = matches!(
+            lock_without_recovery(&state.inner).lifecycle,
+            LifecycleStateV1::Running(0)
+        );
+        blocking.release();
+        let first_delivered = deliveries.recv_timeout(Duration::from_secs(10));
+        let queued_delivered = deliveries.recv_timeout(Duration::from_secs(10));
+        let joined = dispatcher.finish();
+        assert!(joined.is_ok());
+        assert!(matches!(
+            accepted_first,
+            InspectionAdmissionOutcomeV1::Accepted { .. }
+        ));
+        assert!(matches!(
+            accepted_queued,
+            InspectionAdmissionOutcomeV1::Accepted { .. }
+        ));
+        assert_eq!(
+            rejected,
+            InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::QueueClosed)
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(still_running);
+        assert!(first_delivered.is_ok() && queued_delivered.is_ok());
+        assert_eq!(state.accounting.items.load(Ordering::Acquire), 0);
+        assert_eq!(state.accounting.bytes.load(Ordering::Acquire), 0);
+    }
 
     #[derive(Default)]
     struct RecordingSink {
