@@ -59,7 +59,7 @@ a support ticket and safety-net modes.
 Install the CLI, write the default policy, then clean and restore a synthetic contact:
 
 ```sh
-cargo install gaze-cli --version 0.16.0
+cargo install gaze-cli --version 0.17.0
 gaze setup
 printf 'From: %s %s <%s@%s>' Ada Example ada example.invalid | gaze clean --policy gaze.toml > clean.json
 jq -r .clean_text clean.json
@@ -108,7 +108,7 @@ on your server: the blob contains originals and is needed for restore.
 Install the CLI from crates.io:
 
 ```sh
-cargo install gaze-cli --version 0.16.0
+cargo install gaze-cli --version 0.17.0
 ```
 
 Or build from source (latest `main`, or to enable extra features):

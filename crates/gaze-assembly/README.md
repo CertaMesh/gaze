@@ -10,9 +10,9 @@ Builds a `gaze::Pipeline` from policy, context, rulepacks, locales, and built-in
 
 ```toml
 [dependencies]
-gaze-pii = "0.16.0"
-gaze-assembly = "0.16.0"
-gaze-recognizers = "0.16.0"
+gaze-pii = "0.17.0"
+gaze-assembly = "0.17.0"
+gaze-recognizers = "0.17.0"
 serde_json = "1"
 ```
 

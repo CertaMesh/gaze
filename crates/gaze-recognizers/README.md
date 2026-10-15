@@ -10,8 +10,8 @@ Built-in `gaze::Recognizer` backends: regex, dictionary, anchored names, and ONN
 
 ```toml
 [dependencies]
-gaze-pii = "0.16.0"
-gaze-recognizers = "0.16.0"
+gaze-pii = "0.17.0"
+gaze-recognizers = "0.17.0"
 ```
 
 Library users that need parser-backed E.164 phone validation must opt in to the
@@ -19,7 +19,7 @@ Library users that need parser-backed E.164 phone validation must opt in to the
 
 ```toml
 [dependencies]
-gaze-recognizers = { version = "0.16.0", features = ["phone-parser"] }
+gaze-recognizers = { version = "0.17.0", features = ["phone-parser"] }
 ```
 
 `gaze-cli` enables `phone-parser` by default. Without the feature, the

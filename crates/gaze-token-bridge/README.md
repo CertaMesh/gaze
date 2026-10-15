@@ -21,7 +21,7 @@ occurrences, and pre-existing token literals containing raw values are denied. C
 
 ```toml
 [dependencies]
-gaze-token-bridge = "0.16.0"
+gaze-token-bridge = "0.17.0"
 ```
 
 ## Local demo (try it)
