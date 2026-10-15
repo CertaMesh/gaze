@@ -12,13 +12,13 @@ Extracts PNG/JPG/PDF text, protects it with `gaze-pii`, and writes clean Markdow
 
 ```toml
 [dependencies]
-gaze-document = "0.16.0"
+gaze-document = "0.17.0"
 ```
 
 ### CLI
 
 ```bash
-cargo install gaze-cli --version 0.16.0 --features document
+cargo install gaze-cli --version 0.17.0 --features document
 ```
 
 The `document` feature is opt-in on `gaze-cli` so the default install stays
