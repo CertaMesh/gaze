@@ -156,8 +156,12 @@ def validate_labels(spans: Sequence[score.Span], mapping: dict[str, tuple[str, .
 def mapped_document(
     document: score.Document,
     mapping: dict[str, tuple[str, ...]],
+    *, native_gaze: bool = False,
 ) -> score.Document:
-    if document.gold_gap is None:
+    # Gaze already emits the contract's native classes. Replacing its reviewed
+    # compatibility pairs with the comparison map changes the contract's credit
+    # (for example AGE exclusions and v4 credential repeats).
+    if native_gaze or document.gold_gap is None:
         return document
     # The byte scorer is class-agnostic. Only v3's repeat credit needs a
     # reviewed semantic mapping from each tool's native labels to gold labels.
@@ -608,7 +612,8 @@ def rescore_predictions(
     for layer, documents in layers.items():
         stored.update(load_prediction_rows(prediction_path(root, layer, name), documents))
     return measure(name, lambda document: stored[document.uid], layers, mapping,
-                   supported_languages, common_labels)
+                   supported_languages, common_labels,
+                   native_gaze=name in {"gaze-full", "gaze-rules-only", "gaze-rules-ner"})
 
 
 def measure(
@@ -617,6 +622,7 @@ def measure(
     supported_languages: Sequence[str] | None = None,
     common_labels: frozenset[str] | None = None,
     predictions_dir: Path | None = None,
+    *, native_gaze: bool = False,
 ) -> dict[str, object]:
     if common_labels is None:
         common_labels = frozenset(label for labels in mapping.values() for label in labels)
@@ -673,7 +679,7 @@ def measure(
                     skipped_gold_bytes[version] += score.interval_length(
                         score.merge_intervals((span.start, span.end) for span in applied.spans)
                     )
-                accumulators[version].add(mapped_document(applied, mapping), predictions)
+                accumulators[version].add(mapped_document(applied, mapping, native_gaze=native_gaze), predictions)
                 for view in detailed[version].values():
                     view["full"].add(applied, predictions)
                     view[split_for_id(document.uid)].add(applied, predictions)
@@ -733,7 +739,7 @@ def measure_gaze(
                 applied = score.apply_scored_label_contract(
                     [document], agentic_contract if layer in {"A", "D", "R"} else contract,
                 )[0]
-                byte[version].add(mapped_document(applied, mapping), predictions)
+                byte[version].add(mapped_document(applied, mapping, native_gaze=True), predictions)
                 for view in detailed[version].values():
                     view["full"].add(applied, predictions)
                     view[split_for_id(document.uid)].add(applied, predictions)

@@ -15,6 +15,26 @@ from unittest import mock
 import rescore_past_release as rescore
 
 
+class PortablePolicyProvenanceTest(unittest.TestCase):
+    def test_home_policy_path_is_portable_and_keeps_the_content_digest(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            root = Path(tmp)
+            policy = root / 'policy.toml'
+            policy.write_text('schema_version="0.1.0"\n')
+            result = rescore.policy_provenance(policy, root / 'harness')
+            self.assertEqual(result['path'], str(Path('~') / policy.relative_to(Path.home())))
+            self.assertNotIn(str(Path.home()), result['path'])
+            self.assertEqual(result['sha256'], hashlib.sha256(policy.read_bytes()).hexdigest())
+
+    def test_repository_policy_path_is_relative(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy = root / 'policy.toml'
+            policy.write_text('schema_version="0.1.0"\n')
+            self.assertEqual(rescore.policy_provenance(policy, root)['path'], 'policy.toml')
+            self.assertIsNone(rescore.policy_provenance(None, root))
+
+
 class ModelBundleTest(unittest.TestCase):
     def test_a_bundle_whose_digest_differs_from_the_pin_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:

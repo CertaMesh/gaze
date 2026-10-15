@@ -26,6 +26,22 @@ import tune  # noqa: E402
 score = corpus.compare.score
 
 
+class NativeGazeContractTests(unittest.TestCase):
+    def test_gaze_tally_keeps_v4_credential_repeat_credit(self):
+        import versus_gaze
+        uid = uid_in('test', 'synthetic-credential')
+        document = score.Document(uid, 'TOKEN_A TOKEN_A', 'en', '', 'synthetic',
+                                  (score.Span(0, 7, 'SECURITYTOKEN'),))
+        contract = corpus.compare.runner.load_scored_label_contract(
+            tune.REPO, corpus.compare.CONTRACTS['v4'])
+        predictions = {uid: {'spans': [score.Span(8, 15, 'custom:security_token')], 'refused': None}}
+        result = versus_gaze.tally(predictions, {'C': [document]},
+            {'v4': {'main': contract, 'agentic': None}},
+            corpus.compare.load_mapping()['gaze'], None, native_gaze=True)
+        self.assertEqual(result['v4']['C']['false_positive_bytes'], 7)
+        self.assertEqual(result['v4']['C']['false_positive_bytes_after_gold_gap'], 0)
+
+
 def uid_in(split: str, prefix: str) -> str:
     """A document id that split_for_id assigns to `split`."""
     for n in range(10_000):

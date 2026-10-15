@@ -1107,6 +1107,8 @@ def layer_history_aggregates(scorecard: Mapping[str, Any]) -> dict[str, Any]:
         "binary_commit": copy.deepcopy(scorecard.get("binary_commit", scorecard.get("gaze"))),
         "binary_sha256": scorecard.get("binary_sha256"),
         "harness_commit": copy.deepcopy(scorecard.get("gaze")),
+        **({"observation_record": copy.deepcopy(scorecard["observation_record"])}
+           if "observation_record" in scorecard else {}),
         "arms": arms,
     }
 

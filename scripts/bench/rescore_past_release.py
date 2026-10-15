@@ -62,6 +62,12 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def policy_provenance(policy: Path | None, harness_root: Path) -> dict[str, str] | None:
+    if policy is None:
+        return None
+    return {"path": runner.portable_repo_path(harness_root, policy), "sha256": _sha256(policy)}
+
+
 def policy_dependencies(policy: Path | None, release_root: Path) -> dict[str, object] | None:
     if policy is None:
         return None
@@ -274,7 +280,7 @@ def run(args: argparse.Namespace) -> Path:
         "harness_revision": harness,
         "manifest_replacing_actions": sorted(args.manifest_actions.split(",")),
         "binary_sha256": _sha256(binary),
-        "policy": {"path": str(policy), "sha256": _sha256(policy)} if policy is not None else None,
+        "policy": policy_provenance(policy, HARNESS_ROOT),
         "profile": card["parameters"]["profile"],
         "model_bundles": bundles,
         "policy_dependencies": dependency_provenance,

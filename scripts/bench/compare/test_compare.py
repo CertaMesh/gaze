@@ -70,6 +70,45 @@ def test_unmapped_tool_label_fails_closed() -> None:
         compare.validate_labels([compare.score.Span(0, 1, "UNKNOWN")], {})
 
 
+@pytest.mark.parametrize("text,gold_label,native_label", [
+    ("42 42", "AGE", "custom:age"),
+    ("TOKEN_A TOKEN_A", "SECURITYTOKEN", "custom:security_token"),
+])
+def test_gaze_live_and_prediction_replay_preserve_native_contract(
+    text: str, gold_label: str, native_label: str, tmp_path: Path, monkeypatch,
+) -> None:
+    width = len(text.split()[0])
+    document = compare.score.Document(
+        "synthetic-contract", text, "en", "", "synthetic",
+        (compare.score.Span(0, width, gold_label),),
+    )
+    predictions = [compare.score.Span(width + 1, len(text), native_label)]
+    mapping = compare.load_mapping()["gaze"]
+    common = compare.common_claimed_labels(compare.load_mapping())
+
+    def run_config(*args, **kwargs):
+        kwargs["record_document"]("policy-file", document, {}, None)
+        return {"latency_ms": {"clean_ms": {"median": 0, "p95": 0}}}
+
+    monkeypatch.setattr(compare.score, "run_config", run_config)
+    monkeypatch.setattr(compare.score, "final_trace_predictions", lambda *_: predictions)
+    live = compare.measure_gaze("full", Path("unused"), Path("unused"), Path("unused"),
+                                {"C": [document]}, mapping, common, tmp_path, tmp_path)
+    replay = compare.rescore_predictions("gaze-full", {"C": [document]}, mapping, common, tmp_path)
+    for version, path in compare.CONTRACTS.items():
+        contract = compare.runner.load_scored_label_contract(compare.REPO, path)
+        applied = compare.score.apply_scored_label_contract([document], contract)[0]
+        expected = compare.score.MetricAccumulator()
+        expected.add(applied, predictions)
+        result = expected.result()
+        assert compare.mapped_document(applied, mapping, native_gaze=True) is applied
+        for measured in (live[version]["C"], replay["contracts"][version]["C"]):
+            assert measured["leaked_bytes"] == result["utf8_bytes"]["leaked"]
+            assert measured["false_positive_bytes"] == result["utf8_bytes"]["false_positive"]
+            assert measured["gold_gap_protected_bytes"] == result.get("gold_gap", {}).get("gold_gap_protected_bytes", 0)
+            assert measured["false_positive_bytes_after_gold_gap"] == result.get("gold_gap", {}).get("false_positive_bytes_after_gold_gap")
+
+
 def test_gaze_byte_equality_fails_on_each_mismatch() -> None:
     expected = {field: 0 for field in ("leaked_bytes", "false_positive_bytes",
                                        "gold_gap_protected_bytes", "false_positive_bytes_after_gold_gap")}
