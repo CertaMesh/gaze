@@ -20,13 +20,25 @@ MUTATIONS = [
 ]
 for source in ("password.code", "security_token.code"):
     MUTATIONS.extend([
-        (source + "-left", source, r"(?:\A|[\s{\[,;])", "", "code_literal"),
-        (source + "-tail", source, r"(?:[,;}\]]|\r?\n|\z)", "", "code_literal"),
+        (source + "-left", source, r"(?:\A|[\s{\[(,;])", "", "code_literal"),
+        (source + "-tail", source, r"(?:[,;})\]]|\r?\n|\z)", "", "code_literal"),
         (source + "-delimiter", source, "(?:=>|:|=)", r"(?:=>|:|=|\?\?)", "code_literal"),
         (source + "-closing-quote", source, '+)\"', '+)\"?', "code_literal"),
     ])
 
-MUTATIONS.append(("password.code-bare-tail", "password.code", r"[\x20\t]*[,;}\]]", r"[\x20\t]*", "code_literal"))
+MUTATIONS.append(("password.code-bare-tail", "password.code", r"[\x20\t]*[,;})\]]", r"[\x20\t]*", "code_literal"))
+
+
+for source in ("password.code", "security_token.code"):
+    MUTATIONS.extend([
+        (source + "-array-left", source, r"(?:\A|[\s{\[(,;])", r"(?:\A|[\s{\[,;])", "php_array_credentials"),
+        (source + "-array-right", source, r"[,;})\]]", r"[,;}\]]", "php_array_credentials"),
+    ])
+MUTATIONS.extend([
+    ("crypt-salt-alphabet", "password.hash", r"[^$:\n\x00]", "[./A-Za-z0-9]", "producer_hashes"),
+    ("django-salt-alphabet", "password.hash", r"[^$]+", "[A-Za-z0-9./_-]+", "producer_hashes"),
+    ("generic-token", "security_token.code", "|api_key", "|api_key|token", "generic_token_metadata"),
+])
 
 
 def main():

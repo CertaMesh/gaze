@@ -625,6 +625,10 @@ fn jwt_manifest_export_import_restores_whole_value_and_following_email() {
         ),
         (
             format!(r#"{{"token":"{PERSONAL_JWT}","email":"alice@example.invalid"}}"#),
+            vec!["security_token.anchored"],
+        ),
+        (
+            format!(r#"{{"api_token":"{PERSONAL_JWT}","email":"alice@example.invalid"}}"#),
             vec!["security_token.anchored", "security_token.code"],
         ),
     ] {

@@ -11,8 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Password hashes and code credentials.** The setup-default `secrets` bundle
   protects whole bcrypt, Argon2, scrypt/yescrypt, crypt, phpass and Django
-  encodings, including hashes in SQL dumps. Complete quoted password and token
-  fields in PHP and JSON retain their keys and punctuation. Whole Argon2
+  encodings, including broader crypt/Django salts and hashes in SQL dumps.
+  Complete quoted password and credential-token fields in PHP arrays and JSON
+  retain their keys and punctuation. Generic `token` keys remain outside the
+  code-field rule; ambiguous password metadata stays fail-closed. Whole Argon2
   encodings no longer split at an inner postal-code candidate (#824).
 
 - **Credentials in setup policies.** `gaze setup` now includes `secrets` by
