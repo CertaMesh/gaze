@@ -2177,26 +2177,28 @@ older v0.15.x ten A restore/manifest failures remain visible.
 | `v0.16.0` `policy-file` | 75,887 / 140,547 | 2,407 | 9,290 | 120,826 / 137,784 | 1,243 |
 | `v0.15.1` `policy-file` | 92,214 / 140,547 | 3,056 | 10,336 | 121,831 / 137,784 | 1,026 |
 | `v0.15.0` `policy-file` | 92,387 / 140,547 | 3,056 | 10,336 | 121,831 / 137,784 | 1,026 |
-| `v0.14.0` `full-stack-kiji-resolve` | 104,235 / 140,547 | 14,664 | 12,399 | 123,814 / 137,784 | 5,098 |
-| `v0.14.0` `pass2-ner` | 107,113 / 140,547 | 2,430 | 6,225 | 127,115 / 137,784 | 696 |
+| `v0.14.0` `full-stack-kiji-resolve` | N/A | N/A | N/A | N/A | N/A |
+| `v0.14.0` `pass2-ner` | N/A | N/A | N/A | N/A | N/A |
 
 | Release and arm | Refused A / D / R | Leaked on all processed A / D / R B |
 | --- | ---: | ---: |
 | `v0.16.0` `policy-file` | 0 / 0 / 0 | 75,887 / 0 / 120,826 |
 | `v0.15.1` `policy-file` | 0 / 0 / 0 | 92,214 / 0 / 121,831 |
 | `v0.15.0` `policy-file` | 0 / 0 / 0 | 92,387 / 0 / 121,831 |
-| `v0.14.0` `full-stack-kiji-resolve` | 0 / 0 / 0 | 104,235 / 0 / 123,814 |
-| `v0.14.0` `pass2-ner` | 0 / 0 / 0 | 107,113 / 0 / 127,115 |
+| `v0.14.0` `full-stack-kiji-resolve` | N/A | N/A |
+| `v0.14.0` `pass2-ner` | N/A | N/A |
 
 | Release and arm | Exact restores A / D / R | Valid manifests A / D / R | Restore failures A / D / R | Invalid manifests A / D / R |
 | --- | ---: | ---: | ---: | ---: |
 | `v0.16.0` `policy-file` | 6,617 / 5,192 / 3,061 | 6,617 / 5,192 / 3,061 | 0 / 0 / 0 | 0 / 0 / 0 |
 | `v0.15.1` `policy-file` | 6,607 / 5,192 / 3,061 | 6,607 / 5,192 / 3,061 | 10 / 0 / 0 | 10 / 0 / 0 |
 | `v0.15.0` `policy-file` | 6,607 / 5,192 / 3,061 | 6,607 / 5,192 / 3,061 | 10 / 0 / 0 | 10 / 0 / 0 |
-| `v0.14.0` `full-stack-kiji-resolve` | 6,455 / 5,180 / 2,953 | 6,617 / 5,192 / 3,061 | 162 / 12 / 108 | 0 / 0 / 0 |
-| `v0.14.0` `pass2-ner` | 6,617 / 5,192 / 3,061 | 6,617 / 5,192 / 3,061 | 0 / 0 / 0 | 0 / 0 / 0 |
+| `v0.14.0` `full-stack-kiji-resolve` | N/A | N/A | N/A | N/A |
+| `v0.14.0` `pass2-ner` | N/A | N/A | N/A | N/A |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v20-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v20, test corpus `ca2932826893…`. Each release uses its own setup policy; v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`; v0.14.0 retains the v0.15.x model settings.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines are listed above. The [committed measurement ledger](agentic-adjacency-v20-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v20, test corpus `ca2932826893…`. Setup policies: v0.15.x `f909a23aecac…`, v0.16.0 `65cd6aa588ce…`. v0.14.0 uses its legacy Kiji configurations.
+
+v0.14.0 generated layers are unavailable: both fresh contract attempts stopped at `payload_processing:payload`. No byte, refusal or restore counts are inferred. Layer C was measured separately. [Failure receipt](unavailable-v0.14.0-generated-v20.json).
 
 <!-- END GENERATED: agentic-adjacency -->
 
