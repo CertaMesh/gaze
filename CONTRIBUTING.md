@@ -275,3 +275,5 @@ Reserved fixtures avoid leaking reachable numbers into telemetry, CI logs or
 crate metadata. `E164Phone` accepts NANPA and Ofcom reservations, so positive
 tests still exercise validation. DE/US national-phone tests use fictional
 numbers too.
+
+<!-- Markdown-only CI timing probe. -->
