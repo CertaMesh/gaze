@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "scope": "Synthetic mechanism experiment; no production change, LLM planner, clinical/legal claim, release gate, or latency measurement",
+  "hypotheses": {
+    "Q1": "Exact maps preserve source bytes but cannot reliably establish cross-form identity. Unique structured matches plus trusted record context reduce wrong links; unscoped fuzzy or recent-first matching increases incorrect merges.",
+    "Q2": "Explicit local component selectors improve field-level completion over whole-value restoration when trusted structured records exist; they must preserve occurrence-level restore and enforce component permissions independently.",
+    "Q5": "Session membership and valid token syntax are insufficient disclosure authority. A host-bound principal/session/entity/component/action/destination/expiry grant must precede local substitution."
+  },
+  "split": "dev/test vocabulary and template namespaces assigned before evaluation; all perturbations stay with their parent; identical families deliberately test mechanism generalization, not distribution generalization",
+  "primary_metrics": {
+    "byte_precision": "covered gold UTF-8 bytes / all replaced source UTF-8 bytes",
+    "byte_recall": "covered gold UTF-8 bytes / all gold UTF-8 bytes",
+    "missed_pii_bytes": "gold byte positions not replaced; no refusal credit",
+    "false_positive_bytes": "replaced byte positions outside gold; includes benign homonyms and separator overreach",
+    "link_precision": "correct established entity links / established links on non-seed gold occurrences",
+    "link_recall": "correct established entity links / all non-seed gold occurrences; abstentions count as misses",
+    "wrong_links": "non-seed gold occurrences assigned to a different record; same-name records remain distinct",
+    "contaminated_roots": "reference roots containing occurrences from more than one gold entity",
+    "restoration_errors": "turns whose occurrence-map restoration differs byte-for-byte from source",
+    "utility": "Five fixed tasks per conversation. 1 each only for exact requested field value, correct record, approved sink, and no extra component; otherwise 0. No planner or language-quality score.",
+    "resource_cost": "serialized state bytes, alias count, candidate comparisons, regex scan count; no timing or process RSS estimates"
+  },
+  "tasks": {
+    "reply_drafting": "given-name salutation from person p1",
+    "scheduling": "full name for person p2",
+    "crm_update": "family name for person p1",
+    "shipping_label": "full address for address a1",
+    "summarization": "city only for address a1"
+  },
+  "decisions_locked_before_test": [
+    "Never collapse raw occurrence strings onto an entity canonical token",
+    "Default ambiguous structured match abstains; recent-first is a negative comparator",
+    "No type inference from gold; scanner gets only owner-record-derived aliases",
+    "Fuzzy linking requires trusted current record context; fuzzy-unscoped is an ablation",
+    "Denied restoration emits a constant error and no plaintext",
+    "No access to external or sealed per-document datasets"
+  ]
+}
