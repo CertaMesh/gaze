@@ -47,6 +47,9 @@ directories. Cargo keeps the invoking user's registry and toolchain caches.
 The Rust tutorial's `cargo add gaze-pii gaze-assembly` command resolves to
 `--path` dependencies on the checked-out `crates/gaze` and
 `crates/gaze-assembly`; other Cargo commands execute unchanged.
+This substitution leaves the published-crate installation path untested.
+After publishing, maintainers
+[replay the Rust tutorial with the published version](../how-to/maintainers/release-process.md#replay-the-published-rust-tutorial).
 
 The first `text` fence following an `sh` fence is that command's expected stdout.
 Explanatory prose may separate the fences. Another code fence ends the pairing.

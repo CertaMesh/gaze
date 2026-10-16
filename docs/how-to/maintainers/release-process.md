@@ -63,6 +63,20 @@ failed manual replay blocks the release.
 The [tutorial gate contract](../../reference/tutorial-gate.md) defines markers,
 exact output matching, pinned dependencies, and the mutation probes.
 
+## Replay the published Rust tutorial
+
+After the release's crates are available on crates.io, replay
+[Protect a model call from Rust](../../tutorials/getting-started.md) in a fresh
+directory outside a source checkout. Use normal Cargo commands, without the
+tutorial gate's path-dependency substitution. In step 1, pin both dependencies
+to the released version with
+`cargo add gaze-pii@<version> gaze-assembly@<version>`.
+
+Require tokenized model input and the program's exact-restore assertions to
+pass. Record the released version and result in the release PR before marking
+the release complete. The pre-tag CI gate builds source paths and does not
+test installation from crates.io.
+
 ## Pre-tag model-setup ownership gate
 
 Before the first `gaze-model-setup` publication, dispatch `release.yml` on the

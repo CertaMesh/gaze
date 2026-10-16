@@ -76,17 +76,26 @@ assert "example.invalid" not in clean
 assert "jane.doe" not in clean
 assert "Jane Doe" not in clean
 assert "555-0142" not in clean
-print("Name, email, and phone are tokenized")
+print(clean, end="" if clean.endswith("\n") else "\n")
 report = json.loads(Path("agent/report.json").read_text())
 print(f"Report version: {report['bundle_version']}")
 print("Sample PII checks: OK")
 PY
 ```
 
-The checks confirm that the name, email, and phone appear as tokens:
+You see the protected Markdown, followed by the report checks. The session
+prefix changes on each run:
 
 ```text
-Name, email, and phone are tokenized
+# gaze-document safe bundle
+
+Source kind: `png`
+
+---
+
+Bill to: <{session_hex}:Name_1>
+Email: <{session_hex}:Email_1>
+Phone: <{session_hex}:Custom:phone_1>
 Report version: 2
 Sample PII checks: OK
 ```
