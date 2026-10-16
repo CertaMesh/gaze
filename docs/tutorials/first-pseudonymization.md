@@ -125,6 +125,7 @@ Keep `input.txt`, `restored.txt`, and the `owner-*.json` files on the owner side
 For a model response, use its text as the restore request's `text` value and
 keep the same `session_blob`.
 
-This sample proves one round trip. Detection coverage and one-way fallback
-limits are described in [How Gaze works](../explanation/how-gaze-works.md#limits).
+This sample proves one round trip. See
+[detection coverage](../explanation/how-gaze-works.md#detection-coverage) and
+[one-way fallback limits](../explanation/how-gaze-works.md#what-happens-when-the-safety-net-disagrees).
 For policy choices, use [Set up a policy by hand](../how-to/manual-policy.md).
