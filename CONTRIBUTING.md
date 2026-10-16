@@ -114,9 +114,27 @@ pushing a PR; CI also runs workspace, MSRV, cargo-deny and active xtask gates.
 The required `test` check aggregates three owners: `test-support` (the existing
 feature-specific suites, all-feature doctests, pinned live models, and fresh
 producer binding), `workspace-shards` (the all-feature lib/bin/integration suite),
-and `test-coverage` (once-only execution proof). A failed, skipped, cancelled, or
-missing owner fails the required check. The existing `xtask gates` aggregator
+and `test-coverage` (once-only execution proof). On the full CI path, a failed,
+skipped, cancelled, or missing owner fails the required check. The `xtask gates` aggregator
 still requires `test`, the default-feature workspace suite, and feature gates.
+
+PRs whose merge-base diff contains only `.md` files take a shorter path. Changes
+under `.github/`, renames, copies, empty diffs, classifier errors, and events other
+than `pull_request` take full CI. The committed classifier tests run before each
+classification. Test them locally with:
+
+```bash
+python3 -m unittest discover -s scripts/ci -p 'test_*changes.py'
+```
+
+The Markdown path keeps the docs workflow, benchmark Python checks, DCO,
+`readme-version-check`, and `bundle-tokenization-drift --verify-ack`. The latter
+checks CHANGELOG acknowledgements. `scrub-public-text` remains in the release and
+publish workflows. Workspace builds/tests, native subprocess checks, Dylint,
+and benchmark Rust binary checks skip on this path. The existing `test` and
+`xtask gates` jobs still run and validate the expected successful and skipped
+owners. Required workflows have no path filters, so their contexts report a
+result for every PR.
 
 Workspace shards use pinned cargo-nextest with no retries. Every test binary,
 including empty platform/feature-gated binaries, has one explicit assignment in
