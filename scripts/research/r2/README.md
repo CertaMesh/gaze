@@ -51,3 +51,32 @@ as v1/v2 release scores. Full-corpus arms require the normal fresh-base and
 candidate gate with both contracts, refusals, exact restore and manifests,
 plus independent counterweights and historical remeasurement if adopted into
 the published harness. Queue those runs while the machine lease is occupied.
+
+`--normalize-view` is a separate offline prototype: per-scalar NFKC plus
+ZWSP deletion creates a detector view with a byte-to-source map. Predictions
+project back onto whole original characters, and only those source intervals
+are replaced. Production restore is tested on the view; original-source
+restore uses the prototype renderer. These distinct proofs do not establish
+production integration or session-state preservation. Per-scalar NFKC does
+not compose adjacent NFD scalars or fold arbitrary homoglyphs. Do not mistake
+the normalized output for an authorized replacement of the original text.
+
+Native corpus and generated layer slices can be reproduced without opening
+any external corpus:
+
+```sh
+python3 scripts/research/r2/repo_slices.py generate target/r2
+python3 scripts/research/r2/experiment.py run --split holdout \
+  --fixtures target/r2/repo-holdout.json --binary target/debug/r2-source-probe \
+  --policy target/r2/policies/full.toml --out target/r2/repo-full-holdout.json
+python3 scripts/research/r2/repo_slices.py score target/r2/repo-holdout.json \
+  --observations target/r2/repo-full-holdout.observations.json
+python3 -m unittest discover -s scripts/research/r2 -v
+```
+
+The native coverage-loop sample is separate from layer C and has no official
+release v1/v2 semantics. Generated A/D/R samples use disjoint dev/test
+partitions, eight deterministic family-balanced inputs per layer, restricted
+to labels ruled on by v2. Their v1/v2 counts are *sample* byte views, not full
+release gate results; headline all-gold and validity twins still need the
+complete normal gate before adoption. Sample selection is frozen in code.

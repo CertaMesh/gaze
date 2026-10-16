@@ -176,6 +176,37 @@ def mask(spans):
     return set(itertools.chain.from_iterable(range(a, b) for a, b in spans))
 
 
+def normalized_view(text):
+    """Per-scalar NFKC plus ZWSP removal; map every view byte to its source."""
+    parts, mapping, offset = [], [], 0
+    for char in text:
+        width = len(char.encode())
+        view = "" if char == "\u200b" else unicodedata.normalize("NFKC", char)
+        parts.append(view)
+        mapping.extend([(offset, offset + width)] * len(view.encode()))
+        offset += width
+    return "".join(parts), mapping
+
+
+def source_response(row, view_row, response, mapping):
+    if "error" in response:
+        return response
+    view_spans = validate(view_row, response)
+    projected = merge([(mapping[a][0], mapping[b - 1][1]) for a, b in view_spans])
+    raw, clean, entries, tokens, offset = row["text"].encode(), bytearray(), [], [], 0
+    for i, (a, b) in enumerate(projected):
+        clean.extend(raw[offset:a])
+        token = f"<R2_VIEW_{i}>"
+        c = len(clean); clean.extend(token.encode())
+        entries.append(dict(raw_span=dict(start=a, end=b), clean_span=dict(start=c, end=len(clean))))
+        tokens.append(dict(token=token, original=raw[a:b].decode()))
+        offset = b
+    clean.extend(raw[offset:])
+    return dict(session_id=row["session"], clean_text=clean.decode(), manifest=entries,
+                tokens=tokens, exact_restore=True, prototype_projection=True,
+                production_view_exact_restore=response["exact_restore"])
+
+
 def validate(row, response):
     """Check offsets, untouched gaps, manifest/token agreement and exact restore."""
     raw, clean = row["text"].encode(), response["clean_text"].encode()
@@ -256,8 +287,11 @@ def summary(rows, observations, mode):
 
 
 def run(args):
-    rows = json.loads((HERE / f"{args.split}.json").read_text())
-    requests = [{"session_id": r["session"], "text": r["text"]} for r in rows]
+    fixture_path = args.fixtures or HERE / f"{args.split}.json"
+    rows = json.loads(fixture_path.read_text())
+    views = [normalized_view(r["text"]) for r in rows] if args.normalize_view else None
+    view_rows = [dict(r, text=views[i][0]) for i, r in enumerate(rows)] if views else rows
+    requests = [{"session_id": r["session"], "text": r["text"]} for r in view_rows]
     env = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", RAYON_NUM_THREADS="2")
     cmd = [str(args.binary), str(args.policy)]
     # Small bounded batch: communicate drains both pipes, EOF checks child exit.
@@ -265,15 +299,22 @@ def run(args):
                             capture_output=True, text=True, timeout=900, env=env)
     if result.returncode:
         raise RuntimeError(result.stderr[-4000:])
-    observed = [json.loads(line) for line in result.stdout.splitlines()]
+    # JSONL uses LF only. str.splitlines also splits literal U+2028 inside
+    # valid JSON strings, corrupting Unicode stress observations.
+    observed = [json.loads(line) for line in result.stdout.split("\n") if line]
     assert len(rows) == len(observed)
     assert all(a["session"] == b["session_id"] for a, b in zip(rows, observed, strict=True))
+    if views:
+        dump(args.out.with_suffix(".view-observations.json"), observed)
+        observed = [source_response(row, view_row, response, mapping) for row, view_row, response, (_, mapping)
+                    in zip(rows, view_rows, observed, views, strict=True)]
     modes = ["baseline", "lexical", "cue", "lexical+cue", "verified"]
     answer = dict(schema_version=1, split=args.split, source_commit=subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         binary_sha256=hashlib.sha256(args.binary.read_bytes()).hexdigest(),
         policy_sha256=hashlib.sha256(args.policy.read_bytes()).hexdigest(),
-        fixture_sha256=hashlib.sha256((HERE / f"{args.split}.json").read_bytes()).hexdigest(),
+        fixture_sha256=hashlib.sha256(fixture_path.read_bytes()).hexdigest(),
+        normalization_view=args.normalize_view,
         arms={mode: summary(rows, observed, mode) for mode in modes})
     dump(args.out, answer)
     dump(args.out.with_suffix(".observations.json"), observed)
@@ -287,5 +328,7 @@ if __name__ == "__main__":
     parser.add_argument("--binary", type=Path)
     parser.add_argument("--policy", type=Path)
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--fixtures", type=Path)
+    parser.add_argument("--normalize-view", action="store_true")
     args = parser.parse_args()
     generate() if args.command == "generate" else run(args)
