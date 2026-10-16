@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [ci/markdown-fastpath-probe-base]
 
 permissions:
   contents: read

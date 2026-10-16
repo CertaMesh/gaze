@@ -4,7 +4,7 @@ name: dylint
 
 on:
   pull_request:
-    branches: [main]
+    branches: [ci/markdown-fastpath-probe-base]
   schedule:
     - cron: '0 8 * * 1'   # Mondays 08:00 UTC
   workflow_dispatch:

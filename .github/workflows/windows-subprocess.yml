@@ -1,7 +1,7 @@
 name: Windows subprocess ownership
 on:
   pull_request:
-    branches: [main]
+    branches: [ci/markdown-fastpath-probe-base]
 permissions:
   contents: read
 jobs:
