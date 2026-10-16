@@ -1,0 +1,28 @@
+name: classify changes
+
+on:
+  workflow_call:
+    outputs:
+      docs_only:
+        description: True only for a nonempty, unambiguous Markdown-only PR diff
+        value: ${{ jobs.changes.outputs.docs_only }}
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test change classification and required contexts
+        run: python3 -m unittest discover -s scripts/ci -p 'test_*changes.py'
+      - name: Classify merge-base diff (errors select full CI)
+        id: classify
+        continue-on-error: true
+        run: python3 scripts/ci/classify_changes.py >> "$GITHUB_OUTPUT"
