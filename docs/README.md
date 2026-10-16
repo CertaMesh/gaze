@@ -13,8 +13,8 @@ Gaze replaces PII with restorable tokens before text reaches an LLM. Keep restor
 ## Quickstart
 
 New here? [Your first pseudonymization](tutorials/first-pseudonymization.md)
-cleans a fictional email and restores its exact bytes in about five minutes
-after model setup. For a library integration, use
+cleans a fictional email and restores its exact bytes in about five minutes,
+with no model download. For a library integration, use
 [Protect a model call from Rust](tutorials/getting-started.md).
 
 ## Find your way
