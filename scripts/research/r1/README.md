@@ -14,6 +14,7 @@ git diff --exit-code -- scripts/research/r1/scenarios.jsonl
 CARGO_BUILD_JOBS=2 cargo build --offline -j 2 -p gaze-pii --no-default-features --example research_r1
 python3.12 scripts/research/r1/run.py --split dev --output target/research/r1/dev.json
 python3.12 scripts/research/r1/run.py --split test --output target/research/r1/test.json
+python3.12 scripts/research/r1/repeat.py --repetitions 5
 ```
 
 The native example uses the production core and repeat sweep, with a synthetic
