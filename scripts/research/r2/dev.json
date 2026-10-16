@@ -1,0 +1,1302 @@
+[
+  {
+    "id": "dev-000",
+    "split": "dev",
+    "category": "name_title",
+    "language": "en",
+    "text": "Please contact Nelia Quillmere.",
+    "gold": [
+      [
+        15,
+        30
+      ]
+    ],
+    "session": "dev-000"
+  },
+  {
+    "id": "dev-001",
+    "split": "dev",
+    "category": "name_lower",
+    "language": "en",
+    "text": "Please contact nelia quillmere.",
+    "gold": [
+      [
+        15,
+        30
+      ]
+    ],
+    "session": "dev-001"
+  },
+  {
+    "id": "dev-002",
+    "split": "dev",
+    "category": "name_upper",
+    "language": "en",
+    "text": "Please contact NELIA QUILLMERE.",
+    "gold": [
+      [
+        15,
+        30
+      ]
+    ],
+    "session": "dev-002"
+  },
+  {
+    "id": "dev-003",
+    "split": "dev",
+    "category": "name_hyphen",
+    "language": "en",
+    "text": "Please contact Nelia Quillmere-ellery.",
+    "gold": [
+      [
+        15,
+        37
+      ]
+    ],
+    "session": "dev-003"
+  },
+  {
+    "id": "dev-004",
+    "split": "dev",
+    "category": "name_apostrophe",
+    "language": "en",
+    "text": "Please contact Nelia Quillmere'vella.",
+    "gold": [
+      [
+        15,
+        36
+      ]
+    ],
+    "session": "dev-004"
+  },
+  {
+    "id": "dev-005",
+    "split": "dev",
+    "category": "name_title",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie Nelia Quillmere.",
+    "gold": [
+      [
+        23,
+        38
+      ]
+    ],
+    "session": "dev-005"
+  },
+  {
+    "id": "dev-006",
+    "split": "dev",
+    "category": "name_lower",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie nelia quillmere.",
+    "gold": [
+      [
+        23,
+        38
+      ]
+    ],
+    "session": "dev-006"
+  },
+  {
+    "id": "dev-007",
+    "split": "dev",
+    "category": "name_upper",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie NELIA QUILLMERE.",
+    "gold": [
+      [
+        23,
+        38
+      ]
+    ],
+    "session": "dev-007"
+  },
+  {
+    "id": "dev-008",
+    "split": "dev",
+    "category": "name_hyphen",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie Nelia Quillmere-ellery.",
+    "gold": [
+      [
+        23,
+        45
+      ]
+    ],
+    "session": "dev-008"
+  },
+  {
+    "id": "dev-009",
+    "split": "dev",
+    "category": "name_apostrophe",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie Nelia Quillmere'vella.",
+    "gold": [
+      [
+        23,
+        44
+      ]
+    ],
+    "session": "dev-009"
+  },
+  {
+    "id": "dev-010",
+    "split": "dev",
+    "category": "email_plain",
+    "language": "de",
+    "text": "E-Mail: nelia.quillmere@example.invalid.",
+    "gold": [
+      [
+        8,
+        39
+      ]
+    ],
+    "session": "dev-010"
+  },
+  {
+    "id": "dev-011",
+    "split": "dev",
+    "category": "email_nbsp",
+    "language": "de",
+    "text": "E-Mail: nelia.quillmere @example.invalid.",
+    "gold": [
+      [
+        8,
+        41
+      ]
+    ],
+    "session": "dev-011"
+  },
+  {
+    "id": "dev-012",
+    "split": "dev",
+    "category": "email_zero_width",
+    "language": "de",
+    "text": "E-Mail: nelia.quillmere​@example.invalid.",
+    "gold": [
+      [
+        8,
+        42
+      ]
+    ],
+    "session": "dev-012"
+  },
+  {
+    "id": "dev-013",
+    "split": "dev",
+    "category": "email_fullwidth",
+    "language": "de",
+    "text": "E-Mail: nelia.quillmere＠example.invalid.",
+    "gold": [
+      [
+        8,
+        41
+      ]
+    ],
+    "session": "dev-013"
+  },
+  {
+    "id": "dev-014",
+    "split": "dev",
+    "category": "email_homoglyph",
+    "language": "de",
+    "text": "E-Mail: neliа.quillmere@example.invalid.",
+    "gold": [
+      [
+        8,
+        40
+      ]
+    ],
+    "session": "dev-014"
+  },
+  {
+    "id": "dev-015",
+    "split": "dev",
+    "category": "email_newline",
+    "language": "de",
+    "text": "E-Mail: nelia.quillmere\n@example.invalid.",
+    "gold": [
+      [
+        8,
+        40
+      ]
+    ],
+    "session": "dev-015"
+  },
+  {
+    "id": "dev-016",
+    "split": "dev",
+    "category": "name_nbsp",
+    "language": "mixed",
+    "text": "Name: Nelia Quillmere",
+    "gold": [
+      [
+        6,
+        22
+      ]
+    ],
+    "session": "dev-016"
+  },
+  {
+    "id": "dev-017",
+    "split": "dev",
+    "category": "name_zero_width",
+    "language": "mixed",
+    "text": "Name: Nelia​Quillmere",
+    "gold": [
+      [
+        6,
+        23
+      ]
+    ],
+    "session": "dev-017"
+  },
+  {
+    "id": "dev-018",
+    "split": "dev",
+    "category": "name_lf",
+    "language": "mixed",
+    "text": "Name: Nelia\nQuillmere",
+    "gold": [
+      [
+        6,
+        21
+      ]
+    ],
+    "session": "dev-018"
+  },
+  {
+    "id": "dev-019",
+    "split": "dev",
+    "category": "name_ls",
+    "language": "mixed",
+    "text": "Name: Nelia Quillmere",
+    "gold": [
+      [
+        6,
+        23
+      ]
+    ],
+    "session": "dev-019"
+  },
+  {
+    "id": "dev-020",
+    "split": "dev",
+    "category": "name_nfd",
+    "language": "de",
+    "text": "Kundin: Neliaé Quillmereö",
+    "gold": [
+      [
+        8,
+        29
+      ]
+    ],
+    "session": "dev-020"
+  },
+  {
+    "id": "dev-021",
+    "split": "dev",
+    "category": "name_json",
+    "language": "mixed",
+    "text": "{\"recipient_name\": \"nelia quillmere\"}",
+    "gold": [
+      [
+        20,
+        35
+      ]
+    ],
+    "session": "dev-021"
+  },
+  {
+    "id": "dev-022",
+    "split": "dev",
+    "category": "name_cue",
+    "language": "en",
+    "text": "Recipient name: nelia quillmere",
+    "gold": [
+      [
+        16,
+        31
+      ]
+    ],
+    "session": "dev-022"
+  },
+  {
+    "id": "dev-023",
+    "split": "dev",
+    "category": "name_cue",
+    "language": "de",
+    "text": "Kundenname: nelia quillmere",
+    "gold": [
+      [
+        12,
+        27
+      ]
+    ],
+    "session": "dev-023"
+  },
+  {
+    "id": "dev-024",
+    "split": "dev",
+    "category": "phone_fictional",
+    "language": "en",
+    "text": "Phone: +1 202 555 0123",
+    "gold": [
+      [
+        7,
+        22
+      ]
+    ],
+    "session": "dev-024"
+  },
+  {
+    "id": "dev-025",
+    "split": "dev",
+    "category": "phone_nbsp",
+    "language": "de",
+    "text": "Telefon: +44 7700 900123",
+    "gold": [
+      [
+        9,
+        26
+      ]
+    ],
+    "session": "dev-025"
+  },
+  {
+    "id": "dev-026",
+    "split": "dev",
+    "category": "labelled_id_long",
+    "language": "mixed",
+    "text": "Driver licence: ZX0123-AB 1234 CD 5678 EF 9012 GH 3456; status: pending",
+    "gold": [
+      [
+        16,
+        54
+      ]
+    ],
+    "session": "dev-026"
+  },
+  {
+    "id": "dev-027",
+    "split": "dev",
+    "category": "invalid_card_cued",
+    "language": "mixed",
+    "text": "Card number: 4927 6138 2054 7792",
+    "gold": [
+      [
+        13,
+        32
+      ]
+    ],
+    "session": "dev-027"
+  },
+  {
+    "id": "dev-028",
+    "split": "dev",
+    "category": "invalid_card_uncued",
+    "language": "mixed",
+    "text": "Value: 4927 6138 2054 7792",
+    "gold": [
+      [
+        7,
+        26
+      ]
+    ],
+    "session": "dev-028"
+  },
+  {
+    "id": "dev-029",
+    "split": "dev",
+    "category": "labelled_opaque",
+    "language": "de",
+    "text": "Kundennummer: ZX0123A",
+    "gold": [
+      [
+        14,
+        21
+      ]
+    ],
+    "session": "dev-029"
+  },
+  {
+    "id": "dev-030",
+    "split": "dev",
+    "category": "record_separators",
+    "language": "mixed",
+    "text": "Nelia Quillmere\nVela Mossquill",
+    "gold": [
+      [
+        0,
+        15
+      ],
+      [
+        16,
+        30
+      ]
+    ],
+    "session": "dev-030"
+  },
+  {
+    "id": "dev-031",
+    "split": "dev",
+    "category": "turn_email",
+    "language": "mixed",
+    "text": "nelia",
+    "gold": [
+      [
+        0,
+        5
+      ]
+    ],
+    "session": "dev-turn_email-Nelia"
+  },
+  {
+    "id": "dev-032",
+    "split": "dev",
+    "category": "turn_email",
+    "language": "mixed",
+    "text": ".quillmere@example.invalid",
+    "gold": [
+      [
+        0,
+        26
+      ]
+    ],
+    "session": "dev-turn_email-Nelia"
+  },
+  {
+    "id": "dev-033",
+    "split": "dev",
+    "category": "turn_phone",
+    "language": "mixed",
+    "text": "+1 202",
+    "gold": [
+      [
+        0,
+        6
+      ]
+    ],
+    "session": "dev-turn_phone-Nelia"
+  },
+  {
+    "id": "dev-034",
+    "split": "dev",
+    "category": "turn_phone",
+    "language": "mixed",
+    "text": "555 0123",
+    "gold": [
+      [
+        0,
+        8
+      ]
+    ],
+    "session": "dev-turn_phone-Nelia"
+  },
+  {
+    "id": "dev-035",
+    "split": "dev",
+    "category": "turn_name",
+    "language": "mixed",
+    "text": "nelia",
+    "gold": [
+      [
+        0,
+        5
+      ]
+    ],
+    "session": "dev-turn_name-Nelia"
+  },
+  {
+    "id": "dev-036",
+    "split": "dev",
+    "category": "turn_name",
+    "language": "mixed",
+    "text": "quillmere",
+    "gold": [
+      [
+        0,
+        9
+      ]
+    ],
+    "session": "dev-turn_name-Nelia"
+  },
+  {
+    "id": "dev-037",
+    "split": "dev",
+    "category": "source_first",
+    "language": "mixed",
+    "text": "Driver licence: ZX0123A-9172",
+    "gold": [
+      [
+        16,
+        28
+      ]
+    ],
+    "session": "dev-source_first-Nelia"
+  },
+  {
+    "id": "dev-038",
+    "split": "dev",
+    "category": "source_first",
+    "language": "mixed",
+    "text": "ZX0123A-9172",
+    "gold": [
+      [
+        0,
+        12
+      ]
+    ],
+    "session": "dev-source_first-Nelia"
+  },
+  {
+    "id": "dev-039",
+    "split": "dev",
+    "category": "source_last",
+    "language": "mixed",
+    "text": "ZX0123A-9172",
+    "gold": [
+      [
+        0,
+        12
+      ]
+    ],
+    "session": "dev-source_last-Nelia"
+  },
+  {
+    "id": "dev-040",
+    "split": "dev",
+    "category": "source_last",
+    "language": "mixed",
+    "text": "Driver licence: ZX0123A-9172",
+    "gold": [
+      [
+        16,
+        28
+      ]
+    ],
+    "session": "dev-source_last-Nelia"
+  },
+  {
+    "id": "dev-041",
+    "split": "dev",
+    "category": "name_title",
+    "language": "en",
+    "text": "Please contact Tavin Brindlewick.",
+    "gold": [
+      [
+        15,
+        32
+      ]
+    ],
+    "session": "dev-041"
+  },
+  {
+    "id": "dev-042",
+    "split": "dev",
+    "category": "name_lower",
+    "language": "en",
+    "text": "Please contact tavin brindlewick.",
+    "gold": [
+      [
+        15,
+        32
+      ]
+    ],
+    "session": "dev-042"
+  },
+  {
+    "id": "dev-043",
+    "split": "dev",
+    "category": "name_upper",
+    "language": "en",
+    "text": "Please contact TAVIN BRINDLEWICK.",
+    "gold": [
+      [
+        15,
+        32
+      ]
+    ],
+    "session": "dev-043"
+  },
+  {
+    "id": "dev-044",
+    "split": "dev",
+    "category": "name_hyphen",
+    "language": "en",
+    "text": "Please contact Tavin Brindlewick-ellery.",
+    "gold": [
+      [
+        15,
+        39
+      ]
+    ],
+    "session": "dev-044"
+  },
+  {
+    "id": "dev-045",
+    "split": "dev",
+    "category": "name_apostrophe",
+    "language": "en",
+    "text": "Please contact Tavin Brindlewick'vella.",
+    "gold": [
+      [
+        15,
+        38
+      ]
+    ],
+    "session": "dev-045"
+  },
+  {
+    "id": "dev-046",
+    "split": "dev",
+    "category": "name_title",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie Tavin Brindlewick.",
+    "gold": [
+      [
+        23,
+        40
+      ]
+    ],
+    "session": "dev-046"
+  },
+  {
+    "id": "dev-047",
+    "split": "dev",
+    "category": "name_lower",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie tavin brindlewick.",
+    "gold": [
+      [
+        23,
+        40
+      ]
+    ],
+    "session": "dev-047"
+  },
+  {
+    "id": "dev-048",
+    "split": "dev",
+    "category": "name_upper",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie TAVIN BRINDLEWICK.",
+    "gold": [
+      [
+        23,
+        40
+      ]
+    ],
+    "session": "dev-048"
+  },
+  {
+    "id": "dev-049",
+    "split": "dev",
+    "category": "name_hyphen",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie Tavin Brindlewick-ellery.",
+    "gold": [
+      [
+        23,
+        47
+      ]
+    ],
+    "session": "dev-049"
+  },
+  {
+    "id": "dev-050",
+    "split": "dev",
+    "category": "name_apostrophe",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie Tavin Brindlewick'vella.",
+    "gold": [
+      [
+        23,
+        46
+      ]
+    ],
+    "session": "dev-050"
+  },
+  {
+    "id": "dev-051",
+    "split": "dev",
+    "category": "email_plain",
+    "language": "de",
+    "text": "E-Mail: tavin.brindlewick@example.invalid.",
+    "gold": [
+      [
+        8,
+        41
+      ]
+    ],
+    "session": "dev-051"
+  },
+  {
+    "id": "dev-052",
+    "split": "dev",
+    "category": "email_nbsp",
+    "language": "de",
+    "text": "E-Mail: tavin.brindlewick @example.invalid.",
+    "gold": [
+      [
+        8,
+        43
+      ]
+    ],
+    "session": "dev-052"
+  },
+  {
+    "id": "dev-053",
+    "split": "dev",
+    "category": "email_zero_width",
+    "language": "de",
+    "text": "E-Mail: tavin.brindlewick​@example.invalid.",
+    "gold": [
+      [
+        8,
+        44
+      ]
+    ],
+    "session": "dev-053"
+  },
+  {
+    "id": "dev-054",
+    "split": "dev",
+    "category": "email_fullwidth",
+    "language": "de",
+    "text": "E-Mail: tavin.brindlewick＠example.invalid.",
+    "gold": [
+      [
+        8,
+        43
+      ]
+    ],
+    "session": "dev-054"
+  },
+  {
+    "id": "dev-055",
+    "split": "dev",
+    "category": "email_homoglyph",
+    "language": "de",
+    "text": "E-Mail: tаvin.brindlewick@example.invalid.",
+    "gold": [
+      [
+        8,
+        42
+      ]
+    ],
+    "session": "dev-055"
+  },
+  {
+    "id": "dev-056",
+    "split": "dev",
+    "category": "email_newline",
+    "language": "de",
+    "text": "E-Mail: tavin.brindlewick\n@example.invalid.",
+    "gold": [
+      [
+        8,
+        42
+      ]
+    ],
+    "session": "dev-056"
+  },
+  {
+    "id": "dev-057",
+    "split": "dev",
+    "category": "name_nbsp",
+    "language": "mixed",
+    "text": "Name: Tavin Brindlewick",
+    "gold": [
+      [
+        6,
+        24
+      ]
+    ],
+    "session": "dev-057"
+  },
+  {
+    "id": "dev-058",
+    "split": "dev",
+    "category": "name_zero_width",
+    "language": "mixed",
+    "text": "Name: Tavin​Brindlewick",
+    "gold": [
+      [
+        6,
+        25
+      ]
+    ],
+    "session": "dev-058"
+  },
+  {
+    "id": "dev-059",
+    "split": "dev",
+    "category": "name_lf",
+    "language": "mixed",
+    "text": "Name: Tavin\nBrindlewick",
+    "gold": [
+      [
+        6,
+        23
+      ]
+    ],
+    "session": "dev-059"
+  },
+  {
+    "id": "dev-060",
+    "split": "dev",
+    "category": "name_ls",
+    "language": "mixed",
+    "text": "Name: Tavin Brindlewick",
+    "gold": [
+      [
+        6,
+        25
+      ]
+    ],
+    "session": "dev-060"
+  },
+  {
+    "id": "dev-061",
+    "split": "dev",
+    "category": "name_nfd",
+    "language": "de",
+    "text": "Kundin: Taviné Brindlewickö",
+    "gold": [
+      [
+        8,
+        31
+      ]
+    ],
+    "session": "dev-061"
+  },
+  {
+    "id": "dev-062",
+    "split": "dev",
+    "category": "name_json",
+    "language": "mixed",
+    "text": "{\"recipient_name\": \"tavin brindlewick\"}",
+    "gold": [
+      [
+        20,
+        37
+      ]
+    ],
+    "session": "dev-062"
+  },
+  {
+    "id": "dev-063",
+    "split": "dev",
+    "category": "name_cue",
+    "language": "en",
+    "text": "Recipient name: tavin brindlewick",
+    "gold": [
+      [
+        16,
+        33
+      ]
+    ],
+    "session": "dev-063"
+  },
+  {
+    "id": "dev-064",
+    "split": "dev",
+    "category": "name_cue",
+    "language": "de",
+    "text": "Kundenname: tavin brindlewick",
+    "gold": [
+      [
+        12,
+        29
+      ]
+    ],
+    "session": "dev-064"
+  },
+  {
+    "id": "dev-065",
+    "split": "dev",
+    "category": "phone_fictional",
+    "language": "en",
+    "text": "Phone: +1 202 555 0142",
+    "gold": [
+      [
+        7,
+        22
+      ]
+    ],
+    "session": "dev-065"
+  },
+  {
+    "id": "dev-066",
+    "split": "dev",
+    "category": "phone_nbsp",
+    "language": "de",
+    "text": "Telefon: +44 7700 900142",
+    "gold": [
+      [
+        9,
+        26
+      ]
+    ],
+    "session": "dev-066"
+  },
+  {
+    "id": "dev-067",
+    "split": "dev",
+    "category": "labelled_id_long",
+    "language": "mixed",
+    "text": "Driver licence: ZX0142-AB 1234 CD 5678 EF 9012 GH 3456; status: pending",
+    "gold": [
+      [
+        16,
+        54
+      ]
+    ],
+    "session": "dev-067"
+  },
+  {
+    "id": "dev-068",
+    "split": "dev",
+    "category": "invalid_card_cued",
+    "language": "mixed",
+    "text": "Card number: 4927 6138 2054 7792",
+    "gold": [
+      [
+        13,
+        32
+      ]
+    ],
+    "session": "dev-068"
+  },
+  {
+    "id": "dev-069",
+    "split": "dev",
+    "category": "invalid_card_uncued",
+    "language": "mixed",
+    "text": "Value: 4927 6138 2054 7792",
+    "gold": [
+      [
+        7,
+        26
+      ]
+    ],
+    "session": "dev-069"
+  },
+  {
+    "id": "dev-070",
+    "split": "dev",
+    "category": "labelled_opaque",
+    "language": "de",
+    "text": "Kundennummer: ZX0142A",
+    "gold": [
+      [
+        14,
+        21
+      ]
+    ],
+    "session": "dev-070"
+  },
+  {
+    "id": "dev-071",
+    "split": "dev",
+    "category": "record_separators",
+    "language": "mixed",
+    "text": "Tavin Brindlewick\nVela Mossquill",
+    "gold": [
+      [
+        0,
+        17
+      ],
+      [
+        18,
+        32
+      ]
+    ],
+    "session": "dev-071"
+  },
+  {
+    "id": "dev-072",
+    "split": "dev",
+    "category": "turn_email",
+    "language": "mixed",
+    "text": "tavin",
+    "gold": [
+      [
+        0,
+        5
+      ]
+    ],
+    "session": "dev-turn_email-Tavin"
+  },
+  {
+    "id": "dev-073",
+    "split": "dev",
+    "category": "turn_email",
+    "language": "mixed",
+    "text": ".brindlewick@example.invalid",
+    "gold": [
+      [
+        0,
+        28
+      ]
+    ],
+    "session": "dev-turn_email-Tavin"
+  },
+  {
+    "id": "dev-074",
+    "split": "dev",
+    "category": "turn_phone",
+    "language": "mixed",
+    "text": "+1 202",
+    "gold": [
+      [
+        0,
+        6
+      ]
+    ],
+    "session": "dev-turn_phone-Tavin"
+  },
+  {
+    "id": "dev-075",
+    "split": "dev",
+    "category": "turn_phone",
+    "language": "mixed",
+    "text": "555 0142",
+    "gold": [
+      [
+        0,
+        8
+      ]
+    ],
+    "session": "dev-turn_phone-Tavin"
+  },
+  {
+    "id": "dev-076",
+    "split": "dev",
+    "category": "turn_name",
+    "language": "mixed",
+    "text": "tavin",
+    "gold": [
+      [
+        0,
+        5
+      ]
+    ],
+    "session": "dev-turn_name-Tavin"
+  },
+  {
+    "id": "dev-077",
+    "split": "dev",
+    "category": "turn_name",
+    "language": "mixed",
+    "text": "brindlewick",
+    "gold": [
+      [
+        0,
+        11
+      ]
+    ],
+    "session": "dev-turn_name-Tavin"
+  },
+  {
+    "id": "dev-078",
+    "split": "dev",
+    "category": "source_first",
+    "language": "mixed",
+    "text": "Driver licence: ZX0142A-9172",
+    "gold": [
+      [
+        16,
+        28
+      ]
+    ],
+    "session": "dev-source_first-Tavin"
+  },
+  {
+    "id": "dev-079",
+    "split": "dev",
+    "category": "source_first",
+    "language": "mixed",
+    "text": "ZX0142A-9172",
+    "gold": [
+      [
+        0,
+        12
+      ]
+    ],
+    "session": "dev-source_first-Tavin"
+  },
+  {
+    "id": "dev-080",
+    "split": "dev",
+    "category": "source_last",
+    "language": "mixed",
+    "text": "ZX0142A-9172",
+    "gold": [
+      [
+        0,
+        12
+      ]
+    ],
+    "session": "dev-source_last-Tavin"
+  },
+  {
+    "id": "dev-081",
+    "split": "dev",
+    "category": "source_last",
+    "language": "mixed",
+    "text": "Driver licence: ZX0142A-9172",
+    "gold": [
+      [
+        16,
+        28
+      ]
+    ],
+    "session": "dev-source_last-Tavin"
+  },
+  {
+    "id": "dev-082",
+    "split": "dev",
+    "category": "ordinary_numbers",
+    "language": "mixed",
+    "text": "The batch contains 1500 Euro and 37 items.",
+    "gold": [],
+    "session": "dev-082"
+  },
+  {
+    "id": "dev-083",
+    "split": "dev",
+    "category": "ordinary_numbers",
+    "language": "mixed",
+    "text": "Count 4927613820547792 is a synthetic public benchmark counter.",
+    "gold": [],
+    "session": "dev-083"
+  },
+  {
+    "id": "dev-084",
+    "split": "dev",
+    "category": "code_versions",
+    "language": "mixed",
+    "text": "const release = \"1.96.0\"; let result_count = 1024;",
+    "gold": [],
+    "session": "dev-084"
+  },
+  {
+    "id": "dev-085",
+    "split": "dev",
+    "category": "code_versions",
+    "language": "mixed",
+    "text": "error_code = \"ZX0168A\"; version = \"2026.10.16\"",
+    "gold": [],
+    "session": "dev-085"
+  },
+  {
+    "id": "dev-086",
+    "split": "dev",
+    "category": "ambiguous_names",
+    "language": "mixed",
+    "text": "Will may cook brown rice in May.",
+    "gold": [],
+    "session": "dev-086"
+  },
+  {
+    "id": "dev-087",
+    "split": "dev",
+    "category": "ambiguous_names",
+    "language": "mixed",
+    "text": "Der Richter prüft den Schneider.",
+    "gold": [],
+    "session": "dev-087"
+  },
+  {
+    "id": "dev-088",
+    "split": "dev",
+    "category": "public_reference",
+    "language": "mixed",
+    "text": "The fictional public company ExampleDB ships a query compiler.",
+    "gold": [],
+    "session": "dev-088"
+  },
+  {
+    "id": "dev-089",
+    "split": "dev",
+    "category": "public_reference",
+    "language": "mixed",
+    "text": "A fictional public figure, Nora Publicexample, wrote the demo.",
+    "gold": [],
+    "session": "dev-089"
+  },
+  {
+    "id": "dev-090",
+    "split": "dev",
+    "category": "public_url",
+    "language": "mixed",
+    "text": "Public documentation: https://docs.example.invalid/api/v1",
+    "gold": [],
+    "session": "dev-090"
+  },
+  {
+    "id": "dev-091",
+    "split": "dev",
+    "category": "public_url",
+    "language": "mixed",
+    "text": "import endpoint from \"https://example.invalid/public.js\";",
+    "gold": [],
+    "session": "dev-091"
+  },
+  {
+    "id": "dev-092",
+    "split": "dev",
+    "category": "cue_hard_negative",
+    "language": "mixed",
+    "text": "Recipient name: technical support",
+    "gold": [],
+    "session": "dev-092"
+  },
+  {
+    "id": "dev-093",
+    "split": "dev",
+    "category": "cue_hard_negative",
+    "language": "mixed",
+    "text": "Kundenname: technischer support",
+    "gold": [],
+    "session": "dev-093"
+  },
+  {
+    "id": "dev-094",
+    "split": "dev",
+    "category": "cue_hard_negative",
+    "language": "mixed",
+    "text": "Recipient name: release candidate",
+    "gold": [],
+    "session": "dev-094"
+  },
+  {
+    "id": "dev-095",
+    "split": "dev",
+    "category": "cue_hard_negative",
+    "language": "mixed",
+    "text": "Kundenname: offene frage",
+    "gold": [],
+    "session": "dev-095"
+  },
+  {
+    "id": "dev-096",
+    "split": "dev",
+    "category": "mixed_negative",
+    "language": "mixed",
+    "text": "Bitte run the query; status pending, keine Kundendaten.",
+    "gold": [],
+    "session": "dev-096"
+  },
+  {
+    "id": "dev-097",
+    "split": "dev",
+    "category": "mixed_negative",
+    "language": "mixed",
+    "text": "Tax ID is a column name; no value is available.",
+    "gold": [],
+    "session": "dev-097"
+  }
+]

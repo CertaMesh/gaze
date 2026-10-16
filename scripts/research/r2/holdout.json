@@ -1,0 +1,1302 @@
+[
+  {
+    "id": "holdout-000",
+    "split": "holdout",
+    "category": "name_title",
+    "language": "en",
+    "text": "Please contact Liora Fennquartz.",
+    "gold": [
+      [
+        15,
+        31
+      ]
+    ],
+    "session": "holdout-000"
+  },
+  {
+    "id": "holdout-001",
+    "split": "holdout",
+    "category": "name_lower",
+    "language": "en",
+    "text": "Please contact liora fennquartz.",
+    "gold": [
+      [
+        15,
+        31
+      ]
+    ],
+    "session": "holdout-001"
+  },
+  {
+    "id": "holdout-002",
+    "split": "holdout",
+    "category": "name_upper",
+    "language": "en",
+    "text": "Please contact LIORA FENNQUARTZ.",
+    "gold": [
+      [
+        15,
+        31
+      ]
+    ],
+    "session": "holdout-002"
+  },
+  {
+    "id": "holdout-003",
+    "split": "holdout",
+    "category": "name_hyphen",
+    "language": "en",
+    "text": "Please contact Liora Fennquartz-ellery.",
+    "gold": [
+      [
+        15,
+        38
+      ]
+    ],
+    "session": "holdout-003"
+  },
+  {
+    "id": "holdout-004",
+    "split": "holdout",
+    "category": "name_apostrophe",
+    "language": "en",
+    "text": "Please contact Liora Fennquartz'vella.",
+    "gold": [
+      [
+        15,
+        37
+      ]
+    ],
+    "session": "holdout-004"
+  },
+  {
+    "id": "holdout-005",
+    "split": "holdout",
+    "category": "name_title",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie Liora Fennquartz.",
+    "gold": [
+      [
+        23,
+        39
+      ]
+    ],
+    "session": "holdout-005"
+  },
+  {
+    "id": "holdout-006",
+    "split": "holdout",
+    "category": "name_lower",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie liora fennquartz.",
+    "gold": [
+      [
+        23,
+        39
+      ]
+    ],
+    "session": "holdout-006"
+  },
+  {
+    "id": "holdout-007",
+    "split": "holdout",
+    "category": "name_upper",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie LIORA FENNQUARTZ.",
+    "gold": [
+      [
+        23,
+        39
+      ]
+    ],
+    "session": "holdout-007"
+  },
+  {
+    "id": "holdout-008",
+    "split": "holdout",
+    "category": "name_hyphen",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie Liora Fennquartz-ellery.",
+    "gold": [
+      [
+        23,
+        46
+      ]
+    ],
+    "session": "holdout-008"
+  },
+  {
+    "id": "holdout-009",
+    "split": "holdout",
+    "category": "name_apostrophe",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie Liora Fennquartz'vella.",
+    "gold": [
+      [
+        23,
+        45
+      ]
+    ],
+    "session": "holdout-009"
+  },
+  {
+    "id": "holdout-010",
+    "split": "holdout",
+    "category": "email_plain",
+    "language": "de",
+    "text": "E-Mail: liora.fennquartz@example.invalid.",
+    "gold": [
+      [
+        8,
+        40
+      ]
+    ],
+    "session": "holdout-010"
+  },
+  {
+    "id": "holdout-011",
+    "split": "holdout",
+    "category": "email_nbsp",
+    "language": "de",
+    "text": "E-Mail: liora.fennquartz @example.invalid.",
+    "gold": [
+      [
+        8,
+        42
+      ]
+    ],
+    "session": "holdout-011"
+  },
+  {
+    "id": "holdout-012",
+    "split": "holdout",
+    "category": "email_zero_width",
+    "language": "de",
+    "text": "E-Mail: liora.fennquartz​@example.invalid.",
+    "gold": [
+      [
+        8,
+        43
+      ]
+    ],
+    "session": "holdout-012"
+  },
+  {
+    "id": "holdout-013",
+    "split": "holdout",
+    "category": "email_fullwidth",
+    "language": "de",
+    "text": "E-Mail: liora.fennquartz＠example.invalid.",
+    "gold": [
+      [
+        8,
+        42
+      ]
+    ],
+    "session": "holdout-013"
+  },
+  {
+    "id": "holdout-014",
+    "split": "holdout",
+    "category": "email_homoglyph",
+    "language": "de",
+    "text": "E-Mail: liorа.fennquartz@example.invalid.",
+    "gold": [
+      [
+        8,
+        41
+      ]
+    ],
+    "session": "holdout-014"
+  },
+  {
+    "id": "holdout-015",
+    "split": "holdout",
+    "category": "email_newline",
+    "language": "de",
+    "text": "E-Mail: liora.fennquartz\n@example.invalid.",
+    "gold": [
+      [
+        8,
+        41
+      ]
+    ],
+    "session": "holdout-015"
+  },
+  {
+    "id": "holdout-016",
+    "split": "holdout",
+    "category": "name_nbsp",
+    "language": "mixed",
+    "text": "Name: Liora Fennquartz",
+    "gold": [
+      [
+        6,
+        23
+      ]
+    ],
+    "session": "holdout-016"
+  },
+  {
+    "id": "holdout-017",
+    "split": "holdout",
+    "category": "name_zero_width",
+    "language": "mixed",
+    "text": "Name: Liora​Fennquartz",
+    "gold": [
+      [
+        6,
+        24
+      ]
+    ],
+    "session": "holdout-017"
+  },
+  {
+    "id": "holdout-018",
+    "split": "holdout",
+    "category": "name_lf",
+    "language": "mixed",
+    "text": "Name: Liora\nFennquartz",
+    "gold": [
+      [
+        6,
+        22
+      ]
+    ],
+    "session": "holdout-018"
+  },
+  {
+    "id": "holdout-019",
+    "split": "holdout",
+    "category": "name_ls",
+    "language": "mixed",
+    "text": "Name: Liora Fennquartz",
+    "gold": [
+      [
+        6,
+        24
+      ]
+    ],
+    "session": "holdout-019"
+  },
+  {
+    "id": "holdout-020",
+    "split": "holdout",
+    "category": "name_nfd",
+    "language": "de",
+    "text": "Kundin: Lioraé Fennquartzö",
+    "gold": [
+      [
+        8,
+        30
+      ]
+    ],
+    "session": "holdout-020"
+  },
+  {
+    "id": "holdout-021",
+    "split": "holdout",
+    "category": "name_json",
+    "language": "mixed",
+    "text": "{\"recipient_name\": \"liora fennquartz\"}",
+    "gold": [
+      [
+        20,
+        36
+      ]
+    ],
+    "session": "holdout-021"
+  },
+  {
+    "id": "holdout-022",
+    "split": "holdout",
+    "category": "name_cue",
+    "language": "en",
+    "text": "Recipient name: liora fennquartz",
+    "gold": [
+      [
+        16,
+        32
+      ]
+    ],
+    "session": "holdout-022"
+  },
+  {
+    "id": "holdout-023",
+    "split": "holdout",
+    "category": "name_cue",
+    "language": "de",
+    "text": "Kundenname: liora fennquartz",
+    "gold": [
+      [
+        12,
+        28
+      ]
+    ],
+    "session": "holdout-023"
+  },
+  {
+    "id": "holdout-024",
+    "split": "holdout",
+    "category": "phone_fictional",
+    "language": "en",
+    "text": "Phone: +1 202 555 0168",
+    "gold": [
+      [
+        7,
+        22
+      ]
+    ],
+    "session": "holdout-024"
+  },
+  {
+    "id": "holdout-025",
+    "split": "holdout",
+    "category": "phone_nbsp",
+    "language": "de",
+    "text": "Telefon: +44 7700 900168",
+    "gold": [
+      [
+        9,
+        26
+      ]
+    ],
+    "session": "holdout-025"
+  },
+  {
+    "id": "holdout-026",
+    "split": "holdout",
+    "category": "labelled_id_long",
+    "language": "mixed",
+    "text": "Driver licence: ZX0168-AB 1234 CD 5678 EF 9012 GH 3456; status: pending",
+    "gold": [
+      [
+        16,
+        54
+      ]
+    ],
+    "session": "holdout-026"
+  },
+  {
+    "id": "holdout-027",
+    "split": "holdout",
+    "category": "invalid_card_cued",
+    "language": "mixed",
+    "text": "Card number: 4927 6138 2054 7792",
+    "gold": [
+      [
+        13,
+        32
+      ]
+    ],
+    "session": "holdout-027"
+  },
+  {
+    "id": "holdout-028",
+    "split": "holdout",
+    "category": "invalid_card_uncued",
+    "language": "mixed",
+    "text": "Value: 4927 6138 2054 7792",
+    "gold": [
+      [
+        7,
+        26
+      ]
+    ],
+    "session": "holdout-028"
+  },
+  {
+    "id": "holdout-029",
+    "split": "holdout",
+    "category": "labelled_opaque",
+    "language": "de",
+    "text": "Kundennummer: ZX0168A",
+    "gold": [
+      [
+        14,
+        21
+      ]
+    ],
+    "session": "holdout-029"
+  },
+  {
+    "id": "holdout-030",
+    "split": "holdout",
+    "category": "record_separators",
+    "language": "mixed",
+    "text": "Liora Fennquartz\nVela Mossquill",
+    "gold": [
+      [
+        0,
+        16
+      ],
+      [
+        17,
+        31
+      ]
+    ],
+    "session": "holdout-030"
+  },
+  {
+    "id": "holdout-031",
+    "split": "holdout",
+    "category": "turn_email",
+    "language": "mixed",
+    "text": "liora",
+    "gold": [
+      [
+        0,
+        5
+      ]
+    ],
+    "session": "holdout-turn_email-Liora"
+  },
+  {
+    "id": "holdout-032",
+    "split": "holdout",
+    "category": "turn_email",
+    "language": "mixed",
+    "text": ".fennquartz@example.invalid",
+    "gold": [
+      [
+        0,
+        27
+      ]
+    ],
+    "session": "holdout-turn_email-Liora"
+  },
+  {
+    "id": "holdout-033",
+    "split": "holdout",
+    "category": "turn_phone",
+    "language": "mixed",
+    "text": "+1 202",
+    "gold": [
+      [
+        0,
+        6
+      ]
+    ],
+    "session": "holdout-turn_phone-Liora"
+  },
+  {
+    "id": "holdout-034",
+    "split": "holdout",
+    "category": "turn_phone",
+    "language": "mixed",
+    "text": "555 0168",
+    "gold": [
+      [
+        0,
+        8
+      ]
+    ],
+    "session": "holdout-turn_phone-Liora"
+  },
+  {
+    "id": "holdout-035",
+    "split": "holdout",
+    "category": "turn_name",
+    "language": "mixed",
+    "text": "liora",
+    "gold": [
+      [
+        0,
+        5
+      ]
+    ],
+    "session": "holdout-turn_name-Liora"
+  },
+  {
+    "id": "holdout-036",
+    "split": "holdout",
+    "category": "turn_name",
+    "language": "mixed",
+    "text": "fennquartz",
+    "gold": [
+      [
+        0,
+        10
+      ]
+    ],
+    "session": "holdout-turn_name-Liora"
+  },
+  {
+    "id": "holdout-037",
+    "split": "holdout",
+    "category": "source_first",
+    "language": "mixed",
+    "text": "Driver licence: ZX0168A-9172",
+    "gold": [
+      [
+        16,
+        28
+      ]
+    ],
+    "session": "holdout-source_first-Liora"
+  },
+  {
+    "id": "holdout-038",
+    "split": "holdout",
+    "category": "source_first",
+    "language": "mixed",
+    "text": "ZX0168A-9172",
+    "gold": [
+      [
+        0,
+        12
+      ]
+    ],
+    "session": "holdout-source_first-Liora"
+  },
+  {
+    "id": "holdout-039",
+    "split": "holdout",
+    "category": "source_last",
+    "language": "mixed",
+    "text": "ZX0168A-9172",
+    "gold": [
+      [
+        0,
+        12
+      ]
+    ],
+    "session": "holdout-source_last-Liora"
+  },
+  {
+    "id": "holdout-040",
+    "split": "holdout",
+    "category": "source_last",
+    "language": "mixed",
+    "text": "Driver licence: ZX0168A-9172",
+    "gold": [
+      [
+        16,
+        28
+      ]
+    ],
+    "session": "holdout-source_last-Liora"
+  },
+  {
+    "id": "holdout-041",
+    "split": "holdout",
+    "category": "name_title",
+    "language": "en",
+    "text": "Please contact Merik Dornvex.",
+    "gold": [
+      [
+        15,
+        28
+      ]
+    ],
+    "session": "holdout-041"
+  },
+  {
+    "id": "holdout-042",
+    "split": "holdout",
+    "category": "name_lower",
+    "language": "en",
+    "text": "Please contact merik dornvex.",
+    "gold": [
+      [
+        15,
+        28
+      ]
+    ],
+    "session": "holdout-042"
+  },
+  {
+    "id": "holdout-043",
+    "split": "holdout",
+    "category": "name_upper",
+    "language": "en",
+    "text": "Please contact MERIK DORNVEX.",
+    "gold": [
+      [
+        15,
+        28
+      ]
+    ],
+    "session": "holdout-043"
+  },
+  {
+    "id": "holdout-044",
+    "split": "holdout",
+    "category": "name_hyphen",
+    "language": "en",
+    "text": "Please contact Merik Dornvex-ellery.",
+    "gold": [
+      [
+        15,
+        35
+      ]
+    ],
+    "session": "holdout-044"
+  },
+  {
+    "id": "holdout-045",
+    "split": "holdout",
+    "category": "name_apostrophe",
+    "language": "en",
+    "text": "Please contact Merik Dornvex'vella.",
+    "gold": [
+      [
+        15,
+        34
+      ]
+    ],
+    "session": "holdout-045"
+  },
+  {
+    "id": "holdout-046",
+    "split": "holdout",
+    "category": "name_title",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie Merik Dornvex.",
+    "gold": [
+      [
+        23,
+        36
+      ]
+    ],
+    "session": "holdout-046"
+  },
+  {
+    "id": "holdout-047",
+    "split": "holdout",
+    "category": "name_lower",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie merik dornvex.",
+    "gold": [
+      [
+        23,
+        36
+      ]
+    ],
+    "session": "holdout-047"
+  },
+  {
+    "id": "holdout-048",
+    "split": "holdout",
+    "category": "name_upper",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie MERIK DORNVEX.",
+    "gold": [
+      [
+        23,
+        36
+      ]
+    ],
+    "session": "holdout-048"
+  },
+  {
+    "id": "holdout-049",
+    "split": "holdout",
+    "category": "name_hyphen",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie Merik Dornvex-ellery.",
+    "gold": [
+      [
+        23,
+        43
+      ]
+    ],
+    "session": "holdout-049"
+  },
+  {
+    "id": "holdout-050",
+    "split": "holdout",
+    "category": "name_apostrophe",
+    "language": "de",
+    "text": "Bitte kontaktieren Sie Merik Dornvex'vella.",
+    "gold": [
+      [
+        23,
+        42
+      ]
+    ],
+    "session": "holdout-050"
+  },
+  {
+    "id": "holdout-051",
+    "split": "holdout",
+    "category": "email_plain",
+    "language": "de",
+    "text": "E-Mail: merik.dornvex@example.invalid.",
+    "gold": [
+      [
+        8,
+        37
+      ]
+    ],
+    "session": "holdout-051"
+  },
+  {
+    "id": "holdout-052",
+    "split": "holdout",
+    "category": "email_nbsp",
+    "language": "de",
+    "text": "E-Mail: merik.dornvex @example.invalid.",
+    "gold": [
+      [
+        8,
+        39
+      ]
+    ],
+    "session": "holdout-052"
+  },
+  {
+    "id": "holdout-053",
+    "split": "holdout",
+    "category": "email_zero_width",
+    "language": "de",
+    "text": "E-Mail: merik.dornvex​@example.invalid.",
+    "gold": [
+      [
+        8,
+        40
+      ]
+    ],
+    "session": "holdout-053"
+  },
+  {
+    "id": "holdout-054",
+    "split": "holdout",
+    "category": "email_fullwidth",
+    "language": "de",
+    "text": "E-Mail: merik.dornvex＠example.invalid.",
+    "gold": [
+      [
+        8,
+        39
+      ]
+    ],
+    "session": "holdout-054"
+  },
+  {
+    "id": "holdout-055",
+    "split": "holdout",
+    "category": "email_homoglyph",
+    "language": "de",
+    "text": "E-Mail: merik.dornvex@exаmple.invalid.",
+    "gold": [
+      [
+        8,
+        38
+      ]
+    ],
+    "session": "holdout-055"
+  },
+  {
+    "id": "holdout-056",
+    "split": "holdout",
+    "category": "email_newline",
+    "language": "de",
+    "text": "E-Mail: merik.dornvex\n@example.invalid.",
+    "gold": [
+      [
+        8,
+        38
+      ]
+    ],
+    "session": "holdout-056"
+  },
+  {
+    "id": "holdout-057",
+    "split": "holdout",
+    "category": "name_nbsp",
+    "language": "mixed",
+    "text": "Name: Merik Dornvex",
+    "gold": [
+      [
+        6,
+        20
+      ]
+    ],
+    "session": "holdout-057"
+  },
+  {
+    "id": "holdout-058",
+    "split": "holdout",
+    "category": "name_zero_width",
+    "language": "mixed",
+    "text": "Name: Merik​Dornvex",
+    "gold": [
+      [
+        6,
+        21
+      ]
+    ],
+    "session": "holdout-058"
+  },
+  {
+    "id": "holdout-059",
+    "split": "holdout",
+    "category": "name_lf",
+    "language": "mixed",
+    "text": "Name: Merik\nDornvex",
+    "gold": [
+      [
+        6,
+        19
+      ]
+    ],
+    "session": "holdout-059"
+  },
+  {
+    "id": "holdout-060",
+    "split": "holdout",
+    "category": "name_ls",
+    "language": "mixed",
+    "text": "Name: Merik Dornvex",
+    "gold": [
+      [
+        6,
+        21
+      ]
+    ],
+    "session": "holdout-060"
+  },
+  {
+    "id": "holdout-061",
+    "split": "holdout",
+    "category": "name_nfd",
+    "language": "de",
+    "text": "Kundin: Meriké Dornvexö",
+    "gold": [
+      [
+        8,
+        27
+      ]
+    ],
+    "session": "holdout-061"
+  },
+  {
+    "id": "holdout-062",
+    "split": "holdout",
+    "category": "name_json",
+    "language": "mixed",
+    "text": "{\"recipient_name\": \"merik dornvex\"}",
+    "gold": [
+      [
+        20,
+        33
+      ]
+    ],
+    "session": "holdout-062"
+  },
+  {
+    "id": "holdout-063",
+    "split": "holdout",
+    "category": "name_cue",
+    "language": "en",
+    "text": "Recipient name: merik dornvex",
+    "gold": [
+      [
+        16,
+        29
+      ]
+    ],
+    "session": "holdout-063"
+  },
+  {
+    "id": "holdout-064",
+    "split": "holdout",
+    "category": "name_cue",
+    "language": "de",
+    "text": "Kundenname: merik dornvex",
+    "gold": [
+      [
+        12,
+        25
+      ]
+    ],
+    "session": "holdout-064"
+  },
+  {
+    "id": "holdout-065",
+    "split": "holdout",
+    "category": "phone_fictional",
+    "language": "en",
+    "text": "Phone: +1 202 555 0185",
+    "gold": [
+      [
+        7,
+        22
+      ]
+    ],
+    "session": "holdout-065"
+  },
+  {
+    "id": "holdout-066",
+    "split": "holdout",
+    "category": "phone_nbsp",
+    "language": "de",
+    "text": "Telefon: +44 7700 900185",
+    "gold": [
+      [
+        9,
+        26
+      ]
+    ],
+    "session": "holdout-066"
+  },
+  {
+    "id": "holdout-067",
+    "split": "holdout",
+    "category": "labelled_id_long",
+    "language": "mixed",
+    "text": "Driver licence: ZX0185-AB 1234 CD 5678 EF 9012 GH 3456; status: pending",
+    "gold": [
+      [
+        16,
+        54
+      ]
+    ],
+    "session": "holdout-067"
+  },
+  {
+    "id": "holdout-068",
+    "split": "holdout",
+    "category": "invalid_card_cued",
+    "language": "mixed",
+    "text": "Card number: 4927 6138 2054 7792",
+    "gold": [
+      [
+        13,
+        32
+      ]
+    ],
+    "session": "holdout-068"
+  },
+  {
+    "id": "holdout-069",
+    "split": "holdout",
+    "category": "invalid_card_uncued",
+    "language": "mixed",
+    "text": "Value: 4927 6138 2054 7792",
+    "gold": [
+      [
+        7,
+        26
+      ]
+    ],
+    "session": "holdout-069"
+  },
+  {
+    "id": "holdout-070",
+    "split": "holdout",
+    "category": "labelled_opaque",
+    "language": "de",
+    "text": "Kundennummer: ZX0185A",
+    "gold": [
+      [
+        14,
+        21
+      ]
+    ],
+    "session": "holdout-070"
+  },
+  {
+    "id": "holdout-071",
+    "split": "holdout",
+    "category": "record_separators",
+    "language": "mixed",
+    "text": "Merik Dornvex\nVela Mossquill",
+    "gold": [
+      [
+        0,
+        13
+      ],
+      [
+        14,
+        28
+      ]
+    ],
+    "session": "holdout-071"
+  },
+  {
+    "id": "holdout-072",
+    "split": "holdout",
+    "category": "turn_email",
+    "language": "mixed",
+    "text": "merik",
+    "gold": [
+      [
+        0,
+        5
+      ]
+    ],
+    "session": "holdout-turn_email-Merik"
+  },
+  {
+    "id": "holdout-073",
+    "split": "holdout",
+    "category": "turn_email",
+    "language": "mixed",
+    "text": ".dornvex@example.invalid",
+    "gold": [
+      [
+        0,
+        24
+      ]
+    ],
+    "session": "holdout-turn_email-Merik"
+  },
+  {
+    "id": "holdout-074",
+    "split": "holdout",
+    "category": "turn_phone",
+    "language": "mixed",
+    "text": "+1 202",
+    "gold": [
+      [
+        0,
+        6
+      ]
+    ],
+    "session": "holdout-turn_phone-Merik"
+  },
+  {
+    "id": "holdout-075",
+    "split": "holdout",
+    "category": "turn_phone",
+    "language": "mixed",
+    "text": "555 0185",
+    "gold": [
+      [
+        0,
+        8
+      ]
+    ],
+    "session": "holdout-turn_phone-Merik"
+  },
+  {
+    "id": "holdout-076",
+    "split": "holdout",
+    "category": "turn_name",
+    "language": "mixed",
+    "text": "merik",
+    "gold": [
+      [
+        0,
+        5
+      ]
+    ],
+    "session": "holdout-turn_name-Merik"
+  },
+  {
+    "id": "holdout-077",
+    "split": "holdout",
+    "category": "turn_name",
+    "language": "mixed",
+    "text": "dornvex",
+    "gold": [
+      [
+        0,
+        7
+      ]
+    ],
+    "session": "holdout-turn_name-Merik"
+  },
+  {
+    "id": "holdout-078",
+    "split": "holdout",
+    "category": "source_first",
+    "language": "mixed",
+    "text": "Driver licence: ZX0185A-9172",
+    "gold": [
+      [
+        16,
+        28
+      ]
+    ],
+    "session": "holdout-source_first-Merik"
+  },
+  {
+    "id": "holdout-079",
+    "split": "holdout",
+    "category": "source_first",
+    "language": "mixed",
+    "text": "ZX0185A-9172",
+    "gold": [
+      [
+        0,
+        12
+      ]
+    ],
+    "session": "holdout-source_first-Merik"
+  },
+  {
+    "id": "holdout-080",
+    "split": "holdout",
+    "category": "source_last",
+    "language": "mixed",
+    "text": "ZX0185A-9172",
+    "gold": [
+      [
+        0,
+        12
+      ]
+    ],
+    "session": "holdout-source_last-Merik"
+  },
+  {
+    "id": "holdout-081",
+    "split": "holdout",
+    "category": "source_last",
+    "language": "mixed",
+    "text": "Driver licence: ZX0185A-9172",
+    "gold": [
+      [
+        16,
+        28
+      ]
+    ],
+    "session": "holdout-source_last-Merik"
+  },
+  {
+    "id": "holdout-082",
+    "split": "holdout",
+    "category": "ordinary_numbers",
+    "language": "mixed",
+    "text": "The batch contains 1500 Euro and 37 items.",
+    "gold": [],
+    "session": "holdout-082"
+  },
+  {
+    "id": "holdout-083",
+    "split": "holdout",
+    "category": "ordinary_numbers",
+    "language": "mixed",
+    "text": "Count 4927613820547792 is a synthetic public benchmark counter.",
+    "gold": [],
+    "session": "holdout-083"
+  },
+  {
+    "id": "holdout-084",
+    "split": "holdout",
+    "category": "code_versions",
+    "language": "mixed",
+    "text": "const release = \"1.96.0\"; let result_count = 1024;",
+    "gold": [],
+    "session": "holdout-084"
+  },
+  {
+    "id": "holdout-085",
+    "split": "holdout",
+    "category": "code_versions",
+    "language": "mixed",
+    "text": "error_code = \"ZX0168A\"; version = \"2026.10.16\"",
+    "gold": [],
+    "session": "holdout-085"
+  },
+  {
+    "id": "holdout-086",
+    "split": "holdout",
+    "category": "ambiguous_names",
+    "language": "mixed",
+    "text": "Will may cook brown rice in May.",
+    "gold": [],
+    "session": "holdout-086"
+  },
+  {
+    "id": "holdout-087",
+    "split": "holdout",
+    "category": "ambiguous_names",
+    "language": "mixed",
+    "text": "Der Richter prüft den Schneider.",
+    "gold": [],
+    "session": "holdout-087"
+  },
+  {
+    "id": "holdout-088",
+    "split": "holdout",
+    "category": "public_reference",
+    "language": "mixed",
+    "text": "The fictional public company ExampleDB ships a query compiler.",
+    "gold": [],
+    "session": "holdout-088"
+  },
+  {
+    "id": "holdout-089",
+    "split": "holdout",
+    "category": "public_reference",
+    "language": "mixed",
+    "text": "A fictional public figure, Nora Publicexample, wrote the demo.",
+    "gold": [],
+    "session": "holdout-089"
+  },
+  {
+    "id": "holdout-090",
+    "split": "holdout",
+    "category": "public_url",
+    "language": "mixed",
+    "text": "Public documentation: https://docs.example.invalid/api/v1",
+    "gold": [],
+    "session": "holdout-090"
+  },
+  {
+    "id": "holdout-091",
+    "split": "holdout",
+    "category": "public_url",
+    "language": "mixed",
+    "text": "import endpoint from \"https://example.invalid/public.js\";",
+    "gold": [],
+    "session": "holdout-091"
+  },
+  {
+    "id": "holdout-092",
+    "split": "holdout",
+    "category": "cue_hard_negative",
+    "language": "mixed",
+    "text": "Recipient name: technical support",
+    "gold": [],
+    "session": "holdout-092"
+  },
+  {
+    "id": "holdout-093",
+    "split": "holdout",
+    "category": "cue_hard_negative",
+    "language": "mixed",
+    "text": "Kundenname: technischer support",
+    "gold": [],
+    "session": "holdout-093"
+  },
+  {
+    "id": "holdout-094",
+    "split": "holdout",
+    "category": "cue_hard_negative",
+    "language": "mixed",
+    "text": "Recipient name: release candidate",
+    "gold": [],
+    "session": "holdout-094"
+  },
+  {
+    "id": "holdout-095",
+    "split": "holdout",
+    "category": "cue_hard_negative",
+    "language": "mixed",
+    "text": "Kundenname: offene frage",
+    "gold": [],
+    "session": "holdout-095"
+  },
+  {
+    "id": "holdout-096",
+    "split": "holdout",
+    "category": "mixed_negative",
+    "language": "mixed",
+    "text": "Bitte run the query; status pending, keine Kundendaten.",
+    "gold": [],
+    "session": "holdout-096"
+  },
+  {
+    "id": "holdout-097",
+    "split": "holdout",
+    "category": "mixed_negative",
+    "language": "mixed",
+    "text": "Tax ID is a column name; no value is available.",
+    "gold": [],
+    "session": "holdout-097"
+  }
+]

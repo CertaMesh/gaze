@@ -1,0 +1,12 @@
+[package]
+name = "r2-source-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+gaze = { package = "gaze-pii", path = "../../../../crates/gaze" }
+gaze-assembly = { path = "../../../../crates/gaze-assembly", features = ["safety-net-nym"] }
+serde_json = "1"
