@@ -195,7 +195,15 @@ def evaluate(directory, output):
     selections = {"selections": selected, "thresholds": frozen, "fixture_sha256": hashlib.sha256((directory / 'fixtures.jsonl').read_bytes()).hexdigest(), "selection_contract": "all choices use train/dev only; test and transfer/stress untouched"}
     (directory / "frozen-selections.json").write_text(json.dumps(selections, indent=2))
     np.savez_compressed(directory / "scores.npz", **{name: scores for name, scores in arms.items()})
-    groups = {"test": test, "language_holdout": np.asarray([r["evaluation"] == "language_holdout" for r in rows]), "stress": np.asarray([r["evaluation"] == "stress" for r in rows])}
+    # Retain the frozen stress rows, but also expose only genuinely changed unique texts.
+    seen = {(r["parent"], r["language"], r["text"]) for r in rows if r["evaluation"] != "stress"}
+    unique_stress = []
+    for row in rows:
+        key = (row["parent"], row["language"], row["text"])
+        changed = row["evaluation"] == "stress" and key not in seen
+        unique_stress.append(changed)
+        seen.add(key)
+    groups = {"test": test, "language_holdout": np.asarray([r["evaluation"] == "language_holdout" for r in rows]), "stress": np.asarray([r["evaluation"] == "stress" for r in rows]), "changed_unique_stress": np.asarray(unique_stress)}
     for key in ["language", "target", "domain", "family"]:
         for value in sorted({r[key] for r in rows}):
             groups[f"{key}/{value}"] = test & np.asarray([r[key] == value for r in rows])
