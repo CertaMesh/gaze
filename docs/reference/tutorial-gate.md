@@ -118,5 +118,7 @@ background-job readiness, verify observable results, and check `wait` exit
 statuses themselves. The proxy tutorial verifies its request and restored
 response, then accepts only normal exit or the expected SIGTERM status after
 stopping both services. A negative probe starts a failing background job and
-proves that its checked `wait` fails the page. An unchecked background failure
-is outside the shell completion proof.
+proves that its checked `wait` fails the page. A real-page mutation also
+replaces the proxy tutorial's background mock with `false` and requires its
+readiness assertion to fail. An unchecked background failure is outside the
+shell completion proof.

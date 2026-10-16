@@ -112,6 +112,17 @@ class OutputContract(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("TUTORIAL_GATE_BINARY"), "set TUTORIAL_GATE_BINARY for real tutorial mutations")
 class RealTutorialMutations(unittest.TestCase):
+    def test_proxy_rejects_failed_background_mock(self):
+        original = (gate.ROOT / "docs/tutorials/proxy-sdk.md").read_text()
+        broken = original.replace("python3 mock_openai.py > mock.log 2>&1 &", "false > mock.log 2>&1 &")
+        self.assertNotEqual(original, broken)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            page = root / "proxy-sdk.md"
+            page.write_text(broken)
+            with self.assertRaisesRegex(gate.GateError, "mock server did not start"):
+                gate.run_tutorial(page, gate.ROOT, root, Path(os.environ["TUTORIAL_GATE_BINARY"]).resolve())
+
     def test_baseline_and_real_page_mutations(self):
         binary = Path(os.environ["TUTORIAL_GATE_BINARY"]).resolve()
         first = (gate.ROOT / "docs/tutorials/first-pseudonymization.md").read_text()
