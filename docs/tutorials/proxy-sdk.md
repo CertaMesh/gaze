@@ -1,5 +1,7 @@
 # Route an SDK call through the proxy
 
+<!-- tutorial-gate: start=checkout -->
+
 We will send an OpenAI SDK request through Gaze to a local echo server.
 The server receives tokens; the caller receives its restored reply. Allow fifteen minutes.
 
@@ -16,7 +18,7 @@ umask 077
 mkdir -p target/proxy-tutorial
 cd target/proxy-tutorial
 python3 -m venv .venv
-.venv/bin/python -m pip install --quiet openai
+.venv/bin/python -m pip install --quiet openai==2.31.0
 cat > policy.toml <<'TOML'
 [session]
 scope = "ephemeral"

@@ -1,5 +1,7 @@
 # Clean a scanned document into a SafeBundle
 
+<!-- tutorial-gate: start=checkout -->
+
 We will turn a fictional invoice image into tokenized Markdown and keep its
 restore manifest in a separate owner directory. Allow fifteen minutes.
 
@@ -74,17 +76,17 @@ assert "example.invalid" not in clean
 assert "jane.doe" not in clean
 assert "Jane Doe" not in clean
 assert "555-0142" not in clean
-print(clean, end="" if clean.endswith("\n") else "\n")
+print("Name, email, and phone are tokenized")
 report = json.loads(Path("agent/report.json").read_text())
 print(f"Report version: {report['bundle_version']}")
 print("Sample PII checks: OK")
 PY
 ```
 
-The name, email, and phone appear as tokens. Session prefixes change on each
-run. The final lines are:
+The checks confirm that the name, email, and phone appear as tokens:
 
 ```text
+Name, email, and phone are tokenized
 Report version: 2
 Sample PII checks: OK
 ```

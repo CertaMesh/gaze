@@ -1,5 +1,8 @@
 # Tutorials
 
+CI [executes these tutorials](../reference/tutorial-gate.md) and compares their
+documented output. Account-bound steps are marked for manual replay before release.
+
 - [Your first pseudonymization](first-pseudonymization.md) takes about five
   minutes after model setup: clean a fictional email, inspect its token, and
   restore the exact original bytes.

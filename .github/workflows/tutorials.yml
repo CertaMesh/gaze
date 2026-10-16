@@ -1,0 +1,67 @@
+name: tutorials
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tutorials:
+    name: tutorial execution
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Start job clock
+        run: echo "TUTORIAL_JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
+        with:
+          toolchain: 1.96.0
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: 0.11.16
+      - name: Install pinned Python and OCR
+        run: |
+          uv python install 3.13.9
+          dirname "$(uv python find 3.13.9)" >> "$GITHUB_PATH"
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr=5.3.4-1build5 tesseract-ocr-eng=1:4.1.0-2
+      - name: Cache Cargo dependencies and tutorial builds
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/debug
+            target/tutorial-gate/cargo
+          key: ${{ runner.os }}-tutorials-1.96-${{ hashFiles('**/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-tutorials-1.96-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-tutorials-1.96-
+      - name: Build PR-head CLI
+        run: cargo build --locked -p gaze-cli --no-default-features --features proxy,mcp
+      - name: Check runner and real tutorial mutation probes
+        env:
+          TUTORIAL_GATE_BINARY: target/debug/gaze
+        run: python3 -m unittest discover -s scripts/ci -p test_tutorial_gate.py -v
+      - name: Execute every tutorial
+        run: python3 scripts/ci/tutorial_gate.py --gaze target/debug/gaze --output target/tutorial-gate/receipts.json
+      - name: Record job wall clock
+        if: ${{ always() }}
+        run: |
+          mkdir -p target/tutorial-gate
+          elapsed=$(($(date +%s) - TUTORIAL_JOB_START))
+          printf 'Tutorial job wall clock: %ss\n' "$elapsed" | tee target/tutorial-gate/job-time.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: ${{ always() }}
+        with:
+          name: tutorial-execution
+          path: |
+            target/tutorial-gate/receipts.json
+            target/tutorial-gate/job-time.txt
+          if-no-files-found: error
+          retention-days: 14
