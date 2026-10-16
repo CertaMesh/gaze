@@ -1,182 +1,95 @@
-# Getting Started with Gaze
+# Protect a model call from Rust
 
-Clean a document, keep its restore key private, send safe text to an LLM, then
-restore the response. Allow about ten minutes.
+We will build a Rust program that sends tokens to a mock model and restores
+its reply with the original session snapshot. Allow ten minutes.
 
-```mermaid
-flowchart LR
-    A[Owner raw text] --> B[Gaze session]
-    B --> C[Clean text to LLM]
-    B --> D[Owner stores snapshot]
-    C --> E[Tokenized response]
-    E --> F[Owner strict restore]
-    D --> F
-```
+You need Cargo and Rust 1.89 or newer. Start outside an existing Cargo workspace.
+For the CLI path, start with
+[Your first pseudonymization](first-pseudonymization.md).
 
-## Prerequisites
+## 1. Create a project
 
-- Rust toolchain at MSRV `1.89` or newer (matches the workspace `rust-version`).
-- For the CLI: `cargo install gaze-cli` or build from source.
-
-## 1. Add dependencies
+First, create a binary and add the core and assembly crates:
 
 ```sh
+cargo new gaze-model-call --bin --vcs none
+cd gaze-model-call
 cargo add gaze-pii gaze-assembly
+printf 'Project ready\n'
 ```
 
-The crate is published as `gaze-pii`. Import path remains `use gaze::...`.
+Cargo reports the dependencies it adds, followed by:
 
-`CorePipelineConfig` builds bundled defaults: emails, names, locations,
-organizations, and optional locale-aware recognizers.
+```text
+Project ready
+```
 
-## 2. Clean a document
+The package is `gaze-pii`; Rust imports it as `gaze`.
 
-```rust
-use gaze::{CleanDocument, Scope, Session};
+## 2. Write the model loop
+
+Now, replace `src/main.rs`:
+
+```sh
+cat > src/main.rs <<'RS'
+use gaze::{CleanDocument, Scope, SensitiveSnapshot, Session};
 use gaze_assembly::CorePipelineConfig;
 
+fn mock_model(clean_text: &str) -> String {
+	format!("Reply: {clean_text}")
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Build once; share across requests in long-running apps.
-    let core = CorePipelineConfig::new().build()?;
+	let pipeline = CorePipelineConfig::new().build()?;
+	let session = Session::new(Scope::Conversation("demo".into()))?;
+	let original = format!("Contact {}@{}.", "alice", "example.invalid");
+	let cleaned = pipeline.pseudonymize_text(&session, original.clone())?;
+	let CleanDocument::Text(clean_text) = cleaned else {
+		return Err("expected text output".into());
+	};
+	assert!(!clean_text.contains("example.invalid"));
+	assert!(clean_text.contains(":Email_"));
+	println!("Model receives: {clean_text}");
 
-    // One Session per conversation -- it owns the token map.
-    // Share a Session only within the same logical isolation boundary.
-    let session = Session::new(Scope::Conversation("conv-abc".into()))?;
-
-    let cleaned = core.pseudonymize_text(
-        &session,
-        format!(
-            "Hi, {}{}{} called about ORD-789012.",
-            "alice", "@", "example.invalid"
-        ),
-    )?;
-
-    // CleanDocument is an enum: Text(String) or Structured(...). Destructure.
-    let CleanDocument::Text(clean_text) = cleaned else {
-        unreachable!("Text input produces Text output");
-    };
-    println!("{}", clean_text);
-    // "Hi, <hex:Email_N> called about ORD-789012."
-    // ORD-789012 needs a custom recognizer or context JSON -- see Step 5.
-
-    Ok(())
+	let owner_blob = session.export()?.into_bytes();
+	let reply = mock_model(&clean_text);
+	let restored_session = Session::import(SensitiveSnapshot::from(owner_blob))?;
+	let restored = restored_session.restore_strict_text(&reply)?;
+	assert_eq!(restored, format!("Reply: {original}"));
+	println!("Restored reply matches: true");
+	Ok(())
 }
+RS
+printf 'Saved src/main.rs\n'
 ```
 
-`<hex:Email_N>` is display notation. Use the exact token returned by `pseudonymize_text`;
-its session prefix and numeric ordinal change on each run.
+You should see:
 
-Share sessions only within one logical boundary. See the
-[session contract](../explanation/core/session-contract.md).
-
-## 3. Export the restore key before calling the LLM
-
-Add this after cleaning in step 2, using that same `session`:
-
-```rust,ignore
-let blob = session.export()?.into_bytes();
-// Store blob encrypted at rest, bound to this conversation/user.
-// Send only clean_text to the LLM; never send blob to models, analytics, or logs.
+```text
+Saved src/main.rs
 ```
 
-A new session's snapshot cannot restore tokens from the cleaning session.
+Only `clean_text` crosses the mock model boundary. Keep `owner_blob` private;
+a production app stores snapshots encrypted and bound to the conversation.
 
-## 4. Restore after the LLM responds
+## 3. Run the program
 
-Load the encrypted snapshot from storage, then restore the complete response
-on the owner side:
+Run the complete loop:
 
-```rust,ignore
-use gaze::{SensitiveSnapshot, Session};
-
-let session = Session::import(SensitiveSnapshot::from(blob))?;
-let restored = session.restore_strict_text(&llm_response)?;
+```sh
+cargo run --quiet
 ```
 
-Use the actual response tokens; `<hex:Email_N>` is display notation.
-`Session::restore` looks up one exact token and returns `Option<String>`
-(`None` when unknown). Use `restore_strict_text` when unresolved tokens must
-fail the whole response.
+The program prints the protected input and confirms restore:
 
-## 5. Add a policy for tenant-specific PII
-
-```toml
-# policy.toml
-[session]
-scope = "conversation"
-
-[policy.rulepacks]
-bundled = []
-
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "order-id"
-class = "custom:order_id"        # lowercase; no Custom(...) syntax
-pattern = '\bORD-\d{6,}\b'
-
-[[rule]]
-kind = "class"
-class = "custom:order_id"
-action = "tokenize"
+```text
+Model receives: Contact <{session_hex}:Email_1>.
+Restored reply matches: true
 ```
 
-```rust
-use std::collections::HashMap;
-use std::path::Path;
+The eight-character session prefix changes on each run. The assertions check
+that the model sees a token and that restore preserves the original reply.
 
-use gaze::{Context, LocaleChain, Policy};
-
-let policy = Policy::load(Path::new("policy.toml"))?;
-let context = Context {
-    dictionaries: HashMap::new(),
-    class_map: HashMap::new(),
-    fields: Default::default(),
-    record_match_kinds: Default::default(),
-    record_value_rejections: Default::default(),
-};
-let rulepacks = Vec::new();
-let active_locales = LocaleChain::merge_policy_and_cli(None, None);
-
-let pipeline = gaze_assembly::build_pipeline(
-    &policy,
-    &context,
-    &rulepacks,
-    &active_locales,
-    None,
-)?;
-```
-
-Use policy regex for stable shapes. For per-request tenant values, pass a
-context dictionary:
-
-```json
-{
-  "dictionaries": {
-    "order_ids": { "terms": ["ORD-789012"], "case_sensitive": true }
-  },
-  "class_map": { "order_ids": "custom:order_id" },
-  "fields": { "tenant": "demo" }
-}
-```
-
-Pass `gaze clean --context-json context.json`. Its call-scoped dictionary
-tokenizes `ORD-789012` as `Custom:order_id`. See the
-[context schema and `terms_from_context`](../reference/policy.md#policycustom_recognizers).
-
-## Troubleshooting common errors
-
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `PolicyError` (unknown field) | Typo in `policy.toml` | Check [docs/reference/policy.md](../reference/policy.md) |
-| `Error::BlobExpired { .. }` | Snapshot TTL elapsed | Increase `ttl` (a `Duration`) or refresh before expiry |
-| Export errors on `Ephemeral` | Cannot restore from ephemeral sessions | Use `Scope::Conversation` |
-| `RulepackError::UnsupportedValidator` | Unknown validator name | See valid names in [docs/reference/policy.md](../reference/policy.md#built-in-validators) |
-| Tokens not restored | Wrong session blob | The blob must come from the exact session that produced the clean output |
-
-## Next steps
-
-- [Policy reference](../reference/policy.md)
-- [CLI adapter contract](../../crates/gaze-cli/README.md)
-- [Security review](../reference/security-review.md)
-- [Exit codes](../../crates/gaze-cli/README.md#exit-codes)
-- `cargo doc --open -p gaze-pii`
+This example uses bundled deterministic rules. To load the setup policy's
+NER and Nym models, follow [Use the setup policy from Rust](../how-to/rust-library.md).
+For isolation and lifetime rules, see the [session contract](../explanation/core/session-contract.md).
