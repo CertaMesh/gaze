@@ -12,8 +12,10 @@ Gaze replaces PII with restorable tokens before text reaches an LLM. Keep restor
 
 ## Quickstart
 
-New here? Start with the [Getting Started tutorial](tutorials/getting-started.md), a
-working redact → send → restore loop in about ten minutes.
+New here? [Your first pseudonymization](tutorials/first-pseudonymization.md)
+cleans a fictional email and restores its exact bytes in about five minutes,
+with no model download. For a library integration, use
+[Getting started with Rust](tutorials/getting-started.md).
 
 ## Find your way
 
@@ -31,7 +33,7 @@ A dash means no dedicated page; section indexes list all pages.
 | Feature | Tutorial | How-to | Reference | Explanation |
 |---|---|---|---|---|
 | Core redaction & restore | [Getting Started](tutorials/getting-started.md) | [Use the setup policy from Rust](how-to/rust-library.md) | [CLI](reference/cli.md) · [Metrics](reference/metrics.md) | [Restore boundary](explanation/core/restore-boundary.md) · [Session contract](explanation/core/session-contract.md) |
-| CLI (`gaze clean` / `restore`) | [Getting Started](tutorials/getting-started.md) |: | [CLI reference](reference/cli.md) |: |
+| CLI (`gaze clean` / `restore`) | [Your first pseudonymization](tutorials/first-pseudonymization.md) |: | [CLI reference](reference/cli.md) |: |
 | Policy & recognizers |: | [Custom recognizers](how-to/policy/custom-recognizers.md) · [Policy by hand](how-to/manual-policy.md) · [Policy examples](how-to/policy/policy-examples.md) | [Policy schema](reference/policy.md) | [Locale chain](explanation/policy/locale-chain.md) · [detection contracts](explanation/README.md#detection-and-conflict-resolution) |
 | Safety nets / NER |: | [Safety net setup in the CLI README](../crates/gaze-cli/README.md#safety-net) | [Benchmarks](reference/benchmarks/README.md) | [Safety nets](explanation/safety-net/safety-nets.md) · [Modes](explanation/safety-net/safety-net-modes.md) · [GLiNER DOB memory limit](explanation/safety-net/gliner-dob-memory-feasibility.md) |
 | Proxy (OpenAI / Anthropic / Gemini) |: | [Set up the proxy](how-to/proxy/set-up-proxy.md) |: | [Proxy runtime](explanation/proxy/proxy-runtime.md) · [Strict Anthropic Messages contract](explanation/proxy/anthropic-messages-contract.md) |
