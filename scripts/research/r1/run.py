@@ -48,6 +48,10 @@ def evaluate(record, pred, arm):
     c, roots = Counter(), defaultdict(set)
     for turn, predicted in zip(record["turns"], pred["turns"]):
         gold_bytes = {i for g in turn["gold"] for i in range(g["start"], g["end"])}
+        # Auxiliary name-only evaluation excludes other annotated PII from the
+        # benign denominator (e.g. a name fragment inside an email). Such bytes
+        # are neither credited name recall nor charged as benign corruption.
+        ignored = {i for g in turn.get("other_pii", []) for i in range(g["start"], g["end"])} - gold_bytes
         spans = predicted["spans"]
         covered = set()
         for span in spans:
@@ -60,9 +64,10 @@ def evaluate(record, pred, arm):
         c["gold_bytes"] += len(gold_bytes)
         c["covered_gold_bytes"] += len(covered & gold_bytes)
         c["missed_pii_bytes"] += len(gold_bytes - covered)
-        c["false_positive_bytes"] += len(covered - gold_bytes)
+        c["other_pii_covered_bytes"] += len(covered & ignored)
+        c["false_positive_bytes"] += len(covered - gold_bytes - ignored)
         raw = turn["text"].encode()
-        c["false_positive_ascii_whitespace_bytes"] += sum(raw[i] in b" \t\r\n" for i in covered - gold_bytes)
+        c["false_positive_ascii_whitespace_bytes"] += sum(raw[i] in b" \t\r\n" for i in covered - gold_bytes - ignored)
         c["turns"] += 1
         c["restoration_errors"] += not predicted["restore_ok"]
         for gold in turn["gold"]:
@@ -126,7 +131,8 @@ def layer_rows(split):
         rows.append({"id": r.uid, "split": split, "language": r.language, "family": "layer_R/" + r.family,
                      "entities": [{"id": "p1", "kind": "Name", "full": full, "given": given, "family": family}],
                      "turns": [{"text": seed, "seed": True, "gold": [{"start":14,"end":14 + len(full.encode()),"entity":"p1","kind":"Name","value":full}]},
-                               {"text": r.text, "gold": [{"start":g.start,"end":g.end,"value":g.value,"entity":"p1","kind":"Name"} for g in names]}]})
+                               {"text": r.text, "gold": [{"start":g.start,"end":g.end,"value":g.value,"entity":"p1","kind":"Name"} for g in names],
+                                "other_pii":[{"start":g.start,"end":g.end} for g in r.gold if g.label not in {"GIVENNAME","SURNAME"}]}]})
     return rows
 
 

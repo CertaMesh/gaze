@@ -35,6 +35,16 @@ class ExperimentTests(unittest.TestCase):
         p["turns"][0]["spans"].append(p["turns"][0]["spans"][0])
         with self.assertRaises(ValueError): evaluate(r,p,"exact")
 
+    def test_other_annotated_pii_is_not_a_benign_false_positive(self):
+        r = copy.deepcopy(generate.generate()[0])
+        r["turns"] = [{"text":"ab cd", "seed":False,
+                       "gold":[{"start":0,"end":2,"value":"ab","entity":"p1"}],
+                       "other_pii":[{"start":3,"end":5}]}]
+        p = {"turns":[{"spans":[{"start":0,"end":5,"token":"x","root":"abstain"}],"restore_ok":True}]}
+        c = evaluate(r,p,"exact")
+        self.assertEqual(c["false_positive_bytes"],1)
+        self.assertEqual(c["other_pii_covered_bytes"],2)
+
     def test_authentication_and_destination_matrix(self):
         self.assertTrue(authority_suite()["all_pass"])
         self.assertEqual(authority_suite()["invalid_probe_plaintext_bytes"],0)

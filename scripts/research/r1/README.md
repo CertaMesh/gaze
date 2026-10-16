@@ -51,3 +51,10 @@ All evidence outputs go under ignored `target/`; the runner includes source,
 binary, protocol and scenario hashes. It emits per-family and per-language
 counts and records exact error denominators. These scripts are not part of
 the public benchmark harness and do not change release scorecards.
+
+The auxiliary name slice ignores separately annotated non-name PII when
+counting benign false-positive bytes; covered bytes of that PII are reported
+separately as `other_pii_covered_bytes`. Whole-name whitespace between separately
+annotated given/family spans is still charged (with ASCII whitespace reported
+separately). This auxiliary scoring correction was made after the first held-out
+run; no algorithm, scenario, or primary metric changed in that replay.
