@@ -59,6 +59,14 @@ class AvailabilityTest(unittest.TestCase):
         self.assertIsNone(panel.bars[0].leaked)
         self.assertIsNone(panel.bars[0].fp_per_1k)
         self.assertIn("N/A", panel.note)
+        from dataclasses import replace
+        panel = replace(panel, bars=(charts.Bar("synthetic measured tool", 0.5, 10, 1.0), *panel.bars))
+        svg = charts.figure_svg("light", [panel], "synthetic comparison")
+        self.assertIn(">N/A</text>", svg)
+        self.assertNotIn(">pending</text>", svg)
+        table = charts.model_card_tables([panel])
+        self.assertIn("| N/A |", table)
+        self.assertNotIn("pending", table)
 
     def test_table_preserves_na_and_names_skipped_language_count(self):
         row = render.unavailable_summary_row("v4", "C", "opf", False)
