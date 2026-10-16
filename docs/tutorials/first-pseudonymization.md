@@ -44,8 +44,8 @@ PY
 ```
 
 Keep `owner-clean.json` private. Its `session_blob` is a saved session that
-contains the token-to-original mapping, so a model could recover the address from it.
-Send only `clean.txt` to a model.
+holds the original address unencrypted, so anyone who has it can recover the
+address. Send only `clean.txt` to a model.
 
 Now, clean the input and extract the text:
 
@@ -109,8 +109,12 @@ python3 json-helper.py field text < owner-restored-reply.json > restored-reply.t
 cat restored-reply.txt
 ```
 
-The reply starts with `Thanks, I'll email` and ends with the address from
-`input.txt` and a period. The token is gone.
+The token is gone. In the output below, `{original_address}` stands for the
+address in `input.txt`:
+
+```text
+Thanks, I'll email {original_address}.
+```
 
 Keep the input, restored text, and `owner-*.json` files on the owner side.
 With a real model, send the cleaned text and restore its reply using the same
