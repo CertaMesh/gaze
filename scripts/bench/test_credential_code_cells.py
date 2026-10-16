@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import tomllib
 import unittest
+from unittest import mock
 
 import agentic_layers as agentic
 import credential_code_arm as arm
@@ -59,6 +60,31 @@ class CredentialCellsTests(unittest.TestCase):
             for family in ("password_schema", "validation", "language", "masked"):
                 selected = [row for row in rows if row.layer == "D" and row.family == family]
                 self.assertTrue(all("password" in row.text and not row.gold for row in selected))
+
+    def test_review_partitions_share_no_texts_values_or_rendered_templates(self):
+        parts, templates, values = {}, {}, {}
+        for partition in agentic.PARTITIONS:
+            with mock.patch.object(agentic, "_fill_with_decoys", wraps=agentic._fill_with_decoys) as render:
+                parts[partition] = cells.review_records(agentic, partition)
+            # Inspect actual renderer inputs, including non-gold D values. The
+            # partition embedded in a template ID cannot prove a held-out split.
+            templates[partition] = {call.args[0] for call in render.call_args_list}
+            values[partition] = {field[0] for call in render.call_args_list for field in call.args[1].values()}
+
+        def skeleton(row):
+            text = row.text
+            for value in sorted({span.value for span in (*row.gold, *row.decoys)}, key=len, reverse=True):
+                text = text.replace(value, "{V}")
+            return text
+
+        dev, test = agentic.PARTITIONS
+        overlaps = {
+            "rendered_texts": len({row.text for row in parts[dev]} & {row.text for row in parts[test]}),
+            "gold_normalised_templates": len({skeleton(row) for row in parts[dev]} & {skeleton(row) for row in parts[test]}),
+            "all_value_normalised_templates": len(templates[dev] & templates[test]),
+            "inserted_values": len(values[dev] & values[test]),
+        }
+        self.assertEqual(overlaps, dict.fromkeys(overlaps, 0))
 
     def test_arm_changes_only_the_new_rulepack_slot(self):
         source = '[policy.rulepacks]\nbundled=["core","secrets"]\npaths=[]\n\n[[rule]]\nkind="default"\naction="tokenize"\n'
