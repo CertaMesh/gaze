@@ -38,9 +38,8 @@ jobs:
             ~/.cargo/git
             target/debug
             target/tutorial-gate/cargo
-          key: ${{ runner.os }}-tutorials-1.96-${{ hashFiles('**/Cargo.lock') }}-${{ github.sha }}
+          key: ${{ runner.os }}-tutorials-1.96-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-tutorials-1.96-${{ hashFiles('**/Cargo.lock') }}-
             ${{ runner.os }}-tutorials-1.96-
       - name: Build PR-head CLI
         run: cargo build --locked -p gaze-cli --no-default-features --features proxy,mcp
