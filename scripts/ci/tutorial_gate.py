@@ -4,6 +4,7 @@
 import argparse
 from dataclasses import dataclass
 import difflib
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -25,10 +26,31 @@ PLACEHOLDERS = {
 }
 MANUAL = re.compile(r'<!-- tutorial-gate: manual reason="([^"\n]+)" -->')
 START = "<!-- tutorial-gate: start=checkout -->"
+ACCOUNT_COMMAND = re.compile(
+    r"(?m)^\s*(?:(?:command|env)\s+|[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*claude(?:\s|$)"
+)
 
 
 class GateError(ValueError):
     pass
+
+
+def manual_allowlist():
+    entries = json.loads(Path(__file__).with_name("tutorial_manual_steps.json").read_text())
+    if not isinstance(entries, list):
+        raise GateError("manual-step allowlist must be a list")
+    seen = set()
+    for entry in entries:
+        if (not isinstance(entry, dict) or set(entry) != {"page", "sha256", "reason"}
+                or not all(isinstance(value, str) and value.strip() for value in entry.values())
+                or Path(entry["page"]).name != entry["page"]
+                or not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"])):
+            raise GateError("invalid manual-step allowlist entry")
+        key = (entry["page"], entry["sha256"])
+        if key in seen:
+            raise GateError("duplicate manual-step approval")
+        seen.add(key)
+    return entries
 
 
 @dataclass
@@ -60,10 +82,13 @@ def expectation_pattern(expected: str, bindings: dict[str, str]):
     return re.compile("".join(parts))
 
 
-def parse(markdown: str) -> tuple[list[Block], bool]:
+def parse(markdown: str, page_name: str = "", approved_steps=()) -> tuple[list[Block], bool]:
     blocks = []
     pending_manual = None
     previous = None
+    approved = {(entry["sha256"], entry["reason"]) for entry in approved_steps
+                if entry["page"] == page_name}
+    seen_manual = set()
     lines = markdown.splitlines(keepends=True)
     i = 0
     while i < len(lines):
@@ -87,8 +112,18 @@ def parse(markdown: str) -> tuple[list[Block], bool]:
                 raise GateError(f"unclosed fence at line {number}")
             content = "".join(body)
             if language == "sh":
-                if re.search(r"(?m)^\s*claude(?:\s|$)", content) and not pending_manual:
+                account = ACCOUNT_COMMAND.search(content)
+                if account and not pending_manual:
                     raise GateError(f"account-bound claude command at line {number} needs a manual marker")
+                if pending_manual:
+                    key = (hashlib.sha256(content.encode()).hexdigest(), pending_manual)
+                    if key not in approved:
+                        raise GateError(f"manual marker at line {number} is not approved for this page and block")
+                    if not account:
+                        raise GateError("approved manual block must invoke an account command")
+                    if key in seen_manual:
+                        raise GateError("approved manual block appears more than once")
+                    seen_manual.add(key)
                 blocks.append(Block(number, content, manual=pending_manual))
                 pending_manual = None
                 previous = blocks[-1]
@@ -105,6 +140,8 @@ def parse(markdown: str) -> tuple[list[Block], bool]:
         i += 1
     if pending_manual:
         raise GateError("unused manual marker")
+    if seen_manual != approved:
+        raise GateError("approved manual step is missing or changed")
     if not blocks or all(block.manual for block in blocks):
         raise GateError("tutorial must execute at least one sh block")
     return blocks, START in markdown.splitlines()
@@ -133,7 +170,7 @@ def checkout_files(root: Path, destination: Path):
 
 
 def run_tutorial(page: Path, root: Path, scratch: Path, gaze: Path, timeout: int = 600):
-    blocks, checkout = parse(page.read_text())
+    blocks, checkout = parse(page.read_text(), page.name, manual_allowlist())
     started = time.monotonic()
     # Keep cargo new outside the repository's workspace ancestry. Otherwise it
     # silently adds the tutorial project to the real workspace Cargo.toml.
@@ -148,6 +185,13 @@ def run_tutorial(page: Path, root: Path, scratch: Path, gaze: Path, timeout: int
         binary_dir = work / "bin"
         binary_dir.mkdir()
         (binary_dir / "gaze").symlink_to(gaze)
+        account_shim = binary_dir / "claude"
+        account_attempt = work / "account-attempt"
+        account_shim.write_text(
+            "#!/bin/sh\nprintf '%s\\n' 'unmarked account command: claude' >&2\n"
+            f": > {shlex.quote(str(account_attempt))}\nexit 126\n"
+        )
+        account_shim.chmod(0o700)
         env = os.environ.copy()
         env.update({
             "PATH": str(binary_dir) + os.pathsep + env["PATH"],
@@ -194,6 +238,8 @@ def run_tutorial(page: Path, root: Path, scratch: Path, gaze: Path, timeout: int
             process.wait()
         done = set(completed.read_text().splitlines()) if completed.exists() else set()
         executable = [i for i, block in enumerate(blocks) if not block.manual]
+        if account_attempt.exists():
+            raise GateError(f"{page.name}: unmarked account command: claude")
         if process.returncode or done != set(map(str, executable)):
             failed = next((blocks[i].line for i in executable if str(i) not in done), "exit")
             raise GateError(f"{page.name}:{failed}: shell failed ({process.returncode})\n{errors.decode(errors='replace')}")
@@ -226,6 +272,8 @@ def main():
     scratch.mkdir(parents=True, exist_ok=True)
     pages = sorted((root / "docs/tutorials").glob("*.md"))
     pages = [page for page in pages if page.name != "README.md"]
+    if not {entry["page"] for entry in manual_allowlist()} <= {page.name for page in pages}:
+        parser.error("manual-step allowlist names a missing tutorial")
     if args.page:
         pages = [page for page in pages if page.name == args.page]
     if not pages:

@@ -1,12 +1,66 @@
 import os
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import tutorial_gate as gate
 
 
 class OutputContract(unittest.TestCase):
+    def test_only_pinned_account_blocks_can_be_manual(self):
+        command = "claude --print hi\n"
+        approved = [{"page": "account.md", "sha256": hashlib.sha256(command.encode()).hexdigest(),
+                     "reason": "Account"}]
+        markdown = ('```sh\nprintf "setup\\n"\n```\n'
+                    '<!-- tutorial-gate: manual reason="Account" -->\n```sh\n' + command + '```\n')
+        blocks, _ = gate.parse(markdown, "account.md", approved)
+        self.assertEqual(sum(bool(block.manual) for block in blocks), 1)
+        for content, name in ((markdown, "other.md"),
+                              (markdown.replace("--print hi", "--print changed"), "account.md"),
+                              (markdown.replace('reason="Account"', 'reason="Different"'), "account.md"),
+                              ('```sh\nprintf "setup\\n"\n```\n', "account.md")):
+            with self.subTest(name=name, content=content), self.assertRaises(gate.GateError):
+                gate.parse(content, name, approved)
+        ordinary = "printf 'ordinary\\n'\n"
+        approved[0]["sha256"] = hashlib.sha256(ordinary.encode()).hexdigest()
+        with self.assertRaisesRegex(gate.GateError, "must invoke an account command"):
+            gate.parse(markdown.replace(command, ordinary), "account.md", approved)
+
+    def test_account_wrappers_and_runtime_indirection_never_call_real_cli(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            fake = fake_bin / "claude"
+            fake.write_text('#!/bin/sh\n: > "$ACCOUNT_CALLED"\n')
+            fake.chmod(0o700)
+            called = root / "called"
+            page = root / "wrappers.md"
+            calls = ["command claude --print hi", "env claude --print hi", "DEMO=x claude --print hi",
+                     'account=claude\ncommand "$account" --print hi',
+                     'account=claude\nenv "$account" --print hi',
+                     'account=claude\nDEMO=x "$account" --print hi',
+                     'account=claude\n"$account" --print hi || true']
+            with patch.dict(os.environ, {"PATH": str(fake_bin) + os.pathsep + os.environ["PATH"],
+                                         "ACCOUNT_CALLED": str(called)}):
+                for call in calls:
+                    with self.subTest(call=call):
+                        page.write_text('```sh\n' + call + '\n```\n')
+                        with self.assertRaisesRegex(gate.GateError, "needs a manual marker|unmarked account command"):
+                            gate.run_tutorial(page, root, root, Path("/bin/true"))
+                        self.assertFalse(called.exists(), "account executable must never run")
+
+    def test_checked_background_failure_fails_the_page(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            page = root / "background.md"
+            page.write_text('```sh\nfalse >/dev/null 2>&1 &\njob_pid=$!\nwait "$job_pid"\n'
+                            'printf "done\\n"\n```\n```text\ndone\n```\n')
+            with self.assertRaisesRegex(gate.GateError, "shell failed"):
+                gate.run_tutorial(page, root, root, Path("/bin/true"))
+
     def test_exact_output_and_session_binding_across_blocks(self):
         bindings = {}
         gate.compare("<{session_hex}:Email_1>\n", "<012abcde:Email_1>\n", bindings)
@@ -58,13 +112,13 @@ class OutputContract(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("TUTORIAL_GATE_BINARY"), "set TUTORIAL_GATE_BINARY for real tutorial mutations")
 class RealTutorialMutations(unittest.TestCase):
-    def test_baseline_and_three_required_mutations(self):
+    def test_baseline_and_real_page_mutations(self):
         binary = Path(os.environ["TUTORIAL_GATE_BINARY"]).resolve()
         first = (gate.ROOT / "docs/tutorials/first-pseudonymization.md").read_text()
         mcp = (gate.ROOT / "docs/tutorials/mcp-coding-assistant.md").read_text()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            page = root / "tutorial.md"
+            page = root / "first-pseudonymization.md"
             page.write_text(first)
             self.assertGreater(gate.run_tutorial(page, root, root, binary)["executed"], 0)
             mutations = [
@@ -72,6 +126,11 @@ class RealTutorialMutations(unittest.TestCase):
                 (first.replace("gaze clean <", "gaze nonexistent-tutorial-command <"), "shell failed"),
                 (gate.MANUAL.sub("", mcp), "needs a manual marker"),
             ]
+            fences = first.split("```sh\n")
+            marker = '<!-- tutorial-gate: manual reason="Account" -->\n'
+            arbitrary_skips = fences[0] + '```sh\n' + fences[1]
+            arbitrary_skips += ''.join(marker + '```sh\n' + fence for fence in fences[2:])
+            mutations.append((arbitrary_skips, "not approved"))
             for content, failure in mutations:
                 with self.subTest(failure=failure):
                     page.write_text(content)

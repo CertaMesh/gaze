@@ -1,0 +1,7 @@
+[
+  {
+    "page": "mcp-coding-assistant.md",
+    "sha256": "aedbc56dc42537c741a9af203d26aa0f43cca9d90566e355a078c2832e8d7bd7",
+    "reason": "Requires a signed-in Claude Code account and makes model requests; replay before release."
+  }
+]

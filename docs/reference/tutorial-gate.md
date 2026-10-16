@@ -82,15 +82,41 @@ marker with a nonempty reason:
 ```
 
 The job prints each skipped block with its filename, line, and reason. It still
-executes the other blocks on that page. The Claude Code call is currently the
-only marked skip. An unmarked `claude` command is rejected before execution,
-including on a developer machine with a signed-in CLI. Other unmarked commands
-run and fail the gate on nonzero exit. A page with only skipped blocks fails.
+executes the other blocks on that page. A marker is not permission to skip:
+[`tutorial_manual_steps.json`](../../scripts/ci/tutorial_manual_steps.json)
+pins each approved page, the SHA-256 of the exact shell block body, and its
+reason. Unapproved markers, changed or missing approved blocks, duplicate
+approved blocks, and manual blocks without an account command fail the gate.
+Changing an approved command or its reason requires review of the allowlist
+change. The Claude Code call is currently the only approved skip.
+
+The parser rejects unmarked Claude calls, including `command claude`,
+`env claude`, and simple environment assignments before the command. A blocking
+`claude` executable also comes first on the page's PATH. This runtime guard
+catches PATH-resolved shell indirection and records attempts even when a
+command ignores its exit status. It never invokes the installed account CLI.
+Absolute-path calls and deliberate replacement of PATH or the shim are outside
+this guard. Tutorials are trusted code; the runner is not an OS sandbox.
+Other unmarked foreground commands fail the gate on nonzero exit.
+A page with only skipped blocks fails.
 Replay all marked blocks as part of the
 [release checklist](../how-to/maintainers/release-process.md#replay-account-bound-tutorial-steps).
 
 The runner tests mutate real tutorials: changing an expected output line,
-breaking a `gaze` command, and removing the Claude Code manual marker must each
-fail the gate. `TUTORIAL_GATE_BINARY` enables these real-binary probes; CI
-always supplies it. Unit tests also reject zero executed blocks, unknown
-placeholders, invalid session prefixes, and output drift between blocks.
+breaking a `gaze` command, removing the Claude Code manual marker, and marking
+every clean/restore block manual must each fail the gate.
+`TUTORIAL_GATE_BINARY` enables these real-binary probes; CI always supplies it.
+Other probes cover wrappers, runtime account-command indirection, zero
+executed blocks, unknown placeholders, invalid session prefixes, and output
+drift between blocks.
+
+## Background processes
+
+Bash's `set -e` and the block completion record cover foreground commands.
+They do not propagate a background process's failure. Tutorials must check
+background-job readiness, verify observable results, and check `wait` exit
+statuses themselves. The proxy tutorial verifies its request and restored
+response, then accepts only normal exit or the expected SIGTERM status after
+stopping both services. A negative probe starts a failing background job and
+proves that its checked `wait` fails the page. An unchecked background failure
+is outside the shell completion proof.
