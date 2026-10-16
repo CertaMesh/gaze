@@ -7,7 +7,7 @@ import hashlib
 import subprocess
 import tempfile
 import unittest
-from contextlib import ExitStack
+from contextlib import ExitStack, chdir
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -33,6 +33,20 @@ class PortablePolicyProvenanceTest(unittest.TestCase):
             policy.write_text('schema_version="0.1.0"\n')
             self.assertEqual(rescore.policy_provenance(policy, root)['path'], 'policy.toml')
             self.assertIsNone(rescore.policy_provenance(None, root))
+
+
+    def test_external_absolute_and_relative_policy_paths_are_content_addressed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            policy = root / "policy.toml"
+            policy.write_text('schema_version="0.1.0"\n')
+            digest = hashlib.sha256(policy.read_bytes()).hexdigest()
+            with mock.patch.object(Path, "home", return_value=root / "other-home"), chdir(root):
+                for value in (policy, Path("policy.toml")):
+                    with self.subTest(absolute=value.is_absolute()):
+                        result = rescore.policy_provenance(value, root / "harness")
+                        self.assertEqual(result, {"path": f"policy-sha256:{digest}", "sha256": digest})
+                        self.assertNotIn(str(root), result["path"])
 
 
 class ModelBundleTest(unittest.TestCase):

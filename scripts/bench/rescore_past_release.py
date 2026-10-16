@@ -65,7 +65,13 @@ def _sha256(path: Path) -> str:
 def policy_provenance(policy: Path | None, harness_root: Path) -> dict[str, str] | None:
     if policy is None:
         return None
-    return {"path": runner.portable_repo_path(harness_root, policy), "sha256": _sha256(policy)}
+    digest = _sha256(policy)
+    resolved = policy.resolve()
+    if resolved.is_relative_to(harness_root.resolve()) or resolved.is_relative_to(Path.home().resolve()):
+        portable = runner.portable_repo_path(harness_root, resolved)
+    else:
+        portable = f"policy-sha256:{digest}"
+    return {"path": portable, "sha256": digest}
 
 
 def policy_dependencies(policy: Path | None, release_root: Path) -> dict[str, object] | None:
