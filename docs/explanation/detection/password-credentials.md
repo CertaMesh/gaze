@@ -70,7 +70,9 @@ The generated benchmark adds whole hashes, code literals and repeats, with
 incomplete encodings, dollar prices, unrelated keys, expressions and full
 logprob/tokenizer/schema/validation/language/masked contexts as benign
 counterweights. Alternative salts and PHP arrays are included. Generator v22
-preserves every v21 document byte-for-byte. Fresh v2 and v1 gain-gate
+preserves every v21 document byte-for-byte. Its added contexts use separate
+wording, structures and seeded value pools in each partition; tests reject
+shared rendered text or value-normalised templates. Fresh v2 and v1 gain-gate
 measurements, mechanism measurements,
 and historical-release remeasurement remain pending until the release
 benchmark machine is available. No performance or byte-gain result is claimed.

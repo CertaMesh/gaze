@@ -85,9 +85,81 @@ def records(api, partition):
     return result
 
 
+
+# Assign wording, syntax and value pools before drawing any values. These are
+# rendered contexts, not partition-labelled IDs over otherwise shared inputs.
+REVIEW_TEMPLATES = {
+    "dev": {
+        "repeat": "\nCompare {V} again.",
+        "hash_truncated": "Example of an incomplete encoding: {V}",
+        "hash_invalid": "Malformed encoding example, not a stored credential: {V}",
+        "array_compact": "$seed = array('{K}'=>'{V}');",
+        "array_first": "$seed = array('{K}'=>'{V}','enabled'=>true);",
+        "array_final": "$seed = array('enabled'=>true,'{K}'=>'{V}');",
+        "array_nested": "$seed = array('outer'=>array('{K}'=>'{V}'));",
+        "password": "Credential export for a synthetic account; the actual stored password is array('password'=>'{V}');",
+        "generic_token": 'Synthetic account credential export: {"token":"{V}"}',
+        "logprob": 'Model likelihood output, not authentication data: {"content":[{"token":"{V}","logprob":-0.1}]}',
+        "tokenizer": 'Tokenizer vocabulary entry, not an access credential: {"token":"{V}","id":42}',
+        "token_schema": 'OpenAPI example for tokenizer output, no credentials: {"type":"object","example":{"token":"{V}"}}',
+        "password_schema": 'OpenAPI schema example, not an account password: {"type":"object","example":{"password":"{V}"}}',
+        "validation": "Laravel validation rules, not stored account data: $request->validate(['password'=>'{V}']);",
+        "language": "Laravel translation file, no account data: return ['password'=>'{V}'];",
+        "masked": 'A public UI response with its password already masked: {"password":"{V}","masked":true}',
+    },
+    "test": {
+        "repeat": "\nThe subsequent credential lookup returns {V}.",
+        "hash_truncated": "The import manual illustrates a broken digest with `encoded={V}`.",
+        "hash_invalid": "Parser rejection fixture; this malformed string is no account credential: [{V}]",
+        "array_compact": 'return array("{K}"=>"{V}");',
+        "array_first": 'return array("{K}" => "{V}", "role" => "reader");',
+        "array_final": 'return array("role" => "reader", "{K}" => "{V}");',
+        "array_nested": 'return array("credentials" => array("{K}" => "{V}"));',
+        "password": 'Provisioning output for a fictional login; this is the real stored credential: {"credentials":{"password":"{V}"}}',
+        "generic_token": 'A fictional service account stores its access credential in {"connection":{"token":"{V}"}}.',
+        "logprob": 'Generation diagnostics report word probabilities: {"generation":{"logprobs":[{"logprob":-0.75,"token":"{V}"}]}}',
+        "tokenizer": 'BPE configuration for a text processor, with no access secrets: {"vocabulary":{"entry":{"index":73,"token":"{V}"}}}',
+        "token_schema": 'API documentation illustrates a lexical item, not a credential: {"examples":{"lexeme":{"value":{"token":"{V}"}}}}',
+        "password_schema": 'The schema manual uses this public dummy request, not stored login data: {"examples":{"request":{"value":{"password":"{V}"}}}}',
+        "validation": 'Validation configuration checks user input: $rules = Validator::make($input, array("password" => "{V}"));',
+        "language": 'Authentication message catalogue for display to visitors: return array("messages" => array("password" => "{V}"));',
+        "masked": 'The account screen exports only an obscured display value: {"profile":{"password":"{V}"},"display":{"obscured":true}}',
+    },
+}
+
+REVIEW_VALUES = {
+    "dev": {
+        "array_prefix": ("seed_literal!", "local_fixture!"),
+        "passphrase_prefix": ("cedar branch under snow ", "quiet field beside pines "),
+        "pipe_prefix": ("seed|synthetic|secret|", "local|fixture|access|"),
+        "token_prefix": ("seed_opaque!", "local_access!"),
+        "schema": ("string", "text"),
+        "stars": (8, 9, 10),
+        "logprob": ("Hello", "nearby", "green"),
+        "tokenizer": ("indivisible", "unshipped", "merging"),
+        "validation": ("required|string|min:8|confirmed", "required|string|min:10|confirmed"),
+        "language": ("The provided password is incorrect.", "This password does not match our records."),
+    },
+    "test": {
+        "array_prefix": ("handoff_literal-", "provisioned_fixture-"),
+        "passphrase_prefix": ("harbor lantern after sunset ", "paper boat across water "),
+        "pipe_prefix": ("handoff|private|phrase|", "provision|account|value|"),
+        "token_prefix": ("handoff_opaque-", "provision_access-"),
+        "schema": ("example", "sample"),
+        "stars": (12, 13, 14),
+        "logprob": ("Goodbye", "beyond", "amber"),
+        "tokenizer": ("counterfactual", "segmentable", "encoding"),
+        "validation": ("required|min:12|string|confirmed", "required|string|max:72|confirmed"),
+        "language": ("The supplied password cannot be accepted.", "That password did not pass authentication."),
+    },
+}
+
+
 def review_records(api, partition):
     """Independent v22 contexts; leave all v21 documents and random draws intact."""
     result = []
+    templates = REVIEW_TEMPLATES[partition]
+    pools = REVIEW_VALUES[partition]
 
     def emit(layer, family, surface, index, template, value, label):
         text, gold, decoys = api._fill_with_decoys(template, {"V": (value, None if layer == "D" else label)})
@@ -101,6 +173,11 @@ def review_records(api, partition):
         ))
 
     rng = api.Rng(api.PARTITION_SEEDS[partition], "credential-code-review")
+
+    def pick(kind):
+        pool = pools[kind]
+        return pool[rng.below(len(pool))]
+
     for index in range(api.DOCS_PER_FAMILY):
         for family, value in hashes(rng).items():
             if family not in ("sha256crypt", "sha512crypt", "md5crypt",
@@ -117,49 +194,44 @@ def review_records(api, partition):
                     emit("A", family, "salt_" + surface + "_" + str(ord(mark)), index,
                          template, encoded, "PASSWORD")
                     emit("R", family, "salt_" + surface + "_" + str(ord(mark)), index,
-                         template + "\nCompare {V} again.", encoded, "PASSWORD")
+                         template + templates["repeat"], encoded, "PASSWORD")
                 emit("D", family, "salt_truncated_" + str(ord(mark)), index,
-                     "Example of an incomplete encoding: {V}", encoded[:-1], "decoy:incomplete_hash")
+                     templates["hash_truncated"], encoded[:-1], "decoy:incomplete_hash")
                 invalid_parts = parts.copy()
                 invalid_parts[slot] = "" if "django" in family else "bad:salt"
                 emit("D", family, "salt_invalid_" + str(ord(mark)), index,
-                     "Malformed encoding example, not a stored credential: {V}",
+                     templates["hash_invalid"],
                      "$".join(invalid_parts), "decoy:malformed_hash")
         for key, label in (("password", "PASSWORD"), ("api_token", "SECURITYTOKEN"),
                            ("remember_token", "SECURITYTOKEN")):
-            value = partition + "_array!" + rng.digits(6)
-            for surface, template in (
-                ("array_compact", "array('" + key + "'=>'{V}');"),
-                ("array_first", "array('" + key + "'=>'{V}','enabled'=>true);"),
-                ("array_final", "array('enabled'=>true,'" + key + "'=>'{V}');"),
-                ("array_nested", "array('outer'=>array('" + key + "'=>'{V}'));"),
-            ):
+            value = pick("array_prefix") + rng.digits(6)
+            for surface in ("array_compact", "array_first", "array_final", "array_nested"):
+                template = templates[surface].replace("{K}", key)
                 emit("A", key, surface, index, template, value, label)
-                emit("R", key, surface, index, template + "\nCompare {V} again.", value, label)
+                emit("R", key, surface, index, template + templates["repeat"], value, label)
+        weak_string, weak_stars = pick("schema"), "*" * pick("stars")
         for family, value in (
-            ("spaced_passphrase", partition + " synthetic long pass phrase " + rng.digits(6)),
-            ("pipe_password", partition + "|synthetic|secret|" + rng.digits(6)),
-            ("weak_string", "string" if partition == "dev" else "example"),
-            ("weak_stars", "********" if partition == "dev" else "************"),
+            ("spaced_passphrase", pick("passphrase_prefix") + rng.digits(6)),
+            ("pipe_password", pick("pipe_prefix") + rng.digits(6)),
+            ("weak_string", weak_string),
+            ("weak_stars", weak_stars),
         ):
-            template = "Credential export for a synthetic account; the actual stored password is " + "array('password'=>'{V}');"
+            template = templates["password"]
             emit("A", family, "password_" + family, index, template, value, "PASSWORD")
-            emit("R", family, "password_" + family, index, template + "\nStored credential again: {V}", value, "PASSWORD")
+            emit("R", family, "password_" + family, index, template + templates["repeat"], value, "PASSWORD")
         # These are genuine credentials under an ambiguous generic key. Keeping
         # them gold makes the deliberate generic-token recall cost measurable.
-        value = partition + "_opaque!" + rng.digits(8)
+        value = pick("token_prefix") + rng.digits(8)
         emit("A", "generic_token", "generic_token", index,
-             'Synthetic account credential export: {"token":"{V}"}', value, "SECURITYTOKEN")
+             templates["generic_token"], value, "SECURITYTOKEN")
         emit("R", "generic_token", "generic_token", index,
-             'Synthetic account credential export: {"token":"{V}"}\nStored credential again: {V}', value, "SECURITYTOKEN")
-        for family, value, template in (
-            ("logprob", "Hello", 'Model logprobs: {"content":[{"token":"{V}","logprob":-0.1,"bytes":[72,101,108,108,111]}]}'),
-            ("tokenizer", "indivisible", 'Tokenizer vocabulary entry, not an access credential: {"token":"{V}","id":42}'),
-            ("token_schema", "string", 'OpenAPI example for tokenizer output, no credentials: {"type":"object","example":{"token":"{V}"}}'),
-            ("password_schema", "string", 'OpenAPI schema example, not an account password: {"type":"object","example":{"password":"{V}"}}'),
-            ("validation", "required|string|min:8|confirmed", "Laravel validation rules, not stored account data: $request->validate(['password'=>'{V}']);"),
-            ("language", "The provided password is incorrect.", "Laravel translation file, no account data: return ['password'=>'{V}'];"),
-            ("masked", "********", 'A public UI response with its password already masked: {"password":"{V}","masked":true}'),
+             templates["generic_token"] + templates["repeat"], value, "SECURITYTOKEN")
+        for family, value in (
+            ("logprob", pick("logprob")), ("tokenizer", pick("tokenizer")),
+            ("token_schema", weak_string), ("password_schema", weak_string),
+            ("validation", pick("validation")), ("language", pick("language")),
+            ("masked", weak_stars),
         ):
-            emit("D", family, "metadata_" + family, index, template, value, "decoy:credential_metadata")
+            emit("D", family, "metadata_" + family, index,
+                 templates[family], value, "decoy:credential_metadata")
     return result
