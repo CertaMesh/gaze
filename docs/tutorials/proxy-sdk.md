@@ -9,12 +9,11 @@ The only upstream is a local mock. Use the dummy key below.
 
 ## 1. Prepare the application
 
-First, copy the mock server and install the SDK in a virtual environment:
+First, install the SDK and write the local mock server:
 
 ```sh
 umask 077
 mkdir -p target/proxy-tutorial
-cp docs/tutorials/examples/mock_openai.py target/proxy-tutorial/
 cd target/proxy-tutorial
 python3 -m venv .venv
 .venv/bin/python -m pip install --quiet openai
@@ -29,6 +28,49 @@ bundled = ["core"]
 kind = "default"
 action = "tokenize"
 TOML
+cat > mock_openai.py <<'PY'
+"""Local, non-streaming Chat Completions echo server for the proxy tutorial."""
+
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import json
+from pathlib import Path
+
+
+class Echo(BaseHTTPRequestHandler):
+	def do_POST(self):
+		if self.path != "/v1/chat/completions":
+			self.send_error(404)
+			return
+		request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+		Path("upstream-request.json").write_text(json.dumps(request))
+		response = {
+			"id": "mock-completion",
+			"object": "chat.completion",
+			"created": 0,
+			"model": "mock-model",
+			"choices": [{
+				"index": 0,
+				"message": {"role": "assistant", "content": request["messages"][-1]["content"]},
+				"finish_reason": "stop",
+			}],
+		}
+		body = json.dumps(response).encode()
+		self.send_response(200)
+		self.send_header("Content-Type", "application/json")
+		self.send_header("Content-Length", str(len(body)))
+		self.end_headers()
+		self.wfile.write(body)
+
+	def log_message(self, *_args):
+		pass
+
+
+if __name__ == "__main__":
+	with HTTPServer(("127.0.0.1", 0), Echo) as server:
+		host, port = server.server_address
+		Path("mock-upstream-url.txt").write_text(f"http://{host}:{port}")
+		server.serve_forever()
+PY
 printf 'SDK and policy ready\n'
 ```
 
@@ -43,6 +85,7 @@ SDK and policy ready
 Keep this shell open. It owns both processes and stops them at exit:
 
 ```sh
+rm -f mock-upstream-url.txt upstream-request.json
 python3 mock_openai.py > mock.log 2>&1 &
 mock_pid=$!
 trap 'kill "$mock_pid" 2>/dev/null || true' EXIT
