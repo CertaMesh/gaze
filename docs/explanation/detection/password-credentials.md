@@ -19,13 +19,17 @@ Fixed-width checksums require their complete encoded length. Variable-length
 Argon2 salts and digests require at least four base64 characters each, with no
 upper cutoff. Passlib scrypt salts allow up to 1,366 base64 characters, matching
 its 1,024-byte limit. Django salts use alphanumeric characters, dot, slash,
-underscore, or hyphen. Adjacent encoding characters block partial matches.
+underscore, or hyphen. Adjacent encoding characters block partial matches. A preceding `=` remains
+an assignment delimiter, so `digest=$...` values are protected.
 
 `password.code` and `security_token.code` require a complete, nonempty quoted
 literal on one line, after an exact credential key and `:`, `=`, or `=>`.
 Matching quotes and the following comma, closing bracket or brace, semicolon,
 or line end establish the value boundary. Source escapes remain escaped in
-the manifest. Literal length has no cutoff. Expressions such as
+the manifest. Matching uses normalized text, as `password.field` does. Removed
+edge joiners remain outside the capture. Code literals have no length cutoff. Bare password keys
+require a trailing comma, semicolon, brace, or bracket. Other bare line records
+stay with `password.field`, including its existing length and audit contract. Expressions such as
 `Hash::make('secret')` do not establish a credential value.
 
 The labelled-identifier scanner is unsuitable here. Its group and next-label

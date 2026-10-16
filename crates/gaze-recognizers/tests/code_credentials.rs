@@ -53,6 +53,7 @@ fn raw_password_hashes_in_seeders_and_sql_are_one_restorable_span() {
             format!("['digest' => '{hash}'],"),
             format!("INSERT INTO users (password) VALUES ('{hash}');"),
             hash.into(),
+            format!("digest={hash}"),
         ] {
             assert_value(&raw, hash, "password");
         }
@@ -219,6 +220,10 @@ fn every_supported_hash_format_has_exact_whole_value_candidates() {
         format!("scrypt$16384$somesalt$8$5${}==", "a".repeat(86)),
     ];
     for hash in hashes {
+        assert_eq!(
+            found("password.hash", &format!("encoded={hash}")),
+            vec![hash.clone()]
+        );
         let adjacent = format!("'{hash}','{hash}'");
         assert_eq!(
             found("password.hash", &adjacent),
@@ -254,6 +259,11 @@ fn every_supported_hash_format_has_exact_whole_value_candidates() {
 
 #[test]
 fn code_literal_boundaries_and_raw_escapes_are_complete() {
+    assert!(found("password.code", "password: \"value\"").is_empty());
+    assert_eq!(
+        found("password.code", "password: \"value\","),
+        vec!["value"]
+    );
     for (id, key) in [
         ("password.code", "password"),
         ("security_token.code", "api_token"),

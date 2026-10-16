@@ -35,9 +35,9 @@ def hashes(rng):
 
 
 TEMPLATES = {
-    "dev": {"bare": "Stored digest: {V}", "php": "['digest' => '{V}'],",
+    "dev": {"bare": "Stored digest: {V}", "log": "stored_digest={V}", "php": "['digest' => '{V}'],",
             "json": '{"stored_digest":"{V}"}', "sql": "INSERT INTO accounts (password) VALUES ('{V}');"},
-    "test": {"bare": "Account encoding = {V}", "php": "array('encoded' => '{V}');",
+    "test": {"bare": "Account encoding = {V}", "log": "encoded_value={V}", "php": "array('encoded' => '{V}');",
              "json": '{"result":{"encoding":"{V}"}}', "sql": "INSERT INTO members (password, enabled) VALUES ('{V}', true);"},
 }
 
