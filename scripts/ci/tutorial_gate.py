@@ -203,7 +203,7 @@ def run_tutorial(page: Path, root: Path, scratch: Path, gaze: Path, timeout: int
             block = blocks[index]
             if block.expected is not None:
                 try:
-                    compare(block.expected, (work / f"{index}.stdout").read_text(), bindings)
+                    compare(block.expected, (work / f"{index}.stdout").read_bytes().decode("utf-8"), bindings)
                 except GateError as error:
                     raise GateError(f"{page.name}:{block.line}: {error}") from error
                 checked += 1

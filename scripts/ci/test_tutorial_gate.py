@@ -11,7 +11,7 @@ class OutputContract(unittest.TestCase):
         bindings = {}
         gate.compare("<{session_hex}:Email_1>\n", "<012abcde:Email_1>\n", bindings)
         gate.compare("Again {session_hex}\n", "Again 012abcde\n", bindings)
-        for actual in ("Again 87654321\n", "Again 012abcde", " Again 012abcde\n"):
+        for actual in ("Again 87654321\n", "Again 012abcde", " Again 012abcde\n", "Again 012abcde\r\n"):
             with self.subTest(actual=actual), self.assertRaises(gate.GateError):
                 gate.compare("Again {session_hex}\n", actual, bindings)
 
@@ -39,6 +39,9 @@ class OutputContract(unittest.TestCase):
             self.assertEqual((result["executed"], result["checked"]), (2, 1))
             page.write_text('```sh\nfalse\nprintf "must not run\\n"\n```\n')
             with self.assertRaisesRegex(gate.GateError, "shell failed"):
+                gate.run_tutorial(page, root, root, Path("/bin/true"))
+            page.write_text('```sh\nprintf "retained\\r\\n"\n```\n```text\nretained\n```\n')
+            with self.assertRaisesRegex(gate.GateError, "stdout mismatch"):
                 gate.run_tutorial(page, root, root, Path("/bin/true"))
 
     def test_cargo_new_does_not_mutate_source_workspace(self):
