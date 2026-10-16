@@ -42,18 +42,26 @@ TEMPLATES = {
 FAMILIES = ["person", "organisation", "model_id", "ordinary_word", "person_in_code", "code_symbol", "private_id", "technical_number"]
 DOMAINS = ["prose", "business", "config", "language_exercise", "config", "code", "records", "technical"]
 
+AMBIGUOUS_PERSON = {
+    "train": {"en": "My colleague is named {v}; she joined us yesterday.", "de": "Meine Kollegin heißt {v}; sie kam gestern zu uns.", "es": "Mi colega se llama {v}; se unió ayer.", "fr": "Ma collègue s'appelle {v} ; elle nous a rejoints hier."},
+    "dev": {"en": "The injured worker gave his name as {v}.", "de": "Der verletzte Arbeiter gab seinen Namen als {v} an.", "es": "El trabajador herido dio su nombre: {v}.", "fr": "Le travailleur blessé a donné son nom : {v}."},
+    "test": {"en": "The nurse introduced herself: I am {v}.", "de": "Die Pflegerin stellte sich vor: Ich bin {v}.", "es": "La enfermera se presentó: Me llamo {v}.", "fr": "L'infirmière s'est présentée : Je m'appelle {v}.", "it": "L'infermiera si è presentata: Mi chiamo {v}.", "pt": "A enfermeira apresentou-se: Chamo-me {v}."},
+}
+FAMILIES.append("ambiguous_person")
+DOMAINS.append("prose")
+
 
 def make_row(split, language, family, variant, value, template, *, evaluation=None):
     text = template.format(v=value)
     start = text.index(value)
-    positive = family in {"person", "person_in_code", "private_id"}
+    positive = family in {"person", "person_in_code", "ambiguous_person", "private_id"}
     return {
         "id": f"{split}/{language}/{family}/{variant}/{evaluation or 'base'}",
         "split": split, "evaluation": evaluation or ("language_holdout" if language in {"it", "pt"} else split),
         "parent": f"{split}/{family}/{variant}", "template_parent": f"{split}/{family}",
         "language": language, "family": family, "domain": DOMAINS[FAMILIES.index(family)],
         "target": "identifier" if family in {"private_id", "technical_number"} else "name",
-        "entity": "person" if family in {"person", "person_in_code"} else ("identifier" if family == "private_id" else "other"),
+        "entity": "person" if family in {"person", "person_in_code", "ambiguous_person"} else ("identifier" if family == "private_id" else "other"),
         "label": int(positive), "value": value, "text": text,
         "span": [start, start + len(value)], "byte_span": [len(text[:start].encode()), len(text[:start + len(value)].encode())],
         "reality": "fabricated; contextual reference only", "policy": "protect person references and private record identifiers only",
@@ -65,11 +73,11 @@ def rows():
     for split, languages in TEMPLATES.items():
         values = VALUES[split]
         for language, templates in languages.items():
-            for index, (family, template) in enumerate(zip(FAMILIES, templates, strict=True)):
+            for index, (family, template) in enumerate(zip(FAMILIES, templates + [AMBIGUOUS_PERSON[split][language]], strict=True)):
                 for variant in range(len(values["names"])):
-                    value = (values["ids"][variant] if index >= 6 else values["words"][variant] if index == 3 else
-                             values["names"][variant].split()[0] if index == 5 else
-                             f"{values['names'][variant].split()[0].lower()}-sonnet-4-{variant+1}" if index == 2 else
+                    value = (values["ids"][variant] if family in {"private_id", "technical_number"} else values["words"][variant] if family in {"ordinary_word", "ambiguous_person"} else
+                             values["names"][variant].split()[0] if family == "code_symbol" else
+                             f"{values['names'][variant].split()[0].lower()}-sonnet-4-{variant+1}" if family == "model_id" else
                              values["names"][variant])
                     result.append(make_row(split, language, family, variant, value, template))
     # Stress variants derive ONLY from test parents. They cannot tune thresholds.
