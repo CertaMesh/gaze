@@ -1,131 +1,126 @@
 # Your first pseudonymization
 
-We will turn a fictional email address into a token, then restore the original
-file byte for byte. Allow five minutes after the model download.
+We will replace a fictional email address with a token, check a byte-exact
+restore, and restore a simulated model reply. Allow five minutes.
 
-You need `gaze` with its default features, Python 3, and a POSIX shell.
-See [installation](../../README.md#install) if the binary is not on your path.
-The first setup needs network access and disk space for the pinned models.
+You need `gaze`, Python 3, and a POSIX shell. See
+[installation](../../README.md#install) if `gaze` is not on your path.
+This exercise uses Gaze's built-in rules and needs no policy file or model download.
 
-## 1. Create a policy
+## 1. Create a fictional input
 
-First, create a working directory with owner-only permissions:
+First, create a private working directory and write an address from the reserved
+`example.invalid` domain:
 
 ```sh
 umask 077
 mkdir gaze-first-run
 cd gaze-first-run
-gaze setup --non-interactive
+printf 'alice@%s\n' example.invalid > input.txt
+wc -c < input.txt
 ```
 
-Setup installs or verifies the pinned NER and Nym bundles, writes `gaze.toml`,
-and checks the pipeline. Its output includes:
+The count is `22` bytes, including the newline. Keep this shell open for the
+remaining steps.
 
-```text
-doctor Nym pass: synthetic licence plate tokenized
-Setup complete.
-```
+## 2. Replace the address with a token
 
-Keep this shell open for the remaining steps.
-
-## 2. Create a fictional input
-
-Now, write a sample address from the reserved `example.invalid` domain:
+The CLI returns JSON, and `gaze restore` also takes a JSON request. Create one
+small helper to extract a field or build a restore request from the saved session:
 
 ```sh
-printf 'Contact %s@%s for details.\n' alice example.invalid > input.txt
-python3 - <<'PY'
-from pathlib import Path
-print(f"Created input.txt ({len(Path('input.txt').read_bytes())} bytes)")
-PY
-```
-
-The command reports the file size:
-
-```text
-Created input.txt (43 bytes)
-```
-
-## 3. Inspect the cleaned text
-
-Keep `owner-clean.json` private. It contains the session snapshot needed to
-restore the original address. Send only `clean.txt` to a model.
-
-```sh
-gaze clean --policy gaze.toml < input.txt > owner-clean.json
-python3 - <<'PY'
+cat > json-helper.py <<'PY'
 import json
+import sys
 from pathlib import Path
 
-result = json.loads(Path("owner-clean.json").read_text())
-Path("clean.txt").write_text(result["clean_text"])
-print(result["clean_text"], end="")
-print("Saved owner-clean.json and clean.txt")
+mode, source = sys.argv[1:]
+if mode == "field":
+	sys.stdout.write(json.load(sys.stdin)[source])
+elif mode == "request":
+	result = json.loads(Path(source).read_text())
+	json.dump({"session_blob": result["session_blob"], "text": sys.stdin.read()}, sys.stdout)
 PY
 ```
 
-The email becomes a token:
+Keep `owner-clean.json` private. Its `session_blob` is a saved session that
+contains the token-to-original mapping, so a model could recover the address from it.
+Send only `clean.txt` to a model.
 
-```text
-Contact <{session_hex}:Email_1> for details.
-Saved owner-clean.json and clean.txt
-```
-
-`{session_hex}` stands for the eight-character prefix returned by this run.
-Use the actual token in `clean.txt` in the next step.
-
-## 4. Restore with the same session
-
-We will restore the cleaned text unchanged so we can compare the exact bytes.
-First, prepare the restore request from the saved snapshot:
+Now, clean the input and extract the text:
 
 ```sh
-python3 - <<'PY'
-import json
-from pathlib import Path
-
-result = json.loads(Path("owner-clean.json").read_text())
-request = {
-	"session_blob": result["session_blob"],
-	"text": Path("clean.txt").read_text(),
-}
-Path("owner-restore.json").write_text(json.dumps(request))
-print("Prepared owner-restore.json from the cleaning session")
-PY
+gaze clean < input.txt > owner-clean.json
+python3 json-helper.py field clean_text < owner-clean.json > clean.txt
+cat clean.txt
 ```
 
-You should see:
+The token replaces the address. Its eight-character session prefix varies with
+each run. For example:
 
 ```text
-Prepared owner-restore.json from the cleaning session
+<a1b2c3d4:Email_1>
 ```
 
-Now, restore and compare the files:
+The token is a placeholder that Gaze can restore with the saved session.
+Keep the actual token in `clean.txt` for the remaining steps.
+
+## 3. Check a byte-exact restore
+
+Now, build a request with the saved session and restore the cleaned text:
 
 ```sh
+python3 json-helper.py request owner-clean.json < clean.txt > owner-restore.json
 gaze restore < owner-restore.json > owner-restored.json
-python3 - <<'PY'
-import json
-from pathlib import Path
-
-restored = json.loads(Path("owner-restored.json").read_text())["text"]
-Path("restored.txt").write_text(restored)
-assert Path("restored.txt").read_bytes() == Path("input.txt").read_bytes()
-print("Byte-exact restore: OK")
-PY
+python3 json-helper.py field text < owner-restored.json > restored.txt
+cmp input.txt restored.txt && printf 'Byte-exact restore: OK\n'
 ```
 
-The comparison succeeds:
+The comparison prints:
 
 ```text
 Byte-exact restore: OK
 ```
 
-Keep `input.txt`, `restored.txt`, and the `owner-*.json` files on the owner side.
-For a model response, use its text as the restore request's `text` value and
-keep the same `session_blob`.
+The restored file matches all 22 original bytes, including the newline.
 
-This sample proves one round trip. See
-[detection coverage](../explanation/how-gaze-works.md#detection-coverage) and
-[one-way fallback limits](../explanation/how-gaze-works.md#what-happens-when-the-safety-net-disagrees).
-For policy choices, use [Set up a policy by hand](../how-to/manual-policy.md).
+## 4. Restore a model reply
+
+We can simulate a model reply without calling a model. Use the token from
+`clean.txt` in a new sentence:
+
+```sh
+printf "Thanks, I'll email %s.\n" "$(cat clean.txt)" > reply.txt
+cat reply.txt
+```
+
+With the example prefix above, the reply is:
+
+```text
+Thanks, I'll email <a1b2c3d4:Email_1>.
+```
+
+Now, restore the reply with the same saved session:
+
+```sh
+python3 json-helper.py request owner-clean.json < reply.txt > owner-reply-request.json
+gaze restore < owner-reply-request.json > owner-restored-reply.json
+python3 json-helper.py field text < owner-restored-reply.json > restored-reply.txt
+cat restored-reply.txt
+```
+
+The address appears in the reply:
+
+```text
+Thanks, I'll email alice@example.invalid.
+```
+
+Keep the input, restored text, and `owner-*.json` files on the owner side.
+With a real model, send the cleaned text and restore its reply using the same
+`session_blob`.
+
+For names and broader free-text detection, use [`gaze setup`](../reference/cli.md#gaze-setup)
+to download the NER and Nym models and create a policy. This exercise proves one
+email round trip. See [detection coverage](../explanation/how-gaze-works.md#detection-coverage)
+and [one-way fallback limits](../explanation/how-gaze-works.md#what-happens-when-the-safety-net-disagrees)
+before you use Gaze with other data.
