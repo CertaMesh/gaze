@@ -6,7 +6,7 @@ server and verify that the tool returns tokens. Allow ten minutes.
 Start in a Gaze source checkout. You need `gaze` with the `mcp` and `document`
 features, Tesseract, Python 3, and a signed-in Claude Code CLI. See
 [MCP prerequisites](../how-to/mcp/set-up-mcp-adapter.md#prerequisites).
-The assistant step makes one model call with your Claude Code account.
+The assistant step uses your Claude Code account and may make several model requests.
 
 This protects reads through Gaze's tool. Native reads and text pasted into a
 chat bypass this boundary. Use only the fictional fixture in this exercise.
