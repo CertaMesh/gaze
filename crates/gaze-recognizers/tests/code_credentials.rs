@@ -288,3 +288,77 @@ fn code_literal_boundaries_and_raw_escapes_are_complete() {
         }
     }
 }
+
+#[test]
+fn php_array_credentials_cover_compact_first_final_and_nested_elements() {
+    for (key, class) in [("password", "password"), ("api_token", "security_token")] {
+        for raw in [
+            format!("array('{key}' => 'synthetic!value');"),
+            format!("array('{key}'=>'synthetic!value','enabled'=>true);"),
+            format!("array('enabled'=>true,'{key}'=>'synthetic!value');"),
+            format!("array('outer'=>array('{key}'=>'synthetic!value'));"),
+            format!("array( {key} => 'synthetic!value' );"),
+        ] {
+            assert_value(&raw, "synthetic!value", class);
+        }
+    }
+}
+
+#[test]
+fn producer_hashes_keep_alternative_salts_and_exact_digest_widths() {
+    let fixtures: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/password_hash_producers.json")).unwrap();
+    for row in fixtures.as_array().unwrap() {
+        let hash = row["encoded"].as_str().unwrap();
+        assert_value(&format!("digest={hash}"), hash, "password");
+        assert_eq!(found("password.hash", hash), vec![hash]);
+        for malformed in [hash[..hash.len() - 1].to_string(), format!("{hash}A")] {
+            assert!(found("password.hash", &malformed).is_empty(), "{malformed}");
+        }
+        let (parameters, checksum) = hash.rsplit_once('$').unwrap();
+        assert!(found(
+            "password.hash",
+            &format!("{parameters}${}!", &checksum[..checksum.len() - 1])
+        )
+        .is_empty());
+    }
+    for malformed in [
+        format!("$5$bad:salt${}", "a".repeat(43)),
+        format!("$6$bad\nsalt${}", "a".repeat(86)),
+        format!("$1$bad\0salt${}", "a".repeat(22)),
+        format!("pbkdf2_sha256$1000$${}=", "a".repeat(43)),
+        format!("pbkdf2_sha1$1000$bad$salt${}=", "a".repeat(27)),
+        format!("scrypt$1024$$8$1${}==", "a".repeat(86)),
+    ] {
+        assert!(
+            found("password.hash", &malformed).is_empty(),
+            "{malformed:?}"
+        );
+    }
+}
+
+#[test]
+fn generic_token_metadata_does_not_establish_a_code_credential() {
+    for raw in [
+        r#"{"token":"Hello","logprob":-0.1}"#,
+        r#"{"tokenizer":{"token":"indivisible"}}"#,
+        r#"{"type":"object","example":{"token":"string"}}"#,
+        "token: 'Hello',",
+    ] {
+        assert!(found("security_token.code", raw).is_empty(), "{raw}");
+    }
+}
+
+#[test]
+fn ambiguous_password_metadata_remains_fail_closed_with_real_passphrases() {
+    for value in [
+        "synthetic long pass phrase",
+        "synthetic|secret",
+        "string",
+        "********",
+        "required|string|min:8|confirmed",
+        "The provided password is incorrect.",
+    ] {
+        assert_value(&format!("array('password'=>'{value}');"), value, "password");
+    }
+}
