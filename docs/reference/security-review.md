@@ -60,8 +60,9 @@ Verified by: `crates/xtask/src/cargo_metadata_audit_isolation.rs:safety_net_base
   proves tokens leak no key material or source value bytes beyond class and ordinal.
 - Format-preserving restorability: restore round-trip behavior exists, but no
   dedicated test covers every `Action::FormatPreserve` path.
-- NER-load fail-closed: missing or corrupt local model load should fail closed, but
-  the suite needs an explicit named test for that failure mode.
+- NER-load fail-closed: `broken_ner_model_dir_exits_policy_config` in
+  `crates/gaze-cli/tests/cli_pipe.rs` covers a missing directory. Corrupt-model
+  rejection still needs named coverage here.
 - Strict no-network clean execution: current evidence covers dependency shape, not
   a runtime test proving `Pipeline::redact` cannot perform network I/O.
 
@@ -69,8 +70,10 @@ Verified by: `crates/xtask/src/cargo_metadata_audit_isolation.rs:safety_net_base
 
 1. Gaze does not protect against a compromised LLM echoing tokens verbatim.
 2. Gaze does not protect against prompt injection that exfiltrates `SensitiveSnapshot`.
-3. Gaze covers only content passed to `Pipeline::redact` or `gaze clean` stdin.
-   System prompts, tool schemas, and agent instructions are out of scope.
+3. Gaze protects only content routed through its pipeline. The
+   [MCP adapter](../explanation/mcp/mcp-runtime.md#scope) and
+   [proxy](../explanation/proxy/proxy-runtime.md#provider-surface-matrix) define
+   the fields they protect. Content sent outside those paths bypasses Gaze.
 4. `Redact` and `Generalize` are not reversible. Use `Tokenize` or `FormatPreserve`
    when restore is required.
 5. The restore path trusts the snapshot. A stolen `SensitiveSnapshot` can recover

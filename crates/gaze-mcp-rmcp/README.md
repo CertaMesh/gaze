@@ -64,7 +64,7 @@ failure takes precedence over the tool error.
 
 ## Session ids
 
-rmcp 0.2's `tools/call` payload has no native Gaze session-id field. This adapter reserves a top-level `_session_id` argument key:
+rmcp 2.x's `tools/call` payload has no native Gaze session-id field. This adapter reserves a top-level `_session_id` argument key:
 
 ```json
 {
