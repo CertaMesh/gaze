@@ -80,3 +80,24 @@ partitions, eight deterministic family-balanced inputs per layer, restricted
 to labels ruled on by v2. Their v1/v2 counts are *sample* byte views, not full
 release gate results; headline all-gold and validity twins still need the
 complete normal gate before adoption. Sample selection is frozen in code.
+
+For a small stability check, `repeatability.py --binary ... --policy ...
+--out target/r2/repeatability.json` runs five alternating raw/view trials
+over six predeclared diagnostic categories from each split in one loaded
+production pipeline. Each side uses isolated sessions. It reports work/error
+counts, byte ranges and coverage variation across random session identities,
+without measuring time. This checks repeatability on that diagnostic slice;
+it is not five independent populations or a new model-family comparison.
+Ordinary stress cells have one inference trial; offline source-expansion
+replays are not additional model trials.
+
+`experiment.py replay --split dev --out target/r2/full-dev.json` re-scores
+saved observations without inference. Use `--fixtures` for repository slices.
+Raw gold-source misses include internal spaces and punctuation. Supplemental
+alphanumeric/combining-mark byte counts distinguish leaked private content
+from layout-only source incompleteness; they do not replace the source score.
+
+Design comparison and handoff follow the Exhaust the Design Space, Explain
+the Number, Benchmark Checklist and Prototype principles. These instruments
+are throwaway research, with no production runtime or policy defaults changed.
+No performance recommendation may be derived from their debug executables.

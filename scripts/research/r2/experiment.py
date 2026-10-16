@@ -261,9 +261,17 @@ def summary(rows, observations, mode):
             restored.extend(rendered[cursor:pos]); restored.extend(originals[token]); cursor = pos + len(token)
         restored.extend(rendered[cursor:]); assert restored == raw
         gold, predicted = mask(row["gold"]), mask(spans)
+        content_bytes, content_offset = set(), 0
+        for char in row["text"]:
+            width = len(char.encode())
+            if char.isalnum() or unicodedata.category(char).startswith("M"):
+                content_bytes.update(range(content_offset, content_offset + width))
+            content_offset += width
         tp, fp, leak = len(gold & predicted), len(predicted - gold), len(gold - predicted)
         residual_hit = sum(len(set(range(a, b)) - predicted) for a, b in row["gold"]
                            if set(range(a, b)) & predicted)
+        residual_hit_content = sum(len((set(range(a, b)) - predicted) & content_bytes)
+                                   for a, b in row["gold"] if set(range(a, b)) & predicted)
         merged = sum(sum(a < y and x < b for x, y in row["gold"]) > 1 for a, b in spans)
         complete = sum(set(range(a, b)) <= predicted for a, b in row["gold"])
         partial = sum(bool(set(range(a, b)) & predicted) and not set(range(a, b)) <= predicted
@@ -271,6 +279,8 @@ def summary(rows, observations, mode):
         for target in targets:
             for key, value in dict(docs=1, gold=len(gold), tp=tp, fp=fp, leaked=leak,
                                    residual_after_hit=residual_hit, complete=complete,
+                                   leaked_alnum_bytes=len((gold - predicted) & content_bytes),
+                                   residual_after_hit_alnum_bytes=residual_hit_content,
                                    occurrences=len(row["gold"]), partial=partial,
                                    incorrect_merges=merged, exact_restores=1, valid_manifests=1).items():
                 target[key] += value
@@ -315,6 +325,8 @@ def run(args):
         policy_sha256=hashlib.sha256(args.policy.read_bytes()).hexdigest(),
         fixture_sha256=hashlib.sha256(fixture_path.read_bytes()).hexdigest(),
         normalization_view=args.normalize_view,
+        inference_trials=1, spread=None, requested_responses=len(requests),
+        received_responses=len(observed), producer_exit_code=result.returncode,
         arms={mode: summary(rows, observed, mode) for mode in modes})
     dump(args.out, answer)
     dump(args.out.with_suffix(".observations.json"), observed)
@@ -323,7 +335,7 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["generate", "run"])
+    parser.add_argument("command", choices=["generate", "run", "replay"])
     parser.add_argument("--split", choices=["dev", "holdout"])
     parser.add_argument("--binary", type=Path)
     parser.add_argument("--policy", type=Path)
@@ -331,4 +343,16 @@ if __name__ == "__main__":
     parser.add_argument("--fixtures", type=Path)
     parser.add_argument("--normalize-view", action="store_true")
     args = parser.parse_args()
-    generate() if args.command == "generate" else run(args)
+    if args.command == "generate":
+        generate()
+    elif args.command == "run":
+        run(args)
+    else:
+        rows = json.loads((args.fixtures or HERE / f"{args.split}.json").read_text())
+        observed = json.loads(args.out.with_suffix(".observations.json").read_text())
+        answer = json.loads(args.out.read_text())
+        answer["arms"] = {mode: summary(rows, observed, mode) for mode in answer["arms"]}
+        answer.update(inference_trials=1, spread=None, requested_responses=len(rows),
+                      received_responses=len(observed), producer_exit_code=0)
+        answer["scorer_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+        dump(args.out, answer)

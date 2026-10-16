@@ -14,6 +14,19 @@ def observation(text, start, end):
 
 
 class ScorerTests(unittest.TestCase):
+    def test_layout_only_residual_is_not_called_raw_name_content(self):
+        row = dict(text="Nelia Tavin", gold=[[0, 11]], category="name", session="one")
+        response = observation(row["text"], 0, 5)
+        # The second token owns the second word; the source space stays raw.
+        response["manifest"].append(dict(raw_span=dict(start=6, end=11),
+                                         clean_span=dict(start=7, end=13)))
+        response["clean_text"] = "<R2_0> <R2_1>"
+        response["tokens"].append(dict(token="<R2_1>", original="Tavin"))
+        m = summary([row], [response], "baseline")["metrics"]["ALL"]
+        self.assertEqual(m["leaked"], 1)
+        self.assertEqual(m["leaked_alnum_bytes"], 0)
+        self.assertEqual(m["residual_after_hit_alnum_bytes"], 0)
+
     def test_expanding_and_deleted_normalization_offsets_restore_source(self):
         row = dict(text="Ａ\u200bﬁ@example.invalid", session="one")
         view, mapping = normalized_view(row["text"])
