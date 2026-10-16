@@ -16,6 +16,7 @@ def without(text, heading):
 
 
 arms = {"full": baseline}
+arms["rules+nym"] = without(baseline, "ner")
 ner = without(without(baseline, "safety_net.nym"), "safety_net")
 arms["rules+ner"] = ner
 arms["rules"] = without(ner, "ner")

@@ -20,7 +20,7 @@ python3 scripts/research/r2/experiment.py run --split dev \
   --out target/r2/full-dev.json
 ```
 
-Repeat for `holdout` and the policy arms `rules`, `rules+ner`, `name-0.1`,
+Repeat for `holdout` and the policy arms `rules`, `rules+ner`, `rules+nym`, `name-0.1`,
 `name-0.9`. All source-completion ablations replay each captured response;
 they do not rerun inference. Production exact restore and manifest alignment
 are checked independently of prototype span rendering. A refusal remains
