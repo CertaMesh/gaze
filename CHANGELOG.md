@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Personal names with Nym.** The setup policy maps eligible `GIVEN_NAME` and
+  `SURNAME` predictions to reversible `Name` tokens, joining adjacent parts over
+  inline whitespace. Both thresholds are 0.5; rule and NER winners keep
+  precedence. Record boundaries stop joins and BIO continuation. Audit records
+  retain contributing labels and thresholds; policy overrides remain supported
+  (#813).
 - **Credentials in setup policies.** `gaze setup` now includes `secrets` by
   default, protecting supported API keys, access and session tokens, JWTs and
   passwords. Library callers and hand-written policies still select rulepacks
@@ -112,6 +118,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known limitations
 
+- The generated name benchmark reuses six full names per split across surfaces;
+  it does not establish broad personal-name recall. Independent calibration
+  recovered eligible pieces in only four of 18 lowercase cases, with no full
+  lowercase pair meeting both thresholds. Neural name recovery adds false
+  positives and is less explainable than rules. See the [calibration and joining
+  notes](docs/explanation/safety-net/nym-person-names.md) (#813).
 - Direct phone labels intentionally record failed parses. Date-shaped numeric
   values, year ranges and SSN-shaped values after a phone label can therefore
   become phone tokens; parser-valid newline continuations can also be protected.
