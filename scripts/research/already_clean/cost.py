@@ -20,12 +20,13 @@ from extract import MODEL_ROOT, SPECS, encode, session, taps
 
 
 def worker(model, mode, directory, profile=False):
-    spec = SPECS[model]
-    original = MODEL_ROOT / spec["directory"] / spec["file"]
+    spec = SPECS.get(model)
+    model_directory = MODEL_ROOT / spec["directory"] if spec else directory.parent / "minilm-model"
+    original = model_directory / (spec["file"] if spec else "model_quantized.onnx")
     path = original if mode == "original" else directory / f"{model}-tapped.onnx"
     rows = [json.loads(line) for line in (directory / "fixtures.jsonl").read_text().splitlines()]
     rows = [r for r in rows if r["evaluation"] == "train" and r["language"] in {"en", "de"} and r["id"].split('/')[3] == "0"]
-    tokenizer = Tokenizer.from_file(str(MODEL_ROOT / spec["directory"] / "tokenizer.json"))
+    tokenizer = Tokenizer.from_file(str(model_directory / "tokenizer.json"))
     tokenizer.no_truncation()
     tokenizer.no_padding()
     t0 = time.perf_counter()
@@ -40,7 +41,7 @@ def worker(model, mode, directory, profile=False):
         runtime = session(path)
     load_s = time.perf_counter() - t0
     feeds = [encode(tokenizer, r["text"], runtime)[1] for r in rows]
-    names = ["logits"] if mode == "original" else ["logits"] + [name for name, _ in taps(model, spec["layers"]).values()]
+    names = [runtime.get_outputs()[0].name] if mode == "original" else ["logits"] + [name for name, _ in taps(model, spec["layers"]).values()]
     for feed in feeds[:2]:
         runtime.run(names, feed)
     cpu = time.process_time()
@@ -73,7 +74,7 @@ def worker(model, mode, directory, profile=False):
 def run(model, directory, output):
     trials = []
     for _ in range(5):
-        for mode in ["original", "tapped"]:
+        for mode in (["original"] if model == "minilm" else ["original", "tapped"]):
             result = subprocess.run([sys.executable, __file__, "--model", model, "--directory", str(directory), "--worker", mode], check=True, capture_output=True, text=True)
             trials.append(json.loads(result.stdout))
     result = subprocess.run([sys.executable, __file__, "--model", model, "--directory", str(directory), "--worker", "original", "--profile"], check=True, capture_output=True, text=True)
@@ -83,7 +84,7 @@ def run(model, directory, output):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", choices=SPECS, required=True)
+    parser.add_argument("--model", choices=[*SPECS, "minilm"], required=True)
     parser.add_argument("--directory", type=Path, required=True)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--worker", choices=["original", "tapped"])
