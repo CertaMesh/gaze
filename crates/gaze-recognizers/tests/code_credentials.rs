@@ -12,6 +12,10 @@ fn assert_value(raw: &str, value: &str, class: &str) {
         .with_locale(&[LocaleTag::parse("de-DE").unwrap()])
         .build()
         .unwrap();
+    assert_value_with_core(&core, raw, value, class);
+}
+
+fn assert_value_with_core(core: &gaze_assembly::CorePipeline, raw: &str, value: &str, class: &str) {
     let session = Session::new(Scope::Ephemeral).unwrap();
     let (clean, spans, _, _) = core
         .pipeline()
@@ -58,6 +62,22 @@ fn raw_password_hashes_in_seeders_and_sql_are_one_restorable_span() {
 #[test]
 fn whole_argon_hash_contains_the_postal_code_candidate() {
     assert_value(&format!("['argon' => '{ARGON}'],"), ARGON, "password");
+}
+
+#[test]
+fn argon_containment_wins_even_below_the_postal_rule_priority() {
+    let pack = gaze_recognizers::embedded("secrets").unwrap();
+    let weaker = pack.replace("base = 0.95\npriority = 100", "base = 0.95\npriority = 1");
+    assert_ne!(pack, weaker);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("secrets.toml");
+    std::fs::write(&path, weaker).unwrap();
+    let core = CorePipelineConfig::new()
+        .with_rulepack_path(path)
+        .with_locale(&[LocaleTag::parse("de-DE").unwrap()])
+        .build()
+        .unwrap();
+    assert_value_with_core(&core, ARGON, ARGON, "password");
 }
 
 #[test]
@@ -170,5 +190,91 @@ fn expressions_and_unrelated_code_keys_are_not_credential_values() {
             found("password.code", raw).is_empty(),
             "code expression: {raw}"
         );
+    }
+}
+
+#[test]
+fn every_supported_hash_format_has_exact_whole_value_candidates() {
+    let hashes = vec![
+        BCRYPT.to_string(),
+        BCRYPT.replace("$2y$", "$2a$"),
+        BCRYPT.replace("$2y$", "$2b$"),
+        BCRYPT.replace("$2y$", "$2x$"),
+        ARGON.into(),
+        ARGON.replace("argon2id", "argon2i"),
+        ARGON.replace("argon2id", "argon2d"),
+        format!("$scrypt$ln=16,r=8,p=1$c29tZXNhbHQ${}", "a".repeat(43)),
+        format!("$7${}{}", "a".repeat(33), "$".to_string() + &"b".repeat(43)),
+        format!("$y$j9T$salt${}", "a".repeat(43)),
+        format!("$5$salt${}", "a".repeat(43)),
+        format!("$6$rounds=10000$salt${}", "b".repeat(86)),
+        format!("$1$salt${}", "a".repeat(22)),
+        format!("$P${}", "a".repeat(31)),
+        format!("$H${}", "b".repeat(31)),
+        DJANGO.into(),
+        format!("pbkdf2_sha1$600000$somesalt${}=", "a".repeat(27)),
+        format!("argon2{ARGON}"),
+        format!("bcrypt_sha256${BCRYPT}"),
+        format!("bcrypt${BCRYPT}"),
+        format!("scrypt$16384$somesalt$8$5${}==", "a".repeat(86)),
+    ];
+    for hash in hashes {
+        let adjacent = format!("'{hash}','{hash}'");
+        assert_eq!(
+            found("password.hash", &adjacent),
+            vec![hash.clone(), hash.clone()]
+        );
+        for raw in [
+            format!("x{hash}"),
+            format!("{hash}$tail"),
+            format!("{hash}_tail"),
+        ] {
+            assert!(
+                found("password.hash", &raw).is_empty(),
+                "partial format: {raw}"
+            );
+        }
+        if !hash.contains("argon2") {
+            assert!(
+                found("password.hash", &hash[..hash.len() - 1]).is_empty(),
+                "truncated: {hash}"
+            );
+        }
+    }
+    for raw in [
+        format!("$5$salt${}", "a".repeat(44)),
+        format!("$1$toolongsalt${}", "a".repeat(22)),
+        format!("$P${}!", "a".repeat(30)),
+        BCRYPT.replace("/", "!"),
+        ARGON.replace("v=19", "v=1"),
+    ] {
+        assert!(found("password.hash", &raw).is_empty(), "malformed: {raw}");
+    }
+}
+
+#[test]
+fn code_literal_boundaries_and_raw_escapes_are_complete() {
+    for (id, key) in [
+        ("password.code", "password"),
+        ("security_token.code", "api_token"),
+    ] {
+        for value in [r"literal\'quote", r"literal\u1234", &"x".repeat(1024)] {
+            let raw = format!("['{key}' => '{value}', '{key}' => '{value}']");
+            assert_eq!(found(id, &raw), vec![value, value]);
+        }
+        for raw in [
+            format!("'not_{key}' => 'value',"),
+            format!("'{key}' => Hash::make('secret'),"),
+            format!("'{key}' => 'value' + expression"),
+            format!("'{key}' => 'unterminated"),
+            format!("'{key}' => \"unterminated"),
+            format!("'{key}\" => 'value',"),
+            format!("'{key}' ?? 'value',"),
+            format!("x'{key}' => 'value',"),
+            format!("'{key}' => 'value\nsecond line',"),
+            format!("{key}_suffix: 'value',"),
+        ] {
+            assert!(found(id, &raw).is_empty(), "unowned value: {raw}");
+        }
     }
 }

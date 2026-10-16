@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Password hashes and code credentials.** The setup-default `secrets` bundle
+  protects whole bcrypt, Argon2, scrypt/yescrypt, crypt, phpass and Django
+  encodings, including hashes in SQL dumps. Complete quoted password and token
+  fields in PHP and JSON retain their keys and punctuation. Whole Argon2
+  encodings no longer split at an inner postal-code candidate (#824).
+
 - **Credentials in setup policies.** `gaze setup` now includes `secrets` by
   default, protecting supported API keys, access and session tokens, JWTs and
   passwords. Library callers and hand-written policies still select rulepacks
