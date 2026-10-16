@@ -1,8 +1,8 @@
 # Tutorials
 
 - [Your first pseudonymization](first-pseudonymization.md) takes about five
-  minutes after model setup: clean a fictional email, inspect its token, and
-  restore the exact original bytes.
+  minutes with no model download: clean a fictional email, inspect its token,
+  restore the exact original bytes, and restore a simulated model reply.
 - [Protect a model call from Rust](getting-started.md) builds a complete mock
   model loop with a private session snapshot and strict restore. About ten minutes.
 - [Protect a coding assistant's document read](mcp-coding-assistant.md) connects
