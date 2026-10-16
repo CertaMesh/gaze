@@ -1584,8 +1584,13 @@ def chart_panels(
     declared = json.loads(config_bytes)
     if len(set(declared.values())) != len(declared):
         raise RenderError("a README chart configuration was declared twice")
+    from comparison_availability import unavailable_tools
+    try:
+        unavailable = unavailable_tools(comparison)
+    except ValueError as error:
+        raise RenderError(str(error)) from error
     for name in declared.values():
-        if name not in comparison["tools"]:
+        if name not in comparison["tools"] and name not in unavailable:
             raise RenderError(f"declared README chart configuration is missing: {name}")
     try:
         return charts.panels(

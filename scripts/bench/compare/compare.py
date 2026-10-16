@@ -639,6 +639,7 @@ def measure(
         timers = []
         skipped_gold_bytes = {key: 0 for key in contracts}
         skipped_documents = 0
+        skipped_languages: dict[str, int] = {}
         accumulators = {key: score.MetricAccumulator() for key in contracts}
         detailed = {
             version: {
@@ -656,6 +657,7 @@ def measure(
             if skipped:
                 predictions = []
                 skipped_documents += 1
+                skipped_languages[document.language] = skipped_languages.get(document.language, 0) + 1
             else:
                 start = time.perf_counter()
                 try:
@@ -698,6 +700,7 @@ def measure(
                 "false_positive_bytes_after_gold_gap": result.get("gold_gap", {}).get("false_positive_bytes_after_gold_gap"),
                 "documents": result["documents"], "processed_documents": len(timers),
                 "skipped_documents": skipped_documents,
+                "skipped_languages": dict(sorted(skipped_languages.items())),
                 "skipped_gold_bytes": skipped_gold_bytes[version],
                 "latency": latency,
                 "metrics": {
@@ -802,9 +805,10 @@ def rescore_report(report: dict[str, object], layers: dict[str, list[score.Docum
             if old[field] != new[field]:
                 raise ValueError(f"rescore changed {row}/{field}: {old[field]} != {new[field]}")
         old["metrics"] = new["metrics"]
+        old["skipped_languages"] = new["skipped_languages"]
 
     for name, tool in report["tools"].items():
-        languages = tool["provenance"].get("supported_languages") if name.startswith("presidio") else None
+        languages = tool["provenance"].get("supported_languages")
         rescored = rescore_predictions(name, layers, mapping_for_tool(name, mappings),
                                        common_labels, root, languages)
         for version in CONTRACTS:
@@ -820,7 +824,8 @@ def rescore_report(report: dict[str, object], layers: dict[str, list[score.Docum
                 old = rows[version]["layers"][layer] if config == "full" else rows[version][layer]
                 replace_metrics(old, rescored["contracts"][version][layer],
                                 f"{name}/{version}/{layer}")
-    report["rescore_source_revision"] = report["harness_revision"]
+    report.setdefault("measurement_compare_sha256", report["compare_sha256"])
+    report.setdefault("rescore_source_revision", report["harness_revision"])
     report["harness_revision"] = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=REPO, text=True
     ).strip()
@@ -1133,10 +1138,14 @@ def main() -> int:
             try:
                 # Warm the model outside the measured per-document latency.
                 backend.predict(score.Document("warmup", "alice@example.invalid", "en", "", "synthetic", ()))
+                languages = (backend.languages if isinstance(backend, Presidio) else
+                             tuple(backend.scrubbers) if isinstance(backend, Scrubadub) else None)
+                if languages is not None:
+                    provenance["supported_languages"] = list(languages)
                 with ForeignCpuSampler() as sampler:
                     measured = measure(
                         name, backend.predict, layers, mapping,
-                        backend.languages if isinstance(backend, Presidio) else None,
+                        languages,
                         common_labels, args.predictions_dir,
                     )
                 report.setdefault("contention_samples", {})[name] = sampler.result()

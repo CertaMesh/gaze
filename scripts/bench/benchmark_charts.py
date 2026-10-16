@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 from xml.sax.saxutils import escape
 
+from comparison_availability import unavailable_tools
 from tagged_gaze import TAG, UntaggedGazeError, require_tag
 
 #: (benchmark key, panel title, the vendor's own headline metric for that set).
@@ -181,6 +182,7 @@ def own_panel(
     gaze: Sequence[GazeRow], comparison: Mapping[str, Any],
     declared: Mapping[str, str], corpus_name: str,
 ) -> Panel:
+    unavailable = unavailable_tools(comparison)
     layer = comparison["corpus"]["layers"]["C"]["documents"]
     splits = " + ".join(comparison["heldout_split"]["layers"]["C"])
     skipped = 0
@@ -191,6 +193,10 @@ def own_panel(
     tuned = comparison.get("presidio_tuned")
     notes, captions = [], []
     for key, name in declared.items():
+        if name in unavailable:
+            bars.append(Bar(SHORT_NAMES[key], None, None, None))
+            notes.append("OPF: N/A (two 600-second socket timeouts)")
+            continue
         if key == "presidio" and tuned is not None:
             # The declared default moves to competitors.md; the bar is the better tuned row.
             row = tuned["chart"]["row"]

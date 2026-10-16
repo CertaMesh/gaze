@@ -9,19 +9,21 @@ import json
 from pathlib import Path
 
 from compare import TOOLS
+from comparison_availability import unavailable_tools
 
 
 CHART_CONFIGS = Path(__file__).with_name("chart-configs.json")
 
 
 def finalize(report: dict) -> dict:
-    if report["schema_version"] != 2 or set(report["tools"]) != set(TOOLS) or report["skipped"]:
+    unavailable = unavailable_tools(report)
+    if report["schema_version"] != 2 or set(report["tools"]) | unavailable != set(TOOLS) or report["skipped"]:
         raise ValueError("only a complete, unskipped schema-v2 comparison can be finalized")
     declared = json.loads(CHART_CONFIGS.read_text(encoding="utf-8"))
     if len(set(declared.values())) != len(declared) or not set(declared.values()) <= set(TOOLS):
         raise ValueError("README chart configurations must be distinct measured tools")
     samples = report.get("contention_samples", {})
-    if set(samples) != set(TOOLS) | {"gaze-full", "gaze-rules-only", "gaze-rules-ner"}:
+    if set(samples) != set(report["tools"]) | {"gaze-full", "gaze-rules-only", "gaze-rules-ner"}:
         raise ValueError("foreign CPU samples are missing for a measured configuration")
     report["chart_config_sha256"] = hashlib.sha256(CHART_CONFIGS.read_bytes()).hexdigest()
     report["finalizer_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
@@ -51,8 +53,12 @@ def finalize(report: dict) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
+    parser.add_argument("--opf-unavailable-receipt", type=Path)
     args = parser.parse_args()
-    report = finalize(json.loads(args.report.read_text(encoding="utf-8")))
+    report = json.loads(args.report.read_text(encoding="utf-8"))
+    if args.opf_unavailable_receipt is not None:
+        report["unavailable"] = {"opf": json.loads(args.opf_unavailable_receipt.read_text(encoding="utf-8"))}
+    report = finalize(report)
     temporary = args.report.with_suffix(args.report.suffix + ".tmp")
     temporary.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(args.report)

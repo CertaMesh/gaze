@@ -34,7 +34,7 @@ BACKEND_CODE_PARTS = ("class Presidio", "class Gliner", "class DataFogCore", "cl
 PINNED_SHA256 = {
     # Current file also preserves native Gaze repeat-credit contracts; the
     # competitor backend construction above remains byte-identical.
-    "compare.py": "7a99768f035f6f2cc44b96fd0738b5910b4fc2bd1c988a62a1b8f7494f244b08",
+    "compare.py": "ae0541144f907d070ad425d2467c794dda6a41d84f87d8c48fecb693273e424d",
     "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
     "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa",
     "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
