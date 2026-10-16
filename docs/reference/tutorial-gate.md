@@ -5,7 +5,9 @@ changes, and pushes to `main`. It is independent of the required `test` job.
 It builds `gaze` from the checked-out source with `proxy` and `mcp` features.
 The Cargo cache retains dependency builds between runs. The uploaded
 `tutorial-execution` artifact contains per-page counts and timings plus the
-job wall clock, including dependency installation and the CLI build.
+elapsed time through verification, including dependency installation and the
+CLI build. The Actions job's `started_at` and `completed_at` timestamps give the
+full wall clock, including artifact upload and cache saving.
 
 Run it locally from the repository root:
 

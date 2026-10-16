@@ -50,12 +50,12 @@ jobs:
         run: python3 -m unittest discover -s scripts/ci -p test_tutorial_gate.py -v
       - name: Execute every tutorial
         run: python3 scripts/ci/tutorial_gate.py --gaze target/debug/gaze --output target/tutorial-gate/receipts.json
-      - name: Record job wall clock
+      - name: Record elapsed time through verification
         if: ${{ always() }}
         run: |
           mkdir -p target/tutorial-gate
           elapsed=$(($(date +%s) - TUTORIAL_JOB_START))
-          printf 'Tutorial job wall clock: %ss\n' "$elapsed" | tee target/tutorial-gate/job-time.txt >> "$GITHUB_STEP_SUMMARY"
+          printf 'Tutorial steps through verification: %ss\n' "$elapsed" | tee target/tutorial-gate/job-time.txt >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ always() }}
         with:
