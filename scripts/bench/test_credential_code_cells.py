@@ -32,6 +32,34 @@ class CredentialCellsTests(unittest.TestCase):
             old = agentic.records_as_of(20, agentic.generate(partition))
             self.assertEqual(hashlib.sha256(agentic.corpus_bytes(old)).hexdigest(), previous[partition])
 
+    def test_v21_is_reconstructed_without_any_changed_document(self):
+        previous = {"dev": "e5dc19cc4d5fd9ea99864172a193a4cef076631db2964842511fc5affcc70265",
+                    "test": "5f8d113cb46ad5591178d1814d09588e46b49b7e89fb78a7b00c608e6e836587"}
+        for partition in agentic.PARTITIONS:
+            old = agentic.records_as_of(21, agentic.generate(partition))
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(old)).hexdigest(), previous[partition])
+
+    def test_review_contexts_measure_both_credential_and_metadata_boundaries(self):
+        for partition in agentic.PARTITIONS:
+            rows = cells.review_records(agentic, partition)
+            benign = {row.family for row in rows if row.layer == "D"}
+            self.assertTrue({"logprob", "tokenizer", "token_schema", "password_schema",
+                             "validation", "language", "masked"} <= benign)
+            positive = {row.family for row in rows if row.layer == "A"}
+            self.assertTrue({"spaced_passphrase", "pipe_password", "weak_string", "weak_stars",
+                             "generic_token", "sha256crypt", "sha512crypt", "md5crypt",
+                             "django_pbkdf2_sha256", "django_pbkdf2_sha1", "django_scrypt"} <= positive)
+            surfaces = {row.surface for row in rows if row.layer == "A"}
+            self.assertTrue({"credentials_review_array_compact", "credentials_review_array_first",
+                             "credentials_review_array_final", "credentials_review_array_nested"} <= surfaces)
+            for row in rows:
+                self.assertEqual(len(row.gold), 2 if row.layer == "R" else 0 if row.layer == "D" else 1)
+                for span in (*row.gold, *row.decoys):
+                    self.assertEqual(row.text.encode()[span.start:span.end].decode(), span.value)
+            for family in ("password_schema", "validation", "language", "masked"):
+                selected = [row for row in rows if row.layer == "D" and row.family == family]
+                self.assertTrue(all("password" in row.text and not row.gold for row in selected))
+
     def test_arm_changes_only_the_new_rulepack_slot(self):
         source = '[policy.rulepacks]\nbundled=["core","secrets"]\npaths=[]\n\n[[rule]]\nkind="default"\naction="tokenize"\n'
         with tempfile.TemporaryDirectory() as folder:

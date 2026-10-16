@@ -83,3 +83,83 @@ def records(api, partition):
                               ("expression", "'password' => Hash::make('secret'),")):
             emit("D", family, "code_negative", index, "{V}", value, "decoy:code_syntax")
     return result
+
+
+def review_records(api, partition):
+    """Independent v22 contexts; leave all v21 documents and random draws intact."""
+    result = []
+
+    def emit(layer, family, surface, index, template, value, label):
+        text, gold, decoys = api._fill_with_decoys(template, {"V": (value, None if layer == "D" else label)})
+        result.append(api.Record(
+            uid=f"agentic-{partition}-{layer}-credentials-review-{family}-{surface}-{index}",
+            partition=partition, layer=layer, family=family, surface="credentials_review_" + surface,
+            validity=api.BENIGN if layer == "D" else api.UNCHECKED,
+            group=f"{partition}-credentials-review-{family}-{index}",
+            template=f"credentials-review/{partition}/{surface}", language="en", region="US",
+            text=text, gold=gold, decoys=decoys,
+        ))
+
+    rng = api.Rng(api.PARTITION_SEEDS[partition], "credential-code-review")
+    for index in range(api.DOCS_PER_FAMILY):
+        for family, value in hashes(rng).items():
+            if family not in ("sha256crypt", "sha512crypt", "md5crypt",
+                              "django_pbkdf2_sha256", "django_pbkdf2_sha1", "django_scrypt"):
+                continue
+            # Alter only salt components; checksum alphabets/widths stay fixed.
+            parts = value.split("$")
+            slot = 3 if family == "sha512crypt" else 2
+            for mark in ("-", "_") if "django" not in family else ("+", "@", " ", ":"):
+                salt = ("dv" if partition == "dev" else "ts") + mark + rng.digits(4)
+                parts[slot] = salt
+                encoded = "$".join(parts)
+                for surface, template in TEMPLATES[partition].items():
+                    emit("A", family, "salt_" + surface + "_" + str(ord(mark)), index,
+                         template, encoded, "PASSWORD")
+                    emit("R", family, "salt_" + surface + "_" + str(ord(mark)), index,
+                         template + "\nCompare {V} again.", encoded, "PASSWORD")
+                emit("D", family, "salt_truncated_" + str(ord(mark)), index,
+                     "Example of an incomplete encoding: {V}", encoded[:-1], "decoy:incomplete_hash")
+                invalid_parts = parts.copy()
+                invalid_parts[slot] = "" if "django" in family else "bad:salt"
+                emit("D", family, "salt_invalid_" + str(ord(mark)), index,
+                     "Malformed encoding example, not a stored credential: {V}",
+                     "$".join(invalid_parts), "decoy:malformed_hash")
+        for key, label in (("password", "PASSWORD"), ("api_token", "SECURITYTOKEN"),
+                           ("remember_token", "SECURITYTOKEN")):
+            value = partition + "_array!" + rng.digits(6)
+            for surface, template in (
+                ("array_compact", "array('" + key + "'=>'{V}');"),
+                ("array_first", "array('" + key + "'=>'{V}','enabled'=>true);"),
+                ("array_final", "array('enabled'=>true,'" + key + "'=>'{V}');"),
+                ("array_nested", "array('outer'=>array('" + key + "'=>'{V}'));"),
+            ):
+                emit("A", key, surface, index, template, value, label)
+                emit("R", key, surface, index, template + "\nCompare {V} again.", value, label)
+        for family, value in (
+            ("spaced_passphrase", partition + " synthetic long pass phrase " + rng.digits(6)),
+            ("pipe_password", partition + "|synthetic|secret|" + rng.digits(6)),
+            ("weak_string", "string" if partition == "dev" else "example"),
+            ("weak_stars", "********" if partition == "dev" else "************"),
+        ):
+            template = "Credential export for a synthetic account; the actual stored password is " + "array('password'=>'{V}');"
+            emit("A", family, "password_" + family, index, template, value, "PASSWORD")
+            emit("R", family, "password_" + family, index, template + "\nStored credential again: {V}", value, "PASSWORD")
+        # These are genuine credentials under an ambiguous generic key. Keeping
+        # them gold makes the deliberate generic-token recall cost measurable.
+        value = partition + "_opaque!" + rng.digits(8)
+        emit("A", "generic_token", "generic_token", index,
+             'Synthetic account credential export: {"token":"{V}"}', value, "SECURITYTOKEN")
+        emit("R", "generic_token", "generic_token", index,
+             'Synthetic account credential export: {"token":"{V}"}\nStored credential again: {V}', value, "SECURITYTOKEN")
+        for family, value, template in (
+            ("logprob", "Hello", 'Model logprobs: {"content":[{"token":"{V}","logprob":-0.1,"bytes":[72,101,108,108,111]}]}'),
+            ("tokenizer", "indivisible", 'Tokenizer vocabulary entry, not an access credential: {"token":"{V}","id":42}'),
+            ("token_schema", "string", 'OpenAPI example for tokenizer output, no credentials: {"type":"object","example":{"token":"{V}"}}'),
+            ("password_schema", "string", 'OpenAPI schema example, not an account password: {"type":"object","example":{"password":"{V}"}}'),
+            ("validation", "required|string|min:8|confirmed", "Laravel validation rules, not stored account data: $request->validate(['password'=>'{V}']);"),
+            ("language", "The provided password is incorrect.", "Laravel translation file, no account data: return ['password'=>'{V}'];"),
+            ("masked", "********", 'A public UI response with its password already masked: {"password":"{V}","masked":true}'),
+        ):
+            emit("D", family, "metadata_" + family, index, template, value, "decoy:credential_metadata")
+    return result
