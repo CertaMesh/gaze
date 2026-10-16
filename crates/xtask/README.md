@@ -73,27 +73,18 @@ CI calls the same commands. Behavioral gates fail when a protected test is missi
 Every gate must invoke behavioral tests. Do not add a gate that only checks for
 symbols, files, or strings.
 
-The current helper type is:
+`BehavioralTest` specifies `package`, `target`, and the exact test `name`.
+Its `target` is `BehavioralTarget::Lib`, `BehavioralTarget::Bin("binary_name")`,
+or `BehavioralTarget::Integration("target_name")`. Both types live in
+[`src/main.rs`](src/main.rs).
 
-```rust
-#[derive(Debug, Clone, Copy)]
-struct BehavioralTest {
-    package: &'static str,
-    test_target: Option<&'static str>,
-    name: &'static str,
-}
-```
+To add a gate:
 
-A new gate should:
-
-1. add a `Command` enum variant
-2. add a `const` slice of `BehavioralTest`
-3. call `ensure_test_exists` for every entry
-4. call `run_behavioral_test` for every entry
-5. print a clear passed line only after all tests pass
-
-For integration tests, set `test_target: Some("target_name")`; for unit tests,
-set `test_target: None`.
+1. Add a `Command` enum variant and its dispatch arm.
+2. Add a `const` slice of `BehavioralTest` entries.
+3. Call `ensure_test_exists` for every entry.
+4. Call `run_behavioral_test` for every entry.
+5. Print a passed line only after all tests pass.
 
 ## Failure rehearsal
 
