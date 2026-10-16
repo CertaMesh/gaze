@@ -118,10 +118,17 @@ and `test-coverage` (once-only execution proof). On the full CI path, a failed,
 skipped, cancelled, or missing owner fails the required check. The `xtask gates` aggregator
 still requires `test`, the default-feature workspace suite, and feature gates.
 
-PRs whose merge-base diff contains only `.md` files take a shorter path. Changes
-under `.github/`, renames, copies, empty diffs, classifier errors, and events other
-than `pull_request` take full CI. The committed classifier tests run before each
-classification. Test them locally with:
+PRs whose merge-base diff contains only unreferenced `.md` files take a shorter
+path. A reference from any tracked non-Markdown file in the PR head or base
+requires full CI. An explicit list covers paths assembled by reader helpers;
+the classifier tests inventory tracked Markdown filenames used in `crates/` and
+`scripts/` and pin this list. Code-coupled pages such as the policy reference,
+Rust library how-to, redaction-class table, and CHANGELOG take full CI, including
+their consuming tests.
+
+Changes under `.github/`, renames, copies, empty diffs, lookup/classifier errors,
+and events other than `pull_request` also take full CI. The committed classifier
+tests run before each classification. Test them locally with:
 
 ```bash
 python3 -m unittest discover -s scripts/ci -p 'test_*changes.py'
@@ -130,8 +137,9 @@ python3 -m unittest discover -s scripts/ci -p 'test_*changes.py'
 The Markdown path keeps the docs workflow, benchmark Python checks, DCO,
 `readme-version-check`, and `bundle-tokenization-drift --verify-ack`. The latter
 checks CHANGELOG acknowledgements. `scrub-public-text` remains in the release and
-publish workflows. Workspace builds/tests, native subprocess checks, Dylint,
-and benchmark Rust binary checks skip on this path. The existing `test` and
+publish workflows. Full workspace suites, native subprocess checks, Dylint,
+and benchmark Rust binary checks skip on this path. Markdown-specific jobs may
+build `gaze`, including future executable tutorial checks. The existing `test` and
 `xtask gates` jobs still run and validate the expected successful and skipped
 owners. Required workflows have no path filters, so their contexts report a
 result for every PR.
