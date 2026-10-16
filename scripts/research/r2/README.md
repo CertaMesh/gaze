@@ -14,6 +14,7 @@ target/debug/gaze setup --non-interactive --force --policy-out target/r2/setup.t
 python3 scripts/research/r2/policies.py target/r2/setup.toml target/r2/policies
 CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR="$PWD/target" cargo build --locked \
   --manifest-path scripts/research/r2/probe/Cargo.toml -j 2
+python3 scripts/research/r2/preflight.py
 python3 scripts/research/r2/experiment.py run --split dev \
   --binary target/debug/r2-source-probe --policy target/r2/policies/full.toml \
   --out target/r2/full-dev.json
@@ -101,3 +102,8 @@ Design comparison and handoff follow the Exhaust the Design Space, Explain
 the Number, Benchmark Checklist and Prototype principles. These instruments
 are throwaway research, with no production runtime or policy defaults changed.
 No performance recommendation may be derived from their debug executables.
+
+The standalone lockfile is reduced from the root lock, not resolved against
+the newest registry versions. `preflight.py` checks every registry package's
+name/version/source/checksum against the root lock and refuses production
+source changes relative to the research baseline. Use it before observations.
