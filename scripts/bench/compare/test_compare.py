@@ -415,7 +415,9 @@ def test_validate_current_flags_competitor_input_but_not_gaze_drift(monkeypatch:
 def test_older_generator_comparison_binds_to_its_rebuilt_corpus_and_committed_contract(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
-    report = json.loads((compare.REPO / "docs/reference/benchmarks/comparison.json").read_text())
+    fixture = compare.REPO / "scripts/bench/fixtures/comparison-generator-v4.json"
+    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == "b40fa53700b4c3a0e4fc4aeced288338140b1a918a29f4c7fad7e48bcf2e9dba"
+    report = json.loads(fixture.read_text())
     agentic = report["corpus"]["agentic"]
     assert agentic["generator_version"] < compare.agentic.GENERATOR_VERSION
     corpus, contract = render.agentic_identity(report)
