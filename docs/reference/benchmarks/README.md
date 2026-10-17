@@ -26,6 +26,7 @@ and fails on drift.
 | [Competitors' own benchmarks](#competitors-own-benchmarks) | Gaze and competitors on Presidio Research and PIIBench-commercial |
 | [Safety-Net Matrix](#safety-net-matrix) | backend pins and matrix shape |
 | [NER Model Leaderboard](#ner-model-leaderboard) | candidate backends |
+| [Latency](#latency) | timing methodology and historical measurements |
 | [How to reproduce](#how-to-reproduce) | commands, harness, hardware |
 | [Evidence before the release gate](#evidence-before-the-release-gate) | archived per-PR reports |
 
