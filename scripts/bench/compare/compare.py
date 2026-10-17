@@ -372,7 +372,7 @@ class Scrubadub:
         self.scrubbers = {}
         for language, locale in (("en", "en_US"), ("de", "de_DE"),
                                  ("nl", "nl_NL"), ("fr", "fr_FR"),
-                                 ("pt", "pt_PT")):
+                                 ("pt", "pt_PT"), ("es", "es_ES")):
             scrubber = scrubadub.Scrubber(locale=locale)
             if spacy_model and language == "en":
                 from scrubadub_spacy.detectors import SpacyEntityDetector

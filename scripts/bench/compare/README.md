@@ -48,7 +48,11 @@ choice and disjoint test results stay in `competitors.md`.
   German documents. DataFog's spaCy model is English-only.
 - scrubadub 2.0.0: autoloaded built-ins; a second row adds
   `scrubadub-spacy==2.0.0` with pinned `en_core_web_lg` for English documents.
-  The plugin's own locale defaults and detector selection apply.
+  The adapter selects native locales for English, German, Dutch, French,
+  Portuguese and Spanish. scrubadub selects its available detectors for each
+  locale; the spaCy addon remains English-only. The existing committed rows
+  predate the Spanish adapter correction and count those inputs as fully
+  missed. They do not establish that the native library cannot process Spanish.
 - Standalone GLiNER: model-card labels, default 0.5 and high-recall 0.3.
   OpenAI Privacy Filter 0.1.0: vendor default calibrated Viterbi decoder; no
   public threshold is tuned. Its source revision and checkpoint digest are
@@ -71,6 +75,19 @@ are present. The GLiNER checkpoint and its separate mDeBERTa tokenizer snapshot
 must both be pinned by revision and tree SHA-256. The Presidio transformer
 snapshot is pinned the same way. OPF is installed from a clean, recorded source
 revision and uses its locally pinned checkpoint.
+
+Before collecting scrubadub rows, run its native regression checks with the
+Python interpreter from the separately locked scrubadub environment:
+
+```sh
+"$GAZE_COMPARE_SCRUB_PYTHON" scripts/bench/compare/test_scrubadub_native.py
+```
+
+This command checks the scrubadub, plugin, spaCy and English model versions;
+it fails if any are missing or differ. It checks Spanish and English positive and benign
+inputs, both configurations, and full population accounting without Spanish
+skips. Ordinary comparison tests skip these two native checks when scrubadub
+is absent; that skip does not replace this required native run.
 
 ```sh
 cargo run -p gaze-cli -- setup --non-interactive --force \

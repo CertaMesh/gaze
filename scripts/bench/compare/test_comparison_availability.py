@@ -78,9 +78,9 @@ class AvailabilityTest(unittest.TestCase):
         self.assertIn("es=7", note)
         self.assertIn("fully missed", note)
 
-    def test_scrubadub_unsupported_spanish_is_fully_missed(self):
+    def test_unconfigured_language_is_fully_missed(self):
         text = "alice@example.invalid"
-        docs = [compare.score.Document("synthetic", text, "es", "ES", "synthetic",
+        docs = [compare.score.Document("synthetic", text, "zz", "ZZ", "synthetic",
                 (compare.score.Span(0, len(text), "EMAIL"),))]
         def must_not_run(_document):
             raise AssertionError("unsupported input reached backend")
@@ -90,7 +90,7 @@ class AvailabilityTest(unittest.TestCase):
             row = contract["C"]
             self.assertEqual(row["leaked_bytes"], len(text))
             self.assertEqual(row["skipped_gold_bytes"], len(text))
-            self.assertEqual(row["skipped_languages"], {"es": 1})
+            self.assertEqual(row["skipped_languages"], {"zz": 1})
             self.assertEqual(row["latency"]["samples"], 0)
             self.assertEqual(row["metrics"]["product_coverage"]["full"]["leaked_bytes"], len(text))
 
