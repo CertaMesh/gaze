@@ -218,6 +218,36 @@ class CheckTests(unittest.TestCase):
         with self.assertRaises(UntaggedGazeError):
             check_public(body, "leak-ledger table")
 
+    def test_public_reference_keeps_the_original_pinned_release_snapshot(self):
+        provenance = self.index["release_provenance"]
+        self.assertEqual(provenance["observations_file"], self.index["record"]["file"])
+        self.assertEqual(provenance["observations_sha256"], self.index["record"]["sha256"])
+        body = ledger.public_body(self.index)
+        self.assertIn("original release observation snapshot", body)
+        self.assertIn(Path(self.index["record"]["file"]).name, body)
+        self.assertNotIn("`observations-v0.16.0.jsonl.gz`", body)
+        self.assertNotIn("its observations are byte-identical to", body)
+        self.assertIn("current release scorecards are re-measured separately", body)
+
+    def test_refreshing_current_release_archive_does_not_retarget_the_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            index_path = root / ledger.INDEX.relative_to(ledger.ROOT)
+            index_path.parent.mkdir(parents=True)
+            index_path.write_text(json.dumps(self.index), encoding="utf-8")
+            for key in ("record", "rows"):
+                target = root / self.index[key]["file"]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ledger.ROOT / self.index[key]["file"], target)
+            current = index_path.parent / "observations-v0.16.0.jsonl.gz"
+            with gzip.open(current, "wt", encoding="utf-8") as sink:
+                sink.write(json.dumps({"kind": "header", "measurement": "separate fresh release"}) + "\n")
+            index, pinned, _ = ledger.load(root)
+            self.assertNotEqual(ledger.sha256(current), index["record"]["sha256"])
+            self.assertEqual(ledger.sha256(pinned), index["record"]["sha256"])
+            self.assertEqual(ledger.public_body(index), ledger.public_body(self.index))
+            self.assertNotIn(current.name, ledger.public_body(index))
+
     def test_rows_must_equal_the_record_leaks(self):
         ledger.validate_rows(self.rows, self.expected)
         dropped = self.rows[1:]

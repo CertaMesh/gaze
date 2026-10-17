@@ -793,7 +793,7 @@ contract v1 scores; those have their own table in the rendered output.
 
 <!-- BEGIN GENERATED: leak-ledger -->
 
-The leak ledger classifies every leaked gold byte by root cause. It was recorded at `7779119`, an ancestor of `v0.16.0` with the identical crates tree `276a8b2d`; its observations are byte-identical to `observations-v0.16.0.jsonl.gz`. Its table is not shown here. The classified rows ([`leak-ledger.json`](leak-ledger.json) and [its row file](leak-ledger/ledger-7779119128ce.jsonl.gz)) stay committed, and `python3 scripts/bench/leak_ledger.py check` re-derives their totals from the observation record under every scored-label contract.
+The leak ledger classifies every leaked gold byte by root cause. It was recorded at `7779119`, an ancestor of `v0.16.0` with the identical crates tree `276a8b2d`. It retains the original release observation snapshot ([`observations-7779119128ce.jsonl.gz`](leak-ledger/observations-7779119128ce.jsonl.gz)); current release scorecards are re-measured separately. Its table is not shown here. The classified rows ([`leak-ledger.json`](leak-ledger.json) and [its row file](leak-ledger/ledger-7779119128ce.jsonl.gz)) stay committed, and `python3 scripts/bench/leak_ledger.py check` re-derives their totals from the observation record under every scored-label contract.
 
 <!-- END GENERATED: leak-ledger -->
 
