@@ -729,11 +729,15 @@ and a metadata-only audit row; address fields and other Nym labels remain
 eligible. The measured Nym rows below identify the source revision of each
 guard version.
 
+Current candidate ablations use fresh byte-quality measurements, including concurrent runs; they establish no latency or RSS comparison. The GLiNER DOB cost figures below retain their separately pinned historical quiet-host evidence and were not re-measured for this candidate.
+
+The current Nym safety-net ablation **fails both v2 and v1 credit guards**: enabling Nym adds 18 false-positive bytes on the benign BSN counterweight (0 → 18). The fresh v0.16.0 → v0.17.0 release comparison has 18 bytes on both sides for that counterweight, and its numeric gain gates pass. The other five current mechanism ablations pass both contracts. The failed component verdict remains in [`mechanism-arms.json`](mechanism-arms.json).
+
 <!-- BEGIN GENERATED: mechanism-arms -->
 
 Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v4 headline counts false-positive bytes after gold-gap credit.
 
-8 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
+14 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
 
 Shipped releases, one column per release:
 
