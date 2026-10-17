@@ -352,17 +352,17 @@ Two consequences worth stating plainly:
 
 **v0.16.0** — measured on the released tree.
 
-> Measured on the signed release candidate whose crates tree is identical to tag v0.16.0. Byte metrics only; shared-host timings are not quiet-host latency. See [Latency](#latency).
+> Fresh measurement on the release tag with the current harness. Byte metrics only.
 
 | Provenance | Value |
 | --- | --- |
 | Release | `v0.16.0` |
-| Commit | `7779119128ce4b5fdee6674f40937fb770264610` |
-| Measured | 2026-10-08 |
-| Machine | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) |
-| Harness | [`scripts/bench/run_no_opf_benchmark.py`](../../../scripts/bench/run_no_opf_benchmark.py) |
+| Commit | `5a7dac0fa198f20a628ed6b7fa2b5c9d41a91eb0` |
+| Measured | 2026-10-15 |
+| Machine | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) |
+| Harness | [`scripts/bench/rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) |
 | Scorecard | [`scorecard-v0.16.0.json`](scorecard-v0.16.0.json) |
-| Scorecard sha256 | `059cb601cbdb98a7fde8ba8be3598aa141044e3c099f5fe6f1ebf1959bbc990b` |
+| Scorecard sha256 | `a1ed33b5f941385fd7278f4d37e5b2c6a2e6b0f3ca798702f1d65111f763b6d4` |
 | Corpus | `DataikuNLP/kiji-pii-training-data+gaze` @ `0275550f0b1f1b8f2dc9356fd31ac1c788b8228b+a4-negative-v1` |
 | Corpus sha256 | `11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2` |
 | Corpus component `dataiku` | `916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d` |
@@ -372,13 +372,12 @@ Two consequences worth stating plainly:
 | Seed | `20260710` |
 | NER threshold | `0.3` |
 | Model bundle `davlan-mbert-ner-hrl-onnx` | `7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16` |
-| Model bundle `nym-small-int8` | `71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767` |
 | Scorecard, scored labels v2 | [`scorecard-v0.16.0-scored-labels-v2.json`](scorecard-v0.16.0-scored-labels-v2.json) |
-| Scorecard sha256, scored labels v2 | `12a36ced8b8f6ea3404a29cb2a45426b07ba833a4648530cb133b0f22c325391` |
+| Scorecard sha256, scored labels v2 | `1b4a467156faae25d96513812640b553bdad00a6735c14d028efffb64f0a337d` |
 | Scorecard, scored labels v3 | [`scorecard-v0.16.0-scored-labels-v3.json`](scorecard-v0.16.0-scored-labels-v3.json) |
-| Scorecard sha256, scored labels v3 | `3c0300867421f8b1e6dc2713982862fbd0155d93e2d7a1658f17e2892ace39f8` |
+| Scorecard sha256, scored labels v3 | `f889c342abe26d7d275fb7bb9c7040d6dac7a8b3ea5656d06564c4e57c86253e` |
 | Scorecard, scored labels v4 | [`scorecard-v0.16.0-scored-labels-v4.json`](scorecard-v0.16.0-scored-labels-v4.json) |
-| Scorecard sha256, scored labels v4 | `70c7881b8043660e47b5b0e49e912ee6944f51aad1c9d95209d2bdfca296c3df` |
+| Scorecard sha256, scored labels v4 | `9e055feb011691cbf7087b316cee92a0cf7f8f9d4bc79f94c8fd165fbd660029` |
 
 **Scored labels v4 (headline: credentials counted, with protected repeats of a labelled value credited).** Gold PII bytes: 130,282.
 
@@ -386,7 +385,7 @@ Leaked bytes are v2's. A protected, unlabelled, byte-identical repeat of a label
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Gold-gap credited bytes info | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `policy-file` **(shipped default)** | 130,282 | 13,291 | 10.2017% | 15,141 | 11,761 | 0.885410 | 62.8522% | 100.0000% | 100.0000% | 100.0000% | 0 | 390.59 |
+| `policy-file` **(shipped default)** | 130,282 | 13,291 | 10.2017% | 15,141 | 11,761 | 0.885410 | 62.8522% | 100.0000% | 100.0000% | 100.0000% | 0 | 275.84 |
 
 **Scored labels v3 (the labels Gaze committed to detect before credentials, with protected repeats of a labelled value credited).** Gold PII bytes: 123,621.
 
@@ -394,19 +393,19 @@ Leaked bytes are v2's. A protected, unlabelled, byte-identical repeat of a label
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Gold-gap credited bytes info | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `policy-file` **(shipped default)** | 123,621 | 7,348 | 5.9440% | 15,141 | 11,761 | 0.884784 | 71.4777% | 100.0000% | 100.0000% | 100.0000% | 0 | 390.59 |
+| `policy-file` **(shipped default)** | 123,621 | 7,348 | 5.9440% | 15,141 | 11,761 | 0.884784 | 71.4777% | 100.0000% | 100.0000% | 100.0000% | 0 | 275.84 |
 
 **Scored labels v2 (the labels Gaze commits to detect, without gold-gap credit).** Gold PII bytes: 123,621.
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `policy-file` **(shipped default)** | 123,621 | 7,348 | 5.9440% | 26,902 | 0.812104 | 71.4777% | 100.0000% | 100.0000% | 100.0000% | 0 | 390.59 |
+| `policy-file` **(shipped default)** | 123,621 | 7,348 | 5.9440% | 26,902 | 0.812104 | 71.4777% | 100.0000% | 100.0000% | 100.0000% | 0 | 275.84 |
 
 **Scored labels v1 (all original gold labels, kept for comparison with earlier releases).** Gold PII bytes: 130,282.
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `policy-file` **(shipped default)** | 130,282 | 13,291 | 10.2017% | 26,902 | 0.813042 | 62.8522% | 100.0000% | 100.0000% | 100.0000% | 0 | 390.59 |
+| `policy-file` **(shipped default)** | 130,282 | 13,291 | 10.2017% | 26,902 | 0.813042 | 62.8522% | 100.0000% | 100.0000% | 100.0000% | 0 | 275.84 |
 
 Validator-backed labels on `policy-file`, scored labels v1. Gold that fails its own checksum stays scored gold: the two leaked-bytes columns split the surviving bytes above, they do not replace them. Shape recall is what a shape-only match (validator ignored) would cover.
 
@@ -415,8 +414,8 @@ Validator-backed labels on `policy-file`, scored labels v1. Gold that fails its 
 | `CREDITCARDNUMBER` | luhn | 126 | 96 | 0.714286 | 0.984127 | 0 | 248 |
 | `EMAIL` | email_rfc | 375 | 0 | 0.994667 | 0.994667 | 19 | 0 |
 | `IBAN` | iban_mod97 | 207 | 67 | 0.246377 | 0.468599 | 0 | 214 |
-| `PHONENUMBER` | e164_phone, e164_phone_national_de, e164_phone_national_us | 359 | 41 | 0.821727 | 0.908078 | 306 | 352 |
-| `TAXNUM` | de_steuer_id_mod1110 | 212 | 210 | 0.047170 | 0.047170 | 28 | 1,157 |
+| `PHONENUMBER` | e164_phone, e164_phone_national_de, e164_phone_national_us, phone_number | 359 | 24 | 0.849582 | 0.908078 | 495 | 163 |
+| `TAXNUM` | de_steuer_id_mod1110 | 212 | 210 | 0.080189 | 0.080189 | 28 | 1,157 |
 
 <!-- END GENERATED: current-release -->
 
@@ -441,7 +440,7 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 | Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 0.836 | 0.879 | **0.894 (tuned)** | 0.184 | 0.561 | 0.356 | 0.765 | 0.798 |
+| Own corpus | 0.836 | 0.879 | **0.889 (tuned)** | 0.184 | 0.561 | 0.356 | 0.765 | N/A |
 | Presidio Research | not run | 0.825 | **0.918 (tuned)** | 0.147† | 0.639† | 0.538† | 0.692† | 0.663† |
 | PIIBench-commercial | not run | 0.627 | **0.665†** | 0.183† | 0.522† | 0.441† | 0.532† | 0.400† |
 
@@ -449,7 +448,7 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 | Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 19,556 | 13,291 | **8,261 (tuned)** | 110,273 | 33,270 | 89,546 | 26,515 | 25,485 |
+| Own corpus | 19,556 | 13,291 | **4,782 (tuned)** | 110,273 | 33,270 | 89,546 | 26,515 | N/A |
 | Presidio Research | not run | 7,984 | **2,857 (tuned)** | 34,810† | 15,769† | 20,226† | 13,326† | 15,305† |
 | PIIBench-commercial | not run | 105,077 | **87,853†** | 222,697† | 114,880† | 145,119† | 127,361† | 170,336† |
 
@@ -457,7 +456,7 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 | Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 19.3 | 15.8 | 41.0 (tuned) | **6.2** | 257.5 | 16.0 | 55.6 | 32.7 |
+| Own corpus | 19.3 | 15.8 | 52.7 (tuned) | **6.1** | 253.8 | 12.5 | 53.6 | N/A |
 | Presidio Research | not run | 10.7 | 38.6 (tuned) | **0.0†** | 31.5† | 14.6† | 38.3† | 5.2† |
 | PIIBench-commercial | not run | 20.7 | 38.0† | **1.9†** | 94.1† | 71.2† | 36.6† | 5.2† |
 
@@ -625,15 +624,22 @@ which stay committed as the machine-readable evidence.
 
 | Release | Measured | Commit | Machine | Scorecards | Shipped arm | Refused ↓ | Leaked PII bytes, all processed, v4 ↓ | Leaked PII bytes, common documents, v4 ↓ | False-positive bytes, v4 ↔ | Leaked PII bytes, all processed, v3 ↓ | Leaked PII bytes, common documents, v3 ↓ | False-positive bytes, v3 ↔ | Leaked PII bytes, all processed, v2 ↓ | Leaked PII bytes, common documents, v2 ↓ | False-positive bytes, v2 ↔ | Leaked PII bytes, all processed, v1 ↓ | Leaked PII bytes, common documents, v1 ↓ | False-positive bytes, v1 ↔ | Restore exact ↑ | clean p95 ms ↓ |
 | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json), [`scorecard-v0.14.0-scored-labels-v2.json`](scorecard-v0.14.0-scored-labels-v2.json), [`scorecard-v0.14.0-scored-labels-v3.json`](scorecard-v0.14.0-scored-labels-v3.json), [`scorecard-v0.14.0-scored-labels-v4.json`](scorecard-v0.14.0-scored-labels-v4.json) | `full-stack-kiji-resolve` | 0 | 25,179 | 25,179 | 157,048 | 22,144 | 22,144 | 157,048 | 22,144 | 22,144 | 168,259 | 25,179 | 25,179 | 168,276 | 78.4192% | 195.86 |
-| v0.15.0 – v0.15.1 | 2026-09-26 | `f769f82` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.0-scored-labels-v2.json`](scorecard-v0.15.0-scored-labels-v2.json), [`scorecard-v0.15.0-scored-labels-v3.json`](scorecard-v0.15.0-scored-labels-v3.json), [`scorecard-v0.15.0-scored-labels-v4.json`](scorecard-v0.15.0-scored-labels-v4.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json), [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json), [`scorecard-v0.15.1-scored-labels-v3.json`](scorecard-v0.15.1-scored-labels-v3.json), [`scorecard-v0.15.1-scored-labels-v4.json`](scorecard-v0.15.1-scored-labels-v4.json) | `policy-file` | 0 | 19,556 | 19,556 | 18,488 | 13,319 | 13,319 | 18,488 | 13,319 | 13,319 | 30,073 | 19,556 | 19,556 | 30,073 | 100.0000% | 138.72 |
-| v0.16.0 | 2026-10-08 | `7779119` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.16.0.json`](scorecard-v0.16.0.json), [`scorecard-v0.16.0-scored-labels-v2.json`](scorecard-v0.16.0-scored-labels-v2.json), [`scorecard-v0.16.0-scored-labels-v3.json`](scorecard-v0.16.0-scored-labels-v3.json), [`scorecard-v0.16.0-scored-labels-v4.json`](scorecard-v0.16.0-scored-labels-v4.json) | `policy-file` | 0 | 13,291 | 13,291 | 15,141 | 7,348 | 7,348 | 15,141 | 7,348 | 7,348 | 26,902 | 13,291 | 13,291 | 26,902 | 100.0000% | 390.59 |
+| v0.14.0 | 2026-10-15 | `616e8a1` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json), [`scorecard-v0.14.0-scored-labels-v2.json`](scorecard-v0.14.0-scored-labels-v2.json), [`scorecard-v0.14.0-scored-labels-v3.json`](scorecard-v0.14.0-scored-labels-v3.json), [`scorecard-v0.14.0-scored-labels-v4.json`](scorecard-v0.14.0-scored-labels-v4.json) | `full-stack-kiji-resolve` | 0 | 25,179 | 25,179 | 157,048 | 22,144 | 22,144 | 157,048 | 22,144 | 22,144 | 168,259 | 25,179 | 25,179 | 168,276 | 78.4192% | 167.92 |
+| v0.15.0 – v0.15.1 | 2026-10-15 | `4927f7c` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.0-scored-labels-v2.json`](scorecard-v0.15.0-scored-labels-v2.json), [`scorecard-v0.15.0-scored-labels-v3.json`](scorecard-v0.15.0-scored-labels-v3.json), [`scorecard-v0.15.0-scored-labels-v4.json`](scorecard-v0.15.0-scored-labels-v4.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json), [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json), [`scorecard-v0.15.1-scored-labels-v3.json`](scorecard-v0.15.1-scored-labels-v3.json), [`scorecard-v0.15.1-scored-labels-v4.json`](scorecard-v0.15.1-scored-labels-v4.json) | `policy-file` | 0 | 19,556 | 19,556 | 18,488 | 13,319 | 13,319 | 18,488 | 13,319 | 13,319 | 30,073 | 19,556 | 19,556 | 30,073 | 100.0000% | 127.00 |
+| v0.16.0 | 2026-10-15 | `5a7dac0` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.16.0.json`](scorecard-v0.16.0.json), [`scorecard-v0.16.0-scored-labels-v2.json`](scorecard-v0.16.0-scored-labels-v2.json), [`scorecard-v0.16.0-scored-labels-v3.json`](scorecard-v0.16.0-scored-labels-v3.json), [`scorecard-v0.16.0-scored-labels-v4.json`](scorecard-v0.16.0-scored-labels-v4.json) | `policy-file` | 0 | 13,291 | 13,291 | 15,141 | 7,348 | 7,348 | 15,141 | 7,348 | 7,348 | 26,902 | 13,291 | 13,291 | 26,902 | 100.0000% | 275.84 |
 
-- **v0.14.0, scored labels v2:** v0.14.0's own `clean_for_bench` (sha256 `fccad457ec06…`, built from `f66a3f2b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `c495a6f1`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
-- **v0.14.0, scored labels v3:** v0.14.0's own `clean_for_bench` (sha256 `9ef4ba9ef57f…`, built from `f66a3f2b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `9dc171b1`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
-- **v0.14.0, scored labels v4:** v0.14.0's own `clean_for_bench` (sha256 `9ef4ba9ef57f…`, built from `f66a3f2b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `9dc171b1`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
-- **v0.15.0, scored labels v3:** v0.15.0's own `clean_for_bench` (sha256 `2b4f5df0ba3b…`, built from `6fcba31a`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `9dc171b1`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
-- **v0.15.0, scored labels v4:** v0.15.0's own `clean_for_bench` (sha256 `2b4f5df0ba3b…`, built from `6fcba31a`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `9dc171b1`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
+- **v0.14.0, scored labels v2:** v0.14.0's own `clean_for_bench` (sha256 `c2de4dd80b59…`, built from `616e8a10`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
+- **v0.14.0, scored labels v3:** v0.14.0's own `clean_for_bench` (sha256 `c2de4dd80b59…`, built from `616e8a10`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
+- **v0.14.0, scored labels v4:** v0.14.0's own `clean_for_bench` (sha256 `c2de4dd80b59…`, built from `616e8a10`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
+- **v0.15.0, scored labels v2:** v0.15.0's own `clean_for_bench` (sha256 `d3696c1483cd…`, built from `5127788b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
+- **v0.15.0, scored labels v3:** v0.15.0's own `clean_for_bench` (sha256 `d3696c1483cd…`, built from `5127788b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
+- **v0.15.0, scored labels v4:** v0.15.0's own `clean_for_bench` (sha256 `d3696c1483cd…`, built from `5127788b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
+- **v0.15.1, scored labels v2:** v0.15.1's own `clean_for_bench` (sha256 `76faf0ab4088…`, built from `4927f7c0`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
+- **v0.15.1, scored labels v3:** v0.15.1's own `clean_for_bench` (sha256 `76faf0ab4088…`, built from `4927f7c0`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
+- **v0.15.1, scored labels v4:** v0.15.1's own `clean_for_bench` (sha256 `76faf0ab4088…`, built from `4927f7c0`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
+- **v0.16.0, scored labels v2:** v0.16.0's own `clean_for_bench` (sha256 `afe7a2000945…`, built from `5a7dac0f`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
+- **v0.16.0, scored labels v3:** v0.16.0's own `clean_for_bench` (sha256 `afe7a2000945…`, built from `5a7dac0f`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
+- **v0.16.0, scored labels v4:** v0.16.0's own `clean_for_bench` (sha256 `afe7a2000945…`, built from `5a7dac0f`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
 
 <!-- END GENERATED: history -->
 
