@@ -1,0 +1,5 @@
+# Machine-generated benchmark evidence: excluded from GitHub language stats and
+# collapsed (still expandable) in pull-request diffs. The rendered tables in
+# docs/reference/benchmarks/*.md are the reviewable view.
+docs/reference/benchmarks/**/*.json linguist-generated=true
+docs/reference/benchmarks/**/*.gz linguist-generated=true binary
