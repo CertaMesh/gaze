@@ -48,22 +48,32 @@ class ExternalReleaseTests(unittest.TestCase):
         self.assertIn("TRACE's original net-byte gate fails", body)
 
     def test_digest_and_recomputed_arithmetic_reject_tampering(self):
-        for repin in (False, True):
-            with self.subTest(repin=repin), tempfile.TemporaryDirectory() as tmp:
+        cases = [(False, "f2", "digest differs"), (True, "f2", "does not reproduce"),
+                 (True, "formula", "scoring contract"), (True, "pass", "do not all pass"),
+                 (True, "legacy", "original net-byte verdict differs")]
+        for repin, mutation, message in cases:
+            with self.subTest(repin=repin, mutation=mutation), tempfile.TemporaryDirectory() as tmp:
                 target = Path(tmp)
                 shutil.copytree(DATA / "release-v0.17.0", target / "release-v0.17.0")
                 receipt_name = "release-measurement-receipts-v0.17.0.json"
                 shutil.copyfile(DATA / receipt_name, target / receipt_name)
                 path = target / "release-v0.17.0/external-f2-release-review.json"
                 changed = copy.deepcopy(self.review)
-                changed["results"]["piibench-commercial"]["candidate"]["f2_percent"] = 99.0
+                if mutation == "f2":
+                    changed["results"]["piibench-commercial"]["candidate"]["f2_percent"] = 99.0
+                elif mutation == "formula":
+                    changed["formula"] = "character_f2"
+                elif mutation == "pass":
+                    changed["all_benchmarks_pass"] = False
+                else:
+                    changed["results"]["pii-trace"]["legacy_gate"]["verdict"] = "pass"
                 path.write_text(json.dumps(changed))
                 if repin:
                     receipt_path = target / receipt_name
                     receipt = json.loads(receipt_path.read_text())
                     receipt["versions"][external.VERSION]["aggregate_evidence"]["external-f2-release-review.json"]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
                     receipt_path.write_text(json.dumps(receipt))
-                with self.assertRaisesRegex(ValueError, "does not reproduce" if repin else "digest differs"):
+                with self.assertRaisesRegex(ValueError, message):
                     external.load(target, repo=REPO)
 
 

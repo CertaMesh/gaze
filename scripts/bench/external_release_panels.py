@@ -36,12 +36,15 @@ def load(directory: Path, *, repo: Path | None = None) -> dict:
         if tree != release["raw_crates_tree"]:
             raise ValueError("external panels: measured source and release crates trees differ")
     review = checked("external-f2-release-review.json")
-    if review["criterion"] != "byte_micro_f2" or set(review["results"]) != set(TITLES):
+    if (review["criterion"] != "byte_micro_f2" or review["formula"] != "5*TP/(5*TP+4*FN+FP)"
+            or set(review["results"]) != set(TITLES)):
         raise ValueError("external panels: unexpected scoring contract or benchmarks")
     for name, result in review["results"].items():
         gate = checked(f"external/{name}-gate.json")
         quality = checked(f"external/{name}-quality.json")
         validate_receipt(quality)
+        if gate["benchmark"] != name or quality["benchmark"] != name:
+            raise ValueError(f"{name}: benchmark identity differs")
         if gate["gate"] != decide(name, gate["base"]["sets"], gate["candidate"]["sets"]):
             raise ValueError(f"{name}: original gate does not reproduce")
         for field in ("driver_sha256", "wrapper_sha256", "harness_revision", "ner_manifest_sha256",
@@ -89,6 +92,9 @@ def load(directory: Path, *, repo: Path | None = None) -> dict:
         for split, counters in quality["quality"].items():
             if any(gate["candidate"]["sets"][split][key] != value for key, value in counters.items()):
                 raise ValueError(f"{name}: quality counters differ")
+    if (not review["all_benchmarks_pass"]
+            or any(result["f2_gate"] != "pass" for result in review["results"].values())):
+        raise ValueError("external panels: accepted release comparisons do not all pass")
     for name in ("strict-gate-v1.json", "strict-gate-v2.json"):
         if checked(name)["verdict"] != "not_comparable":
             raise ValueError("external panels: strict identity disclosure changed")

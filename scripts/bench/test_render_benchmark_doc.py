@@ -1366,6 +1366,12 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             self.assertEqual(render.main(args + ["--check"]), 1)
             report.write_text(json.dumps(self.comparison), encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 0)
+            # The separate byte-micro figures are checked by the same command.
+            external = svgs[-1]
+            saved = external.read_text(encoding="utf-8")
+            external.write_text(saved.replace("0.64238", "0.99999"), encoding="utf-8")
+            self.assertEqual(render.main(args + ["--check"]), 1)
+            external.write_text(saved, encoding="utf-8")
             # A hand-edited value on an SVG bar is drift too.
             self.assertIn("0.901", svgs[0].read_text(encoding="utf-8"))
             svgs[0].write_text(svgs[0].read_text(encoding="utf-8").replace("0.901", "0.999"),

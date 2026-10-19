@@ -697,8 +697,8 @@ def render(data: Mapping[str, Any]) -> str:
                          "traffic with PII-TRACE and the subset carries no split label, so overlap with its training "
                          "data cannot be ruled out; treat that row as an upper bound, not a clean holdout.")
             if set(rows) == {repro["vendor_system"]}:
-                lines.append("- Gaze and the other tools are not yet measured on this set; the table holds only "
-                             "the vendor's own model until they are.")
+                lines.append("- This historical character and vendor-evaluator table holds only the vendor's own model. "
+                             "Fresh release byte-micro results have separate receipts and appear above.")
         else:
             published = repro["published_full_mix"]
             lines.append(f"- Published Presidio span F1 {published['f1']} is on the full ten-source mix "
@@ -759,7 +759,7 @@ def render(data: Mapping[str, Any]) -> str:
                           "the other Presidio rows stay in this table."]
         if not any(is_tagged_gaze_row(tool) for tool in rows):
             latest = json.loads(RELEASE_HISTORY.read_text(encoding="utf-8"))["releases"][-1]["version"]
-            lines += ["", f"Gaze {latest}: not yet measured on this set, so no Gaze row is shown."]
+            lines += ["", f"Gaze {latest}: no tagged character or vendor-evaluator measurement is available for this historical table, so no Gaze row is shown."]
         lines += ["", f"Typed cells read \"{HELD}\" for tools whose labels pass through collision-family "
                   "or secret/password/token mappings, which the comparison's typed-scoring fix changed; "
                   "leaked and false-positive bytes do not depend on labels and are unaffected.",

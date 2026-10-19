@@ -2391,10 +2391,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                     target, original, rendered = outputs[index]
                     start = "<!-- BEGIN GENERATED: external-release -->"
                     end = "<!-- END GENERATED: external-release -->"
-                    before, rest = rendered.split(start, 1)
-                    _, after = rest.split(end, 1)
-                    outputs[index] = (target, original, before + start + "\n\n" +
-                                      external_release_panels.markdown(external, root=root) + "\n\n" + end + after)
+                    begin, stop = rendered.find(start), rendered.find(end)
+                    if begin < 0 or stop < begin:
+                        raise RenderError("document is missing ordered 'external-release' generated markers")
+                    body = check_public(external_release_panels.markdown(external, root=root),
+                                        "external release panels")
+                    outputs[index] = (target, original, rendered[:begin + len(start)] + "\n\n" +
+                                      body + "\n\n" + rendered[stop:])
             if readme is not None:
                 for name, svg in external_release_panels.files(external).items():
                     target = readme.parent / CHART_ASSETS / name

@@ -976,7 +976,7 @@ Fresh v0.17.0 byte-micro release comparisons for PIIBench-commercial and PII-TRA
 
 - Perplexity publishes no number for this subset: its paper reports the 1,922-document, 13-language test split, which is not public, so no vendor figure is reproduced. The bar here is PII-Tracer, the vendor's own tuned model: character F1 0.974, exact typed micro F1 0.726.
 - All 2,653 gold spans sit in user messages; assistant messages have none, so a detection there is a false positive. The paper says PII-Tracer's training data shares production traffic with PII-TRACE and the subset carries no split label, so overlap with its training data cannot be ruled out; treat that row as an upper bound, not a clean holdout.
-- Gaze and the other tools are not yet measured on this set; the table holds only the vendor's own model until they are.
+- This historical character and vendor-evaluator table holds only the vendor's own model. Fresh release byte-micro results have separate receipts and appear above.
 
 Gold PII bytes: 55,580. Common-intersection labels: account_number, private_address, private_date, private_email, private_phone, private_url.
 
@@ -986,7 +986,7 @@ Gold PII bytes: 55,580. Common-intersection labels: account_number, private_addr
 
 † Pre-receipt evidence: not receipt-verified; regeneration pending.
 
-Gaze v0.17.0: not yet measured on this set, so no Gaze row is shown.
+Gaze v0.17.0: no tagged character or vendor-evaluator measurement is available for this historical table, so no Gaze row is shown.
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
