@@ -804,7 +804,7 @@ Test half (product coverage):
 | v1 | Repeated PII values with decoys | presidio-strong | 47,219 | 2,796 | 0.321 | 0.022 |
 | v1 | Repeated PII values with decoys | presidio-strong-high-recall | 45,023 | 4,902 | 0.355 | 0.021 |
 
-Against the latest Gaze release (v0.17.0) on all of Kiji EN/DE holdout and A4 negatives, the only layer that release was measured on in this corpus's form. The tuned-here rows include the validation half they were selected on, which can only flatter them. False positives are after v4's gold-gap credit.
+Against the latest Gaze release (v0.17.0) on all of Kiji EN/DE holdout and A4 negatives. This table covers layer C. The tuned-here rows include the validation half they were selected on, which can only flatter them. False positives are after v4's gold-gap credit.
 
 | Contract | Configuration | Leaked B | FP B | Char F2 |
 | --- | --- | ---: | ---: | ---: |
