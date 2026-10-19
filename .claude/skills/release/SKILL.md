@@ -143,10 +143,10 @@ After the workflows finish:
    crates. Check each version's source/package metadata and published checksum
    against retained package evidence. A missing crate or count mismatch is a
    partial publication, even if one workflow job succeeded.
-4. Verify release archives and checksums for both binary families, `gaze` and
-   `gaze-model-setup`, on every declared platform. Check extracted version
-   output and artifact provenance against the actual tag/source. An uploaded
-   archive alone does not prove the right binary was published.
+4. Verify each workflow-declared `gaze` binary and its checksum: macOS ARM64
+   and Linux x86_64 for v0.17. Check version output and artifact provenance
+   against the actual tag/source. Verify the NER checksum manifest separately.
+   An uploaded asset alone does not prove the right binary was published.
 5. Promote provisional history only after actual tag/source/crates binding.
    Use `compare/release_char_level.py record` with the pinned corpus, retain its
    output, then run `check` and regenerate history, comparator pages and charts.
