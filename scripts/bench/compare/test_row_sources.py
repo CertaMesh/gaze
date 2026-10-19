@@ -275,6 +275,55 @@ def test_compose_cli_reuses_receipt_but_cannot_replace_it(inputs, monkeypatch):
     assert output.read_bytes() == before
 
 
+def bind_fictional_opf_measurement(base):
+    receipt = base["unavailable"]["opf"]
+    receipt["measurement_revision"] = base.get("rescore_source_revision", base["harness_revision"])
+    receipt["comparison_adapter_sha256"] = base.get("measurement_compare_sha256", base["compare_sha256"])
+    configuration = digest({key: value for key, value in receipt.items() if key != "attempts"})
+    for attempt in receipt["attempts"]:
+        attempt["configuration_sha256"] = configuration
+
+
+@pytest.mark.parametrize("identity", ("harness_revision", "rescore_source_revision",
+    "measurement_harness_revision", "old-scrubadub-row", "old-inherited-row"))
+def test_compose_cli_rejects_repacked_conflicting_clean_revision(inputs, monkeypatch, identity):
+    compose_cli(inputs, monkeypatch)
+    output = inputs[-1]
+    base, supplement = (json.loads(path.read_bytes()) for path in inputs[:2])
+    revision = base["harness_revision"] if identity == "harness_revision" else "c" * 40
+    if identity.startswith("old-"):
+        name = "scrubadub-base" if identity == "old-scrubadub-row" else "gliner"
+        base["tools"][name]["provenance"].update(
+            measurement_harness_revision=revision, measurement_compare_sha256=row_sources.ORIGINAL_ADAPTER)
+    elif identity != "harness_revision":
+        base[identity] = revision
+        base["measurement_compare_sha256"] = row_sources.ORIGINAL_ADAPTER
+    bind_fictional_opf_measurement(base)
+    supplement["harness_revision"] = revision
+    assert base["harness_dirty"] is supplement["harness_dirty"] is False
+    assert base["compare_sha256"] != supplement["compare_sha256"]
+    write(inputs[0], base)
+    write(inputs[1], supplement)
+    before = {path: path.read_bytes() for path in (*inputs[:2], output, row_sources.native_receipt_path(output))}
+    # The CLI recomputes both snapshot pins, so this is a well-formed repacked claim.
+    with pytest.raises(ValueError, match="clean source revision"):
+        compose_cli(inputs, monkeypatch)
+    assert {path: path.read_bytes() for path in before} == before
+
+
+def test_distinct_fresh_revision_keeps_declared_old_measurement_identity(inputs, monkeypatch):
+    base = json.loads(inputs[0].read_bytes())
+    base.update(rescore_source_revision="c" * 40, measurement_compare_sha256="d" * 64)
+    base["tools"]["scrubadub-base"]["provenance"]["measurement_harness_revision"] = "e" * 40
+    bind_fictional_opf_measurement(base)
+    write(inputs[0], base)
+    result = compose_cli(inputs, monkeypatch)
+    assert result["rescore_source_revision"] == base["rescore_source_revision"]
+    assert result["measurement_compare_sha256"] == base["measurement_compare_sha256"]
+    assert json.loads(inputs[0].read_bytes()) == base
+    render_cli(inputs[-1], inputs[-1].with_suffix(".md"), monkeypatch)
+
+
 @pytest.mark.parametrize("source", (0, 1))
 def test_changed_snapshot_bytes_or_expected_hash_preserve_prior_output(inputs, monkeypatch, source):
     output = inputs[-1]

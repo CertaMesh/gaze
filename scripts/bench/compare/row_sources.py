@@ -108,6 +108,15 @@ def _compatible(base: dict, supplement: dict) -> None:
         if (not re.fullmatch(r"[0-9a-f]{40}", source["harness_revision"])
                 or not isinstance(source.get("generated_at"), str)):
             raise ValueError("source lacks revision or collection/replay time")
+    old_bindings = [(base["harness_revision"], base["compare_sha256"])]
+    old_bindings.extend((base[key], base.get("measurement_compare_sha256", base["compare_sha256"]))
+                        for key in ("rescore_source_revision", "measurement_harness_revision") if key in base)
+    old_bindings.extend((tool["provenance"]["measurement_harness_revision"],
+                         tool["provenance"].get("measurement_compare_sha256", base["compare_sha256"]))
+                        for tool in base["tools"].values() if "measurement_harness_revision" in tool["provenance"])
+    if any(revision == supplement["harness_revision"] and adapter != supplement["compare_sha256"]
+           for revision, adapter in old_bindings):
+        raise ValueError("clean source revision cannot bind different comparison adapters")
     for name in REPLACED:
         old = base["tools"][name]["provenance"]
         new = supplement["tools"][name]["provenance"]
