@@ -19,6 +19,13 @@ import layer_display
 from layer_display import layer_display_name
 
 
+def original_comparison() -> dict:
+    path = compare.REPO / "docs/reference/benchmarks/comparison-sources/original.json"
+    raw = path.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == "119e24993cc47ae9b6b53af052b2266a8f83a4903675f72327eb4c419602851d"
+    return json.loads(raw)
+
+
 def test_native_character_offsets_become_utf8_bytes() -> None:
     spans = compare.byte_spans("Ä alice@example.invalid", [(2, 23, "EMAIL_ADDRESS")])
     assert spans == [compare.score.Span(3, 24, "EMAIL_ADDRESS")]
@@ -384,7 +391,7 @@ def test_run_full_wrapper_parses_every_model_and_policy_arg() -> None:
 
 
 def test_validate_current_flags_competitor_input_but_not_gaze_drift(monkeypatch: pytest.MonkeyPatch) -> None:
-    report = json.loads((compare.REPO / "docs/reference/benchmarks/comparison.json").read_text())
+    report = original_comparison()
     report.update({
         "scorer_sha256": render.digest_file(render.BENCH / "gaze_bench_score.py"),
         "dataset_loader_sha256": render.digest_file(render.BENCH / "dataiku_en_de_gaze_bench.py"),
@@ -504,7 +511,7 @@ def test_contract_v4_restores_typed_credential_credit() -> None:
 def direct_evidence(tmp_path):
     """Only committed aggregate JSON and fictional scorer input; no native records."""
     from comparison_availability import digest
-    report = json.loads(derive_contract_v4.REPORT.read_bytes())
+    report = original_comparison()
     tuned = json.loads(derive_contract_v4.TUNED.read_bytes())
     text = "TOKEN_A TOKEN_A"
     layers = {layer: [compare.score.Document(
@@ -701,6 +708,33 @@ def test_direct_v4_check_preserves_composed_and_original_identities(composed_dir
     monkeypatch.setattr(compare.dataiku, "load_documents", forbidden)
     derive_contract_v4.check(report_path, tuned_path)
     assert tuned["comparison_sha256"] == report["row_sources"]["base"]["sha256"]
+    assert {path: path.read_bytes() for path in report_path.parent.iterdir()} == before
+
+
+def test_composed_validation_requires_its_report_path(composed_direct_evidence):
+    report_path, _, report, _ = composed_direct_evidence
+    render.validate_current(report, report_path)
+    with pytest.raises(ValueError, match="mixed-source validation requires the report path"):
+        render.validate_current(report)
+
+
+def test_composition_rejects_a_composed_snapshot(composed_direct_evidence):
+    import row_sources
+    report_path, _, report, _ = composed_direct_evidence
+    supplement = json.loads((report_path.parent / report["row_sources"]["supplement"]["path"]).read_bytes())
+    with pytest.raises(ValueError, match="original snapshots, not nested compositions"):
+        row_sources._assemble(report, supplement, report["row_sources"])
+
+
+def test_direct_v4_check_requires_retained_composition_receipt(composed_direct_evidence):
+    import row_sources
+    report_path, tuned_path, _, _ = composed_direct_evidence
+    receipt_path = row_sources.native_receipt_path(report_path)
+    receipt_path.unlink()
+    before = {path: path.read_bytes() for path in report_path.parent.iterdir()}
+    with pytest.raises(FileNotFoundError) as error:
+        derive_contract_v4.check(report_path, tuned_path)
+    assert error.value.filename == str(receipt_path)
     assert {path: path.read_bytes() for path in report_path.parent.iterdir()} == before
 
 
