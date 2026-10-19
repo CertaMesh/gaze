@@ -1,0 +1,226 @@
+{
+  "supplement_sha256": "d0b476ca86901e545211143358c9b8b04e9990cac86c6de53ec24231356d6a95",
+  "populations": {
+    "C": 2910,
+    "A": 6617,
+    "D": 5192,
+    "R": 3061
+  },
+  "spanish_controls": {
+    "scrubadub-base": {
+      "v1": {
+        "A": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 330,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        },
+        "D": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 0,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        }
+      },
+      "v2": {
+        "A": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 330,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        },
+        "D": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 0,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        }
+      },
+      "v3": {
+        "A": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 330,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        },
+        "D": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 0,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        }
+      },
+      "v4": {
+        "A": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 330,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        },
+        "D": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 0,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        }
+      }
+    },
+    "scrubadub-spacy": {
+      "v1": {
+        "A": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 330,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        },
+        "D": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 0,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        }
+      },
+      "v2": {
+        "A": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 330,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        },
+        "D": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 0,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        }
+      },
+      "v3": {
+        "A": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 330,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        },
+        "D": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 0,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        }
+      },
+      "v4": {
+        "A": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 330,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        },
+        "D": {
+          "documents": 30,
+          "processed_documents": 30,
+          "skipped_documents": 0,
+          "skipped_gold_bytes": 0,
+          "leaked_bytes": 0,
+          "false_positive_bytes": 0,
+          "gold_gap_protected_bytes": 0,
+          "false_positive_bytes_after_gold_gap": null
+        }
+      }
+    }
+  },
+  "native_files": {
+    "native-predictions/C/pred/scrubadub-base.jsonl": {
+      "sha256": "1dee73abb167ca252f9520dfcf4b2fec899b737c3160606007377ef133c0607e",
+      "bytes": 169233
+    },
+    "native-predictions/A/pred/scrubadub-base.jsonl": {
+      "sha256": "b811eee05990e79a95956fafaf0cf2ec36c61fd10349cb1f890e87ecf5f25ee2",
+      "bytes": 508662
+    },
+    "native-predictions/D/pred/scrubadub-base.jsonl": {
+      "sha256": "c8c47baba0a37470417de39d98ab8da8f324a8903a3948111f0ade49ad43c8a1",
+      "bytes": 413232
+    },
+    "native-predictions/R/pred/scrubadub-base.jsonl": {
+      "sha256": "7785832b7badcfeadb57fa08916a4ea51abffd2b4c0e01acf61c57f744b43cc4",
+      "bytes": 256568
+    },
+    "native-predictions/C/pred/scrubadub-spacy.jsonl": {
+      "sha256": "554996d02711a4d635c1b408c5a73ec9c0ad7db7b7060d50400ab3aac3c09d7b",
+      "bytes": 298604
+    },
+    "native-predictions/A/pred/scrubadub-spacy.jsonl": {
+      "sha256": "521b98c8eecdb3da5c1ae1f1ee500215b19db9472375d96cdc9a05d2778f94c0",
+      "bytes": 552919
+    },
+    "native-predictions/D/pred/scrubadub-spacy.jsonl": {
+      "sha256": "b5d8058b9d694e2451098650c7a99c46b0331fa82e549e52fb273fe3f5d71b92",
+      "bytes": 446166
+    },
+    "native-predictions/R/pred/scrubadub-spacy.jsonl": {
+      "sha256": "f6f683a68ee7b3196f6408c72103bfbb6cb95657906b200329474fe6236893b0",
+      "bytes": 298801
+    }
+  },
+  "kind": "explicit native-record observation replay; no inference"
+}

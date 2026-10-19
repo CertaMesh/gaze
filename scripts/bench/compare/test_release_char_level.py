@@ -107,17 +107,12 @@ def test_character_counts_cannot_exceed_the_byte_counts() -> None:
 
 
 def test_check_needs_only_the_tags_not_the_history_commits(monkeypatch) -> None:
-    """History commits may live only on a local branch; the check never resolves them."""
-    real = rcl._crates_of
-    commits = {entry["commit"] for entry in HISTORY["releases"]}
+    """Offline checking resolves real tags without looking up history-only commits."""
+    def unavailable_history_commit(commit: str) -> str:
+        raise rcl.GitError(f"cannot read history-only commit {commit[:12]}")
 
-    def tags_only(commit: str) -> str:
-        if commit in commits:
-            raise rcl.GitError(f"cannot read crates/ of {commit[:12]}: not on this remote")
-        return real(commit)
-
-    monkeypatch.setattr(rcl, "_crates_of", tags_only)
-    rcl.check(DATA, HISTORY)
+    monkeypatch.setattr(rcl, "commit_crates_tree", unavailable_history_commit)
+    assert rcl.check(DATA, HISTORY) is None
 
 
 def test_a_missing_tag_is_a_readable_error_not_a_traceback() -> None:

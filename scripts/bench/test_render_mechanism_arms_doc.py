@@ -660,10 +660,10 @@ class CommittedLedgerTest(unittest.TestCase):
         releases = mech._released_versions(mech.RELEASE_HISTORY)
         self.assertEqual(mech.apply(document, mech.render(LEDGER, releases)), document)
 
-    def test_gliner_is_recorded_as_opt_in_until_shrunk_with_its_cost(self) -> None:
+    def test_gliner_records_the_public_opt_in_command_and_pinned_cost(self) -> None:
         entry = next(item for item in LEDGER["mechanisms"] if item["id"] == "gliner-dob-judge")
         self.assertIn("opt-in", entry["shipped"])
-        self.assertIn("3905", entry["shipped"])
+        self.assertIn("`gaze setup --dob-judge`", entry["shipped"])
         body = mech.render(_released(LEDGER), [])
         self.assertIn("peak RSS +664 MiB", body)
         self.assertIn("p95 +22.5 ms", body)

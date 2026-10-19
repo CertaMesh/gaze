@@ -145,49 +145,53 @@ class RecordReplayTests(unittest.TestCase):
             self.assertEqual(score.sha256_file(bench / result["scorecard"]), result["scorecard_sha256"])
             self.assertEqual(record.rescore(path, v3), committed, release["version"])
 
-    def test_later_captures_reproduce_their_releases_committed_numbers(self):
-        """v0.15.0 and v0.14.0 were captured on 2026-09-27 with that day's harness.
-
-        Every run field matches the committed v1 and v2 scorecards except
-        `validator_recall_by_label`, which the harness's probe computes, not the
-        release, and which grew since those runs: v0.15.0's original v1 differs
-        only in credit-card shape-only recall (99 -> 124 of 126); v0.14.0's
-        original v1 run also lacks the `production_recall_by_gold_validity`
-        sub-blocks and differs in shape-only recall for cards (94 -> 124), IBAN,
-        phone and tax numbers and in card validator-backed recall. Against
-        v0.14.0's v2 run and its v1 calibration, and the regenerated v0.15.0 v2
-        scorecard, the block matches. The document renders validator recall only
-        from the current release's own scorecard, so no displayed number depends
-        on it.
-        """
+    def test_current_release_cohorts_replay_exactly_except_timing(self):
         bench = ROOT / "docs/reference/benchmarks"
         contracts = (bench / "scored-labels-v2.json", bench / "scored-labels-v3.json")
-        for version, v1, probe_differs in (
-            ("v0.15.0", "scorecard-v0.15.0.json", {"v1": True, "v2": False}),
-            ("v0.14.0", "scorecard-v0.14.0.json", {"v1": True, "v2": False}),
-            ("v0.14.0", "scorecard-v0.14.0-rescore-calibration-v1.json", {"v1": False, "v2": False}),
-        ):
-            with self.subTest(version=version, v1=v1):
-                result = proof.verify_capture(
+        for version in ("v0.15.0", "v0.14.0"):
+            with self.subTest(version=version):
+                self.assertEqual(proof.verify(
                     bench / f"observations-{version}.jsonl.gz",
-                    bench / v1,
+                    bench / f"scorecard-{version}.json",
                     bench / f"scorecard-{version}-scored-labels-v2.json",
                     *contracts,
-                    ignore=["validator_recall_by_label"],
-                )
-                self.assertEqual(
-                    result["ignored_run_fields_differ"], {"validator_recall_by_label": probe_differs}
-                )
+                ), {"v1_exact_except_timing": True, "v2_exact_except_timing": True,
+                    "v3_valid": True})
+
+    def test_old_calibration_rejects_the_new_tagged_record_identity(self):
+        bench = ROOT / "docs/reference/benchmarks"
+        with self.assertRaisesRegex(record.RecordError, "v1_commit_matches': False"):
+            proof.verify_capture(
+                bench / "observations-v0.14.0.jsonl.gz",
+                bench / "scorecard-v0.14.0-rescore-calibration-v1.json",
+                bench / "scorecard-v0.14.0-scored-labels-v2.json",
+                bench / "scored-labels-v2.json", bench / "scored-labels-v3.json",
+                ignore=["validator_recall_by_label"],
+            )
 
     def test_capture_mode_compares_runs_and_reports_skipped_fields(self):
         bench = ROOT / "docs/reference/benchmarks"
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        source = root / "synthetic.jsonl.gz"
+        self.make_record(source)
+        cards = {}
+        for name, contract in (
+            ("v1", score.SCORED_LABEL_CONTRACT_V1),
+            ("v2", score.load_scored_label_contract(
+                bench / "scored-labels-v2.json",
+                display_path="docs/reference/benchmarks/scored-labels-v2.json")),
+        ):
+            cards[name] = record.rescore(source, contract)
+            (root / f"{name}.json").write_text(json.dumps(cards[name]), encoding="utf-8")
         args = (
-            bench / "observations-v0.15.1.jsonl.gz",
-            bench / "scorecard-v0.15.1.json",
-            bench / "scorecard-v0.15.1-scored-labels-v2.json",
+            source, root / "v1.json", root / "v2.json",
             bench / "scored-labels-v2.json",
             bench / "scored-labels-v3.json",
         )
+        self.assertEqual(proof.HARNESS_RUN_FIELDS, frozenset({"validator_recall_by_label"}))
+        self.assertEqual(proof.verify_capture(*args)["ignored_run_fields_differ"], {})
         result = proof.verify_capture(*args, ignore=["validator_recall_by_label"])
         self.assertTrue(result["v1_runs_match"] and result["v2_runs_match"])
         # Only a harness-computed field may be skipped: skipping the release's
@@ -206,19 +210,33 @@ class RecordReplayTests(unittest.TestCase):
             result["ignored_run_fields_differ"],
             {"validator_recall_by_label": {"v1": False, "v2": False}},
         )
-        with tempfile.TemporaryDirectory() as tmp:
-            changed = json.loads(args[1].read_text(encoding="utf-8"))
-            changed["runs"][0]["metrics"]["utf8_bytes"]["leaked"] += 1
-            v1 = Path(tmp) / "v1.json"
-            v1.write_text(json.dumps(changed), encoding="utf-8")
-            with self.assertRaisesRegex(record.RecordError, "v1_runs_match': False"):
-                proof.verify_capture(args[0], v1, *args[2:])
-            # A skipped field still reports its difference instead of hiding it.
-            changed = json.loads(args[1].read_text(encoding="utf-8"))
-            changed["runs"][0]["validator_recall_by_label"] = {}
-            v1.write_text(json.dumps(changed), encoding="utf-8")
-            result = proof.verify_capture(args[0], v1, *args[2:], ignore=["validator_recall_by_label"])
-            self.assertEqual(result["ignored_run_fields_differ"]["validator_recall_by_label"]["v1"], True)
+        for field, mutate, failed in (
+            ("metrics", lambda c: c["runs"][0]["metrics"]["utf8_bytes"].update(
+                leaked=c["runs"][0]["metrics"]["utf8_bytes"]["leaked"] + 1), "v1_runs_match"),
+            ("pipeline_contract", lambda c: c["runs"][0]["pipeline_contract"].update(
+                restore_exact_rate=0), "v1_runs_match"),
+            ("revision", lambda c: c["gaze"].update(revision="a" * 40), "v1_commit_matches"),
+            ("dataset", lambda c: c["dataset"]["integrity"].update(sha256="b" * 64),
+             "v1_dataset_matches"),
+        ):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(cards["v1"])
+                mutate(changed)
+                args[1].write_text(json.dumps(changed), encoding="utf-8")
+                with self.assertRaisesRegex(record.RecordError, f"{failed}': False"):
+                    proof.verify_capture(*args, ignore=["validator_recall_by_label"])
+        args[1].write_text(json.dumps(cards["v1"]), encoding="utf-8")
+        for name, path in (("v1", args[1]), ("v2", args[2])):
+            with self.subTest(ignored_difference=name):
+                changed = copy.deepcopy(cards[name])
+                changed["runs"][0]["validator_recall_by_label"] = {"SYNTHETIC": {}}
+                path.write_text(json.dumps(changed), encoding="utf-8")
+                with self.assertRaisesRegex(record.RecordError, f"{name}_runs_match': False"):
+                    proof.verify_capture(*args)
+                result = proof.verify_capture(*args, ignore=["validator_recall_by_label"])
+                self.assertEqual(result["ignored_run_fields_differ"], {
+                    "validator_recall_by_label": {"v1": name == "v1", "v2": name == "v2"}})
+                path.write_text(json.dumps(cards[name]), encoding="utf-8")
 
     def setUp(self):
         email = "alice@example.invalid"

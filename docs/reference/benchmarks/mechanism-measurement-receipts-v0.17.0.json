@@ -1,0 +1,294 @@
+{
+  "runtime_revision": "034cd7447c9a736fccb6a9c2b165fc48fd38dd98",
+  "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
+  "mechanisms": {
+    "gliner-dob-judge": {
+      "base-v2": {
+        "schema_version": 1,
+        "source_sha256": "32cdbede14c02ecd07a41103c9892ba88b79b6c970500e816ef97460e05184f1",
+        "exported_sha256": "32cdbede14c02ecd07a41103c9892ba88b79b6c970500e816ef97460e05184f1",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "gliner-dob-judge/base-v2/full",
+        "original_scorecard_sha256": "279e0d8e71c75186828dc2d9a032c5d6b03024b3efa4814654f25dcaa3021aa4",
+        "exported_scorecard_sha256": "279e0d8e71c75186828dc2d9a032c5d6b03024b3efa4814654f25dcaa3021aa4",
+        "fresh_untimed_results_preserved": true
+      },
+      "base-v1": {
+        "schema_version": 1,
+        "source_sha256": "61fa7405e44b63e49a62663cd557e79364d4ef25eefa4177212a7afafc58ce52",
+        "exported_sha256": "61fa7405e44b63e49a62663cd557e79364d4ef25eefa4177212a7afafc58ce52",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "gliner-dob-judge/base-v1/full",
+        "original_scorecard_sha256": "a62de923d722cf71fd23caef23587fa59591de6e1797fe57da70c54cc7f0784b",
+        "exported_scorecard_sha256": "a62de923d722cf71fd23caef23587fa59591de6e1797fe57da70c54cc7f0784b",
+        "fresh_untimed_results_preserved": true
+      },
+      "base_independent_v1_v2_untimed_match": true,
+      "candidate-v2": {
+        "schema_version": 1,
+        "source_sha256": "6e0d206cc7d9cd67b32ddb78df9884b50413f662be8086a49fa9dfd419de699d",
+        "exported_sha256": "6e0d206cc7d9cd67b32ddb78df9884b50413f662be8086a49fa9dfd419de699d",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "gliner-dob-judge/candidate-v2/full",
+        "original_scorecard_sha256": "f0025604117292f9ab73f78d83d3a4ef8f79944faa148d1249d434c8458b0cd0",
+        "exported_scorecard_sha256": "f0025604117292f9ab73f78d83d3a4ef8f79944faa148d1249d434c8458b0cd0",
+        "fresh_untimed_results_preserved": true
+      },
+      "candidate-v1": {
+        "schema_version": 1,
+        "source_sha256": "c7e598dd6114f7153f29c79e62094ee799190abdee5ef4cc4c759610f17fa0e1",
+        "exported_sha256": "c7e598dd6114f7153f29c79e62094ee799190abdee5ef4cc4c759610f17fa0e1",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "gliner-dob-judge/candidate-v1/full",
+        "original_scorecard_sha256": "58cf17441f0d0f315fc88600aeab18da5f2b37584c476e499d38b989139b0e52",
+        "exported_scorecard_sha256": "58cf17441f0d0f315fc88600aeab18da5f2b37584c476e499d38b989139b0e52",
+        "fresh_untimed_results_preserved": true
+      },
+      "candidate_independent_v1_v2_untimed_match": true
+    },
+    "nym-safety-net": {
+      "base-v2": {
+        "schema_version": 1,
+        "source_sha256": "aec61c3263034363157762950fe801a45b226b86b83baba369b988bc82cb15c8",
+        "exported_sha256": "aec61c3263034363157762950fe801a45b226b86b83baba369b988bc82cb15c8",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "nym-safety-net/base-v2/full",
+        "original_scorecard_sha256": "33fc6a91ba5e33bdb8485f07fd61000bd2a056b07bf96a8856abfa0eb4b3b795",
+        "exported_scorecard_sha256": "33fc6a91ba5e33bdb8485f07fd61000bd2a056b07bf96a8856abfa0eb4b3b795",
+        "fresh_untimed_results_preserved": true
+      },
+      "base-v1": {
+        "schema_version": 1,
+        "source_sha256": "79f1651823bd4bd04cff771c7fa1e8634add920ae4415e6aa9fa780f1f58929a",
+        "exported_sha256": "79f1651823bd4bd04cff771c7fa1e8634add920ae4415e6aa9fa780f1f58929a",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "nym-safety-net/base-v1/full",
+        "original_scorecard_sha256": "de26b779680d3823617923e980c6f1cbe14b9a2f687df72a43c3a709d611577f",
+        "exported_scorecard_sha256": "de26b779680d3823617923e980c6f1cbe14b9a2f687df72a43c3a709d611577f",
+        "fresh_untimed_results_preserved": true
+      },
+      "base_independent_v1_v2_untimed_match": true,
+      "candidate-v2": {
+        "schema_version": 1,
+        "source_sha256": "1a90fc182cc1a51ec905d92893c86a59a4b13e3889ea11285ec3b2fae34d7598",
+        "exported_sha256": "1a90fc182cc1a51ec905d92893c86a59a4b13e3889ea11285ec3b2fae34d7598",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "nym-safety-net/candidate-v2/full",
+        "original_scorecard_sha256": "66f89a21b6a29aa9c5a36429f7c9bb8b5690ae74d51d926986c63c1844bab470",
+        "exported_scorecard_sha256": "66f89a21b6a29aa9c5a36429f7c9bb8b5690ae74d51d926986c63c1844bab470",
+        "fresh_untimed_results_preserved": true
+      },
+      "candidate-v1": {
+        "schema_version": 1,
+        "source_sha256": "cc2812164a27270b30637e930d9ae4f30fe4090c1de5d23037f4c1e248e2a08f",
+        "exported_sha256": "cc2812164a27270b30637e930d9ae4f30fe4090c1de5d23037f4c1e248e2a08f",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "nym-safety-net/candidate-v1/full",
+        "original_scorecard_sha256": "26c61a38c16f92fd8f47db0f7100e0302055d704a3634dc070144099c7663621",
+        "exported_scorecard_sha256": "26c61a38c16f92fd8f47db0f7100e0302055d704a3634dc070144099c7663621",
+        "fresh_untimed_results_preserved": true
+      },
+      "candidate_independent_v1_v2_untimed_match": true
+    },
+    "davlan-ner": {
+      "base-v2": {
+        "schema_version": 1,
+        "source_sha256": "8b044b962da79c92bc9473abb02fbf0ef79be2147dbcd61f0b82f78eb75e4b46",
+        "exported_sha256": "8b044b962da79c92bc9473abb02fbf0ef79be2147dbcd61f0b82f78eb75e4b46",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "davlan-ner/base-v2/full",
+        "original_scorecard_sha256": "6aafa097d0c9e651de13d405fa1211de389b23f9cd4de018016ca47514526d4f",
+        "exported_scorecard_sha256": "6aafa097d0c9e651de13d405fa1211de389b23f9cd4de018016ca47514526d4f",
+        "fresh_untimed_results_preserved": true
+      },
+      "base-v1": {
+        "schema_version": 1,
+        "source_sha256": "6140973258fb8b8bde8a36eaed523e32af8d3bda7ee5e49308b583ae5d918184",
+        "exported_sha256": "6140973258fb8b8bde8a36eaed523e32af8d3bda7ee5e49308b583ae5d918184",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "davlan-ner/base-v1/full",
+        "original_scorecard_sha256": "c2e58113d1474bc5b088ea7070b88041956dc5ba4c854144208813aef4fb2096",
+        "exported_scorecard_sha256": "c2e58113d1474bc5b088ea7070b88041956dc5ba4c854144208813aef4fb2096",
+        "fresh_untimed_results_preserved": true
+      },
+      "base_independent_v1_v2_untimed_match": true,
+      "candidate-v2": {
+        "schema_version": 1,
+        "source_sha256": "b510185055d98408056a23997aecfcd1953cf19c42ead37b862d286fbda2b715",
+        "exported_sha256": "b510185055d98408056a23997aecfcd1953cf19c42ead37b862d286fbda2b715",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "davlan-ner/candidate-v2/full",
+        "original_scorecard_sha256": "b2e50045b7a7133d577fba5232ffec137aaf24ad15091a39ff27995c391350fe",
+        "exported_scorecard_sha256": "b2e50045b7a7133d577fba5232ffec137aaf24ad15091a39ff27995c391350fe",
+        "fresh_untimed_results_preserved": true
+      },
+      "candidate-v1": {
+        "schema_version": 1,
+        "source_sha256": "d295cfc1c619e1e32f217d6941ff9aee3bc4b72eabe0e3d1306ced337dabc2c3",
+        "exported_sha256": "d295cfc1c619e1e32f217d6941ff9aee3bc4b72eabe0e3d1306ced337dabc2c3",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "davlan-ner/candidate-v1/full",
+        "original_scorecard_sha256": "5e5c4f32f186412083624ad43ff02e68e67de79cbbcbb1efa8b30abecce5939b",
+        "exported_scorecard_sha256": "5e5c4f32f186412083624ad43ff02e68e67de79cbbcbb1efa8b30abecce5939b",
+        "fresh_untimed_results_preserved": true
+      },
+      "candidate_independent_v1_v2_untimed_match": true
+    },
+    "address-blocks": {
+      "base-v2": {
+        "schema_version": 1,
+        "source_sha256": "9cd0baf95b0333b6a8c232bd101941fcd9aa5b1455fb2c79b30fe257877e7805",
+        "exported_sha256": "9cd0baf95b0333b6a8c232bd101941fcd9aa5b1455fb2c79b30fe257877e7805",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "address-blocks/base-v2/full",
+        "original_scorecard_sha256": "87a80dd171b962653c6d15d535a6ea5a495669db42cd37f84c450d92d6346679",
+        "exported_scorecard_sha256": "87a80dd171b962653c6d15d535a6ea5a495669db42cd37f84c450d92d6346679",
+        "fresh_untimed_results_preserved": true
+      },
+      "base-v1": {
+        "schema_version": 1,
+        "source_sha256": "669167ddf19da1c7b314f2bf76e7d22c3c1feca204bfe73c69cf33772e5d16b0",
+        "exported_sha256": "669167ddf19da1c7b314f2bf76e7d22c3c1feca204bfe73c69cf33772e5d16b0",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "address-blocks/base-v1/full",
+        "original_scorecard_sha256": "4e2e321fbba20a084e0521bec34d99da1bd59936b49c81e705e3695f22029704",
+        "exported_scorecard_sha256": "4e2e321fbba20a084e0521bec34d99da1bd59936b49c81e705e3695f22029704",
+        "fresh_untimed_results_preserved": true
+      },
+      "base_independent_v1_v2_untimed_match": true,
+      "candidate-v2": {
+        "schema_version": 1,
+        "source_sha256": "aba448f731919ddb67a96e0f6b7fe49193da7dc06098e37e584b3321d2f5d586",
+        "exported_sha256": "aba448f731919ddb67a96e0f6b7fe49193da7dc06098e37e584b3321d2f5d586",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "address-blocks/candidate-v2/full",
+        "original_scorecard_sha256": "d8200ced2e6278bcb74b97f1e1a9519395361d7186f55a2d50a24dc329738b92",
+        "exported_scorecard_sha256": "d8200ced2e6278bcb74b97f1e1a9519395361d7186f55a2d50a24dc329738b92",
+        "fresh_untimed_results_preserved": true
+      },
+      "candidate-v1": {
+        "schema_version": 1,
+        "source_sha256": "4f1f28375239665e81dac12bda5df79cfeb61b686c18139428c11d22c47a5d47",
+        "exported_sha256": "4f1f28375239665e81dac12bda5df79cfeb61b686c18139428c11d22c47a5d47",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "address-blocks/candidate-v1/full",
+        "original_scorecard_sha256": "e86db3793591b6538b2d3507925b51c1c528b2744318c1a052c414cc1ab4dde6",
+        "exported_scorecard_sha256": "e86db3793591b6538b2d3507925b51c1c528b2744318c1a052c414cc1ab4dde6",
+        "fresh_untimed_results_preserved": true
+      },
+      "candidate_independent_v1_v2_untimed_match": true
+    },
+    "secrets-rulepack": {
+      "base-v2": {
+        "schema_version": 1,
+        "source_sha256": "851e22702b87767b954dbca4cda47b9ef949c1d7c22651ac349761f70adc06e6",
+        "exported_sha256": "851e22702b87767b954dbca4cda47b9ef949c1d7c22651ac349761f70adc06e6",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "secrets-rulepack/base-v2/full",
+        "original_scorecard_sha256": "4437285e085e7b0aaf7bf7b9007ea781b2cd6b44f9ac2324d295077b3fbf33c2",
+        "exported_scorecard_sha256": "4437285e085e7b0aaf7bf7b9007ea781b2cd6b44f9ac2324d295077b3fbf33c2",
+        "fresh_untimed_results_preserved": true
+      },
+      "base-v1": {
+        "schema_version": 1,
+        "source_sha256": "96c56f5c7a08eb2f53ac65a6dd78e7a00207fe55ece48bd2bc7442ce37e73194",
+        "exported_sha256": "96c56f5c7a08eb2f53ac65a6dd78e7a00207fe55ece48bd2bc7442ce37e73194",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "secrets-rulepack/base-v1/full",
+        "original_scorecard_sha256": "209144224635ccd5c722895d3a54c8eed50a30fb9ca40c9c62d3076543a85045",
+        "exported_scorecard_sha256": "209144224635ccd5c722895d3a54c8eed50a30fb9ca40c9c62d3076543a85045",
+        "fresh_untimed_results_preserved": true
+      },
+      "base_independent_v1_v2_untimed_match": true,
+      "candidate-v2": {
+        "schema_version": 1,
+        "source_sha256": "3ac3eedbb97c2761738a144052e4a568d3b79aa936b9567d43ace4e67fed4263",
+        "exported_sha256": "3ac3eedbb97c2761738a144052e4a568d3b79aa936b9567d43ace4e67fed4263",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "secrets-rulepack/candidate-v2/full",
+        "original_scorecard_sha256": "f613826a05c0e621a379e9840cdcbb67039c5d9752b56e902a3f669b21636618",
+        "exported_scorecard_sha256": "f613826a05c0e621a379e9840cdcbb67039c5d9752b56e902a3f669b21636618",
+        "fresh_untimed_results_preserved": true
+      },
+      "candidate-v1": {
+        "schema_version": 1,
+        "source_sha256": "7701242227c4f76b9fb22b1c75aa42ffe4fb45770126bd9b40e21c1cf3f741be",
+        "exported_sha256": "7701242227c4f76b9fb22b1c75aa42ffe4fb45770126bd9b40e21c1cf3f741be",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "secrets-rulepack/candidate-v1/full",
+        "original_scorecard_sha256": "e398bbfbc1a891ed9d059cb76325ae588a848ff5e8bd658e6fc2be9a7b26a0cf",
+        "exported_scorecard_sha256": "e398bbfbc1a891ed9d059cb76325ae588a848ff5e8bd658e6fc2be9a7b26a0cf",
+        "fresh_untimed_results_preserved": true
+      },
+      "candidate_independent_v1_v2_untimed_match": true
+    },
+    "nym-person-name-labels": {
+      "base-v2": {
+        "schema_version": 1,
+        "source_sha256": "beb862e67eb2ce5c051e511b62dfe477bb16f67e68c2094e26c589beb49d85d2",
+        "exported_sha256": "beb862e67eb2ce5c051e511b62dfe477bb16f67e68c2094e26c589beb49d85d2",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "nym-person-name-labels/base-v2/full",
+        "original_scorecard_sha256": "553ba3e722561cbe13826aff65dcffc9bbb7d71f079d7071e94385b0ea09d94e",
+        "exported_scorecard_sha256": "553ba3e722561cbe13826aff65dcffc9bbb7d71f079d7071e94385b0ea09d94e",
+        "fresh_untimed_results_preserved": true
+      },
+      "base-v1": {
+        "schema_version": 1,
+        "source_sha256": "e7ee56bacf01900183deef9b4288ad46984acb9b158e0ef69c12d134cac652fe",
+        "exported_sha256": "e7ee56bacf01900183deef9b4288ad46984acb9b158e0ef69c12d134cac652fe",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "nym-person-name-labels/base-v1/full",
+        "original_scorecard_sha256": "e6121eb2cafc18c1d5abccd2d4623860e240162573cd8ca2097b77262a025bf0",
+        "exported_scorecard_sha256": "e6121eb2cafc18c1d5abccd2d4623860e240162573cd8ca2097b77262a025bf0",
+        "fresh_untimed_results_preserved": true
+      },
+      "base_independent_v1_v2_untimed_match": true,
+      "candidate-v2": {
+        "schema_version": 1,
+        "source_sha256": "fa8fd827c25583c93932c5ff7fde3071bd7c4d66069b18c6606b117b9ec4bb2b",
+        "exported_sha256": "fa8fd827c25583c93932c5ff7fde3071bd7c4d66069b18c6606b117b9ec4bb2b",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "nym-person-name-labels/candidate-v2/full",
+        "original_scorecard_sha256": "23df7a0eecec65cb108787c44f4f3816f1f556245e135908b3a64140d3654342",
+        "exported_scorecard_sha256": "23df7a0eecec65cb108787c44f4f3816f1f556245e135908b3a64140d3654342",
+        "fresh_untimed_results_preserved": true
+      },
+      "candidate-v1": {
+        "schema_version": 1,
+        "source_sha256": "9b10f20ca335d8f49c4b43fb8f971166e5f5a8151baf11665e594c6d74735cb2",
+        "exported_sha256": "9b10f20ca335d8f49c4b43fb8f971166e5f5a8151baf11665e594c6d74735cb2",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true,
+        "directory": "nym-person-name-labels/candidate-v1/full",
+        "original_scorecard_sha256": "b983c6c6cc922d60b42a5436459ab6168315cde91eac3ea855fca17f5e362540",
+        "exported_scorecard_sha256": "b983c6c6cc922d60b42a5436459ab6168315cde91eac3ea855fca17f5e362540",
+        "fresh_untimed_results_preserved": true
+      },
+      "candidate_independent_v1_v2_untimed_match": true
+    }
+  }
+}

@@ -11,6 +11,7 @@ document must move. Adding a column without wiring it fails here.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import re
 import subprocess
@@ -18,6 +19,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import benchmark_charts as charts
 import subprocess as _subprocess
@@ -692,15 +694,12 @@ class RefusalAwareHistoryTest(unittest.TestCase):
             render.render_history(value)
 
     def test_legacy_rows_alone_keep_the_original_table(self):
-        committed = render.load_history(render.DEFAULT_HISTORY)
-        committed["releases"] = [
-            r for r in committed["releases"] if "shipped_default_arm" not in r
-        ]
-        self.assertEqual([r["version"] for r in committed["releases"]], ["v0.14.0"])
-        # One contract only: a v2 re-score would switch to the per-contract table.
-        for row in committed["releases"]:
-            row.pop("contract_results", None)
-        block = render.render_history(committed)
+        legacy = ShippedDefaultArmTest.legacy_kiji_row(self)
+        self.assertNotIn("shipped_default_arm", legacy)
+        self.assertNotIn("contract_results", legacy)
+        value = history_of(legacy)
+        render.validate_history(value)
+        block = render.render_history(value)
         self.assertTrue(block.startswith(
             "| Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |\n"
         ))
@@ -785,8 +784,15 @@ class ShippedDefaultChartsTest(unittest.TestCase):
             for group in render.displayed_groups(committed)
         }
 
-    def test_committed_history_trend_has_every_distinct_result(self):
+    def test_historical_trend_keeps_both_defaults_and_coalesces_duplicate_results(self):
         committed = render.load_history(render.DEFAULT_HISTORY)
+        committed = {
+            **committed,
+            "releases": [
+                row for row in committed["releases"]
+                if row["version"] in ("v0.14.0", "v0.15.0", "v0.15.1")
+            ],
+        }
         expected = [
             (label, arm["surviving_pii_utf8_bytes"])
             for label, arm in self.committed_group_defaults(committed).items()
@@ -801,6 +807,27 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         )
         charts = render.render_charts(committed)
         self.assertIn(f"line [{', '.join(str(value) for _, value in expected)}]", charts)
+
+    def test_committed_history_trend_has_every_distinct_result(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        defaults = self.committed_default_arms(committed)
+        # Independent of displayed_groups and group_label: the current window
+        # has three results, with the two v0.15 releases sharing one point.
+        expected = [
+            ("v0.15.0 – v0.15.1", defaults["v0.15.1"]["surviving_pii_utf8_bytes"]),
+            ("v0.16.0", defaults["v0.16.0"]["surviving_pii_utf8_bytes"]),
+            ("v0.17.0", defaults["v0.17.0"]["surviving_pii_utf8_bytes"]),
+        ]
+        self.assertEqual(
+            render.shipped_default_trend(committed, "surviving_pii_utf8_bytes"), expected
+        )
+        charts = render.render_charts(committed)
+        self.assertIn(f"line [{', '.join(str(value) for _, value in expected)}]", charts)
+        self.assertNotIn("v0.14.0", charts)
+        self.assertEqual(
+            [row["version"] for row in committed["releases"]],
+            ["v0.14.0", "v0.15.0", "v0.15.1", "v0.16.0", "v0.17.0"],
+        )
 
     def test_comparison_bars_on_committed_history(self):
         committed = render.load_history(render.DEFAULT_HISTORY)
@@ -1044,13 +1071,59 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             render.chart_panels(history, changed, self.their)
 
     def test_comparison_keeps_its_original_release_when_a_new_release_shares_the_corpus(self):
-        self.assertEqual(self.comparison["latest_release_at_measurement"]["version"], "v0.15.1")
-        self.assertEqual(self.history["releases"][-1]["version"], "v0.16.0")
+        older = with_v4(release("v0.15.1", leaked=120))
+        newer = with_v4(release("v0.16.0", leaked=80))
+        older["scorecard_sha256"], newer["scorecard_sha256"] = "1" * 64, "2" * 64
+        value = releases(older, newer)
+        metrics = {"char_level": {"f2": 0.5}, "leaked_bytes": 20,
+                   "false_positive_bytes": 10, "total_bytes": 2000}
+        comparison = {
+            "schema_version": 2,
+            "latest_release_at_measurement": {
+                "version": older["version"], "scorecard_sha256": older["scorecard_sha256"],
+            },
+            "corpus": {"main_dataset": {"sha256": "a" * 64},
+                       "negative_corpus_sha256": "b" * 64,
+                       "layers": {"C": {"documents": 2910}}},
+            "heldout_split": {"layers": {"C": ["test"]}},
+            "tools": {"gliner": {"contracts": {"v4": {"C": {
+                "false_positive_bytes_after_gold_gap": 0, "skipped_documents": 0,
+                "metrics": {"product_coverage": {"full": metrics}},
+            }}}}},
+        }
+        their = {key: {"rows": {"gliner": {"product_coverage": metrics}},
+                       "splits": {"test": {"documents": 5}}}
+                 for key, _, _ in charts.THIRD_PARTY}
+        measured = {row["version"]: {"char_level": {"f2": f2},
+                    "leaked_bytes": leaked, "total_bytes": 2000}
+                    for row, f2, leaked in ((older, 0.7, 120), (newer, 0.8, 80))}
+        with tempfile.TemporaryDirectory() as tmp:
+            configs, chars = Path(tmp) / "configs.json", Path(tmp) / "chars.json"
+            configs.write_text(json.dumps({"gliner": "gliner"}), encoding="utf-8")
+            chars.write_text(json.dumps({"releases": measured}), encoding="utf-8")
+            comparison["chart_config_sha256"] = hashlib.sha256(configs.read_bytes()).hexdigest()
+            original = copy.deepcopy(comparison)
+            with mock.patch.object(render, "CHART_CONFIGS", configs), \
+                    mock.patch.object(render, "RELEASE_CHAR_LEVEL", chars):
+                own = render.chart_panels(value, comparison, their)[0]
+                self.assertEqual([(b.name, b.f2, b.leaked) for b in own.bars if b.gaze],
+                                 [("Gaze 0.15", 0.7, 120), ("Gaze 0.16", 0.8, 80)])
+                self.assertEqual(comparison, original)
+                changed = copy.deepcopy(comparison)
+                changed["latest_release_at_measurement"]["scorecard_sha256"] = "3" * 64
+                with self.assertRaisesRegex(render.RenderError, "does not match"):
+                    render.chart_panels(value, changed, their)
+                changed_history = copy.deepcopy(value)
+                changed_history["releases"][-1]["dataset"]["integrity"]["component_sha256"]["dataiku"] = "c" * 64
+                with self.assertRaisesRegex(render.RenderError, "different layer C corpora"):
+                    render.chart_panels(changed_history, comparison, their)
+
+    def test_committed_comparison_names_its_measured_history_row(self):
+        measured = self.comparison["latest_release_at_measurement"]
+        [row] = [r for r in self.history["releases"] if r["version"] == measured["version"]]
+        self.assertFalse(row.get("provisional", False))
+        self.assertEqual(row["scorecard_sha256"], measured["scorecard_sha256"])
         self.assertTrue(self.panels())
-        changed = copy.deepcopy(self.comparison)
-        changed["latest_release_at_measurement"]["scorecard_sha256"] = "a" * 64
-        with self.assertRaisesRegex(render.RenderError, "does not match"):
-            self.panels(changed)
 
     def test_comparison_panels_require_a_released_history_row(self):
         history = copy.deepcopy(self.history)
@@ -1149,29 +1222,51 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
 
     def test_false_positive_rate_uses_one_metrics_block(self):
         """Numerator and denominator come from the same block of the same tool."""
-        _, presidio, piibench = self.panels()
-        self.assertEqual([round(b.fp_per_1k, 1) for b in presidio.bars[1:]],
-                         [38.6, 0.0, 31.5, 14.6, 38.3, 5.2])  # first bar: Presidio tuned (was declared strong, 25.4)
-        self.assertEqual([round(b.fp_per_1k, 1) for b in piibench.bars[1:]],
-                         [38.0, 1.9, 94.1, 71.2, 36.6, 5.2])
-        # The common-intersection block's total (a different, smaller byte count) is never used.
-        moved = copy.deepcopy(self.their)
-        for bench in moved.values():
-            for row in bench["rows"].values():
-                row["common_intersection"]["total_bytes"] = 1
-        self.assertEqual(self.panels(their=moved), self.panels())
-        # The product-coverage block's own total is what divides its false positives.
-        changed = copy.deepcopy(self.their)
-        row = changed["presidio-research"]["rows"]["presidio-tuned-presidio-research"]["product_coverage"]
-        row["total_bytes"] *= 2
-        bar = self.panels(their=changed)[1].bars[1]
-        self.assertAlmostEqual(bar.fp_per_1k, 38.6 / 2, places=1)
-        # Own corpus: each competitor divides by its own block's total.
-        cell = self.comparison["tools"]["opf"]["contracts"]["v4"]["C"]
-        block = cell["metrics"]["product_coverage"]["full"]
-        fp = cell["false_positive_bytes_after_gold_gap"] or cell["false_positive_bytes"]
-        opf = next(b for b in self.panels()[0].bars if b.name == "OPF")
-        self.assertAlmostEqual(opf.fp_per_1k, 1000 * fp / block["total_bytes"])
+        block = {"char_level": {"f2": 0.5}, "leaked_bytes": 10,
+                 "false_positive_bytes": 50, "total_bytes": 2000}
+        cell = {"false_positive_bytes": 50, "false_positive_bytes_after_gold_gap": 20,
+                "skipped_documents": 0, "metrics": {
+                    "product_coverage": {"full": block},
+                    "common_intersection": {"full": {**block, "total_bytes": 1000}},
+                }}
+        comparison = {"corpus": {"layers": {"C": {"documents": 2}}},
+                      "heldout_split": {"layers": {"C": ["test"]}},
+                      "tools": {"opf": {"contracts": {"v4": {"C": cell}}}}}
+        gaze = [charts.GazeRow("v0.16.0", 0.8, 5, 4, 2000)]
+        def own():
+            return charts.own_panel(gaze, comparison, {"opf": "opf"}, "Synthetic corpus").bars[-1]
+        self.assertEqual(own().fp_per_1k, 10)
+        cell["metrics"]["common_intersection"]["full"]["total_bytes"] = 1
+        self.assertEqual(own().fp_per_1k, 10)
+        block["total_bytes"] *= 2
+        self.assertEqual(own().fp_per_1k, 5)
+        for adjusted, expected in ((0, 0), (None, 12.5)):
+            with self.subTest(adjusted=adjusted):
+                cell["false_positive_bytes_after_gold_gap"] = adjusted
+                self.assertEqual(own().fp_per_1k, expected)
+
+        third = {"rows": {"opf": {"product_coverage": copy.deepcopy(block),
+                                  "common_intersection": {**block, "total_bytes": 1}}},
+                 "splits": {"test": {"documents": 2}}}
+        def competitor():
+            return charts.third_party_panel(third, "Synthetic", "F2", {"opf": "opf"}, "v0.16.0").bars[-1]
+        self.assertEqual(competitor().fp_per_1k, 12.5)
+        third["rows"]["opf"]["common_intersection"]["total_bytes"] = 9000
+        self.assertEqual(competitor().fp_per_1k, 12.5)
+        third["rows"]["opf"]["product_coverage"]["total_bytes"] *= 2
+        self.assertEqual(competitor().fp_per_1k, 6.25)
+
+    def test_committed_unavailable_opf_has_no_numeric_metrics_and_renders_na(self):
+        self.assertNotIn("opf", self.comparison["tools"])
+        own = self.panels()[0]
+        opf = next(b for b in own.bars if b.name == "OPF")
+        self.assertTrue(opf.unavailable)
+        self.assertEqual((opf.f2, opf.leaked, opf.fp_per_1k), (None, None, None))
+        tables = charts.model_card_tables([own]).splitlines()
+        header = next(line for line in tables if line.startswith("| Benchmark |"))
+        column = [cell.strip() for cell in header.split("|")].index("OPF")
+        for row in (line for line in tables if line.startswith("| Own corpus |")):
+            self.assertEqual(row.split("|")[column].strip(), "N/A")
 
     def test_the_benchmark_page_discloses_the_limit_of_the_offline_check(self):
         text = render.DEFAULT_DOC.read_text(encoding="utf-8")
@@ -1213,13 +1308,27 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
                 self.assertIn(phrase, text, (path.name, phrase))
 
     def test_model_card_bolds_the_best_value_per_row(self):
-        tables = charts.model_card_tables(self.panels())
-        rows = [line for line in tables.splitlines() if line.startswith("| Own corpus")]
-        self.assertEqual(len(rows), 3)
-        self.assertEqual(rows[0].count("**"), 2)  # F2: one best, the highest
-        self.assertIn("**0.879**", rows[0])
-        self.assertIn("**13,291**", rows[1])  # leaked bytes: lowest wins
-        self.assertIn("**6.2**", rows[2])  # false positives: lowest wins
+        bars = (charts.Bar("A", 0.90144, 120, 2.04),
+                charts.Bar("B", 0.90145, 90, 2.03),
+                charts.Bar("C", 0.88, 90, 2.03),
+                charts.Bar("Pending", None, None, None),
+                charts.Bar("Unavailable", None, None, None, unavailable=True))
+        def cells(bars):
+            panel = charts.Panel("Synthetic", "Synthetic corpus", "All labels", bars)
+            return [[cell.strip() for cell in line.split("|")[2:-1]]
+                    for line in charts.model_card_tables([panel]).splitlines()
+                    if line.startswith("| Synthetic |")]
+        self.assertEqual(cells(bars), [
+            ["0.901", "**0.901**", "0.880", "pending", "N/A"],
+            ["120", "**90**", "**90**", "pending", "N/A"],
+            ["2.0", "**2.0**", "**2.0**", "pending", "N/A"],
+        ])
+        changed = (charts.Bar("A", 0.95, 80, 1.0), *bars[1:])
+        self.assertEqual(cells(changed), [
+            ["**0.950**", "0.901", "0.880", "pending", "N/A"],
+            ["**80**", "90", "90", "pending", "N/A"],
+            ["**1.0**", "2.0", "2.0", "pending", "N/A"],
+        ])
 
     def test_comparison_mutation_fails_check(self):
         with tempfile.TemporaryDirectory() as tmp:

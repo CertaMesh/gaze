@@ -6,7 +6,7 @@
       "id": "gliner-dob-judge",
       "title": "GLiNER date-of-birth judge",
       "added_in": "v0.16",
-      "shipped": "opt-in (`gaze setup --dob-judge`) until its 352 MB bundle is shrunk (todo 3905), then default-on",
+      "shipped": "opt-in (`gaze setup --dob-judge`)",
       "latency": {
         "file": "docs/reference/benchmarks/mechanisms/gliner-dob-judge-latency.json",
         "sha256": "838cfd64c0e33e3b7b0504347ba3a968041ed10f887732c60b9cf5dcbe9266d9"
@@ -157,6 +157,150 @@
             "binary_sha256": "0ecb1cddab0326cb29dcbe4af550aeaa765fd4d929465a9d52bc25df0f9c7885",
             "crates_tree": "d23a925233253226ff68f6ec700e89c45ea1c950",
             "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
+          }
+        },
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/6cc02a9f9828c76883dba10f65925d675f52dd820e05311cf2280f47569b28d0/base-32cdbede14c02ecd07a41103c9892ba88b79b6c970500e816ef97460e05184f1.jsonl.gz",
+              "sha256": "32cdbede14c02ecd07a41103c9892ba88b79b6c970500e816ef97460e05184f1"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/6cc02a9f9828c76883dba10f65925d675f52dd820e05311cf2280f47569b28d0/candidate-6e0d206cc7d9cd67b32ddb78df9884b50413f662be8086a49fa9dfd419de699d.jsonl.gz",
+              "sha256": "6e0d206cc7d9cd67b32ddb78df9884b50413f662be8086a49fa9dfd419de699d"
+            }
+          },
+          "revision": "034cd7447c9a736fccb6a9c2b165fc48fd38dd98",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+          "candidate_policy_sha256": "b5ce687c9ab89b76c114761b76182d5d18bae840b5a37c71e6d5b36f7594df10",
+          "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9636,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "DATEOFBIRTH": -81
+              }
+            },
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6571,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "DATEOFBIRTH": -81
+              }
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6571,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "DATEOFBIRTH": -81
+              },
+              "false_positive_by_class_delta": {}
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9636,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "DATEOFBIRTH": -81
+              },
+              "false_positive_by_class_delta": {}
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 71130,
+                "false_positive": 2489,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 71110,
+                "false_positive": 2489,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 9328,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 9328,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 120476,
+                "false_positive": 1277,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 120476,
+                "false_positive": 1277,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 101, FP bytes changed by +0"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 101, FP bytes changed by +0"
+            }
+          },
+          "attested": {
+            "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
+            "crates_tree": "e9a48d578aa0c2d02b6fd60d2d9d8525537a24e7",
+            "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71)",
             "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
           }
         }
@@ -788,6 +932,218 @@
             "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
             "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
           }
+        },
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/121b9fd4a8f41845a11b1e78c39a63347197a1a82cc850d28dc6fef5665ddca2/base-aec61c3263034363157762950fe801a45b226b86b83baba369b988bc82cb15c8.jsonl.gz",
+              "sha256": "aec61c3263034363157762950fe801a45b226b86b83baba369b988bc82cb15c8"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/121b9fd4a8f41845a11b1e78c39a63347197a1a82cc850d28dc6fef5665ddca2/candidate-1a90fc182cc1a51ec905d92893c86a59a4b13e3889ea11285ec3b2fae34d7598.jsonl.gz",
+              "sha256": "1a90fc182cc1a51ec905d92893c86a59a4b13e3889ea11285ec3b2fae34d7598"
+            }
+          },
+          "revision": "034cd7447c9a736fccb6a9c2b165fc48fd38dd98",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "7802726f8b0676bce0f00e39b7896fabe3e5ce33266e4290cad6c14eeda245ff",
+          "candidate_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+          "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 13408,
+                "false_positive": 15048,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -248,
+                "COUNTRY": -7,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -148,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -46,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1497,
+                "PASSWORD": -423,
+                "SECURITYTOKEN": -50,
+                "STATE": -8,
+                "STREET": -20,
+                "SURNAME": -46,
+                "URL": -252,
+                "USERNAME": -857,
+                "ZIP": -48
+              }
+            },
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 9870,
+                "false_positive": 15048,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -248,
+                "COUNTRY": -7,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -148,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -46,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1497,
+                "STATE": -8,
+                "STREET": -20,
+                "SURNAME": -46,
+                "URL": -252,
+                "USERNAME": -857,
+                "ZIP": -48
+              }
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 9870,
+                "false_positive": 26529,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -248,
+                "COUNTRY": -7,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -148,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -46,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1497,
+                "STATE": -8,
+                "STREET": -20,
+                "SURNAME": -46,
+                "URL": -252,
+                "USERNAME": -857,
+                "ZIP": -48
+              },
+              "false_positive_by_class_delta": {
+                "custom:building_number": 229,
+                "custom:date": 18,
+                "custom:license_plate": 67,
+                "custom:username": 30,
+                "name": 131
+              }
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 13408,
+                "false_positive": 26546,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -248,
+                "COUNTRY": -7,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -148,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -46,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1497,
+                "PASSWORD": -423,
+                "SECURITYTOKEN": -50,
+                "STATE": -8,
+                "STREET": -20,
+                "SURNAME": -46,
+                "URL": -252,
+                "USERNAME": -857,
+                "ZIP": -48
+              },
+              "false_positive_by_class_delta": {
+                "custom:building_number": 229,
+                "custom:date": 18,
+                "custom:license_plate": 67,
+                "custom:username": 30,
+                "name": 131
+              }
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 75408,
+                "false_positive": 1927,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 71130,
+                "false_positive": 2489,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 5441,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 9328,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 125520,
+                "false_positive": 965,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 120476,
+                "false_positive": 1277,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "fail",
+              "reason": "credit guard: FP bytes rose on ['ref_number_9 (BSN: 0 -> 18)'], the benign twin of credited checksum-invalid gold; no net-bytes gain offsets it"
+            },
+            "v1": {
+              "verdict": "fail",
+              "reason": "credit guard: FP bytes rose on ['ref_number_9 (BSN: 0 -> 18)'], the benign twin of credited checksum-invalid gold; no net-bytes gain offsets it"
+            }
+          },
+          "attested": {
+            "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
+            "crates_tree": "e9a48d578aa0c2d02b6fd60d2d9d8525537a24e7",
+            "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71)",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
+          }
         }
       ],
       "shipped": "default-on (gaze setup)"
@@ -1027,6 +1383,236 @@
             "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
             "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
           }
+        },
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/45804bca5deff5bdb7392acf55247ca5093523adbf72ee0451730a3821ba2cdc/base-8b044b962da79c92bc9473abb02fbf0ef79be2147dbcd61f0b82f78eb75e4b46.jsonl.gz",
+              "sha256": "8b044b962da79c92bc9473abb02fbf0ef79be2147dbcd61f0b82f78eb75e4b46"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/45804bca5deff5bdb7392acf55247ca5093523adbf72ee0451730a3821ba2cdc/candidate-b510185055d98408056a23997aecfcd1953cf19c42ead37b862d286fbda2b715.jsonl.gz",
+              "sha256": "b510185055d98408056a23997aecfcd1953cf19c42ead37b862d286fbda2b715"
+            }
+          },
+          "revision": "034cd7447c9a736fccb6a9c2b165fc48fd38dd98",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "268eae65f7fcdae0071b1875b7b089806a9eb747667346b83c0d3cab1cd09aa7",
+          "candidate_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+          "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 57155,
+                "false_positive": 5880,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "AGE": 4,
+                "BUILDINGNUM": -1236,
+                "CITY": -11539,
+                "COMPANYNAME": -5580,
+                "COUNTRY": -3259,
+                "DATEOFBIRTH": -4,
+                "FIRSTNAME": -88,
+                "IDCARDNUM": -3,
+                "LICENSEPLATENUM": 14,
+                "ORGANIZATION": -69,
+                "PASSWORD": -41,
+                "REGION": -10,
+                "SECURITYTOKEN": 57,
+                "STATE": -6852,
+                "STREET": -18659,
+                "SURNAME": -145,
+                "URL": -15,
+                "USERNAME": 10,
+                "ZIP": -44
+              }
+            },
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 54106,
+                "false_positive": 5880,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "AGE": 4,
+                "BUILDINGNUM": -1236,
+                "CITY": -11539,
+                "COMPANYNAME": -5580,
+                "COUNTRY": -3259,
+                "DATEOFBIRTH": -4,
+                "FIRSTNAME": -88,
+                "IDCARDNUM": -3,
+                "LICENSEPLATENUM": 14,
+                "ORGANIZATION": -69,
+                "REGION": -10,
+                "STATE": -6852,
+                "STREET": -18659,
+                "SURNAME": -145,
+                "URL": -15,
+                "USERNAME": 10,
+                "ZIP": -44
+              }
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 54106,
+                "false_positive": 12434,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "AGE": 4,
+                "BUILDINGNUM": -1236,
+                "CITY": -11539,
+                "COMPANYNAME": -5580,
+                "COUNTRY": -3259,
+                "DATEOFBIRTH": -4,
+                "FIRSTNAME": -88,
+                "IDCARDNUM": -3,
+                "LICENSEPLATENUM": 14,
+                "ORGANIZATION": -69,
+                "REGION": -10,
+                "STATE": -6852,
+                "STREET": -18659,
+                "SURNAME": -145,
+                "URL": -15,
+                "USERNAME": 10,
+                "ZIP": -44
+              },
+              "false_positive_by_class_delta": {
+                "custom:building_number": -71,
+                "custom:license_plate": 1,
+                "custom:postal_code": -4,
+                "custom:tax_number": -1,
+                "custom:username": -6,
+                "location": 10097,
+                "name": 106,
+                "organization": 4448
+              }
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 57155,
+                "false_positive": 12451,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "AGE": 4,
+                "BUILDINGNUM": -1236,
+                "CITY": -11539,
+                "COMPANYNAME": -5580,
+                "COUNTRY": -3259,
+                "DATEOFBIRTH": -4,
+                "FIRSTNAME": -88,
+                "IDCARDNUM": -3,
+                "LICENSEPLATENUM": 14,
+                "ORGANIZATION": -69,
+                "PASSWORD": -41,
+                "REGION": -10,
+                "SECURITYTOKEN": 57,
+                "STATE": -6852,
+                "STREET": -18659,
+                "SURNAME": -145,
+                "URL": -15,
+                "USERNAME": 10,
+                "ZIP": -44
+              },
+              "false_positive_by_class_delta": {
+                "custom:building_number": -71,
+                "custom:license_plate": 1,
+                "custom:postal_code": -4,
+                "custom:tax_number": -1,
+                "custom:username": -6,
+                "location": 10097,
+                "name": 106,
+                "organization": 4448
+              }
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 75231,
+                "false_positive": 781,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 71130,
+                "false_positive": 2489,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 8215,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 9328,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 121802,
+                "false_positive": 882,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 120476,
+                "false_positive": 1277,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 52881, FP bytes changed by +17786"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 52865, FP bytes changed by +17786"
+            }
+          },
+          "attested": {
+            "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
+            "crates_tree": "e9a48d578aa0c2d02b6fd60d2d9d8525537a24e7",
+            "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71)",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
+          }
         }
       ],
       "shipped": "default-on (gaze setup)"
@@ -1191,6 +1777,158 @@
             "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
             "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
           }
+        },
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/d1bf00bdb00cd201609856d04cea7950f423baa9ebbe072bea6c0e8eb3a2906c/base-9cd0baf95b0333b6a8c232bd101941fcd9aa5b1455fb2c79b30fe257877e7805.jsonl.gz",
+              "sha256": "9cd0baf95b0333b6a8c232bd101941fcd9aa5b1455fb2c79b30fe257877e7805"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/d1bf00bdb00cd201609856d04cea7950f423baa9ebbe072bea6c0e8eb3a2906c/candidate-aba448f731919ddb67a96e0f6b7fe49193da7dc06098e37e584b3321d2f5d586.jsonl.gz",
+              "sha256": "aba448f731919ddb67a96e0f6b7fe49193da7dc06098e37e584b3321d2f5d586"
+            }
+          },
+          "revision": "034cd7447c9a736fccb6a9c2b165fc48fd38dd98",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "ac50a3cdbb3a68fe5011735a29377534d38d9297518884403eeabd9749185070",
+          "candidate_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+          "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9828,
+                "false_positive": 15141,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -53,
+                "STATE": -58
+              }
+            },
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6763,
+                "false_positive": 15141,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -53,
+                "STATE": -58
+              }
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6763,
+                "false_positive": 26921,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -53,
+                "STATE": -58
+              },
+              "false_positive_by_class_delta": {
+                "location": 83
+              }
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9828,
+                "false_positive": 26938,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -53,
+                "STATE": -58
+              },
+              "false_positive_by_class_delta": {
+                "location": 83
+              }
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 71663,
+                "false_positive": 2489,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 71130,
+                "false_positive": 2489,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 9328,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 9328,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 120476,
+                "false_positive": 1277,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 120476,
+                "false_positive": 1277,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 644, FP bytes changed by +83"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 644, FP bytes changed by +83"
+            }
+          },
+          "attested": {
+            "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
+            "crates_tree": "e9a48d578aa0c2d02b6fd60d2d9d8525537a24e7",
+            "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71)",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
+          }
         }
       ],
       "shipped": "default-on (gaze setup)"
@@ -1349,6 +2087,154 @@
             "binary_sha256": "f8cbfd624a70dcabea253ad2888bee6c22f46c4e03314bbedff7cadd65fa068e",
             "crates_tree": "42fd8a0cacbef68d29172d036979a3b869a133b8",
             "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
+          }
+        },
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/4954852be914c65846a5ca967bc528ac65af1b40357a99e46f5ac10532f8516b/base-851e22702b87767b954dbca4cda47b9ef949c1d7c22651ac349761f70adc06e6.jsonl.gz",
+              "sha256": "851e22702b87767b954dbca4cda47b9ef949c1d7c22651ac349761f70adc06e6"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/4954852be914c65846a5ca967bc528ac65af1b40357a99e46f5ac10532f8516b/candidate-3ac3eedbb97c2761738a144052e4a568d3b79aa936b9567d43ace4e67fed4263.jsonl.gz",
+              "sha256": "3ac3eedbb97c2761738a144052e4a568d3b79aa936b9567d43ace4e67fed4263"
+            }
+          },
+          "revision": "034cd7447c9a736fccb6a9c2b165fc48fd38dd98",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "65cd6aa588ce6923f9e2156699893fcffb9a870967d9a0db5018deaa0c22c8cc",
+          "candidate_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+          "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 12596,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -1,
+                "SECURITYTOKEN": -2879
+              }
+            },
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6653,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -1
+              }
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6653,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -1
+              },
+              "false_positive_by_class_delta": {}
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 12596,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -1,
+                "SECURITYTOKEN": -2879
+              },
+              "false_positive_by_class_delta": {
+                "custom:security_token": 17
+              }
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 71840,
+                "false_positive": 2489,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 71130,
+                "false_positive": 2489,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 9328,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 9328,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 120476,
+                "false_positive": 1277,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 120476,
+                "false_positive": 1277,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 711, FP bytes changed by +0"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 3589, FP bytes changed by +17"
+            }
+          },
+          "attested": {
+            "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
+            "crates_tree": "e9a48d578aa0c2d02b6fd60d2d9d8525537a24e7",
+            "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71)",
             "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
           }
         }
@@ -1521,6 +2407,166 @@
             "binary_sha256": "7ed727ebfc2f1dfe4af48ee52bb04369eeac78e30567e243b84393810b47e833",
             "crates_tree": "383f1c2bbc4859afc2d25e0ebfc4837b92b5f833",
             "machine": "Apple M5 Max; 18 physical/logical cores; 64 GiB; macOS 26.5 (25F71); arm64",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
+          }
+        },
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/f209409b5b505e04d7058938e10fdf49bb08cadf0e100b5af0358b270432ed45/base-beb862e67eb2ce5c051e511b62dfe477bb16f67e68c2094e26c589beb49d85d2.jsonl.gz",
+              "sha256": "beb862e67eb2ce5c051e511b62dfe477bb16f67e68c2094e26c589beb49d85d2"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/f209409b5b505e04d7058938e10fdf49bb08cadf0e100b5af0358b270432ed45/candidate-fa8fd827c25583c93932c5ff7fde3071bd7c4d66069b18c6606b117b9ec4bb2b.jsonl.gz",
+              "sha256": "fa8fd827c25583c93932c5ff7fde3071bd7c4d66069b18c6606b117b9ec4bb2b"
+            }
+          },
+          "revision": "034cd7447c9a736fccb6a9c2b165fc48fd38dd98",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "6375621a56ec573f1e0f0843dd53f0c664dd9ac6b1ff31f6e322ae1a361dd459",
+          "candidate_policy_sha256": "6d44dd5e3c2fc1f7e08544de070eeea417a1db00b92704bfdd54847a6a7555e6",
+          "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9813,
+                "false_positive": 15112,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "COUNTRY": -7,
+                "FIRSTNAME": -29,
+                "STREET": -20,
+                "SURNAME": -40
+              }
+            },
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6748,
+                "false_positive": 15112,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "COUNTRY": -7,
+                "FIRSTNAME": -29,
+                "STREET": -20,
+                "SURNAME": -40
+              }
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6748,
+                "false_positive": 26873,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "COUNTRY": -7,
+                "FIRSTNAME": -29,
+                "STREET": -20,
+                "SURNAME": -40
+              },
+              "false_positive_by_class_delta": {
+                "name": 131
+              }
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9813,
+                "false_positive": 26890,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "COUNTRY": -7,
+                "FIRSTNAME": -29,
+                "STREET": -20,
+                "SURNAME": -40
+              },
+              "false_positive_by_class_delta": {
+                "name": 131
+              }
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 71375,
+                "false_positive": 2356,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 71130,
+                "false_positive": 2489,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 9266,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 9328,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 120738,
+                "false_positive": 1243,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 120476,
+                "false_positive": 1277,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 603, FP bytes changed by +360"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 603, FP bytes changed by +360"
+            }
+          },
+          "attested": {
+            "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
+            "crates_tree": "e9a48d578aa0c2d02b6fd60d2d9d8525537a24e7",
+            "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71)",
             "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
           }
         }
