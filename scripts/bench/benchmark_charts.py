@@ -240,15 +240,24 @@ def third_party_panel(
 ) -> Panel:
     """Competitors from their declared rows; Gaze only from a tagged row.
 
-    A `gaze-vX.Y.Z` row of the benchmark is a tagged run. Until the latest tag is
-    measured on the set, its slot reads "pending" rather than borrowing the
-    untagged `gaze-full` run.
+    Keep the latest measured tagged row at or before the current release, with
+    its original version label. With no eligible tagged run, the slot reads
+    "pending"; the untagged `gaze-full` run never fills it.
     """
     for tool in bench["rows"]:
         if tool.startswith("gaze-v") and not TAG.fullmatch(tool[len("gaze-"):]):
             raise ChartError(f"row {tool!r} is not a gaze-vX.Y.Z release tag row")
-    label = "Gaze " + latest_tag[1:].rsplit(".", 1)[0]
-    tagged = bench["rows"].get(f"gaze-{latest_tag}")
+    def version_key(version: str) -> tuple[int, ...]:
+        return tuple(int(part) for part in version[1:].split("."))
+
+    measured_tags = [
+        tool[len("gaze-"):] for tool in bench["rows"]
+        if tool.startswith("gaze-v")
+        and version_key(tool[len("gaze-"):]) <= version_key(latest_tag)
+    ]
+    measured_tag = max(measured_tags, key=version_key) if measured_tags else latest_tag
+    label = "Gaze " + measured_tag[1:].rsplit(".", 1)[0]
+    tagged = bench["rows"].get(f"gaze-{measured_tag}")
     if tagged is not None:
         bars = [_third_party_bar(label, tagged, True)]
     else:

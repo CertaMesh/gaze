@@ -20,13 +20,14 @@ before the tool runs ([integration](docs/explanation/how-gaze-works.md#how-it-fi
 
 ## How good is it
 
-Fresh v0.17.0 candidate measurements pass the accepted own-policy numeric and
-external F2 criteria. Strict own-policy identity remains `not_comparable`, and
-TRACE's original net-byte gate fails. [Results and limits](docs/reference/benchmarks/README.md#v017-final-candidate-evidence)
-remain provisional until tag and package checks; the panels retain tagged releases.
+The v0.17.0 measurements pass the accepted own-policy numeric and external F2
+criteria. Strict own-policy identity remains `not_comparable`, and TRACE's
+original net-byte gate fails. [Results and limits](docs/reference/benchmarks/README.md#v017-final-candidate-evidence)
+retain the measured source and provenance. The own-corpus panel includes tagged
+v0.17.0; external panels retain their separately measured tagged releases.
 
 The [tagged-release benchmark panels](docs/reference/benchmarks/README.md#benchmark-panels)
-compares the `gaze setup` policy with Presidio, DataFog, scrubadub, GLiNER and
+compare the `gaze setup` policy with Presidio, DataFog, scrubadub, GLiNER and
 OPF on their declared configurations. “Leaked” counts PII bytes still reaching
 the model. The target is zero.
 
@@ -37,7 +38,7 @@ the model. The target is zero.
   <img alt="Bar panels of character-level F2 and false-positive bytes per 1,000 bytes for Gaze releases and competitors on three benchmarks; the values are printed on the bars." src="docs/assets/benchmarks/benchmark-panels-light.svg">
 </picture>
 
-Gaze 0.16 leaks 13,291 PII bytes on our holdout (character-level F2 0.879; credentials counted since contract v4). Methods, competitor setups and how to reproduce: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels).
+Gaze 0.17 leaks 9,717 PII bytes on our holdout (character-level F2 0.901; credentials counted since contract v4). Methods, competitor setups and how to reproduce: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels).
 
 <!-- END GENERATED: readme-chart -->
 
