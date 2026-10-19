@@ -139,6 +139,10 @@ bundle as the `[ner]` model. Re-run `gaze setup` to get the benchmarked model.
 
 `gaze setup` also installs the pinned Nym-small bundle and writes
 `[safety_net].backend = "nym"` with its absolute `[safety_net.nym].model_dir`.
+The policy maps eligible `GIVEN_NAME` and `SURNAME` predictions to reversible
+`Name` tokens at thresholds of 0.5. Explicit label and threshold overrides stay
+in effect; policies without a label override use the updated defaults. The
+pinned model weights are unchanged.
 `--safety-net none` writes the NER-only policy; the removed `ner` value migrates
 to `none`. `--safety-net opf` additionally verifies an OpenAI Privacy Filter
 checkpoint and prints a Nym + OPF command; OPF remains CLI-only. Setup prints
@@ -343,7 +347,7 @@ Safety nets report suspects; the pipeline chooses the action. No net runs withou
 | Backend | Build / coverage |
 | --- | --- |
 | `openai-filter` | Opt-in `safety-net-openai`; subprocess with Person, Email, Phone, URL, Address, Date, Account number, Secret labels. Heavier model and per-call startup. |
-| `nym` | Default build through `setup` / `safety-net-nym`; pinned Nym-small v3 int8 in-process model. Default op-B labels: building numbers, licence plates, usernames, birth dates. Policy changes labels/thresholds; registry dispatch is unsupported. |
+| `nym` | Default build through `setup` / `safety-net-nym`; pinned Nym-small v3 int8 in-process model. Default op-B labels: building numbers, licence plates, usernames, birth dates, given names, surnames. Policy changes labels/thresholds; registry dispatch is unsupported. |
 
 ### Build and install the backends
 

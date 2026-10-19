@@ -20,6 +20,9 @@ before the tool runs ([integration](docs/explanation/how-gaze-works.md#how-it-fi
 
 ## How good is it
 
+The v0.17.0 source candidate is awaiting fresh final-source measurements.
+Its benchmark claims remain provisional; the charts below retain tagged releases.
+
 The [v0.16.0 benchmark](docs/reference/benchmarks/README.md#current-release)
 compares the `gaze setup` policy with Presidio, DataFog, scrubadub, GLiNER and
 OPF on their declared configurations. “Leaked” counts PII bytes still reaching

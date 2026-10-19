@@ -29,6 +29,7 @@ mcp = [
     "dep:gaze-mcp-core",
     "dep:gaze-mcp-rmcp",
     "dep:pdfium-render",
+    "dep:tempfile",
     "dep:tokio",
     "document",
     "gaze-document/mcp",

@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 from xml.sax.saxutils import escape
 
+from comparison_availability import unavailable_tools
 from tagged_gaze import TAG, UntaggedGazeError, require_tag
 
 #: (benchmark key, panel title, the vendor's own headline metric for that set).
@@ -129,6 +130,7 @@ class Bar:
     gaze: bool = False
     column: str = ""  # the model-card table column this bar belongs to (default: its name)
     receipt_unverified: bool = False
+    unavailable: bool = False
 
     @property
     def table_column(self) -> str:
@@ -181,6 +183,7 @@ def own_panel(
     gaze: Sequence[GazeRow], comparison: Mapping[str, Any],
     declared: Mapping[str, str], corpus_name: str,
 ) -> Panel:
+    unavailable = unavailable_tools(comparison)
     layer = comparison["corpus"]["layers"]["C"]["documents"]
     splits = " + ".join(comparison["heldout_split"]["layers"]["C"])
     skipped = 0
@@ -191,6 +194,10 @@ def own_panel(
     tuned = comparison.get("presidio_tuned")
     notes, captions = [], []
     for key, name in declared.items():
+        if name in unavailable:
+            bars.append(Bar(SHORT_NAMES[key], None, None, None, unavailable=True))
+            notes.append("OPF: N/A (two 600-second socket timeouts)")
+            continue
         if key == "presidio" and tuned is not None:
             # The declared default moves to competitors.md; the bar is the better tuned row.
             row = tuned["chart"]["row"]
@@ -345,7 +352,7 @@ def _bar_svg(t: Mapping[str, str], bar: Bar, value: float | None, fmt: str,
             f'fill="none" stroke="{t["accent"]}" stroke-width="1.5" stroke-dasharray="3 2"/>'
         )
         out.append(f'<text x="{cx:.1f}" y="{bot - 12:.1f}" font-size="11" font-weight="700" '
-                   f'text-anchor="middle" fill="{t["accent"]}">pending</text>')
+                   f'text-anchor="middle" fill="{t["accent"]}">{"N/A" if bar.unavailable else "pending"}</text>')
         return out
     bh = ph * min(value / vmax, 1.0)
     fill = t["accent"] if bar.gaze else t["grey"]
@@ -478,7 +485,7 @@ def _table(panel_set: Sequence[Panel], pick: Any, fmt: str, best: Any) -> list[s
             if bar is None:
                 cells.append("not run")
             elif pick(bar) is None:
-                cells.append("pending")
+                cells.append("N/A" if bar.unavailable else "pending")
             else:
                 text = fmt.format(pick(bar)) + (" (tuned)" if bar.column else "")
                 text += "†" if bar.receipt_unverified else ""

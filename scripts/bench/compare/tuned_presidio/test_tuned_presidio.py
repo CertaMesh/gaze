@@ -26,6 +26,22 @@ import tune  # noqa: E402
 score = corpus.compare.score
 
 
+class NativeGazeContractTests(unittest.TestCase):
+    def test_gaze_tally_keeps_v4_credential_repeat_credit(self):
+        import versus_gaze
+        uid = uid_in('test', 'synthetic-credential')
+        document = score.Document(uid, 'TOKEN_A TOKEN_A', 'en', '', 'synthetic',
+                                  (score.Span(0, 7, 'SECURITYTOKEN'),))
+        contract = corpus.compare.runner.load_scored_label_contract(
+            tune.REPO, corpus.compare.CONTRACTS['v4'])
+        predictions = {uid: {'spans': [score.Span(8, 15, 'custom:security_token')], 'refused': None}}
+        result = versus_gaze.tally(predictions, {'C': [document]},
+            {'v4': {'main': contract, 'agentic': None}},
+            corpus.compare.load_mapping()['gaze'], None, native_gaze=True)
+        self.assertEqual(result['v4']['C']['false_positive_bytes'], 7)
+        self.assertEqual(result['v4']['C']['false_positive_bytes_after_gold_gap'], 0)
+
+
 def uid_in(split: str, prefix: str) -> str:
     """A document id that split_for_id assigns to `split`."""
     for n in range(10_000):
@@ -41,6 +57,57 @@ def document(uid: str, text: str, gold: list[tuple[str, str]], language: str = "
         start = text.encode().index(value.encode())
         spans.append(score.Span(start, start + len(value.encode()), label))
     return score.Document(uid, text, language, "", "synthetic", tuple(spans))
+
+
+class LiveLanguageTest(unittest.TestCase):
+    def test_unsupported_spanish_does_not_look_up_an_analyzer(self) -> None:
+        analyzers = mock.MagicMock()
+        analyzers.__getitem__.side_effect = AssertionError("unsupported registry lookup")
+        self.assertEqual(pool.live_analyze(analyzers, {}, "Correo alice@example.invalid", "es"), [])
+        analyzers.__getitem__.assert_not_called()
+
+    def test_supported_languages_keep_the_exact_analyzer_call(self) -> None:
+        for language in space.LANGUAGES:
+            for allow_list in ([], ["alice@example.invalid"]):
+                with self.subTest(language=language, allow_list=allow_list):
+                    analyzer = mock.Mock()
+                    found = [object()]
+                    analyzer.analyze.return_value = found
+                    result = pool.live_analyze(
+                        {language: analyzer}, {"allow_list": allow_list},
+                        "Mail alice@example.invalid", language)
+                    self.assertIs(result, found)
+                    analyzer.analyze.assert_called_once_with(
+                        text="Mail alice@example.invalid", language=language,
+                        score_threshold=None, allow_list=allow_list or None,
+                        allow_list_match="exact")
+
+    def test_missing_supported_analyzer_is_still_an_error(self) -> None:
+        with self.assertRaises(KeyError) as error:
+            pool.live_analyze({}, {"allow_list": []}, "Mail alice@example.invalid", "en")
+        self.assertEqual(error.exception.args, ("en",))
+
+    def test_spanish_stays_in_live_sample_and_all_gold_is_missed(self) -> None:
+        email = "alice@example.invalid"
+        uid = uid_in("test", "synthetic-unsupported-spanish")
+        doc = document(uid, f"Correo {email}", [(email, "EMAIL")], language="es")
+        config = {"context": "off", "thresholds": {}, "allow_list": []}
+        mapping = {"EMAIL_ADDRESS": ("EMAIL",)}
+        replayer = search.Replayer([search.Doc(uid, "C", "es", doc, ())], mapping, mapping)
+        with mock.patch.object(pool, "live_analyzers", return_value={}), \
+                mock.patch.object(tune, "in_live_sample", return_value=True):
+            verified = tune.live_verify(config, pool.ModelPaths(spacy={}), replayer)
+        self.assertEqual(verified["documents"], 1)
+        self.assertEqual(verified["documents_by_layer"]["C"], 1)
+        self.assertTrue(verified["identical"])
+        measured = corpus.compare.measure(
+            "unsupported-live", lambda d: pool.live_analyze({}, config, d.text, d.language),
+            {"C": [doc]}, mapping)
+        for version, layers in measured["contracts"].items():
+            with self.subTest(contract=version):
+                self.assertEqual(layers["C"]["documents"], 1)
+                self.assertEqual(layers["C"]["leaked_bytes"], len(email.encode("utf-8")))
+                self.assertEqual(layers["C"]["false_positive_bytes"], 0)
 
 
 class BlankSpacyEngine:

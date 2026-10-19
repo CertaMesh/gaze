@@ -156,8 +156,12 @@ def validate_labels(spans: Sequence[score.Span], mapping: dict[str, tuple[str, .
 def mapped_document(
     document: score.Document,
     mapping: dict[str, tuple[str, ...]],
+    *, native_gaze: bool = False,
 ) -> score.Document:
-    if document.gold_gap is None:
+    # Gaze already emits the contract's native classes. Replacing its reviewed
+    # compatibility pairs with the comparison map changes the contract's credit
+    # (for example AGE exclusions and v4 credential repeats).
+    if native_gaze or document.gold_gap is None:
         return document
     # The byte scorer is class-agnostic. Only v3's repeat credit needs a
     # reviewed semantic mapping from each tool's native labels to gold labels.
@@ -368,7 +372,7 @@ class Scrubadub:
         self.scrubbers = {}
         for language, locale in (("en", "en_US"), ("de", "de_DE"),
                                  ("nl", "nl_NL"), ("fr", "fr_FR"),
-                                 ("pt", "pt_PT")):
+                                 ("pt", "pt_PT"), ("es", "es_ES")):
             scrubber = scrubadub.Scrubber(locale=locale)
             if spacy_model and language == "en":
                 from scrubadub_spacy.detectors import SpacyEntityDetector
@@ -608,7 +612,8 @@ def rescore_predictions(
     for layer, documents in layers.items():
         stored.update(load_prediction_rows(prediction_path(root, layer, name), documents))
     return measure(name, lambda document: stored[document.uid], layers, mapping,
-                   supported_languages, common_labels)
+                   supported_languages, common_labels,
+                   native_gaze=name in {"gaze-full", "gaze-rules-only", "gaze-rules-ner"})
 
 
 def measure(
@@ -617,6 +622,7 @@ def measure(
     supported_languages: Sequence[str] | None = None,
     common_labels: frozenset[str] | None = None,
     predictions_dir: Path | None = None,
+    *, native_gaze: bool = False,
 ) -> dict[str, object]:
     if common_labels is None:
         common_labels = frozenset(label for labels in mapping.values() for label in labels)
@@ -633,6 +639,7 @@ def measure(
         timers = []
         skipped_gold_bytes = {key: 0 for key in contracts}
         skipped_documents = 0
+        skipped_languages: dict[str, int] = {}
         accumulators = {key: score.MetricAccumulator() for key in contracts}
         detailed = {
             version: {
@@ -650,6 +657,7 @@ def measure(
             if skipped:
                 predictions = []
                 skipped_documents += 1
+                skipped_languages[document.language] = skipped_languages.get(document.language, 0) + 1
             else:
                 start = time.perf_counter()
                 try:
@@ -673,7 +681,7 @@ def measure(
                     skipped_gold_bytes[version] += score.interval_length(
                         score.merge_intervals((span.start, span.end) for span in applied.spans)
                     )
-                accumulators[version].add(mapped_document(applied, mapping), predictions)
+                accumulators[version].add(mapped_document(applied, mapping, native_gaze=native_gaze), predictions)
                 for view in detailed[version].values():
                     view["full"].add(applied, predictions)
                     view[split_for_id(document.uid)].add(applied, predictions)
@@ -692,6 +700,7 @@ def measure(
                 "false_positive_bytes_after_gold_gap": result.get("gold_gap", {}).get("false_positive_bytes_after_gold_gap"),
                 "documents": result["documents"], "processed_documents": len(timers),
                 "skipped_documents": skipped_documents,
+                "skipped_languages": dict(sorted(skipped_languages.items())),
                 "skipped_gold_bytes": skipped_gold_bytes[version],
                 "latency": latency,
                 "metrics": {
@@ -733,7 +742,7 @@ def measure_gaze(
                 applied = score.apply_scored_label_contract(
                     [document], agentic_contract if layer in {"A", "D", "R"} else contract,
                 )[0]
-                byte[version].add(mapped_document(applied, mapping), predictions)
+                byte[version].add(mapped_document(applied, mapping, native_gaze=True), predictions)
                 for view in detailed[version].values():
                     view["full"].add(applied, predictions)
                     view[split_for_id(document.uid)].add(applied, predictions)
@@ -796,9 +805,10 @@ def rescore_report(report: dict[str, object], layers: dict[str, list[score.Docum
             if old[field] != new[field]:
                 raise ValueError(f"rescore changed {row}/{field}: {old[field]} != {new[field]}")
         old["metrics"] = new["metrics"]
+        old["skipped_languages"] = new["skipped_languages"]
 
     for name, tool in report["tools"].items():
-        languages = tool["provenance"].get("supported_languages") if name.startswith("presidio") else None
+        languages = tool["provenance"].get("supported_languages")
         rescored = rescore_predictions(name, layers, mapping_for_tool(name, mappings),
                                        common_labels, root, languages)
         for version in CONTRACTS:
@@ -814,7 +824,8 @@ def rescore_report(report: dict[str, object], layers: dict[str, list[score.Docum
                 old = rows[version]["layers"][layer] if config == "full" else rows[version][layer]
                 replace_metrics(old, rescored["contracts"][version][layer],
                                 f"{name}/{version}/{layer}")
-    report["rescore_source_revision"] = report["harness_revision"]
+    report.setdefault("measurement_compare_sha256", report["compare_sha256"])
+    report.setdefault("rescore_source_revision", report["harness_revision"])
     report["harness_revision"] = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=REPO, text=True
     ).strip()
@@ -1127,10 +1138,14 @@ def main() -> int:
             try:
                 # Warm the model outside the measured per-document latency.
                 backend.predict(score.Document("warmup", "alice@example.invalid", "en", "", "synthetic", ()))
+                languages = (backend.languages if isinstance(backend, Presidio) else
+                             tuple(backend.scrubbers) if isinstance(backend, Scrubadub) else None)
+                if languages is not None:
+                    provenance["supported_languages"] = list(languages)
                 with ForeignCpuSampler() as sampler:
                     measured = measure(
                         name, backend.predict, layers, mapping,
-                        backend.languages if isinstance(backend, Presidio) else None,
+                        languages,
                         common_labels, args.predictions_dir,
                     )
                 report.setdefault("contention_samples", {})[name] = sampler.result()

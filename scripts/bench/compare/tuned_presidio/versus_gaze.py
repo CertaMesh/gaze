@@ -71,7 +71,7 @@ def build_predictions(path: Path, layers: dict[str, list]) -> dict[str, dict]:
 
 
 def tally(system: dict[str, dict], layers: dict[str, list], contracts: dict, mapping: dict,
-          only: set[str] | None) -> dict:
+          only: set[str] | None, *, native_gaze: bool = False) -> dict:
     """Test-half cells per contract and layer, plus per-class leaked bytes."""
     out: dict = {}
     for version, contract in contracts.items():
@@ -92,7 +92,7 @@ def tally(system: dict[str, dict], layers: dict[str, list], contracts: dict, map
                     continue
                 applied = score.apply_scored_label_contract(
                     [document], contract["agentic"] if layer in {"A", "D", "R"} else contract["main"])[0]
-                accumulator.add(compare.mapped_document(applied, mapping), entry["spans"])
+                accumulator.add(compare.mapped_document(applied, mapping, native_gaze=native_gaze), entry["spans"])
                 gold, ignored, retained = score.contract_scoring_view(applied, entry["spans"])
                 predicted = score.subtract_intervals(
                     score.merge_intervals((s.start, s.end) for s in retained), ignored)
@@ -129,7 +129,7 @@ def main() -> int:
     layers = corpus.load_measured(args.dataset, comparison)
     mapping = tune.tuned_mapping()
     gaze_mapping = compare.load_mapping()["gaze"]
-    systems: dict[str, tuple[dict, dict]] = {}
+    systems: dict[str, tuple[dict, dict, bool]] = {}
     with corpus.measured_agentic_contract(comparison):
         agentic_contract = compare.agentic.load_contract(tune.REPO)
         contracts = {version: {"main": compare.runner.load_scored_label_contract(tune.REPO, path),
@@ -142,21 +142,21 @@ def main() -> int:
             choice = selection["choices"][objective]
             config = choice["finals"][choice["start"]]["config"]
             systems[tune.ROWS[objective]] = ({doc.uid: {"spans": replayer.predict(i, config), "refused": None}
-                                              for i, doc in enumerate(docs)}, mapping)
+                                              for i, doc in enumerate(docs)}, mapping, False)
         documents = {d.uid: d for docs_ in layers.values() for d in docs_}
         authors = tune.authors_predictions(args.authors, documents)
         systems[tune.ROWS["authors"]] = ({uid: {"spans": spans, "refused": None} for uid, spans in authors.items()},
-                                         mapping)
-        systems[args.gaze_build_name] = (build_predictions(args.gaze_build, layers), gaze_mapping)
+                                         mapping, False)
+        systems[args.gaze_build_name] = (build_predictions(args.gaze_build, layers), gaze_mapping, True)
         version, release = release_predictions(layers)
-        systems[f"Gaze {version}"] = (release, gaze_mapping)
+        systems[f"Gaze {version}"] = (release, gaze_mapping, True)
         subset = {uid for uid in release}
         report = {"split": "test", "gaze_build": json.loads((args.gaze_build / "meta.json").read_text()),
                   "release": version, "full": {}, "release_subset": {}}
-        for name, (predictions, labels) in systems.items():
-            if not name.startswith("Gaze v"):
-                report["full"][name] = tally(predictions, layers, contracts, labels, None)
-            report["release_subset"][name] = tally(predictions, layers, contracts, labels, subset)
+        for name, (predictions, labels, native_gaze) in systems.items():
+            if name != f"Gaze {version}":
+                report["full"][name] = tally(predictions, layers, contracts, labels, None, native_gaze=native_gaze)
+            report["release_subset"][name] = tally(predictions, layers, contracts, labels, subset, native_gaze=native_gaze)
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "versus-gaze.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     lines = []
