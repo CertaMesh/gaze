@@ -87,6 +87,27 @@ class OwnerStateTests(unittest.TestCase):
                     with self.assertRaises(ProducerFailure):
                         owner.signal_group(signal.SIGTERM)
 
+    def test_foreign_unknown_states_do_not_affect_owned_members(self):
+        data = b'6493 6485 ?E\n7 7 Z\n8 7 S+\n9 8 \xff\n'
+        with patch.object(binding, 'metadata', return_value=data):
+            self.assertEqual(binding.group_members(7, time.monotonic()+3),
+                             {7: 'Z', 8: 'S+'})
+
+    def test_owned_unknown_states_are_refused(self):
+        for state in (b'?E', b'?', b'E', b'\xff'):
+            with self.subTest(state=state), \
+                    patch.object(binding, 'metadata', return_value=b'7 7 '+state+b'\n'):
+                with self.assertRaises((ProducerFailure, UnicodeDecodeError)):
+                    binding.group_members(7, time.monotonic()+3)
+
+    def test_foreign_malformed_identities_are_refused(self):
+        for row in (b'bad 8 ?E', b'9 bad ?E', b'0 8 ?E',
+                    b'9 8 ?E\n9 9 Z', b'7 8 ?E', b'9 8 ?E extra'):
+            with self.subTest(row=row), \
+                    patch.object(binding, 'metadata', return_value=b'7 7 Z\n'+row+b'\n'):
+                with self.assertRaises(ProducerFailure):
+                    binding.group_members(7, time.monotonic()+3)
+
 
 class CargoSelectionTests(unittest.TestCase):
     def setUp(self):
