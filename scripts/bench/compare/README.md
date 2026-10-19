@@ -233,8 +233,8 @@ uv run --project scripts/bench python scripts/bench/compare/render.py \
 
 The composed report keeps the base's top-level measurement and replay metadata.
 `row_sources.tool_sources` attributes each competitor to its snapshot;
-`row_sources.aggregation` records only the later composition revision, code
-hashes and time. Snapshot metadata and each tool's provenance retain their own
+`row_sources.aggregation` records only the later composition revision, dirty
+state, code hashes and time. Snapshot metadata and each tool's provenance retain their own
 source, adapter, collection or replay time, configuration and model pins. Native
 hashes cover both original and fresh records, including superseded original
 scrubadub records. Eleven inherited tool objects, Gaze measurements, selected

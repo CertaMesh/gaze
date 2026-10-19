@@ -8,7 +8,7 @@ Gaze is not listed: the comparison run measured an unreleased build, and this pa
 
 Competitor runtimes: Presidio 2.2.364 with spaCy 3.7.5; GLiNER 0.2.29 at model snapshot `1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d`. GLiNER uses model-card labels, library threshold 0.5. OpenAI Privacy Filter (OPF) unavailable after two 600-second socket timeouts.
 
-Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are not published.
+Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are not published. The original scrubadub measurements predate the Spanish adapter correction; their Spanish inputs count as fully missed.
 
 | Contract | Layer | Tool | Leaked B | FP B | Processed | Skipped | Skipped gold B | Latency |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |

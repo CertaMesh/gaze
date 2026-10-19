@@ -52,6 +52,8 @@ def complete(report: dict) -> None:
 
 def _compatible(base: dict, supplement: dict) -> None:
     complete(base)
+    if unavailable_tools(base) != {"opf"}:
+        raise ValueError("Spanish composition requires the original OPF unavailable receipt")
     if base.get("latency_validity", {}).get("publishable") is not False:
         raise ValueError("composition requires the original timing-withheld publication")
     if "row_sources" in base or "row_sources" in supplement:
@@ -156,6 +158,8 @@ def compose(base_path: Path, base_sha: str, supplement_path: Path, supplement_sh
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "harness_revision": subprocess.check_output(
                 ["git", "rev-parse", "HEAD"], cwd=compare.REPO, text=True).strip(),
+            "harness_dirty": bool(subprocess.check_output(
+                ["git", "status", "--porcelain"], cwd=compare.REPO, text=True).strip()),
             "composer_sha256": file_hash(Path(__file__)),
             "compare_sha256": file_hash(Path(compare.__file__)),
             "finalizer_sha256": file_hash(Path(__file__).with_name("finalize_report.py")),
@@ -200,7 +204,8 @@ def validate(report: dict, path: Path) -> None:
     if manifest["tool_sources"] != expected_sources:
         raise ValueError("tool source attribution differs")
     aggregation = manifest["aggregation"]
-    if (set(aggregation) != {"generated_at", "harness_revision", "composer_sha256", "compare_sha256", "finalizer_sha256"}
+    if (set(aggregation) != {"generated_at", "harness_revision", "harness_dirty", "composer_sha256", "compare_sha256", "finalizer_sha256"}
+            or type(aggregation["harness_dirty"]) is not bool
             or not re.fullmatch(r"[0-9a-f]{40}", aggregation["harness_revision"])
             or not isinstance(aggregation["generated_at"], str)):
         raise ValueError("invalid aggregation identity")
@@ -217,7 +222,7 @@ def validate(report: dict, path: Path) -> None:
 def publication_note(report: dict) -> str:
     if "row_sources" not in report:
         if report.get("compare_sha256") == ORIGINAL_ADAPTER:
-            return "These original measurements predate the Spanish scrubadub adapter correction; Spanish inputs count as fully missed."
+            return "The original scrubadub measurements predate the Spanish adapter correction; their Spanish inputs count as fully missed."
         return ""
     refs = report["row_sources"]
     return (

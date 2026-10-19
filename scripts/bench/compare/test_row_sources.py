@@ -168,7 +168,7 @@ def test_original_snapshot_still_renders_with_its_legitimate_contract(inputs, mo
     base = inputs[0]
     page = base.with_suffix(".md")
     render_cli(base, page, monkeypatch)
-    assert "predate the Spanish scrubadub adapter correction" in page.read_text()
+    assert "original scrubadub measurements predate the Spanish adapter correction" in page.read_text()
 
 
 @pytest.mark.parametrize("source", (0, 1))
@@ -290,3 +290,15 @@ def test_output_cannot_overwrite_a_source_snapshot(inputs, monkeypatch, source):
     with pytest.raises(ValueError, match="overwritten"):
         compose_cli(redirected, monkeypatch)
     assert inputs[source].read_bytes() == before
+
+
+def test_composition_requires_the_original_opf_unavailable_receipt(inputs, monkeypatch):
+    base = json.loads(inputs[0].read_bytes())
+    del base["unavailable"]
+    base["tools"]["opf"] = copy.deepcopy(base["tools"]["gliner"])
+    base["tools"]["opf"]["tool"] = "opf"
+    base["contention_samples"]["opf"] = {"contended": False}
+    write(inputs[0], base)
+    with pytest.raises(ValueError, match="original OPF unavailable receipt"):
+        compose_cli(inputs, monkeypatch)
+    assert not inputs[-1].exists()
