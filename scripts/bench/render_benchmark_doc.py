@@ -1604,15 +1604,26 @@ def chart_panels(
 def attach_presidio_tuned(comparison: Mapping[str, Any], comparison_path: Path) -> Mapping[str, Any]:
     """The comparison plus `presidio-tuned.json` when it sits beside it and is sound.
 
-    The tuned report must name these exact comparison bytes, reproduce the
-    comparison's presidio-all row from its own records, and have run each chosen
-    configuration live on its fixed sample covering the same bytes as the replay.
+    The tuned report must name the original comparison snapshot, reproduce its
+    presidio-all row, and have run each chosen configuration live on its fixed
+    sample covering the same bytes as the replay. Composed reports retain that
+    anchor only after validation against both snapshots and the native receipt.
     """
     path = comparison_path.parent / TUNED_PRESIDIO_NAME
     if not path.exists():
         return comparison
     tuned = json.loads(path.read_text(encoding="utf-8"))
-    if tuned["comparison_sha256"] != _sha256(comparison_path):
+    anchor_path = comparison_path
+    if "row_sources" in comparison:
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "compare"))
+        import row_sources
+
+        try:
+            row_sources.validate(comparison, comparison_path)
+        except (ValueError, OSError, KeyError, TypeError) as error:
+            raise RenderError(f"invalid comparison row sources: {error}") from error
+        anchor_path = comparison_path.parent / comparison["row_sources"]["base"]["path"]
+    if tuned["comparison_sha256"] != _sha256(anchor_path):
         raise RenderError(f"{TUNED_PRESIDIO_NAME} was measured beside a different comparison.json")
     if tuned.get("harness_dirty") is not False or not tuned["anchor"]["equal"]:
         raise RenderError(f"{TUNED_PRESIDIO_NAME} needs a clean harness and a reproduced presidio-all anchor")
