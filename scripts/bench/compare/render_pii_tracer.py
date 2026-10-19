@@ -71,7 +71,7 @@ def render(report: Mapping[str, Any], committed: Mapping[str, Any]) -> str:
     lines = [
         "# PII-Tracer on Gaze's corpus",
         "",
-        "Perplexity's [PII-Tracer](https://huggingface.co/perplexity-ai/PII-Tracer) is a 0.6B on-device PII "
+        f"Perplexity's [PII-Tracer](https://huggingface.co/{provenance['model_repo']}/blob/{provenance['revision']}/README.md) is a 0.6B on-device PII "
         "detector. This page scores it on the same corpus, scorer and scored-label contracts as the other "
         "competitors in [competitors.md](competitors.md), full-corpus layer C. Byte leaks, false positives "
         "and character F2 use the shared scorer. Only aggregates are published. Gaze rows appear on "
