@@ -784,8 +784,15 @@ class ShippedDefaultChartsTest(unittest.TestCase):
             for group in render.displayed_groups(committed)
         }
 
-    def test_committed_history_trend_has_every_distinct_result(self):
+    def test_historical_trend_keeps_both_defaults_and_coalesces_duplicate_results(self):
         committed = render.load_history(render.DEFAULT_HISTORY)
+        committed = {
+            **committed,
+            "releases": [
+                row for row in committed["releases"]
+                if row["version"] in ("v0.14.0", "v0.15.0", "v0.15.1")
+            ],
+        }
         expected = [
             (label, arm["surviving_pii_utf8_bytes"])
             for label, arm in self.committed_group_defaults(committed).items()
@@ -800,6 +807,27 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         )
         charts = render.render_charts(committed)
         self.assertIn(f"line [{', '.join(str(value) for _, value in expected)}]", charts)
+
+    def test_committed_history_trend_has_every_distinct_result(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        defaults = self.committed_default_arms(committed)
+        # Independent of displayed_groups and group_label: the current window
+        # has three results, with the two v0.15 releases sharing one point.
+        expected = [
+            ("v0.15.0 – v0.15.1", defaults["v0.15.1"]["surviving_pii_utf8_bytes"]),
+            ("v0.16.0", defaults["v0.16.0"]["surviving_pii_utf8_bytes"]),
+            ("v0.17.0", defaults["v0.17.0"]["surviving_pii_utf8_bytes"]),
+        ]
+        self.assertEqual(
+            render.shipped_default_trend(committed, "surviving_pii_utf8_bytes"), expected
+        )
+        charts = render.render_charts(committed)
+        self.assertIn(f"line [{', '.join(str(value) for _, value in expected)}]", charts)
+        self.assertNotIn("v0.14.0", charts)
+        self.assertEqual(
+            [row["version"] for row in committed["releases"]],
+            ["v0.14.0", "v0.15.0", "v0.15.1", "v0.16.0", "v0.17.0"],
+        )
 
     def test_comparison_bars_on_committed_history(self):
         committed = render.load_history(render.DEFAULT_HISTORY)

@@ -1,67 +1,125 @@
 ---
 name: release
-description: "Execute a Gaze release: preflight, explicit tag authority, workflow publishing, and post-tag verification."
+description: "Execute a Gaze release with verified evidence, signed tags, workflow publishing and post-tag checks."
 ---
 
-# Release Orchestration
+# Release orchestration
 
 Use this skill for Gaze release execution. It complements the `release-notes`
 skill, which controls release-note voice only.
 
-Do not cut a release, push a tag, or trigger publish workflows until the
-pre-flight checklist is green and the user gives an explicit lock signal such
-as "Do it yourself", "Tag + push", or an equivalent direct instruction.
+Require green preflight checks and explicit user authority before pushing a tag
+or publishing. An existing instruction to finish the full publication supplies
+that authority; do not ask again. A worker assigned only evidence or source
+preparation must stop at its assigned boundary.
 
-## Pre-Flight Gates
+## Preflight gates
 
-Run from `main` after all release-blocker PRs are merged.
+Use an isolated Anvil checkout of the actual remote `main` merge after all
+release blockers are merged. Read the local-development workflow before
+isolation, service startup or full verification. Do not reset a divergent local
+`main` or change remote refs to satisfy a source check.
 
-1. Confirm the working tree is clean and `main` is at the intended merge commit.
+1. Confirm the working tree is clean and `HEAD` is the intended remote-main merge.
 2. Confirm all open PRs marked as `v0.X.0-final` blockers are merged.
 3. Confirm the workspace version pin matches the about-to-tag version in the
    root `Cargo.toml` and all per-crate `Cargo.toml` files.
-4. Run `cargo run -p xtask -- ci-feature-matrix` and require green.
+4. Require `cargo run -p xtask -- ci-feature-matrix` and applicable hosted
+   preflights to pass on the exact source. Retain completed native qualification
+   with its original source and input provenance. Reuse it only when the
+   qualified code, features, toolchain and inputs are unchanged; record that
+   binding rather than claiming a new run. Rerun affected checks after changes.
 5. Run `cargo run -p xtask -- readme-version-check` and require green.
 6. Run `git grep -E '/Users/[a-z]+'` and require zero tracked-file matches.
    Path-leak output is release-blocking until scrubbed to `~/` or `$HOME`.
-7. Dogfood Gaze on its own release text: pipe the modified `CHANGELOG.md`
-   section, plus any optional extra release text passed to the release
-   preflight, through `gaze clean` and verify zero detections. GitHub Release
-   bodies use generated notes; `dist/release-notes/` is not committed.
+7. Run `cargo run -p xtask -- scrub-public-text --published` with the proposed
+   release notes and PR text as additional files. Require the actual checker
+   to accept all publication text, including the version's changelog section.
+   Use supported public-doc citations; do not widen URL exceptions to silence
+   a rejected CI or commit link. GitHub initially generates release notes;
+   keep curated notes in `CHANGELOG.md`, not `dist/release-notes/`.
 8. Verify benchmark claims in the changelog or release PR body link to the
    script and hardware specification that produced them.
-9. Pair every release with its own benchmark: version X ships with benchmark X.
-   Run the scorecard runner on the release commit in a fresh anvil worktree
-   (see the `docs/reference/benchmarks` README for the command and the hardware
-   spec), store the result as
-   `docs/reference/benchmarks/scorecard-vX.Y.Z.json`, and add one row and one
-   chart point keyed by `vX.Y.Z` to the consolidated benchmark document, with
-   commit sha, script, and hardware as secondary columns. Dogfood the updated
-   document. A release without a fresh benchmark is blocked.
+9. Pair version X with verified benchmark evidence for its actual source,
+   policy, models and inputs. Follow the evidence rules below. Store scorecards,
+   portable observation archives and receipts under `docs/reference/benchmarks`.
+   Before tagging, use the history renderer's `--provisional` option. Charts
+   admit only real tagged releases; plan their promotion after the tag exists.
 10. Confirm every detection PR merged since the last tag carries passing
     evidence under the
-    [benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate), and that
-    past-release rows were re-measured if the benchmark itself changed.
-11. Re-run `scripts/bench/compare/compare.py` for this release's Gaze rows and
-    every competitor on the same corpus, contracts, and variant packs. Update
-    `comparison.json` and `competitors.md`; retain aggregate results and model
-    hashes. The PR docs gate checks competitor inputs, while this release step
-    refreshes the Gaze revision shown on the page.
+    [benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate). Remeasure
+    displayed past releases when benchmark inputs or scoring change. Retain
+    unchanged historical subjects and inputs under their original identities.
+11. Update comparisons through supported collectors, composition and renderers.
+    Reuse unchanged competitors with full original provenance. Collect affected
+    rows only; do not rerun an unaffected roster because Gaze's source changed.
+    Require exact source guards, complete populations and reviewed native hash
+    receipts. Preserve all inherited Gaze, threshold and OPF identities.
+12. Bind the measured source, actual merge and intended tag target. Require
+    exact raw `crates` tree equality, including crate READMEs and manifests.
+    Record and review any changes outside that tree. Inspect the publish plan
+    and package file lists; package the coordinated workspace as described in
+    [Release process](../../../docs/how-to/maintainers/release-process.md).
+    Retain package digests and source bindings. A Git tree hash alone does not
+    establish identical `.crate` payloads.
 
 If any step fails, stop and fix the release branch. Do not tag around a red
 checklist.
 
-## Tag Procedure
+## Benchmark evidence and reuse
 
-Only after explicit user lock signal:
+The latest headline is scored-label contract v4. Run the gain gates separately
+under v1 and v2. Keep explicit v3/v4 observation replays distinct from fresh
+v1/v2 inference. Export publication archives with `export_portable_record.py`;
+retain original/private and portable hashes, unchanged-row proof and source,
+binary, policy, model, corpus, seed and hardware provenance. Never restamp a
+retained capture with the current source or a fresh replay time.
+
+Reuse evidence only while its measured subject and benchmark inputs remain
+unchanged and their full provenance is verified. A full cache-key match may
+justify reuse; a changed revision alone is not an exact cache hit. Current
+release-history admission rejects `cache_replay: true`; do not flip that flag
+or fabricate a receipt to bypass it. Resolve unsupported admission explicitly.
+When direct final-source evidence is required, collect only the changed
+candidate sides and retain valid baselines.
+
+Strict identity `not_comparable` stays distinct from an explicitly accepted
+comparison of each release's own setup policy. Such a numeric comparison must
+retain policy differences, layer-by-layer leaked and false-positive bytes,
+populations, refusals, exact restores, restore failures, valid/invalid manifests
+and every credited-label counterweight guard. Apply the same discipline to an
+explicitly accepted external byte-micro F2 comparison: report F2 and every
+per-set guard, with the original net-byte verdict separately, including FAIL.
+An override of the comparison rule does not waive correctness or identity proof.
+
+For mixed-source comparisons, retain immutable original/supplement snapshots
+and the fixed sibling native receipt produced by `finalize_report.py`.
+Validate their hashes and reconstruction with the existing row-source checks.
+Tuned Presidio remains anchored to the original snapshot. Its byte-equivalence
+verdict does not establish typed-label equality. Retain disclosed label
+differences, failed mechanism arms and unavailable-tool attempts. No partial
+OPF metrics or extra attempts are implied by a documentation refresh.
+
+Run relevant renderer, receipt, public-text and source-binding checks on the
+final branch. No contended timing result supports a speed claim. A renderer's
+offline check proves consistency; a corpus replay establishes new character
+counts. Do not substitute one for the other.
+
+## Tag procedure
+
+After the checks pass and publication authority is established:
 
 ```bash
-git tag -a vX.Y.Z -m "vX.Y.Z" <merge-sha>
+git tag -s vX.Y.Z -m "vX.Y.Z" <merge-sha>
+git verify-tag vX.Y.Z
+git rev-parse vX.Y.Z^{commit} vX.Y.Z:crates
 git push origin vX.Y.Z
 ```
 
-Use an annotated tag on the merge commit. Do not tag a local-only commit, an
-unmerged branch head, or a dirty working tree.
+Use a signed annotated tag on the verified remote-main merge commit. Verify
+the actual tag target and measured crates tree before pushing. All created
+commits must also be signed, cryptographically verified and DCO-signed by their
+authors. Do not tag a local-only commit, an unmerged head or a dirty tree.
 
 The tag push auto-fires two workflows:
 
@@ -74,20 +132,29 @@ The tag push auto-fires two workflows:
 Do not publish to crates.io manually. The workflow owns publication order and
 idempotent retries.
 
-## Post-Tag Verification
+## Post-tag verification
 
 After the workflows finish:
 
 1. Confirm `gh release view vX.Y.Z` returns the release.
 2. Confirm both workflow runs succeeded: `release.yml` and `publish-crates.yml`.
-3. Confirm every published crate reports the new version. Derive the expected
-   set with `cargo run -p xtask -- publish-plan` rather than a hard-coded list,
-   then query the `crates.io` API endpoint `/api/v1/crates/<name>` and expect
-   `max_version == X.Y.Z` for each. A count that differs from the plan is a partial publish.
-4. Update the orchestrator scratchpad with released URLs:
-   GitHub Release URL plus one crates.io URL per crate in the publish plan.
+3. Confirm every planned crate reports the exact new version on crates.io.
+   Derive the set with `cargo run -p xtask -- publish-plan`; v0.17 expects 15
+   crates. Check each version's source/package metadata and published checksum
+   against retained package evidence. A missing crate or count mismatch is a
+   partial publication, even if one workflow job succeeded.
+4. Verify each workflow-declared `gaze` binary and its checksum: macOS ARM64
+   and Linux x86_64 for v0.17. Check version output and artifact provenance
+   against the actual tag/source. Verify the NER checksum manifest separately.
+   An uploaded asset alone does not prove the right binary was published.
+5. Promote provisional history only after actual tag/source/crates binding.
+   Use `compare/release_char_level.py record` with the pinned corpus, retain its
+   output, then run `check` and regenerate history, comparator pages and charts.
+   Preserve historical evidence; do not invent a tag to render a candidate.
+6. Record the GitHub Release URL, one crates.io URL per planned crate, binary
+   verification and any unresolved publication failure in the release report.
 
-## Escalation Rules
+## Escalation rules
 
 - Do not push tags without an explicit user lock signal.
 - Do not publish to crates.io manually.

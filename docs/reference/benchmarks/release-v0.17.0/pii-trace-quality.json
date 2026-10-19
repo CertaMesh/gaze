@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "benchmark": "pii-trace",
+  "receipts": {
+    "driver_sha256": "21e1190bfcedcc2ef049e645da58f945083f1f837db3f533f216e24e3cd0ab08",
+    "wrapper_sha256": "f60642902cfbb3acfbd190ff3a8d145407165c0ef4fb2252cd17cf2e47f74d2f",
+    "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
+    "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+    "harness_revision": "a8c31bc5e7f7a0809c4299e91b685dd7dda73389",
+    "runtime_revision": "86195a8fbff001489b4eee385020c94c15e502b3",
+    "ner_manifest_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+    "nym_manifest_sha256": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767",
+    "inputs_sha256": {
+      "train.parquet": "1f37039ca2a9c7a93d7b755e1603d5192424c61e61fcbf2ce9405f26705fd670"
+    },
+    "driver_output_sha256": "0be715664d012887eefffaba2b975a596bb33a420759bba2b17836bdfe2c916a"
+  },
+  "quality": {
+    "test": {
+      "attempted_documents": 4500,
+      "completed_documents": 4500,
+      "failed_closed_documents": 0,
+      "contract_documents": 4500,
+      "restore_exact_documents": 4500,
+      "restore_success_decisions": 4500,
+      "manifest_valid_documents": 4500,
+      "restore_failures": 0,
+      "restore_decision_failures": 0,
+      "manifest_invalid_documents": 0
+    }
+  }
+}

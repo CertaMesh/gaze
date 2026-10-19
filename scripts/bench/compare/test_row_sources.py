@@ -14,6 +14,7 @@ import compare
 import finalize_report
 import render
 import row_sources
+import render_benchmark_doc as history_render
 from comparison_availability import REASON, digest
 
 
@@ -179,6 +180,101 @@ def test_original_snapshot_still_renders_with_its_legitimate_contract(inputs, mo
     page = base.with_suffix(".md")
     render_cli(base, page, monkeypatch)
     assert "original scrubadub measurements predate the Spanish adapter correction" in page.read_text()
+
+
+@pytest.fixture
+def history_tuned(inputs, monkeypatch):
+    report = compose_cli(inputs, monkeypatch)
+    base, _, _, _, output = inputs
+    row = "presidio-tuned-own-f2"
+    tuned = {
+        "comparison_sha256": row_sources.file_hash(base),
+        "harness_revision": "a" * 40, "harness_dirty": False,
+        "anchor": {"equal": True},
+        "provenance": {row: {"live_verification": {
+            "persistent": ["fictional-label-difference"],
+            "differences": {"fictional-label-difference": {
+                "live_only": [[0, 5, "PERSON"]], "replay_only": [[0, 5, "LOCATION"]],
+            }},
+        }}},
+        "chart": {"row": row}, "rows": {row: {}},
+    }
+    write(output.with_name("presidio-tuned.json"), tuned)
+    return report, tuned
+
+
+def test_history_tuned_keeps_original_snapshot_identity(inputs, history_tuned):
+    report, tuned = history_tuned
+    output = inputs[-1]
+    paths = (*inputs[:2], output, output.with_name("presidio-tuned.json"), row_sources.native_receipt_path(output))
+    before = {path: path.read_bytes() for path in paths}
+    assert tuned["comparison_sha256"] != row_sources.file_hash(output)
+    for comparison, path in ((json.loads(inputs[0].read_bytes()), inputs[0]), (report, output)):
+        attached = history_render.attach_presidio_tuned(comparison, path)
+        assert attached == {**comparison, "presidio_tuned": tuned}
+        assert attached["presidio_tuned"]["harness_revision"] == "a" * 40
+    assert {path: path.read_bytes() for path in paths} == before
+
+
+@pytest.mark.parametrize("owner", ("presidio", "gaze", "threshold", "source-hash"))
+def test_history_tuned_rejects_changed_inherited_data(inputs, history_tuned, owner):
+    report, _ = history_tuned
+    if owner == "presidio":
+        report["tools"]["presidio-all"]["tool"] = "changed"
+    elif owner == "gaze":
+        report["gaze"]["v4"]["gaze_revision"] = "c" * 40
+    elif owner == "threshold":
+        report["selected_threshold_rows"]["gliner"] = "gliner"
+    else:
+        report["row_sources"]["aggregation"]["composer_sha256"] = "0" * 64
+    output = inputs[-1]
+    write(output, report)
+    before = output.read_bytes()
+    with pytest.raises(history_render.RenderError, match="row sources"):
+        history_render.attach_presidio_tuned(report, output)
+    assert output.read_bytes() == before
+
+
+@pytest.mark.parametrize("index", (0, 1))
+def test_history_tuned_rejects_changed_snapshot(inputs, history_tuned, index):
+    report, _ = history_tuned
+    snapshot = inputs[index]
+    snapshot.write_bytes(snapshot.read_bytes() + b"\n")
+    before = snapshot.read_bytes()
+    with pytest.raises(history_render.RenderError, match="row sources"):
+        history_render.attach_presidio_tuned(report, inputs[-1])
+    assert snapshot.read_bytes() == before
+
+
+@pytest.mark.parametrize("change", ("missing", "changed", "repacked"))
+def test_history_tuned_rejects_invalid_retained_receipt(inputs, history_tuned, change):
+    report, _ = history_tuned
+    output = inputs[-1]
+    receipt = row_sources.native_receipt_path(output)
+    if change == "missing":
+        receipt.unlink()
+    else:
+        receipt.write_bytes(receipt.read_bytes() + b"\n")
+        if change == "repacked":
+            report["row_sources"]["native_receipt_sha256"] = row_sources.file_hash(receipt)
+            write(output, report)
+    before = output.read_bytes()
+    with pytest.raises(history_render.RenderError, match="row sources"):
+        history_render.attach_presidio_tuned(report, output)
+    assert output.read_bytes() == before
+
+
+@pytest.mark.parametrize("anchor", ("publication", "unrelated"))
+def test_history_tuned_rejects_relabelled_anchor(inputs, history_tuned, anchor):
+    report, tuned = history_tuned
+    output = inputs[-1]
+    tuned["comparison_sha256"] = row_sources.file_hash(output) if anchor == "publication" else "0" * 64
+    path = output.with_name("presidio-tuned.json")
+    write(path, tuned)
+    before = path.read_bytes()
+    with pytest.raises(history_render.RenderError, match="different comparison"):
+        history_render.attach_presidio_tuned(report, output)
+    assert path.read_bytes() == before
 
 
 @pytest.mark.parametrize("alias", ("direct", "symlink", "hardlink"))

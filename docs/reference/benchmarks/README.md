@@ -1,10 +1,11 @@
 # Gaze Benchmarks
 
-The v0.17.0 source candidate requires fresh measurements of its finalized crate
-sources, including crate documentation. Retained candidate evidence describes
-its recorded source revision and is provisional for this release. It does not
-qualify the assembled source tree. Tagged-release tables stay unchanged until
-final evidence and release checks pass.
+The v0.17.0 candidate has fresh measurements of merged source
+`86195a8fbff001489b4eee385020c94c15e502b3`. Its raw crates tree is
+`5a3c6502bd64eabf40f009eb05ca55da3ed50dfe`, including crate READMEs and manifests.
+[Final candidate evidence](#v017-final-candidate-evidence) remains provisional
+until the real tag and package checks. Tagged-release benchmark panels retain
+v0.16.0; the current table and inline trends include the provisional candidate.
 
 The single benchmark document for Gaze. It carries the current release's
 measured numbers as a table and as charts, the methodology behind them, and the
@@ -49,6 +50,86 @@ Related contracts kept as separate documents:
   `fixture_only_not_a_corpus_commitment`; it is not a corpus commitment.
 
 ---
+
+## v0.17 final candidate evidence
+
+These results compare the v0.16 shipped setup policy with the v0.17 candidate's
+own setup policy. The candidate runtime is merged source `86195a8f`, not the
+later documentation commit. The [measurement receipts](release-measurement-receipts-v0.17.0.json)
+pin original captures, portable exports, replay views and aggregate evidence.
+The portable exporter verifies every observation row unchanged. Independent
+v1/v2 captures reproduce identical untimed runs and layers when replayed under
+v1; v3/v4 are explicit replays of v2, without new inference. Contract v4 remains
+the headline; v1/v2 remain the gates.
+
+The accepted shipped-policy numeric comparison passes v1 and v2. The strict
+identity gates remain `not_comparable` because `nym-small-int8` model-bundle
+identity and `policy_sha256` differ. Neither strict metadata nor original
+capture provenance was rewritten. The fresh runners both exit 4 for zero-leak
+readiness: improved detection still leaves PII exposed on these test sets.
+
+| Contract | Layer | Gated leak bytes, base → candidate | All-gold leak bytes, base → candidate | FP bytes, base → candidate |
+| --- | --- | --- | --- | --- |
+| v1 | C | 13,291 → 9,717 | 13,291 → 9,717 | 26,902 → 27,021 |
+| v2 | C | 7,348 → 6,652 | 7,348 → 6,652 | 26,902 → 27,004 |
+| v1/v2 | A | 74,685 → 71,130 | 75,887 → 72,332 | 2,407 → 2,489 |
+| v1/v2 | D | 0 → 0 | 0 → 0 | 9,290 → 9,328 |
+| v1/v2 | R | 120,826 → 120,476 | 120,826 → 120,476 | 1,243 → 1,277 |
+
+Across layers, v1 removes 7,479 leaked bytes with 273 additional FP bytes; v2
+removes 4,601 with 256 additional FP bytes. Each side processes C 2,910, A 6,617,
+D 5,192 and R 3,061 documents. All 17,780 restore exactly with valid manifests;
+refusals, restore failures and invalid manifests stay zero. Credited-label
+counterweights remain unchanged, including 18 → 18 and 30 → 30 bytes.
+[Own-policy review](release-v0.17.0/own-policy-ruling-review.json) retains every
+layer and guard; [strict v1](release-v0.17.0/strict-gate-v1.json) and
+[strict v2](release-v0.17.0/strict-gate-v2.json) retain the identity mismatch.
+
+External candidates use runtime `86195a8f` with the unchanged historical harness
+`a8c31bc5`; the baseline remains the v0.16 runtime. The accepted external
+criterion is byte-micro F2, `5*TP/(5*TP+4*FN+FP)`, with all per-set population,
+leak, refusal, restore and manifest guards. It passes all three comparisons.
+The original net-byte verdict is reported separately, including TRACE's failure.
+These byte-micro scores do not replace vendor metrics or relabel historical
+rows in [their benchmarks](#competitors-own-benchmarks).
+
+| Benchmark | Byte-micro F2 %, base → candidate | Leaked bytes removed | FP bytes added | Original net-byte gate | Accepted F2 gate |
+| --- | --- | ---: | ---: | --- | --- |
+| Sealed OpenPII/Gretel | 64.3476308515 → 66.0206379254 | 20,738 | 5,282 | PASS | PASS |
+| PIIBench-commercial | 62.7119062150 → 64.2375059624 | 4,520 | 815 | PASS | PASS |
+| PII-TRACE | 75.8824156820 → 76.2383386217 | 284 | 353 | FAIL, `no_eligible_gain` | PASS |
+
+The [external review](release-v0.17.0/external-f2-release-review.json) retains
+all set counters and the original gate hashes. Sealed totals sum OpenPII all
+and Gretel English, German and French. The overlapping OpenPII en-de-fr subset
+is guarded separately and excluded from totals. Attempted, completed,
+exact-restore and valid-manifest counts remain 9,990, 2,891, 453 and 443;
+the overlap has 999. Commercial PIIBench retains 5,000 documents; TRACE retains
+4,500. Refusals, actual restore failures and invalid manifests stay zero on all
+sets. French restore-decision failures remain one on each side, separately
+from actual restore failures. The [sealed](release-v0.17.0/sealed-gate.json),
+[commercial](release-v0.17.0/piibench-commercial-gate.json) and
+[TRACE](release-v0.17.0/pii-trace-gate.json) receipts retain binary, policy,
+model, input, driver and original score-output digests.
+
+Only two comparator rows were freshly measured: scrubadub-base and
+scrubadub-spacy, each over all 17,780 documents with full sample counts and no
+skipped documents, languages or gold bytes under every contract. Each tool's
+Spanish positive A controls still leak 330 bytes over 30 documents, with zero
+FP bytes; the 30 benign D controls have zero leaks and FP bytes. See the
+[Spanish review](release-v0.17.0/spanish-aggregate-review.json) and
+[mixed-source comparison](competitors.md). Eleven other tool objects, Gaze,
+threshold choices and OPF's unavailable receipt retain their original identities.
+The immutable snapshots and fixed sibling native receipt bind both original
+and replacement native-file digests. Composition does not establish new inference.
+
+PII-Tracer, tuned Presidio and all 24 mechanism captures retain their original
+identities. The Nym component BSN counterweight remains a FAIL at 0 → 18 FP
+bytes; the release comparison has 18 → 18. OPF remains unavailable after exactly
+two 600-second attempts. Experimental trained checkpoints are excluded.
+Timing comparisons remain withheld for contended captures. The provisional
+history entry does not establish a tag or package equality; actual-tag history
+promotion and character-count replay follow release binding.
 
 ## What we measure, and how
 
@@ -357,19 +438,19 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: current-release -->
 
-**v0.16.0** — measured on the released tree.
+**v0.17.0** **(provisional)** — *not* measured on the released tree.
 
-> Fresh measurement on the release tag with the current harness. Byte metrics only.
+> Pretag measurements of merged source 86195a8fbff001489b4eee385020c94c15e502b3; shipped setup policy, independent v1/v2 captures and v3/v4 observation replays. Not a tagged release; timing is not a speed comparison.
 
 | Provenance | Value |
 | --- | --- |
-| Release | `v0.16.0` |
-| Commit | `5a7dac0fa198f20a628ed6b7fa2b5c9d41a91eb0` |
-| Measured | 2026-10-15 |
+| Release | `v0.17.0` |
+| Commit | `86195a8fbff001489b4eee385020c94c15e502b3` |
+| Measured | 2026-10-19 |
 | Machine | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) |
-| Harness | [`scripts/bench/rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) |
-| Scorecard | [`scorecard-v0.16.0.json`](scorecard-v0.16.0.json) |
-| Scorecard sha256 | `a1ed33b5f941385fd7278f4d37e5b2c6a2e6b0f3ca798702f1d65111f763b6d4` |
+| Harness | [`scripts/bench/run_no_opf_benchmark.py`](../../../scripts/bench/run_no_opf_benchmark.py) |
+| Scorecard | [`scorecard-v0.17.0.json`](scorecard-v0.17.0.json) |
+| Scorecard sha256 | `48038f42f665fc41d45aab2c3b12c65eaa23854d055c99b49308b8c553a59f75` |
 | Corpus | `DataikuNLP/kiji-pii-training-data+gaze` @ `0275550f0b1f1b8f2dc9356fd31ac1c788b8228b+a4-negative-v1` |
 | Corpus sha256 | `11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2` |
 | Corpus component `dataiku` | `916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d` |
@@ -379,12 +460,13 @@ Two consequences worth stating plainly:
 | Seed | `20260710` |
 | NER threshold | `0.3` |
 | Model bundle `davlan-mbert-ner-hrl-onnx` | `7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16` |
-| Scorecard, scored labels v2 | [`scorecard-v0.16.0-scored-labels-v2.json`](scorecard-v0.16.0-scored-labels-v2.json) |
-| Scorecard sha256, scored labels v2 | `1b4a467156faae25d96513812640b553bdad00a6735c14d028efffb64f0a337d` |
-| Scorecard, scored labels v3 | [`scorecard-v0.16.0-scored-labels-v3.json`](scorecard-v0.16.0-scored-labels-v3.json) |
-| Scorecard sha256, scored labels v3 | `f889c342abe26d7d275fb7bb9c7040d6dac7a8b3ea5656d06564c4e57c86253e` |
-| Scorecard, scored labels v4 | [`scorecard-v0.16.0-scored-labels-v4.json`](scorecard-v0.16.0-scored-labels-v4.json) |
-| Scorecard sha256, scored labels v4 | `9e055feb011691cbf7087b316cee92a0cf7f8f9d4bc79f94c8fd165fbd660029` |
+| Model bundle `nym-small-int8` | `71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767` |
+| Scorecard, scored labels v2 | [`scorecard-v0.17.0-scored-labels-v2.json`](scorecard-v0.17.0-scored-labels-v2.json) |
+| Scorecard sha256, scored labels v2 | `41fe2764e982c7f7cd9637b4c273c5bc4083b104d8af9ed3db24a0fbbcac1765` |
+| Scorecard, scored labels v3 | [`scorecard-v0.17.0-scored-labels-v3.json`](scorecard-v0.17.0-scored-labels-v3.json) |
+| Scorecard sha256, scored labels v3 | `cdfec65479d0db7f0e00018b12dd86c8c2b30ac1e855f50afe8525a010590802` |
+| Scorecard, scored labels v4 | [`scorecard-v0.17.0-scored-labels-v4.json`](scorecard-v0.17.0-scored-labels-v4.json) |
+| Scorecard sha256, scored labels v4 | `7944d60a003fd8e5d6ace066003b7a6ad291b1c644ed19dd24469bd33aaa285f` |
 
 **Scored labels v4 (headline: credentials counted, with protected repeats of a labelled value credited).** Gold PII bytes: 130,282.
 
@@ -392,7 +474,7 @@ Leaked bytes are v2's. A protected, unlabelled, byte-identical repeat of a label
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Gold-gap credited bytes info | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `policy-file` **(shipped default)** | 130,282 | 13,291 | 10.2017% | 15,141 | 11,761 | 0.885410 | 62.8522% | 100.0000% | 100.0000% | 100.0000% | 0 | 275.84 |
+| `policy-file` **(shipped default)** | 130,282 | 9,717 | 7.4584% | 15,224 | 11,797 | 0.887885 | 67.2165% | 100.0000% | 100.0000% | 100.0000% | 0 | 453.44 |
 
 **Scored labels v3 (the labels Gaze committed to detect before credentials, with protected repeats of a labelled value credited).** Gold PII bytes: 123,621.
 
@@ -400,19 +482,19 @@ Leaked bytes are v2's. A protected, unlabelled, byte-identical repeat of a label
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Gold-gap credited bytes info | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `policy-file` **(shipped default)** | 123,621 | 7,348 | 5.9440% | 15,141 | 11,761 | 0.884784 | 71.4777% | 100.0000% | 100.0000% | 100.0000% | 0 | 275.84 |
+| `policy-file` **(shipped default)** | 123,621 | 6,652 | 5.3810% | 15,224 | 11,780 | 0.884835 | 73.0928% | 100.0000% | 100.0000% | 100.0000% | 0 | 453.44 |
 
 **Scored labels v2 (the labels Gaze commits to detect, without gold-gap credit).** Gold PII bytes: 123,621.
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `policy-file` **(shipped default)** | 123,621 | 7,348 | 5.9440% | 26,902 | 0.812104 | 71.4777% | 100.0000% | 100.0000% | 100.0000% | 0 | 275.84 |
+| `policy-file` **(shipped default)** | 123,621 | 6,652 | 5.3810% | 27,004 | 0.812437 | 73.0928% | 100.0000% | 100.0000% | 100.0000% | 0 | 453.44 |
 
 **Scored labels v1 (all original gold labels, kept for comparison with earlier releases).** Gold PII bytes: 130,282.
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `policy-file` **(shipped default)** | 130,282 | 13,291 | 10.2017% | 26,902 | 0.813042 | 62.8522% | 100.0000% | 100.0000% | 100.0000% | 0 | 275.84 |
+| `policy-file` **(shipped default)** | 130,282 | 9,717 | 7.4584% | 27,021 | 0.816914 | 67.2165% | 100.0000% | 100.0000% | 100.0000% | 0 | 453.44 |
 
 Validator-backed labels on `policy-file`, scored labels v1. Gold that fails its own checksum stays scored gold: the two leaked-bytes columns split the surviving bytes above, they do not replace them. Shape recall is what a shape-only match (validator ignored) would cover.
 
@@ -421,8 +503,8 @@ Validator-backed labels on `policy-file`, scored labels v1. Gold that fails its 
 | `CREDITCARDNUMBER` | luhn | 126 | 96 | 0.714286 | 0.984127 | 0 | 248 |
 | `EMAIL` | email_rfc | 375 | 0 | 0.994667 | 0.994667 | 19 | 0 |
 | `IBAN` | iban_mod97 | 207 | 67 | 0.246377 | 0.468599 | 0 | 214 |
-| `PHONENUMBER` | e164_phone, e164_phone_national_de, e164_phone_national_us, phone_number | 359 | 24 | 0.849582 | 0.908078 | 495 | 163 |
-| `TAXNUM` | de_steuer_id_mod1110 | 212 | 210 | 0.080189 | 0.080189 | 28 | 1,157 |
+| `PHONENUMBER` | e164_phone, e164_phone_national_de, e164_phone_national_us, phone_number | 359 | 24 | 0.849582 | 0.908078 | 417 | 163 |
+| `TAXNUM` | de_steuer_id_mod1110 | 212 | 210 | 0.080189 | 0.080189 | 14 | 765 |
 
 <!-- END GENERATED: current-release -->
 
@@ -488,18 +570,23 @@ PIIBench-commercial: PIIBench publishes no vendor-tuned Presidio, so Presidio is
 
 ## Charts
 
+The inline trends below include the provisional v0.17 candidate. Its source is
+measured before the real tag; the tagged-release benchmark panels above retain
+v0.16.0. The rolling display keeps three distinct result groups. Older entries,
+including v0.14 and its C-only limitation, remain in the committed history.
+
 <!-- BEGIN GENERATED: charts -->
 
 #### Scored labels v4 (headline: credentials counted, with protected repeats of a labelled value credited)
 
-**Leaked PII bytes — v0.16.0 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v4; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
+**Leaked PII bytes — v0.17.0 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v4; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
 
 ```mermaid
 xychart-beta horizontal
     title "Leaked PII bytes, scored labels v4 - lower is better"
-    x-axis ["v0.16.0 default (10.2%)", "v0.15.0 – v0.15.1 default (15.0%)"]
-    y-axis "Leaked PII bytes" 0 --> 22000
-    bar [13291, 19556]
+    x-axis ["v0.17.0 default (7.5%)", "v0.16.0 default (10.2%)"]
+    y-axis "Leaked PII bytes" 0 --> 15000
+    bar [9717, 13291]
 ```
 
 **Trend across releases — each release's shipped default.** Scored under scored labels v4. The shipped arm changes between releases; the history table names it per row.
@@ -507,29 +594,29 @@ xychart-beta horizontal
 ```mermaid
 xychart-beta
     title "Leaked PII bytes, shipped default - scored labels v4"
-    x-axis ["v0.14.0 (19.3%)", "v0.15.0 – v0.15.1 (15.0%)", "v0.16.0 (10.2%)"]
-    y-axis "Leaked PII bytes (lower is better)" 0 --> 28000
-    line [25179, 19556, 13291]
+    x-axis ["v0.15.0 – v0.15.1 (15.0%)", "v0.16.0 (10.2%)", "v0.17.0 (7.5%)"]
+    y-axis "Leaked PII bytes (lower is better)" 0 --> 22000
+    line [19556, 13291, 9717]
 ```
 
 ```mermaid
 xychart-beta
     title "False-positive bytes, shipped default - scored labels v4"
-    x-axis ["v0.14.0", "v0.15.0 – v0.15.1", "v0.16.0"]
-    y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 180000
-    line [157048, 18488, 15141]
+    x-axis ["v0.15.0 – v0.15.1", "v0.16.0", "v0.17.0"]
+    y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 21000
+    line [18488, 15141, 15224]
 ```
 
 #### Scored labels v3 (the labels Gaze committed to detect before credentials, with protected repeats of a labelled value credited)
 
-**Leaked PII bytes — v0.16.0 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v3; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes.
+**Leaked PII bytes — v0.17.0 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v3; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes.
 
 ```mermaid
 xychart-beta horizontal
     title "Leaked PII bytes, scored labels v3 - lower is better"
-    x-axis ["v0.16.0 default (5.9%)", "v0.15.0 – v0.15.1 default (10.8%)"]
-    y-axis "Leaked PII bytes" 0 --> 15000
-    bar [7348, 13319]
+    x-axis ["v0.17.0 default (5.4%)", "v0.16.0 default (5.9%)"]
+    y-axis "Leaked PII bytes" 0 --> 8100
+    bar [6652, 7348]
 ```
 
 **Trend across releases — each release's shipped default.** Scored under scored labels v3. The shipped arm changes between releases; the history table names it per row.
@@ -537,29 +624,29 @@ xychart-beta horizontal
 ```mermaid
 xychart-beta
     title "Leaked PII bytes, shipped default - scored labels v3"
-    x-axis ["v0.14.0 (17.9%)", "v0.15.0 – v0.15.1 (10.8%)", "v0.16.0 (5.9%)"]
-    y-axis "Leaked PII bytes (lower is better)" 0 --> 25000
-    line [22144, 13319, 7348]
+    x-axis ["v0.15.0 – v0.15.1 (10.8%)", "v0.16.0 (5.9%)", "v0.17.0 (5.4%)"]
+    y-axis "Leaked PII bytes (lower is better)" 0 --> 15000
+    line [13319, 7348, 6652]
 ```
 
 ```mermaid
 xychart-beta
     title "False-positive bytes, shipped default - scored labels v3"
-    x-axis ["v0.14.0", "v0.15.0 – v0.15.1", "v0.16.0"]
-    y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 180000
-    line [157048, 18488, 15141]
+    x-axis ["v0.15.0 – v0.15.1", "v0.16.0", "v0.17.0"]
+    y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 21000
+    line [18488, 15141, 15224]
 ```
 
 #### Scored labels v2 (the labels Gaze commits to detect, without gold-gap credit)
 
-**Leaked PII bytes — v0.16.0 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v2; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes.
+**Leaked PII bytes — v0.17.0 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v2; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes.
 
 ```mermaid
 xychart-beta horizontal
     title "Leaked PII bytes, scored labels v2 - lower is better"
-    x-axis ["v0.16.0 default (5.9%)", "v0.15.0 – v0.15.1 default (10.8%)"]
-    y-axis "Leaked PII bytes" 0 --> 15000
-    bar [7348, 13319]
+    x-axis ["v0.17.0 default (5.4%)", "v0.16.0 default (5.9%)"]
+    y-axis "Leaked PII bytes" 0 --> 8100
+    bar [6652, 7348]
 ```
 
 **Trend across releases — each release's shipped default.** Scored under scored labels v2. The shipped arm changes between releases; the history table names it per row.
@@ -567,29 +654,29 @@ xychart-beta horizontal
 ```mermaid
 xychart-beta
     title "Leaked PII bytes, shipped default - scored labels v2"
-    x-axis ["v0.14.0 (17.9%)", "v0.15.0 – v0.15.1 (10.8%)", "v0.16.0 (5.9%)"]
-    y-axis "Leaked PII bytes (lower is better)" 0 --> 25000
-    line [22144, 13319, 7348]
+    x-axis ["v0.15.0 – v0.15.1 (10.8%)", "v0.16.0 (5.9%)", "v0.17.0 (5.4%)"]
+    y-axis "Leaked PII bytes (lower is better)" 0 --> 15000
+    line [13319, 7348, 6652]
 ```
 
 ```mermaid
 xychart-beta
     title "False-positive bytes, shipped default - scored labels v2"
-    x-axis ["v0.14.0", "v0.15.0 – v0.15.1", "v0.16.0"]
-    y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 190000
-    line [168259, 30073, 26902]
+    x-axis ["v0.15.0 – v0.15.1", "v0.16.0", "v0.17.0"]
+    y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 34000
+    line [30073, 26902, 27004]
 ```
 
 #### Scored labels v1 (all original gold labels, kept for comparison with earlier releases)
 
-**Leaked PII bytes — v0.16.0 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v1; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
+**Leaked PII bytes — v0.17.0 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v1; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
 
 ```mermaid
 xychart-beta horizontal
     title "Leaked PII bytes, scored labels v1 - lower is better"
-    x-axis ["v0.16.0 default (10.2%)", "v0.15.0 – v0.15.1 default (15.0%)"]
-    y-axis "Leaked PII bytes" 0 --> 22000
-    bar [13291, 19556]
+    x-axis ["v0.17.0 default (7.5%)", "v0.16.0 default (10.2%)"]
+    y-axis "Leaked PII bytes" 0 --> 15000
+    bar [9717, 13291]
 ```
 
 **Trend across releases — each release's shipped default.** Scored under scored labels v1. The shipped arm changes between releases; the history table names it per row.
@@ -597,17 +684,17 @@ xychart-beta horizontal
 ```mermaid
 xychart-beta
     title "Leaked PII bytes, shipped default - scored labels v1"
-    x-axis ["v0.14.0 (19.3%)", "v0.15.0 – v0.15.1 (15.0%)", "v0.16.0 (10.2%)"]
-    y-axis "Leaked PII bytes (lower is better)" 0 --> 28000
-    line [25179, 19556, 13291]
+    x-axis ["v0.15.0 – v0.15.1 (15.0%)", "v0.16.0 (10.2%)", "v0.17.0 (7.5%)"]
+    y-axis "Leaked PII bytes (lower is better)" 0 --> 22000
+    line [19556, 13291, 9717]
 ```
 
 ```mermaid
 xychart-beta
     title "False-positive bytes, shipped default - scored labels v1"
-    x-axis ["v0.14.0", "v0.15.0 – v0.15.1", "v0.16.0"]
-    y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 190000
-    line [168276, 30073, 26902]
+    x-axis ["v0.15.0 – v0.15.1", "v0.16.0", "v0.17.0"]
+    y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 34000
+    line [30073, 26902, 27021]
 ```
 
 <!-- END GENERATED: charts -->
@@ -631,13 +718,10 @@ which stay committed as the machine-readable evidence.
 
 | Release | Measured | Commit | Machine | Scorecards | Shipped arm | Refused ↓ | Leaked PII bytes, all processed, v4 ↓ | Leaked PII bytes, common documents, v4 ↓ | False-positive bytes, v4 ↔ | Leaked PII bytes, all processed, v3 ↓ | Leaked PII bytes, common documents, v3 ↓ | False-positive bytes, v3 ↔ | Leaked PII bytes, all processed, v2 ↓ | Leaked PII bytes, common documents, v2 ↓ | False-positive bytes, v2 ↔ | Leaked PII bytes, all processed, v1 ↓ | Leaked PII bytes, common documents, v1 ↓ | False-positive bytes, v1 ↔ | Restore exact ↑ | clean p95 ms ↓ |
 | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| v0.14.0 | 2026-10-15 | `616e8a1` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json), [`scorecard-v0.14.0-scored-labels-v2.json`](scorecard-v0.14.0-scored-labels-v2.json), [`scorecard-v0.14.0-scored-labels-v3.json`](scorecard-v0.14.0-scored-labels-v3.json), [`scorecard-v0.14.0-scored-labels-v4.json`](scorecard-v0.14.0-scored-labels-v4.json) | `full-stack-kiji-resolve` | 0 | 25,179 | 25,179 | 157,048 | 22,144 | 22,144 | 157,048 | 22,144 | 22,144 | 168,259 | 25,179 | 25,179 | 168,276 | 78.4192% | 167.92 |
 | v0.15.0 – v0.15.1 | 2026-10-15 | `4927f7c` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.0-scored-labels-v2.json`](scorecard-v0.15.0-scored-labels-v2.json), [`scorecard-v0.15.0-scored-labels-v3.json`](scorecard-v0.15.0-scored-labels-v3.json), [`scorecard-v0.15.0-scored-labels-v4.json`](scorecard-v0.15.0-scored-labels-v4.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json), [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json), [`scorecard-v0.15.1-scored-labels-v3.json`](scorecard-v0.15.1-scored-labels-v3.json), [`scorecard-v0.15.1-scored-labels-v4.json`](scorecard-v0.15.1-scored-labels-v4.json) | `policy-file` | 0 | 19,556 | 19,556 | 18,488 | 13,319 | 13,319 | 18,488 | 13,319 | 13,319 | 30,073 | 19,556 | 19,556 | 30,073 | 100.0000% | 127.00 |
 | v0.16.0 | 2026-10-15 | `5a7dac0` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.16.0.json`](scorecard-v0.16.0.json), [`scorecard-v0.16.0-scored-labels-v2.json`](scorecard-v0.16.0-scored-labels-v2.json), [`scorecard-v0.16.0-scored-labels-v3.json`](scorecard-v0.16.0-scored-labels-v3.json), [`scorecard-v0.16.0-scored-labels-v4.json`](scorecard-v0.16.0-scored-labels-v4.json) | `policy-file` | 0 | 13,291 | 13,291 | 15,141 | 7,348 | 7,348 | 15,141 | 7,348 | 7,348 | 26,902 | 13,291 | 13,291 | 26,902 | 100.0000% | 275.84 |
+| v0.17.0 *(provisional)* | 2026-10-19 | `86195a8` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.17.0.json`](scorecard-v0.17.0.json), [`scorecard-v0.17.0-scored-labels-v2.json`](scorecard-v0.17.0-scored-labels-v2.json), [`scorecard-v0.17.0-scored-labels-v3.json`](scorecard-v0.17.0-scored-labels-v3.json), [`scorecard-v0.17.0-scored-labels-v4.json`](scorecard-v0.17.0-scored-labels-v4.json) | `policy-file` | 0 | 9,717 | 9,717 | 15,224 | 6,652 | 6,652 | 15,224 | 6,652 | 6,652 | 27,004 | 9,717 | 9,717 | 27,021 | 100.0000% | 453.44 |
 
-- **v0.14.0, scored labels v2:** v0.14.0's own `clean_for_bench` (sha256 `c2de4dd80b59…`, built from `616e8a10`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
-- **v0.14.0, scored labels v3:** v0.14.0's own `clean_for_bench` (sha256 `c2de4dd80b59…`, built from `616e8a10`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
-- **v0.14.0, scored labels v4:** v0.14.0's own `clean_for_bench` (sha256 `c2de4dd80b59…`, built from `616e8a10`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
 - **v0.15.0, scored labels v2:** v0.15.0's own `clean_for_bench` (sha256 `d3696c1483cd…`, built from `5127788b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
 - **v0.15.0, scored labels v3:** v0.15.0's own `clean_for_bench` (sha256 `d3696c1483cd…`, built from `5127788b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
 - **v0.15.0, scored labels v4:** v0.15.0's own `clean_for_bench` (sha256 `d3696c1483cd…`, built from `5127788b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
@@ -826,19 +910,19 @@ row.
 
 | Release | Setup | Warm p50 ms ↓ | Warm p95 ms ↓ | Cold first document ms ↓ | Peak RSS MiB ↓ |
 | --- | --- | ---: | ---: | ---: | ---: |
-| v0.14.0 | not measured | — | — | — | — |
 | v0.15.0 – v0.15.1 | `gaze setup` without Nym (rules + NER) | 20.36 | 33.30 | 763.90 | 591.2 |
 | v0.15.0 – v0.15.1 | `gaze setup` (rules + NER + Nym) | 69.42 | 138.88 | 2126.90 | 1049.9 |
 | v0.16.0 | not measured | — | — | — | — |
+| v0.17.0 | not measured | — | — | — | — |
 
 **CLI.** One-shot starts `gaze clean` per document; the daemon (`gaze daemon`) loads once and serves every document after the first.
 
 | Release | Setup | One-shot p50 ms ↓ | One-shot p95 ms ↓ | Daemon warm p50 ms ↓ | Daemon warm p95 ms ↓ |
 | --- | --- | ---: | ---: | ---: | ---: |
-| v0.14.0 | not measured | — | — | — | — |
 | v0.15.0 – v0.15.1 | `gaze setup` without Nym (rules + NER) | 771.50 | 821.52 | 20.29 | 32.35 |
 | v0.15.0 – v0.15.1 | `gaze setup` (rules + NER + Nym) | 2140.15 | 2187.25 | 69.50 | 141.50 |
 | v0.16.0 | not measured | — | — | — | — |
+| v0.17.0 | not measured | — | — | — | — |
 
 - **v0.15.0 – v0.15.1:** [`latency-v0.15.1.json`](latency-v0.15.1.json), verdict `valid`, 30 documents, 1-minute load 1.77 at start. Host: Apple M5 Max, 18 cores, 64 GiB RAM, macOS-26.5-arm64-arm-64bit-Mach-O, ort 2.0.0-rc.12, Nym bundle 71f9023bcf86…, intra-op threads 1.
 
@@ -874,7 +958,7 @@ Gold PII bytes: 55,580. Common-intersection labels: account_number, private_addr
 
 † Pre-receipt evidence: not receipt-verified; regeneration pending.
 
-Gaze v0.16.0: not yet measured on this set, so no Gaze row is shown.
+Gaze v0.17.0: not yet measured on this set, so no Gaze row is shown.
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
@@ -1147,7 +1231,9 @@ Pull requests that change detection or the benchmark use these commands under th
 
 ### The release run
 
-Each release measures its own tree. The three steps below are the whole contract:
+Each release measures its own tree. Capture contracts v1 and v2 independently,
+then replay the v2 observation record under v3 and v4. Contract v4 is the
+headline; v1 and v2 remain the release gates.
 
 Release evidence must be measured with `--no-cache`. Cache replay records and
 scorecards carry `cache_replay: true` and `cache_key_sha256`; the release-history
@@ -1156,43 +1242,62 @@ renderer refuses these scorecards. Fresh measurements carry `cache_replay: false
 ```bash
 # 1. Produce the scorecard on the release commit.
 uv sync --project scripts/bench --locked
+cargo run --locked -p gaze-cli -- setup --non-interactive --force \
+  --policy-out target/bench-data/release-policy.toml
 uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
-  --seed 20260710 --no-download --no-cache
+  --seed 20260710 --no-download --no-cache --release \
+  --policy target/bench-data/release-policy.toml \
+  --output-dir target/bench-data/release-v1
 
 # 2. Commit it under its release name and regenerate this document.
-cp target/bench-data/no-opf/full/scorecard-v4.json \
+cp target/bench-data/release-v1/full/scorecard-v4.json \
    docs/reference/benchmarks/scorecard-vX.Y.Z.json
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z.json \
   --version vX.Y.Z \
   --machine "<CPU, cores, RAM, OS and build>" \
+  --shipped-default-arm policy-file \
   --append-history
 ```
 
-Then score the same commit under contracts v2 and v3 and record both on the
-row just appended. The run must use the same commit, corpus and policy; the
-renderer refuses a result that differs in any of them. v3 needs no new run: it
-re-scores the observation record the v2 run wrote.
+Record contracts v2, v3 and v4 on the row just appended. Use the same commit,
+corpus and policy; the renderer refuses a result that differs in any of them.
+The v2 result is a fresh capture. The v3 and v4 results replay its retained
+observation record without new inference.
 
 ```bash
-# 3. Re-score under contract v2 and record it on the row.
+# 3. Capture contract v2 independently and record it on the row.
 uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
-  --seed 20260710 --no-download --no-cache \
+  --seed 20260710 --no-download --no-cache --release \
+  --policy target/bench-data/release-policy.toml \
+  --output-dir target/bench-data/release-v2 \
   --scored-labels docs/reference/benchmarks/scored-labels-v2.json
-cp target/bench-data/no-opf/full/scorecard-v4.json \
+cp target/bench-data/release-v2/full/scorecard-v4.json \
    docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json \
   --version vX.Y.Z \
   --append-contract-result
 
-# 4. Re-score the v2 run's observation record under contract v3 (the headline).
+# 4. Replay the v2 observation record under contract v3.
 uv run --project scripts/bench python scripts/bench/rescore.py \
-  target/bench-data/no-opf/full/observations-v1.jsonl.gz \
+  target/bench-data/release-v2/full/observations-v1.jsonl.gz \
   --scored-labels docs/reference/benchmarks/scored-labels-v3.json \
+  --agentic-scored-labels docs/reference/benchmarks/scored-labels-agentic.json \
   --output docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v3.json
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v3.json \
+  --version vX.Y.Z \
+  --append-contract-result
+
+# 5. Replay the same observation record under contract v4 (the headline).
+uv run --project scripts/bench python scripts/bench/rescore.py \
+  target/bench-data/release-v2/full/observations-v1.jsonl.gz \
+  --scored-labels docs/reference/benchmarks/scored-labels-v4.json \
+  --agentic-scored-labels docs/reference/benchmarks/scored-labels-agentic.json \
+  --output docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v4.json
+uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
+  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v4.json \
   --version vX.Y.Z \
   --append-contract-result
 ```

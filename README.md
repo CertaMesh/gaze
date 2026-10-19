@@ -20,10 +20,12 @@ before the tool runs ([integration](docs/explanation/how-gaze-works.md#how-it-fi
 
 ## How good is it
 
-The v0.17.0 source candidate is awaiting fresh final-source measurements.
-Its benchmark claims remain provisional; the charts below retain tagged releases.
+Fresh v0.17.0 candidate measurements pass the accepted own-policy numeric and
+external F2 criteria. Strict own-policy identity remains `not_comparable`, and
+TRACE's original net-byte gate fails. [Results and limits](docs/reference/benchmarks/README.md#v017-final-candidate-evidence)
+remain provisional until tag and package checks; the panels retain tagged releases.
 
-The [v0.16.0 benchmark](docs/reference/benchmarks/README.md#current-release)
+The [tagged-release benchmark panels](docs/reference/benchmarks/README.md#benchmark-panels)
 compares the `gaze setup` policy with Presidio, DataFog, scrubadub, GLiNER and
 OPF on their declared configurations. “Leaked” counts PII bytes still reaching
 the model. The target is zero.
