@@ -626,6 +626,29 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
     return lines
 
 
+def input_paths(report: dict, path: Path) -> list[Path]:
+    """Evidence read by validation/rendering, including optional tuned inputs."""
+    here = Path(__file__).parent
+    paths = [path, *(path.with_name(name) for name in (
+        TUNED_NAME, "presidio-tuned-selection.json", "presidio-tuned-overlap.json",
+        "release-history.json", "release-char-level.json")),
+        *(here / name for name in (
+            "compare.py", "row_sources.py", "finalize_report.py", "chart-configs.json",
+            "label-map.json", "model-wheels.json", "requirements.lock", "requirements-scrubadub.lock",
+            "comparison_metrics.py", "cpu_contention.py")),
+        *(here / "tuned_presidio" / name for name in TUNED_CODE),
+        *(BENCH / name for name in ("gaze_bench_score.py", "dataiku_en_de_gaze_bench.py", "opf_daemon.py")),
+        REPO / "crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl",
+        compare.agentic.CUE_VOCABULARY_PATH,
+        *(REPO / contract for contract in compare.CONTRACTS.values() if contract is not None),
+        REPO / compare.agentic.SCORED_LABELS_PATH,
+        *(REPO / contract for contract in compare.agentic.HISTORICAL_CONTRACTS.values()),
+        *(REPO / "docs/reference/benchmarks/variant-packs").glob("*.jsonl")]
+    if "row_sources" in report:
+        paths.extend(path.parent / report["row_sources"][name]["path"] for name in ("base", "supplement"))
+    return paths
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
@@ -633,6 +656,7 @@ def main() -> None:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     report = json.loads(args.report.read_text(encoding="utf-8"))
+    row_sources.protect_inputs(args.page, input_paths(report, args.report))
     validate_current(report, args.report)
     tuned_path = args.report.with_name(TUNED_NAME)
     tuned = None

@@ -171,6 +171,48 @@ def test_original_snapshot_still_renders_with_its_legitimate_contract(inputs, mo
     assert "original scrubadub measurements predate the Spanish adapter correction" in page.read_text()
 
 
+@pytest.mark.parametrize("alias", ("direct", "symlink", "hardlink"))
+@pytest.mark.parametrize("target", ("base", "supplement", "report", "presidio-tuned.json",
+    "presidio-tuned-selection.json", "presidio-tuned-overlap.json", "release-history.json", "release-char-level.json"))
+def test_render_cli_preserves_input_evidence(inputs, monkeypatch, alias, target):
+    compose_cli(inputs, monkeypatch)
+    output = inputs[-1]
+    source = {"base": inputs[0], "supplement": inputs[1], "report": output}.get(target)
+    if source is None:
+        source = output.with_name(target)
+        source.write_bytes(b"previous evidence\n")
+    before = {path: path.read_bytes() for path in (*inputs[:2], output, source)}
+    page = output.with_suffix(".md")
+    if alias == "direct":
+        page = source
+    elif alias == "symlink":
+        page.symlink_to(source)
+    else:
+        try:
+            page.hardlink_to(source)
+        except OSError as error:
+            pytest.skip(f"filesystem does not support hardlinks: {error}")
+    with pytest.raises(ValueError, match="overwritten"):
+        render_cli(output, page, monkeypatch)
+    assert {path: path.read_bytes() for path in before} == before
+    if alias == "symlink":
+        assert page.is_symlink()
+    if alias == "hardlink":
+        assert page.samefile(source)
+
+
+def test_render_cli_repeats_identical_output(inputs, monkeypatch):
+    compose_cli(inputs, monkeypatch)
+    output = inputs[-1]
+    page = output.with_suffix(".md")
+    render_cli(output, page, monkeypatch)
+    before = page.read_bytes()
+    render_cli(output, page, monkeypatch)
+    assert page.read_bytes() == before
+    monkeypatch.setattr(sys, "argv", ["render.py", str(output), "--page", str(page), "--check"])
+    render.main()
+
+
 @pytest.mark.parametrize("source", (0, 1))
 def test_changed_snapshot_bytes_or_expected_hash_preserve_prior_output(inputs, monkeypatch, source):
     output = inputs[-1]

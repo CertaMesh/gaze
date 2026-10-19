@@ -32,6 +32,14 @@ def file_hash(path: Path) -> str:
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
+def protect_inputs(output: Path, inputs: list[Path]) -> None:
+    """Reject path, symlink and existing hardlink aliases without opening output."""
+    for source in inputs:
+        if output.resolve() == source.resolve() or (
+                output.exists() and source.exists() and output.samefile(source)):
+            raise ValueError("input evidence would be overwritten by output")
+
+
 def adapter_is_compatible(recorded: str, current: str) -> bool:
     return recorded == current or (recorded == ORIGINAL_ADAPTER and current == SPANISH_ADAPTER)
 
@@ -119,8 +127,9 @@ def source_ref(path: Path, expected_hash: str, output: Path, records: dict) -> t
     # Snapshots travel with the publication; no git history or private paths needed.
     relative = path.resolve().relative_to(output.resolve().parent).as_posix()
     raw = path.read_bytes()
-    reserved = {output.resolve(), output.with_suffix(output.suffix + ".tmp").resolve()}
-    if path.resolve() in reserved or hashlib.sha256(raw).hexdigest() != expected_hash:
+    for destination in (output, output.with_suffix(output.suffix + ".tmp")):
+        protect_inputs(destination, [path])
+    if hashlib.sha256(raw).hexdigest() != expected_hash:
         raise ValueError("source snapshot hash differs or would be overwritten")
     report = json.loads(raw)
     return report, {"path": relative, "sha256": expected_hash, "native_records": records,
