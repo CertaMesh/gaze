@@ -170,3 +170,80 @@ scrubadub: https://github.com/LeapBeyond/scrubadub/blob/master/docs/usage.rst
 GLiNER PII model: https://huggingface.co/urchade/gliner_multi_pii-v1
 OPF: https://github.com/openai/privacy-filter
 PII-Tracer: https://huggingface.co/perplexity-ai/PII-Tracer
+
+## Publish the Spanish scrubadub supplement
+
+The Spanish correction changes exactly `scrubadub-base` and `scrubadub-spacy`.
+The original complete report remains a valid record of the original adapter,
+including its skipped Spanish inputs. Preserve that file byte for byte. Its
+SHA-256 is `119e24993cc47ae9b6b53af052b2266a8f83a4903675f72327eb4c419602851d`.
+The renderer accepts the reviewed original adapter and finalizer hashes without
+claiming those measurements used the current adapter.
+
+After the reviewed collector source is on main, collect a fresh sparse report
+in the pinned scrubadub environment. Use the original dataset and English model.
+The collector still requires exact `HEAD:crates` and `origin/main:crates` equality.
+This competitor-only supplement has no Gaze scorecards: the publication inherits
+the original Gaze measurements from the complete snapshot.
+
+```sh
+common=(
+  --dataset "$GAZE_COMPARE_DATASET"
+  --pack-dir docs/reference/benchmarks/variant-packs
+  --en-model "$GAZE_COMPARE_EN_MODEL"
+  --output "$SUPPLEMENT_REPORT"
+  --predictions-dir "$SUPPLEMENT_NATIVE"
+)
+"$GAZE_COMPARE_SCRUB_PYTHON" scripts/bench/compare/compare.py \
+  "${common[@]}" --tool scrubadub-base
+"$GAZE_COMPARE_SCRUB_PYTHON" scripts/bench/compare/compare.py \
+  "${common[@]}" --tool scrubadub-spacy --resume
+```
+
+Use new private output and native-record directories. Do not resume the original
+complete report. Both fresh rows must process every document under every scored
+contract, with zero skipped documents. Retain the separate Spanish positive and
+benign-counterweight review; a synthetic regression does not establish corpus
+performance. OPF retains its original unavailable receipt.
+
+Copy the original complete report and sparse supplement into
+`docs/reference/benchmarks/comparison-sources/original.json` and
+`docs/reference/benchmarks/comparison-sources/spanish.json`. Review the supplement
+hash before composition. Keep these aggregate snapshots immutable and commit
+them with the composed publication. Private native records stay outside the
+repository. The finalizer reads them only as bytes to record file hashes and
+sizes; the renderer needs only the committed snapshots and aggregate manifest.
+
+```sh
+uv run --project scripts/bench python scripts/bench/compare/finalize_report.py \
+  docs/reference/benchmarks/comparison.json \
+  --compose-base docs/reference/benchmarks/comparison-sources/original.json \
+  --base-sha256 119e24993cc47ae9b6b53af052b2266a8f83a4903675f72327eb4c419602851d \
+  --supplement docs/reference/benchmarks/comparison-sources/spanish.json \
+  --supplement-sha256 "$SUPPLEMENT_SHA256" \
+  --base-predictions-dir "$ORIGINAL_NATIVE" \
+  --supplement-predictions-dir "$SUPPLEMENT_NATIVE"
+uv run --project scripts/bench python scripts/bench/compare/render.py \
+  docs/reference/benchmarks/comparison.json \
+  --page docs/reference/benchmarks/competitors.md
+uv run --project scripts/bench python scripts/bench/compare/render.py \
+  docs/reference/benchmarks/comparison.json \
+  --page docs/reference/benchmarks/competitors.md --check
+```
+
+The composed report keeps the base's top-level measurement and replay metadata.
+`row_sources.tool_sources` attributes each competitor to its snapshot;
+`row_sources.aggregation` records only the later composition revision, code
+hashes and time. Snapshot metadata and each tool's provenance retain their own
+source, adapter, collection or replay time, configuration and model pins. Native
+hashes cover both original and fresh records, including superseded original
+scrubadub records. Eleven inherited tool objects, Gaze measurements, selected
+thresholds and the OPF receipt remain identical to the original snapshot.
+
+Composition requires identical corpus, scored contracts, scorer, mappings,
+dependency and model pins, heldout split and machine identity. The only accepted
+adapter transition is the reviewed Spanish locale addition. Rendering checks
+snapshot byte hashes and reconstructs the composition; altered inherited or
+fresh objects fail validation. A rejected input leaves the prior output intact.
+Tuned Presidio remains bound to the original snapshot, with the existing
+byte-identity verdict and disclosed label differences. Timing stays withheld.

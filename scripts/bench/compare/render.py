@@ -12,6 +12,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 BENCH = REPO / "scripts/bench"
 import compare  # noqa: E402
+import row_sources  # noqa: E402
 from comparison_availability import unavailable_tools  # noqa: E402
 from layer_display import layer_display_name  # noqa: E402
 from markdown_table import table_header  # noqa: E402
@@ -62,8 +63,18 @@ def digest_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def validate_current(report: dict[str, object]) -> None:
+def validate_current(report: dict[str, object], source_path: Path | None = None) -> None:
     """Reject a published comparison when benchmark inputs have changed."""
+    if "row_sources" in report:
+        if source_path is None:
+            raise ValueError("mixed-source validation requires the report path")
+        row_sources.validate(report, source_path)
+        for name in ("base", "supplement"):
+            snapshot_path = source_path.parent / report["row_sources"][name]["path"]
+            snapshot = json.loads(snapshot_path.read_bytes())
+            # Sparse inference has no finalizer/chart fields; inherited publication does.
+            validate_current(snapshot, snapshot_path)
+        return
     corpus = report["corpus"]
     expected = {
         "scorer": (report["scorer_sha256"], digest_file(BENCH / "gaze_bench_score.py")),
@@ -101,20 +112,24 @@ def validate_current(report: dict[str, object]) -> None:
             report.get("cpu_contention_sha256"),
             digest_file(Path(__file__).with_name("cpu_contention.py")),
         )
-        expected["README chart configurations"] = (
-            report.get("chart_config_sha256"),
-            digest_file(Path(__file__).with_name("chart-configs.json")),
-        )
-        expected["report finalizer"] = (
-            report.get("finalizer_sha256"),
-            digest_file(Path(__file__).with_name("finalize_report.py")),
-        )
+        if set(report.get("tools", {})) != set(row_sources.REPLACED):
+            expected["README chart configurations"] = (
+                report.get("chart_config_sha256"),
+                digest_file(Path(__file__).with_name("chart-configs.json")),
+            )
+            expected["report finalizer"] = (
+                report.get("finalizer_sha256"),
+                digest_file(Path(__file__).with_name("finalize_report.py")),
+            )
     for version, path in compare.CONTRACTS.items():
         expected[f"{version} scored labels"] = (
             report["contracts"][version], compare.runner.load_scored_label_contract(REPO, path).sha256,
         )
     for name, (recorded, current) in expected.items():
-        if recorded != current:
+        compatible = (row_sources.adapter_is_compatible(recorded, current) if name == "comparison adapter"
+                      else row_sources.finalizer_is_compatible(recorded, current) if name == "report finalizer"
+                      else recorded == current)
+        if not compatible:
             raise ValueError(f"{name} changed; rerun affected competitor rows on the same corpus")
     pack_dir = REPO / "docs/reference/benchmarks/variant-packs"
     current_packs = {
@@ -287,7 +302,8 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
         f"GLiNER uses model-card labels, library threshold 0.5. "
         f"{opf_description}",
         "",
-        f"Aggregate source: [`{source}`]({source}). Raw document outputs are not published.",
+        f"Aggregate source: [`{source}`]({source}). Raw document outputs are not published. "
+        + row_sources.publication_note(report),
         "",
         *table_header(summary_columns),
     ]
@@ -384,8 +400,13 @@ TUNED_BASELINES = ("presidio-all", "presidio-strong", "presidio-strong-high-reca
 def validate_tuned(tuned: dict[str, object], report_path: Path) -> None:
     """Reject a tuned report whose inputs or code changed, or whose replay is unproven."""
     here = Path(__file__).parent
+    comparison = json.loads(report_path.read_bytes())
+    anchor_path = report_path
+    if "row_sources" in comparison:
+        row_sources.validate(comparison, report_path)
+        anchor_path = report_path.parent / comparison["row_sources"]["base"]["path"]
     expected = {
-        "comparison report": (tuned["comparison_sha256"], digest_file(report_path)),
+        "comparison report": (tuned["comparison_sha256"], digest_file(anchor_path)),
         "comparison adapter": (tuned["compare_sha256"], digest_file(Path(compare.__file__))),
         "comparison metrics": (tuned["comparison_metrics_sha256"], digest_file(here / "comparison_metrics.py")),
         "scorer": (tuned["scorer_sha256"], digest_file(BENCH / "gaze_bench_score.py")),
@@ -394,7 +415,9 @@ def validate_tuned(tuned: dict[str, object], report_path: Path) -> None:
            for name in TUNED_CODE},
     }
     for name, (recorded, current) in expected.items():
-        if recorded != current:
+        compatible = (row_sources.adapter_is_compatible(recorded, current)
+                      if name == "comparison adapter" else recorded == current)
+        if not compatible:
             raise ValueError(f"{name} changed; rerun tuned_presidio/tune.py measure")
     if tuned.get("harness_dirty") is not False or not tuned["anchor"]["equal"]:
         raise ValueError("tuned Presidio needs a clean harness and the reproduced presidio-all anchor")
@@ -610,7 +633,7 @@ def main() -> None:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     report = json.loads(args.report.read_text(encoding="utf-8"))
-    validate_current(report)
+    validate_current(report, args.report)
     tuned_path = args.report.with_name(TUNED_NAME)
     tuned = None
     if tuned_path.exists():
