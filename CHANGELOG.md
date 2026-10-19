@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-19
+
+v0.17.0 expands credential and personal-name protection, tightens fail-closed
+boundaries, and preserves reversible manifests. Release benchmark claims remain
+provisional until fresh measurements qualify the finalized crate sources.
+
 ### Security
 
 - **Personal names with Nym.** The setup policy maps eligible `GIVEN_NAME` and
@@ -54,6 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **MCP doctor probes.** Concurrent writable-directory checks use separate
+  temporary files, preserve existing files, and report cleanup failures.
 - **Custom rulepack dictionaries in `CorePipeline`.** Policy-loaded inline and
   file terms reach every `pseudonymize_text` call and remain available through
   `dictionaries()` and `into_parts()`. Unreadable files and unsupported enabled
@@ -118,6 +126,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known limitations
 
+- The existing Nym weights are unchanged. The retained safety-net ablation fails
+  the benign BSN counterweight guard at 0 → 18 false-positive bytes under both
+  v2 and v1. The retained v0.16.0 → v0.17.0 release comparison has 18 → 18 bytes
+  on that counterweight. Fresh final-source evidence is still required.
 - The generated name benchmark reuses six full names per split across surfaces;
   it does not establish broad personal-name recall. Independent calibration
   recovered eligible pieces in only four of 18 lowercase cases, with no full
@@ -4066,7 +4078,8 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/CertaMesh/gaze/compare/v0.16.0...v0.17.0
 [0.14.0]: https://github.com/CertaMesh/gaze/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/CertaMesh/gaze/compare/v0.12.0...v0.13.0
 [0.6.4]: https://github.com/EmpireTwo/gaze/compare/v0.6.3...v0.6.4

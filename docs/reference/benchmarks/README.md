@@ -1,5 +1,11 @@
 # Gaze Benchmarks
 
+The v0.17.0 source candidate requires fresh measurements of its finalized crate
+sources, including crate documentation. Retained candidate evidence describes
+its recorded source revision and is provisional for this release. It does not
+qualify the assembled source tree. Tagged-release tables stay unchanged until
+final evidence and release checks pass.
+
 The single benchmark document for Gaze. It carries the current release's
 measured numbers as a table and as charts, the methodology behind them, and the
 commands to reproduce them.
