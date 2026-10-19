@@ -1358,7 +1358,8 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             self.assertEqual(render.main(args + ["--check"]), 0)
             svgs = sorted((root / render.CHART_ASSETS).glob("*.svg"))
             self.assertEqual([p.name for p in svgs],
-                             ["benchmark-panels-dark.svg", "benchmark-panels-light.svg"])
+                             ["benchmark-panels-dark.svg", "benchmark-panels-light.svg",
+                              "external-release-panels-dark.svg", "external-release-panels-light.svg"])
             changed = copy.deepcopy(self.comparison)
             changed["tools"]["gliner"]["contracts"]["v4"]["C"]["metrics"]["product_coverage"]["full"]["leaked_bytes"] += 1000
             report.write_text(json.dumps(changed), encoding="utf-8")

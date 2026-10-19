@@ -77,6 +77,11 @@ def render(report: Mapping[str, Any], committed: Mapping[str, Any]) -> str:
         "and character F2 use the shared scorer. Only aggregates are published. Gaze rows appear on "
         "competitors.md, where only tagged releases are shown.",
         "",
+        "This PII-Tracer model capture retains its original provenance. The "
+        "[fresh v0.17.0 PII-TRACE dataset comparison](README.md#v017-final-candidate-evidence) "
+        "measures Gaze on a separate external dataset using byte-micro F2; it does not "
+        "refresh this model's own-corpus results.",
+        "",
         f"**Declared configuration** (fixed from the model card before any result): model "
         f"`{provenance['model_repo']}` at revision `{provenance['revision']}` (MIT); {runtime['device']}, "
         f"stored {runtime['dtype']}, `predict()` decoding, non-overlapping 4080-token windows for longer "

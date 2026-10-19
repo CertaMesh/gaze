@@ -133,7 +133,9 @@ remain provisional until actual tag and package checks.
 - The existing Nym weights are unchanged. The retained safety-net ablation fails
   the benign BSN counterweight guard at 0 → 18 false-positive bytes under both
   v2 and v1. The retained v0.16.0 → v0.17.0 release comparison has 18 → 18 bytes
-  on that counterweight. Fresh final-source evidence is still required.
+  on that counterweight. [Fresh release evidence](docs/reference/benchmarks/README.md#v017-final-candidate-evidence)
+  passes the own-policy numeric criteria while retaining the component failure,
+  strict identity mismatch and unmet zero-leak readiness.
 - The generated name benchmark reuses six full names per split across surfaces;
   it does not establish broad personal-name recall. Independent calibration
   recovered eligible pieces in only four of 18 lowercase cases, with no full
@@ -145,19 +147,24 @@ remain provisional until actual tag and package checks.
   become phone tokens; parser-valid newline continuations can also be protected.
   See the [validator contract](docs/explanation/detection/validator-veto.md#recorded-failures) (#766).
 - Presidio Research native-harness and PB_DATA third-party measurement work
-  (F1) is deferred past v0.17. Benchmark claims for this release use Gaze's own
-  benchmark, including tuned-Presidio rows; they do not claim a fresh independent
-  reproduction of the deferred work.
+  (F1) is deferred past v0.17. Fresh external release comparisons use byte-micro
+  F2 on sealed OpenPII/Gretel, PIIBench-commercial and PII-TRACE. These results
+  do not establish a fresh vendor-evaluator reproduction of the deferred work.
 
 ### Benchmark
 
-- Release-commit results: **TBD (release-commit scorecard)**. Headline contract v4
-  scores `PASSWORD` and `SECURITYTOKEN`; v1–v3 remain historical views. Final
-  evidence must refresh every displayed release with the current harness and
-  include per-layer leaked bytes, false-positive bytes, refusals, exact restores
-  and valid manifests. See the [benchmark methodology and hardware
-  specification](docs/reference/benchmarks/README.md#how-to-reproduce) and
-  [`run_no_opf_benchmark.py`](scripts/bench/run_no_opf_benchmark.py).
+- Tagged v0.17.0 retains measured source `86195a8f`, whose raw crates tree
+  matches the signed release tag. Headline contract v4 reports 9,717 leaked
+  bytes and 15,224 false-positive bytes on layer C. Independent v1/v2 captures
+  and v3/v4 observation replays remain distinct. All 17,780 documents restore
+  exactly with valid manifests and zero refusals.
+- All three fresh external byte-micro F2 comparisons pass the accepted criterion.
+  TRACE's original net-byte gate fails. Strict own-policy identity remains
+  `not_comparable`, and zero-leak readiness remains unmet. The generated
+  [external release panels and per-layer evidence](docs/reference/benchmarks/README.md#v017-final-candidate-evidence)
+  retain the original measurement identities, receipts and historical rows.
+  See the [benchmark methodology and hardware](docs/reference/benchmarks/README.md#how-to-reproduce)
+  and [`run_no_opf_benchmark.py`](scripts/bench/run_no_opf_benchmark.py).
 
 ## [0.16.0] - 2026-10-08
 

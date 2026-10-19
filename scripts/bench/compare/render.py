@@ -294,6 +294,12 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
         + (" The measured call scopes differ by tool, so latency is descriptive."
            if latency_publishable else ""),
         "",
+        "Fresh v0.17.0 external byte-micro scores are in the "
+        "[external release panels](README.md#v017-final-candidate-evidence). "
+        "They measure different datasets and do not refresh the comparator captures on this page. "
+        "Only the two scrubadub rows were freshly measured for the v0.17 release; "
+        "other comparator and tuned Presidio measurements keep their original identities.",
+        "",
         "Competitor runtimes: Presidio "
         f"{tools['presidio-en']['provenance']['analyzer_version']} with spaCy "
         f"{tools['presidio-en']['provenance']['spacy_version']}; GLiNER "

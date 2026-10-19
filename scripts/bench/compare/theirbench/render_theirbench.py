@@ -662,6 +662,13 @@ def render(data: Mapping[str, Any]) -> str:
         "English only, so Presidio's three language configurations give identical rows.",
         "",
     ]
+    lines += [
+        "Fresh v0.17.0 byte-micro release comparisons for PIIBench-commercial and PII-TRACE "
+        "are shown in the [external release panels](#v017-final-candidate-evidence). "
+        "Those receipts contain neither character counts nor vendor-evaluator results, so "
+        "the historical v0.16 rows below retain their original scope and identities. "
+        "Presidio Research has no fresh v0.17 measurement.", "",
+    ]
     for name, entry in data["benchmarks"].items():
         checked_harness_commits(entry)
         rows, metric, metric_label = entry["rows"], *OWN_METRIC[name]

@@ -5,8 +5,8 @@ Its measurements retain source `86195a8fbff001489b4eee385020c94c15e502b3`, with
 identical raw crates tree `5a3c6502bd64eabf40f009eb05ca55da3ed50dfe`, including
 crate READMEs and manifests. The [release evidence](#v017-final-candidate-evidence)
 keeps its original capture identities. The own-corpus panel, current table and
-inline trends include tagged v0.17.0; external panels retain their separately
-measured tagged rows.
+inline trends include tagged v0.17.0. Fresh external byte-micro panels show
+v0.17.0 alongside v0.16.0; historical character panels keep their original rows.
 
 The single benchmark document for Gaze. It carries the current release's
 measured numbers as a table and as charts, the methodology behind them, and the
@@ -94,11 +94,27 @@ The original net-byte verdict is reported separately, including TRACE's failure.
 These byte-micro scores do not replace vendor metrics or relabel historical
 rows in [their benchmarks](#competitors-own-benchmarks).
 
-| Benchmark | Byte-micro F2 %, base → candidate | Leaked bytes removed | FP bytes added | Original net-byte gate | Accepted F2 gate |
-| --- | --- | ---: | ---: | --- | --- |
-| Sealed OpenPII/Gretel | 64.3476308515 → 66.0206379254 | 20,738 | 5,282 | PASS | PASS |
-| PIIBench-commercial | 62.7119062150 → 64.2375059624 | 4,520 | 815 | PASS | PASS |
-| PII-TRACE | 75.8824156820 → 76.2383386217 | 284 | 353 | FAIL, `no_eligible_gain` | PASS |
+<!-- BEGIN GENERATED: external-release -->
+
+Fresh external release measurements use byte-micro F2, `5*TP/(5*TP+4*FN+FP)`. These are separate from the character-level and vendor-evaluator scores below.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../assets/benchmarks/external-release-panels-dark.svg">
+  <img alt="Fresh external byte-micro F2 for Gaze v0.16.0 and v0.17.0, with leaked bytes and original net-byte verdicts." src="../../assets/benchmarks/external-release-panels-light.svg">
+</picture>
+
+| Benchmark | Version | Byte-micro F2 % | Leaked bytes | FP bytes | Original net-byte gate | Accepted F2 gate |
+| --- | --- | ---: | ---: | ---: | --- | --- |
+| Sealed OpenPII/Gretel | v0.16.0 | 64.3476308515 | 399,158 | 246,957 | baseline | baseline |
+| Sealed OpenPII/Gretel | v0.17.0 | 66.0206379254 | 378,420 | 252,239 | PASS | PASS |
+| PIIBench-commercial | v0.16.0 | 62.7119062150 | 105,077 | 48,309 | baseline | baseline |
+| PIIBench-commercial | v0.17.0 | 64.2375059624 | 100,557 | 49,124 | PASS | PASS |
+| PII-TRACE | v0.16.0 | 75.8824156820 | 15,739 | 357 | baseline | baseline |
+| PII-TRACE | v0.17.0 | 76.2383386217 | 15,455 | 710 | FAIL | PASS |
+
+[Evidence and limits](release-v0.17.0/external-f2-release-review.json): all three accepted external F2 comparisons pass. TRACE's original net-byte gate fails. Strict own-policy identity remains `not_comparable`; zero-leak readiness remains unmet.
+
+<!-- END GENERATED: external-release -->
 
 The [external review](release-v0.17.0/external-f2-release-review.json) retains
 all set counters and the original gate hashes. Sealed totals sum OpenPII all
@@ -175,8 +191,9 @@ SafetyNet scan. `full-stack-opf-resolve` exercises the OpenAI Privacy Filter. It
 is excluded from the default run because it needs a separately installed
 verified 2.6 GB checkpoint and a warmed daemon, and it has a measured
 fail-closed invalid-output rate. `full-stack-nym-resolve` exercises the in-process
-Nym-small net and needs its pinned bundle. The v0.16 `gaze setup` default is
-rules plus NER plus Nym; its tagged measurement is in the v0.16 release row.
+Nym-small net and needs its pinned bundle. The v0.17 `gaze setup` default is
+rules plus NER plus Nym, with the secrets rulepack and eligible personal-name
+labels enabled. Its tagged measurement is in the current release row.
 
 The v0.16 comparison mapping adds `custom:age` → `AGE`. Historical comparison
 predictions are unavailable for a live replay. Their published scores are retained:
@@ -184,8 +201,9 @@ the older Gaze revisions cannot emit that label, and their composed mappings and
 common-label intersections are unchanged. The committed
 [`refresh_age_mapping.py`](../../../scripts/bench/compare/refresh_age_mapping.py)
 audit verifies those claims against each row’s recorded harness revision. Release
-character scores are replayed from the committed observations; new third-party
-v0.16 rows come from paired builds of the release tag.
+character scores are replayed from the committed observations. Historical
+third-party v0.16 character and vendor rows come from paired tag builds; fresh
+v0.17 byte-micro results retain their separately pinned source and harness.
 
 Warm per-document latency of the Nym arm is measured by
 [`scripts/bench/nym-warm-latency.py`](../../../scripts/bench/nym-warm-latency.py)
@@ -576,8 +594,10 @@ PIIBench-commercial: PIIBench publishes no vendor-tuned Presidio, so Presidio is
 ## Charts
 
 The inline trends and own-corpus panel include tagged v0.17.0, using the retained
-measured source and replayed character counts. External panels retain their
-separately measured tagged rows; this promotion adds no external measurement.
+measured source and replayed character counts. The fresh external byte-micro
+panels above show v0.17.0. External character panels retain their original
+v0.16 measurements because the new receipts contain byte counts, not character
+counts or vendor-evaluator results. No new inference is run for this projection.
 The rolling display keeps three distinct result groups. Older entries, including
 v0.14 and its C-only limitation, remain in the committed history.
 
@@ -949,6 +969,8 @@ in [`scripts/bench/compare/theirbench/`](../../../scripts/bench/compare/theirben
 <!-- BEGIN GENERATED: their-benchmarks -->
 
 Report-only: these sets are never used to design or tune Gaze rules. Every gold label counts (no scored-label contract). Leaked and false-positive bytes use the same scorer code as the main comparison; each benchmark's own metric comes from its own evaluator, fed the same spans. Lower leaked bytes is better. The table lists every measured competitor row and every tagged Gaze release; untagged builds are not shown. No latency is published here: the machine was shared during these runs, and per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the main comparison's configurations; Presidio's default rows keep score threshold 0.0, so they differ from the notebook's vanilla configuration (threshold 0.4). Every set here is English only, so Presidio's three language configurations give identical rows.
+
+Fresh v0.17.0 byte-micro release comparisons for PIIBench-commercial and PII-TRACE are shown in the [external release panels](#v017-final-candidate-evidence). Those receipts contain neither character counts nor vendor-evaluator results, so the historical v0.16 rows below retain their original scope and identities. Presidio Research has no fresh v0.17 measurement.
 
 #### PII-TRACE public subset (500 English conversations, 4,500 messages)
 
