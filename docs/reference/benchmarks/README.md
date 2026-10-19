@@ -1147,7 +1147,9 @@ Pull requests that change detection or the benchmark use these commands under th
 
 ### The release run
 
-Each release measures its own tree. The three steps below are the whole contract:
+Each release measures its own tree. Capture contracts v1 and v2 independently,
+then replay the v2 observation record under v3 and v4. Contract v4 is the
+headline; v1 and v2 remain the release gates.
 
 Release evidence must be measured with `--no-cache`. Cache replay records and
 scorecards carry `cache_replay: true` and `cache_key_sha256`; the release-history
@@ -1169,13 +1171,13 @@ uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --append-history
 ```
 
-Then score the same commit under contracts v2 and v3 and record both on the
-row just appended. The run must use the same commit, corpus and policy; the
-renderer refuses a result that differs in any of them. v3 needs no new run: it
-re-scores the observation record the v2 run wrote.
+Record contracts v2, v3 and v4 on the row just appended. Use the same commit,
+corpus and policy; the renderer refuses a result that differs in any of them.
+The v2 result is a fresh capture. The v3 and v4 results replay its retained
+observation record without new inference.
 
 ```bash
-# 3. Re-score under contract v2 and record it on the row.
+# 3. Capture contract v2 independently and record it on the row.
 uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
   --seed 20260710 --no-download --no-cache \
   --scored-labels docs/reference/benchmarks/scored-labels-v2.json
@@ -1186,13 +1188,25 @@ uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --version vX.Y.Z \
   --append-contract-result
 
-# 4. Re-score the v2 run's observation record under contract v3 (the headline).
+# 4. Replay the v2 observation record under contract v3.
 uv run --project scripts/bench python scripts/bench/rescore.py \
   target/bench-data/no-opf/full/observations-v1.jsonl.gz \
   --scored-labels docs/reference/benchmarks/scored-labels-v3.json \
+  --agentic-scored-labels docs/reference/benchmarks/scored-labels-agentic.json \
   --output docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v3.json
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v3.json \
+  --version vX.Y.Z \
+  --append-contract-result
+
+# 5. Replay the same observation record under contract v4 (the headline).
+uv run --project scripts/bench python scripts/bench/rescore.py \
+  target/bench-data/no-opf/full/observations-v1.jsonl.gz \
+  --scored-labels docs/reference/benchmarks/scored-labels-v4.json \
+  --agentic-scored-labels docs/reference/benchmarks/scored-labels-agentic.json \
+  --output docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v4.json
+uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
+  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v4.json \
   --version vX.Y.Z \
   --append-contract-result
 ```
