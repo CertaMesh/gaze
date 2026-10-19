@@ -498,3 +498,229 @@ def test_contract_derivation_rejects_unreviewed_metrics_repin(monkeypatch) -> No
 def test_contract_v4_restores_typed_credential_credit() -> None:
     mapping = compare.load_mapping()["gaze"]
     assert compare.typed_mapping_for_contract(mapping, "v4")["custom:password"] == ("PASSWORD",)
+
+
+@pytest.fixture
+def direct_evidence(tmp_path):
+    """Only committed aggregate JSON and fictional scorer input; no native records."""
+    from comparison_availability import digest
+    report = json.loads(derive_contract_v4.REPORT.read_bytes())
+    tuned = json.loads(derive_contract_v4.TUNED.read_bytes())
+    text = "TOKEN_A TOKEN_A"
+    layers = {layer: [compare.score.Document(
+        f"fictional-{layer}", text, "en", "", "synthetic",
+        (compare.score.Span(0, 7, "SECURITYTOKEN"),),
+    )] for layer in report["corpus"]["layers"]}
+    measured = compare.measure("fictional", lambda _: [compare.score.Span(8, 15, "credential")],
+                               layers, {"credential": ("SECURITYTOKEN",)})["contracts"]
+    assert measured["v4"]["C"] != derive_contract_v4.derive_cell(measured["v1"]["C"], measured["v3"]["C"])
+    report["corpus"]["layers"] = {layer: {"documents": 1} for layer in layers}
+    for tool in report["tools"].values():
+        tool["contracts"] = copy.deepcopy(measured)
+    for version, contract in report["gaze"].items():
+        contract["layers"] = copy.deepcopy(measured[version])
+    for name in report["gaze_ablations"]:
+        report["gaze_ablations"][name] = copy.deepcopy(measured)
+    receipt = report["unavailable"]["opf"]
+    receipt["corpus_sha256"] = digest(report["corpus"])
+    configuration = digest({k: v for k, v in receipt.items() if k != "attempts"})
+    for attempt in receipt["attempts"]:
+        attempt["configuration_sha256"] = configuration
+    for name, row in tuned["rows"].items():
+        row["contracts"] = copy.deepcopy(measured)
+    tuned["corpus"] = copy.deepcopy(report["corpus"])
+    selection = derive_contract_v4.TUNED.with_name("presidio-tuned-selection.json")
+    (tmp_path / selection.name).write_bytes(selection.read_bytes())
+    return tmp_path / "comparison.json", tmp_path / "presidio-tuned.json", report, tuned
+
+
+def write_direct_evidence(evidence):
+    report_path, tuned_path, report, tuned = evidence
+    report_path.write_text(json.dumps(report))
+    tuned["comparison_sha256"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
+    tuned_path.write_text(json.dumps(tuned))
+
+
+def test_direct_v4_check_preserves_actual_scores_without_derivation(direct_evidence, monkeypatch, capsys):
+    write_direct_evidence(direct_evidence)
+    report_path, tuned_path, _, _ = direct_evidence
+    before = {p: p.read_bytes() for p in report_path.parent.iterdir()}
+    def forbidden(*args, **kwargs):
+        raise AssertionError("direct checking attempted derivation, data, inference, or write")
+    for name in ("derive", "derive_tuned", "sync_contract_hashes", "sync_metrics_hash",
+                 "comparison_documents", "audit_opf_repeat_credit"):
+        monkeypatch.setattr(derive_contract_v4, name, forbidden)
+    monkeypatch.setattr(compare.dataiku, "load_documents", forbidden)
+    monkeypatch.setattr(compare, "measure", forbidden)
+    monkeypatch.setattr(compare, "Opf", forbidden)
+    monkeypatch.setattr(Path, "write_text", forbidden)
+    monkeypatch.setattr(Path, "write_bytes", forbidden)
+    monkeypatch.setattr(derive_contract_v4, "REPORT", report_path)
+    monkeypatch.setattr(derive_contract_v4, "TUNED", tuned_path)
+    monkeypatch.setattr(sys, "argv", ["derive_contract_v4.py", "--check"])
+    derive_contract_v4.main()
+    assert {p: p.read_bytes() for p in report_path.parent.iterdir()} == before
+    assert "Directly scored" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("owner", ("tool", "gaze", "ablation", "tuned"))
+@pytest.mark.parametrize("missing", ("contract", "layer"))
+def test_direct_v4_check_requires_all_contracts_and_layers(direct_evidence, owner, missing):
+    report_path, tuned_path, report, tuned = direct_evidence
+    contracts = {"tool": report["tools"]["presidio-all"]["contracts"],
+                 "gaze": report["gaze"], "ablation": report["gaze_ablations"]["rules-only"],
+                 "tuned": tuned["rows"]["presidio-tuned-own-f2"]["contracts"]}[owner]
+    if missing == "contract":
+        del contracts["v4"]
+    else:
+        del (contracts["v4"]["layers"] if owner == "gaze" else contracts["v4"])["C"]
+    write_direct_evidence(direct_evidence)
+    with pytest.raises(ValueError, match="contracts|layers"):
+        derive_contract_v4.check(report_path, tuned_path)
+
+
+@pytest.mark.parametrize("fault,match", (
+    ("stale", "mapping changed"), ("dirty", "clean harness"),
+    ("tuned-binding", "comparison report changed"), ("byte-check", "different bytes"),
+    ("missing-live", "live verification"), ("tuned-contract", "tuned contracts differ"),
+    ("tuned-corpus", "tuned corpus differ"), ("population", "document count"),
+))
+def test_direct_v4_check_rejects_invalid_bindings(direct_evidence, fault, match):
+    report_path, tuned_path, report, tuned = direct_evidence
+    if fault == "stale": report["mapping_sha256"] = "f" * 64
+    if fault == "dirty": report["harness_dirty"] = True
+    if fault == "tuned-contract": tuned["contracts"]["v4"] = "f" * 64
+    if fault == "tuned-corpus": tuned["corpus"]["layers"]["C"]["documents"] = 2
+    if fault == "population": report["gaze_ablations"]["rules-only"]["v4"]["C"]["documents"] = 2
+    provenance = tuned["provenance"]["presidio-tuned-own-f2"]
+    if fault == "missing-live": del provenance["live_verification"]
+    if fault == "byte-check":
+        provenance["live_verification"] = {"persistent": ["fictional"], "differences": {
+            "fictional": {"live_only": [[0, 1, "EMAIL"]], "replay_only": [[1, 2, "EMAIL"]]}}}
+    write_direct_evidence(direct_evidence)
+    if fault == "tuned-binding":
+        tuned["comparison_sha256"] = "f" * 64
+        tuned_path.write_text(json.dumps(tuned))
+    with pytest.raises(ValueError, match=match):
+        derive_contract_v4.check(report_path, tuned_path)
+
+
+@pytest.mark.parametrize("owner", ("comparison", "tuned"))
+@pytest.mark.parametrize("receipt", (None, {}, {"targeted_opf_replay": {"credential_gold_gap_protected_bytes": 1}}))
+def test_direct_v4_check_never_falls_back_from_invalid_legacy_receipt(direct_evidence, receipt, owner):
+    report_path, tuned_path, report, tuned = direct_evidence
+    (report if owner == "comparison" else tuned)["contract_v4_derivation"] = receipt
+    write_direct_evidence(direct_evidence)
+    with pytest.raises(ValueError, match="receipt|credential repeat audit"):
+        derive_contract_v4.check(report_path, tuned_path)
+
+
+def test_legacy_v4_check_keeps_audit_and_aggregate_equality(direct_evidence, monkeypatch):
+    report_path, tuned_path, report, tuned = direct_evidence
+    receipt = {"targeted_opf_replay": {"credential_gold_gap_protected_bytes": 0},
+               "main_dataset_sha256": compare.dataiku.DATASET_SHA256,
+               "agentic_corpus_sha256": report["corpus"]["agentic"]["corpus_sha256"],
+               "variant_packs": report["corpus"]["packs"]}
+    report["contract_v4_derivation"] = receipt
+    report = derive_contract_v4.derive(report, dataset=None)
+    report_path.write_text(json.dumps(report))
+    monkeypatch.setattr(derive_contract_v4, "REPORT", report_path)
+    tuned = derive_contract_v4.derive_tuned(tuned)
+    tuned_path.write_text(json.dumps(tuned))
+    derive_contract_v4.check(report_path, tuned_path)
+    report["tools"]["presidio-all"]["contracts"]["v4"]["C"]["leaked_bytes"] += 1
+    report_path.write_text(json.dumps(report))
+    with pytest.raises(ValueError, match="comparison v4 aggregates need"):
+        derive_contract_v4.check(report_path, tuned_path)
+    report["contract_v4_derivation"]["main_dataset_sha256"] = "f" * 64
+    report_path.write_text(json.dumps(report))
+    with pytest.raises(ValueError, match="dataset changed"):
+        derive_contract_v4.check(report_path, tuned_path)
+
+
+def test_direct_v4_check_accepts_original_committed_aggregate(capsys):
+    paths = (derive_contract_v4.REPORT, derive_contract_v4.TUNED)
+    before = {path: path.read_bytes() for path in paths}
+    derive_contract_v4.check(*paths)
+    assert {path: path.read_bytes() for path in paths} == before
+    assert "no predictions replayed" in capsys.readouterr().out
+
+
+@pytest.fixture
+def composed_direct_evidence(direct_evidence):
+    """Compose fictional aggregate receipts without opening native predictions."""
+    import row_sources
+    report_path, tuned_path, base, tuned = direct_evidence
+    supplement = copy.deepcopy(base)
+    for key in ("gaze_inference", "unavailable", "latency_validity", "chart_config_sha256",
+                "finalizer_sha256", "measurement_compare_sha256", "rescore_source_revision"):
+        supplement.pop(key, None)
+    supplement.update(harness_revision="b" * 40, compare_sha256=row_sources.SPANISH_ADAPTER,
+                      tools={name: copy.deepcopy(base["tools"][name]) for name in row_sources.REPLACED},
+                      contention_samples={name: {"contended": False} for name in row_sources.REPLACED},
+                      gaze={}, gaze_ablations={})
+    for tool in supplement["tools"].values():
+        tool["provenance"]["supported_languages"].append("es")
+        for key in ("measurement_harness_revision", "measurement_compare_sha256"):
+            tool["provenance"].pop(key, None)
+    manifest = {"schema_version": 1, "tool_sources": {
+        name: "supplement" if name in row_sources.REPLACED else "base" for name in base["tools"]},
+        "aggregation": {"generated_at": "2026-01-01T00:00:00+00:00", "harness_revision": "c" * 40,
+                        "harness_dirty": False,
+                        "composer_sha256": row_sources.file_hash(Path(row_sources.__file__)),
+                        "compare_sha256": row_sources.file_hash(Path(compare.__file__)),
+                        "finalizer_sha256": row_sources.file_hash(Path(row_sources.__file__).with_name("finalize_report.py"))}}
+    for name, source in (("base", base), ("supplement", supplement)):
+        path = report_path.with_name(name + ".json")
+        path.write_text(json.dumps(source))
+        names = set(source["tools"])
+        if source.get("gaze_inference"):
+            names |= {"gaze-full", "gaze-rules-only", "gaze-rules-ner"}
+        records = {tool: {layer: {"sha256": "d" * 64, "bytes": 0}
+                          for layer in source["corpus"]["layers"]} for tool in names}
+        sha = row_sources.file_hash(path)
+        manifest[name] = {"path": path.name, "sha256": sha, "native_records": records,
+                          "native_records_sha256": row_sources.digest({"report_sha256": sha, "records": records})}
+    receipt = row_sources._native_receipt_bytes(manifest)
+    row_sources.native_receipt_path(report_path).write_bytes(receipt)
+    manifest["native_receipt_sha256"] = hashlib.sha256(receipt).hexdigest()
+    report = row_sources._assemble(base, supplement, manifest)
+    report_path.write_text(json.dumps(report))
+    tuned["comparison_sha256"] = manifest["base"]["sha256"]
+    tuned_path.write_text(json.dumps(tuned))
+    return report_path, tuned_path, report, tuned
+
+
+def test_direct_v4_check_preserves_composed_and_original_identities(composed_direct_evidence, monkeypatch):
+    report_path, tuned_path, report, tuned = composed_direct_evidence
+    before = {path: path.read_bytes() for path in report_path.parent.iterdir()}
+    def forbidden(*args, **kwargs):
+        raise AssertionError("checking composition attempted data or inference")
+    monkeypatch.setattr(compare, "measure", forbidden)
+    monkeypatch.setattr(compare, "load_prediction_rows", forbidden)
+    monkeypatch.setattr(compare.dataiku, "load_documents", forbidden)
+    derive_contract_v4.check(report_path, tuned_path)
+    assert tuned["comparison_sha256"] == report["row_sources"]["base"]["sha256"]
+    assert {path: path.read_bytes() for path in report_path.parent.iterdir()} == before
+
+
+@pytest.mark.parametrize("fault,match", (
+    ("snapshot", "snapshot hash"), ("receipt", "native-record map"),
+    ("producer", "aggregation composer_sha256"), ("tuned", "comparison report changed"),
+))
+def test_direct_v4_check_rejects_broken_composition(composed_direct_evidence, fault, match):
+    import row_sources
+    report_path, tuned_path, report, tuned = composed_direct_evidence
+    if fault == "snapshot":
+        path = report_path.with_name(report["row_sources"]["base"]["path"])
+        path.write_bytes(path.read_bytes() + b"\n")
+    if fault == "receipt":
+        row_sources.native_receipt_path(report_path).write_bytes(b"{}\n")
+    if fault == "producer":
+        report["row_sources"]["aggregation"]["composer_sha256"] = "f" * 64
+        report_path.write_text(json.dumps(report))
+    if fault == "tuned":
+        tuned["comparison_sha256"] = row_sources.file_hash(report_path)
+        tuned_path.write_text(json.dumps(tuned))
+    with pytest.raises(ValueError, match=match):
+        derive_contract_v4.check(report_path, tuned_path)

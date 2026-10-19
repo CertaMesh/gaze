@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Derive immutable comparison-contract v4 aggregates without replaying predictions.
+"""Check directly scored v4 evidence or derive historical v4 aggregates.
 
 Contract v4 has v1's scored-label and prediction-class scope plus v3's
 gold-gap semantics. Historical native predictions are unavailable, so this
@@ -7,6 +7,9 @@ migration copies each v1 aggregate and applies the already-measured v3
 gold-gap credit. ``--write`` additionally audits credential repeats in the
 pinned corpus and replays only those documents through the historical OPF,
 proving v4 introduces no credential-specific gold-gap credit.
+``--check`` validates directly scored four-contract reports without deriving
+cells or replaying predictions; reports with migration receipts retain the
+legacy audit and aggregate-equality checks.
 """
 from __future__ import annotations
 
@@ -233,6 +236,64 @@ def derive(
     return report
 
 
+def check(report_path: Path, tuned_path: Path) -> None:
+    """Validate aggregate evidence without loading documents or normalizing hashes."""
+    report = json.loads(report_path.read_bytes())
+    tuned = json.loads(tuned_path.read_bytes())
+    if "contract_v4_derivation" in report or "contract_v4_derivation" in tuned:
+        require(report == derive(report, dataset=None), "comparison v4 aggregates need --write")
+        require(tuned == derive_tuned(tuned), "tuned Presidio v4 aggregates need --write")
+        print("Contract v4 migration receipt and derived aggregates validated; no predictions replayed.")
+        return
+
+    import render
+    import row_sources
+
+    require(report.get("schema_version") == 2, "direct comparison requires schema 2")
+    require(tuned.get("schema_version") == 1, "direct tuned report requires schema 1")
+    row_sources.complete(report)
+    layers = report["corpus"]["layers"]
+    require({"C", "A", "D", "R"}.issubset(layers), "direct comparison lacks required layers")
+
+    def coverage(name: str, contracts: dict, *, gaze: bool = False, timing: bool = True) -> None:
+        require(set(contracts) == set(compare.CONTRACTS), f"{name} lacks complete v1-v4 contracts")
+        for version, contract in contracts.items():
+            rows = contract["layers"] if gaze else contract
+            require(set(rows) == set(layers), f"{name}/{version} layers differ from comparison")
+            for layer, row in rows.items():
+                count = layers[layer]["documents"]
+                require(row["documents"] == count,
+                        f"{name}/{version}/{layer} document count differs")
+                if not gaze or "processed_documents" in row:
+                    require(row["processed_documents"] + row["skipped_documents"] == count,
+                            f"{name}/{version}/{layer} document count differs")
+                    if timing:
+                        require(row["latency"]["samples"] == row["processed_documents"],
+                                f"{name}/{version}/{layer} latency includes skipped documents")
+
+    coverage("Gaze", report["gaze"], gaze=True)
+    for name, tool in report["tools"].items():
+        coverage(name, tool["contracts"])
+    require(set(report["gaze_ablations"]) == {"rules-only", "rules-ner"},
+            "direct comparison lacks Gaze ablations")
+    for name, contracts in report["gaze_ablations"].items():
+        coverage(f"Gaze {name}", contracts)
+    require(set(tuned["rows"]) == set(render.TUNED_LABELS), "direct tuned rows differ")
+    require(set(tuned["provenance"]) == set(tuned["rows"]), "direct tuned provenance differs")
+    for name, tool in tuned["rows"].items():
+        # Tuned replay intentionally strips timing; its document counts remain measured.
+        coverage(name, tool["contracts"], timing=False)
+        if name != "presidio-tuned-presidio-research":
+            require(bool(tuned["provenance"][name].get("live_verification")),
+                    f"{name} lacks live verification")
+    for key in ("corpus", "contracts", "common_intersection_labels"):
+        require(tuned[key] == report[key], f"tuned {key} differ from comparison")
+    render.validate_current(report, report_path)
+    render.render(report, report_path.name)
+    render.validate_tuned(tuned, report_path)
+    print("Directly scored v1-v4 comparison and tuned evidence validated; no predictions replayed.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     action = parser.add_mutually_exclusive_group(required=True)
@@ -247,6 +308,9 @@ def main() -> None:
     if args.write and (args.opf_python is None or args.opf_checkpoint is None):
         parser.error("--write requires --opf-python and --opf-checkpoint for targeted repeat replay")
     current = json.loads(REPORT.read_text(encoding="utf-8"))
+    if args.check:
+        check(REPORT, TUNED)
+        return
     result = derive(
         current, dataset=args.dataset,
         opf_python=args.opf_python, opf_checkpoint=args.opf_checkpoint,
