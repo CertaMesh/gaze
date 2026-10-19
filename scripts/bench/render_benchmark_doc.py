@@ -7,17 +7,20 @@ when rendering the committed history.
 Two jobs, deliberately split so CI never needs the benchmark corpus:
 
 ``--append-history``
-    Reads one ``scorecard-vX.Y.Z.json`` (schema v4), extracts the headline
+    Reads one ``scorecard-vX.Y.Z.json.gz`` (schema v4), extracts the headline
     fields into ``release-history.json``, then re-renders the document. This is
     the per-release step and runs on the machine that produced the scorecard.
 
 ``--check``
     Re-renders from committed release history and comparison aggregates and
-    fails if either generated document has drifted. Stdlib-only and corpus-free.
+    fails if either generated document has drifted or a committed scorecard no
+    longer hashes to its recorded ``scorecard_sha256``. Stdlib-only and
+    corpus-free.
 
 ``release-history.json`` is the source of truth for release results, while
 ``comparison.json`` supplies the same-run Gaze and competitor results. The
-scorecard JSON stays committed as the machine-readable release evidence.
+scorecard JSON stays committed as the machine-readable release evidence,
+gzipped by ``bench_json.py``; its pinned digest covers the decompressed bytes.
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+import bench_json
 import benchmark_charts as charts
 from tagged_gaze import check_public, require_release_tag
 from layer_display import layer_display_name
@@ -317,7 +321,7 @@ def empty_history() -> dict[str, Any]:
         "comment": (
             "Release-keyed benchmark history. One entry per released version, "
             "appended by scripts/bench/render_benchmark_doc.py --append-history "
-            "from that release's committed scorecard-vX.Y.Z.json."
+            "from that release's committed scorecard-vX.Y.Z.json.gz."
         ),
         "shipped_default_arm": SHIPPED_DEFAULT_ARM,
         "releases": [],
@@ -456,8 +460,12 @@ def _validate_observation_record(
         raise RenderError(f"{where}: observation record corpus digest mismatch")
 
 
+def release_scorecard_name(version: str) -> str:
+    return f"scorecard-{version}.json.gz"
+
+
 def contract_scorecard_name(version: str, contract_version: int) -> str:
-    return f"scorecard-{version}-scored-labels-v{contract_version}.json"
+    return f"scorecard-{version}-scored-labels-v{contract_version}.json.gz"
 
 
 def contract_result_from_scorecard(
@@ -2172,6 +2180,25 @@ def _display(path: Path) -> str:
         return path.name
 
 
+def check_committed_scorecards(entry: Mapping[str, Any], directory: Path) -> None:
+    """Every scorecard a row names is committed and still hashes to its pin."""
+    pins = [(entry["scorecard"], entry["scorecard_sha256"])] + [
+        (result["scorecard"], result["scorecard_sha256"])
+        for result in entry.get("contract_results", ())
+    ]
+    for name, pinned in pins:
+        path = directory / name
+        if not path.exists():
+            raise RenderError(
+                f"{entry['version']} names {name}, which is not "
+                "committed; the machine-readable evidence must stay in the tree"
+            )
+        if bench_json.content_sha256(path) != pinned:
+            raise RenderError(
+                f"{entry['version']}: {name} does not match its recorded scorecard_sha256"
+            )
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -2253,7 +2280,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             rows = [e for e in history["releases"] if e["version"] == args.release_version]
             if not rows:
                 raise RenderError(f"no history row for {args.release_version}")
-            scorecard = json.loads(args.scorecard.read_text(encoding="utf-8"))
+            scorecard = bench_json.load(args.scorecard)
             contract = _scored_label_contract(scorecard)
             if contract is None:
                 raise RenderError("the scorecard is scored under contract v1")
@@ -2267,7 +2294,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     scorecard,
                     rows[0],
                     scorecard_filename=expected,
-                    scorecard_sha256=_sha256(args.scorecard),
+                    scorecard_sha256=bench_json.content_sha256(args.scorecard),
                 )
             )
             validate_history(history)
@@ -2290,18 +2317,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             scorecard_path = args.scorecard
             if not scorecard_path.exists():
                 raise RenderError(f"scorecard not found: {scorecard_path}")
-            expected = f"scorecard-{args.release_version}.json"
+            expected = release_scorecard_name(args.release_version)
             if scorecard_path.name != expected:
                 raise RenderError(
                     f"scorecard must be named {expected} for {args.release_version}, "
                     f"got {scorecard_path.name}"
                 )
             entry = history_entry_from_scorecard(
-                json.loads(scorecard_path.read_text(encoding="utf-8")),
+                bench_json.load(scorecard_path),
                 version=args.release_version,
                 machine=args.machine,
                 scorecard_filename=scorecard_path.name,
-                scorecard_sha256=_sha256(scorecard_path),
+                scorecard_sha256=bench_json.content_sha256(scorecard_path),
                 provisional=args.provisional,
                 note=args.note,
                 shipped_arm=args.shipped_default_arm,
@@ -2312,15 +2339,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             write_history(args.history, history)
 
         for entry in history["releases"]:
-            names = [entry["scorecard"]] + [
-                result["scorecard"] for result in entry.get("contract_results", ())
-            ]
-            for name in names:
-                if not (args.history.parent / name).exists():
-                    raise RenderError(
-                        f"{entry['version']} names {name}, which is not "
-                        "committed; the machine-readable evidence must stay in the tree"
-                    )
+            check_committed_scorecards(entry, args.history.parent)
 
         readme = args.readme
         if readme is None and args.history.resolve() == DEFAULT_HISTORY.resolve():

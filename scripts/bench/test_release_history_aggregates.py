@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bench_json
 import render_benchmark_doc as render
 import render_agentic_adjacency_doc as adjacency
 
@@ -17,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2] / "docs/reference/benchmarks"
 
 class ReleaseHistoryAggregateTests(unittest.TestCase):
     def test_full_layer_history_keeps_its_replay_archive_receipt(self):
-        card = json.loads((ROOT / 'scorecard-v0.17.0.json').read_text())
+        card = bench_json.load(ROOT / 'scorecard-v0.17.0.json.gz')
         aggregate = render.layer_history_aggregates(card)
         self.assertEqual(aggregate['observation_record'], card['observation_record'])
         aggregate['observation_record']['sha256'] = '0' * 64
@@ -38,8 +39,8 @@ class ReleaseHistoryAggregateTests(unittest.TestCase):
                 self.assertTrue(all(row['binary_revision'] == release['commit'] for row in unavailable))
             for row in rows:
                 card_path = ROOT / row["scorecard"]
-                self.assertEqual(hashlib.sha256(card_path.read_bytes()).hexdigest(), row['scorecard_sha256'])
-                card = json.loads(card_path.read_text())
+                self.assertEqual(bench_json.content_sha256(card_path), row['scorecard_sha256'])
+                card = bench_json.load(card_path)
                 for config, arm in row["arms"].items():
                     run = next(run for run in card["runs"] if run["config"] == config)
                     self.assertEqual(arm["per_label_recall"], run["per_label_recall"])

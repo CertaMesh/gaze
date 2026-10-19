@@ -21,6 +21,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import bench_json
 import benchmark_charts as charts
 import subprocess as _subprocess
 from tagged_gaze import check_public
@@ -37,6 +38,16 @@ MODULE = Path(__file__).resolve().parent / "render_benchmark_doc.py"
 #: Distinguishes "this key is absent" from "this key holds None" in the tamper
 #: matrices below; both must be refused, for different reasons.
 _MISSING = object()
+
+#: The committed stand-in for a scorecard whose content a test does not read;
+#: rows that name one record its digest, which `--check` verifies.
+PLACEHOLDER_SCORECARD: dict = {}
+PLACEHOLDER_SHA256 = hashlib.sha256(json.dumps(PLACEHOLDER_SCORECARD).encode("utf-8")).hexdigest()
+
+
+def write_scorecard(path: Path, card: dict = PLACEHOLDER_SCORECARD) -> None:
+    """Commit ``card`` the way release evidence is stored: gzipped JSON."""
+    path.write_bytes(bench_json.gzip_bytes(json.dumps(card).encode("utf-8")))
 
 
 def _label(path) -> str:
@@ -115,8 +126,8 @@ def entry(version: str = "v0.14.0", **kwargs) -> dict:
         scorecard(**kwargs),
         version=version,
         machine="Test host, 1 core, 1 GB",
-        scorecard_filename=f"scorecard-{version}.json",
-        scorecard_sha256="0" * 64,
+        scorecard_filename=f"scorecard-{version}.json.gz",
+        scorecard_sha256=PLACEHOLDER_SHA256,
     )
 
 
@@ -196,8 +207,8 @@ class ScorecardMappingTest(unittest.TestCase):
                     mutated,
                     version="v0.14.0",
                     machine="Test host, 1 core, 1 GB",
-                    scorecard_filename="scorecard-v0.14.0.json",
-                    scorecard_sha256="0" * 64,
+                    scorecard_filename="scorecard-v0.14.0.json.gz",
+                    scorecard_sha256=PLACEHOLDER_SHA256,
                 )
                 arm = "rule-floor-extended"
                 self.assertNotEqual(
@@ -214,8 +225,8 @@ class ScorecardMappingTest(unittest.TestCase):
                 broken,
                 version="v0.14.0",
                 machine="m",
-                scorecard_filename="scorecard-v0.14.0.json",
-                scorecard_sha256="0" * 64,
+                scorecard_filename="scorecard-v0.14.0.json.gz",
+                scorecard_sha256=PLACEHOLDER_SHA256,
             )
 
     def test_dirty_tree_scorecard_is_refused(self):
@@ -230,8 +241,8 @@ class ScorecardMappingTest(unittest.TestCase):
                 stale,
                 version="v0.14.0",
                 machine="m",
-                scorecard_filename="scorecard-v0.14.0.json",
-                scorecard_sha256="0" * 64,
+                scorecard_filename="scorecard-v0.14.0.json.gz",
+                scorecard_sha256=PLACEHOLDER_SHA256,
             )
 
     def test_every_extracted_field_is_rendered(self):
@@ -423,7 +434,7 @@ class CliTest(unittest.TestCase):
         self._write_history(render.empty_history())
         self.assertEqual(render.main(self._argv()), 0)
         value = history("v0.14.0")
-        (self.root / "scorecard-v0.14.0.json").write_text("{}", encoding="utf-8")
+        write_scorecard(self.root / "scorecard-v0.14.0.json.gz")
         self._write_history(value)
         self.assertEqual(render.main(self._argv("--check")), 1)
 
@@ -431,10 +442,19 @@ class CliTest(unittest.TestCase):
         self._write_history(history("v0.14.0"))
         self.assertEqual(render.main(self._argv("--check")), 2)
 
+    def test_check_fails_when_the_scorecard_content_drifts_from_its_pin(self):
+        committed = self.root / "scorecard-v0.14.0.json.gz"
+        write_scorecard(committed)
+        self._write_history(history("v0.14.0"))
+        self.assertEqual(render.main(self._argv()), 0)
+        self.assertEqual(render.main(self._argv("--check")), 0)
+        write_scorecard(committed, {"edited": True})
+        self.assertEqual(render.main(self._argv("--check")), 2)
+
     def test_append_history_rejects_a_mismatched_filename(self):
         self._write_history(render.empty_history())
-        path = self.root / "scorecard-v9.9.9.json"
-        path.write_text(json.dumps(scorecard()), encoding="utf-8")
+        path = self.root / "scorecard-v9.9.9.json.gz"
+        write_scorecard(path, scorecard())
         self.assertEqual(
             render.main(
                 self._argv(
@@ -452,8 +472,8 @@ class CliTest(unittest.TestCase):
 
     def test_append_history_requires_machine(self):
         self._write_history(render.empty_history())
-        path = self.root / "scorecard-v0.14.0.json"
-        path.write_text(json.dumps(scorecard()), encoding="utf-8")
+        path = self.root / "scorecard-v0.14.0.json.gz"
+        write_scorecard(path, scorecard())
         self.assertEqual(
             render.main(
                 self._argv(
@@ -469,8 +489,8 @@ class CliTest(unittest.TestCase):
 
     def test_append_history_writes_a_row_and_renders(self):
         self._write_history(render.empty_history())
-        path = self.root / "scorecard-v0.14.0.json"
-        path.write_text(json.dumps(scorecard()), encoding="utf-8")
+        path = self.root / "scorecard-v0.14.0.json.gz"
+        write_scorecard(path, scorecard())
         self.assertEqual(
             render.main(
                 self._argv(
@@ -493,8 +513,8 @@ class CliTest(unittest.TestCase):
     def test_appended_rows_sort_by_version_not_insertion_order(self):
         self._write_history(render.empty_history())
         for version in ("v0.14.0", "v0.12.0", "v0.13.0"):
-            path = self.root / f"scorecard-{version}.json"
-            path.write_text(json.dumps(scorecard()), encoding="utf-8")
+            path = self.root / f"scorecard-{version}.json.gz"
+            write_scorecard(path, scorecard())
             self.assertEqual(
                 render.main(
                     self._argv(
@@ -590,8 +610,8 @@ class ShippedDefaultArmTest(unittest.TestCase):
                 card,
                 version="v0.15.0",
                 machine="m",
-                scorecard_filename="scorecard-v0.15.0.json",
-                scorecard_sha256="0" * 64,
+                scorecard_filename="scorecard-v0.15.0.json.gz",
+                scorecard_sha256=PLACEHOLDER_SHA256,
             )
 
 
@@ -619,8 +639,8 @@ class RefusalAwareHistoryTest(unittest.TestCase):
             self.policy_scorecard(refused),
             version="v0.15.0",
             machine="Test host, 1 core, 1 GB",
-            scorecard_filename="scorecard-v0.15.0.json",
-            scorecard_sha256="0" * 64,
+            scorecard_filename="scorecard-v0.15.0.json.gz",
+            scorecard_sha256=PLACEHOLDER_SHA256,
             shipped_arm="policy-file",
         )
 
@@ -642,8 +662,8 @@ class RefusalAwareHistoryTest(unittest.TestCase):
                 scorecard(),
                 version="v0.15.0",
                 machine="Test host, 1 core, 1 GB",
-                scorecard_filename="scorecard-v0.15.0.json",
-                scorecard_sha256="0" * 64,
+                scorecard_filename="scorecard-v0.15.0.json.gz",
+                scorecard_sha256=PLACEHOLDER_SHA256,
                 shipped_arm="policy-file",
             )
 
@@ -711,8 +731,8 @@ class RefusalAwareHistoryTest(unittest.TestCase):
             doc, hist = root / "README.md", root / "release-history.json"
             doc.write_text(DOC, encoding="utf-8")
             render.write_history(hist, render.empty_history())
-            card = root / "scorecard-v0.15.0.json"
-            card.write_text(json.dumps(self.policy_scorecard()), encoding="utf-8")
+            card = root / "scorecard-v0.15.0.json.gz"
+            write_scorecard(card, self.policy_scorecard())
             argv = [
                 "--doc", str(doc), "--history", str(hist), "--append-history",
                 "--scorecard", str(card), "--version", "v0.15.0",
@@ -946,7 +966,7 @@ class ShippedDefaultChartsTest(unittest.TestCase):
             value = self.mixed()
             render.write_history(hist, value)
             for row in value["releases"]:
-                (root / row["scorecard"]).write_text("{}", encoding="utf-8")
+                write_scorecard(root / row["scorecard"])
             argv = ["--doc", str(doc), "--history", str(hist), "--readme", str(readme)]
             self.assertEqual(render.main(argv), 0)
             # The v0.14.0 Kiji default is the second bar, after v0.15.0's.
@@ -1409,8 +1429,8 @@ class RealScorecardShapeTest(unittest.TestCase):
                     self.real,
                     version="v0.14.0",
                     machine="Test host, 1 core, 1 GB",
-                    scorecard_filename="scorecard-v0.14.0.json",
-                    scorecard_sha256="0" * 64,
+                    scorecard_filename="scorecard-v0.14.0.json.gz",
+                    scorecard_sha256=PLACEHOLDER_SHA256,
                 )
             )
         )
@@ -1427,8 +1447,8 @@ class RealScorecardShapeTest(unittest.TestCase):
                     self.real,
                     version="v0.14.0",
                     machine="m",
-                    scorecard_filename="scorecard-v0.14.0.json",
-                    scorecard_sha256="0" * 64,
+                    scorecard_filename="scorecard-v0.14.0.json.gz",
+                    scorecard_sha256=PLACEHOLDER_SHA256,
                 )
             )
         )
@@ -1443,8 +1463,8 @@ class RealScorecardShapeTest(unittest.TestCase):
         """End to end: append the real scorecard, render, then `--check`."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            scorecard_path = root / "scorecard-v0.14.0.json"
-            scorecard_path.write_text(json.dumps(self.real), encoding="utf-8")
+            scorecard_path = root / "scorecard-v0.14.0.json.gz"
+            write_scorecard(scorecard_path, self.real)
             history_path = root / "release-history.json"
             history_path.write_text(
                 json.dumps(render.empty_history()), encoding="utf-8"
@@ -1489,8 +1509,8 @@ class RequiredProvenanceGuardTest(unittest.TestCase):
                 broken,
                 version="v0.14.0",
                 machine="m",
-                scorecard_filename="scorecard-v0.14.0.json",
-                scorecard_sha256="0" * 64,
+                scorecard_filename="scorecard-v0.14.0.json.gz",
+                scorecard_sha256=PLACEHOLDER_SHA256,
             )
 
     def test_missing_integrity_block_is_refused(self):
@@ -1559,8 +1579,8 @@ class RequiredProvenanceGuardTest(unittest.TestCase):
                     card,
                     version="v0.14.0",
                     machine="m",
-                    scorecard_filename="scorecard-v0.14.0.json",
-                    scorecard_sha256="0" * 64,
+                    scorecard_filename="scorecard-v0.14.0.json.gz",
+                    scorecard_sha256=PLACEHOLDER_SHA256,
                 )
             )
         )
@@ -1732,7 +1752,7 @@ class RenderSiteRefusesNonDigestsTest(unittest.TestCase):
     def test_a_well_formed_entry_still_renders_every_provenance_row(self):
         rendered = render.render_current_release(history_of(entry()))
         self.assertIn(f"| Corpus sha256 | `{'f' * 64}` |", rendered)
-        self.assertIn(f"| Scorecard sha256 | `{'0' * 64}` |", rendered)
+        self.assertIn(f"| Scorecard sha256 | `{PLACEHOLDER_SHA256}` |", rendered)
         self.assertIn("2,910 documents / 14,719 entities", rendered)
         self.assertNotIn("n/a", rendered)
 
@@ -1770,7 +1790,7 @@ class CheckDoorTest(unittest.TestCase):
             with self.subTest(path=_label(path)):
                 with tempfile.TemporaryDirectory() as tmp:
                     root = Path(tmp)
-                    (root / "scorecard-v0.14.0.json").write_text("{}", encoding="utf-8")
+                    write_scorecard(root / "scorecard-v0.14.0.json.gz")
                     doc_path = root / "README.md"
                     doc_path.write_text(DOC, encoding="utf-8")
                     broken = copy.deepcopy(history())
@@ -1797,7 +1817,7 @@ class CheckDoorTest(unittest.TestCase):
     def test_check_still_passes_on_a_well_formed_history(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "scorecard-v0.14.0.json").write_text("{}", encoding="utf-8")
+            write_scorecard(root / "scorecard-v0.14.0.json.gz")
             (root / "release-history.json").write_text(
                 json.dumps(history()), encoding="utf-8"
             )
@@ -1815,7 +1835,7 @@ def release(version: str, leaked: int = 19556, *, p95: float = 124.0, **fields) 
     row = RefusalAwareHistoryTest.policy_entry(RefusalAwareHistoryTest())
     row.update(
         version=version,
-        scorecard=f"scorecard-{version}.json",
+        scorecard=f"scorecard-{version}.json.gz",
         commit=(version.replace(".", "")[1:] * 40)[:40],
     )
     arm = row["arms"]["policy-file"]
@@ -1925,7 +1945,7 @@ class DistinctResultGroupTest(unittest.TestCase):
         self.assertNotIn(f"`{'0150' * 10}"[:8], line)
         self.assertIn("| 138.72 |", line)
         for version in ("v0.15.0", "v0.15.1"):
-            self.assertIn(f"[`scorecard-{version}.json`](scorecard-{version}.json)", line)
+            self.assertIn(f"[`scorecard-{version}.json.gz`](scorecard-{version}.json.gz)", line)
 
     def test_only_the_last_three_groups_are_displayed(self):
         value = releases(
@@ -2223,7 +2243,7 @@ class HeadlineContractTest(unittest.TestCase):
         self.assertNotIn("Gold-gap credited", current[v2:])
         self.assertIn("| 19,556 |", current[v1:])
         for version in (2, 3, 4):
-            name = f"scorecard-v0.15.1-scored-labels-v{version}.json"
+            name = f"scorecard-v0.15.1-scored-labels-v{version}.json.gz"
             self.assertIn(f"| Scorecard, scored labels v{version} | [`{name}`]({name}) |", current)
 
     def test_charts_lead_with_v4_and_name_the_contract(self):
@@ -2297,7 +2317,7 @@ class HeadlineContractTest(unittest.TestCase):
             new,
         )
         for version in ("v0.15.0", "v0.15.1"):
-            name = f"scorecard-{version}-scored-labels-v2.json"
+            name = f"scorecard-{version}-scored-labels-v2.json.gz"
             self.assertIn(f"[`{name}`]({name})", new)
 
     def test_a_v2_only_difference_splits_the_group(self):
@@ -2342,7 +2362,7 @@ class HeadlineContractTest(unittest.TestCase):
         with self.assertRaisesRegex(render.RenderError, "recorded twice"):
             releases(twice)
         misnamed = copy.deepcopy(row)
-        misnamed["contract_results"][0]["scorecard"] = "scorecard-v0.15.1.json"
+        misnamed["contract_results"][0]["scorecard"] = "scorecard-v0.15.1.json.gz"
         with self.assertRaisesRegex(render.RenderError, "must be named"):
             releases(misnamed)
 
@@ -2391,9 +2411,9 @@ class HeadlineContractTest(unittest.TestCase):
             doc.write_text(DOC, encoding="utf-8")
             row = release("v0.15.1")
             render.write_history(history_path, releases(row))
-            (root / "scorecard-v0.15.1.json").write_text("{}", encoding="utf-8")
-            card = root / "scorecard-v0.15.1-scored-labels-v2.json"
-            card.write_text(json.dumps(v2_scorecard(row)), encoding="utf-8")
+            write_scorecard(root / "scorecard-v0.15.1.json.gz")
+            card = root / "scorecard-v0.15.1-scored-labels-v2.json.gz"
+            write_scorecard(card, v2_scorecard(row))
             argv = ["--doc", str(doc), "--history", str(history_path)]
             self.assertEqual(
                 render.main(argv + ["--append-contract-result", "--scorecard", str(card), "--version", "v0.15.1"]),
@@ -2451,8 +2471,8 @@ class ValidatorRecallTableTest(unittest.TestCase):
             value,
             version="v0.15.0",
             machine="Test host, 1 core, 1 GB",
-            scorecard_filename="scorecard-v0.15.0.json",
-            scorecard_sha256="0" * 64,
+            scorecard_filename="scorecard-v0.15.0.json.gz",
+            scorecard_sha256=PLACEHOLDER_SHA256,
         )
 
     def test_pre_split_scorecard_records_and_renders_no_table(self):

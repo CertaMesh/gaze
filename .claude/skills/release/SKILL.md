@@ -33,8 +33,8 @@ Run from `main` after all release-blocker PRs are merged.
 9. Pair every release with its own benchmark: version X ships with benchmark X.
    Run the scorecard runner on the release commit in a fresh anvil worktree
    (see the `docs/reference/benchmarks` README for the command and the hardware
-   spec), store the result as
-   `docs/reference/benchmarks/scorecard-vX.Y.Z.json`, and add one row and one
+   spec), store the result gzipped with `scripts/bench/bench_json.py compress` as
+   `docs/reference/benchmarks/scorecard-vX.Y.Z.json.gz`, and add one row and one
    chart point keyed by `vX.Y.Z` to the consolidated benchmark document, with
    commit sha, script, and hardware as secondary columns. Dogfood the updated
    document. A release without a fresh benchmark is blocked.
