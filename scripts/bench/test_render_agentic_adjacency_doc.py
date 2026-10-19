@@ -10,6 +10,29 @@ from unittest import mock
 import render_agentic_adjacency_doc as render
 
 
+def failure_receipt(root: Path, inputs=render.MEASURED_INPUTS) -> Path:
+    folder = root / 'docs/reference/benchmarks'
+    folder.mkdir(parents=True, exist_ok=True)
+    driver = root / 'scripts/bench/rescore_past_release.py'
+    driver.parent.mkdir(parents=True, exist_ok=True)
+    driver.write_bytes((render.ROOT / 'scripts/bench/rescore_past_release.py').read_bytes())
+    value = {
+        'schema_version': 1, 'kind': 'historical-producer-unavailable', 'version': 'v0.14.0',
+        'binary_revision': '616e8a10b957961f9f7dcb745610afa978783c3a', 'binary_sha256': 'a' * 64,
+        'harness_revision': 'b' * 40, 'driver_sha256': render.sha256(driver),
+        'generator_version': inputs.version, 'corpus_sha256': inputs.corpus_sha256,
+        'contract_sha256': inputs.contract_sha256,
+        'configs': ['rule-floor-extended', 'pass2-ner', 'full-stack-kiji-resolve'],
+        'manifest_replacing_actions': ['tokenize'],
+        'attempts': [{'scored_label_contract': contract, 'exit_code': 1,
+                      'error_phase': 'payload_processing', 'error_code': 'payload',
+                      'log_sha256': 'c' * 64} for contract in (1, 2)],
+    }
+    path = folder / f'unavailable-v0.14.0-generated-v{inputs.version}.json'
+    path.write_text(json.dumps(value))
+    return path
+
+
 def scorecard(corpus_sha256: str = render.CORPUS_SHA256) -> dict:
     return {
         "measured": "v0.15.1",
@@ -38,6 +61,64 @@ def scorecard(corpus_sha256: str = render.CORPUS_SHA256) -> dict:
 
 
 class AdjacencyHistoryTests(unittest.TestCase):
+    def test_unavailable_cells_require_receipts_and_never_infer_zero_counts(self):
+        history = render.load_history(render.HISTORY)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = failure_receipt(root)
+            with mock.patch.object(render, 'ROOT', root):
+                rows = render.rows_from_unavailable_receipt(path, render.MEASURED_INPUTS)
+                history['rows'] = [row for row in history['rows'] if row['version'] != 'v0.14.0'] + rows
+                render.validate_history(history)
+                table = render.render(history)
+                self.assertIn('`v0.14.0` `pass2-ner` | N/A | N/A | N/A | N/A | N/A |', table)
+                self.assertIn('`v0.14.0` `pass2-ner` | N/A | N/A |', table)
+                self.assertIn('payload_processing:payload', table)
+                self.assertIn(path.name, table)
+                self.assertNotIn('layers', rows[0])
+                rows[0]['layers'] = {}
+                with self.assertRaisesRegex(render.HistoryError, 'cannot contain measured metrics'):
+                    render.validate_history(history)
+
+    def test_unavailability_rejects_wrong_inputs_incomplete_attempts_and_raw_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = failure_receipt(root)
+            original = json.loads(path.read_text())
+            mutations = [
+                lambda value: value.update(corpus_sha256='d' * 64),
+                lambda value: value.update(driver_sha256='d' * 64),
+                lambda value: value.update(version='v0.16.0'),
+                lambda value: value.update(schema_version=True),
+                lambda value: value.update(text='synthetic fixture text'),
+                lambda value: value['attempts'].pop(),
+                lambda value: value['attempts'][0].update(exit_code=0),
+            ]
+            with mock.patch.object(render, 'ROOT', root):
+                for mutate in mutations:
+                    value = json.loads(json.dumps(original))
+                    mutate(value)
+                    path.write_text(json.dumps(value))
+                    with self.subTest(value=value), self.assertRaises(render.HistoryError):
+                        render.rows_from_unavailable_receipt(path, render.MEASURED_INPUTS)
+
+    def test_unavailability_digest_source_and_file_boundary_cannot_be_bypassed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = failure_receipt(root)
+            with mock.patch.object(render, 'ROOT', root):
+                row = render.rows_from_unavailable_receipt(path, render.MEASURED_INPUTS)[0]
+                for field, value in [('evidence_sha256', 'd' * 64), ('version', 'v0.16.0'),
+                                     ('binary_revision', 'd' * 40), ('evidence_file', '../receipt.json')]:
+                    changed = {**row, field: value}
+                    with self.subTest(field=field), self.assertRaises(render.HistoryError):
+                        render.validate_unavailable_row(changed, render.MEASURED_INPUTS)
+                outside = root / 'outside.json'
+                path.rename(outside)
+                path.symlink_to(outside)
+                with self.assertRaisesRegex(render.HistoryError, 'regular committed'):
+                    render.validate_unavailable_row(row, render.MEASURED_INPUTS)
+
     def test_v16_records_restore_and_manifest_counts_without_hiding_legacy_errors(self):
         inputs = render.HistoryInputs.for_version(16)
         value = scorecard(inputs.corpus_sha256)

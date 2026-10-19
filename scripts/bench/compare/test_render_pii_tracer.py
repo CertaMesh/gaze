@@ -71,3 +71,44 @@ def test_refuses_a_dirty_or_multi_tool_report() -> None:
 def test_committed_page_matches_its_data() -> None:
     assert page.PAGE.read_text(encoding="utf-8") == page.render(
         json.loads(page.REPORT.read_text(encoding="utf-8")), json.loads(page.COMMITTED.read_text(encoding="utf-8")))
+
+
+def test_headline_uses_latest_contract_and_keeps_older_views() -> None:
+    report, committed = reports()
+    for value in (report, committed):
+        value["contracts"]["v4"] = "latest"
+    for tool in (*report["tools"].values(), *committed["tools"].values()):
+        tool["contracts"]["v4"] = copy.deepcopy(tool["contracts"]["v3"])
+    latest = report["tools"][page.TOOL]["contracts"]["v4"]["C"]
+    latest["metrics"]["product_coverage"]["full"]["leaked_bytes"] = 7
+    body = page.render(report, committed)
+    assert "## Layer C, scored-label contract v4" in body
+    assert "| pii-tracer | 0.800 | 7 |" in body
+    assert "| Layer | v4 | v3 | v2 | v1 |" in body
+
+
+def test_proven_unavailable_opf_stays_visible_without_numeric_imputation() -> None:
+    from comparison_availability import REASON, digest
+
+    report, committed = reports()
+    del committed["tools"]["opf"]
+    committed.update(harness_revision="a" * 40, compare_sha256="b" * 64)
+    receipt = dict(schema_version=1, tool="opf", status="unavailable", reason=REASON,
+                   measurement_revision=committed["harness_revision"],
+                   comparison_adapter_sha256=committed["compare_sha256"],
+                   corpus_sha256=digest(committed["corpus"]), contracts_sha256=digest(committed["contracts"]),
+                   checkpoint_sha256="c" * 64, runtime_source_revision="d" * 40)
+    configuration = digest(receipt)
+    receipt["attempts"] = [dict(attempt=n, timeout_seconds=600, outcome="socket_timeout",
+                                log_sha256=str(n) * 64, configuration_sha256=configuration) for n in (1, 2)]
+    committed["unavailable"] = {"opf": receipt}
+    body = page.render(report, committed)
+    assert "| opf | N/A | N/A | N/A | N/A |" in body
+    assert "No partial metrics" in body
+
+
+def test_missing_opf_without_receipt_is_rejected() -> None:
+    report, committed = reports()
+    del committed["tools"]["opf"]
+    with pytest.raises(ValueError, match="OPF"):
+        page.render(report, committed)

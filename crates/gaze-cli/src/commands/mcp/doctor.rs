@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use pdfium_render::prelude::Pdfium;
@@ -219,8 +220,14 @@ fn check_manifest_dir(path: &Path) -> Check {
             format!("`{}` is not a directory", path.display()),
         );
     }
-    let probe = path.join(".gaze-doctor-write-test");
-    match std::fs::write(&probe, b"ok").and_then(|_| std::fs::remove_file(&probe)) {
+    let writable = tempfile::Builder::new()
+        .prefix(".gaze-doctor-")
+        .tempfile_in(path)
+        .and_then(|mut probe| {
+            probe.as_file_mut().write_all(b"ok")?;
+            probe.close()
+        });
+    match writable {
         Ok(()) => pass("manifest dir", format!("`{}` is writable", path.display())),
         Err(err) => fail(
             "manifest dir",
@@ -322,6 +329,84 @@ fn paths_match(a: &Path, b: &Path) -> bool {
     let a = a.canonicalize().unwrap_or_else(|_| a.to_path_buf());
     let b = b.canonicalize().unwrap_or_else(|_| b.to_path_buf());
     a == b
+}
+
+#[cfg(test)]
+mod manifest_dir_tests {
+    use super::*;
+    use std::sync::Barrier;
+
+    #[test]
+    fn probe_preserves_existing_files() {
+        let root = tempfile::tempdir().unwrap();
+        let sentinel = root.path().join(".gaze-doctor-write-test");
+        std::fs::write(&sentinel, b"existing sentinel").unwrap();
+        std::fs::write(root.path().join("unrelated"), b"keep").unwrap();
+
+        let check = check_manifest_dir(root.path());
+        assert_eq!(check.state, CheckState::Pass, "{}", check.evidence);
+        assert_eq!(std::fs::read(&sentinel).unwrap(), b"existing sentinel");
+        assert_eq!(
+            std::fs::read(root.path().join("unrelated")).unwrap(),
+            b"keep"
+        );
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn concurrent_probes_pass_and_leave_no_files() {
+        let root = tempfile::tempdir().unwrap();
+        let barrier = Barrier::new(8);
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..8)
+                .map(|_| {
+                    scope.spawn(|| {
+                        barrier.wait();
+                        check_manifest_dir(root.path())
+                    })
+                })
+                .collect();
+            for handle in handles {
+                let check = handle.join().unwrap();
+                assert_eq!(check.state, CheckState::Pass, "{}", check.evidence);
+            }
+        });
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn missing_directory_warns_without_creating_it() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("missing");
+        let check = check_manifest_dir(&path);
+        assert_eq!(check.state, CheckState::Warn);
+        assert!(check.evidence.contains("serve will create it"));
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn non_directory_fails_without_changing_it() {
+        let root = tempfile::NamedTempFile::new().unwrap();
+        let check = check_manifest_dir(root.path());
+        assert_eq!(check.state, CheckState::Fail);
+        assert!(check.evidence.contains("not a directory"));
+        assert!(root.path().is_file());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_without_write_permission_fails() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let permissions = std::fs::metadata(root.path()).unwrap().permissions();
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o500)).unwrap();
+        let check = check_manifest_dir(root.path());
+        std::fs::set_permissions(root.path(), permissions).unwrap();
+        assert_eq!(check.state, CheckState::Fail, "{}", check.evidence);
+        assert!(check.evidence.contains("not writable"));
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    }
 }
 
 #[cfg(all(test, feature = "setup", feature = "safety-net-nym"))]

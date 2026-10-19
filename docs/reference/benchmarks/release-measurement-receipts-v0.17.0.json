@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "description": "Independent fresh v1/v2 observations and canonical v1-v4 replay receipts; no benchmark text or values.",
+  "versions": {
+    "0.14.0": {
+      "available": true,
+      "scope": "C only; A/D/R unavailable",
+      "observation_file": "observations-v0.14.0.jsonl.gz",
+      "observation_sha256": "ede9ecaa3ee4c180f55b83d0e8c2774fb54d5f2730e64b96fb6663839ef55d4c",
+      "independent_v1_file": "observations-v0.14.0-independent-v1.jsonl.gz",
+      "independent_v1_sha256": "3ffb0d60fe949268767fe4ca3532ddf88462b74a43905ca8c1391837990be2a0",
+      "canonical_export": {
+        "schema_version": 1,
+        "source_sha256": "ede9ecaa3ee4c180f55b83d0e8c2774fb54d5f2730e64b96fb6663839ef55d4c",
+        "exported_sha256": "ede9ecaa3ee4c180f55b83d0e8c2774fb54d5f2730e64b96fb6663839ef55d4c",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true
+      },
+      "independent_export": {
+        "schema_version": 1,
+        "source_sha256": "3ffb0d60fe949268767fe4ca3532ddf88462b74a43905ca8c1391837990be2a0",
+        "exported_sha256": "3ffb0d60fe949268767fe4ca3532ddf88462b74a43905ca8c1391837990be2a0",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true
+      },
+      "views": {
+        "1": {
+          "file": "scorecard-v0.14.0.json",
+          "sha256": "713479df6505331f9f79e9250edeab600c97624fc02f7e943f684cae1984287b"
+        },
+        "2": {
+          "file": "scorecard-v0.14.0-scored-labels-v2.json",
+          "sha256": "315ffc325884c7047da73b6ae37fc0bc4e06a38e9a76eee7fe20e730d1084ccb"
+        },
+        "3": {
+          "file": "scorecard-v0.14.0-scored-labels-v3.json",
+          "sha256": "3e5633cbf195a677d277eb529d4e523fbe15d74a28e562092e494f1a73baf6a1"
+        },
+        "4": {
+          "file": "scorecard-v0.14.0-scored-labels-v4.json",
+          "sha256": "44ba6e06f931d8e235e5dd36bc3775f726bbc7b335122dcc34d62fcf56fff617"
+        }
+      },
+      "fresh_v1_v2_untimed_runs_match": true
+    },
+    "0.15.0": {
+      "available": true,
+      "scope": "C/A/D/R",
+      "observation_file": "observations-v0.15.0.jsonl.gz",
+      "observation_sha256": "93bcfbe8e34df030d9d41f1f50e3e8d82b3f82506a998f3c3046dd810ac7753d",
+      "independent_v1_file": "observations-v0.15.0-independent-v1.jsonl.gz",
+      "independent_v1_sha256": "2d37a5daf465fc0146ea33a9c58d68d45cd9b178a89daa7d725666a18f61d4e7",
+      "canonical_export": {
+        "schema_version": 1,
+        "source_sha256": "c92fd15eff3ad10dab5c17ddac3f79658ae01fb10c2b9f08bf6da676e7128eaf",
+        "exported_sha256": "93bcfbe8e34df030d9d41f1f50e3e8d82b3f82506a998f3c3046dd810ac7753d",
+        "metadata_normalization": "policy-path-home-prefix",
+        "observation_rows_unchanged": true
+      },
+      "independent_export": {
+        "schema_version": 1,
+        "source_sha256": "93db96007bc88cc3356f817fddb97f261c3a1c03289480c729446dbe08a7ca88",
+        "exported_sha256": "2d37a5daf465fc0146ea33a9c58d68d45cd9b178a89daa7d725666a18f61d4e7",
+        "metadata_normalization": "policy-path-home-prefix",
+        "observation_rows_unchanged": true
+      },
+      "views": {
+        "1": {
+          "file": "scorecard-v0.15.0.json",
+          "sha256": "81a2b4daffd945347543c0a0e22dc28b4973e8d1ff089d317626b06b4e0c6b62"
+        },
+        "2": {
+          "file": "scorecard-v0.15.0-scored-labels-v2.json",
+          "sha256": "6fb9de86548f88b7ff9b931a74c36157c14b9ca4547c269bc2005e6a16ce999b"
+        },
+        "3": {
+          "file": "scorecard-v0.15.0-scored-labels-v3.json",
+          "sha256": "0369ccbe618953276a8577bde90269ecbef51b231366fa7845c23e0932e4a98c"
+        },
+        "4": {
+          "file": "scorecard-v0.15.0-scored-labels-v4.json",
+          "sha256": "0b634d5245ddc3c89915f6abd2f234d1e3d9d7aad3df48e066e1da586ce46ea9"
+        }
+      },
+      "fresh_v1_v2_untimed_runs_match": true
+    },
+    "0.15.1": {
+      "available": true,
+      "scope": "C/A/D/R",
+      "observation_file": "observations-v0.15.1.jsonl.gz",
+      "observation_sha256": "6e452a6cafda99ceeaf21136c6148a3db54d17080244005c3ef03ab9bce97f3e",
+      "independent_v1_file": "observations-v0.15.1-independent-v1.jsonl.gz",
+      "independent_v1_sha256": "6407bad713dad7169623231b6663826e71bd4821619182b0aa3ef892af6e38d2",
+      "canonical_export": {
+        "schema_version": 1,
+        "source_sha256": "76307bf4d841cf2a29d73dc2619abfe95390d17d7c01153ee8c4f01fb4afecb6",
+        "exported_sha256": "6e452a6cafda99ceeaf21136c6148a3db54d17080244005c3ef03ab9bce97f3e",
+        "metadata_normalization": "policy-path-home-prefix",
+        "observation_rows_unchanged": true
+      },
+      "independent_export": {
+        "schema_version": 1,
+        "source_sha256": "48b8223b0350f2bc4c999da46ce7ecc96e270823911803b63201b33519307ec7",
+        "exported_sha256": "6407bad713dad7169623231b6663826e71bd4821619182b0aa3ef892af6e38d2",
+        "metadata_normalization": "policy-path-home-prefix",
+        "observation_rows_unchanged": true
+      },
+      "views": {
+        "1": {
+          "file": "scorecard-v0.15.1.json",
+          "sha256": "4a3f6dd478c0e4232971b56deb7f19e3016a2b4b9f4b2e42af7ebf5604ae106d"
+        },
+        "2": {
+          "file": "scorecard-v0.15.1-scored-labels-v2.json",
+          "sha256": "036c7504c21d92c0d8b9956f4e93535a8b88b9b1fea1843f48150b4b5c4b3294"
+        },
+        "3": {
+          "file": "scorecard-v0.15.1-scored-labels-v3.json",
+          "sha256": "baca208e3db14b638ff9e0db63abb92fcf3eeda26d8dae524fc388619bc434c8"
+        },
+        "4": {
+          "file": "scorecard-v0.15.1-scored-labels-v4.json",
+          "sha256": "23b074b4ab5548129ad5d93be6dc5f9ce23e9a3ff9adf9407b9dda292a66f0f5"
+        }
+      },
+      "fresh_v1_v2_untimed_runs_match": true
+    },
+    "0.16.0": {
+      "available": true,
+      "scope": "C/A/D/R",
+      "observation_file": "observations-v0.16.0.jsonl.gz",
+      "observation_sha256": "c05d061b95a4d230a60dbdec6bb60be243c4b2cadecc119f653e09d67d564a42",
+      "independent_v1_file": "observations-v0.16.0-independent-v1.jsonl.gz",
+      "independent_v1_sha256": "44beabf7e3cfdbfcf96d9a3e73c29fdeca4677618e746a0b1cf66f253b194c0e",
+      "canonical_export": {
+        "schema_version": 1,
+        "source_sha256": "d6fba53b707b287d0cb51b71a5037f0550e61fd14e8c1fb92fbb914cead59b9c",
+        "exported_sha256": "c05d061b95a4d230a60dbdec6bb60be243c4b2cadecc119f653e09d67d564a42",
+        "metadata_normalization": "policy-path-home-prefix",
+        "observation_rows_unchanged": true
+      },
+      "independent_export": {
+        "schema_version": 1,
+        "source_sha256": "d4386ccb0ab586b2215b3c4082ad69be0d2cc414607e80606af293bdf4b29ded",
+        "exported_sha256": "44beabf7e3cfdbfcf96d9a3e73c29fdeca4677618e746a0b1cf66f253b194c0e",
+        "metadata_normalization": "policy-path-home-prefix",
+        "observation_rows_unchanged": true
+      },
+      "views": {
+        "1": {
+          "file": "scorecard-v0.16.0.json",
+          "sha256": "a1ed33b5f941385fd7278f4d37e5b2c6a2e6b0f3ca798702f1d65111f763b6d4"
+        },
+        "2": {
+          "file": "scorecard-v0.16.0-scored-labels-v2.json",
+          "sha256": "1b4a467156faae25d96513812640b553bdad00a6735c14d028efffb64f0a337d"
+        },
+        "3": {
+          "file": "scorecard-v0.16.0-scored-labels-v3.json",
+          "sha256": "f889c342abe26d7d275fb7bb9c7040d6dac7a8b3ea5656d06564c4e57c86253e"
+        },
+        "4": {
+          "file": "scorecard-v0.16.0-scored-labels-v4.json",
+          "sha256": "9e055feb011691cbf7087b316cee92a0cf7f8f9d4bc79f94c8fd165fbd660029"
+        }
+      },
+      "fresh_v1_v2_untimed_runs_match": true
+    },
+    "0.17.0": {
+      "available": true,
+      "scope": "C/A/D/R",
+      "observation_file": "observations-v0.17.0.jsonl.gz",
+      "observation_sha256": "3ac53252712148fad5ed55efe3e9c3645613279f596fcce3155a81080a72b47e",
+      "independent_v1_file": "observations-v0.17.0-independent-v1.jsonl.gz",
+      "independent_v1_sha256": "f7dcf3a815bbf35f0b20afbccab65ccd4f96eaec99c09fe65a45641b00baee00",
+      "canonical_export": {
+        "schema_version": 1,
+        "source_sha256": "3ac53252712148fad5ed55efe3e9c3645613279f596fcce3155a81080a72b47e",
+        "exported_sha256": "3ac53252712148fad5ed55efe3e9c3645613279f596fcce3155a81080a72b47e",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true
+      },
+      "independent_export": {
+        "schema_version": 1,
+        "source_sha256": "f7dcf3a815bbf35f0b20afbccab65ccd4f96eaec99c09fe65a45641b00baee00",
+        "exported_sha256": "f7dcf3a815bbf35f0b20afbccab65ccd4f96eaec99c09fe65a45641b00baee00",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true
+      },
+      "views": {
+        "1": {
+          "file": "scorecard-v0.17.0.json",
+          "sha256": "b80967351f02a715bb3bbca116190e9563f1ed9903a3af88be29072aaf75e9be"
+        },
+        "2": {
+          "file": "scorecard-v0.17.0-scored-labels-v2.json",
+          "sha256": "6d53672dfd09d52222a0e822b4b319ddd966f67f4b89ddaf563bad84dae902ae"
+        },
+        "3": {
+          "file": "scorecard-v0.17.0-scored-labels-v3.json",
+          "sha256": "280cc64a0cefb69beadeb5f1f0e8df14f546cdc32d2618ff8533ed864ac4d952"
+        },
+        "4": {
+          "file": "scorecard-v0.17.0-scored-labels-v4.json",
+          "sha256": "dd3af222b32cd659432700a0058d3f3eea26a0d13648e5f345ac52d4e64af5f3"
+        }
+      },
+      "fresh_v1_v2_untimed_runs_match": true
+    }
+  }
+}

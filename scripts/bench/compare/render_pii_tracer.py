@@ -4,7 +4,7 @@
 Reads docs/reference/benchmarks/comparison-pii-tracer.json (written by pii_tracer.py) and
 comparison.json, and writes docs/reference/benchmarks/competitors-pii-tracer.md. The page is
 generated: `--check` fails when it drifts. The two reports must describe the same corpus and the
-same v1-v3 scored-label contracts or rendering refuses, so every row is comparable to the others.
+same v1-v4 scored-label contracts or rendering refuses, so every row is comparable to the others.
 Gaze rows are not shown here: only tagged releases are published, on competitors.md.
 """
 
@@ -17,13 +17,15 @@ from pathlib import Path
 from typing import Any, Mapping
 
 REPO = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO / "scripts/bench"))
+from comparison_availability import unavailable_tools  # noqa: E402
 BENCHMARKS = REPO / "docs/reference/benchmarks"
 REPORT = BENCHMARKS / "comparison-pii-tracer.json"
 COMMITTED = BENCHMARKS / "comparison.json"
 PAGE = BENCHMARKS / "competitors-pii-tracer.md"
 TOOL = "pii-tracer"
 LAYERS = ("C", "A", "D", "R")
-CONTRACTS = ("v3", "v2", "v1")
+CONTRACTS = ("v4", "v3", "v2", "v1")
 LAYER_NAMES = {"C": "C (prose holdout)", "A": "A (generated identifiers)", "D": "D (benign lookalikes)",
                "R": "R (repeated values)"}
 
@@ -38,7 +40,7 @@ def check_comparable(report: Mapping[str, Any], committed: Mapping[str, Any]) ->
         or report["contracts"][version] != committed["contracts"][version]
         for version in CONTRACTS
     ):
-        raise ValueError("v1-v3 contracts differ from comparison.json; the rows are not comparable")
+        raise ValueError("v1-v4 contracts differ from comparison.json; the rows are not comparable")
     if report["harness_dirty"] or set(report["tools"]) != {TOOL}:
         raise ValueError("the PII-Tracer report must be a clean single-tool measurement")
 
@@ -57,6 +59,10 @@ def foreign_cpu_max(report: Mapping[str, Any]) -> float:
 
 def render(report: Mapping[str, Any], committed: Mapping[str, Any]) -> str:
     check_comparable(report, committed)
+    unavailable = unavailable_tools(committed)
+    if "opf" not in committed["tools"] and "opf" not in unavailable:
+        raise ValueError("comparison lacks measured OPF or a valid unavailable receipt")
+    headline = CONTRACTS[0]
     tool = report["tools"][TOOL]
     provenance = tool["provenance"]
     runtime = provenance["runtime"]
@@ -82,17 +88,22 @@ def render(report: Mapping[str, Any], committed: Mapping[str, Any]) -> str:
         f"{sum(v['documents'] for v in report['corpus']['layers'].values()):,} documents). "
         "Later generator versions add documents that are not measured here.",
         "",
-        "## Layer C, scored-label contract v3",
+        f"## Layer C, scored-label contract {headline}",
         "",
         "| Tool | Char F2 | Leaked B | FP B | Documents leaking |",
         "| --- | ---: | ---: | ---: | ---: |",
     ]
-    rows = {name: full(row, "v3", "C") for name, row in committed["tools"].items()}
-    rows[TOOL] = full(tool, "v3", "C")
+    rows = {name: full(row, headline, "C") for name, row in committed["tools"].items()}
+    rows[TOOL] = full(tool, headline, "C")
     for name in sorted(rows, key=lambda n: (rows[n]["leaked_bytes"], n)):
         m = rows[name]
         lines.append(f"| {name} | {m['char_level']['f2']:.3f} | {m['leaked_bytes']:,} | "
                      f"{m['false_positive_bytes']:,} | {m['document_leak_rate'] * 100:.1f}% |")
+    for name in sorted(unavailable):
+        lines.append(f"| {name} | N/A | N/A | N/A | N/A |")
+    if unavailable:
+        lines += ["", "OPF is unavailable after two unchanged 600-second socket timeouts; "
+                  "see the receipts in [competitors.md](competitors.md). No partial metrics are published."]
     lines += ["", "## PII-Tracer by layer and contract (leaked B / false-positive B)", "",
               "| Layer | " + " | ".join(CONTRACTS) + " |", "| --- | " + " | ".join("---:" for _ in CONTRACTS) + " |"]
     for layer in LAYERS:

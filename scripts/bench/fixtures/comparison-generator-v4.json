@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "source": {
+    "commit": "034cd7447c9a736fccb6a9c2b165fc48fd38dd98",
+    "file": "docs/reference/benchmarks/comparison.json",
+    "sha256": "c0e2ca67cb5fcef7a71fa225d2edf4e1babf31c832248852eda1e97fb49a19e0"
+  },
+  "corpus": {
+    "agentic": {
+      "generator_version": 4,
+      "corpus_sha256": "387a35ac155153e9b58a26ec7946b3d459b0d094fffdd5f05de39558eb640604",
+      "documents": 3250
+    }
+  },
+  "contracts": {
+    "agentic": "d30ee303effc9a0de004531d12e85deb530d5eb74a1298e5d4432da4cfd6fce0"
+  }
+}

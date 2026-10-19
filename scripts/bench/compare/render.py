@@ -12,6 +12,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 BENCH = REPO / "scripts/bench"
 import compare  # noqa: E402
+from comparison_availability import unavailable_tools  # noqa: E402
 from layer_display import layer_display_name  # noqa: E402
 from markdown_table import table_header  # noqa: E402
 from tagged_gaze import check_public  # noqa: E402
@@ -149,8 +150,24 @@ def agentic_corpus_note(report: dict[str, object]) -> str:
     )
 
 
+def skipped_language_footnote(tools: dict) -> str:
+    language_skips = [
+        f"{name}/{layer_display_name(layer)}: " + ", ".join(f"{language}={count:,}" for language, count in row.get("skipped_languages", {}).items())
+        for name, tool in tools.items() for layer, row in tool["contracts"]["v4"].items()
+        if row.get("skipped_languages")
+    ]
+    return ("Skipped-language document counts: " + "; ".join(language_skips)
+            + ". Every skipped document counts as fully missed, including all its gold bytes.") if language_skips else ""
+
+
+def unavailable_summary_row(version: str, layer: str, name: str, latency_publishable: bool) -> str:
+    return (f"| {version} | {layer_display_name(layer)} | {name} | N/A | N/A | N/A | N/A | N/A | "
+            + ("N/A | N/A |" if latency_publishable else "unavailable |"))
+
+
 def render(report: dict[str, object], source: str, tuned: dict[str, object] | None = None,
            history_path: Path | None = None) -> str:
+    unavailable = unavailable_tools(report)
     gaze = report["gaze"]
     tools = report["tools"]
     versions = ("v4", "v3", "v2", "v1")
@@ -161,7 +178,7 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
     required = {"presidio-all", "presidio-en", "presidio-en-de", "gliner"}
     if report.get("schema_version", 1) >= 2:
         required.update(set(compare.TOOLS) - {"opf"})
-    if not required.issubset(tools) or ("opf" not in tools and "opf" not in report.get("skipped", {})):
+    if not required.issubset(tools) or ("opf" not in tools and "opf" not in report.get("skipped", {}) and "opf" not in unavailable):
         raise ValueError("public comparison needs every configured competitor or an explicit OPF skip")
     layer_ids = list(report["corpus"]["layers"])
     revisions = {row["gaze_revision"] for row in gaze.values()}
@@ -206,7 +223,8 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
                 if row["latency"]["samples"] != row["processed_documents"]:
                     raise ValueError(f"{name} latency includes skipped documents")
 
-    opf_description = "OpenAI Privacy Filter (OPF) skipped."
+    opf_description = ("OpenAI Privacy Filter (OPF) unavailable after two 600-second socket timeouts."
+                       if unavailable else "OpenAI Privacy Filter (OPF) skipped.")
     if "opf" in tools:
         runtime = tools["opf"]["provenance"]["runtime"]
         opf_source = runtime.get("source_revision")
@@ -277,6 +295,8 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
         for layer in layer_ids:
             for name in ORDER:
                 if name not in tools:
+                    if name in unavailable:
+                        lines.append(unavailable_summary_row(version, layer, name, latency_publishable))
                     continue
                 row = tools[name]["contracts"][version][layer]
                 fp = row["false_positive_bytes"]
@@ -295,6 +315,14 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
                     f"{row.get('skipped_documents', 0):,} | {row.get('skipped_gold_bytes', 0):,} | "
                     + timing
                 )
+    footnote = skipped_language_footnote(tools)
+    if footnote:
+        lines.extend(["", footnote])
+    if unavailable:
+        receipt = report["unavailable"]["opf"]
+        lines.extend(["", "**OPF: N/A (unavailable).** Two unchanged attempts reached the declared "
+                      "600-second socket timeout. No partial metrics are published; the cause remains unproven. "
+                      "Attempt log SHA-256 receipts: " + ", ".join(f"`{item['log_sha256']}`" for item in receipt["attempts"]) + "."])
     if report.get("schema_version", 1) >= 2:
         lines.extend([
             "", "## Heldout safety and entity metrics", "",

@@ -32,7 +32,9 @@ BACKEND_CODE_SHA256 = "3604a9cf3e420db14bae23b6f36d850ae55a93234fc82f2101bb235ad
 BACKEND_CODE_PARTS = ("class Presidio", "class Gliner", "class DataFogCore", "class DataFogPython",
                       "class Scrubadub", "class Opf", "def resolved_presidio_spans", "def byte_spans")
 PINNED_SHA256 = {
-    "compare.py": "5ddedb6cab9bb15957803a79d2e7ea6b8f2848a04229b062ffbaea783892f38e",
+    # Current file also preserves native Gaze repeat-credit contracts; the
+    # competitor backend construction above remains byte-identical.
+    "compare.py": "ae0541144f907d070ad425d2467c794dda6a41d84f87d8c48fecb693273e424d",
     "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
     "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa",
     "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",

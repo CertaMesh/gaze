@@ -51,6 +51,21 @@ class OwnerStateTests(unittest.TestCase):
                 binding.platform_preflight()
             self.assertEqual(caught.exception.code, 'invalid_state')
 
+    def test_missing_platform_capability_rejected_before_spawn(self):
+        capabilities = ('waitid', 'WNOWAIT', 'O_NOFOLLOW', 'O_NONBLOCK')
+        for missing in capabilities:
+            with self.subTest(missing=missing), \
+                    patch.object(sys, 'version_info', (3, 13)), \
+                    patch.object(signal, 'getsignal', return_value=signal.SIG_DFL), \
+                    patch.dict(os.__dict__, {key: object() for key in capabilities}), \
+                    patch.object(binding.subprocess, 'Popen') as spawn:
+                del os.__dict__[missing]
+                owner = binding.BuildOwner(deadline=time.monotonic()+30)
+                with self.assertRaises(ProducerFailure) as caught:
+                    owner.run(['synthetic'])
+                self.assertEqual(caught.exception.code, 'unsupported_platform')
+                spawn.assert_not_called()
+
     def test_ambiguous_process_metadata_rejected(self):
         for data in (b'1 1 Z', b'1 1 Z\n1 1 Z\n', b'1 bad Z\n', b'1 1 ?\n'):
             with self.subTest(data=data), patch.object(binding, 'metadata', return_value=data):
@@ -658,6 +673,9 @@ class BindingRegressionTests(unittest.TestCase):
                     return 0
                 process.wait.side_effect = wait
                 observed = types.SimpleNamespace(si_status=0, si_code=os.CLD_EXITED)
+                def observe():
+                    owner.observed = observed
+                    return observed
                 selector = MagicMock()
                 selector.__enter__.return_value = selector
                 selector.get_map.return_value = {}
@@ -684,7 +702,7 @@ class BindingRegressionTests(unittest.TestCase):
                         patch.object(binding.subprocess, 'Popen', return_value=process), \
                         patch.object(binding.selectors, 'DefaultSelector', return_value=selector), \
                         patch.object(os, 'set_blocking'), \
-                        patch.object(os, 'waitid', return_value=observed), \
+                        patch.object(owner, 'observe', side_effect=observe), \
                         patch.object(owner, 'settled', side_effect=settled), \
                         patch.object(os, 'killpg', side_effect=lambda *args: log.append(('signal', owner.state))):
                     sys.settrace(trace)
