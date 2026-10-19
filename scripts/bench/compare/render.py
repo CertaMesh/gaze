@@ -645,6 +645,7 @@ def input_paths(report: dict, path: Path) -> list[Path]:
         *(REPO / contract for contract in compare.agentic.HISTORICAL_CONTRACTS.values()),
         *(REPO / "docs/reference/benchmarks/variant-packs").glob("*.jsonl")]
     if "row_sources" in report:
+        paths.append(row_sources.native_receipt_path(path))
         paths.extend(path.parent / report["row_sources"][name]["path"] for name in ("base", "supplement"))
     return paths
 

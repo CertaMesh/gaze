@@ -40,6 +40,30 @@ def protect_inputs(output: Path, inputs: list[Path]) -> None:
             raise ValueError("input evidence would be overwritten by output")
 
 
+def native_receipt_path(report: Path) -> Path:
+    # Fixed by the publication filename, never redirected by submitted fields.
+    return report.with_name(report.name + ".native-receipt.json")
+
+
+def _native_receipt_bytes(manifest: dict) -> bytes:
+    receipt = {"schema_version": 1, "sources": {
+        name: {"report_sha256": manifest[name]["sha256"], "records": manifest[name]["native_records"]}
+        for name in ("base", "supplement")}}
+    return (json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def _retain_native_receipt(path: Path, raw: bytes) -> None:
+    """Create once; an existing reviewed receipt can only be reused unchanged."""
+    if path.is_symlink():
+        raise ValueError("native receipt must be a retained regular file")
+    try:
+        with path.open("xb") as destination:
+            destination.write(raw)
+    except FileExistsError:
+        if path.read_bytes() != raw:
+            raise ValueError("retained native receipt differs; use a new publication path")
+
+
 def adapter_is_compatible(recorded: str, current: str) -> bool:
     return recorded == current or (recorded == ORIGINAL_ADAPTER and current == SPANISH_ADAPTER)
 
@@ -174,15 +198,33 @@ def compose(base_path: Path, base_sha: str, supplement_path: Path, supplement_sh
             "finalizer_sha256": file_hash(Path(__file__).with_name("finalize_report.py")),
         },
     }
+    raw_receipt = _native_receipt_bytes(manifest)
+    manifest["native_receipt_sha256"] = hashlib.sha256(raw_receipt).hexdigest()
     result = _assemble(base, supplement, manifest)
+    # Validate all current public inputs before creating any publication evidence.
+    from render import validate_current
+    validate_current(base, base_path)
+    validate_current(supplement, supplement_path)
+    receipt_path = native_receipt_path(output)
+    protect_inputs(receipt_path, [base_path, supplement_path, output, output.with_suffix(output.suffix + ".tmp")])
+    _retain_native_receipt(receipt_path, raw_receipt)
     validate(result, output)
     return result
 
 
 def validate(report: dict, path: Path) -> None:
     manifest = report["row_sources"]
-    if set(manifest) != {"schema_version", "base", "supplement", "tool_sources", "aggregation"} or manifest["schema_version"] != 1:
+    if set(manifest) != {"schema_version", "base", "supplement", "tool_sources", "aggregation", "native_receipt_sha256"} or manifest["schema_version"] != 1:
         raise ValueError("unsupported row-source manifest")
+    receipt_path = native_receipt_path(path)
+    if receipt_path.is_symlink():
+        raise ValueError("native receipt must be a retained regular file")
+    for destination in (path, path.with_suffix(path.suffix + ".tmp")):
+        protect_inputs(destination, [receipt_path])
+    raw_receipt = receipt_path.read_bytes()
+    if (hashlib.sha256(raw_receipt).hexdigest() != manifest["native_receipt_sha256"]
+            or raw_receipt != _native_receipt_bytes(manifest)):
+        raise ValueError("native-record map differs from retained native receipt")
     sources = {}
     for name in ("base", "supplement"):
         ref = manifest[name]

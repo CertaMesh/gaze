@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -141,6 +142,10 @@ def test_composition_and_renderer_preserve_original_measurements(inputs, monkeyp
     for name in unchanged:
         assert result["tools"][name] == old["tools"][name]
         assert result["row_sources"]["tool_sources"][name] == "base"
+        for layer in old["corpus"]["layers"]:
+            native = compare.prediction_path(inputs[2], layer, name)
+            assert result["row_sources"]["base"]["native_records"][name][layer] == {
+                "sha256": row_sources.file_hash(native), "bytes": native.stat().st_size}
     for name in row_sources.REPLACED:
         assert result["tools"][name] == new["tools"][name]
         assert result["row_sources"]["tool_sources"][name] == "supplement"
@@ -150,6 +155,10 @@ def test_composition_and_renderer_preserve_original_measurements(inputs, monkeyp
     assert result["row_sources"]["aggregation"]["compare_sha256"] == row_sources.SPANISH_ADAPTER
     assert not result["latency_validity"]["publishable"]
     assert result["row_sources"]["base"]["native_records"]["gliner"]["A"]["sha256"] == row_sources.file_hash(inputs[2] / "A/pred/gliner.jsonl")
+    receipt = row_sources.native_receipt_path(output)
+    receipt_before = receipt.read_bytes()
+    assert result["row_sources"]["native_receipt_sha256"] == row_sources.file_hash(receipt)
+    assert json.loads(receipt_before)["sources"]["base"]["records"] == result["row_sources"]["base"]["native_records"]
     page = output.with_suffix(".md")
     render_cli(output, page, monkeypatch)
     text = page.read_text()
@@ -162,6 +171,7 @@ def test_composition_and_renderer_preserve_original_measurements(inputs, monkeyp
     monkeypatch.setattr(sys, "argv", ["finalize_report.py", str(output)])
     finalize_report.main()
     assert json.loads(output.read_bytes()) == result
+    assert receipt.read_bytes() == receipt_before
 
 
 def test_original_snapshot_still_renders_with_its_legitimate_contract(inputs, monkeypatch):
@@ -172,12 +182,13 @@ def test_original_snapshot_still_renders_with_its_legitimate_contract(inputs, mo
 
 
 @pytest.mark.parametrize("alias", ("direct", "symlink", "hardlink"))
-@pytest.mark.parametrize("target", ("base", "supplement", "report", "presidio-tuned.json",
+@pytest.mark.parametrize("target", ("base", "supplement", "report", "receipt", "presidio-tuned.json",
     "presidio-tuned-selection.json", "presidio-tuned-overlap.json", "release-history.json", "release-char-level.json"))
 def test_render_cli_preserves_input_evidence(inputs, monkeypatch, alias, target):
     compose_cli(inputs, monkeypatch)
     output = inputs[-1]
-    source = {"base": inputs[0], "supplement": inputs[1], "report": output}.get(target)
+    source = {"base": inputs[0], "supplement": inputs[1], "report": output,
+              "receipt": row_sources.native_receipt_path(output)}.get(target)
     if source is None:
         source = output.with_name(target)
         source.write_bytes(b"previous evidence\n")
@@ -211,6 +222,57 @@ def test_render_cli_repeats_identical_output(inputs, monkeypatch):
     assert page.read_bytes() == before
     monkeypatch.setattr(sys, "argv", ["render.py", str(output), "--page", str(page), "--check"])
     render.main()
+
+
+@pytest.mark.parametrize("entry", ("finalize", "render"))
+@pytest.mark.parametrize("source", ("base", "supplement"))
+@pytest.mark.parametrize("repack_receipt_pin", (False, True))
+def test_public_entry_rejects_repacked_native_map(inputs, monkeypatch, entry, source, repack_receipt_pin):
+    result = compose_cli(inputs, monkeypatch)
+    output = inputs[-1]
+    receipt = row_sources.native_receipt_path(output)
+    receipt_before = receipt.read_bytes()
+    ref = result["row_sources"][source]
+    name = "gliner" if source == "base" else "scrubadub-base"
+    ref["native_records"][name]["C"]["sha256"] = "0" * 64
+    ref["native_records_sha256"] = digest({"report_sha256": ref["sha256"], "records": ref["native_records"]})
+    if repack_receipt_pin:
+        # Repack every submitted checksum, but leave the independently retained file intact.
+        changed = json.loads(receipt_before)
+        changed["sources"][source]["records"] = ref["native_records"]
+        raw = (json.dumps(changed, indent=2, sort_keys=True) + "\n").encode()
+        result["row_sources"]["native_receipt_sha256"] = hashlib.sha256(raw).hexdigest()
+    write(output, result)
+    before = {path: path.read_bytes() for path in (*inputs[:2], output, receipt)}
+    page = output.with_suffix(".md")
+    page.write_bytes(b"previous page\n")
+    with pytest.raises(ValueError, match="retained native receipt"):
+        if entry == "finalize":
+            monkeypatch.setattr(sys, "argv", ["finalize_report.py", str(output)])
+            finalize_report.main()
+        else:
+            render_cli(output, page, monkeypatch)
+    assert {path: path.read_bytes() for path in before} == before
+    assert page.read_bytes() == b"previous page\n"
+
+
+def test_compose_cli_reuses_receipt_but_cannot_replace_it(inputs, monkeypatch):
+    compose_cli(inputs, monkeypatch)
+    output = inputs[-1]
+    receipt = row_sources.native_receipt_path(output)
+    raw, stat = receipt.read_bytes(), receipt.stat()
+    compose_cli(inputs, monkeypatch)
+    assert receipt.read_bytes() == raw
+    assert receipt.stat().st_ino == stat.st_ino
+    assert receipt.stat().st_mtime_ns == stat.st_mtime_ns
+    before = output.read_bytes()
+    # Fictional native fixture only: a new native hash cannot replace retained evidence.
+    native = compare.prediction_path(inputs[2], "C", "gliner")
+    native.write_bytes(native.read_bytes() + b"\n")
+    with pytest.raises(ValueError, match="retained native receipt differs"):
+        compose_cli(inputs, monkeypatch)
+    assert receipt.read_bytes() == raw
+    assert output.read_bytes() == before
 
 
 @pytest.mark.parametrize("source", (0, 1))

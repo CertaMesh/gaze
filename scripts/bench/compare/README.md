@@ -212,7 +212,12 @@ Copy the original complete report and sparse supplement into
 hash before composition. Keep these aggregate snapshots immutable and commit
 them with the composed publication. Private native records stay outside the
 repository. The finalizer reads them only as bytes to record file hashes and
-sizes; the renderer needs only the committed snapshots and aggregate manifest.
+sizes. Composition also creates `comparison.json.native-receipt.json` beside the
+output report. This public-safe aggregate receipt contains only the two snapshot
+hashes and native file hashes and sizes, including superseded records.
+It contains no native bodies or private paths. Review and separately pin its SHA-256 alongside
+the snapshot hashes, and commit all three immutable evidence files with the
+publication. The renderer needs only these files and the composed report.
 
 ```sh
 uv run --project scripts/bench python scripts/bench/compare/finalize_report.py \
@@ -223,6 +228,7 @@ uv run --project scripts/bench python scripts/bench/compare/finalize_report.py \
   --supplement-sha256 "$SUPPLEMENT_SHA256" \
   --base-predictions-dir "$ORIGINAL_NATIVE" \
   --supplement-predictions-dir "$SUPPLEMENT_NATIVE"
+shasum -a 256 docs/reference/benchmarks/comparison.json.native-receipt.json
 uv run --project scripts/bench python scripts/bench/compare/render.py \
   docs/reference/benchmarks/comparison.json \
   --page docs/reference/benchmarks/competitors.md
@@ -237,7 +243,16 @@ The composed report keeps the base's top-level measurement and replay metadata.
 state, code hashes and time. Snapshot metadata and each tool's provenance retain their own
 source, adapter, collection or replay time, configuration and model pins. Native
 hashes cover both original and fresh records, including superseded original
-scrubadub records. Eleven inherited tool objects, Gaze measurements, selected
+scrubadub records. `row_sources.native_receipt_sha256` pins the separately retained
+receipt. Its filename is always the full report filename plus
+`.native-receipt.json`. Submitted manifest fields cannot redirect it. Composition
+creates it exclusively and can reuse identical bytes, but cannot replace it with
+different evidence. Use a new publication filename for a new pair of sources.
+Ordinary finalization and rendering compare both native maps against that file,
+without reading private native records. A checksum repacked only in the submitted
+report is insufficient. The trusted inputs are the independently retained,
+reviewed snapshots and receipt. Simultaneous malicious rewriting of every
+trusted input is outside this contract. Eleven inherited tool objects, Gaze measurements, selected
 thresholds and the OPF receipt remain identical to the original snapshot.
 
 Composition requires identical corpus, scored contracts, scorer, mappings,
