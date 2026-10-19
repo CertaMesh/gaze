@@ -30,8 +30,9 @@ class OwnerStateTests(unittest.TestCase):
                     with self.assertRaises(ProducerFailure) as caught:
                         binding.BuildOwner(deadline=time.monotonic()+30, cap=cap)
                     self.assertEqual(caught.exception.code, 'invalid_limits')
+        binding.BuildOwner(deadline=time.monotonic()+30, stdout_cap=268435456)
         with self.assertRaises(ProducerFailure) as caught:
-            binding.BuildOwner(deadline=time.monotonic()+30, stdout_cap=134217729)
+            binding.BuildOwner(deadline=time.monotonic()+30, stdout_cap=268435457)
         self.assertEqual(caught.exception.code, 'invalid_limits')
 
     def test_no_signal_after_reap(self):
@@ -191,16 +192,16 @@ class SnapshotTests(unittest.TestCase):
         # Header plus payload is 9,728 bytes. End markers need another record.
         self.assert_snapshot({'Cargo.lock': b'#'+b'x'*8704})
 
-    def test_snapshot_just_under_128_mib(self):
-        # The last complete 10 KiB tar record below 128 MiB, with one header
+    def test_snapshot_just_under_256_mib(self):
+        # The last complete 10 KiB tar record below 256 MiB, with one header
         # and two end markers. The payload is synthetic, not a Cargo input.
-        size = self.assert_snapshot({'Cargo.lock': b'#' + b'x' * 134214143})
-        self.assertEqual(size, 134215680)
+        size = self.assert_snapshot({'Cargo.lock': b'#' + b'x' * 268429823})
+        self.assertEqual(size, 268431360)
 
-    def test_snapshot_just_over_128_mib(self):
-        # The next complete tar record above 128 MiB is rejected.
+    def test_snapshot_just_over_256_mib(self):
+        # The next complete tar record above 256 MiB is rejected.
         with self.assertRaises(ProducerFailure) as caught:
-            self.assert_snapshot({'Cargo.lock': b'#' + b'x' * 134224383})
+            self.assert_snapshot({'Cargo.lock': b'#' + b'x' * 268440063})
         self.assertEqual(caught.exception.code, 'output_limit')
 
     def assert_snapshot(self, files):
@@ -844,11 +845,11 @@ while remaining:
 '''
     for kind, stream, ceiling in (
             ('cargo', 'stdout', 67108864), ('cargo', 'stderr', 67108864),
-            ('archive', 'stdout', 134217728), ('archive', 'stderr', 67108864)):
+            ('archive', 'stdout', 268435456), ('archive', 'stderr', 67108864)):
         for offset in (-1, 1):
             label = f'{kind}_{stream}_{"under" if offset < 0 else "over"}'
             binding.check_time(suite_deadline-binding.PROCESS_RESERVE)
-            options = {'stdout_cap': 134217728} if kind == 'archive' else {}
+            options = {'stdout_cap': 268435456} if kind == 'archive' else {}
             owner = binding.BuildOwner(deadline=min(suite_deadline, time.monotonic()+30),
                                        seconds=15, **options)
             received = 0

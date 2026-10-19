@@ -29,7 +29,7 @@ from bench_subprocess import BenchSubprocess, ProducerFailure, TransportLimits, 
 import evidence_bridge
 
 MIB = 1024 * 1024
-SNAPSHOT_MAX_BYTES = 128 * MIB
+SNAPSHOT_MAX_BYTES = 256 * MIB
 CHUNK = 64 * 1024
 PROCESS_RESERVE = 10
 DIRECTORY_RESERVE = 120

@@ -117,7 +117,8 @@ provisional until fresh measurements qualify the finalized crate sources.
   measures warmed mutations under its primary scoring contract, and tier-four
   gating requires positive semantic proof (#765, #790, #793, #804).
 - **Source snapshot bound.** Private benchmark source archives allow up to
-  128 MiB; Cargo, bridge and request stream limits remain 64 MiB, with archive
+  256 MiB to accommodate the full source evidence inventory at a higher bounded
+  memory cost; Cargo, bridge and request stream limits remain 64 MiB, with archive
   integrity checks unchanged (#796).
 - **Documentation.** Root guides, tutorials, how-to pages, explanations and
   references were shortened, runtime boundaries gained diagrams, and the crate
