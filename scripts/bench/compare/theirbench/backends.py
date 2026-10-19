@@ -40,6 +40,14 @@ PINNED_SHA256 = {
     "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
     "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
 }
+# Fresh collection has a separate source contract. Historical report pins above
+# remain unchanged; the only adapter difference is native Spanish scrubadub routing.
+CURRENT_COMPARISON_REVISION = "c26adac173f8792e35452e84bc377063dafc32bc"
+CURRENT_BACKEND_CODE_SHA256 = "b0c86d1b22785957bf16ea820dbfc7952f128f122f04f3d59f5890250a8ed4e7"
+CURRENT_PINNED_SHA256 = {
+    **PINNED_SHA256,
+    "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+}
 # The aggregate rows predate opt-in per-label telemetry. Their default metrics
 # are byte-identical, but no other old-to-current metrics transition is compatible.
 TELEMETRY_ONLY_PREVIOUS_METRICS_SHA256 = "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f"
@@ -48,13 +56,13 @@ COMPARE_DIR = Path(compare.__file__).resolve().parent
 
 
 def verify_pinned_comparison() -> dict[str, str]:
-    actual = {name: hashlib.sha256((COMPARE_DIR / name).read_bytes()).hexdigest() for name in PINNED_SHA256}
-    changed = sorted(name for name, digest in actual.items() if digest != PINNED_SHA256[name])
+    actual = {name: hashlib.sha256((COMPARE_DIR / name).read_bytes()).hexdigest() for name in CURRENT_PINNED_SHA256}
+    changed = sorted(name for name, digest in actual.items() if digest != CURRENT_PINNED_SHA256[name])
     if changed:
-        raise SystemExit(f"{changed} differ from comparison revision {COMPARISON_REVISION}; "
+        raise SystemExit(f"{changed} differ from comparison revision {CURRENT_COMPARISON_REVISION}; "
                          "mirror the change in theirbench/backends.py and re-pin")
-    if backend_code_sha256() != BACKEND_CODE_SHA256:
-        raise SystemExit(f"compare.py backend construction differs from measured revision {MEASURED_REVISION}")
+    if backend_code_sha256() != CURRENT_BACKEND_CODE_SHA256:
+        raise SystemExit(f"compare.py backend construction differs from current revision {CURRENT_COMPARISON_REVISION}")
     return actual
 
 
@@ -90,7 +98,7 @@ def add_tool_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def build_backend(name: str, args: argparse.Namespace, mappings: dict, scratch: Path):
-    """(backend, provenance, mapping) for one tool, mirroring compare.main() at COMPARISON_REVISION."""
+    """(backend, provenance, mapping) mirroring compare.main() at CURRENT_COMPARISON_REVISION."""
     c = compare
     if name == "opf" and (args.opf_python is None or args.opf_checkpoint is None):
         return None, {"skipped": "local OPF runtime or checkpoint not configured"}, None
