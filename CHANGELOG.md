@@ -10,8 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.17.0] - 2026-10-19
 
 v0.17.0 expands credential and personal-name protection, tightens fail-closed
-boundaries, and preserves reversible manifests. Release benchmark claims remain
-provisional until fresh measurements qualify the finalized crate sources.
+boundaries, and preserves reversible manifests. Fresh merged-source measurements
+pass the accepted own-policy numeric and external F2 criteria. Strict own-policy
+identity remains `not_comparable`; TRACE's original net-byte gate fails.
+[Evidence and limits](docs/reference/benchmarks/README.md#v017-final-candidate-evidence)
+remain provisional until actual tag and package checks.
 
 ### Security
 

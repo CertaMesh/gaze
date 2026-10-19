@@ -1,0 +1,356 @@
+{
+  "source_revision": "86195a8fbff001489b4eee385020c94c15e502b3",
+  "results": {
+    "1": {
+      "strict_gate": {
+        "verdict": "not_comparable",
+        "differing": [
+          "model bundle nym-small-int8",
+          "policy_sha256"
+        ],
+        "layers": {}
+      },
+      "release_gate": {
+        "verdict": "pass",
+        "reason": "leaked bytes fell by 7479, FP bytes changed by +273",
+        "summary": {
+          "leaked_bytes_decrease": 7479,
+          "false_positive_bytes_increase": 273
+        },
+        "layers": {
+          "C": {
+            "attempted_base": 2910,
+            "attempted_candidate": 2910,
+            "documents_base": 2910,
+            "documents_candidate": 2910,
+            "headline_leaked_base": 13291,
+            "headline_leaked_candidate": 9717,
+            "leaked_base": 13291,
+            "leaked_candidate": 9717,
+            "twin_leaked_base": 0,
+            "twin_leaked_candidate": 0,
+            "false_positive_base": 26902,
+            "false_positive_candidate": 27021,
+            "failed_closed_base": 0,
+            "failed_closed_candidate": 0,
+            "restore_exact_base": 2910,
+            "restore_exact_candidate": 2910,
+            "restore_failures_base": 0,
+            "restore_failures_candidate": 0,
+            "manifest_valid_base": 2910,
+            "manifest_valid_candidate": 2910,
+            "manifest_invalid_base": 0,
+            "manifest_invalid_candidate": 0
+          },
+          "A": {
+            "attempted_base": 6617,
+            "attempted_candidate": 6617,
+            "documents_base": 6617,
+            "documents_candidate": 6617,
+            "headline_leaked_base": 75887,
+            "headline_leaked_candidate": 72332,
+            "leaked_base": 74685,
+            "leaked_candidate": 71130,
+            "twin_leaked_base": 1202,
+            "twin_leaked_candidate": 1202,
+            "false_positive_base": 2407,
+            "false_positive_candidate": 2489,
+            "failed_closed_base": 0,
+            "failed_closed_candidate": 0,
+            "restore_exact_base": 6617,
+            "restore_exact_candidate": 6617,
+            "restore_failures_base": 0,
+            "restore_failures_candidate": 0,
+            "manifest_valid_base": 6617,
+            "manifest_valid_candidate": 6617,
+            "manifest_invalid_base": 0,
+            "manifest_invalid_candidate": 0
+          },
+          "D": {
+            "attempted_base": 5192,
+            "attempted_candidate": 5192,
+            "documents_base": 5192,
+            "documents_candidate": 5192,
+            "headline_leaked_base": 0,
+            "headline_leaked_candidate": 0,
+            "leaked_base": 0,
+            "leaked_candidate": 0,
+            "twin_leaked_base": 0,
+            "twin_leaked_candidate": 0,
+            "false_positive_base": 9290,
+            "false_positive_candidate": 9328,
+            "failed_closed_base": 0,
+            "failed_closed_candidate": 0,
+            "restore_exact_base": 5192,
+            "restore_exact_candidate": 5192,
+            "restore_failures_base": 0,
+            "restore_failures_candidate": 0,
+            "manifest_valid_base": 5192,
+            "manifest_valid_candidate": 5192,
+            "manifest_invalid_base": 0,
+            "manifest_invalid_candidate": 0
+          },
+          "R": {
+            "attempted_base": 3061,
+            "attempted_candidate": 3061,
+            "documents_base": 3061,
+            "documents_candidate": 3061,
+            "headline_leaked_base": 120826,
+            "headline_leaked_candidate": 120476,
+            "leaked_base": 120826,
+            "leaked_candidate": 120476,
+            "twin_leaked_base": 0,
+            "twin_leaked_candidate": 0,
+            "false_positive_base": 1243,
+            "false_positive_candidate": 1277,
+            "failed_closed_base": 0,
+            "failed_closed_candidate": 0,
+            "restore_exact_base": 3061,
+            "restore_exact_candidate": 3061,
+            "restore_failures_base": 0,
+            "restore_failures_candidate": 0,
+            "manifest_valid_base": 3061,
+            "manifest_valid_candidate": 3061,
+            "manifest_invalid_base": 0,
+            "manifest_invalid_candidate": 0
+          }
+        },
+        "gate_credit_version": 2,
+        "credit_guard": {
+          "ref_number_9": {
+            "base": 18,
+            "candidate": 18
+          },
+          "ref_number_11": {
+            "base": 30,
+            "candidate": 30
+          },
+          "card_twin_grouped_ref_csv": {
+            "base": 0,
+            "candidate": 0
+          },
+          "card_twin_order": {
+            "base": 0,
+            "candidate": 0
+          },
+          "card_twin_reader_serial": {
+            "base": 0,
+            "candidate": 0
+          },
+          "card_twin_timestamp_log": {
+            "base": 0,
+            "candidate": 0
+          },
+          "card_twin_transaction_json": {
+            "base": 0,
+            "candidate": 0
+          },
+          "ref_number_16": {
+            "base": 0,
+            "candidate": 0
+          },
+          "ref_number_10": {
+            "base": 0,
+            "candidate": 0
+          },
+          "gov_twin_tax_eleven": {
+            "base": 0,
+            "candidate": 0
+          },
+          "gov_near_tax_eleven": {
+            "base": 0,
+            "candidate": 0
+          },
+          "gov_twin_tax_grouped": {
+            "base": 0,
+            "candidate": 0
+          },
+          "gov_near_tax_grouped": {
+            "base": 0,
+            "candidate": 0
+          }
+        }
+      },
+      "scorecard_sha256": {
+        "base": "8f1e01e564de8f2f5b8ea43c26aafd222a764b5e8831a95212935e9aab1b3c04",
+        "candidate": "1235c73c213ed1992f36519284fc67fc7488c04d1d7261c939e49ba576a431dc"
+      }
+    },
+    "2": {
+      "strict_gate": {
+        "verdict": "not_comparable",
+        "differing": [
+          "model bundle nym-small-int8",
+          "policy_sha256"
+        ],
+        "layers": {}
+      },
+      "release_gate": {
+        "verdict": "pass",
+        "reason": "leaked bytes fell by 4601, FP bytes changed by +256",
+        "summary": {
+          "leaked_bytes_decrease": 4601,
+          "false_positive_bytes_increase": 256
+        },
+        "layers": {
+          "C": {
+            "attempted_base": 2910,
+            "attempted_candidate": 2910,
+            "documents_base": 2910,
+            "documents_candidate": 2910,
+            "headline_leaked_base": 7348,
+            "headline_leaked_candidate": 6652,
+            "leaked_base": 7348,
+            "leaked_candidate": 6652,
+            "twin_leaked_base": 0,
+            "twin_leaked_candidate": 0,
+            "false_positive_base": 26902,
+            "false_positive_candidate": 27004,
+            "failed_closed_base": 0,
+            "failed_closed_candidate": 0,
+            "restore_exact_base": 2910,
+            "restore_exact_candidate": 2910,
+            "restore_failures_base": 0,
+            "restore_failures_candidate": 0,
+            "manifest_valid_base": 2910,
+            "manifest_valid_candidate": 2910,
+            "manifest_invalid_base": 0,
+            "manifest_invalid_candidate": 0
+          },
+          "A": {
+            "attempted_base": 6617,
+            "attempted_candidate": 6617,
+            "documents_base": 6617,
+            "documents_candidate": 6617,
+            "headline_leaked_base": 75887,
+            "headline_leaked_candidate": 72332,
+            "leaked_base": 74685,
+            "leaked_candidate": 71130,
+            "twin_leaked_base": 1202,
+            "twin_leaked_candidate": 1202,
+            "false_positive_base": 2407,
+            "false_positive_candidate": 2489,
+            "failed_closed_base": 0,
+            "failed_closed_candidate": 0,
+            "restore_exact_base": 6617,
+            "restore_exact_candidate": 6617,
+            "restore_failures_base": 0,
+            "restore_failures_candidate": 0,
+            "manifest_valid_base": 6617,
+            "manifest_valid_candidate": 6617,
+            "manifest_invalid_base": 0,
+            "manifest_invalid_candidate": 0
+          },
+          "D": {
+            "attempted_base": 5192,
+            "attempted_candidate": 5192,
+            "documents_base": 5192,
+            "documents_candidate": 5192,
+            "headline_leaked_base": 0,
+            "headline_leaked_candidate": 0,
+            "leaked_base": 0,
+            "leaked_candidate": 0,
+            "twin_leaked_base": 0,
+            "twin_leaked_candidate": 0,
+            "false_positive_base": 9290,
+            "false_positive_candidate": 9328,
+            "failed_closed_base": 0,
+            "failed_closed_candidate": 0,
+            "restore_exact_base": 5192,
+            "restore_exact_candidate": 5192,
+            "restore_failures_base": 0,
+            "restore_failures_candidate": 0,
+            "manifest_valid_base": 5192,
+            "manifest_valid_candidate": 5192,
+            "manifest_invalid_base": 0,
+            "manifest_invalid_candidate": 0
+          },
+          "R": {
+            "attempted_base": 3061,
+            "attempted_candidate": 3061,
+            "documents_base": 3061,
+            "documents_candidate": 3061,
+            "headline_leaked_base": 120826,
+            "headline_leaked_candidate": 120476,
+            "leaked_base": 120826,
+            "leaked_candidate": 120476,
+            "twin_leaked_base": 0,
+            "twin_leaked_candidate": 0,
+            "false_positive_base": 1243,
+            "false_positive_candidate": 1277,
+            "failed_closed_base": 0,
+            "failed_closed_candidate": 0,
+            "restore_exact_base": 3061,
+            "restore_exact_candidate": 3061,
+            "restore_failures_base": 0,
+            "restore_failures_candidate": 0,
+            "manifest_valid_base": 3061,
+            "manifest_valid_candidate": 3061,
+            "manifest_invalid_base": 0,
+            "manifest_invalid_candidate": 0
+          }
+        },
+        "gate_credit_version": 2,
+        "credit_guard": {
+          "ref_number_9": {
+            "base": 18,
+            "candidate": 18
+          },
+          "ref_number_11": {
+            "base": 30,
+            "candidate": 30
+          },
+          "card_twin_grouped_ref_csv": {
+            "base": 0,
+            "candidate": 0
+          },
+          "card_twin_order": {
+            "base": 0,
+            "candidate": 0
+          },
+          "card_twin_reader_serial": {
+            "base": 0,
+            "candidate": 0
+          },
+          "card_twin_timestamp_log": {
+            "base": 0,
+            "candidate": 0
+          },
+          "card_twin_transaction_json": {
+            "base": 0,
+            "candidate": 0
+          },
+          "ref_number_16": {
+            "base": 0,
+            "candidate": 0
+          },
+          "ref_number_10": {
+            "base": 0,
+            "candidate": 0
+          },
+          "gov_twin_tax_eleven": {
+            "base": 0,
+            "candidate": 0
+          },
+          "gov_near_tax_eleven": {
+            "base": 0,
+            "candidate": 0
+          },
+          "gov_twin_tax_grouped": {
+            "base": 0,
+            "candidate": 0
+          },
+          "gov_near_tax_grouped": {
+            "base": 0,
+            "candidate": 0
+          }
+        }
+      },
+      "scorecard_sha256": {
+        "base": "558c28670142478ded7a3becd65925813f01b69d126acc9177478fa58f3e7f23",
+        "candidate": "5d259d7c56733d507d20ed44a4919d20ac9ff014f0a6b118948b9e5e2a11d4d8"
+      }
+    }
+  },
+  "criterion": "retained shipped-policy numeric comparison; strict identity retained separately"
+}
