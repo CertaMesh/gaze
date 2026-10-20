@@ -44,6 +44,7 @@ from typing import Any, Mapping, Sequence
 import agentic_layers as agentic
 import gaze_bench_score as score
 import scorecard_record as record
+import stage_timing as stages
 from tagged_gaze import TAG, check_public
 import verify_record_scorecards as verify
 from render_benchmark_doc import (
@@ -415,6 +416,7 @@ def git_crates_tree(revision: str) -> str:
         raise MechanismError(f"cannot resolve the crates tree of {revision}: {error}") from error
 
 
+@stages.timed("mechanism_arm")
 def record_measurement(
     ledger: dict[str, Any], *, mechanism: str, title: str, added_in: str, shipped: str,
     delta: Path,
@@ -943,16 +945,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         apply(original, "")  # Refuse missing markers before a record publishes evidence.
         ledger = load_ledger()
         if args.command == "record":
-            record_measurement(
-                ledger, mechanism=args.mechanism, title=args.title, added_in=args.added_in,
-                shipped=args.shipped,
-                delta=args.policy_delta,
-                runs={name: getattr(args, name.replace("-", "_"))
-                      for name in ("base-v2", "candidate-v2", "base-v1", "candidate-v1")},
-                binary=args.binary, machine=args.machine, release=args.release,
-                latency=args.latency,
-            )
-            _persist_ledger(ledger, LEDGER)
+            with stages.session(args.candidate_v2 / "mechanism-evidence.json"):
+                record_measurement(
+                    ledger, mechanism=args.mechanism, title=args.title, added_in=args.added_in,
+                    shipped=args.shipped,
+                    delta=args.policy_delta,
+                    runs={name: getattr(args, name.replace("-", "_"))
+                          for name in ("base-v2", "candidate-v2", "base-v1", "candidate-v1")},
+                    binary=args.binary, machine=args.machine, release=args.release,
+                    latency=args.latency,
+                )
+                _persist_ledger(ledger, LEDGER)
         elif args.command == "refresh":
             refresh(ledger)
             _persist_ledger(ledger, LEDGER)

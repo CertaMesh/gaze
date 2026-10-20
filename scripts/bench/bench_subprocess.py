@@ -14,6 +14,8 @@ import sys
 import time
 from dataclasses import dataclass
 
+from stage_timing import NativeProfileReader
+
 
 CODES = frozenset({
     "unsupported_platform", "invalid_limits", "invalid_state", "input_limit",
@@ -122,6 +124,14 @@ class BenchSubprocess:
         self.phase = "start"
         self.finished = False
         self.message_deadline = 0.0
+        effective_environment = os.environ if env is None else env
+        self.profile_reader = (
+            NativeProfileReader() if effective_environment.get("GAZE_BENCH_PROFILE") == "1" else None
+        )
+
+    @property
+    def native_profile(self):
+        return self.profile_reader.result if self.profile_reader is not None else None
 
     def _check(self, deadline):
         if time.monotonic() >= deadline:
@@ -180,6 +190,11 @@ class BenchSubprocess:
         self.stderr_seen += len(chunk)
         if self.stderr_seen > self.limits.stderr_bytes:
             raise ProducerFailure("stderr_limit", self.phase)
+        if self.profile_reader is not None:
+            try:
+                self.profile_reader.feed(chunk)
+            except (ValueError, UnicodeError):
+                raise ProducerFailure("protocol", self.phase) from None
 
     def _idle_output(self):
         # Bytes already waiting before a request cannot be its response.
