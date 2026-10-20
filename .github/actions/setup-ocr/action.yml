@@ -2,8 +2,8 @@ name: Set up OCR and disk monitoring
 description: Prepare the existing Linux OCR runtime and sample free disk during the job.
 inputs:
   free-disk-space:
-    description: Remove preinstalled tools before the build.
-    default: 'true'
+    description: Opt in to removing preinstalled tools when measured disk space is low.
+    default: 'false'
   install-ocr:
     description: Install runtime Tesseract and pdfium dependencies.
     default: 'true'

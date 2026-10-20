@@ -22,16 +22,16 @@ jobs:
         uses: ./.github/actions/setup-ocr
         with:
           install-ocr: 'false'
-      - name: Cache cargo dependencies
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - name: Cache cargo registry + target
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671
-          key: ${{ runner.os }}-cargo-test-dependencies-v2-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-dependencies-v1-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-dependencies-v2-
+            ${{ runner.os }}-cargo-test-dependencies-v1-
       - name: cargo check workspace (MSRV)
         env:
           RUSTUP_TOOLCHAIN: 1.89.0
@@ -61,16 +61,17 @@ jobs:
           toolchain: 1.96.0
       - name: Set up OCR and sample disk space
         uses: ./.github/actions/setup-ocr
-      - name: Cache cargo dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      # Keep the name and dependency-only key parsed by the producer-binding regression test.
+      - name: Cache cargo registry + target
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671
-          key: ${{ runner.os }}-cargo-test-dependencies-v2-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-dependencies-v1-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-dependencies-v2-
+            ${{ runner.os }}-cargo-test-dependencies-v1-
       - name: Test shard ownership and evidence contracts
         run: python3 -m unittest discover -s scripts/ci
       - name: cargo fmt --check
@@ -78,7 +79,7 @@ jobs:
       # Linux-only: the canonical harness uses a POSIX producer transport.
       # Call its build function so flags/features cannot diverge from bench runs.
       - name: Cache detached validator probe target
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: target/validator-recall-probe
           key: ${{ runner.os }}-validator-probe-1.96-${{ hashFiles('**/Cargo.lock') }}
@@ -95,7 +96,7 @@ jobs:
       - name: Workspace all-feature doctests
         run: cargo test --workspace --all-features --doc --no-fail-fast
       - name: Cache pinned Nym bundle
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/gaze/models/nym-small-int8
           key: ${{ runner.os }}-nym-small-int8-${{ env.NYM_SMALL_INT8_BUNDLE_SHA256 }}
@@ -141,7 +142,7 @@ jobs:
           cargo test -p gaze-cli --all-features --test eval_cli "$name" -- --ignored --exact --nocapture 2>&1 | tee "$RUNNER_TEMP/$name.log"
           grep -Fq "test $name ... ok" "$RUNNER_TEMP/$name.log"
       - name: Cache pinned Davlan NER bundle
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/gaze/models/davlan-mbert-ner-hrl
           key: ${{ runner.os }}-davlan-ner-7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16
@@ -229,16 +230,16 @@ jobs:
           toolchain: 1.96.0
       - name: Set up OCR and sample disk space
         uses: ./.github/actions/setup-ocr
-      - name: Cache cargo dependencies
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - name: Cache cargo registry + target
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671
-          key: ${{ runner.os }}-cargo-test-dependencies-v2-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-dependencies-v1-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-dependencies-v2-
+            ${{ runner.os }}-cargo-test-dependencies-v1-
       - name: Install pinned nextest
         shell: bash
         run: |
@@ -381,16 +382,16 @@ jobs:
           toolchain: 1.96.0
       - name: Set up OCR and sample disk space
         uses: ./.github/actions/setup-ocr
-      - name: Cache cargo dependencies
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - name: Cache cargo registry + target
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671
-          key: ${{ runner.os }}-cargo-test-dependencies-v2-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-dependencies-v1-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-dependencies-v2-
+            ${{ runner.os }}-cargo-test-dependencies-v1-
       - name: xtask ci-feature-matrix
         run: cargo run -p xtask -- ci-feature-matrix --partition ci-gates
       - name: Report disk space after build and sampled peak use
@@ -418,16 +419,16 @@ jobs:
           toolchain: 1.96.0
       - name: Set up OCR and sample disk space
         uses: ./.github/actions/setup-ocr
-      - name: Cache cargo dependencies
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - name: Cache cargo registry + target
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671
-          key: ${{ runner.os }}-cargo-test-dependencies-v2-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-dependencies-v1-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-dependencies-v2-
+            ${{ runner.os }}-cargo-test-dependencies-v1-
       - name: Default-feature workspace suite
         run: cargo run -p xtask -- ci-feature-matrix --partition ci-default
       - name: Report disk space after build and sampled peak use
