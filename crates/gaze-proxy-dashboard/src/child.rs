@@ -1239,20 +1239,20 @@ mod tests {
         entered_rx.recv_timeout(Duration::from_secs(60)).unwrap();
         let purge_state = state.clone();
         let (attempt_tx, attempt_rx) = mpsc::sync_channel(1);
-        let (purged_tx, purged_rx) = mpsc::sync_channel(1);
         let purger = thread::spawn(move || {
+            assert!(matches!(
+                purge_state.try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            ));
             attempt_tx.send(()).unwrap();
             purge_state
                 .lock()
                 .unwrap_or_else(|poison| poison.into_inner())
                 .purge_all(InspectionEpochV1::new(1));
-            purged_tx.send(()).unwrap();
         });
-        attempt_rx.recv().unwrap();
-        assert!(purged_rx.recv_timeout(Duration::from_millis(20)).is_err());
+        attempt_rx.recv_timeout(Duration::from_secs(60)).unwrap();
         release_tx.send(()).unwrap();
         assert!(writer.join().unwrap() > 1_024);
-        purged_rx.recv_timeout(Duration::from_secs(60)).unwrap();
         purger.join().unwrap();
         assert_eq!(
             state
