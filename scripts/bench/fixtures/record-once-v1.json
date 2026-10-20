@@ -268,7 +268,7 @@
       },
       "warm_latency_ms": {},
       "process": {
-        "wall_seconds": 0.00010304199531674385,
+        "wall_seconds": 1.0,
         "documents_per_second": 1000.0,
         "start_to_first_response_ms": 0.0,
         "cold_start_to_first_validated_response_ms": 0.0,

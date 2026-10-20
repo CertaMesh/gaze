@@ -1,6 +1,7 @@
 """A scoring contract must never silently trigger another detection capture."""
 
 import contextlib
+import gzip
 import io
 import json
 import subprocess
@@ -14,7 +15,6 @@ import known_record_arm
 import known_record_cells
 import gaze_bench_score as score
 import scorecard_record as record
-from verify_record_scorecards import without_timing
 
 
 class RecordOnceTests(unittest.TestCase):
@@ -37,13 +37,16 @@ class RecordOnceTests(unittest.TestCase):
 
     def test_v2_record_replays_independent_v1_scorecard(self):
         fixtures = Path(__file__).parent / "fixtures"
+        with gzip.open(fixtures / "record-once.jsonl.gz", "rt") as stream:
+            captured = json.loads(next(stream))["scorecard"]
+        self.assertEqual(captured["scoring"]["scored_label_contract"]["version"], 2)
         replay = record.rescore(
             fixtures / "record-once.jsonl.gz", score.SCORED_LABEL_CONTRACT_V1,
             max_workers=1,
         )
         expected = json.loads((fixtures / "record-once-v1.json").read_text())
         replay.pop("observation_record")
-        self.assertEqual(without_timing(replay), without_timing(expected))
+        self.assertEqual(replay, expected)
 
     def test_contract_capture_requires_explicit_cross_check(self):
         for flag in ("--scored-labels", "--agentic-scored-labels"):
