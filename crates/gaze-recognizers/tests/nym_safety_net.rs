@@ -741,7 +741,7 @@ fn case_text(id: &str) -> String {
 }
 
 #[test]
-#[ignore = "needs GAZE_NYM_MODEL_DIR (run by xtask safety-net-sanity when set)"]
+#[ignore = "needs GAZE_NYM_MODEL_DIR (run by CI test-support)"]
 fn live_plate_in_prose_is_a_suspect() {
     let text = case_text("plate-in-prose");
     let suspects = live_check(&text);
@@ -755,7 +755,7 @@ fn live_plate_in_prose_is_a_suspect() {
 }
 
 #[test]
-#[ignore = "needs GAZE_NYM_MODEL_DIR (run by xtask safety-net-sanity when set)"]
+#[ignore = "needs GAZE_NYM_MODEL_DIR (run by CI test-support)"]
 fn live_salutation_protects_surname_but_not_unsupported_secret() {
     let text = case_text("salutation-4192");
     let suspects = live_check(&text);
@@ -765,7 +765,7 @@ fn live_salutation_protects_surname_but_not_unsupported_secret() {
 }
 
 #[test]
-#[ignore = "needs GAZE_NYM_MODEL_DIR (run by xtask safety-net-sanity when set)"]
+#[ignore = "needs GAZE_NYM_MODEL_DIR (run by CI test-support)"]
 fn live_long_document_is_scanned_to_the_end() {
     let text = case_text("long-document-tail");
     let suspects = live_check(&text);
@@ -782,7 +782,7 @@ fn live_long_document_is_scanned_to_the_end() {
 /// keep testing what the pinned model really outputs. With `GAZE_NYM_WRITE_FIXTURE` set it
 /// rewrites the fixture instead.
 #[test]
-#[ignore = "needs GAZE_NYM_MODEL_DIR (run by xtask safety-net-sanity when set)"]
+#[ignore = "needs GAZE_NYM_MODEL_DIR (run by CI test-support)"]
 fn live_capture_matches_the_committed_fixture() {
     let fresh = capture_all();
     if std::env::var_os("GAZE_NYM_WRITE_FIXTURE").is_some() {
