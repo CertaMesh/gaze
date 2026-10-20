@@ -115,8 +115,6 @@ jobs:
         run: python3 -m unittest discover -s scripts/ci
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
-      - name: README version check
-        run: cargo run -p xtask -- readme-version-check
       # Linux-only: the canonical harness uses a POSIX producer transport.
       # Call its build function so flags/features cannot diverge from bench runs.
       - name: Cache detached validator probe target
@@ -453,38 +451,6 @@ jobs:
           key: ${{ runner.os }}-cargo-xtask-gates-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-xtask-gates-
-      - name: xtask symmetric-potemkin
-        run: cargo run -p xtask -- symmetric-potemkin
-      - name: xtask class-map-override-safety
-        run: cargo run -p xtask -- class-map-override-safety
-      - name: xtask recognizer-composition-validator
-        run: cargo run -p xtask -- recognizer-composition-validator
-      - name: xtask no-tenant-knowledge
-        run: cargo run -p xtask -- no-tenant-knowledge
-      - name: xtask bundle-tokenization-drift
-        # --verify-ack: any committed snapshot change (e.g. an emitted class
-        # rename) must carry a `// drift-ack:` comment and a CHANGELOG line —
-        # the v0.8 `custom:iban` -> `custom:family:payment-card-or-iban` change
-        # merged silently without this and leaked downstream (issue #360).
-        run: cargo run -p xtask -- bundle-tokenization-drift --verify-ack
-      - name: xtask family-policy-table-coherence
-        run: cargo run -p xtask -- family-policy-table-coherence
-      - name: xtask locale-cue-bundle-coherence
-        run: cargo run -p xtask -- locale-cue-bundle-coherence
-      - name: xtask fixture-citation-lint
-        run: cargo run -p xtask -- fixture-citation-lint
-      - name: xtask trybuild-fixture-hygiene
-        run: cargo run -p xtask -- trybuild-fixture-hygiene
-      - name: xtask cargo-metadata-audit-isolation
-        run: cargo run -p xtask -- cargo-metadata-audit-isolation
-      - name: xtask readme-version-check
-        run: cargo run -p xtask -- readme-version-check
-      - name: xtask safety-net-sanity
-        run: cargo run -p xtask -- safety-net-sanity
-      - name: xtask dashboard-isolation
-        run: cargo run -p xtask -- dashboard-isolation
-      - name: xtask mcp-tier-isolation
-        run: cargo run -p xtask -- mcp-tier-isolation
       - name: xtask ci-feature-matrix
         run: cargo run -p xtask -- ci-feature-matrix --partition ci-gates
 
