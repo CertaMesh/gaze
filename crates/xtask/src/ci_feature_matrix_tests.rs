@@ -64,6 +64,45 @@ fn ci_partitions_preserve_every_local_command_with_one_owner() {
 }
 
 #[test]
+fn ci_gates_partition_runs_each_xtask_gate_once_with_its_full_argv() {
+    use super::{partition_commands, Partition};
+
+    let expected = [
+        "bundle-tokenization-drift --verify-ack",
+        "cargo-metadata-audit-isolation",
+        "class-map-override-safety",
+        "fixture-citation-lint",
+        "trybuild-fixture-hygiene",
+        "family-policy-table-coherence",
+        "locale-cue-bundle-coherence",
+        "readme-version-check",
+        "dashboard-isolation",
+        "mcp-tier-isolation",
+        "no-tenant-knowledge",
+        "safety-net-sanity",
+        "tokenbridge-no-raw-index",
+        "tokenbridge-encrypted-index",
+        "symmetric-potemkin",
+        "recognizer-composition-validator",
+    ]
+    .map(|gate| {
+        ["run", "-p", "xtask", "--"]
+            .into_iter()
+            .chain(gate.split_whitespace())
+            .collect::<Vec<_>>()
+    });
+    let actual: Vec<_> = partition_commands(Partition::CiGates)
+        .filter(|command| command.args.starts_with(&["run", "-p", "xtask", "--"]))
+        .map(|command| {
+            assert_eq!(command.program, "cargo");
+            assert_eq!(command.label, format!("cargo {}", command.args.join(" ")));
+            command.args.to_vec()
+        })
+        .collect();
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn matrix_roster_requires_the_no_phone_parser_core_load() {
     assert!(FEATURE_MATRIX.contains(&CORE_NO_PHONE_PARSER_LOAD_GUARD));
     assert_eq!(
