@@ -8,6 +8,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import run_no_opf_benchmark as runner
 import rescore_past_release as past
@@ -47,6 +48,77 @@ class RecordOnceTests(unittest.TestCase):
         expected = json.loads((fixtures / "record-once-v1.json").read_text())
         replay.pop("observation_record")
         self.assertEqual(replay, expected)
+
+        # Build a fresh producer response from synthetic text, independently of
+        # the value-free record and frozen card. Exercise the direct boundary,
+        # including response validation; replay_responses is deliberately absent.
+        email = "alice@example.invalid"
+        text = f"{email} {email} secret"
+        document = score.Document(
+            "synthetic-1", text, "en", "US", "synthetic",
+            (score.Span(len(text) - 6, len(text), "PASSWORD"),
+             score.Span(0, len(email), "EMAIL")),
+        )
+        start, end = len(email) + 1, len(email) * 2 + 1
+        response = {
+            "fixture_id": document.uid,
+            "clean_text": f"{email} <Email_1> secret",
+            "manifest_spans": [{"raw_start": start, "raw_end": end,
+                                "clean_start": start, "clean_end": start + 9, "class": "email"}],
+            "pre_safety_text_len": None, "pre_safety_manifest_spans": None,
+            "leak_suspects": [], "safety_net_mode": "disabled",
+            "final_protection_trace": [{
+                "raw_start": start, "raw_end": end, "class": "email", "action": "tokenize",
+                "provenance": {"stage": "primary_pipeline", "decision": "policy",
+                               "source_ids": ["synthetic:email"]},
+            }],
+            "restore": {"exact": True, "decision": "success", "unknown_token_count": 0,
+                        "manifest_bypass_count": 0, "fresh_pii_detected_count": 0,
+                        "phase_execution_mask": 0},
+            "manifest_integrity": {"spans": 1, "invalid_clean_bounds": 0,
+                                   "invalid_raw_bounds": 0, "overlapping_clean_spans": 0,
+                                   "non_monotonic_raw_spans": 0,
+                                   "token_restore_failures": 0, "raw_value_mismatches": 0},
+            "initial_safety_net_stats": {"suspect_count": 0, "uncovered_count": 0,
+                                         "partial_bleed_count": 0, "class_mismatch_count": 0,
+                                         "locale_skipped_count": 0},
+            "strict_would_reject": False, "post_policy_safety_net_stats": None,
+            "timing": {"clean_ms": 1.0, "restore_ms": 1.0, "post_policy_scan_ms": None},
+        }
+        measurements = {
+            "validator_kinds_by_class": {},
+            "documents": {document.uid: {
+                "gold_validation": [
+                    {"start": span.start, "end": span.end, "label": span.label,
+                     "applicable": False, "validator_passed": None} for span in document.spans
+                ],
+                "predictions": None,
+            }},
+        }
+        process = mock.MagicMock(message_deadline=None)
+        process.exchange.return_value = response
+        with mock.patch.object(score, "BenchSubprocess") as producer, mock.patch.object(
+            score.time, "perf_counter", side_effect=[0.0, 0.0, 0.0, 1.0],
+        ):
+            producer.return_value.__enter__.return_value = process
+            direct_run = score.run_config(
+                Path("."), Path("synthetic-producer"), "policy-file", [document], Path("."),
+                None, None, None, 0.3, Path("."), validator_measurements=measurements,
+            )
+        process.exchange.assert_called_once_with({
+            "fixture_id": document.uid, "locale_chain": document.locale_chain, "text": text,
+        })
+        direct = {
+            "schema_version": 4, "generated_at": "synthetic",
+            "gaze": {"revision": "synthetic", "dirty": False},
+            "dataset": {"integrity": {"sha256": "0" * 64},
+                        "validator_gold_census": score.validator_gold_census([document], measurements)},
+            "scoring": {"scored_label_contract": score.scored_label_contract_report(
+                score.SCORED_LABEL_CONTRACT_V1, [document])},
+            "parameters": {"ner_threshold": 0.3, "configs": ["policy-file"]},
+            "runs": [direct_run],
+        }
+        self.assertEqual(direct, replay)
 
     def test_contract_capture_requires_explicit_cross_check(self):
         for flag in ("--scored-labels", "--agentic-scored-labels"):
