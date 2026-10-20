@@ -1,11 +1,12 @@
 # Gaze Benchmarks
 
-The v0.17.0 candidate has fresh measurements of merged source
-`86195a8fbff001489b4eee385020c94c15e502b3`. Its raw crates tree is
-`5a3c6502bd64eabf40f009eb05ca55da3ed50dfe`, including crate READMEs and manifests.
-[Final candidate evidence](#v017-final-candidate-evidence) remains provisional
-until the real tag and package checks. Tagged-release benchmark panels retain
-v0.16.0; the current table and inline trends include the provisional candidate.
+The signed v0.17.0 tag targets merge `8a19d8c64a007a990ab5efc8a22d33f08bbe9f11`.
+Its measurements retain source `86195a8fbff001489b4eee385020c94c15e502b3`, with
+identical raw crates tree `5a3c6502bd64eabf40f009eb05ca55da3ed50dfe`, including
+crate READMEs and manifests. The [release evidence](#v017-final-candidate-evidence)
+keeps its original capture identities. The own-corpus panel, current table and
+inline trends include tagged v0.17.0. Fresh external byte-micro panels show
+v0.17.0 alongside v0.16.0; historical character panels keep their original rows.
 
 The single benchmark document for Gaze. It carries the current release's
 measured numbers as a table and as charts, the methodology behind them, and the
@@ -53,9 +54,9 @@ Related contracts kept as separate documents:
 
 ## v0.17 final candidate evidence
 
-These results compare the v0.16 shipped setup policy with the v0.17 candidate's
-own setup policy. The candidate runtime is merged source `86195a8f`, not the
-later documentation commit. The [measurement receipts](release-measurement-receipts-v0.17.0.json)
+These results compare the v0.16 shipped setup policy with v0.17's own setup
+policy. The measured runtime remains merged source `86195a8f`; the actual
+v0.17.0 tag targets merge `8a19d8c6`, whose raw crates tree is identical. The [measurement receipts](release-measurement-receipts-v0.17.0.json)
 pin original captures, portable exports, replay views and aggregate evidence.
 The portable exporter verifies every observation row unchanged. Independent
 v1/v2 captures reproduce identical untimed runs and layers when replayed under
@@ -93,11 +94,27 @@ The original net-byte verdict is reported separately, including TRACE's failure.
 These byte-micro scores do not replace vendor metrics or relabel historical
 rows in [their benchmarks](#competitors-own-benchmarks).
 
-| Benchmark | Byte-micro F2 %, base → candidate | Leaked bytes removed | FP bytes added | Original net-byte gate | Accepted F2 gate |
-| --- | --- | ---: | ---: | --- | --- |
-| Sealed OpenPII/Gretel | 64.3476308515 → 66.0206379254 | 20,738 | 5,282 | PASS | PASS |
-| PIIBench-commercial | 62.7119062150 → 64.2375059624 | 4,520 | 815 | PASS | PASS |
-| PII-TRACE | 75.8824156820 → 76.2383386217 | 284 | 353 | FAIL, `no_eligible_gain` | PASS |
+<!-- BEGIN GENERATED: external-release -->
+
+Fresh external release measurements use byte-micro F2, `5*TP/(5*TP+4*FN+FP)`. These are separate from the character-level and vendor-evaluator scores below.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../assets/benchmarks/external-release-panels-dark.svg">
+  <img alt="Fresh external byte-micro F2 for Gaze v0.16.0 and v0.17.0, with leaked bytes and original net-byte verdicts." src="../../assets/benchmarks/external-release-panels-light.svg">
+</picture>
+
+| Benchmark | Version | Byte-micro F2 % | Leaked bytes | FP bytes | Original net-byte gate | Accepted F2 gate |
+| --- | --- | ---: | ---: | ---: | --- | --- |
+| Sealed OpenPII/Gretel | v0.16.0 | 64.3476308515 | 399,158 | 246,957 | baseline | baseline |
+| Sealed OpenPII/Gretel | v0.17.0 | 66.0206379254 | 378,420 | 252,239 | PASS | PASS |
+| PIIBench-commercial | v0.16.0 | 62.7119062150 | 105,077 | 48,309 | baseline | baseline |
+| PIIBench-commercial | v0.17.0 | 64.2375059624 | 100,557 | 49,124 | PASS | PASS |
+| PII-TRACE | v0.16.0 | 75.8824156820 | 15,739 | 357 | baseline | baseline |
+| PII-TRACE | v0.17.0 | 76.2383386217 | 15,455 | 710 | FAIL | PASS |
+
+[Evidence and limits](release-v0.17.0/external-f2-release-review.json): all three accepted external F2 comparisons pass. TRACE's original net-byte gate fails. Strict own-policy identity remains `not_comparable`; zero-leak readiness remains unmet.
+
+<!-- END GENERATED: external-release -->
 
 The [external review](release-v0.17.0/external-f2-release-review.json) retains
 all set counters and the original gate hashes. Sealed totals sum OpenPII all
@@ -127,9 +144,13 @@ PII-Tracer, tuned Presidio and all 24 mechanism captures retain their original
 identities. The Nym component BSN counterweight remains a FAIL at 0 → 18 FP
 bytes; the release comparison has 18 → 18. OPF remains unavailable after exactly
 two 600-second attempts. Experimental trained checkpoints are excluded.
-Timing comparisons remain withheld for contended captures. The provisional
-history entry does not establish a tag or package equality; actual-tag history
-promotion and character-count replay follow release binding.
+Timing comparisons remain withheld for contended captures. The history entry
+now binds the actual signed tag while retaining the measured source. Character
+counts were replayed from the retained observations over the pinned corpus with
+[`release_char_level.py record`](../../../scripts/bench/compare/release_char_level.py),
+without new detection or external captures. Every older character result remains
+unchanged. Tag/crates equality establishes source binding; package equality is
+verified separately in the release process.
 
 ## What we measure, and how
 
@@ -170,8 +191,9 @@ SafetyNet scan. `full-stack-opf-resolve` exercises the OpenAI Privacy Filter. It
 is excluded from the default run because it needs a separately installed
 verified 2.6 GB checkpoint and a warmed daemon, and it has a measured
 fail-closed invalid-output rate. `full-stack-nym-resolve` exercises the in-process
-Nym-small net and needs its pinned bundle. The v0.16 `gaze setup` default is
-rules plus NER plus Nym; its tagged measurement is in the v0.16 release row.
+Nym-small net and needs its pinned bundle. The v0.17 `gaze setup` default is
+rules plus NER plus Nym, with the secrets rulepack and eligible personal-name
+labels enabled. Its tagged measurement is in the current release row.
 
 The v0.16 comparison mapping adds `custom:age` → `AGE`. Historical comparison
 predictions are unavailable for a live replay. Their published scores are retained:
@@ -179,8 +201,9 @@ the older Gaze revisions cannot emit that label, and their composed mappings and
 common-label intersections are unchanged. The committed
 [`refresh_age_mapping.py`](../../../scripts/bench/compare/refresh_age_mapping.py)
 audit verifies those claims against each row’s recorded harness revision. Release
-character scores are replayed from the committed observations; new third-party
-v0.16 rows come from paired builds of the release tag.
+character scores are replayed from the committed observations. Historical
+third-party v0.16 character and vendor rows come from paired tag builds; fresh
+v0.17 byte-micro results retain their separately pinned source and harness.
 
 Warm per-document latency of the Nym arm is measured by
 [`scripts/bench/nym-warm-latency.py`](../../../scripts/bench/nym-warm-latency.py)
@@ -438,9 +461,9 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: current-release -->
 
-**v0.17.0** **(provisional)** — *not* measured on the released tree.
+**v0.17.0** — measured on the released tree.
 
-> Pretag measurements of merged source 86195a8fbff001489b4eee385020c94c15e502b3; shipped setup policy, independent v1/v2 captures and v3/v4 observation replays. Not a tagged release; timing is not a speed comparison.
+> Measured source 86195a8fbff001489b4eee385020c94c15e502b3; signed annotated v0.17.0 targets merge 8a19d8c64a007a990ab5efc8a22d33f08bbe9f11 with the identical raw crates tree 5a3c6502bd64eabf40f009eb05ca55da3ed50dfe. Shipped setup policy, independent v1/v2 captures and v3/v4 observation replays retain their original provenance. Tagged character counts replay the retained observations over the pinned corpus; no new detection. Timing is not a speed comparison.
 
 | Provenance | Value |
 | --- | --- |
@@ -527,29 +550,29 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 **Character-level F2 (β=2, label-agnostic, micro)** (higher is better; best per row in bold):
 
-| Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
+| Benchmark | Gaze 0.16 | Gaze 0.17 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 0.836 | 0.879 | **0.889 (tuned)** | 0.184 | 0.561 | 0.356 | 0.765 | N/A |
-| Presidio Research | not run | 0.825 | **0.918 (tuned)** | 0.147† | 0.639† | 0.538† | 0.692† | 0.663† |
-| PIIBench-commercial | not run | 0.627 | **0.665†** | 0.183† | 0.522† | 0.441† | 0.532† | 0.400† |
+| Own corpus | 0.879 | **0.901** | 0.889 (tuned) | 0.184 | 0.561 | 0.356 | 0.765 | N/A |
+| Presidio Research | 0.825 | not run | **0.918 (tuned)** | 0.147† | 0.639† | 0.538† | 0.692† | 0.663† |
+| PIIBench-commercial | 0.627 | not run | **0.665†** | 0.183† | 0.522† | 0.441† | 0.532† | 0.400† |
 
 **Leaked PII bytes** (lower is better; best per row in bold):
 
-| Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
+| Benchmark | Gaze 0.16 | Gaze 0.17 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 19,556 | 13,291 | **4,782 (tuned)** | 110,273 | 33,270 | 89,546 | 26,515 | N/A |
-| Presidio Research | not run | 7,984 | **2,857 (tuned)** | 34,810† | 15,769† | 20,226† | 13,326† | 15,305† |
-| PIIBench-commercial | not run | 105,077 | **87,853†** | 222,697† | 114,880† | 145,119† | 127,361† | 170,336† |
+| Own corpus | 13,291 | 9,717 | **4,782 (tuned)** | 110,273 | 33,270 | 89,546 | 26,515 | N/A |
+| Presidio Research | 7,984 | not run | **2,857 (tuned)** | 34,810† | 15,769† | 20,226† | 13,326† | 15,305† |
+| PIIBench-commercial | 105,077 | not run | **87,853†** | 222,697† | 114,880† | 145,119† | 127,361† | 170,336† |
 
 **False-positive bytes per 1,000 bytes** (lower is better; best per row in bold):
 
-| Benchmark | Gaze 0.15 | Gaze 0.16 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
+| Benchmark | Gaze 0.16 | Gaze 0.17 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 19.3 | 15.8 | 52.7 (tuned) | **6.1** | 253.8 | 12.5 | 53.6 | N/A |
-| Presidio Research | not run | 10.7 | 38.6 (tuned) | **0.0†** | 31.5† | 14.6† | 38.3† | 5.2† |
-| PIIBench-commercial | not run | 20.7 | 38.0† | **1.9†** | 94.1† | 71.2† | 36.6† | 5.2† |
+| Own corpus | 15.8 | 15.9 | 52.7 (tuned) | **6.1** | 253.8 | 12.5 | 53.6 | N/A |
+| Presidio Research | 10.7 | not run | 38.6 (tuned) | **0.0†** | 31.5† | 14.6† | 38.3† | 5.2† |
+| PIIBench-commercial | 20.7 | not run | 38.0† | **1.9†** | 94.1† | 71.2† | 36.6† | 5.2† |
 
-A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.15 0, Gaze 0.16 0.
+A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.16 0, Gaze 0.17 0.
 
 Own corpus: Presidio tuned for this corpus on its validation half (highest F2), the best of three tuned Presidio rows by test-half F2; like every bar it shows all of layer C, validation half included; Presidio's defaults are in competitors.md.
 Presidio Research: Presidio tuned for this dataset by its authors (their published custom setup).
@@ -570,10 +593,13 @@ PIIBench-commercial: PIIBench publishes no vendor-tuned Presidio, so Presidio is
 
 ## Charts
 
-The inline trends below include the provisional v0.17 candidate. Its source is
-measured before the real tag; the tagged-release benchmark panels above retain
-v0.16.0. The rolling display keeps three distinct result groups. Older entries,
-including v0.14 and its C-only limitation, remain in the committed history.
+The inline trends and own-corpus panel include tagged v0.17.0, using the retained
+measured source and replayed character counts. The fresh external byte-micro
+panels above show v0.17.0. External character panels retain their original
+v0.16 measurements because the new receipts contain byte counts, not character
+counts or vendor-evaluator results. No new inference is run for this projection.
+The rolling display keeps three distinct result groups. Older entries, including
+v0.14 and its C-only limitation, remain in the committed history.
 
 <!-- BEGIN GENERATED: charts -->
 
@@ -720,7 +746,7 @@ which stay committed as the machine-readable evidence.
 | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | v0.15.0 – v0.15.1 | 2026-10-15 | `4927f7c` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.0-scored-labels-v2.json`](scorecard-v0.15.0-scored-labels-v2.json), [`scorecard-v0.15.0-scored-labels-v3.json`](scorecard-v0.15.0-scored-labels-v3.json), [`scorecard-v0.15.0-scored-labels-v4.json`](scorecard-v0.15.0-scored-labels-v4.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json), [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json), [`scorecard-v0.15.1-scored-labels-v3.json`](scorecard-v0.15.1-scored-labels-v3.json), [`scorecard-v0.15.1-scored-labels-v4.json`](scorecard-v0.15.1-scored-labels-v4.json) | `policy-file` | 0 | 19,556 | 19,556 | 18,488 | 13,319 | 13,319 | 18,488 | 13,319 | 13,319 | 30,073 | 19,556 | 19,556 | 30,073 | 100.0000% | 127.00 |
 | v0.16.0 | 2026-10-15 | `5a7dac0` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.16.0.json`](scorecard-v0.16.0.json), [`scorecard-v0.16.0-scored-labels-v2.json`](scorecard-v0.16.0-scored-labels-v2.json), [`scorecard-v0.16.0-scored-labels-v3.json`](scorecard-v0.16.0-scored-labels-v3.json), [`scorecard-v0.16.0-scored-labels-v4.json`](scorecard-v0.16.0-scored-labels-v4.json) | `policy-file` | 0 | 13,291 | 13,291 | 15,141 | 7,348 | 7,348 | 15,141 | 7,348 | 7,348 | 26,902 | 13,291 | 13,291 | 26,902 | 100.0000% | 275.84 |
-| v0.17.0 *(provisional)* | 2026-10-19 | `86195a8` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.17.0.json`](scorecard-v0.17.0.json), [`scorecard-v0.17.0-scored-labels-v2.json`](scorecard-v0.17.0-scored-labels-v2.json), [`scorecard-v0.17.0-scored-labels-v3.json`](scorecard-v0.17.0-scored-labels-v3.json), [`scorecard-v0.17.0-scored-labels-v4.json`](scorecard-v0.17.0-scored-labels-v4.json) | `policy-file` | 0 | 9,717 | 9,717 | 15,224 | 6,652 | 6,652 | 15,224 | 6,652 | 6,652 | 27,004 | 9,717 | 9,717 | 27,021 | 100.0000% | 453.44 |
+| v0.17.0 | 2026-10-19 | `86195a8` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.17.0.json`](scorecard-v0.17.0.json), [`scorecard-v0.17.0-scored-labels-v2.json`](scorecard-v0.17.0-scored-labels-v2.json), [`scorecard-v0.17.0-scored-labels-v3.json`](scorecard-v0.17.0-scored-labels-v3.json), [`scorecard-v0.17.0-scored-labels-v4.json`](scorecard-v0.17.0-scored-labels-v4.json) | `policy-file` | 0 | 9,717 | 9,717 | 15,224 | 6,652 | 6,652 | 15,224 | 6,652 | 6,652 | 27,004 | 9,717 | 9,717 | 27,021 | 100.0000% | 453.44 |
 
 - **v0.15.0, scored labels v2:** v0.15.0's own `clean_for_bench` (sha256 `d3696c1483cd…`, built from `5127788b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
 - **v0.15.0, scored labels v3:** v0.15.0's own `clean_for_bench` (sha256 `d3696c1483cd…`, built from `5127788b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
@@ -832,14 +858,14 @@ Each row runs the same binary, corpus and seed twice: once with the base policy,
 
 Shipped releases, one column per release:
 
-| Mechanism | `v0.16.0` | `v0.15.1` | `v0.15.0` | `v0.14.0` |
-| --- | --- | --- | --- | --- |
-| GLiNER date-of-birth judge | not measured for this release | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
-| Nym safety net | not measured for this release | not measured for this release | not measured for this release | not available: mechanism added in v0.15 |
-| Davlan NER | not measured for this release | not measured for this release | not measured for this release | not available: setup default added in v0.15 |
-| Address-block growth | not measured for this release | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
-| Credential rulepack | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
-| Nym personal-name labels | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
+| Mechanism | `v0.17.0` | `v0.16.0` | `v0.15.1` | `v0.15.0` | `v0.14.0` |
+| --- | --- | --- | --- | --- | --- |
+| GLiNER date-of-birth judge | not measured for this release | not measured for this release | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
+| Nym safety net | not measured for this release | not measured for this release | not measured for this release | not measured for this release | not available: mechanism added in v0.15 |
+| Davlan NER | not measured for this release | not measured for this release | not measured for this release | not measured for this release | not available: setup default added in v0.15 |
+| Address-block growth | not measured for this release | not measured for this release | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
+| Credential rulepack | not measured for this release | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
+| Nym personal-name labels | not measured for this release | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
 
 <!-- END GENERATED: mechanism-arms -->
 
@@ -944,11 +970,13 @@ in [`scripts/bench/compare/theirbench/`](../../../scripts/bench/compare/theirben
 
 Report-only: these sets are never used to design or tune Gaze rules. Every gold label counts (no scored-label contract). Leaked and false-positive bytes use the same scorer code as the main comparison; each benchmark's own metric comes from its own evaluator, fed the same spans. Lower leaked bytes is better. The table lists every measured competitor row and every tagged Gaze release; untagged builds are not shown. No latency is published here: the machine was shared during these runs, and per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the main comparison's configurations; Presidio's default rows keep score threshold 0.0, so they differ from the notebook's vanilla configuration (threshold 0.4). Every set here is English only, so Presidio's three language configurations give identical rows.
 
+Fresh v0.17.0 byte-micro release comparisons for PIIBench-commercial and PII-TRACE are shown in the [external release panels](#v017-final-candidate-evidence). Those receipts contain neither character counts nor vendor-evaluator results, so the historical v0.16 rows below retain their original scope and identities. Presidio Research has no fresh v0.17 measurement.
+
 #### PII-TRACE public subset (500 English conversations, 4,500 messages)
 
 - Perplexity publishes no number for this subset: its paper reports the 1,922-document, 13-language test split, which is not public, so no vendor figure is reproduced. The bar here is PII-Tracer, the vendor's own tuned model: character F1 0.974, exact typed micro F1 0.726.
 - All 2,653 gold spans sit in user messages; assistant messages have none, so a detection there is a false positive. The paper says PII-Tracer's training data shares production traffic with PII-TRACE and the subset carries no split label, so overlap with its training data cannot be ruled out; treat that row as an upper bound, not a clean holdout.
-- Gaze and the other tools are not yet measured on this set; the table holds only the vendor's own model until they are.
+- This historical character and vendor-evaluator table holds only the vendor's own model. Fresh release byte-micro results have separate receipts and appear above.
 
 Gold PII bytes: 55,580. Common-intersection labels: account_number, private_address, private_date, private_email, private_phone, private_url.
 
@@ -958,7 +986,7 @@ Gold PII bytes: 55,580. Common-intersection labels: account_number, private_addr
 
 † Pre-receipt evidence: not receipt-verified; regeneration pending.
 
-Gaze v0.17.0: not yet measured on this set, so no Gaze row is shown.
+Gaze v0.17.0: no tagged character or vendor-evaluator measurement is available for this historical table, so no Gaze row is shown.
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 

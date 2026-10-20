@@ -16529,8 +16529,8 @@
         "sampling_seed": 20260710,
         "ner_threshold": 0.3
       },
-      "provisional": true,
-      "note": "Pretag measurements of merged source 86195a8fbff001489b4eee385020c94c15e502b3; shipped setup policy, independent v1/v2 captures and v3/v4 observation replays. Not a tagged release; timing is not a speed comparison.",
+      "provisional": false,
+      "note": "Measured source 86195a8fbff001489b4eee385020c94c15e502b3; signed annotated v0.17.0 targets merge 8a19d8c64a007a990ab5efc8a22d33f08bbe9f11 with the identical raw crates tree 5a3c6502bd64eabf40f009eb05ca55da3ed50dfe. Shipped setup policy, independent v1/v2 captures and v3/v4 observation replays retain their original provenance. Tagged character counts replay the retained observations over the pinned corpus; no new detection. Timing is not a speed comparison.",
       "shipped_default_arm": "policy-file",
       "arms": {
         "policy-file": {

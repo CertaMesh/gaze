@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import benchmark_charts as charts
+import external_release_panels
 from tagged_gaze import check_public, require_release_tag
 from layer_display import layer_display_name
 from markdown_table import table_header
@@ -1704,6 +1705,17 @@ def render_readme_chart(
         "reproduce: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels)."
         + _pending_note(panel_set)
     )
+    scopes = [
+        f"{panel.title}: " + ", ".join(
+            bar.name if bar.f2 is not None else "no tagged Gaze measurement"
+            for bar in panel.bars if bar.gaze
+        )
+        for panel in panel_set[1:]
+    ]
+    caption += (
+        " External character panels keep their measured scope (" + "; ".join(scopes) + "). "
+        "The fresh external receipts above contain byte-micro scores, not character scores."
+    )
     return "\n\n".join([_picture("", _PANEL_ALT), caption])
 
 
@@ -2367,6 +2379,29 @@ def main(argv: Sequence[str] | None = None) -> int:
                 outputs.append(
                     (target, target.read_text(encoding="utf-8") if target.exists() else None, svg)
                 )
+
+        if args.history.resolve() == DEFAULT_HISTORY.resolve():
+            try:
+                external = external_release_panels.load(args.history.parent)
+            except (ValueError, KeyError, OSError) as error:
+                raise RenderError(f"external release panels: {error}") from error
+            for path, root in ((args.doc, False), (readme, True)):
+                if path is not None:
+                    index = next(i for i, item in enumerate(outputs) if item[0] == path)
+                    target, original, rendered = outputs[index]
+                    start = "<!-- BEGIN GENERATED: external-release -->"
+                    end = "<!-- END GENERATED: external-release -->"
+                    begin, stop = rendered.find(start), rendered.find(end)
+                    if begin < 0 or stop < begin:
+                        raise RenderError("document is missing ordered 'external-release' generated markers")
+                    body = check_public(external_release_panels.markdown(external, root=root),
+                                        "external release panels")
+                    outputs[index] = (target, original, rendered[:begin + len(start)] + "\n\n" +
+                                      body + "\n\n" + rendered[stop:])
+            if readme is not None:
+                for name, svg in external_release_panels.files(external).items():
+                    target = readme.parent / CHART_ASSETS / name
+                    outputs.append((target, target.read_text() if target.exists() else None, svg))
 
         if args.check:
             drifted = [path for path, original, rendered in outputs if rendered != original]

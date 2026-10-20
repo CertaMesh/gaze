@@ -202,7 +202,7 @@ class RenderTest(unittest.TestCase):
 
         data = synthetic()
         del data["benchmarks"]["presidio-research"]["rows"]["gaze-v0.15.1"]
-        self.assertRegex(render.render(data), r"Gaze v\d+\.\d+\.\d+: not yet measured on this set")
+        self.assertRegex(render.render(data), r"Gaze v\d+\.\d+\.\d+: no tagged character or vendor-evaluator measurement")
 
     def test_declared_row_must_be_measured(self) -> None:
         import render_theirbench as render
