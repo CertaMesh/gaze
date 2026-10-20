@@ -115,6 +115,8 @@ class SyntheticMechanism:
             # The rescore returns the header's scorecard provenance, so the
             # policy binding goes into the record, as a runner would write it.
             rows = _rows(source)
+            rows[0]["binary_sha256"] = mech.sha256(self.binary)
+            rows[0]["scorecard"].get("runner_provenance", {}).pop("binary_sha256", None)
             self._bind_policy(rows[0]["scorecard"], self.policies[arm])
             _write_rows(source, rows)
             directory = root / arm
@@ -178,6 +180,29 @@ class MechanismArmsTest(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         return self.pristine.clone(Path(tmp.name).resolve())
+
+    def test_swapped_executable_is_rejected_before_publication(self):
+        fixture = self.fresh()
+        fixture.binary.write_bytes(b"unrelated replacement executable")
+        with self.assertRaisesRegex(mech.MechanismError, "binary SHA-256 differs"):
+            fixture.record(mech.empty_ledger())
+        self.assertFalse((fixture.root / "evidence").exists())
+
+    def test_unbound_and_mismatched_arm_records_are_rejected(self):
+        for digest in (None, "f" * 64):
+            with self.subTest(digest=digest):
+                fixture = self.fresh()
+                path = fixture.runs["candidate"] / "observations-v1.jsonl.gz"
+                rows = _rows(path)
+                rows[0].pop("binary_sha256")
+                if digest is not None:
+                    rows[0]["binary_sha256"] = digest
+                _write_rows(path, rows)
+                fixture.edit("candidate", lambda card: card["observation_record"].update(
+                    sha256=mech.sha256(path)))
+                with self.assertRaisesRegex(mech.MechanismError, "binary SHA-256"):
+                    fixture.record(mech.empty_ledger())
+                self.assertFalse((fixture.root / "evidence").exists())
 
     def rewrite_runs(self, fixture, revision=None):
         """Valid runner receipts with a new revision or different gzip bytes."""

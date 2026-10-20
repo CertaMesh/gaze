@@ -181,6 +181,10 @@ inside the record. The same scoring accumulators compute the new scorecard.
 `mechanism_arms.py record` accepts only `--base` and `--candidate` runner
 directories, one capture each. It re-scores both records under every contract
 and validates both gated contracts with the mechanism policy delta.
+New captures bind the executable SHA-256 before measurement and refuse to write
+if the executable changes during capture. New mechanism gain evidence requires
+both records to bind the same digest as `--binary`. Historical records without
+this binding remain replayable; their binary identity is attested, not verified.
 The v0.15.1 records remain committed as replay proof. Starting with v0.16.0,
 upload release records as assets on the matching GitHub release, using
 `observations-vX.Y.Z.jsonl.gz` and, when generated layers are measured,

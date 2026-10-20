@@ -295,7 +295,11 @@ def derive(
                 }
                 for layer in ("A", "D", "R")
             }
-    return {**identity, "contracts": contracts, "agentic_layers": layers, "gate": gate}
+    digests = [record.binary_sha256(path) for path in (base_record, candidate_record)]
+    if digests[0] != digests[1]:
+        raise MechanismError("base and candidate records bind different binaries")
+    binding = {"binary_sha256": digests[0]} if digests[0] is not None else {}
+    return {**identity, **binding, "contracts": contracts, "agentic_layers": layers, "gate": gate}
 
 
 # --------------------------------------------------------------------------
@@ -330,12 +334,18 @@ def _identity(scorecard: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def check_pair(
-    arms: Mapping[str, tuple[dict[str, Any], Path]], delta: Path
+    arms: Mapping[str, tuple[dict[str, Any], Path]], delta: Path, *, binary_sha256: str
 ) -> dict[str, Any]:
     """Bind each capture to its record, then gate both contracts by replay."""
     if set(arms) != {"base", "candidate"}:
         raise MechanismError("record needs exactly one base and one candidate capture")
     for name, (card, path) in arms.items():
+        try:
+            bound = record.binary_sha256(path, required=True)
+        except record.RecordError as error:
+            raise MechanismError(f"{name}: {error}") from error
+        if bound != binary_sha256:
+            raise MechanismError(f"{name} record binary SHA-256 differs from supplied executable")
         if card["gaze"]["dirty"] is not False:
             raise MechanismError(f"{name} was measured from a dirty tree")
         if card["parameters"]["profile"] != "full":
@@ -365,6 +375,7 @@ def check_pair(
         gates[f"v{version}"] = {"verdict": result["verdict"], "reason": result["reason"]}
     return {
         "revision": reference["revision"],
+        "binary_sha256": binary_sha256,
         "corpus_sha256": reference["corpus_sha256"],
         "sampling_seed": reference["sampling_seed"],
         "base_policy_sha256": arms["base"][0]["parameters"]["policy_sha256"],
@@ -373,10 +384,6 @@ def check_pair(
     }
 
 
-ATTESTED_NOTE = (
-    "Recorded at record time from --binary, git and --machine; the observation records "
-    "do not carry them, so check cannot re-derive them."
-)
 # Fields a measurement holds besides what `derive` recomputes from its records.
 NON_DERIVED_FIELDS = frozenset({"release", "records", "attested"})
 
@@ -412,7 +419,8 @@ def record_measurement(
     if not shipped.strip():
         raise MechanismError("--shipped is required: say how the mechanism ships today")
     arms = {name: _load_arm(path) for name, path in runs.items()}
-    pair = check_pair(arms, delta)
+    measured_binary = sha256(binary)
+    pair = check_pair(arms, delta, binary_sha256=measured_binary)
     validate(ledger, root)
     indexes = _identity_index(ledger, root)
     key = target_key({"release": release, "revision": pair["revision"]})
@@ -465,8 +473,11 @@ def record_measurement(
         measurement = {
             "release": release, "records": files, **derived,
             "attested": {
-                "binary_sha256": sha256(binary), "crates_tree": crates_tree,
-                "machine": machine, "note": ATTESTED_NOTE,
+                "binary_sha256": measured_binary, "crates_tree": crates_tree,
+                "machine": machine, "note": (
+                    "Binary SHA-256 verified against both capture-time record bindings and --binary; "
+                    "crates tree and machine are attested, not re-derivable."
+                ),
             },
         }
         entry["measurements"] = [
@@ -667,12 +678,21 @@ def _validate_measurement(
     ):
         if not isinstance(value, str) or not pattern.fullmatch(value):
             raise MechanismError(f"{where}: {key} is missing or malformed")
+    for arm in ("base", "candidate"):
+        _check_file(measurement.get("records", {}).get(arm), f"{where} {arm} record", root, staged_files)
+    bound = measurement.get("binary_sha256")
+    if bound is not None:
+        if bound != attested["binary_sha256"]:
+            raise MechanismError(f"{where}: binary attestation differs from capture binding")
+        for arm in ("base", "candidate"):
+            path = (root / measurement["records"][arm]["file"]).resolve()
+            path = (staged_files or {}).get(path, path)
+            if record.binary_sha256(path, required=True) != bound:
+                raise MechanismError(f"{where}: {arm} binary differs from capture binding")
     if measurement["base_policy_sha256"] == measurement["candidate_policy_sha256"]:
         raise MechanismError(f"{where}: base and candidate policies are identical")
     if not isinstance(attested.get("machine"), str) or not attested["machine"].strip():
         raise MechanismError(f"{where}: attested.machine is missing")
-    for arm in ("base", "candidate"):
-        _check_file(measurement.get("records", {}).get(arm), f"{where} {arm} record", root, staged_files)
     contracts = measurement.get("contracts", {})
     if not all(isinstance(key, str) and key.isdigit() for key in contracts) or not {
         str(version) for version in GATED_CONTRACTS
@@ -824,9 +844,16 @@ def render(ledger: Mapping[str, Any], releases: Sequence[str], root: Path = ROOT
             f"({_link(entry['policy_delta']['file'])}); evidence "
             f"[base]({_link(measurement['records']['base']['file'])}) and "
             f"[candidate]({_link(measurement['records']['candidate']['file'])}) "
-            f"observation records. Attested, not re-derivable: `crates/` tree "
-            f"`{measurement['attested']['crates_tree'][:12]}`, binary "
-            f"`{measurement['attested']['binary_sha256'][:12]}`, {measurement['attested']['machine']}."
+            + (
+                f"observation records. Verified from both capture bindings: binary "
+                f"`{measurement['binary_sha256'][:12]}`. Attested, not re-derivable: "
+                f"`crates/` tree `{measurement['attested']['crates_tree'][:12]}`, "
+                f"{measurement['attested']['machine']}."
+                if "binary_sha256" in measurement else
+                f"observation records. Attested, not re-derivable: `crates/` tree "
+                f"`{measurement['attested']['crates_tree'][:12]}`, binary "
+                f"`{measurement['attested']['binary_sha256'][:12]}`, {measurement['attested']['machine']}."
+            )
         )
     lines += [
         "",

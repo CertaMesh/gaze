@@ -228,7 +228,7 @@ def run(args: argparse.Namespace) -> Path:
     )
     record_writer = records.RecordWriter(
         original_available, complete_measurements,
-        corpus_sha256=dataset_report["integrity"]["sha256"],
+        corpus_sha256=dataset_report["integrity"]["sha256"], binary=binary,
         extra_documents=(
             [record.to_document() for record in agentic.generate(agentic.PUBLISHED_PARTITION)]
             if prepared is not None else []
@@ -294,7 +294,7 @@ def run(args: argparse.Namespace) -> Path:
         ),
         "harness_revision": harness,
         "manifest_replacing_actions": sorted(args.manifest_actions.split(",")),
-        "binary_sha256": _sha256(binary),
+        "binary_sha256": record_writer.binary_sha256,
         "policy": policy_provenance(policy, HARNESS_ROOT),
         "profile": card["parameters"]["profile"],
         "model_bundles": bundles,

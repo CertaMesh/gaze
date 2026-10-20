@@ -1481,7 +1481,7 @@ def run(args: argparse.Namespace) -> int:
     )
     record_writer = records.RecordWriter(
         original_available_documents, complete_validator_measurements,
-        corpus_sha256=dataset_report["integrity"]["sha256"],
+        corpus_sha256=dataset_report["integrity"]["sha256"], binary=binary,
         extra_documents=extra_documents,
         layer_contract=agentic_prepared.contract if agentic_prepared is not None else None,
     )
