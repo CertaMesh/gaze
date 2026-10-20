@@ -4503,13 +4503,7 @@ fn t14_silence_on_success_across_subcommands() {
 
 #[test]
 fn t15_stats_detections_excludes_preserve() {
-    // Spec's verbatim scenario needs a detected-but-preserved Organization
-    // alongside a tokenized email; stub pipeline (solo #3 pending) only has
-    // an email-Tokenize detector, so Preserve cannot fire for an org.
-    // The semantic still goes through: a single tokenized email produces
-    // `stats.detections == 1`, and the code path excluding `Action::Preserve`
-    // in `CountingLogger::log` is unit-exercised here via the absence of
-    // any extra counts on text that contains only one detection.
+    // A tokenized email increments the counter; empty input below rules out a constant.
     let (_, _, detections) = clean_ok("Reach Alice via alice@example.invalid tomorrow.");
     assert_eq!(
         detections, 1,
@@ -4521,13 +4515,54 @@ fn t15_stats_detections_excludes_preserve() {
     assert_eq!(zero, 0);
 }
 
-/// Spec test 15 verbatim — requires the real policy loader (solo #3) so an
-/// Organization detector can fire with `Action::Preserve` alongside an email
-/// on `Action::Tokenize`. Re-enable once policy.toml loading lands.
+/// Tokenized email counts; an explicitly preserved Organization does not.
 #[test]
-#[ignore = "requires policy loader (solo #3) to drive an Organization detector with Preserve"]
 fn t15b_stats_detections_excludes_preserve_verbatim_spec() {
-    let (_, _, detections) = clean_ok("Alice at alice@example.invalid works at Acme Corp.");
+    let dir = tempdir().unwrap();
+    let policy = dir.path().join("policy.toml");
+    fs::write(
+        &policy,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = []
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "email"
+pattern = 'alice@example[.]invalid'
+class = "email"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "organization"
+pattern = 'Acme Corp[.]'
+class = "organization"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "organization"
+action = "preserve"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+    let input = "Alice at alice@example.invalid works at Acme Corp.";
+    let (clean, _, detections) = clean_ok_with_args(&["--policy", policy.to_str().unwrap()], input);
+    assert!(!clean.contains("alice@example.invalid"));
+    assert!(clean.contains("Acme Corp."));
+
     assert_eq!(
         detections, 1,
         "tokenized email counts; preserved Organization does not"
