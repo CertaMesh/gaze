@@ -1,40 +1,26 @@
-use std::path::PathBuf;
-
-const REQUIRED_XTASK_GATES: &[&str] = &[
-    "symmetric-potemkin",
-    "class-map-override-safety",
-    "recognizer-composition-validator",
-    "no-tenant-knowledge",
-    "bundle-tokenization-drift --verify-ack",
-    "family-policy-table-coherence",
-    "locale-cue-bundle-coherence",
-    "fixture-citation-lint",
-    "trybuild-fixture-hygiene",
-    "cargo-metadata-audit-isolation",
-    "readme-version-check",
-    "safety-net-sanity",
-    "dashboard-isolation",
-    "mcp-tier-isolation",
-    "ci-feature-matrix --partition ci-gates",
-];
-
 #[test]
-fn test_workflow_runs_every_required_xtask_gate() {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let repo_root = manifest_dir
-        .parent()
-        .and_then(std::path::Path::parent)
-        .unwrap();
-    let workflow = std::fs::read_to_string(repo_root.join(".github/workflows/test.yml")).unwrap();
-    let gates = job_section(&workflow, "xtask-feature-gates");
-
-    for gate in REQUIRED_XTASK_GATES {
-        let command = format!("run: cargo run -p xtask -- {gate}");
-        assert!(
-            gates.lines().any(|line| line.trim() == command),
-            "test.yml must run `{command}`"
-        );
-    }
+fn test_workflow_runs_xtask_gates_only_through_the_matrix() {
+    let workflow = include_str!("../../../.github/workflows/test.yml");
+    let gates = job_section(workflow, "xtask-feature-gates");
+    let command = "run: cargo run -p xtask -- ci-feature-matrix --partition ci-gates";
+    assert_eq!(
+        gates.lines().filter(|line| line.trim() == command).count(),
+        1,
+        "the feature-gates job must run the matrix exactly once"
+    );
+    let direct_xtask_commands: Vec<_> = workflow
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("run: cargo run -p xtask -- "))
+        .collect();
+    assert_eq!(
+        direct_xtask_commands,
+        [
+            command,
+            "run: cargo run -p xtask -- ci-feature-matrix --partition ci-default",
+        ],
+        "standalone xtask gates duplicate commands owned by the matrix"
+    );
 }
 
 fn job_section(workflow: &str, job: &str) -> String {
