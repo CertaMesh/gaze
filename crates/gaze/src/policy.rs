@@ -1003,6 +1003,9 @@ mod tests {
 scope = "ephemeral"
 [proxy]
 anthropic_betas = ["claude-code-20250219", "effort-2025-11-24"]
+[[rule]]
+kind = "default"
+action = "tokenize"
 "#,
         )
         .unwrap();
