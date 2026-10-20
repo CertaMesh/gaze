@@ -81,9 +81,10 @@ class AdjacencyHistoryTests(unittest.TestCase):
                     render.validate_history(history)
 
     def test_unavailability_rejects_wrong_inputs_incomplete_attempts_and_raw_text(self):
+        inputs = render.HistoryInputs.for_version(render.agentic_layers.GENERATOR_VERSION)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            path = failure_receipt(root)
+            path = failure_receipt(root, inputs)
             original = json.loads(path.read_text())
             mutations = [
                 lambda value: value.update(corpus_sha256='d' * 64),
@@ -100,7 +101,7 @@ class AdjacencyHistoryTests(unittest.TestCase):
                     mutate(value)
                     path.write_text(json.dumps(value))
                     with self.subTest(value=value), self.assertRaises(render.HistoryError):
-                        render.rows_from_unavailable_receipt(path, render.MEASURED_INPUTS)
+                        render.rows_from_unavailable_receipt(path, inputs)
 
     def test_unavailability_digest_source_and_file_boundary_cannot_be_bypassed(self):
         with tempfile.TemporaryDirectory() as temporary:
