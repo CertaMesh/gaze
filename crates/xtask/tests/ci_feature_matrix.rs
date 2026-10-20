@@ -19,7 +19,7 @@ struct Step {
 }
 
 fn check_matrix_ownership(workflow: &str) -> Result<(), String> {
-    let workflow: Workflow = serde_yaml::from_str(workflow).map_err(|error| error.to_string())?;
+    let workflow: Workflow = serde_saphyr::from_str(workflow).map_err(|error| error.to_string())?;
     let mut commands = Vec::new();
     for (job, body) in workflow.jobs {
         for step in body.steps {
