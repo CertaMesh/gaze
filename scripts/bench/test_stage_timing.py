@@ -33,8 +33,8 @@ class StageTimingTests(unittest.TestCase):
                     env={**os.environ, "GAZE_BENCH_PROFILE": "1"},
                 ) as process:
                     self.assertEqual(process.exchange({"id": "synthetic"}), {"ok": True})
-                stages.native(getattr(process, "native_profile", None))
             evidence = json.loads(evidence_path.read_text())
+            self.assertEqual(len(evidence["stages"]), 3)
             self.assertEqual({row["stage"] for row in evidence["stages"]}, stages.NATIVE_STAGES)
             self.assertTrue(all(row["layer"] == "C" for row in evidence["stages"]))
             self.assertTrue(all(row["cpu_seconds"] == 0.2 for row in evidence["stages"]))

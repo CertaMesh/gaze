@@ -19,6 +19,7 @@ except ImportError:
 
 CURRENT = contextvars.ContextVar("benchmark_stage_evidence", default=None)
 LABELS = contextvars.ContextVar("benchmark_stage_labels", default={})
+ACTIVE_SCORING = contextvars.ContextVar("benchmark_scoring_clock", default=None)
 NATIVE_PREFIX = b"GAZE_BENCH_PROFILE "
 NATIVE_STAGES = frozenset({"startup_model_load", "detection", "restore"})
 
@@ -137,6 +138,28 @@ class ScoringClock:
             total = elapsed(self.start)
             wall, own = (max(0.0, total[i] - self.excluded[i]) for i in (0, 1))
             self.evidence.add("scoring", (wall, own, 0.0), mode="capture_accounting")
+
+
+@contextlib.contextmanager
+def scoring():
+    observer = ScoringClock(True)
+    token = ACTIVE_SCORING.set(observer)
+    try:
+        yield
+    finally:
+        ACTIVE_SCORING.reset(token)
+        observer.finish()
+
+
+def transport_call(function):
+    """Subtract producer I/O and process lifetime boundaries from parent scoring."""
+    @functools.wraps(function)
+    def wrapped(*args, **kwargs):
+        observer = ACTIVE_SCORING.get()
+        if observer is None:
+            return function(*args, **kwargs)
+        return observer.excluding(function)(*args, **kwargs)
+    return wrapped
 
 
 def validate_native(value: object) -> dict:

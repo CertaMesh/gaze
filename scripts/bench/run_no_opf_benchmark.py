@@ -621,7 +621,7 @@ def execute_measurements(
     for repetition in range(1, measured_repetitions + 1):
         current: list[dict[str, object]] = []
         for config in configs:
-            with stages.labels(layer=record_layer, config=config, repetition=repetition), stages.measure("layer_capture"):
+            with stages.labels(layer=record_layer, config=config, repetition=repetition), stages.measure("layer_capture"), stages.scoring():
                 run = score.run_config(
                     repo_root,
                     binary,
@@ -723,14 +723,15 @@ def measure_agentic_layers(
             record.to_document() for record in agentic.generate(agentic.PUBLISHED_PARTITION)
         )
     }
-    full_identifier_measurements, full_repeat_measurements = (
-        score.collect_validator_measurements(
-            validator_probe,
-            [raw_by_id[document.uid] for document in documents],
-            (document.uid for document in documents),
-        )
-        for documents in (prepared.identifiers, prepared.repeats)
-    )
+    full_measurements = []
+    for layer, documents in (("A", prepared.identifiers), ("R", prepared.repeats)):
+        with stages.labels(layer=layer), stages.measure("validator_measurements"):
+            full_measurements.append(score.collect_validator_measurements(
+                validator_probe,
+                [raw_by_id[document.uid] for document in documents],
+                (document.uid for document in documents),
+            ))
+    full_identifier_measurements, full_repeat_measurements = full_measurements
     identifier_measurements = records.filter_measurements(
         full_identifier_measurements, prepared.identifiers
     )
@@ -1440,16 +1441,17 @@ def _run(args: argparse.Namespace) -> int:
 
     metadata, dataset_report = composite_dataset_report(dataiku_report, negative_report)
     profile = "release" if args.release else "debug"
-    binary = (
-        Path(os.environ.get("CARGO_TARGET_DIR", str(repo_root / "target")))
-        / profile / "examples/clean_for_bench"
-        if args.skip_build
-        else dataiku.build_binary(
-            repo_root,
-            ("policy-file",) if policy_path else tuple(score.DEFAULT_CONFIGS),
-            release=args.release,
+    with stages.measure("build", role="detector", executed=not args.skip_build):
+        binary = (
+            Path(os.environ.get("CARGO_TARGET_DIR", str(repo_root / "target")))
+            / profile / "examples/clean_for_bench"
+            if args.skip_build
+            else dataiku.build_binary(
+                repo_root,
+                ("policy-file",) if policy_path else tuple(score.DEFAULT_CONFIGS),
+                release=args.release,
+            )
         )
-    )
     if not binary.is_file():
         raise CandidateError(f"benchmark binary is missing: {binary}")
     validator_probe = (
@@ -1506,11 +1508,12 @@ def _run(args: argparse.Namespace) -> int:
             else:
                 return finish_run(args, output_dir, candidate)
 
-    complete_validator_measurements = score.collect_validator_measurements(
-        validator_probe,
-        original_available_documents,
-        (document.uid for document in documents),
-    )
+    with stages.labels(layer="C"), stages.measure("validator_measurements"):
+        complete_validator_measurements = score.collect_validator_measurements(
+            validator_probe,
+            original_available_documents,
+            (document.uid for document in documents),
+        )
     validator_measurements = records.filter_measurements(
         complete_validator_measurements, available_documents
     )

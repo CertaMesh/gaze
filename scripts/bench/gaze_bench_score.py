@@ -8,8 +8,6 @@ diagnostics, but conventional NER F1 is not allowed to hide partial leaks.
 
 from __future__ import annotations
 
-import stage_timing as stages
-
 import copy
 import hashlib
 import json
@@ -2147,7 +2145,6 @@ def _validate_validator_probe_response(
 
 
 @producer_boundary
-@stages.timed("validator_measurements")
 def collect_validator_measurements(
     probe_binary: Path,
     documents: Sequence[Document],
@@ -2424,12 +2421,9 @@ def run_config(
         environment["OPF_CHECKPOINT"] = str(opf_checkpoint)
     if opf_daemon_socket is not None:
         environment["GAZE_OPF_DAEMON_SOCKET"] = str(opf_daemon_socket)
-    if stages.CURRENT.get() is not None and replay_responses is None:
-        environment["GAZE_BENCH_PROFILE"] = "1"
     command = [str(binary), "--config", config]
     started = time.perf_counter()
 
-    scoring_clock = stages.ScoringClock(replay_responses is None)
     overall = MetricAccumulator()
     per_language: defaultdict[str, MetricAccumulator] = defaultdict(MetricAccumulator)
     per_label: defaultdict[str, RecallAccumulator] = defaultdict(RecallAccumulator)
@@ -2453,7 +2447,6 @@ def run_config(
     first_response_ms: float | None = None
     discarded_warmup_samples: list[dict[str, object]] = []
 
-    @scoring_clock.excluding
     def exchange(document: Document) -> tuple[dict[str, object], float]:
         nonlocal first_response_ms
         if replay_responses is not None:
@@ -2486,9 +2479,7 @@ def run_config(
         if replay_responses is not None
         else BenchSubprocess(command, cwd=repo_root, env=environment)
     )
-    entering = stages.clock() if scoring_clock.evidence else None
     with process_context as process:
-        scoring_clock.exclude_since(entering)
         for warmup_index in range(warmup_count):
             warmup_document = documents[warmup_index % len(documents)]
             response, round_trip_ms = exchange(warmup_document)
@@ -2615,11 +2606,7 @@ def run_config(
                     file=sys.stderr,
                 )
         process.check_message_deadline()
-        finishing = stages.clock() if scoring_clock.evidence else None
 
-    scoring_clock.exclude_since(finishing)
-    if replay_responses is None:
-        stages.native(getattr(process, "native_profile", None))
     wall_seconds = time.perf_counter() - started
     clean_ms = success_timing.get("clean_ms", [])
     measured_clean_seconds = sum(clean_ms) / 1000.0
@@ -2723,7 +2710,6 @@ def run_config(
         },
     }
 
-    scoring_clock.finish()
     process.check_deadline()
     return result
 

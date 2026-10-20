@@ -44,7 +44,7 @@ def write_capture(binary, directory, key):
     with stages.session(directory / "run-evidence.json") as evidence:
         evidence.cache = {"status": "miss", "key_sha256": cache.key_digest(key)}
         for layer, doc in population:
-            with stages.labels(layer=layer):
+            with stages.labels(layer=layer), stages.scoring():
                 runs[layer] = score.run_config(
                     ROOT, binary, "rule-floor-core", [doc], directory, None, None, None,
                     0.3, directory, base_environment={"PATH": os.environ.get("PATH", "")},

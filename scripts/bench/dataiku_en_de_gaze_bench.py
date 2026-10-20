@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import stage_timing as stages
-
 import argparse
 import hashlib
 import json
@@ -176,7 +174,6 @@ def load_documents(path: Path) -> tuple[list[score.Document], dict[str, object]]
     return documents, report
 
 
-@stages.timed("build", role="detector")
 def build_binary(repo_root: Path, configs: tuple[str, ...], *, release: bool = False) -> Path:
     command = [
         "cargo",
