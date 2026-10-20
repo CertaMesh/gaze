@@ -11,14 +11,16 @@ Configure an Anthropic SDK with the proxy root as its base URL:
 http://127.0.0.1:8787
 ```
 
-Do not append `/v1`. The only provider route claimed by this profile is exactly:
+Do not append `/v1`. This profile admits these provider routes:
 
 ```text
 POST /v1/messages
+POST /v1/messages/count_tokens
 ```
 
-Other methods, trailing slashes, suffixes, and query-based route variants are
-rejected. The default upstream is `https://api.anthropic.com`. A configured
+Both routes accept either no query or exactly `?beta=true`. Other keys, values,
+encoding variants, duplicate parameters, methods, trailing slashes and suffixes
+are rejected before upstream I/O. The default upstream is `https://api.anthropic.com`. A configured
 upstream must be an origin root without credentials, query, or fragment. HTTPS
 is accepted; plain HTTP is accepted only for a loopback upstream.
 
@@ -63,7 +65,7 @@ map.
 | `content-type` | Required JSON content type; duplicate, folded, or malformed values fail closed. | Canonical `application/json`. |
 | `x-api-key` | Required visible-ASCII singleton without commas. | Forwarded unchanged after validation. |
 | `anthropic-version` | Required visible-ASCII singleton. The default allowlist contains exactly `2023-06-01`. | Forwarded only when allowlisted. |
-| `anthropic-beta` | Optional visible-ASCII singleton. The default allowlist is empty. | Forwarded only when its complete value was explicitly allowlisted. |
+| `anthropic-beta` | Optional visible-ASCII singleton. The default allowlist is empty. | Comma-separated items are trimmed for spaces/tabs and checked individually against explicit allowlist entries; empty or unlisted items reject the whole request. |
 | `x-gaze-session-id` | Mode-dependent as described above. | Never forwarded. |
 | `Authorization` | With no local-auth configuration it is accepted then dropped. If configured as local auth, exactly one value is consumed inside the trusted principal-resolution boundary. | Never forwarded. |
 | `content-length` / `transfer-encoding` | Each is a singleton; sending both is ambiguous framing and fails closed. | Never forwarded. The rebuilt client frames its own body. |
@@ -73,8 +75,13 @@ map.
 
 Headers are capped at 64 fields, a 128-byte name, an 8 KiB value, and 64 KiB
 aggregate bytes. Builder configuration may lower those ceilings, never raise
-them. Duplicate or comma-folded singleton values and over-limit headers fail
+them. Duplicate singleton headers, comma-folded values outside the beta list, and over-limit headers fail
 before any upstream request.
+
+Set policy `[proxy] anthropic_betas = ["claude-code-20250219"]` or repeat
+`gaze proxy serve --anthropic-beta <value>` for each required value. CLI values
+extend policy values. Defaults permit no betas; comma lists belong in the HTTP
+header, never in a single configuration entry.
 
 ## Request JSON matrix
 
@@ -84,7 +91,7 @@ as controls; mutable owner payload is pseudonymized through the session.
 
 | Surface | Admitted shape and treatment |
 | --- | --- |
-| Root controls | Required nonempty `model`, positive-integer `max_tokens`, and `messages`. Optional controls are `service_tier` (`auto` or `standard_only`), nonnegative-integer `top_k`, unit-interval `temperature`/`top_p`, Boolean `stream`, string-array `stop_sequences`, `thinking` (`disabled`, or `enabled` with positive `budget_tokens`), `tool_choice` (`auto`, `any`, `none`, or `tool` with nonempty `name`, plus optional Boolean `disable_parallel_tool_use`), and `cache_control` (`type: ephemeral`, optional `ttl: 5m` or `1h`). |
+| Root controls | Required nonempty `model`, positive-integer `max_tokens`, and `messages`. Optional controls are `service_tier` (`auto` or `standard_only`), nonnegative-integer `top_k`, unit-interval `temperature`/`top_p`, Boolean `stream`, string-array `stop_sequences`, `thinking` (`disabled`, `adaptive`, or `enabled` with positive `budget_tokens`; enabled/adaptive optionally accept `display: summarized`, `omitted`, or `updates`), `tool_choice` (`auto`, `any`, `none`, or `tool` with nonempty `name`, plus optional Boolean `disable_parallel_tool_use`), and `cache_control` (`type: ephemeral`, optional `ttl: 5m` or `1h`). |
 | `metadata` | A mutable JSON domain: object keys and string leaves are pseudonymized recursively, Boolean/null leaves pass, and numeric leaves are rejected. |
 | `system` | A string or a nonempty array of text blocks. Text is pseudonymized. |
 | `messages` | An array of `user` or `assistant` objects. `content` is a string or nonempty block array. |
@@ -96,6 +103,38 @@ as controls; mutable owner payload is pseudonymized through the session.
 | `thinking` and `redacted_thinking` | Signed or encrypted bytes are retained exactly. Already-issued manifest tokens may remain pseudonymized, but any owner PII that would require changing signed bytes returns `SignedMutationRequired` (`502`). Malformed signed surfaces fail closed. |
 | `image` or another opaque/unknown block | Rejected with `OpaqueMediaUninspected` (`422`) or `InvalidRequestFormat` (`400`); it is never skipped or forwarded uninspected. |
 | `tools` | Definitions use a closed schema. Descriptions plus admitted schema property names, descriptions, and enum strings are protected; tool names and structural schema controls are validated. |
+
+### Claude Code request options
+
+- `output_config` admits `effort: low|medium|high|xhigh|max` and
+  `format: {type: "json_schema", schema: {...}}`. The schema uses the same
+  closed inspection rules as tool input schemas: mutable descriptions, defaults,
+  examples and property names are tokenized; immutable literals are scanned and
+  refused if they would change. Other options (including `task_budget`) fail closed.
+- `context_management` admits an `edits` array with `clear_thinking_20251015`,
+  `clear_tool_uses_20250919`, and `compact_20260112`. Their typed trigger/keep
+  quantities, clear-tool-input options, excluded tool names and compaction pause
+  flag are validated. Versioned edit types are exact reviewed schema literals,
+  not manifest token references. Compaction `instructions` are tokenized and join the final
+  prompt-domain proof. Tool names are scanned immutable controls.
+- `safeguards` is refused: it has no verified public request schema.
+  Message-level `role: "system"` is refused because the
+  [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages/create)
+  admits only `user` and `assistant`; use the inspected top-level `system` instead.
+- Unknown members at every closed boundary still return `InvalidRequestFormat`
+  (`400`). Allowlisting a beta never enables new JSON fields or media handling.
+
+`count_tokens` uses the same inspection, duplicate-key checks, manifest transaction
+and final coverage proof as messages. It requires `model` and `messages`, without
+`max_tokens`. Generation-only controls (`max_tokens`, `stream`, `stop_sequences`,
+`top_k`, `temperature`, `top_p`) are refused. Its successful JSON response must
+contain exactly one nonnegative integer `input_tokens` field.
+
+Plain HTTP(S) URLs in text, system prompts, tool descriptions and other inspected
+strings are processed as text; the proxy never fetches them. PII visible in their
+text is tokenized. Actual URL/image/document media sources remain refused, as do
+percent-encoded text carriers, data/file carriers, suspicious encoded blobs and
+control characters. Response URL/exfiltration checks remain strict.
 
 Every JSON member name—including owner-defined metadata, tool-input, and admitted schema-property names—must be ASCII; a non-ASCII member name fails as `InvalidRequestFormat`.
 
@@ -194,7 +233,9 @@ inspection publication. Mutation is `ControlWouldMutate`: codec phase
 
 Prompt proof checks every present permutation of system/tools/messages in
 provider-semantic and emitted JSON order. Metadata is a separate domain in both
-orders. Provider-ordered members use that order; arbitrary objects use decoded-key
+orders. Compaction instructions belong to system text, and output schemas use
+the tool-schema domain. Routing controls and fixed configuration enums do not
+separate prompt fragments. Provider-ordered members use that order; arbitrary objects use decoded-key
 byte order semantically and source member order in the emitted view. Arrays keep
 API order; keys precede value subtrees. Signed/encrypted carriers remain opaque,
 but surrounding fields participate in occurrence coverage.
@@ -258,6 +299,11 @@ returned as an ordinary JSON `429`, not as an SSE stream.
 
 ## Closed errors and upstream statuses
 
+Local Anthropic failures use `{ "type": "error", "error": { "type": ..., "message": ..., "code": ..., "phase": ... } }`.
+HTTP 4xx errors use `invalid_request_error`; other error statuses use `api_error`.
+Unsupported request surfaces produce `InvalidRequestFormat` (`400`),
+with a fixed contract reference rather than echoing private keys or values.
+
 Errors expose only a closed `code`, processing `phase`, and an optional bounded
 retry delay. Display/debug rendering and the late-SSE error frame do not include
 raw headers, credentials, bodies, provider errors, PII, or manifest contents.
@@ -319,7 +365,8 @@ reject whole provider responses on false positives.
 Earlier session-header auto-continuity and unchanged-auth forwarding claims
 are obsolete for this profile.
 
-1. Set the SDK base URL to the proxy root; use exact `POST /v1/messages`.
+1. Set the SDK base URL to the proxy root. Use `POST /v1/messages` or
+   `POST /v1/messages/count_tokens`, optionally with `?beta=true`.
 2. Remove `x-gaze-session-id` for `AnthropicAdapter::new`, or enable continuity
    and send a canonical lowercase UUIDv4 every time.
 3. Supply `x-api-key` and allowlisted `anthropic-version`; explicitly allowlist

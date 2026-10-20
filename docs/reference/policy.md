@@ -899,6 +899,22 @@ environment.
 - Unknown keys in the table fail at load. A Nym settings table alone does not
   activate the backend.
 
+### `[proxy]`
+
+```toml
+[proxy]
+anthropic_betas = ["claude-code-20250219", "effort-2025-11-24"]
+```
+
+`anthropic_betas` defaults to an empty array of strings. Each entry permits exactly
+one value in the Anthropic proxy's comma-separated `anthropic-beta` header.
+The proxy validates entries at startup. Empty entries, commas and non-visible
+ASCII are rejected. Repeatable `proxy serve --anthropic-beta` values extend
+this list. Entries never bypass body inspection or enable unknown fields.
+
+See the [Anthropic contract](../explanation/proxy/anthropic-messages-contract.md)
+for supported request schemas and explicit refusals.
+
 ## Detectors
 
 ### Regex (`kind = "regex"`)

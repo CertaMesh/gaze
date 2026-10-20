@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Anthropic proxy accepts the literal `?beta=true` query, individually allowlisted
+  comma-separated beta headers (policy or repeatable `--anthropic-beta`), and
+  inspected `count_tokens` requests. Adaptive thinking, output configuration and
+  documented context edits use closed schemas; plain HTTP(S) URLs are inspected
+  as text. Unsupported fields return Anthropic-shaped `400` errors. Unverified
+  `safeguards`, message-level system roles and opaque media remain refused (#814).
+
 ## [0.17.0] - 2026-10-19
 
 v0.17.0 expands credential and personal-name protection, tightens fail-closed
