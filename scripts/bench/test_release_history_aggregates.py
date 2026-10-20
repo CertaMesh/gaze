@@ -34,10 +34,17 @@ class ReleaseHistoryAggregateTests(unittest.TestCase):
         capture = companion["observation_record"]
         self.assertEqual(hashlib.sha256((ROOT / capture["file"]).read_bytes()).hexdigest(),
                          capture["sha256"])
-        for contract in (companion["scoring"]["scored_label_contract"],
-                         companion["layers"]["scored_label_contract"]):
-            path = ROOT.parents[2] / contract["file"]
-            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), contract["file_sha256"])
+        contract = companion["scoring"]["scored_label_contract"]
+        path = ROOT.parents[2] / contract["file"]
+        self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), contract["file_sha256"])
+        version = companion["layers"]["generator"]["generator_version"]
+        path = ROOT.parents[2] / (
+            adjacency.agentic_layers.SCORED_LABELS_PATH
+            if version == adjacency.agentic_layers.GENERATOR_VERSION
+            else adjacency.agentic_layers.HISTORICAL_CONTRACTS[version]
+        )
+        contract = companion["layers"]["scored_label_contract"]
+        self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), contract["file_sha256"])
 
     def test_full_layer_history_keeps_its_replay_archive_receipt(self):
         card = json.loads((ROOT / 'scorecard-v0.17.0.json').read_text())
