@@ -40,14 +40,14 @@ def workspace():
     return names, reverse
 
 
-def make_plan(event, paths):
+def make_plan(event, paths, fast_lane=''):
     if event not in EVENTS:
         raise ValueError(f'unsupported event: {event}')
     names, reverse = workspace()
     paths = list(paths)
     if not all(isinstance(path, str) and path for path in paths):
         raise ValueError('changed paths must be nonempty strings')
-    integration = event != 'pull_request'
+    integration = event != 'pull_request' or fast_lane != 'enabled'
     wide = integration or not paths
     selected = set()
     bench = dylint = msrv = integration
@@ -106,7 +106,7 @@ def required_jobs(plan, context):
     return jobs
 
 
-def check(event, needs, context):
+def check(event, needs, context, fast_lane=''):
     if event not in EVENTS or needs.get('plan', {}).get('result') != 'success':
         raise ValueError('the lane plan is missing or unsuccessful')
     raw = needs['plan'].get('outputs', {})
@@ -122,8 +122,8 @@ def check(event, needs, context):
         elif type(value) is not bool:
             raise ValueError(f'invalid boolean: {key}')
         plan[key] = value
-    if plan['integration'] != (event != 'pull_request'):
-        raise ValueError('plan does not match the triggering event')
+    if plan['integration'] != (event != 'pull_request' or fast_lane != 'enabled'):
+        raise ValueError('plan does not match the triggering event and activation variable')
     required = required_jobs(plan, context) | {'plan'}
     for job in sorted(required | set(needs)):
         result = needs.get(job, {}).get('result')
@@ -177,13 +177,14 @@ def main():
             paths = json.loads(args.paths_json) if args.paths_json else changed_paths(args.base, args.head)
             if not isinstance(paths, list):
                 raise ValueError('changed paths must be an array')
-        result = make_plan(args.event, paths)
+        result = make_plan(args.event, paths, os.environ.get('GAZE_CI_FAST_LANE', ''))
         print(json.dumps(result, indent=2))
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
             for key, value in outputs(result).items():
                 output.write(f'{key}={value}\n')
     elif args.command == 'check':
-        message = check(os.environ['EVENT_NAME'], json.loads(os.environ['NEEDS_JSON']), args.context)
+        message = check(os.environ['EVENT_NAME'], json.loads(os.environ['NEEDS_JSON']), args.context,
+                        os.environ.get('GAZE_CI_FAST_LANE', ''))
         print(message)
         if os.environ.get('GITHUB_STEP_SUMMARY'):
             with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:

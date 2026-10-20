@@ -1,5 +1,5 @@
 name: test
-run-name: "${{ github.event_name == 'pull_request' && 'PR fast lane only' || 'Full integration' }} (${{ github.sha }})"
+run-name: "CI (${{ github.sha }})"
 
 on:
   push:
@@ -24,6 +24,9 @@ permissions:
 
 env:
   CARGO_BUILD_JOBS: '4'
+  # Full PR integration until the queue and required checks are activated.
+  # Python compares this value exactly; only 'enabled' selects the fast PR lane.
+  GAZE_CI_FAST_LANE: ${{ vars.GAZE_CI_FAST_LANE }}
 
 jobs:
   plan:
@@ -51,7 +54,7 @@ jobs:
   fast:
     name: PR fmt, affected clippy and tests (not integration)
     needs: [plan]
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ needs.plan.outputs.integration == 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -85,6 +88,8 @@ jobs:
         id: sample
         env:
           SAMPLE_PATHS: ${{ toJSON(matrix.paths) }}
+          # Synthetic samples cannot change the actual full dispatch plan.
+          GAZE_CI_FAST_LANE: enabled
         run: python3 scripts/ci/ci_gate.py plan --event pull_request --paths-json "$SAMPLE_PATHS"
       - name: Set up OCR and sample disk space
         if: ${{ steps.sample.outputs.packages != '[]' }}

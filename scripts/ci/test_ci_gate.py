@@ -1,5 +1,9 @@
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 import ci_gate as gate
@@ -7,7 +11,7 @@ import ci_gate as gate
 
 class LaneSelection(unittest.TestCase):
     def plan(self, *paths, event='pull_request'):
-        return gate.make_plan(event, paths)
+        return gate.make_plan(event, paths, 'enabled')
 
     def test_documentation_only_is_lightweight(self):
         plan = self.plan('CODE_OF_CONDUCT.md', 'LICENSE-MIT')
@@ -84,6 +88,27 @@ class LaneSelection(unittest.TestCase):
     def test_empty_diff_fails_wide(self):
         self.assertTrue(self.plan()['wide'])
 
+    def test_only_exact_enabled_value_allows_fast_prs(self):
+        full_owners = {'msrv', 'test-support', 'workspace-shards', 'test-coverage',
+                       'benchmark-model-free', 'xtask-feature-gates', 'workspace-default',
+                       'dylint', 'test', 'xtask-gates'}
+        for value in ['', 'disabled', 'true', 'ENABLED', 'enabled ', 'enabled']:
+            for event in gate.EVENTS:
+                with self.subTest(value=value, event=event):
+                    plan = gate.make_plan(event, ['CODE_OF_CONDUCT.md'], value)
+                    full = event != 'pull_request' or value != 'enabled'
+                    self.assertEqual(plan['integration'], full)
+                    if full:
+                        self.assertEqual(gate.required_jobs(plan, 'integration'), full_owners)
+                        self.assertEqual(set(plan['packages']), set(gate.workspace()[0].values()))
+                    else:
+                        self.assertEqual(plan['packages'], [])
+
+    def test_unset_variable_defaults_to_full_on_docs_only_pr(self):
+        plan = gate.make_plan('pull_request', ['CODE_OF_CONDUCT.md'])
+        self.assertTrue(plan['integration'])
+        self.assertTrue(plan['wide'])
+
 
 class Aggregate(unittest.TestCase):
     def needs(self, plan):
@@ -94,12 +119,14 @@ class Aggregate(unittest.TestCase):
         return needs
 
     def test_every_mandatory_failure_cancel_skip_or_missing_is_red(self):
-        for event in ['merge_group', 'push', 'workflow_dispatch', 'pull_request']:
-            for paths in [('README.md',), ('crates/gaze-types/src/lib.rs',),
+        for fast_lane, event in [(value, event) for value in ['', 'enabled']
+                                 for event in gate.EVENTS]:
+            for paths in [('CODE_OF_CONDUCT.md',), ('README.md',),
+                          ('crates/gaze-types/src/lib.rs',),
                           ('scripts/bench/score.py',), ('.github/workflows/test.yml',)]:
-                plan = gate.make_plan(event, paths)
+                plan = gate.make_plan(event, paths, fast_lane)
                 needs = self.needs(plan)
-                gate.check(event, needs, 'integration')
+                gate.check(event, needs, 'integration', fast_lane)
                 for job in gate.required_jobs(plan, 'integration') | {'plan'}:
                     for result in ['failure', 'cancelled', 'skipped', '', None]:
                         broken = json.loads(json.dumps(needs))
@@ -109,10 +136,10 @@ class Aggregate(unittest.TestCase):
                             broken[job]['result'] = result
                         with self.subTest(event=event, job=job, result=result):
                             with self.assertRaises(ValueError):
-                                gate.check(event, broken, 'integration')
+                                gate.check(event, broken, 'integration', fast_lane)
 
     def test_missing_or_malformed_plan_output_is_red(self):
-        plan = gate.make_plan('pull_request', ['README.md'])
+        plan = gate.make_plan('pull_request', ['CODE_OF_CONDUCT.md'], 'enabled')
         for key in gate.outputs(plan):
             for value in [None, 'invalid']:
                 needs = self.needs(plan)
@@ -121,27 +148,60 @@ class Aggregate(unittest.TestCase):
                 else:
                     needs['plan']['outputs'][key] = value
                 with self.assertRaises(ValueError):
-                    gate.check('pull_request', needs, 'integration')
+                    gate.check('pull_request', needs, 'integration', 'enabled')
 
     def test_optional_jobs_may_skip_but_never_fail(self):
-        plan = gate.make_plan('pull_request', ['README.md'])
+        plan = gate.make_plan('pull_request', ['CODE_OF_CONDUCT.md'], 'enabled')
         needs = self.needs(plan)
         for result in ['failure', 'cancelled']:
             needs['dylint']['result'] = result
             with self.assertRaises(ValueError):
-                gate.check('pull_request', needs, 'integration')
+                gate.check('pull_request', needs, 'integration', 'enabled')
 
     def test_legacy_contexts_require_their_owners_in_each_lane(self):
-        for event in ['pull_request', 'merge_group']:
-            plan = gate.make_plan(event, ['README.md'])
+        for fast_lane, event in [(value, event) for value in ['', 'enabled']
+                                 for event in ['pull_request', 'merge_group']]:
+            plan = gate.make_plan(event, ['CODE_OF_CONDUCT.md'], fast_lane)
             for context in ['test', 'xtask']:
                 needs = self.needs(plan)
-                gate.check(event, needs, context)
+                gate.check(event, needs, context, fast_lane)
                 for job in gate.required_jobs(plan, context):
                     needs[job]['result'] = 'skipped'
                     with self.assertRaises(ValueError):
-                        gate.check(event, needs, context)
+                        gate.check(event, needs, context, fast_lane)
                     needs[job]['result'] = 'success'
+
+    def test_aggregate_reports_lane_and_rejects_activation_mismatch(self):
+        for value in ['', 'enabled']:
+            plan = gate.make_plan('pull_request', ['CODE_OF_CONDUCT.md'], value)
+            needs = self.needs(plan)
+            message = gate.check('pull_request', needs, 'integration', value)
+            self.assertIn('PR FAST LANE ONLY' if value else 'FULL INTEGRATION', message)
+            with self.assertRaises(ValueError):
+                gate.check('pull_request', needs, 'integration', '' if value else 'enabled')
+
+    def test_cli_uses_activation_variable_for_planning_and_checking(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for value in [None, 'disabled', 'ENABLED', 'enabled']:
+                with self.subTest(value=value):
+                    env = dict(os.environ, GITHUB_OUTPUT=str(Path(temporary) / 'outputs'),
+                               GITHUB_STEP_SUMMARY=str(Path(temporary) / 'summary'),
+                               EVENT_NAME='pull_request')
+                    env.pop('GAZE_CI_FAST_LANE', None)
+                    if value is not None:
+                        env['GAZE_CI_FAST_LANE'] = value
+                    command = [sys.executable, str(gate.ROOT / 'scripts/ci/ci_gate.py')]
+                    result = subprocess.run(
+                        command + ['plan', '--event', 'pull_request', '--paths-json',
+                                   '["CODE_OF_CONDUCT.md"]'],
+                        env=env, check=True, capture_output=True, text=True)
+                    plan = json.loads(result.stdout)
+                    self.assertEqual(plan['integration'], value != 'enabled')
+                    env['NEEDS_JSON'] = json.dumps(self.needs(plan))
+                    result = subprocess.run(command + ['check', '--context', 'integration'],
+                                            env=env, check=True, capture_output=True, text=True)
+                    self.assertIn('PR FAST LANE ONLY' if value == 'enabled' else 'FULL INTEGRATION',
+                                  result.stdout)
 
 
 if __name__ == '__main__':
