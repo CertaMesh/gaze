@@ -32,6 +32,8 @@ pub(crate) struct Admission {
     accepted: AtomicU64,
     full: AtomicU64,
     closed: AtomicU64,
+    #[cfg(test)]
+    quiescence_waiting: std::sync::Mutex<Option<SyncSender<()>>>,
 }
 
 impl Admission {
@@ -42,6 +44,8 @@ impl Admission {
             accepted: AtomicU64::new(0),
             full: AtomicU64::new(0),
             closed: AtomicU64::new(0),
+            #[cfg(test)]
+            quiescence_waiting: std::sync::Mutex::new(None),
         }
     }
 
@@ -126,6 +130,10 @@ impl Admission {
     fn wait_for_quiescence(&self) -> bool {
         let deadline = std::time::Instant::now() + QUIESCENCE_TIMEOUT;
         while self.in_flight.load(Ordering::Acquire) != 0 {
+            #[cfg(test)]
+            if let Some(waiting) = self.quiescence_waiting.lock().unwrap().take() {
+                waiting.send(()).unwrap();
+            }
             if std::time::Instant::now() >= deadline {
                 return false;
             }
@@ -238,12 +246,21 @@ mod tests {
             drop(permit);
         });
         acquired_rx.recv().unwrap();
+        let (waiting_tx, waiting_rx) = mpsc::sync_channel(1);
+        *admission.quiescence_waiting.lock().unwrap() = Some(waiting_tx);
         let closed_admission = admission.clone();
         let (closed_tx, closed_rx) = mpsc::sync_channel(1);
         let closer = std::thread::spawn(move || {
-            closed_tx.send(closed_admission.close_for_purge()).unwrap();
+            let closed = closed_admission.close_for_purge();
+            assert_eq!(closed_admission.in_flight.load(Ordering::Acquire), 0);
+            closed_tx.send(closed).unwrap();
         });
-        assert!(closed_rx.recv_timeout(Duration::from_millis(20)).is_err());
+        waiting_rx.recv_timeout(Duration::from_secs(60)).unwrap();
+        assert_eq!(
+            admission.state_and_generation.load(Ordering::Acquire) & STATE_MASK,
+            PURGING
+        );
+        assert!(admission.acquire().is_none());
         barrier.wait();
         assert!(closed_rx.recv_timeout(Duration::from_secs(60)).unwrap());
         holder.join().unwrap();
