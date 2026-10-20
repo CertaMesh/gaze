@@ -21,14 +21,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
         with:
           toolchain: 1.96.0
       - name: Install nightly toolchain for dylint
         run: rustup toolchain install nightly-2025-09-18 --component rustc-dev,rust-src,llvm-tools-preview
       - name: Cache cargo registry and git
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -38,7 +38,7 @@ jobs:
             dylint-cargo-${{ runner.os }}-
       - name: Cache Dylint tools
         id: dylint-tools
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ~/.cargo/bin/cargo-dylint
@@ -48,7 +48,7 @@ jobs:
         if: steps.dylint-tools.outputs.cache-hit != 'true'
         run: cargo install --locked --version 6.0.4 cargo-dylint dylint-link
       - name: Cache lint, driver, and workspace targets
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             lint/dylint/target
