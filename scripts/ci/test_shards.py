@@ -79,17 +79,16 @@ def normalized_inventory(inventory):
     }
 
 
-def collect(output, default_features=False):
+def collect(output):
     output.mkdir(parents=True, exist_ok=True)
-    selection = (["--workspace", "--lib", "--bins", "--tests"] if default_features
-                 else ["--workspace", "--all-features"])
+    roster = load_roster()
     # Cargo is the independent baseline, using the original workspace selection.
     metadata = json.loads(subprocess.check_output(
         ["cargo", "metadata", "--no-deps", "--format-version", "1"], cwd=ROOT
     ))
     packages = {package["id"]: package["name"] for package in metadata["packages"]}
     cargo = subprocess.run(
-        ["cargo", "test", *selection, "--no-run", "--message-format=json"],
+        ["cargo", "test", "--workspace", "--all-features", "--no-run", "--message-format=json"],
         cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE,
     )
     artifacts = {}
@@ -102,14 +101,11 @@ def collect(output, default_features=False):
                 raise ValueError(f"duplicate Cargo test binary: {binary}")
             artifacts[binary] = message["executable"]
     inventory = json.loads(subprocess.check_output(
-        ["cargo", "nextest", "list", *selection, "--message-format", "json"],
+        ["cargo", "nextest", "list", "--workspace", "--all-features", "--message-format", "json"],
         cwd=ROOT,
     ))
-    if not default_features:
-        validate_inventory(inventory, load_roster())
+    validate_inventory(inventory, roster)
     suites = inventory["rust-suites"]
-    if any(suite["status"] != "listed" for suite in suites.values()):
-        raise ValueError("every binary must be successfully listed")
     if set(artifacts) != set(suites):
         raise ValueError("Cargo and nextest must discover exactly the same test binaries")
     baseline = {}
@@ -123,8 +119,7 @@ def collect(output, default_features=False):
         raise ValueError("Cargo/libtest and nextest names or ignored status differ")
     (output / "before.json").write_text(json.dumps(baseline, indent=2, sort_keys=True) + "\n")
     (output / "after.json").write_text(json.dumps(candidate, indent=2, sort_keys=True) + "\n")
-    if not default_features:
-        (output / "ownership.json").write_text(json.dumps(load_roster(), indent=2) + "\n")
+    (output / "ownership.json").write_text(json.dumps(roster, indent=2) + "\n")
     print(f"Coverage: {len(baseline)} binaries, "
           f"{sum(len(tests) for tests in baseline.values())} names, identical ignored status")
 
@@ -204,33 +199,10 @@ def covered_package(output, package):
             name not in workspace[binary] or workspace[binary][name] != ignored
             for name, ignored in tests.items()
         ):
-            raise ValueError(f"{package}: default workspace does not cover {binary}")
+            raise ValueError(f"{package}: workspace does not cover {binary}")
     (output / f"{package}.json").write_text(json.dumps(standalone, indent=2) + "\n")
     print(f"Covered {package}: {len(standalone)} binaries, "
           f"{sum(len(tests) for tests in standalone.values())} names, identical ignored status")
-
-
-def prove_default(evidence, junit):
-    before = json.loads((evidence / "before.json").read_text())
-    after = json.loads((evidence / "after.json").read_text())
-    if before != after:
-        raise ValueError("default Cargo/libtest and nextest inventories differ")
-    expected = {
-        (binary, name)
-        for binary, tests in before.items()
-        for name, ignored in tests.items() if not ignored
-    }
-    actual = executed_tests(junit)
-    if not expected or set(actual) != expected:
-        raise ValueError(f"default: missing {sorted(expected - set(actual))}; "
-                         f"unexpected {sorted(set(actual) - expected)}")
-    report = (f"Default coverage proof: {len(before)} binaries, {len(actual)} non-ignored "
-              "tests, each passed exactly once. All names and ignored flags match Cargo/libtest.\n")
-    (evidence / "summary.md").write_text(report)
-    print(report)
-    if os.environ.get("GITHUB_STEP_SUMMARY"):
-        with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
-            stream.write(report)
 
 
 def main():
@@ -238,10 +210,6 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     listing = commands.add_parser("collect")
     listing.add_argument("--output", type=Path, required=True)
-    listing.add_argument("--default-features", action="store_true")
-    defaults = commands.add_parser("prove-default")
-    defaults.add_argument("--evidence", type=Path, required=True)
-    defaults.add_argument("--junit", type=Path, required=True)
     covered = commands.add_parser("covered-package")
     covered.add_argument("--evidence", type=Path, required=True)
     covered.add_argument("--package", required=True)
@@ -252,9 +220,7 @@ def main():
     proof.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "collect":
-        collect(args.output, args.default_features)
-    elif args.command == "prove-default":
-        prove_default(args.evidence, args.junit)
+        collect(args.output)
     elif args.command == "covered-package":
         covered_package(args.evidence, args.package)
     elif args.command == "filter":

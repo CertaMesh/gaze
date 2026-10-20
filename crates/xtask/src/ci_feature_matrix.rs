@@ -187,19 +187,9 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         args: &["test", "--workspace", "--all-features"],
     },
     MatrixCommand {
-        label: "cargo nextest run --workspace --lib --bins --tests --profile ci --no-fail-fast",
+        label: "cargo test --workspace --lib --bins --tests",
         program: "cargo",
-        args: &[
-            "nextest",
-            "run",
-            "--workspace",
-            "--lib",
-            "--bins",
-            "--tests",
-            "--profile",
-            "ci",
-            "--no-fail-fast",
-        ],
+        args: &["test", "--workspace", "--lib", "--bins", "--tests"],
     },
 ];
 
@@ -261,9 +251,7 @@ fn ci_owner(command: &MatrixCommand) -> CiOwner {
         | ["test", "-p", "gaze-document", "--features", "mcp"]
         | ["test", "-p", "gaze-cli", "--features", "mcp"]
         | ["test", "--workspace", "--all-features"] => CiOwner::Test,
-        ["nextest", "run", "--workspace", "--lib", "--bins", "--tests", "--profile", "ci", "--no-fail-fast"] => {
-            CiOwner::DefaultWorkspace
-        }
+        ["test", "--workspace", "--lib", "--bins", "--tests"] => CiOwner::DefaultWorkspace,
         _ => CiOwner::FeatureGates,
     }
 }
