@@ -30,6 +30,7 @@ class LaneSelection(unittest.TestCase):
                 'docs/reference/cli.md', 'docs/new-input.md',
                 'scripts/bench/fixtures/evidence/mcp_route_v1.golden.json',
                 'scripts/bench/fixtures/jwt_payload/policy.toml',
+                'scripts/bench/trace-lineage-vocabulary.json',
                 'tests/fixtures/new-input.md', 'dylint.toml',
                 'scripts/fetch/fetch-ner-model.sh']:
             with self.subTest(path=path):

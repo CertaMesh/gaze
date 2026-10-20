@@ -56,7 +56,8 @@ def make_plan(event, paths, fast_lane=''):
                 or Path(path).name in {'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml'}):
             wide = True
             continue
-        if path.startswith(('docs/', 'scripts/bench/fixtures/')):
+        if (path.startswith(('docs/', 'scripts/bench/fixtures/'))
+                or path == 'scripts/bench/trace-lineage-vocabulary.json'):
             wide = True
             continue
         if path.startswith('scripts/bench/'):
