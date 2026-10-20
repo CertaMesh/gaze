@@ -118,8 +118,7 @@ as controls; mutable owner payload is pseudonymized through the session.
   not manifest token references. Compaction `instructions` are tokenized and join the final
   prompt-domain proof. Tool names are scanned immutable controls.
 - `safeguards` is refused: it has no verified public request schema.
-  Message-level `role: "system"` is refused because the
-  [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages/create)
+  Message-level `role: "system"` is refused because the Anthropic Messages API
   admits only `user` and `assistant`; use the inspected top-level `system` instead.
 - Unknown members at every closed boundary still return `InvalidRequestFormat`
   (`400`). Allowlisting a beta never enables new JSON fields or media handling.

@@ -158,7 +158,8 @@ gaze proxy logs --follow
 For a local health check, call the reserved proxy endpoint:
 
 ```sh
-curl http://127.0.0.1:8787/_gaze_proxy/healthz
+proxy_base=http://127.0.0.1:8787
+curl "$proxy_base/_gaze_proxy/healthz"
 ```
 
 ## Stop, restart, and supervise the proxy
