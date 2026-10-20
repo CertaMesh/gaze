@@ -332,7 +332,7 @@ async fn spawn_openai(
     let pipeline = Arc::new(pipeline);
     let handle = support::spawn_proxy(
         config,
-        pipeline,
+        move || pipeline,
         listener,
         support::Readiness::Poll {
             interval: Duration::from_millis(10),

@@ -406,7 +406,7 @@ async fn spawn_proxy_with_observability(
     };
     let handle = support::spawn_proxy(
         config,
-        Arc::new(pipeline),
+        move || Arc::new(pipeline),
         listener,
         support::Readiness::Poll {
             interval: Duration::from_millis(20),

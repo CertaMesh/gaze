@@ -1148,7 +1148,7 @@ async fn spawn_proxy(
     };
     let handle = support::spawn_proxy(
         config,
-        Arc::new(inspection_pipeline()),
+        || Arc::new(inspection_pipeline()),
         listener,
         support::Readiness::HealthJson {
             adapter: "anthropic",

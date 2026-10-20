@@ -32,13 +32,13 @@ pub async fn spawn_upstream(app: Router) -> (SocketAddr, JoinHandle<()>) {
 
 pub async fn spawn_proxy(
     config: ProxyConfig,
-    pipeline: Arc<Pipeline>,
+    pipeline: impl FnOnce() -> Arc<Pipeline> + Send + 'static,
     listener: TcpListener,
     readiness: Readiness,
 ) -> JoinHandle<()> {
     let bind = listener.local_addr().unwrap();
     let handle = tokio::spawn(async move {
-        gaze_proxy::serve_with_listener(config, pipeline, listener)
+        gaze_proxy::serve_with_listener(config, pipeline(), listener)
             .await
             .unwrap();
     });

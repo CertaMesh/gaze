@@ -72,7 +72,7 @@ async fn spawn_proxy(upstream: Url) -> ProxyServer {
     let pipeline = Arc::new(email_pipeline());
     let handle = support::spawn_proxy(
         config,
-        pipeline,
+        move || pipeline,
         listener,
         support::Readiness::Poll {
             interval: Duration::from_millis(10),
