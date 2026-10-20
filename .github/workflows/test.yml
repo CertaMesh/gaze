@@ -383,6 +383,8 @@ jobs:
   benchmark-model-free:
     name: benchmark model-free Python tests
     runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -397,11 +399,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: scripts/bench/uv.lock
       - name: Sync locked benchmark environment
-        run: uv sync --project scripts/bench --locked --group comparison-test
+        run: uv sync --project scripts/bench --python 3.13 --locked --group comparison-test
       - name: Run benchmark scorer and comparator tests
-        run: uv run --project scripts/bench --group comparison-test python -m unittest discover -s scripts/bench
-      - name: Run competitor adapter and known-record tests
-        run: uv run --project scripts/bench --group comparison-test python -m pytest -q scripts/bench/compare/ scripts/bench/test_known_record_*.py scripts/bench/test_family_precedence_*.py scripts/bench/test_external_release_gate.py
+        run: uv run --project scripts/bench --python 3.13 --group comparison-test python -m pytest -q scripts/bench --durations=30
       - name: Build model-free equivalence binaries
         run: |
           cargo build --locked -p gaze-cli --bin gaze
@@ -411,7 +411,7 @@ jobs:
       - name: Run bench producer example tests
         run: cargo test --locked -p gaze-recognizers --all-features --example clean_for_bench
       - name: Check policy and CLI equivalence on committed sample
-        run: uv run --project scripts/bench --group comparison-test python scripts/bench/check_policy_equivalence.py --self-check
+        run: uv run --project scripts/bench --python 3.13 --group comparison-test python scripts/bench/check_policy_equivalence.py --self-check
 
   xtask-feature-gates:
     name: xtask feature gates

@@ -613,7 +613,7 @@ _REAL_DERIVE = mech.derive
 
 
 def _derive_once(base: Path, candidate: Path, versions) -> dict:
-    """Re-scoring a full record takes seconds; each mutation needs the same result."""
+    """Reuse immutable committed records; give each check a fresh derived result."""
     return json.loads(_cached_derive(base, candidate, tuple(versions)))
 
 
@@ -655,7 +655,8 @@ class CommittedLedgerTest(unittest.TestCase):
 
     def test_committed_ledger_matches_its_records_and_document(self) -> None:
         mech.validate(LEDGER)
-        mech.check_evidence(LEDGER)
+        with mock.patch.object(mech, "derive", _derive_once):
+            mech.check_evidence(LEDGER)
         document = mech.DOC.read_text(encoding="utf-8")
         releases = mech._released_versions(mech.RELEASE_HISTORY)
         self.assertEqual(mech.apply(document, mech.render(LEDGER, releases)), document)
