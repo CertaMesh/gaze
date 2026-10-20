@@ -1,6 +1,7 @@
 """Small native capture proof and adversarial exact-input cache checks."""
 
 import copy
+import gzip
 import json
 import os
 from pathlib import Path
@@ -38,7 +39,7 @@ def write_capture(binary, directory, key):
              "applicable": False, "validator_passed": None} for span in doc.spans],
             "predictions": None} for _, doc in population}}
     writer = records.RecordWriter(main, records.filter_measurements(measurements, main),
-                                  corpus_sha256=identity.file_digest(CORPUS), extra_documents=extra,
+                                  corpus_sha256=identity.file_digest(CORPUS), binary=binary, extra_documents=extra,
                                   layer_contract=score.SCORED_LABEL_CONTRACT_V1)
     runs = {}
     with stages.session(directory / "run-evidence.json") as evidence:
@@ -120,6 +121,8 @@ class CaptureIdentityTests(unittest.TestCase):
                 read = lambda: runner.observation_cache_key(**inputs)[0]
                 original = read()
                 self.assertIsNotNone(original)
+                self.assertEqual(original["binary_sha256"], identity.file_digest(paths["detector"]))
+                self.assertEqual(original["binary_sha256"], original["effective_inputs"]["files"]["detector_binary"])
                 for name, path in paths.items():
                     with self.subTest(input=name):
                         path.write_bytes(b"changed")
@@ -197,6 +200,7 @@ class NativeCaptureReuseTests(unittest.TestCase):
                    "locale_environment": "synthetic", "harness_schema": records.SCHEMA_VERSION,
                    "runtime": identity.native_runtime({"detector": BINARY})}
             original, card = write_capture(BINARY, fresh, key)
+            self.assertEqual(card["observation_record"]["binary_sha256"], key["binary_sha256"])
             destination = root / "hit" / original.name
             with stages.session(destination.parent / "run-evidence.json") as evidence:
                 status = cache.restore_layers(fresh / "cache", key, destination)
@@ -224,7 +228,36 @@ class NativeCaptureReuseTests(unittest.TestCase):
                 self.assertEqual(cache.restore_layers(fresh / "cache", key, root / "tampered.gz"), "miss_record_hash")
                 self.assertFalse((root / "tampered.gz").exists())
                 path.write_bytes(old)
+            # Even a legacy entry whose hashes and key binding have all been
+            # refreshed must miss when its observation header has no binary pin.
             metadata = entry / "layers.json"
+            header_path = entry / "header.jsonl.gz"
+            original_header = header_path.read_bytes()
+            original_metadata = metadata.read_bytes()
+            with gzip.open(header_path, "rt") as stream:
+                header = json.loads(next(stream))
+            for bound in (None, "f" * 64):
+                with self.subTest(record_binary=bound):
+                    altered = copy.deepcopy(header)
+                    altered.pop("binary_sha256")
+                    if bound is not None:
+                        altered["binary_sha256"] = bound
+                    unbound_record = root / "unbound.jsonl.gz"
+                    _, observations = records._read(original)
+                    records._write_rows(unbound_record, [altered, *observations])
+                    with self.assertRaisesRegex(ValueError, "capture-time binary"):
+                        cache.store_layers(root / "rejected-cache", key, unbound_record)
+                    records._write_rows(header_path, [altered])
+                    forged = json.loads(original_metadata)
+                    forged["parts"]["header"] = identity.file_digest(header_path)
+                    forged["record_sha256"] = identity.file_digest(unbound_record)
+                    metadata.write_text(json.dumps(forged))
+                    refused = root / "unbound-hit.gz"
+                    self.assertEqual(cache.restore_layers(fresh / "cache", key, refused), "miss_binary_binding")
+                    self.assertFalse(refused.exists())
+                    self.assertFalse(refused.with_suffix(".gz.cache-tmp").exists())
+            header_path.write_bytes(original_header)
+            metadata.write_bytes(original_metadata)
             changed = json.loads(metadata.read_text())
             changed["key"]["seed"] += 1
             metadata.write_text(json.dumps(changed))

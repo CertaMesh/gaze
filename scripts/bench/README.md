@@ -154,8 +154,12 @@ and record schema, Cargo inputs, declared build/runtime environment (including l
 Python runtime and package contents, OS build, hardware and native libraries.
 Environment values are hashed rather than copied into evidence.
 
-A hit verifies the complete key, every part hash, the header's key binding and
-the reconstructed record hash before re-scoring. A missing or invalid part
+The key's `binary_sha256` must equal the capture-time digest in the record.
+Unbound historical records and records bound to another executable cannot enter
+this cache or produce a hit.
+
+A hit verifies the complete key, every part hash, the header's key and binary
+bindings, and the reconstructed record hash before re-scoring. A missing or invalid part
 causes a fresh capture; the runner never substitutes a nearby key or combines
 partial hits. It builds or checks both native binaries before lookup so the
 key identifies actual artifacts. A hit skips model loading, validator execution

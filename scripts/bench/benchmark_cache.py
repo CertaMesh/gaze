@@ -122,6 +122,8 @@ def store_layers(root: Path, key: Mapping[str, object], source: Path) -> None:
 
     header, observations = records._read(source)
     digest = key_digest(key)
+    if not key.get("binary_sha256") or header.get("binary_sha256") != key["binary_sha256"]:
+        raise ValueError("observation record has no matching capture-time binary SHA-256")
     if header["scorecard"].get("capture_cache") != provenance(key):
         raise ValueError("observation record is not bound to this full cache key")
     entry = root / digest
@@ -186,6 +188,8 @@ def restore_layers(root: Path, key: Mapping[str, object], destination: Path) -> 
                     if len(data) != 1 or data[0]["scorecard"].get("capture_cache") != provenance(key):
                         return "miss_binding"
                     header = data[0]
+                    if not key.get("binary_sha256") or header.get("binary_sha256") != key["binary_sha256"]:
+                        return "miss_binary_binding"
                 else:
                     for item in data:
                         index = item["index"]

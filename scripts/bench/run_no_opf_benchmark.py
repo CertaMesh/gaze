@@ -951,6 +951,7 @@ def observation_cache_key(
     return {
         "schema_version": capture_identity.SCHEMA_VERSION,
         "effective_inputs": inputs,
+        "binary_sha256": inputs["files"]["detector_binary"],
         "record_schema_version": records.SCHEMA_VERSION,
         **source_identity,
         "cargo_lock_sha256": score.sha256_file(repo_root / "Cargo.lock"),
@@ -1481,7 +1482,7 @@ def _run(args: argparse.Namespace) -> int:
             corpus_sha256=dataset_report["integrity"]["sha256"], contract=scored_label_contract,
             model_provenance=model_provenance, policy_dependencies=policy_dependencies,
             agentic_prepared=agentic_prepared, document_ids=[document.uid for document in documents],
-            threshold=effective_threshold, source_environment=dict(os.environ),
+            threshold=effective_threshold, source_environment=source_environment,
             binary=binary, validator_probe=validator_probe, davlan_model=davlan_model,
         )
 
@@ -1537,6 +1538,8 @@ def _run(args: argparse.Namespace) -> int:
         extra_documents=extra_documents,
         layer_contract=agentic_prepared.contract if agentic_prepared is not None else None,
     )
+    if cache_key is not None and record_writer.binary_sha256 != cache_key["binary_sha256"]:
+        raise CandidateError("executable changed after cache input inventory")
     runs, repetition_provenance = execute_measurements(
         repo_root=repo_root,
         binary=binary,
