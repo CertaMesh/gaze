@@ -20,10 +20,30 @@ before the tool runs ([integration](docs/explanation/how-gaze-works.md#how-it-fi
 
 ## How good is it
 
-The [v0.16.0 benchmark](docs/reference/benchmarks/README.md#current-release)
-compares the `gaze setup` policy with Presidio, DataFog, scrubadub, GLiNER and
+The v0.17.0 measurements pass the accepted own-policy numeric and external F2
+criteria. Strict own-policy identity remains `not_comparable`, and TRACE's
+original net-byte gate fails. [Results and limits](docs/reference/benchmarks/README.md#v017-final-candidate-evidence)
+retain the measured source and provenance. The own-corpus panel includes tagged
+v0.17.0. Fresh external byte-micro results appear first; historical external
+character panels keep their measured version labels.
+
+The [tagged-release benchmark panels](docs/reference/benchmarks/README.md#benchmark-panels)
+compare the `gaze setup` policy with Presidio, DataFog, scrubadub, GLiNER and
 OPF on their declared configurations. “Leaked” counts PII bytes still reaching
 the model. The target is zero.
+
+<!-- BEGIN GENERATED: external-release -->
+
+Fresh external release measurements use byte-micro F2, `5*TP/(5*TP+4*FN+FP)`. These are separate from the character-level and vendor-evaluator scores below.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmarks/external-release-panels-dark.svg">
+  <img alt="Fresh external byte-micro F2 for Gaze v0.16.0 and v0.17.0, with leaked bytes and original net-byte verdicts." src="docs/assets/benchmarks/external-release-panels-light.svg">
+</picture>
+
+[Evidence and limits](docs/reference/benchmarks/README.md#v017-final-candidate-evidence): all three accepted external F2 comparisons pass. TRACE's original net-byte gate fails. Strict own-policy identity remains `not_comparable`; zero-leak readiness remains unmet.
+
+<!-- END GENERATED: external-release -->
 
 <!-- BEGIN GENERATED: readme-chart -->
 
@@ -32,7 +52,7 @@ the model. The target is zero.
   <img alt="Bar panels of character-level F2 and false-positive bytes per 1,000 bytes for Gaze releases and competitors on three benchmarks; the values are printed on the bars." src="docs/assets/benchmarks/benchmark-panels-light.svg">
 </picture>
 
-Gaze 0.16 leaks 13,291 PII bytes on our holdout (character-level F2 0.879; credentials counted since contract v4). Methods, competitor setups and how to reproduce: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels).
+Gaze 0.17 leaks 9,717 PII bytes on our holdout (character-level F2 0.901; credentials counted since contract v4). Methods, competitor setups and how to reproduce: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels). External character panels keep their measured scope (Presidio Research: Gaze 0.16; PIIBench-commercial: Gaze 0.16). The fresh external receipts above contain byte-micro scores, not character scores.
 
 <!-- END GENERATED: readme-chart -->
 

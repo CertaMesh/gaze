@@ -1,0 +1,310 @@
+{
+  "schema_version": 1,
+  "description": "Independent fresh v1/v2 observations and canonical v1-v4 replay receipts; no benchmark text or values.",
+  "versions": {
+    "0.14.0": {
+      "available": true,
+      "scope": "C only; A/D/R unavailable",
+      "observation_file": "observations-v0.14.0.jsonl.gz",
+      "observation_sha256": "ede9ecaa3ee4c180f55b83d0e8c2774fb54d5f2730e64b96fb6663839ef55d4c",
+      "independent_v1_file": "observations-v0.14.0-independent-v1.jsonl.gz",
+      "independent_v1_sha256": "3ffb0d60fe949268767fe4ca3532ddf88462b74a43905ca8c1391837990be2a0",
+      "canonical_export": {
+        "schema_version": 1,
+        "source_sha256": "ede9ecaa3ee4c180f55b83d0e8c2774fb54d5f2730e64b96fb6663839ef55d4c",
+        "exported_sha256": "ede9ecaa3ee4c180f55b83d0e8c2774fb54d5f2730e64b96fb6663839ef55d4c",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true
+      },
+      "independent_export": {
+        "schema_version": 1,
+        "source_sha256": "3ffb0d60fe949268767fe4ca3532ddf88462b74a43905ca8c1391837990be2a0",
+        "exported_sha256": "3ffb0d60fe949268767fe4ca3532ddf88462b74a43905ca8c1391837990be2a0",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true
+      },
+      "views": {
+        "1": {
+          "file": "scorecard-v0.14.0.json",
+          "sha256": "713479df6505331f9f79e9250edeab600c97624fc02f7e943f684cae1984287b"
+        },
+        "2": {
+          "file": "scorecard-v0.14.0-scored-labels-v2.json",
+          "sha256": "315ffc325884c7047da73b6ae37fc0bc4e06a38e9a76eee7fe20e730d1084ccb"
+        },
+        "3": {
+          "file": "scorecard-v0.14.0-scored-labels-v3.json",
+          "sha256": "3e5633cbf195a677d277eb529d4e523fbe15d74a28e562092e494f1a73baf6a1"
+        },
+        "4": {
+          "file": "scorecard-v0.14.0-scored-labels-v4.json",
+          "sha256": "44ba6e06f931d8e235e5dd36bc3775f726bbc7b335122dcc34d62fcf56fff617"
+        }
+      },
+      "fresh_v1_v2_untimed_runs_match": true
+    },
+    "0.15.0": {
+      "available": true,
+      "scope": "C/A/D/R",
+      "observation_file": "observations-v0.15.0.jsonl.gz",
+      "observation_sha256": "93bcfbe8e34df030d9d41f1f50e3e8d82b3f82506a998f3c3046dd810ac7753d",
+      "independent_v1_file": "observations-v0.15.0-independent-v1.jsonl.gz",
+      "independent_v1_sha256": "2d37a5daf465fc0146ea33a9c58d68d45cd9b178a89daa7d725666a18f61d4e7",
+      "canonical_export": {
+        "schema_version": 1,
+        "source_sha256": "c92fd15eff3ad10dab5c17ddac3f79658ae01fb10c2b9f08bf6da676e7128eaf",
+        "exported_sha256": "93bcfbe8e34df030d9d41f1f50e3e8d82b3f82506a998f3c3046dd810ac7753d",
+        "metadata_normalization": "policy-path-home-prefix",
+        "observation_rows_unchanged": true
+      },
+      "independent_export": {
+        "schema_version": 1,
+        "source_sha256": "93db96007bc88cc3356f817fddb97f261c3a1c03289480c729446dbe08a7ca88",
+        "exported_sha256": "2d37a5daf465fc0146ea33a9c58d68d45cd9b178a89daa7d725666a18f61d4e7",
+        "metadata_normalization": "policy-path-home-prefix",
+        "observation_rows_unchanged": true
+      },
+      "views": {
+        "1": {
+          "file": "scorecard-v0.15.0.json",
+          "sha256": "81a2b4daffd945347543c0a0e22dc28b4973e8d1ff089d317626b06b4e0c6b62"
+        },
+        "2": {
+          "file": "scorecard-v0.15.0-scored-labels-v2.json",
+          "sha256": "6fb9de86548f88b7ff9b931a74c36157c14b9ca4547c269bc2005e6a16ce999b"
+        },
+        "3": {
+          "file": "scorecard-v0.15.0-scored-labels-v3.json",
+          "sha256": "0369ccbe618953276a8577bde90269ecbef51b231366fa7845c23e0932e4a98c"
+        },
+        "4": {
+          "file": "scorecard-v0.15.0-scored-labels-v4.json",
+          "sha256": "0b634d5245ddc3c89915f6abd2f234d1e3d9d7aad3df48e066e1da586ce46ea9"
+        }
+      },
+      "fresh_v1_v2_untimed_runs_match": true
+    },
+    "0.15.1": {
+      "available": true,
+      "scope": "C/A/D/R",
+      "observation_file": "observations-v0.15.1.jsonl.gz",
+      "observation_sha256": "6e452a6cafda99ceeaf21136c6148a3db54d17080244005c3ef03ab9bce97f3e",
+      "independent_v1_file": "observations-v0.15.1-independent-v1.jsonl.gz",
+      "independent_v1_sha256": "6407bad713dad7169623231b6663826e71bd4821619182b0aa3ef892af6e38d2",
+      "canonical_export": {
+        "schema_version": 1,
+        "source_sha256": "76307bf4d841cf2a29d73dc2619abfe95390d17d7c01153ee8c4f01fb4afecb6",
+        "exported_sha256": "6e452a6cafda99ceeaf21136c6148a3db54d17080244005c3ef03ab9bce97f3e",
+        "metadata_normalization": "policy-path-home-prefix",
+        "observation_rows_unchanged": true
+      },
+      "independent_export": {
+        "schema_version": 1,
+        "source_sha256": "48b8223b0350f2bc4c999da46ce7ecc96e270823911803b63201b33519307ec7",
+        "exported_sha256": "6407bad713dad7169623231b6663826e71bd4821619182b0aa3ef892af6e38d2",
+        "metadata_normalization": "policy-path-home-prefix",
+        "observation_rows_unchanged": true
+      },
+      "views": {
+        "1": {
+          "file": "scorecard-v0.15.1.json",
+          "sha256": "4a3f6dd478c0e4232971b56deb7f19e3016a2b4b9f4b2e42af7ebf5604ae106d"
+        },
+        "2": {
+          "file": "scorecard-v0.15.1-scored-labels-v2.json",
+          "sha256": "036c7504c21d92c0d8b9956f4e93535a8b88b9b1fea1843f48150b4b5c4b3294"
+        },
+        "3": {
+          "file": "scorecard-v0.15.1-scored-labels-v3.json",
+          "sha256": "baca208e3db14b638ff9e0db63abb92fcf3eeda26d8dae524fc388619bc434c8"
+        },
+        "4": {
+          "file": "scorecard-v0.15.1-scored-labels-v4.json",
+          "sha256": "23b074b4ab5548129ad5d93be6dc5f9ce23e9a3ff9adf9407b9dda292a66f0f5"
+        }
+      },
+      "fresh_v1_v2_untimed_runs_match": true
+    },
+    "0.16.0": {
+      "available": true,
+      "scope": "C/A/D/R",
+      "observation_file": "observations-v0.16.0.jsonl.gz",
+      "observation_sha256": "c05d061b95a4d230a60dbdec6bb60be243c4b2cadecc119f653e09d67d564a42",
+      "independent_v1_file": "observations-v0.16.0-independent-v1.jsonl.gz",
+      "independent_v1_sha256": "44beabf7e3cfdbfcf96d9a3e73c29fdeca4677618e746a0b1cf66f253b194c0e",
+      "canonical_export": {
+        "schema_version": 1,
+        "source_sha256": "d6fba53b707b287d0cb51b71a5037f0550e61fd14e8c1fb92fbb914cead59b9c",
+        "exported_sha256": "c05d061b95a4d230a60dbdec6bb60be243c4b2cadecc119f653e09d67d564a42",
+        "metadata_normalization": "policy-path-home-prefix",
+        "observation_rows_unchanged": true
+      },
+      "independent_export": {
+        "schema_version": 1,
+        "source_sha256": "d4386ccb0ab586b2215b3c4082ad69be0d2cc414607e80606af293bdf4b29ded",
+        "exported_sha256": "44beabf7e3cfdbfcf96d9a3e73c29fdeca4677618e746a0b1cf66f253b194c0e",
+        "metadata_normalization": "policy-path-home-prefix",
+        "observation_rows_unchanged": true
+      },
+      "views": {
+        "1": {
+          "file": "scorecard-v0.16.0.json",
+          "sha256": "a1ed33b5f941385fd7278f4d37e5b2c6a2e6b0f3ca798702f1d65111f763b6d4"
+        },
+        "2": {
+          "file": "scorecard-v0.16.0-scored-labels-v2.json",
+          "sha256": "1b4a467156faae25d96513812640b553bdad00a6735c14d028efffb64f0a337d"
+        },
+        "3": {
+          "file": "scorecard-v0.16.0-scored-labels-v3.json",
+          "sha256": "f889c342abe26d7d275fb7bb9c7040d6dac7a8b3ea5656d06564c4e57c86253e"
+        },
+        "4": {
+          "file": "scorecard-v0.16.0-scored-labels-v4.json",
+          "sha256": "9e055feb011691cbf7087b316cee92a0cf7f8f9d4bc79f94c8fd165fbd660029"
+        }
+      },
+      "fresh_v1_v2_untimed_runs_match": true
+    },
+    "0.17.0": {
+      "available": true,
+      "scope": "C/A/D/R",
+      "observation_file": "observations-v0.17.0.jsonl.gz",
+      "observation_sha256": "f20e0cfc47b7e7867bdf1a07708314c36d1213226a7ee08592d5c99ae71b4313",
+      "independent_v1_file": "observations-v0.17.0-independent-v1.jsonl.gz",
+      "independent_v1_sha256": "30ddfc2e6a8d6fbdf6edb44025fd896fa6482b40ce7b2d360aa766ef289fe68a",
+      "canonical_export": {
+        "schema_version": 1,
+        "source_sha256": "f20e0cfc47b7e7867bdf1a07708314c36d1213226a7ee08592d5c99ae71b4313",
+        "exported_sha256": "f20e0cfc47b7e7867bdf1a07708314c36d1213226a7ee08592d5c99ae71b4313",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true
+      },
+      "independent_export": {
+        "schema_version": 1,
+        "source_sha256": "30ddfc2e6a8d6fbdf6edb44025fd896fa6482b40ce7b2d360aa766ef289fe68a",
+        "exported_sha256": "30ddfc2e6a8d6fbdf6edb44025fd896fa6482b40ce7b2d360aa766ef289fe68a",
+        "metadata_normalization": "none",
+        "observation_rows_unchanged": true
+      },
+      "views": {
+        "1": {
+          "file": "scorecard-v0.17.0.json",
+          "sha256": "48038f42f665fc41d45aab2c3b12c65eaa23854d055c99b49308b8c553a59f75"
+        },
+        "2": {
+          "file": "scorecard-v0.17.0-scored-labels-v2.json",
+          "sha256": "41fe2764e982c7f7cd9637b4c273c5bc4083b104d8af9ed3db24a0fbbcac1765"
+        },
+        "3": {
+          "file": "scorecard-v0.17.0-scored-labels-v3.json",
+          "sha256": "cdfec65479d0db7f0e00018b12dd86c8c2b30ac1e855f50afe8525a010590802"
+        },
+        "4": {
+          "file": "scorecard-v0.17.0-scored-labels-v4.json",
+          "sha256": "7944d60a003fd8e5d6ace066003b7a6ad291b1c644ed19dd24469bd33aaa285f"
+        }
+      },
+      "fresh_v1_v2_untimed_runs_match": true,
+      "measured_source": "86195a8fbff001489b4eee385020c94c15e502b3",
+      "raw_crates_tree": "5a3c6502bd64eabf40f009eb05ca55da3ed50dfe",
+      "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
+      "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+      "captures": {
+        "1": {
+          "kind": "fresh inference",
+          "card_sha256": "1235c73c213ed1992f36519284fc67fc7488c04d1d7261c939e49ba576a431dc",
+          "record_sha256": "30ddfc2e6a8d6fbdf6edb44025fd896fa6482b40ce7b2d360aa766ef289fe68a"
+        },
+        "2": {
+          "kind": "fresh inference",
+          "card_sha256": "5d259d7c56733d507d20ed44a4919d20ac9ff014f0a6b118948b9e5e2a11d4d8",
+          "record_sha256": "f20e0cfc47b7e7867bdf1a07708314c36d1213226a7ee08592d5c99ae71b4313"
+        },
+        "3": {
+          "kind": "explicit observation replay",
+          "card_sha256": "5013f3898e1596ab6fb8cfe9a79c493d604f804907b647c78c31d334ec80690e",
+          "record_sha256": "f20e0cfc47b7e7867bdf1a07708314c36d1213226a7ee08592d5c99ae71b4313"
+        },
+        "4": {
+          "kind": "explicit observation replay",
+          "card_sha256": "a73f81d67e14c81b2a9146e6b805fd0447d3642b13ebf9df073fa76bf53f8b4b",
+          "record_sha256": "f20e0cfc47b7e7867bdf1a07708314c36d1213226a7ee08592d5c99ae71b4313"
+        }
+      },
+      "aggregate_evidence": {
+        "own-policy-ruling-review.json": {
+          "file": "release-v0.17.0/own-policy-ruling-review.json",
+          "sha256": "417514314b4c68e38336945c12f6a3d7a8dbbd2e8f93dcb9df17b9f8fa7a659c",
+          "original_sha256": "417514314b4c68e38336945c12f6a3d7a8dbbd2e8f93dcb9df17b9f8fa7a659c",
+          "normalization": "none"
+        },
+        "strict-gate-v1.json": {
+          "file": "release-v0.17.0/strict-gate-v1.json",
+          "sha256": "39cab66a4e3c90959cbb4c081c35c8090d260a592859a57cfec7b934d601b947",
+          "original_sha256": "39cab66a4e3c90959cbb4c081c35c8090d260a592859a57cfec7b934d601b947",
+          "normalization": "none"
+        },
+        "strict-gate-v2.json": {
+          "file": "release-v0.17.0/strict-gate-v2.json",
+          "sha256": "39cab66a4e3c90959cbb4c081c35c8090d260a592859a57cfec7b934d601b947",
+          "original_sha256": "39cab66a4e3c90959cbb4c081c35c8090d260a592859a57cfec7b934d601b947",
+          "normalization": "none"
+        },
+        "spanish-aggregate-review.json": {
+          "file": "release-v0.17.0/spanish-aggregate-review.json",
+          "sha256": "c026613131d42c9916eb9943f00a3d5b670288bffac02d091bfb894ef2a2462a",
+          "original_sha256": "c026613131d42c9916eb9943f00a3d5b670288bffac02d091bfb894ef2a2462a",
+          "normalization": "none"
+        },
+        "external-f2-release-review.json": {
+          "file": "release-v0.17.0/external-f2-release-review.json",
+          "sha256": "9c88c66f54aa181c5a49acc6aaef95a969f53fba065ae6ed8eb69fb5a2d46b80",
+          "original_sha256": "9c88c66f54aa181c5a49acc6aaef95a969f53fba065ae6ed8eb69fb5a2d46b80",
+          "normalization": "none"
+        },
+        "external/sealed-gate.json": {
+          "file": "release-v0.17.0/sealed-gate.json",
+          "sha256": "5d8361a6574026f74eb0ce0fe99114794aa7d5626533099cca2270afb9d8ce4c",
+          "original_sha256": "5d8361a6574026f74eb0ce0fe99114794aa7d5626533099cca2270afb9d8ce4c",
+          "normalization": "none"
+        },
+        "external/sealed-quality.json": {
+          "file": "release-v0.17.0/sealed-quality.json",
+          "sha256": "6799b400157795580e973429c3ef1ad70bb7690a0b4e0afe2f8069e0a92565c6",
+          "original_sha256": "6799b400157795580e973429c3ef1ad70bb7690a0b4e0afe2f8069e0a92565c6",
+          "normalization": "none"
+        },
+        "external/piibench-commercial-gate.json": {
+          "file": "release-v0.17.0/piibench-commercial-gate.json",
+          "sha256": "1ab31fce4c1e8abd908433002bc40b59eb4547b29a016bdc6338d7e9048e8cce",
+          "original_sha256": "1ab31fce4c1e8abd908433002bc40b59eb4547b29a016bdc6338d7e9048e8cce",
+          "normalization": "none"
+        },
+        "external/piibench-commercial-quality.json": {
+          "file": "release-v0.17.0/piibench-commercial-quality.json",
+          "sha256": "675952200ab278b51d1791ad45a377dd354318bae7c01dfeec03bb7e70098c82",
+          "original_sha256": "675952200ab278b51d1791ad45a377dd354318bae7c01dfeec03bb7e70098c82",
+          "normalization": "none"
+        },
+        "external/pii-trace-gate.json": {
+          "file": "release-v0.17.0/pii-trace-gate.json",
+          "sha256": "17e0b506efd7ab09bbf80c9e10200afb01ae3b4ff449ff1c42d8e9e019419280",
+          "original_sha256": "17e0b506efd7ab09bbf80c9e10200afb01ae3b4ff449ff1c42d8e9e019419280",
+          "normalization": "none"
+        },
+        "external/pii-trace-quality.json": {
+          "file": "release-v0.17.0/pii-trace-quality.json",
+          "sha256": "fa4a2345526db7ef07f6e625eba0090733d31abde41a331dfef6ea9c6ff74a4d",
+          "original_sha256": "fa4a2345526db7ef07f6e625eba0090733d31abde41a331dfef6ea9c6ff74a4d",
+          "normalization": "none"
+        }
+      },
+      "composition": {
+        "original_snapshot_sha256": "119e24993cc47ae9b6b53af052b2266a8f83a4903675f72327eb4c419602851d",
+        "spanish_snapshot_sha256": "d0b476ca86901e545211143358c9b8b04e9990cac86c6de53ec24231356d6a95",
+        "native_receipt_sha256": "421e8b3a5c53d88c0f89456a69f82d8c2220b06c574003e83883273b3480388b"
+      }
+    }
+  }
+}

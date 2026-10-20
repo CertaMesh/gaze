@@ -29,7 +29,7 @@ from bench_subprocess import BenchSubprocess, ProducerFailure, TransportLimits, 
 import evidence_bridge
 
 MIB = 1024 * 1024
-SNAPSHOT_MAX_BYTES = 128 * MIB
+SNAPSHOT_MAX_BYTES = 256 * MIB
 CHUNK = 64 * 1024
 PROCESS_RESERVE = 10
 DIRECTORY_RESERVE = 120
@@ -107,10 +107,11 @@ def group_members(pgid, deadline):
         fields = line.split()
         require(len(fields) == 3 and fields[0].isdigit() and fields[1].isdigit(), 'cleanup')
         pid, group = int(fields[0]), int(fields[1])
-        state = fields[2].decode('ascii')
-        require(pid > 0 and pid not in seen and state and state[0] in 'RSDTtZXIWU', 'cleanup')
+        require(pid > 0 and pid not in seen, 'cleanup')
         seen.add(pid)
         if group == pgid:
+            state = fields[2].decode('ascii')
+            require(state and state[0] in 'RSDTtZXIWU', 'cleanup')
             members[pid] = state
     return members
 

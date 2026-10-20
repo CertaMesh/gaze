@@ -202,7 +202,7 @@ class RenderTest(unittest.TestCase):
 
         data = synthetic()
         del data["benchmarks"]["presidio-research"]["rows"]["gaze-v0.15.1"]
-        self.assertRegex(render.render(data), r"Gaze v\d+\.\d+\.\d+: not yet measured on this set")
+        self.assertRegex(render.render(data), r"Gaze v\d+\.\d+\.\d+: no tagged character or vendor-evaluator measurement")
 
     def test_declared_row_must_be_measured(self) -> None:
         import render_theirbench as render
@@ -278,14 +278,14 @@ class PinnedComparisonTest(unittest.TestCase):
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
         import backends
 
-        self.assertEqual(backends.verify_pinned_comparison(), backends.PINNED_SHA256)
-        original = backends.PINNED_SHA256["compare.py"]
+        self.assertEqual(backends.verify_pinned_comparison(), backends.CURRENT_PINNED_SHA256)
+        original = backends.CURRENT_PINNED_SHA256["compare.py"]
         try:
-            backends.PINNED_SHA256["compare.py"] = "0" * 64
+            backends.CURRENT_PINNED_SHA256["compare.py"] = "0" * 64
             with self.assertRaises(SystemExit):
                 backends.verify_pinned_comparison()
         finally:
-            backends.PINNED_SHA256["compare.py"] = original
+            backends.CURRENT_PINNED_SHA256["compare.py"] = original
 
     def test_chart_configs_are_the_comparison_declared_rows(self) -> None:
         import backends
@@ -367,10 +367,10 @@ class HoldAndRescoreTest(unittest.TestCase):
             self.assertEqual((char["tp"], char["fp"], char["fn"]), (6, 0, 0))
             self.assertEqual(char["f2"], 1.0)
 
-    def test_measured_backend_code_is_unchanged(self) -> None:
+    def test_current_backend_code_matches_the_live_pin(self) -> None:
         import backends
 
-        self.assertEqual(backends.backend_code_sha256(), backends.BACKEND_CODE_SHA256)
+        self.assertEqual(backends.backend_code_sha256(), backends.CURRENT_BACKEND_CODE_SHA256)
 
 
 class GuardTest(unittest.TestCase):
@@ -387,13 +387,13 @@ class GuardTest(unittest.TestCase):
     def test_backend_code_drift_refuses_to_run(self) -> None:
         import backends
 
-        original = backends.BACKEND_CODE_SHA256
+        original = backends.CURRENT_BACKEND_CODE_SHA256
         try:
-            backends.BACKEND_CODE_SHA256 = "0" * 64
+            backends.CURRENT_BACKEND_CODE_SHA256 = "0" * 64
             with self.assertRaisesRegex(SystemExit, "backend construction"):
                 backends.verify_pinned_comparison()
         finally:
-            backends.BACKEND_CODE_SHA256 = original
+            backends.CURRENT_BACKEND_CODE_SHA256 = original
 
     def test_unrescored_or_dirty_rescore_is_never_published(self) -> None:
         import render_theirbench as render

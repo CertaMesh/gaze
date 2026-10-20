@@ -130,3 +130,18 @@ The OpenMed model is pinned in `vendor-tuned.json` by repository, revision and t
 The tuned row's typed metrics and common-intersection view use the comparison's Presidio label table plus the extra OpenMed entities in `vendor-tuned.json`; the common-intersection label set is still computed over the standard roster. Leaked and false-positive bytes do not depend on labels. `add-tuned` refuses a row whose provenance does not match the declaration (setup, source, commit), whose producer record is a smoke run, or whose own-scorer result is not the notebook-5 replay of the same spans, and it needs the vendor's tuned number reproduced first.
 
 Measurements take the bench machine lock. `render --check` fails when the README block drifts from `their-benchmarks.json`.
+
+### Current collection and historical pins
+
+`backends.py` keeps historical `PINNED_SHA256`, `BACKEND_CODE_SHA256` and
+`COMPARISON_REVISION` values for the original measurements and strict aggregate
+admission. Fresh collection verifies `CURRENT_PINNED_SHA256` and
+`CURRENT_BACKEND_CODE_SHA256`, and records `CURRENT_COMPARISON_REVISION` in its
+report. The current adapter adds native Spanish scrubadub routing; other backend
+construction remains identical. Both whole-file and backend-slice guards remain
+active, including for Gaze-only collection.
+
+Historical reports keep their original identities. Adding a fresh report to an
+existing aggregate still requires the existing strict source-compatibility
+checks. Use the matching clean historical harness with the separate runtime,
+binary and policy inputs when a campaign requires the original harness contract.

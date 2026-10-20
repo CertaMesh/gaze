@@ -824,8 +824,10 @@ def public_body(index: Mapping[str, Any]) -> str:
             "The leak ledger classifies every leaked gold byte by root cause. "
             f"It was recorded at `{provenance['recorded_at'][:7]}`, an ancestor of "
             f"`{provenance['tag']}` with the identical crates tree "
-            f"`{provenance['crates_tree'][:8]}`; its observations are byte-identical to "
-            f"`{Path(provenance['observations_file']).name}`. Its table is not shown here. "
+            f"`{provenance['crates_tree'][:8]}`. It retains the original release observation "
+            f"snapshot ([`{Path(provenance['observations_file']).name}`]"
+            f"({provenance['observations_file'].split('benchmarks/', 1)[-1]})); "
+            "current release scorecards are re-measured separately. Its table is not shown here. "
         )
     else:
         description = (

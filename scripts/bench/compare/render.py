@@ -12,6 +12,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 BENCH = REPO / "scripts/bench"
 import compare  # noqa: E402
+import row_sources  # noqa: E402
+from comparison_availability import unavailable_tools  # noqa: E402
 from layer_display import layer_display_name  # noqa: E402
 from markdown_table import table_header  # noqa: E402
 from tagged_gaze import check_public  # noqa: E402
@@ -61,8 +63,18 @@ def digest_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def validate_current(report: dict[str, object]) -> None:
+def validate_current(report: dict[str, object], source_path: Path | None = None) -> None:
     """Reject a published comparison when benchmark inputs have changed."""
+    if "row_sources" in report:
+        if source_path is None:
+            raise ValueError("mixed-source validation requires the report path")
+        row_sources.validate(report, source_path)
+        for name in ("base", "supplement"):
+            snapshot_path = source_path.parent / report["row_sources"][name]["path"]
+            snapshot = json.loads(snapshot_path.read_bytes())
+            # Sparse inference has no finalizer/chart fields; inherited publication does.
+            validate_current(snapshot, snapshot_path)
+        return
     corpus = report["corpus"]
     expected = {
         "scorer": (report["scorer_sha256"], digest_file(BENCH / "gaze_bench_score.py")),
@@ -100,20 +112,24 @@ def validate_current(report: dict[str, object]) -> None:
             report.get("cpu_contention_sha256"),
             digest_file(Path(__file__).with_name("cpu_contention.py")),
         )
-        expected["README chart configurations"] = (
-            report.get("chart_config_sha256"),
-            digest_file(Path(__file__).with_name("chart-configs.json")),
-        )
-        expected["report finalizer"] = (
-            report.get("finalizer_sha256"),
-            digest_file(Path(__file__).with_name("finalize_report.py")),
-        )
+        if set(report.get("tools", {})) != set(row_sources.REPLACED):
+            expected["README chart configurations"] = (
+                report.get("chart_config_sha256"),
+                digest_file(Path(__file__).with_name("chart-configs.json")),
+            )
+            expected["report finalizer"] = (
+                report.get("finalizer_sha256"),
+                digest_file(Path(__file__).with_name("finalize_report.py")),
+            )
     for version, path in compare.CONTRACTS.items():
         expected[f"{version} scored labels"] = (
             report["contracts"][version], compare.runner.load_scored_label_contract(REPO, path).sha256,
         )
     for name, (recorded, current) in expected.items():
-        if recorded != current:
+        compatible = (row_sources.adapter_is_compatible(recorded, current) if name == "comparison adapter"
+                      else row_sources.finalizer_is_compatible(recorded, current) if name == "report finalizer"
+                      else recorded == current)
+        if not compatible:
             raise ValueError(f"{name} changed; rerun affected competitor rows on the same corpus")
     pack_dir = REPO / "docs/reference/benchmarks/variant-packs"
     current_packs = {
@@ -149,8 +165,24 @@ def agentic_corpus_note(report: dict[str, object]) -> str:
     )
 
 
+def skipped_language_footnote(tools: dict) -> str:
+    language_skips = [
+        f"{name}/{layer_display_name(layer)}: " + ", ".join(f"{language}={count:,}" for language, count in row.get("skipped_languages", {}).items())
+        for name, tool in tools.items() for layer, row in tool["contracts"]["v4"].items()
+        if row.get("skipped_languages")
+    ]
+    return ("Skipped-language document counts: " + "; ".join(language_skips)
+            + ". Every skipped document counts as fully missed, including all its gold bytes.") if language_skips else ""
+
+
+def unavailable_summary_row(version: str, layer: str, name: str, latency_publishable: bool) -> str:
+    return (f"| {version} | {layer_display_name(layer)} | {name} | N/A | N/A | N/A | N/A | N/A | "
+            + ("N/A | N/A |" if latency_publishable else "unavailable |"))
+
+
 def render(report: dict[str, object], source: str, tuned: dict[str, object] | None = None,
            history_path: Path | None = None) -> str:
+    unavailable = unavailable_tools(report)
     gaze = report["gaze"]
     tools = report["tools"]
     versions = ("v4", "v3", "v2", "v1")
@@ -161,7 +193,7 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
     required = {"presidio-all", "presidio-en", "presidio-en-de", "gliner"}
     if report.get("schema_version", 1) >= 2:
         required.update(set(compare.TOOLS) - {"opf"})
-    if not required.issubset(tools) or ("opf" not in tools and "opf" not in report.get("skipped", {})):
+    if not required.issubset(tools) or ("opf" not in tools and "opf" not in report.get("skipped", {}) and "opf" not in unavailable):
         raise ValueError("public comparison needs every configured competitor or an explicit OPF skip")
     layer_ids = list(report["corpus"]["layers"])
     revisions = {row["gaze_revision"] for row in gaze.values()}
@@ -206,7 +238,8 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
                 if row["latency"]["samples"] != row["processed_documents"]:
                     raise ValueError(f"{name} latency includes skipped documents")
 
-    opf_description = "OpenAI Privacy Filter (OPF) skipped."
+    opf_description = ("OpenAI Privacy Filter (OPF) unavailable after two 600-second socket timeouts."
+                       if unavailable else "OpenAI Privacy Filter (OPF) skipped.")
     if "opf" in tools:
         runtime = tools["opf"]["provenance"]["runtime"]
         opf_source = runtime.get("source_revision")
@@ -261,6 +294,12 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
         + (" The measured call scopes differ by tool, so latency is descriptive."
            if latency_publishable else ""),
         "",
+        "Fresh v0.17.0 external byte-micro scores are in the "
+        "[external release panels](README.md#v017-final-candidate-evidence). "
+        "They measure different datasets and do not refresh the comparator captures on this page. "
+        "Only the two scrubadub rows were freshly measured for the v0.17 release; "
+        "other comparator and tuned Presidio measurements keep their original identities.",
+        "",
         "Competitor runtimes: Presidio "
         f"{tools['presidio-en']['provenance']['analyzer_version']} with spaCy "
         f"{tools['presidio-en']['provenance']['spacy_version']}; GLiNER "
@@ -269,7 +308,8 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
         f"GLiNER uses model-card labels, library threshold 0.5. "
         f"{opf_description}",
         "",
-        f"Aggregate source: [`{source}`]({source}). Raw document outputs are not published.",
+        f"Aggregate source: [`{source}`]({source}). Raw document outputs are not published. "
+        + row_sources.publication_note(report),
         "",
         *table_header(summary_columns),
     ]
@@ -277,6 +317,8 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
         for layer in layer_ids:
             for name in ORDER:
                 if name not in tools:
+                    if name in unavailable:
+                        lines.append(unavailable_summary_row(version, layer, name, latency_publishable))
                     continue
                 row = tools[name]["contracts"][version][layer]
                 fp = row["false_positive_bytes"]
@@ -295,6 +337,14 @@ def render(report: dict[str, object], source: str, tuned: dict[str, object] | No
                     f"{row.get('skipped_documents', 0):,} | {row.get('skipped_gold_bytes', 0):,} | "
                     + timing
                 )
+    footnote = skipped_language_footnote(tools)
+    if footnote:
+        lines.extend(["", footnote])
+    if unavailable:
+        receipt = report["unavailable"]["opf"]
+        lines.extend(["", "**OPF: N/A (unavailable).** Two unchanged attempts reached the declared "
+                      "600-second socket timeout. No partial metrics are published; the cause remains unproven. "
+                      "Attempt log SHA-256 receipts: " + ", ".join(f"`{item['log_sha256']}`" for item in receipt["attempts"]) + "."])
     if report.get("schema_version", 1) >= 2:
         lines.extend([
             "", "## Heldout safety and entity metrics", "",
@@ -356,8 +406,13 @@ TUNED_BASELINES = ("presidio-all", "presidio-strong", "presidio-strong-high-reca
 def validate_tuned(tuned: dict[str, object], report_path: Path) -> None:
     """Reject a tuned report whose inputs or code changed, or whose replay is unproven."""
     here = Path(__file__).parent
+    comparison = json.loads(report_path.read_bytes())
+    anchor_path = report_path
+    if "row_sources" in comparison:
+        row_sources.validate(comparison, report_path)
+        anchor_path = report_path.parent / comparison["row_sources"]["base"]["path"]
     expected = {
-        "comparison report": (tuned["comparison_sha256"], digest_file(report_path)),
+        "comparison report": (tuned["comparison_sha256"], digest_file(anchor_path)),
         "comparison adapter": (tuned["compare_sha256"], digest_file(Path(compare.__file__))),
         "comparison metrics": (tuned["comparison_metrics_sha256"], digest_file(here / "comparison_metrics.py")),
         "scorer": (tuned["scorer_sha256"], digest_file(BENCH / "gaze_bench_score.py")),
@@ -366,7 +421,9 @@ def validate_tuned(tuned: dict[str, object], report_path: Path) -> None:
            for name in TUNED_CODE},
     }
     for name, (recorded, current) in expected.items():
-        if recorded != current:
+        compatible = (row_sources.adapter_is_compatible(recorded, current)
+                      if name == "comparison adapter" else recorded == current)
+        if not compatible:
             raise ValueError(f"{name} changed; rerun tuned_presidio/tune.py measure")
     if tuned.get("harness_dirty") is not False or not tuned["anchor"]["equal"]:
         raise ValueError("tuned Presidio needs a clean harness and the reproduced presidio-all anchor")
@@ -532,8 +589,8 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
                     f"{test['char_level']['f2']:.3f} | {test['typed_entities']['f2']:.3f} |")
     version, gaze = _gaze_release_c(history_path)
     lines.extend([
-        "", f"Against the latest Gaze release ({version}) on all of {layer_display_name('C')}, the only layer "
-        "that release was measured on in this corpus's form. The tuned-here rows include the validation half "
+        "", f"Against the latest Gaze release ({version}) on all of {layer_display_name('C')}. "
+        "This table covers layer C. The tuned-here rows include the validation half "
         "they were selected on, which can only flatter them. False positives are after v4's gold-gap credit.", "",
         *table_header([("Contract", False), ("Configuration", False), ("Leaked B", True), ("FP B", True),
                        ("Char F2", True)]),
@@ -575,6 +632,30 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
     return lines
 
 
+def input_paths(report: dict, path: Path) -> list[Path]:
+    """Evidence read by validation/rendering, including optional tuned inputs."""
+    here = Path(__file__).parent
+    paths = [path, *(path.with_name(name) for name in (
+        TUNED_NAME, "presidio-tuned-selection.json", "presidio-tuned-overlap.json",
+        "release-history.json", "release-char-level.json")),
+        *(here / name for name in (
+            "compare.py", "row_sources.py", "finalize_report.py", "chart-configs.json",
+            "label-map.json", "model-wheels.json", "requirements.lock", "requirements-scrubadub.lock",
+            "comparison_metrics.py", "cpu_contention.py")),
+        *(here / "tuned_presidio" / name for name in TUNED_CODE),
+        *(BENCH / name for name in ("gaze_bench_score.py", "dataiku_en_de_gaze_bench.py", "opf_daemon.py")),
+        REPO / "crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl",
+        compare.agentic.CUE_VOCABULARY_PATH,
+        *(REPO / contract for contract in compare.CONTRACTS.values() if contract is not None),
+        REPO / compare.agentic.SCORED_LABELS_PATH,
+        *(REPO / contract for contract in compare.agentic.HISTORICAL_CONTRACTS.values()),
+        *(REPO / "docs/reference/benchmarks/variant-packs").glob("*.jsonl")]
+    if "row_sources" in report:
+        paths.append(row_sources.native_receipt_path(path))
+        paths.extend(path.parent / report["row_sources"][name]["path"] for name in ("base", "supplement"))
+    return paths
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
@@ -582,7 +663,8 @@ def main() -> None:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     report = json.loads(args.report.read_text(encoding="utf-8"))
-    validate_current(report)
+    row_sources.protect_inputs(args.page, input_paths(report, args.report))
+    validate_current(report, args.report)
     tuned_path = args.report.with_name(TUNED_NAME)
     tuned = None
     if tuned_path.exists():

@@ -35,6 +35,13 @@ Run `gaze setup --force` to regenerate an existing policy with credential
 protection, or add `"secrets"` to `[policy.rulepacks].bundled` in your policy.
 Existing policies keep their selected rulepacks until you update them.
 
+The default Nym operating point now maps eligible `GIVEN_NAME` and `SURNAME`
+predictions to reversible `Name` tokens at thresholds of 0.5. This also applies
+to existing Nym policies without an explicit label override. Explicit label and
+threshold overrides stay in effect. Review these overrides to adopt name
+protection. The pinned model weights and stored restore manifests need no
+migration.
+
 ### Action required: valid recognizer registration
 
 Every recognizer ID must be unique, and each collision membership must name an

@@ -174,6 +174,6 @@ and [CLI exit codes](../../crates/gaze-cli/README.md#safety-net).
 ### Nym-small
 
 Run `gaze setup`, then `gaze clean --policy gaze.toml`. Nym defaults to building
-numbers, licence plates, usernames, and dates of birth. Configure allowlists
+numbers, licence plates, usernames, dates of birth, given names, and surnames. Configure allowlists
 and thresholds in `[safety_net.nym]`; `[safety_net].backend = "nym"` activates it.
 See the [Nym contract, measurements, and open items](../../docs/explanation/safety-net/safety-nets.md#nym-small-adapter).

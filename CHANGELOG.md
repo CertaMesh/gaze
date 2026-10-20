@@ -17,6 +17,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   code-field rule; ambiguous password metadata stays fail-closed. Whole Argon2
   encodings no longer split at an inner postal-code candidate (#824).
 
+
+## [0.17.0] - 2026-10-19
+
+v0.17.0 expands credential and personal-name protection, tightens fail-closed
+boundaries, and preserves reversible manifests. Fresh merged-source measurements
+pass the accepted own-policy numeric and external F2 criteria. Strict own-policy
+identity remains `not_comparable`; TRACE's original net-byte gate fails.
+[Evidence and limits](docs/reference/benchmarks/README.md#v017-final-candidate-evidence)
+remain provisional until actual tag and package checks.
+
+### Security
+
+- **Personal names with Nym.** The setup policy maps eligible `GIVEN_NAME` and
+  `SURNAME` predictions to reversible `Name` tokens, joining adjacent parts over
+  inline whitespace. Both thresholds are 0.5; rule and NER winners keep
+  precedence. Record boundaries stop joins and BIO continuation. Audit records
+  retain contributing labels and thresholds; policy overrides remain supported
+  (#813).
 - **Credentials in setup policies.** `gaze setup` now includes `secrets` by
   default, protecting supported API keys, access and session tokens, JWTs and
   passwords. Library callers and hand-written policies still select rulepacks
@@ -56,6 +74,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **MCP doctor probes.** Concurrent writable-directory checks use separate
+  temporary files, preserve existing files, and report cleanup failures.
 - **Custom rulepack dictionaries in `CorePipeline`.** Policy-loaded inline and
   file terms reach every `pseudonymize_text` call and remain available through
   `dictionaries()` and `into_parts()`. Unreadable files and unsupported enabled
@@ -111,7 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   measures warmed mutations under its primary scoring contract, and tier-four
   gating requires positive semantic proof (#765, #790, #793, #804).
 - **Source snapshot bound.** Private benchmark source archives allow up to
-  128 MiB; Cargo, bridge and request stream limits remain 64 MiB, with archive
+  256 MiB to accommodate the full source evidence inventory at a higher bounded
+  memory cost; Cargo, bridge and request stream limits remain 64 MiB, with archive
   integrity checks unchanged (#796).
 - **Documentation.** Root guides, tutorials, how-to pages, explanations and
   references were shortened, runtime boundaries gained diagrams, and the crate
@@ -120,24 +141,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known limitations
 
+- The existing Nym weights are unchanged. The retained safety-net ablation fails
+  the benign BSN counterweight guard at 0 → 18 false-positive bytes under both
+  v2 and v1. The retained v0.16.0 → v0.17.0 release comparison has 18 → 18 bytes
+  on that counterweight. [Fresh release evidence](docs/reference/benchmarks/README.md#v017-final-candidate-evidence)
+  passes the own-policy numeric criteria while retaining the component failure,
+  strict identity mismatch and unmet zero-leak readiness.
+- The generated name benchmark reuses six full names per split across surfaces;
+  it does not establish broad personal-name recall. Independent calibration
+  recovered eligible pieces in only four of 18 lowercase cases, with no full
+  lowercase pair meeting both thresholds. Neural name recovery adds false
+  positives and is less explainable than rules. See the [calibration and joining
+  notes](docs/explanation/safety-net/nym-person-names.md) (#813).
 - Direct phone labels intentionally record failed parses. Date-shaped numeric
   values, year ranges and SSN-shaped values after a phone label can therefore
   become phone tokens; parser-valid newline continuations can also be protected.
   See the [validator contract](docs/explanation/detection/validator-veto.md#recorded-failures) (#766).
 - Presidio Research native-harness and PB_DATA third-party measurement work
-  (F1) is deferred past v0.17. Benchmark claims for this release use Gaze's own
-  benchmark, including tuned-Presidio rows; they do not claim a fresh independent
-  reproduction of the deferred work.
+  (F1) is deferred past v0.17. Fresh external release comparisons use byte-micro
+  F2 on sealed OpenPII/Gretel, PIIBench-commercial and PII-TRACE. These results
+  do not establish a fresh vendor-evaluator reproduction of the deferred work.
 
 ### Benchmark
 
-- Release-commit results: **TBD (release-commit scorecard)**. Headline contract v4
-  scores `PASSWORD` and `SECURITYTOKEN`; v1–v3 remain historical views. Final
-  evidence must refresh every displayed release with the current harness and
-  include per-layer leaked bytes, false-positive bytes, refusals, exact restores
-  and valid manifests. See the [benchmark methodology and hardware
-  specification](docs/reference/benchmarks/README.md#how-to-reproduce) and
-  [`run_no_opf_benchmark.py`](scripts/bench/run_no_opf_benchmark.py).
+- Tagged v0.17.0 retains measured source `86195a8f`, whose raw crates tree
+  matches the signed release tag. Headline contract v4 reports 9,717 leaked
+  bytes and 15,224 false-positive bytes on layer C. Independent v1/v2 captures
+  and v3/v4 observation replays remain distinct. All 17,780 documents restore
+  exactly with valid manifests and zero refusals.
+- All three fresh external byte-micro F2 comparisons pass the accepted criterion.
+  TRACE's original net-byte gate fails. Strict own-policy identity remains
+  `not_comparable`, and zero-leak readiness remains unmet. The generated
+  [external release panels and per-layer evidence](docs/reference/benchmarks/README.md#v017-final-candidate-evidence)
+  retain the original measurement identities, receipts and historical rows.
+  See the [benchmark methodology and hardware](docs/reference/benchmarks/README.md#how-to-reproduce)
+  and [`run_no_opf_benchmark.py`](scripts/bench/run_no_opf_benchmark.py).
 
 ## [0.16.0] - 2026-10-08
 
@@ -4062,7 +4100,8 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/CertaMesh/gaze/compare/v0.16.0...v0.17.0
 [0.14.0]: https://github.com/CertaMesh/gaze/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/CertaMesh/gaze/compare/v0.12.0...v0.13.0
 [0.6.4]: https://github.com/EmpireTwo/gaze/compare/v0.6.3...v0.6.4

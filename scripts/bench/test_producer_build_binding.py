@@ -30,8 +30,9 @@ class OwnerStateTests(unittest.TestCase):
                     with self.assertRaises(ProducerFailure) as caught:
                         binding.BuildOwner(deadline=time.monotonic()+30, cap=cap)
                     self.assertEqual(caught.exception.code, 'invalid_limits')
+        binding.BuildOwner(deadline=time.monotonic()+30, stdout_cap=268435456)
         with self.assertRaises(ProducerFailure) as caught:
-            binding.BuildOwner(deadline=time.monotonic()+30, stdout_cap=134217729)
+            binding.BuildOwner(deadline=time.monotonic()+30, stdout_cap=268435457)
         self.assertEqual(caught.exception.code, 'invalid_limits')
 
     def test_no_signal_after_reap(self):
@@ -50,6 +51,21 @@ class OwnerStateTests(unittest.TestCase):
             with self.assertRaises(ProducerFailure) as caught:
                 binding.platform_preflight()
             self.assertEqual(caught.exception.code, 'invalid_state')
+
+    def test_missing_platform_capability_rejected_before_spawn(self):
+        capabilities = ('waitid', 'WNOWAIT', 'O_NOFOLLOW', 'O_NONBLOCK')
+        for missing in capabilities:
+            with self.subTest(missing=missing), \
+                    patch.object(sys, 'version_info', (3, 13)), \
+                    patch.object(signal, 'getsignal', return_value=signal.SIG_DFL), \
+                    patch.dict(os.__dict__, {key: object() for key in capabilities}), \
+                    patch.object(binding.subprocess, 'Popen') as spawn:
+                del os.__dict__[missing]
+                owner = binding.BuildOwner(deadline=time.monotonic()+30)
+                with self.assertRaises(ProducerFailure) as caught:
+                    owner.run(['synthetic'])
+                self.assertEqual(caught.exception.code, 'unsupported_platform')
+                spawn.assert_not_called()
 
     def test_ambiguous_process_metadata_rejected(self):
         for data in (b'1 1 Z', b'1 1 Z\n1 1 Z\n', b'1 bad Z\n', b'1 1 ?\n'):
@@ -70,6 +86,27 @@ class OwnerStateTests(unittest.TestCase):
                 else:
                     with self.assertRaises(ProducerFailure):
                         owner.signal_group(signal.SIGTERM)
+
+    def test_foreign_unknown_states_do_not_affect_owned_members(self):
+        data = b'6493 6485 ?E\n7 7 Z\n8 7 S+\n9 8 \xff\n'
+        with patch.object(binding, 'metadata', return_value=data):
+            self.assertEqual(binding.group_members(7, time.monotonic()+3),
+                             {7: 'Z', 8: 'S+'})
+
+    def test_owned_unknown_states_are_refused(self):
+        for state in (b'?E', b'?', b'E', b'\xff'):
+            with self.subTest(state=state), \
+                    patch.object(binding, 'metadata', return_value=b'7 7 '+state+b'\n'):
+                with self.assertRaises((ProducerFailure, UnicodeDecodeError)):
+                    binding.group_members(7, time.monotonic()+3)
+
+    def test_foreign_malformed_identities_are_refused(self):
+        for row in (b'bad 8 ?E', b'9 bad ?E', b'0 8 ?E',
+                    b'9 8 ?E\n9 9 Z', b'7 8 ?E', b'9 8 ?E extra'):
+            with self.subTest(row=row), \
+                    patch.object(binding, 'metadata', return_value=b'7 7 Z\n'+row+b'\n'):
+                with self.assertRaises(ProducerFailure):
+                    binding.group_members(7, time.monotonic()+3)
 
 
 class CargoSelectionTests(unittest.TestCase):
@@ -176,16 +213,16 @@ class SnapshotTests(unittest.TestCase):
         # Header plus payload is 9,728 bytes. End markers need another record.
         self.assert_snapshot({'Cargo.lock': b'#'+b'x'*8704})
 
-    def test_snapshot_just_under_128_mib(self):
-        # The last complete 10 KiB tar record below 128 MiB, with one header
+    def test_snapshot_just_under_256_mib(self):
+        # The last complete 10 KiB tar record below 256 MiB, with one header
         # and two end markers. The payload is synthetic, not a Cargo input.
-        size = self.assert_snapshot({'Cargo.lock': b'#' + b'x' * 134214143})
-        self.assertEqual(size, 134215680)
+        size = self.assert_snapshot({'Cargo.lock': b'#' + b'x' * 268429823})
+        self.assertEqual(size, 268431360)
 
-    def test_snapshot_just_over_128_mib(self):
-        # The next complete tar record above 128 MiB is rejected.
+    def test_snapshot_just_over_256_mib(self):
+        # The next complete tar record above 256 MiB is rejected.
         with self.assertRaises(ProducerFailure) as caught:
-            self.assert_snapshot({'Cargo.lock': b'#' + b'x' * 134224383})
+            self.assert_snapshot({'Cargo.lock': b'#' + b'x' * 268440063})
         self.assertEqual(caught.exception.code, 'output_limit')
 
     def assert_snapshot(self, files):
@@ -658,6 +695,9 @@ class BindingRegressionTests(unittest.TestCase):
                     return 0
                 process.wait.side_effect = wait
                 observed = types.SimpleNamespace(si_status=0, si_code=os.CLD_EXITED)
+                def observe():
+                    owner.observed = observed
+                    return observed
                 selector = MagicMock()
                 selector.__enter__.return_value = selector
                 selector.get_map.return_value = {}
@@ -684,7 +724,7 @@ class BindingRegressionTests(unittest.TestCase):
                         patch.object(binding.subprocess, 'Popen', return_value=process), \
                         patch.object(binding.selectors, 'DefaultSelector', return_value=selector), \
                         patch.object(os, 'set_blocking'), \
-                        patch.object(os, 'waitid', return_value=observed), \
+                        patch.object(owner, 'observe', side_effect=observe), \
                         patch.object(owner, 'settled', side_effect=settled), \
                         patch.object(os, 'killpg', side_effect=lambda *args: log.append(('signal', owner.state))):
                     sys.settrace(trace)
@@ -826,11 +866,11 @@ while remaining:
 '''
     for kind, stream, ceiling in (
             ('cargo', 'stdout', 67108864), ('cargo', 'stderr', 67108864),
-            ('archive', 'stdout', 134217728), ('archive', 'stderr', 67108864)):
+            ('archive', 'stdout', 268435456), ('archive', 'stderr', 67108864)):
         for offset in (-1, 1):
             label = f'{kind}_{stream}_{"under" if offset < 0 else "over"}'
             binding.check_time(suite_deadline-binding.PROCESS_RESERVE)
-            options = {'stdout_cap': 134217728} if kind == 'archive' else {}
+            options = {'stdout_cap': 268435456} if kind == 'archive' else {}
             owner = binding.BuildOwner(deadline=min(suite_deadline, time.monotonic()+30),
                                        seconds=15, **options)
             received = 0

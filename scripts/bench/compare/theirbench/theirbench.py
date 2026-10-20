@@ -483,7 +483,7 @@ def main() -> int:
         "harness_revision": harness_state()[0], "harness_dirty": harness_state()[1],
         "gaze_crates_tree": compare.crates_tree("HEAD"),
         "label_maps_sha256": compare.digest_file(loaders.LABEL_MAPS),
-        "comparison_revision": backends.COMPARISON_REVISION, "comparison_sha256": pinned,
+        "comparison_revision": backends.CURRENT_COMPARISON_REVISION, "comparison_sha256": pinned,
         "chart_configs": backends.chart_configs(),
         "mapping_sha256": compare.digest_file(compare.MAP_PATH),
         "hardware": platform.platform(), "device": "cpu",
@@ -503,7 +503,7 @@ def main() -> int:
             raise SystemExit("--rescore needs a measured --output report")
         rescore(report, splits, composed, common, args.predictions_dir)
         report["rescored_with"] = {
-            "comparison_revision": backends.COMPARISON_REVISION, "comparison_sha256": pinned,
+            "comparison_revision": backends.CURRENT_COMPARISON_REVISION, "comparison_sha256": pinned,
             "harness_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=compare.REPO, text=True).strip(),
             "harness_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=compare.REPO, text=True).strip()),
             "at": datetime.now(timezone.utc).isoformat(),
