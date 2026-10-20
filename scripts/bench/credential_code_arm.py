@@ -16,6 +16,7 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[2]
 NEW_IDS = {"password.hash", "password.code", "security_token.code"}
 DELTA = ROOT / "scripts/bench/mechanisms/password-code-credentials.toml"
+RULEPACK_PATH = Path("target/bench-mechanisms/password-code-credentials.toml")
 
 
 def split_rulepack(source):
@@ -40,13 +41,15 @@ def prepare(source, output):
     old, new = split_rulepack((ROOT / "crates/gaze-recognizers/embedded/secrets.toml").read_text())
     output.mkdir(parents=True, exist_ok=True)
     old_path = output.resolve() / "base-secrets.toml"
-    new_path = output.resolve() / "password-code-credentials.toml"
-    # Absolute paths avoid dependence on the benchmark runner's working directory.
+    new_path = ROOT / RULEPACK_PATH
+    new_path.parent.mkdir(parents=True, exist_ok=True)
+    # The committed delta uses this repository-relative generated input.
+    # Run both arms from ROOT, as the benchmark runner does.
     base = copy.deepcopy(policy)
     base["policy"]["rulepacks"]["bundled"].remove("secrets")
     base["policy"]["rulepacks"].setdefault("paths", []).append(str(old_path))
     candidate = copy.deepcopy(base)
-    candidate["policy"]["rulepacks"]["paths"].append(str(new_path))
+    candidate["policy"]["rulepacks"]["paths"].append(RULEPACK_PATH.as_posix())
 
     def rewrite(expected):
         result = source
@@ -66,9 +69,9 @@ def prepare(source, output):
     (output / "base.toml").write_text(rewrite(base))
     (output / "candidate.toml").write_text(rewrite(candidate))
     delta = tomllib.loads(DELTA.read_text())
-    if delta != {"mechanism_delta": {"append_rulepack_paths": ["password-code-credentials.toml"]}}:
+    if delta != {"mechanism_delta": {"append_rulepack_paths": [RULEPACK_PATH.as_posix()]}}:
         raise ValueError("committed credential mechanism delta differs")
-    (output / "delta.toml").write_text('[mechanism_delta]\nappend_rulepack_paths = ' + json.dumps([str(new_path)]) + '\n')
+    (output / "delta.toml").write_text(DELTA.read_text())
     return base, candidate
 
 
@@ -78,7 +81,7 @@ def main():
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     prepare(args.setup_policy.read_text(), args.output_dir)
-    print("Prepared base.toml, candidate.toml and delta.toml; measurement pending.")
+    print(f"Prepared base.toml, candidate.toml, delta.toml and {RULEPACK_PATH}; measurement pending.")
 
 
 if __name__ == "__main__":
