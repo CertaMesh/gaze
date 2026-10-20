@@ -415,7 +415,7 @@ def corpus(repo: Path, contract: str, dataset: Path) -> dict[str, list[score.Doc
     }
 
 
-def main() -> None:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--binary", required=True, type=Path)
@@ -428,9 +428,18 @@ def main() -> None:
     parser.add_argument("--shipping-defaults", action="store_true", help="measure product defaults without oracle kind overrides")
     parser.add_argument("--baseline-only", action="store_true", help="score no-record requests with a separate binary")
     parser.add_argument("--binary-source-commit", help="source commit of --binary when it differs from --repo")
-    args = parser.parse_args()
+    parser.add_argument("--cross-check", action="store_true",
+                        help="explicit legacy contract-specific oracle capture; not record-once evidence")
+    args = parser.parse_args(argv)
+    if not args.cross_check:
+        parser.error("legacy contract-specific capture requires --cross-check; gain evidence must capture once and replay")
     if args.baseline_only and not args.binary_source_commit:
         parser.error("--baseline-only requires --binary-source-commit")
+    return args
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    args = parse_args(argv)
     repo = args.repo.resolve()
     policy_path = args.policy.resolve()
     policy = tomllib.loads(policy_path.read_text(encoding="utf-8"))

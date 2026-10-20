@@ -301,7 +301,7 @@ NBSP-class separators into spaces before detection, so an NBSP copy is an exact
 match. Such pairs, and the other pairs that exercise no probe kind, are typed
 controls in their own buckets. `python3 scripts/bench/known_record_cells.py`
 prints the pinned manifest. `... known_record_cells.py prove --binary <clean_for_bench>
---policy <policy> --model-dir <ner> --contract v2 --output <json>` scores layer K
+--policy <policy> --model-dir <ner> --contract v2 --cross-check --output <json>` scores layer K
 three ways (no record, record with the default kinds, record with the probe kinds
 on) and reports bytes per bucket. Its `kind_switch_effective` is false when the
 binary ignores the per-request `record_match_kinds`.
@@ -321,11 +321,14 @@ The hash depends on the checkout path and toolchain; a rustup 1.96 build
 differs. Compare the proof's `binary_sha256` field rather than expecting a
 byte-identical build elsewhere.
 
-For a shipping decision, `known_record_arm.py --shipping-defaults` scores the
-product's default match kinds without per-request overrides. Run it under v2
-and v1, and use `--baseline-only --binary-source-commit <main-sha>` with main's
-own producer and setup policy to score the same documents without a record.
-`known_record_shipping_gate.py` requires all five layers, compares the full
+The aggregate-only oracle drivers `known_record_arm.py` and
+`known_record_cells.py prove` require `--cross-check`. They retain their legacy
+contract-specific experiment paths and cannot supply record-once gain evidence.
+`known_record_arm.py --shipping-defaults --cross-check` scores the product's
+default match kinds without per-request overrides. Its
+`--baseline-only --binary-source-commit <main-sha>` mode uses main's own producer
+and setup policy without a record. `known_record_shipping_gate.py` checks
+retained five-layer reports, compares the full
 no-record baseline scorecards to main, and reports per-class, per-match-kind
 attribution. The committed [shipping result](../../docs/reference/benchmarks/known-record-oracle.md#shipping-default-gate)
 shows the exact commands' aggregate outputs.
