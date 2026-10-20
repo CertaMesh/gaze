@@ -362,3 +362,125 @@ fn ambiguous_password_metadata_remains_fail_closed_with_real_passphrases() {
         assert_value(&format!("array('password'=>'{value}');"), value, "password");
     }
 }
+
+#[derive(Clone, Default)]
+struct HashAudit(std::sync::Arc<std::sync::Mutex<Vec<gaze::RedactionEntry>>>);
+
+impl gaze::RedactionLogger for HashAudit {
+    fn log(&self, entry: &gaze::RedactionEntry) -> Result<(), gaze::RedactionLogError> {
+        self.0.lock().unwrap().push(entry.clone());
+        Ok(())
+    }
+}
+
+fn assert_escaped_hash(raw: &str, value: &str) {
+    let audit = HashAudit::default();
+    let core = CorePipelineConfig::new()
+        .with_bundled_rulepack("secrets")
+        .build()
+        .unwrap()
+        .into_pipeline()
+        .with_redaction_logger(audit.clone());
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let (clean, spans, _, _) = core
+        .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+            &session,
+            raw,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+            SafetyNetPolicy::default(),
+        )
+        .unwrap();
+    assert_eq!(spans.len(), 1, "one complete hash: {raw:?}; {spans:?}");
+    assert_eq!(&raw[spans[0].raw_span.clone()], value, "split hash");
+    let gaze::CleanDocument::Text(clean) = clean else {
+        panic!("text")
+    };
+    assert_eq!(core.restore_strict_text(&session, &clean).unwrap(), raw);
+    assert!(!clean.contains(value));
+    assert!(audit
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|entry| !entry.conflict_loser
+            && entry.recognizer_id.as_deref() == Some("password.hash")));
+}
+
+fn source_escape_fixtures(family: &str) {
+    let rows: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/password_hash_source_escapes.json")).unwrap();
+    for row in rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["family"] == family)
+    {
+        let raw = row["input"].as_str().unwrap();
+        let value = row["value"].as_str().unwrap();
+        assert_eq!(found("password.hash", raw), vec![value], "{raw}");
+        assert_escaped_hash(raw, value);
+    }
+}
+
+#[test]
+fn escaped_crypt_salts_count_decoded_units_at_producer_limits() {
+    source_escape_fixtures("crypt");
+    for (kind, width, limit) in [("1", 22, 8), ("5", 43, 16), ("6", 86, 16)] {
+        for quote in ["'", "''", r"\'"] {
+            let salt = format!("{}{}", "a".repeat(limit - 1), quote);
+            let hash = format!("${kind}${salt}${}", "a".repeat(width));
+            assert_escaped_hash(&format!("INSERT INTO accounts VALUES ('{hash}');"), &hash);
+            let invalid = format!("${kind}$a{salt}${}", "a".repeat(width));
+            assert!(
+                found("password.hash", &invalid).is_empty(),
+                "overlong salt: {invalid}"
+            );
+            for size in [width - 1, width + 1] {
+                let invalid = format!("${kind}${salt}${}", "a".repeat(size));
+                assert!(
+                    found("password.hash", &invalid).is_empty(),
+                    "checksum: {invalid}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn escaped_json_slashes_are_complete_hash_alphabet_units() {
+    source_escape_fixtures("json");
+    for hash in [
+        format!("$2b$12${}", "/".repeat(53)),
+        "$argon2id$v=19$m=8192,t=1,p=1$////$////".into(),
+        format!("$scrypt$ln=16,r=8,p=1$////${}", "/".repeat(43)),
+        format!("$7${}{}", "/".repeat(33), "$".to_string() + &"/".repeat(43)),
+        format!("$y$j9T$////${}", "/".repeat(43)),
+        format!("$P${}", "/".repeat(31)),
+        format!("pbkdf2_sha256$1000$salt${}=", "/".repeat(43)),
+        format!("pbkdf2_sha1$1000$salt${}=", "/".repeat(27)),
+        format!("scrypt$1024$salt$8$1${}==", "/".repeat(86)),
+    ] {
+        let encoded = hash.replace('/', r"\/");
+        assert_escaped_hash(&format!(r#"{{"stored_digest":"{encoded}"}}"#), &encoded);
+        for suffix in [r"\", r"\q", r"\u002f", "_tail"] {
+            assert!(found("password.hash", &format!("{encoded}{suffix}")).is_empty());
+        }
+    }
+    for count in [52, 54] {
+        let invalid = format!("$2b$12${}", r"\/".repeat(count));
+        assert!(
+            found("password.hash", &invalid).is_empty(),
+            "bcrypt width: {invalid}"
+        );
+    }
+    for invalid in [
+        r"$argon2id$v=19$m=8192,t=1,p=1$aaaa$aaa\/",
+        r"$argon2id$v=19$m=8192,t=1,p=1$aaa\/$aaaa",
+    ] {
+        // Three letters plus one escaped slash is valid, but removing a decoded
+        // letter must never leave a complete component or a truncated match.
+        let broken = invalid.replace("aaa", "aa");
+        assert!(found("password.hash", &broken).is_empty());
+    }
+}

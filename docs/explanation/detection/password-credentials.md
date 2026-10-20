@@ -20,7 +20,14 @@ Argon2 salts and digests require at least four base64 characters each, with no
 upper cutoff. Passlib scrypt salts allow up to 1,366 base64 characters, matching
 its 1,024-byte limit. SHA-crypt and MD5-crypt salt components accept characters
 other than dollar, colon, newline and NUL, following libxcrypt's parser.
-The matcher bounds these salts at 16 and 8 characters respectively; libxcrypt
+The matcher bounds these salts at 16 and 8 decoded characters respectively.
+SQL doubled quotes (`''`) and MySQL backslash quotes (`\'`) count as one
+character. JSON escaped slashes (`\/`) count as one alphabet character in
+hash components, including fixed-width checksums. The full serialized source
+is one manifest span; strict restore returns the original escape spelling.
+A trailing backslash cannot terminate a hash match. These are supported source
+escapes, not a general source-language decoder. Other escapes are outside this
+shape contract; libxcrypt
 truncates at that many bytes. A Unicode salt over the producer's byte limit
 can therefore still match the stored-encoding shape. Salt and checksum
 alphabets are distinct; checksums retain exact crypt-base64 widths. Django salts are nonempty and exclude
