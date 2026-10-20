@@ -464,6 +464,11 @@ jobs:
   workspace-default:
     name: workspace default features
     runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
     steps:
       - name: Free disk space (ubuntu-latest preinstalled bloat removal)
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
@@ -511,8 +516,36 @@ jobs:
           key: ${{ runner.os }}-cargo-workspace-default-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-workspace-default-
+      - name: Install pinned nextest
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/nextest.tar.gz" \
+            https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.146/cargo-nextest-0.9.146-x86_64-unknown-linux-gnu.tar.gz
+          echo "682c21b777c333e96fd532e114d3a5a894e0729ab88d94c0a9f20f8419695428  $RUNNER_TEMP/nextest.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/nextest.tar.gz" -C "$HOME/.cargo/bin" cargo-nextest
+          cargo nextest --version
+          echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> "$GITHUB_ENV"
+      - name: Verify default Cargo and nextest test-name equivalence
+        run: python3 scripts/ci/test_shards.py collect --default-features --output target/default-evidence
+      - name: Verify removed dashboard workflow test coverage
+        run: |
+          python3 scripts/ci/test_shards.py covered-package --evidence target/default-evidence --package gaze-proxy-dashboard
+          python3 scripts/ci/test_shards.py covered-package --evidence target/default-evidence --package gaze-inspection
       - name: Default-feature workspace suite
         run: cargo run -p xtask -- ci-feature-matrix --partition ci-default
+      - name: Require every default-feature test to pass
+        run: python3 scripts/ci/test_shards.py prove-default --evidence target/default-evidence --junit target/nextest/ci/junit.xml
+      - name: Upload default-feature coverage and timing
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: workspace-tests-default
+          path: |
+            target/default-evidence/
+            target/nextest/ci/junit.xml
+          if-no-files-found: error
+          retention-days: 14
 
   xtask-gates:
     name: xtask gates

@@ -187,9 +187,19 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         args: &["test", "--workspace", "--all-features"],
     },
     MatrixCommand {
-        label: "cargo test --workspace --lib --bins --tests",
+        label: "cargo nextest run --workspace --lib --bins --tests --profile ci --no-fail-fast",
         program: "cargo",
-        args: &["test", "--workspace", "--lib", "--bins", "--tests"],
+        args: &[
+            "nextest",
+            "run",
+            "--workspace",
+            "--lib",
+            "--bins",
+            "--tests",
+            "--profile",
+            "ci",
+            "--no-fail-fast",
+        ],
     },
 ];
 
@@ -251,7 +261,9 @@ fn ci_owner(command: &MatrixCommand) -> CiOwner {
         | ["test", "-p", "gaze-document", "--features", "mcp"]
         | ["test", "-p", "gaze-cli", "--features", "mcp"]
         | ["test", "--workspace", "--all-features"] => CiOwner::Test,
-        ["test", "--workspace", "--lib", "--bins", "--tests"] => CiOwner::DefaultWorkspace,
+        ["nextest", "run", "--workspace", "--lib", "--bins", "--tests", "--profile", "ci", "--no-fail-fast"] => {
+            CiOwner::DefaultWorkspace
+        }
         _ => CiOwner::FeatureGates,
     }
 }
@@ -424,7 +436,8 @@ fn configured_command(command: MatrixCommand) -> Result<ProcessCommand> {
     cmd.env_clear();
     // Bound artifacts in this build and inherited nested/adversarial builds.
     // These are fixed policy values, never caller-controlled overrides.
-    cmd.env("CARGO_INCREMENTAL", "0")
+    cmd.env("CARGO_BUILD_JOBS", "4")
+        .env("CARGO_INCREMENTAL", "0")
         .env("CARGO_PROFILE_DEV_DEBUG", "0")
         .env("CARGO_PROFILE_TEST_DEBUG", "0");
     // Keep matrix children deterministic: no caller Cargo/Rust pollution, only

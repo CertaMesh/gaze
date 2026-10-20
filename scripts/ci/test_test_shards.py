@@ -59,6 +59,28 @@ class ShardContracts(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "more than once"):
                 shards.executed_tests(path)
 
+    def test_default_proof_requires_exact_execution_and_ignored_status(self):
+        baseline = {"binary": {"one": False, "helper": True}, "empty": {}}
+        with tempfile.TemporaryDirectory() as temp:
+            evidence = Path(temp)
+            for filename in ("before.json", "after.json"):
+                (evidence / filename).write_text(json.dumps(baseline))
+            junit = evidence / "junit.xml"
+            original = ('<testsuites><testsuite name="binary">'
+                        '<testcase name="one" time="1.25"/></testsuite></testsuites>')
+            junit.write_text(original)
+            with contextlib.redirect_stdout(io.StringIO()):
+                shards.prove_default(evidence, junit)
+            self.assertIn("2 binaries, 1 non-ignored tests", (evidence / "summary.md").read_text())
+            for change in ("<testsuites/>", original.replace('name="one"', 'name="helper"')):
+                junit.write_text(change)
+                with self.assertRaisesRegex(ValueError, "missing"):
+                    shards.prove_default(evidence, junit)
+            junit.write_text(original)
+            (evidence / "after.json").write_text(json.dumps({"binary": {"one": True}}))
+            with self.assertRaisesRegex(ValueError, "inventories differ"):
+                shards.prove_default(evidence, junit)
+
     def test_proof_requires_all_shards_and_exact_test_names(self):
         roster = shards.load_roster()
         baseline = {binary: {} for values in roster.values() for binary in values}

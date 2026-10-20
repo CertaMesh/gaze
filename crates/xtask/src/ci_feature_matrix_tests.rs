@@ -33,7 +33,17 @@ fn ci_partitions_preserve_every_local_command_with_one_owner() {
     assert_eq!(defaults.len(), 1);
     assert_eq!(
         defaults[0].args,
-        ["test", "--workspace", "--lib", "--bins", "--tests"]
+        [
+            "nextest",
+            "run",
+            "--workspace",
+            "--lib",
+            "--bins",
+            "--tests",
+            "--profile",
+            "ci",
+            "--no-fail-fast",
+        ]
     );
     let test_owned: Vec<_> = FEATURE_MATRIX
         .iter()

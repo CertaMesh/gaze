@@ -77,6 +77,18 @@ fn ci_workflow_keeps_all_coverage_owners_and_required_contexts() {
     assert!(
         defaults.contains("run: cargo run -p xtask -- ci-feature-matrix --partition ci-default")
     );
+    for command in [
+        "Install pinned nextest",
+        "python3 scripts/ci/test_shards.py collect --default-features",
+        "python3 scripts/ci/test_shards.py prove-default",
+        "name: workspace-tests-default",
+        "target/nextest/ci/junit.xml",
+    ] {
+        assert!(
+            defaults.contains(command),
+            "default suite must retain {command}"
+        );
+    }
     assert!(!defaults.contains("    needs:"));
     assert!(!job_section(workflow, "xtask-feature-gates").contains("    needs:"));
     let aggregate = job_section(workflow, "xtask-gates");
