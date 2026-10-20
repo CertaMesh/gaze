@@ -309,6 +309,29 @@ class RecordReplayTests(unittest.TestCase):
         writer.write(path, card, add_reference=False)
         return card
 
+    def test_executable_binding_is_captured_before_observations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binary = root / "producer"
+            binary.write_bytes(b"measured executable")
+            writer = record.RecordWriter(
+                [self.document], self.measurements, corpus_sha256="0" * 64, binary=binary,
+            )
+            self.assertEqual(writer.binary_sha256, score.sha256_file(binary))
+            writer.add("C", "policy-file", self.document, self.response, self.measurements)
+            card = self.make_record(root / "legacy.jsonl.gz")
+            reference = writer.write(root / "bound.jsonl.gz", card, add_reference=True)
+            self.assertEqual(reference["binary_sha256"], writer.binary_sha256)
+            self.assertEqual(record.binary_sha256(root / "bound.jsonl.gz", required=True),
+                             writer.binary_sha256)
+            self.assertIsNone(record.binary_sha256(root / "legacy.jsonl.gz"))
+            with self.assertRaisesRegex(record.RecordError, "no capture-time binary"):
+                record.binary_sha256(root / "legacy.jsonl.gz", required=True)
+            binary.write_bytes(b"replacement executable")
+            with self.assertRaisesRegex(record.RecordError, "changed during capture"):
+                writer.write(root / "invalid.jsonl.gz", card, add_reference=True)
+            self.assertFalse((root / "invalid.jsonl.gz").exists())
+
     def with_lineage(self, events=None, **provenance):
         response = copy.deepcopy(self.response)
         item = response["final_protection_trace"][0]

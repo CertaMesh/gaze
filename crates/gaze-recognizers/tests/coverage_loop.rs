@@ -9,7 +9,7 @@ use gaze::{EmittedTokenSpan, LocaleTag, PiiClass, Pipeline, RawDocument, Scope, 
 use serde::{Deserialize, Serialize};
 
 #[test]
-#[ignore]
+#[ignore = "manual corpus report; writes target/coverage-report.{md,json} and optionally checks a local trend baseline"]
 fn coverage_loop_reports_labels_against_core_pipeline() -> Result<(), Box<dyn Error>> {
     let root = coverage_root();
     let fixtures = load_fixtures(&root.join("corpus"))?;

@@ -47,9 +47,10 @@ isolation, service startup or full verification. Do not reset a divergent local
    admit only real tagged releases; plan their promotion after the tag exists.
 10. Confirm every detection PR merged since the last tag carries passing
     evidence under the
-    [benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate). Remeasure
-    displayed past releases when benchmark inputs or scoring change. Retain
-    unchanged historical subjects and inputs under their original identities.
+    [benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate). Before release,
+    measure the current and previous release on the same immutable specification.
+    Retain unchanged historical subjects and inputs under their original identities.
+    Additional history backfills are non-blocking.
 11. Update comparisons through supported collectors, composition and renderers.
     Reuse unchanged competitors with full original provenance. Collect affected
     rows only; do not rerun an unaffected roster because Gaze's source changed.
@@ -68,9 +69,11 @@ checklist.
 
 ## Benchmark evidence and reuse
 
-The latest headline is scored-label contract v4. Run the gain gates separately
-under v1 and v2. Keep explicit v3/v4 observation replays distinct from fresh
-v1/v2 inference. Export publication archives with `export_portable_record.py`;
+The latest headline is scored-label contract v4. Capture each side once, then
+use `rescore.py` on that record for every contract. Run the gain gates separately
+under v1 and v2. Never run inference per contract. The runner accepts a
+contract-specific capture only with `--cross-check` for equivalence verification.
+Export publication archives with `export_portable_record.py`;
 retain original/private and portable hashes, unchanged-row proof and source,
 binary, policy, model, corpus, seed and hardware provenance. Never restamp a
 retained capture with the current source or a fresh replay time.
@@ -81,7 +84,13 @@ justify reuse; a changed revision alone is not an exact cache hit. Current
 release-history admission rejects `cache_replay: true`; do not flip that flag
 or fabricate a receipt to bypass it. Resolve unsupported admission explicitly.
 When direct final-source evidence is required, collect only the changed
-candidate sides and retain valid baselines.
+candidate sides and retain valid baselines. Benchmark specifications have immutable
+version IDs; never compare across specifications. Integrity checks remain mandatory.
+History backfills are automated, non-blocking and off the PR critical path. Before
+release, measure the current and previous release on the same specification.
+Main requires full-corpus-equivalent evidence for the exact integrated candidate:
+full evaluation, shadow-validated sound incremental evaluation, or a full-gated
+combined merge train. A targeted subset never certifies main.
 
 Strict identity `not_comparable` stays distinct from an explicitly accepted
 comparison of each release's own setup policy. Such a numeric comparison must

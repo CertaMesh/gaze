@@ -21,6 +21,7 @@ sha3 = "0.10"
 tempfile = "3"
 
 [dev-dependencies]
+serde-saphyr = { version = "=2.0.0", default-features = false, features = ["deserialize"] }
 fake = { version = "*", default-features = false }
 syn = { version = "2", features = ["full"] }
 tempfile = "3"
