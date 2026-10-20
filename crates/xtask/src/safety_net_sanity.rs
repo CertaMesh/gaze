@@ -2,6 +2,10 @@ use std::process::Command as ProcessCommand;
 
 use anyhow::{bail, Context, Result};
 
+use crate::test_commands::{
+    cargo_test_command as shared_cargo_test_command, list_command_output, BehavioralTarget,
+};
+
 // Live Nym checks belong to test-support in test.yml, which installs the pinned bundle
 // and requires every ignored live test to report success by name. This gate is model-free.
 const MAX_CARGO_TEST_INVOCATIONS: usize = 5;
@@ -111,20 +115,9 @@ fn suites() -> Vec<Suite> {
 }
 
 fn ensure_required_tests_exist(suite: &Suite) -> Result<()> {
-    let output = cargo_test_command(suite)
-        .arg("--")
-        .arg("--list")
-        .output()
-        .with_context(|| format!("failed to list tests for {}", suite.label))?;
-    if !output.status.success() {
-        bail!(
-            "safety_net_sanity: failed to list {}: {}",
-            suite.label,
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut command = cargo_test_command(suite);
+    command.args(["--", "--list"]);
+    let stdout = list_command_output(command, suite.label)?;
     for required in suite.required_tests {
         let expected = format!("{required}: test");
         if !stdout.lines().any(|line| line == expected) {
@@ -150,13 +143,10 @@ fn run_suite(suite: &Suite) -> Result<()> {
 }
 
 fn cargo_test_command(suite: &Suite) -> ProcessCommand {
-    let mut command = ProcessCommand::new("cargo");
-    command
-        .arg("test")
-        .arg("-p")
-        .arg(suite.package)
-        .arg("--test")
-        .arg(suite.test_target);
+    let mut command = shared_cargo_test_command(
+        suite.package,
+        BehavioralTarget::Integration(suite.test_target),
+    );
     if !suite.features.is_empty() {
         command.arg("--features").arg(suite.features.join(","));
     }

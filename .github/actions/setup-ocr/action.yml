@@ -1,0 +1,56 @@
+name: Set up OCR and disk monitoring
+description: Prepare the existing Linux OCR runtime and sample free disk during the job.
+inputs:
+  free-disk-space:
+    description: Opt in to removing preinstalled tools when measured disk space is low.
+    default: 'false'
+  install-ocr:
+    description: Install runtime Tesseract and pdfium dependencies.
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Free disk space (ubuntu-latest preinstalled bloat removal)
+      if: ${{ inputs.free-disk-space == 'true' }}
+      uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+      with:
+        tool-cache: true
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: false
+        docker-images: true
+        swap-storage: false
+    - name: Install Tesseract + English language pack (gaze-document)
+      if: ${{ inputs.install-ocr == 'true' }}
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+    - name: Install pdfium dynamic library (gaze-document PDF input)
+      if: ${{ inputs.install-ocr == 'true' }}
+      shell: bash
+      run: |
+        set -eu
+        # Pinned release: https://github.com/bblanchon/pdfium-binaries/releases/tag/chromium%2F7920
+        # Update by resolving the latest tag, downloading pdfium-linux-x64.tgz, and refreshing PDFIUM_SHA256.
+        PDFIUM_RELEASE="chromium/7920"
+        PDFIUM_SHA256="49ab3afbd4e6c1e284b5f2898129c8bb8a10fd785c1c5392c8c1fc70242f9ced"
+        curl -sSL -o /tmp/pdfium.tgz \
+          "https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_RELEASE}/pdfium-linux-x64.tgz"
+        echo "${PDFIUM_SHA256}  /tmp/pdfium.tgz" | sha256sum -c -
+        mkdir -p /tmp/pdfium-extract
+        tar -xzf /tmp/pdfium.tgz -C /tmp/pdfium-extract
+        sudo install -m 0755 /tmp/pdfium-extract/lib/libpdfium.so /usr/local/lib/libpdfium.so
+        sudo ldconfig
+    - name: Start disk space sampling
+      shell: bash
+      run: |
+        df -h "$GITHUB_WORKSPACE"
+        nohup bash -s > "$RUNNER_TEMP/gaze-disk-free-kib.txt" 2>/dev/null <<'BASH' &
+        while true; do
+          df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }'
+          sleep 5
+        done
+        BASH
+        echo "$!" > "$RUNNER_TEMP/gaze-disk-sampler.pid"

@@ -6,6 +6,7 @@ import dataclasses
 import json
 import os
 from pathlib import Path
+import select
 import signal
 import subprocess
 import sys
@@ -92,6 +93,9 @@ def child(mode):
                 os.write(1, bytes([byte]))
         elif mode in ("ignore", "finish-hang"):
             emit(request)
+            if mode == "ignore":
+                while True:
+                    signal.pause()
             time.sleep(1.5)
             return 0
         elif mode == "inherit":
@@ -622,10 +626,10 @@ class TransportTests(unittest.TestCase):
                 self.reaped(owner)
 
     def test_idle_stdout_before_request_rejected(self):
-        owner = self.owner("prefix-idle")
+        owner = self.owner("prefix-idle", invocation_seconds=10)
         with self.assertRaises(transport.ProducerFailure, msg="idle-prefix") as failure:
             with owner:
-                time.sleep(0.25)
+                self.assertTrue(select.select([owner.process.stdout], [], [], 5)[0], "child-ready")
                 owner.exchange({"x": 1})
         self.assertEqual(failure.exception.code, "protocol", "idle-prefix")
         self.reaped(owner)
@@ -677,13 +681,14 @@ class TransportTests(unittest.TestCase):
             limits(**slow_cleanup).validate()
         except transport.ProducerFailure:
             self.fail("cleanup-budget")
-        owner = self.owner("ignore", **slow_cleanup)
+        owner = self.owner("ignore", **{**slow_cleanup, "exchange_seconds": 5, "invocation_seconds": 10})
         with self.assertRaises(transport.ProducerFailure, msg="cleanup-budget") as failure:
             with owner:
-                owner.exchange({"x": 1})
-                time.sleep(0.45)
+                self.assertEqual(owner.exchange({"x": 1}), {"x": 1}, "child-ready")
+                owner.invocation_deadline = time.monotonic() - 1
                 owner.check_deadline()
         self.assertEqual(failure.exception.code, "deadline", "cleanup-budget")
+        self.assertEqual(failure.exception.phase, "exchange", "cleanup-budget")
         self.assertTrue(time.monotonic() > owner.invocation_deadline, "cleanup-budget")
         self.reaped(owner)
         self.assertEqual(owner.process.returncode, -signal.SIGKILL, "cleanup-budget")
