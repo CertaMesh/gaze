@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::repo::{fixture_citation_file, production_source_dirs, repo_root, source_files};
+use crate::test_commands::list_command_output;
 const MARKER_PREFIX: &str = "// fixture-cited(";
 const MARKER_SUFFIX: &str = ")";
 const FIXTURE_PATTERNS: &[&str] = &[
@@ -119,19 +120,10 @@ pub fn scan_source_dirs_with_tests(
 }
 
 fn workspace_test_names() -> anyhow::Result<HashSet<String>> {
-    let output = Command::new("cargo")
-        .arg("test")
-        .arg("--workspace")
-        .arg("--")
-        .arg("--list")
-        .output()?;
-    if !output.status.success() {
-        anyhow::bail!(
-            "failed to list workspace tests: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    Ok(parse_test_list(&String::from_utf8_lossy(&output.stdout)))
+    let mut command = Command::new("cargo");
+    command.args(["test", "--workspace", "--", "--list"]);
+    let stdout = list_command_output(command, "workspace")?;
+    Ok(parse_test_list(&stdout))
 }
 
 pub fn parse_test_list(output: &str) -> HashSet<String> {
