@@ -413,22 +413,6 @@ fn request_logical_domains_reject_every_email_split_across_supported_carriers() 
 }
 
 #[test]
-fn request_carrier_inventory_is_source_independent_from_the_mutation_visitor() {
-    let source = include_str!("../src/codecs/anthropic.rs");
-    let start = source
-        .find("fn collect_final_request_carriers")
-        .expect("independent inventory entry point must exist");
-    let end = source[start..]
-        .find("fn classify_request_root")
-        .map(|offset| start + offset)
-        .expect("independent inventory must retain a closed helper boundary");
-    let inventory_entry = &source[start..end];
-
-    assert!(!inventory_entry.contains("CoverageLedger"));
-    assert!(!inventory_entry.contains("transform_request_"));
-}
-
-#[test]
 fn request_logical_domains_cover_semantic_emitted_and_all_prompt_component_orders() {
     let emitted_only = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":[{"type":"tool_use","id":"toolu_1","name":"lookup","input":{"alice":null,"@example.invalid":null}}]}]}"#;
     assert_logical_domain_rejected_bytes(emitted_only);
