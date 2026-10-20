@@ -1,5 +1,7 @@
 # Protect a coding assistant's document read
 
+<!-- tutorial-gate: start=checkout -->
+
 We will configure Claude Code to read a fictional invoice through Gaze's MCP
 server and verify that the tool returns tokens. Allow ten minutes.
 
@@ -53,6 +55,7 @@ Client launches gaze mcp serve
 We will enable only this MCP server and disable built-in tools for the call.
 The prompt names the file without including its contents:
 
+<!-- tutorial-gate: manual reason="Requires a signed-in Claude Code account and makes model requests; replay before release." -->
 ```sh
 claude --strict-mcp-config --mcp-config .mcp.json --tools "" \
 	--allowedTools mcp__gaze__gaze_read_file --print \
