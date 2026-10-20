@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import bench_json
 import gaze_bench_score as score
 import agentic_layers as agentic
 import benchmark_cache as cache
@@ -104,8 +105,8 @@ class RecordReplayTests(unittest.TestCase):
         self.assertEqual(
             proof.verify(
                 bench / release["observation_record"]["file"],
-                bench / "scorecard-v0.15.1.json",
-                bench / "scorecard-v0.15.1-scored-labels-v2.json",
+                bench / "scorecard-v0.15.1.json.gz",
+                bench / "scorecard-v0.15.1-scored-labels-v2.json.gz",
                 bench / "scored-labels-v2.json",
                 bench / "scored-labels-v3.json",
             ),
@@ -141,8 +142,8 @@ class RecordReplayTests(unittest.TestCase):
             pointer = result.get("observation_record") or release["observation_record"]
             self.assertEqual(pointer["file"], path.name)
             self.assertEqual(score.sha256_file(path), pointer["sha256"])
-            committed = json.loads((bench / result["scorecard"]).read_text(encoding="utf-8"))
-            self.assertEqual(score.sha256_file(bench / result["scorecard"]), result["scorecard_sha256"])
+            committed = bench_json.load(bench / result["scorecard"])
+            self.assertEqual(bench_json.content_sha256(bench / result["scorecard"]), result["scorecard_sha256"])
             self.assertEqual(record.rescore(path, v3), committed, release["version"])
 
     def test_current_release_cohorts_replay_exactly_except_timing(self):
@@ -152,8 +153,8 @@ class RecordReplayTests(unittest.TestCase):
             with self.subTest(version=version):
                 self.assertEqual(proof.verify(
                     bench / f"observations-{version}.jsonl.gz",
-                    bench / f"scorecard-{version}.json",
-                    bench / f"scorecard-{version}-scored-labels-v2.json",
+                    bench / f"scorecard-{version}.json.gz",
+                    bench / f"scorecard-{version}-scored-labels-v2.json.gz",
                     *contracts,
                 ), {"v1_exact_except_timing": True, "v2_exact_except_timing": True,
                     "v3_valid": True})
@@ -163,8 +164,8 @@ class RecordReplayTests(unittest.TestCase):
         with self.assertRaisesRegex(record.RecordError, "v1_commit_matches': False"):
             proof.verify_capture(
                 bench / "observations-v0.14.0.jsonl.gz",
-                bench / "scorecard-v0.14.0-rescore-calibration-v1.json",
-                bench / "scorecard-v0.14.0-scored-labels-v2.json",
+                bench / "scorecard-v0.14.0-rescore-calibration-v1.json.gz",
+                bench / "scorecard-v0.14.0-scored-labels-v2.json.gz",
                 bench / "scored-labels-v2.json", bench / "scored-labels-v3.json",
                 ignore=["validator_recall_by_label"],
             )
