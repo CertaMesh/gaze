@@ -843,9 +843,17 @@ class BindingRegressionTests(unittest.TestCase):
         workflow = (Path(__file__).resolve().parents[2]/'.github/workflows/test.yml').read_text()
         support = workflow.split('\n  test-support:\n', 1)[1].split('\n  workspace-shards:\n', 1)[0]
         cache = support.split('      - name: Cache cargo registry + target', 1)[1].split('      - name:', 1)[0]
-        native = '~/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671'
-        self.assertIn(native, cache, 'dependency-cache-restores-exact-native')
-        self.assertIn('-cargo-test-dependencies-v1-', cache)
+        caches = [step for step in workflow.split('      - ') if 'uses: actions/cache' in step]
+        for step in caches:
+            self.assertNotIn('ort.pyke.io', step, 'ort-sys-must-download-and-verify-native-bytes')
+        dependency_caches = [step for step in caches if '-cargo-test-dependencies-' in step]
+        self.assertEqual(len(dependency_caches), 5)
+        for step in dependency_caches:
+            paths = step.split('          path: |\n', 1)[1].split('          key:', 1)[0]
+            self.assertEqual(paths.split(), ['~/.cargo/registry', '~/.cargo/git'])
+            self.assertIn('-cargo-test-dependencies-v2-', step)
+            self.assertNotIn('-cargo-test-dependencies-v1-', step, 'old-archives-contain-unverified-native-bytes')
+        self.assertIn('-cargo-test-dependencies-v2-', cache)
         self.assertNotIn('\n            target\n', cache, 'mutable-targets-are-not-cached')
         self.assertNotIn('-cargo-test-native-v2-', cache, 'legacy-target-cache-excluded')
         self.assertNotIn('-cargo-test-${{', cache, 'legacy-exact-key-excluded')
