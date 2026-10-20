@@ -5,12 +5,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use gaze::{
-    Action, Candidate, CleanDocument, Context, ContextDictionary, DetectContext, DictionaryBundle,
-    EmittedTokenSpan, FallbackReason, GazeLocalProtectionTraceItem, LeakKind, LeakReportStats,
-    LocaleBasis, LocaleChain, LocaleTag, NerPolicy, PiiClass, Pipeline, RECORD_DICTIONARY_PREFIX,
-    RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec, Rulepack, RulepackSource,
-    SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope, Session,
-    record_dictionary_name,
+    record_dictionary_name, Action, Candidate, CleanDocument, Context, ContextDictionary,
+    DetectContext, DictionaryBundle, EmittedTokenSpan, FallbackReason,
+    GazeLocalProtectionTraceItem, LeakKind, LeakReportStats, LocaleBasis, LocaleChain, LocaleTag,
+    NerPolicy, PiiClass, Pipeline, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec,
+    Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
+    Scope, Session, RECORD_DICTIONARY_PREFIX,
 };
 use gaze_recognizers::embedded;
 use serde::{Deserialize, Serialize};
@@ -961,7 +961,7 @@ fn ner_settings_from_env() -> Result<NerSettings, BenchmarkBuildError> {
             .map_err(|source| BenchmarkBuildError::InvalidNerThreshold { value, source })?,
         Err(std::env::VarError::NotPresent) => gaze::DEFAULT_NER_THRESHOLD,
         Err(std::env::VarError::NotUnicode(_)) => {
-            return Err(BenchmarkBuildError::NonUnicodeNerThreshold);
+            return Err(BenchmarkBuildError::NonUnicodeNerThreshold)
         }
     };
     if !(0.0..=1.0).contains(&threshold) {
@@ -1946,18 +1946,16 @@ mod tests {
             assert_eq!(item.provenance.decision, "policy");
             assert_eq!(item.action, "tokenize");
             assert!(!item.provenance.source_ids.is_empty());
-            assert!(
-                item.provenance
-                    .source_ids
-                    .iter()
-                    .all(|source_id| !source_id.is_empty())
-            );
-            assert!(
-                item.provenance
-                    .source_ids
-                    .windows(2)
-                    .all(|pair| pair[0] < pair[1])
-            );
+            assert!(item
+                .provenance
+                .source_ids
+                .iter()
+                .all(|source_id| !source_id.is_empty()));
+            assert!(item
+                .provenance
+                .source_ids
+                .windows(2)
+                .all(|pair| pair[0] < pair[1]));
             assert_eq!(
                 response
                     .manifest_spans
@@ -2095,16 +2093,12 @@ mod tests {
                 manifest_signature(&benchmark_manifest),
                 manifest_signature(&production_manifest)
             );
-            assert!(
-                manifest_signature(&benchmark_manifest)
-                    .iter()
-                    .any(|(_, _, class)| class == "email")
-            );
-            assert!(
-                manifest_signature(&benchmark_manifest)
-                    .iter()
-                    .any(|(_, _, class)| class == "custom:phone")
-            );
+            assert!(manifest_signature(&benchmark_manifest)
+                .iter()
+                .any(|(_, _, class)| class == "email"));
+            assert!(manifest_signature(&benchmark_manifest)
+                .iter()
+                .any(|(_, _, class)| class == "custom:phone"));
 
             let (benchmark_restore, _) = benchmark
                 .restore_with_telemetry(&session, &benchmark_text)

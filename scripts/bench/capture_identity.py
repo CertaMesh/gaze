@@ -13,6 +13,23 @@ from pathlib import Path
 
 
 SCHEMA_VERSION = 3
+ENVIRONMENT_KEYS = frozenset({
+    "CARGO_ENCODED_RUSTFLAGS", "CARGO_HOME", "CC", "CFLAGS", "CPPFLAGS", "CXX", "CXXFLAGS",
+    "HOME", "LDFLAGS", "MACOSX_DEPLOYMENT_TARGET", "PATH", "RUSTC", "RUSTC_WRAPPER",
+    "RUSTFLAGS", "RUSTUP_HOME", "RUSTUP_TOOLCHAIN", "SDKROOT", "LANG", "LANGUAGE", "TZ", "TZDIR",
+    "PYTHONHASHSEED", "PYTHONDONTWRITEBYTECODE", "PYTHONUTF8", "PYTHONIOENCODING",
+})
+ENVIRONMENT_PREFIXES = (
+    "CARGO_BUILD_", "CARGO_PROFILE_", "CARGO_TARGET_", "DYLD_", "GAZE_", "LC_", "LD_",
+    "JEMALLOC_", "MALLOC_", "MIMALLOC_", "MKL_", "OMP_", "ORT_", "RAYON_", "TOKENIZERS_",
+    "OPENBLAS_", "GOTO_", "BLIS_", "KMP_", "VECLIB_", "NUMEXPR_", "ARROW_", "PYARROW_", "NUMPY_",
+)
+
+
+def observation_environment(environment: dict[str, str]) -> dict[str, str]:
+    """Declared build/runtime inputs, excluding orchestration IDs and output destinations."""
+    return {name: value for name, value in sorted(environment.items())
+            if name in ENVIRONMENT_KEYS or name.startswith(ENVIRONMENT_PREFIXES)}
 
 
 def digest(value: object) -> str:
@@ -119,6 +136,5 @@ def snapshot(*, files: dict[str, Path], models: dict[str, Path], environment: di
     return {"schema_version": SCHEMA_VERSION,
             "files": {role: file_digest(path) for role, path in sorted(files.items())},
             "models": {role: tree(path) for role, path in sorted(models.items())},
-            # Hash the complete inherited environment, including locale and absent/present flags.
-            "environment_sha256": digest(environment),
+            "environment_sha256": digest(observation_environment(environment)),
             "runtime": runtime}

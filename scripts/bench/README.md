@@ -143,7 +143,7 @@ under an exact content key in the shared checkout's `target/bench-data/cache/`.
 The key binds actual detector and validator binary hashes, policy bytes and
 referenced files, complete model trees (including hidden files), corpus and
 generator identity, layer specification, seed, sampled IDs, contracts, harness
-and record schema, Cargo inputs, inherited environment (including locale),
+and record schema, Cargo inputs, declared build/runtime environment (including locale),
 Python runtime and package contents, OS build, hardware and native libraries.
 Environment values are hashed rather than copied into evidence.
 
@@ -165,8 +165,8 @@ from reuse. Older cache entries without the complete bound key remain ineligible
 
 Dirty sources, `--skip-build`, performance gating, random-session mode and
 unresolved native inputs bypass reuse. External safety-net execution, loader
-injection and external ORT overrides also bypass it. Hashing the complete
-environment and runtime deliberately permits conservative misses. Use
+injection, external Python import roots and external ORT overrides also bypass it. Hashing the complete
+build/runtime environment and runtime deliberately permits conservative misses. Use
 `--no-cache` for fresh measurements or `--cache-dir` for another cache root.
 Release admission still requires `--no-cache`: its existing renderer cannot
 validate the linked local run evidence and refuses reusable base scorecards.

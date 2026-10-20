@@ -150,8 +150,10 @@ class CaptureIdentityTests(unittest.TestCase):
                     path.write_bytes(b"synthetic-change")
                     self.assertNotEqual(read(), original)
                     path.write_bytes(old)
-            for name in ("LANG", "LC_ALL", "GAZE_NER_LOCALE", "TZ", "OTHER_INHERITED_INPUT"):
-                self.assertNotEqual(read(env={name: "synthetic-changed"}), original)
+            for name in ("LANG", "LC_ALL", "GAZE_NER_LOCALE", "TZ", "PYTHONHASHSEED"):
+                self.assertNotEqual(read(env={"LANG": "C", "LC_ALL": "C", "GAZE_NER_LOCALE": "en", name: "synthetic-changed"}), original)
+            self.assertEqual(read(env={"LANG": "C", "LC_ALL": "C", "GAZE_NER_LOCALE": "en",
+                                       "SOLO_PROCESS_ID": "synthetic", "PWD": "/synthetic/output"}), original)
             self.assertNotEqual(read(runtime={"os": "changed"}), original)
             for value in ("", "0", "1"):
                 with self.assertRaisesRegex(ValueError, "random sessions"):

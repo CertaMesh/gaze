@@ -48,19 +48,8 @@ DAVLAN_RUNTIME_ARTIFACTS = frozenset(
     }
 )
 DAVLAN_BUNDLE_SURFACE = DAVLAN_RUNTIME_ARTIFACTS | {"SHA256SUMS"}
-OBSERVATION_ENVIRONMENT_KEYS = frozenset(
-    {
-        "CARGO_ENCODED_RUSTFLAGS", "CARGO_HOME", "CC", "CFLAGS", "CPPFLAGS",
-        "CXX", "CXXFLAGS", "HOME", "LDFLAGS", "MACOSX_DEPLOYMENT_TARGET",
-        "PATH", "RUSTC", "RUSTC_WRAPPER", "RUSTFLAGS", "RUSTUP_HOME",
-        "RUSTUP_TOOLCHAIN", "SDKROOT",
-    }
-)
-OBSERVATION_ENVIRONMENT_PREFIXES = (
-    "CARGO_BUILD_", "CARGO_PROFILE_", "CARGO_TARGET_", "DYLD_", "GAZE_",
-    "JEMALLOC_", "LD_", "MALLOC_", "MIMALLOC_", "MKL_", "OMP_", "ORT_",
-    "RAYON_", "TOKENIZERS_",
-)
+OBSERVATION_ENVIRONMENT_KEYS = capture_identity.ENVIRONMENT_KEYS
+OBSERVATION_ENVIRONMENT_PREFIXES = capture_identity.ENVIRONMENT_PREFIXES
 
 
 class RunnerError(RuntimeError):
@@ -945,7 +934,7 @@ def observation_cache_key(
             files["agentic_scored_labels"] = repo_path(repo_root, args.agentic_scored_labels)
         runtime = capture_identity.native_runtime({"detector": binary, "validator": validator_probe})
         inputs = capture_identity.snapshot(files=files, models=models,
-                                          environment=dict(source_environment), runtime=runtime)
+                                          environment=build_no_opf_environment(source_environment), runtime=runtime)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, agentic.LayerError):
         return None, "effective input inventory is unresolved"
     return {
