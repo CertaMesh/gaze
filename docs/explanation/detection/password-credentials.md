@@ -27,8 +27,7 @@ hash components, including fixed-width checksums. The full serialized source
 is one manifest span; strict restore returns the original escape spelling.
 A trailing backslash cannot terminate a hash match. These are supported source
 escapes, not a general source-language decoder. Other escapes are outside this
-shape contract; libxcrypt
-truncates at that many bytes. A Unicode salt over the producer's byte limit
+shape contract. Libxcrypt truncates at that many bytes. A Unicode salt over the producer's byte limit
 can therefore still match the stored-encoding shape. Salt and checksum
 alphabets are distinct; checksums retain exact crypt-base64 widths. Django salts are nonempty and exclude
 only dollar, as required by its hasher API; plus, at-sign, spaces and Unicode
