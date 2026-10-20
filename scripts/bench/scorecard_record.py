@@ -406,6 +406,7 @@ class RecordWriter:
         measurements: Mapping[str, object],
         *,
         corpus_sha256: str,
+        binary: Path | None = None,
         extra_documents: Sequence[score.Document] = (),
         layer_contract: score.ScoredLabelContract | None = None,
     ) -> None:
@@ -418,6 +419,8 @@ class RecordWriter:
         }
         self.measurements = measurements
         self.corpus_sha256 = corpus_sha256
+        self.binary = binary.resolve() if binary is not None else None
+        self.binary_sha256 = score.sha256_file(self.binary) if self.binary is not None else None
         self.layer_contract = layer_contract
         self.layer_measurements: dict[str, Mapping[str, object]] = {}
         self.rows: list[dict[str, object]] = []
@@ -471,6 +474,8 @@ class RecordWriter:
         self.rows.append(row)
 
     def write(self, path: Path, scorecard: Mapping[str, object], *, add_reference: bool) -> dict[str, object]:
+        if self.binary is not None and score.sha256_file(self.binary) != self.binary_sha256:
+            raise RecordError("benchmark executable changed during capture")
         if set(self.document_layers) != set(self.documents):
             raise RecordError("some generated documents have no observation layer")
         documents = [
@@ -496,6 +501,9 @@ class RecordWriter:
             "layer_identity": _layer_identity(scorecard["layers"]["generator"], documents)
             if "layers" in scorecard else None,
         }
+        if self.binary_sha256 is not None:
+            header["binary_sha256"] = self.binary_sha256
+            _header_binary_sha256(header)
         rows = [header, *self.rows]
         _write_rows(path, rows)
         digest = score.sha256_file(path)
@@ -505,6 +513,7 @@ class RecordWriter:
             "format": "gzip-jsonl",
             "schema_version": self.schema_version,
             "corpus_sha256": self.corpus_sha256,
+            **({"binary_sha256": self.binary_sha256} if self.binary_sha256 is not None else {}),
             "observations": len(self.rows),
             "bytes": path.stat().st_size,
         }
@@ -602,6 +611,31 @@ def _check_lineage(header: Mapping[str, object], observations: Sequence[Mapping[
             validate_response_lineage(row["response"], sizes[row["document_id"]], row["document_id"])
 
 
+def _header_binary_sha256(header: Mapping[str, object]) -> str | None:
+    digest = header.get("binary_sha256")
+    if digest is None:
+        return None  # Historical records carry only an external attestation.
+    if (not isinstance(digest, str) or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)):
+        raise RecordError("record binary SHA-256 is malformed")
+    card = header["scorecard"]
+    for reported in (card.get("binary_sha256"),
+                     card.get("runner_provenance", {}).get("binary_sha256")):
+        if reported is not None and reported != digest:
+            raise RecordError("record binary SHA-256 disagrees with scorecard")
+    return digest
+
+
+def binary_sha256(path: Path, *, required: bool = False) -> str | None:
+    """Read the capture-time executable binding; never infer it from an attestation."""
+    with gzip.open(path, "rt", encoding="utf-8") as stream:
+        header = json.loads(next(stream))
+    digest = _header_binary_sha256(header)
+    if required and digest is None:
+        raise RecordError("observation record has no capture-time binary SHA-256")
+    return digest
+
+
 def _read(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
     with gzip.open(path, "rt", encoding="utf-8") as stream:
         rows = [json.loads(line) for line in stream]
@@ -609,6 +643,7 @@ def _read(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
             or rows[0].get("schema_version") not in READABLE_SCHEMA_VERSIONS):
         raise RecordError("unknown or missing record header")
     header, observations = rows[0], rows[1:]
+    _header_binary_sha256(header)
     if any(row.get("kind") != "observation" for row in observations):
         raise RecordError("unknown record row")
     _check_lineage(header, observations)
@@ -881,6 +916,7 @@ def rescore(
             "file": path.name, "sha256": score.sha256_file(path),
             "format": "gzip-jsonl", "schema_version": header["schema_version"],
             "corpus_sha256": header["corpus_sha256"],
+            **({"binary_sha256": header["binary_sha256"]} if "binary_sha256" in header else {}),
             "observations": len(observations), "bytes": path.stat().st_size,
         }
     return result

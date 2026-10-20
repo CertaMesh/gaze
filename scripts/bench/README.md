@@ -53,8 +53,10 @@ The `clean_for_bench` producer derives a repeatable session prefix from each
 fixture ID by default. Set `GAZE_BENCH_RANDOM_SESSION=1` when measuring the
 effect of fresh random prefixes; record that setting with the scorecard.
 
-When the generated adjacency layers change, measure the displayed past releases
-with `agentic_layers.py measure`, then pass their scorecard files to
+Before release, measure the current and previous release on the same immutable
+benchmark specification. Additional history backfills are non-blocking and off
+the PR critical path. Never compare across specifications. Capture each release
+once with `rescore_past_release.py --agentic-layers`, then pass its scorecard to
 `render_agentic_adjacency_doc.py --record <file>` (repeat `--record` for each
 release). That command writes the committed measurement ledger and its table
 in `docs/reference/benchmarks/README.md`; `--check` verifies both in CI.
@@ -70,10 +72,15 @@ A scored-label contract says which corpus labels count as gold PII. Without
 `--scored-labels` the runner uses contract **v1**, which scores every corpus
 label, so every row measured before contracts existed stays reproducible.
 
+Capture once without `--scored-labels`; every contract uses the same record.
+The runner rejects contract-specific captures unless `--cross-check` explicitly
+requests an independent equivalence check.
+
 ```bash
-uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py \
-  full --seed 20260710 --no-download \
-  --scored-labels docs/reference/benchmarks/scored-labels-v2.json
+uv run --project scripts/bench python scripts/bench/rescore.py \
+  target/bench-data/no-opf/full/observations-v1.jsonl.gz \
+  --scored-labels docs/reference/benchmarks/scored-labels-v2.json \
+  --output target/bench-data/no-opf/full/scorecard-v2.json
 ```
 
 [`scored-labels-v2.json`](../../docs/reference/benchmarks/scored-labels-v2.json)
@@ -171,6 +178,13 @@ uv run --project scripts/bench python scripts/bench/rescore.py \
 Omit `--scored-labels` for v1. Use `--agentic-scored-labels` to change the
 generated layer contract too; otherwise replay uses the layer contract pinned
 inside the record. The same scoring accumulators compute the new scorecard.
+`mechanism_arms.py record` accepts only `--base` and `--candidate` runner
+directories, one capture each. It re-scores both records under every contract
+and validates both gated contracts with the mechanism policy delta.
+New captures bind the executable SHA-256 before measurement and refuse to write
+if the executable changes during capture. New mechanism gain evidence requires
+both records to bind the same digest as `--binary`. Historical records without
+this binding remain replayable; their binary identity is attested, not verified.
 The v0.15.1 records remain committed as replay proof. Starting with v0.16.0,
 upload release records as assets on the matching GitHub release, using
 `observations-vX.Y.Z.jsonl.gz` and, when generated layers are measured,
@@ -291,7 +305,7 @@ NBSP-class separators into spaces before detection, so an NBSP copy is an exact
 match. Such pairs, and the other pairs that exercise no probe kind, are typed
 controls in their own buckets. `python3 scripts/bench/known_record_cells.py`
 prints the pinned manifest. `... known_record_cells.py prove --binary <clean_for_bench>
---policy <policy> --model-dir <ner> --contract v2 --output <json>` scores layer K
+--policy <policy> --model-dir <ner> --contract v2 --cross-check --output <json>` scores layer K
 three ways (no record, record with the default kinds, record with the probe kinds
 on) and reports bytes per bucket. Its `kind_switch_effective` is false when the
 binary ignores the per-request `record_match_kinds`.
@@ -311,11 +325,14 @@ The hash depends on the checkout path and toolchain; a rustup 1.96 build
 differs. Compare the proof's `binary_sha256` field rather than expecting a
 byte-identical build elsewhere.
 
-For a shipping decision, `known_record_arm.py --shipping-defaults` scores the
-product's default match kinds without per-request overrides. Run it under v2
-and v1, and use `--baseline-only --binary-source-commit <main-sha>` with main's
-own producer and setup policy to score the same documents without a record.
-`known_record_shipping_gate.py` requires all five layers, compares the full
+The aggregate-only oracle drivers `known_record_arm.py` and
+`known_record_cells.py prove` require `--cross-check`. They retain their legacy
+contract-specific experiment paths and cannot supply record-once gain evidence.
+`known_record_arm.py --shipping-defaults --cross-check` scores the product's
+default match kinds without per-request overrides. Its
+`--baseline-only --binary-source-commit <main-sha>` mode uses main's own producer
+and setup policy without a record. `known_record_shipping_gate.py` checks
+retained five-layer reports, compares the full
 no-record baseline scorecards to main, and reports per-class, per-match-kind
 attribution. The committed [shipping result](../../docs/reference/benchmarks/known-record-oracle.md#shipping-default-gate)
 shows the exact commands' aggregate outputs.
