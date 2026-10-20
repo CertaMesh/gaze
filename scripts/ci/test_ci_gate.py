@@ -33,7 +33,9 @@ class LaneSelection(unittest.TestCase):
     def test_manifests_ci_and_unknown_paths_fall_back_wide(self):
         for path in ['Cargo.lock', 'crates/gaze-types/Cargo.toml',
                      '.github/workflows/test.yml', 'scripts/ci/ci_gate.py',
-                     '.cargo/config.toml', 'rust-toolchain.toml', 'new/input.dat']:
+                     '.cargo/config.toml', 'rust-toolchain.toml', 'new/input.dat',
+                     'fixtures/embedded.md', 'scripts/bench/validator_recall_probe/Cargo.toml',
+                     'scripts/bench/validator_recall_probe/src/main.rs']:
             with self.subTest(path=path):
                 plan = self.plan(path)
                 self.assertTrue(plan['wide'])

@@ -49,12 +49,14 @@ def make_plan(event, paths):
     selected = set()
     bench = dylint = msrv = integration
     for path in paths:
-        if path.startswith(('scripts/bench/', 'docs/reference/benchmarks/')):
-            bench = True
-            continue
         if (path.startswith(('.github/', '.cargo/', 'scripts/ci/', 'lint/'))
                 or Path(path).name in {'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml'}):
             wide = True
+            continue
+        if path.startswith(('scripts/bench/', 'docs/reference/benchmarks/')):
+            bench = True
+            if path.endswith('.rs'):
+                wide = True
             continue
         member = next((member for member in names if path.startswith(member + '/')), None)
         if member:
@@ -63,7 +65,7 @@ def make_plan(event, paths):
             if '/examples/' in path:
                 bench = True
             continue
-        if (path.startswith('docs/') or path.endswith('.md')
+        if (path.startswith('docs/') or ('/' not in path and path.endswith('.md'))
                 or path in {'LICENSE-APACHE', 'LICENSE-MIT', '.gitignore'}):
             continue
         wide = True
@@ -153,7 +155,7 @@ def run_fast(packages):
     subprocess.run(['cargo', 'clippy', '--locked', *selection, '--all-features', '--all-targets',
                     '--', '-D', 'warnings'], cwd=ROOT, check=True)
     subprocess.run(['cargo', 'test', '--locked', *selection, '--all-features',
-                    '--lib', '--bins', '--tests', '--examples', '--no-fail-fast'], cwd=ROOT, check=True)
+                    '--no-fail-fast'], cwd=ROOT, check=True)
 
 
 def main():
