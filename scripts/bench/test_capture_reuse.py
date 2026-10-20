@@ -107,7 +107,7 @@ class CaptureIdentityTests(unittest.TestCase):
                         path.write_bytes(b"changed")
                         self.assertNotEqual(read(), original)
                         path.write_bytes(b"synthetic")
-                for field in ("seed", "warmups", "measured_repetitions"):
+                for field in ("seed", "warmups", "measured_repetitions", "quick_documents"):
                     previous = getattr(args, field)
                     setattr(args, field, previous + 1)
                     self.assertNotEqual(read(), original)

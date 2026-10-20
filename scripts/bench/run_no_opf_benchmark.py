@@ -962,6 +962,7 @@ def observation_cache_key(
         "environment": observation_environment_identity(source_environment),
         "ner_threshold": threshold,
         "profile": args.profile,
+        "max_documents": args.quick_documents if args.profile == "quick" else None,
         "release": args.release,
         "warmups": args.warmups,
         "measured_repetitions": args.measured_repetitions,
