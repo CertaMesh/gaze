@@ -61,6 +61,23 @@ def scorecard(corpus_sha256: str = render.CORPUS_SHA256) -> dict:
 
 
 class AdjacencyHistoryTests(unittest.TestCase):
+    def test_old_failure_receipt_keeps_its_original_driver_binding(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = failure_receipt(root)
+            original_driver = b"synthetic historical measurement driver"
+            value = json.loads(path.read_text())
+            value['driver_sha256'] = render.hashlib.sha256(original_driver).hexdigest()
+            path.write_text(json.dumps(value))
+            with mock.patch.object(render, 'ROOT', root), mock.patch(
+                'subprocess.check_output', return_value=original_driver,
+            ):
+                render.unavailable_receipt(path, render.MEASURED_INPUTS)
+                value['driver_sha256'] = 'd' * 64
+                path.write_text(json.dumps(value))
+                with self.assertRaises(render.HistoryError):
+                    render.unavailable_receipt(path, render.MEASURED_INPUTS)
+
     def test_unavailable_cells_require_receipts_and_never_infer_zero_counts(self):
         history = render.load_history(render.HISTORY)
         with tempfile.TemporaryDirectory() as temporary:
