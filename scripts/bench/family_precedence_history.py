@@ -34,6 +34,9 @@ ROOT = Path(__file__).resolve().parents[2]
 BRIDGE = ROOT / "scripts/bench/family-precedence-v014-policy-bridge.patch"
 RELEASES = ("v0.14.0", "v0.15.0", "v0.15.1", "v0.16.0")
 HISTORY_ROOT = ROOT / "docs/reference/benchmarks/mechanisms/family-precedence-history"
+# The original receipts pin source bytes without a harness revision. This commit
+# retains those exact bytes; never substitute the current driver for their pin.
+LEGACY_HARNESS_REVISION = "03b95dd0ed01706e322a85dba3e11f31d2e5bb27"
 
 
 def sha(path: Path) -> str:
@@ -193,7 +196,10 @@ def capture(release: str, tree: Path, receipt_file: Path, probe: Path, output: P
         selected = [row for row in raw_records if row.layer == layer]
         documents = [row.to_document() for row in selected]
         measurements = score.collect_validator_measurements(probe, documents, [doc.uid for doc in documents])
-        writer = records.RecordWriter(documents, measurements, corpus_sha256=corpus)
+        writer = records.RecordWriter(
+            documents, measurements, corpus_sha256=corpus,
+            binary=tree / "target/release/examples/clean_for_bench",
+        )
         with patch.object(score, "COMMITTED_SOURCE_ID_VOCABULARY", score.load_committed_source_id_vocabulary(tree)):
             run = score.run_config(
                 repo_root=ROOT, binary=tree / "target/release/examples/clean_for_bench", config="policy-file",
@@ -221,14 +227,29 @@ def capture(release: str, tree: Path, receipt_file: Path, probe: Path, output: P
     return result
 
 
+def validate_harness_digest(digest: str) -> None:
+    if digest == sha(Path(__file__)):
+        return
+    try:
+        original = subprocess.check_output(
+            ["git", "show", f"{LEGACY_HARNESS_REVISION}:scripts/bench/family_precedence_history.py"],
+            cwd=ROOT, stderr=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError as error:
+        raise ValueError("cannot verify the pinned historical driver; fetch its source commit") from error
+    if digest != hashlib.sha256(original).hexdigest():
+        raise ValueError("history harness differs from its committed source pin")
+
+
 def check(directory: Path) -> dict:
     capture = json.loads((directory / "capture.json").read_text())
     if capture.get("release") not in RELEASES or capture.get("revision") != tag_commit(capture["release"], ROOT):
         raise ValueError("history capture does not name a displayed release tag")
     validate_receipt(capture.get("build", {}), capture["release"])
+    validate_harness_digest(capture.get("history_harness_sha256"))
     expected_corpus = hashlib.sha256(agentic.corpus_bytes(arm.generate("test"))).hexdigest()
     if (capture.get("corpus_sha256") != expected_corpus or capture.get("generator_sha256") != sha(Path(arm.__file__))
-            or capture.get("history_harness_sha256") != sha(Path(__file__)) or capture.get("policy_delta_sha256") != sha(arm.DELTA)):
+            or capture.get("policy_delta_sha256") != sha(arm.DELTA)):
         raise ValueError("history inputs differ from committed arm")
     if set(capture.get("layers", {})) != {"A", "D"}:
         raise ValueError("history capture omits positives or benign controls")
