@@ -19,8 +19,10 @@ POST /v1/messages/count_tokens
 ```
 
 Both routes accept either no query or exactly `?beta=true`. Other keys, values,
-encoding variants, duplicate parameters, methods, trailing slashes and suffixes
-are rejected before upstream I/O. The default upstream is `https://api.anthropic.com`. A configured
+encoding variants, duplicate parameters, and empty queries return
+`InvalidRequestFormat` (`400`, `invalid_request_error`). Other methods, trailing
+slashes, and suffixes return `RouteRejected` (`404`). All are rejected before
+upstream I/O. The default upstream is `https://api.anthropic.com`. A configured
 upstream must be an origin root without credentials, query, or fragment. HTTPS
 is accepted; plain HTTP is accepted only for a loopback upstream.
 
@@ -310,6 +312,7 @@ raw headers, credentials, bodies, provider errors, PII, or manifest contents.
 | Condition | Public code | HTTP status |
 | --- | --- | ---: |
 | Wrong route | `RouteRejected` | 404 |
+| Malformed or disallowed query on an admitted route | `InvalidRequestFormat` | 400 |
 | Invalid/duplicate request header, missing/malformed session identity, unexpected session header, invalid request JSON, duplicate key | `HeaderRejected`, `SessionIdentityRequired`, `UnexpectedSessionHeader`, `InvalidRequestFormat`, `DuplicateObjectKey` | 400 |
 | Missing/rejected principal or upstream auth denial | `PrincipalRequired`, `UpstreamUnauthorized`, `PrincipalRejected`, `UpstreamForbidden` | 401 or 403 |
 | Expired/conflicting session | `SessionExpired`, `SessionGenerationConflict` | 410 or 409 |

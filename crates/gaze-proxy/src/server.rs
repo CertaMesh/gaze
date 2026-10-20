@@ -2171,11 +2171,12 @@ fn prepare_direct_ingress(
         .direct
         .as_ref()
         .ok_or_else(|| ProxyErrorCode::ProxyConfiguration.error(ProxyErrorPhase::Framework))?;
-    if method != Method::POST
-        || !matches!(uri.path(), "/v1/messages" | "/v1/messages/count_tokens")
-        || !matches!(uri.query(), None | Some("beta=true"))
+    if method != Method::POST || !matches!(uri.path(), "/v1/messages" | "/v1/messages/count_tokens")
     {
         return Err(ProxyErrorCode::RouteRejected.error(ProxyErrorPhase::Ingress));
+    }
+    if !matches!(uri.query(), None | Some("beta=true")) {
+        return Err(ProxyErrorCode::InvalidRequestFormat.error(ProxyErrorPhase::Ingress));
     }
     let outbound_headers = validate_direct_request_headers(headers, runtime)?;
     let session = match runtime.session_policy {

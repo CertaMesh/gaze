@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   comma-separated beta headers (policy or repeatable `--anthropic-beta`), and
   inspected `count_tokens` requests. Adaptive thinking, output configuration and
   documented context edits use closed schemas; plain HTTP(S) URLs are inspected
-  as text. Unsupported fields return Anthropic-shaped `400` errors. Unverified
+  as text. Unsupported fields and disallowed queries on admitted routes return
+  Anthropic-shaped `400` errors. Unknown paths retain `404`. Unverified
   `safeguards`, message-level system roles and opaque media remain refused (#814).
 
 ### Benchmark

@@ -2256,7 +2256,7 @@ async fn claude_code_messages_and_count_tokens_inspect_all_new_text_and_restore(
 }
 
 #[tokio::test]
-async fn claude_code_unknown_beta_query_and_surfaces_fail_closed() {
+async fn claude_code_unknown_beta_and_surfaces_fail_closed() {
     let upstream = spawn_upstream().await;
     let adapter = AnthropicAdapter::builder(upstream.origin.clone())
         .ephemeral_sessions()
@@ -2282,13 +2282,7 @@ async fn claude_code_unknown_beta_query_and_surfaces_fail_closed() {
         assert_eq!(error["error"]["type"], "invalid_request_error");
         assert_eq!(error["error"]["code"], "HeaderRejected");
     }
-    for path in [
-        "/v1/messages?beta=false",
-        "/v1/messages?beta=true&private=1",
-        "/v1/messages?beta=true&beta=true",
-        "/v1/messages/count_tokens?unknown=true",
-        "/v1/messages/unknown",
-    ] {
+    for path in ["/v1/messages/unknown", "/v1/messages/unknown?beta=false"] {
         let response = Client::new()
             .post(format!("{}{path}", proxy.base_url))
             .header("x-api-key", "synthetic-key")
@@ -2340,4 +2334,94 @@ async fn claude_code_unknown_beta_query_and_surfaces_fail_closed() {
     }
     assert!(upstream.captures.lock().await.is_empty());
     assert_eq!(upstream.connections.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn claude_code_admitted_routes_reject_queries_before_upstream_connection() {
+    let upstream = spawn_upstream().await;
+    let proxy = spawn_proxy(AnthropicAdapter::new(upstream.origin.clone())).await;
+    let client = Client::new();
+    for route in ["/v1/messages", "/v1/messages/count_tokens"] {
+        let mut body = sdk_request(false);
+        if route.ends_with("count_tokens") {
+            body.as_object_mut().unwrap().remove("max_tokens");
+        }
+        for query in [
+            "beta=%74rue",
+            "%62eta=true",
+            "beta=true&beta=true",
+            "unknown=true",
+            "beta=true&alice@example.invalid=1",
+            "beta=false",
+            "beta=TRUE",
+            "beta=",
+            "beta",
+            "",
+        ] {
+            let response = client
+                .post(format!("{}{route}?{query}", proxy.base_url))
+                .header("x-api-key", "synthetic-key")
+                .header("anthropic-version", "2023-06-01")
+                .json(&body)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "{route}?{query}"
+            );
+            let error: Value = response.json().await.unwrap();
+            assert_eq!(
+                error,
+                json!({
+                    "type": "error",
+                    "error": {
+                        "type": "invalid_request_error",
+                        "message": "unsupported_or_invalid_request_surface; see the Anthropic proxy contract",
+                        "code": "InvalidRequestFormat",
+                        "phase": "Ingress",
+                    },
+                })
+            );
+            assert!(upstream.captures.lock().await.is_empty());
+            assert_eq!(upstream.connections.load(Ordering::SeqCst), 0);
+        }
+    }
+}
+
+#[tokio::test]
+async fn claude_code_duplicate_beta_headers_fail_before_upstream_connection() {
+    let upstream = spawn_upstream().await;
+    let adapter = AnthropicAdapter::builder(upstream.origin.clone())
+        .ephemeral_sessions()
+        .allow_beta("claude-code-20250219")
+        .unwrap()
+        .build()
+        .unwrap();
+    let proxy = spawn_proxy(adapter).await;
+    let client = Client::new();
+    for route in ["/v1/messages", "/v1/messages/count_tokens"] {
+        let mut body = sdk_request(false);
+        if route.ends_with("count_tokens") {
+            body.as_object_mut().unwrap().remove("max_tokens");
+        }
+        let response = client
+            .post(format!("{}{route}", proxy.base_url))
+            .header("x-api-key", "synthetic-key")
+            .header("anthropic-version", "2023-06-01")
+            .header("anthropic-beta", "claude-code-20250219")
+            .header("anthropic-beta", "claude-code-20250219")
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{route}");
+        let error: Value = response.json().await.unwrap();
+        assert_eq!(error["type"], "error");
+        assert_eq!(error["error"]["type"], "invalid_request_error");
+        assert_eq!(error["error"]["code"], "HeaderRejected");
+        assert!(upstream.captures.lock().await.is_empty());
+        assert_eq!(upstream.connections.load(Ordering::SeqCst), 0);
+    }
 }

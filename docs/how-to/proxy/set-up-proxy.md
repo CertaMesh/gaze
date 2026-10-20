@@ -85,7 +85,9 @@ export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
 
 Do not append `/v1`: the strict Anthropic client base URL is the proxy root and
 the SDK may issue `POST /v1/messages` or `POST /v1/messages/count_tokens`,
-with an optional literal `?beta=true`. The direct constructor is
+with an optional literal `?beta=true`. Other queries return an Anthropic-shaped
+`400 invalid_request_error` before any upstream connection; unknown paths return
+`404`. The direct constructor is
 ephemeral and rejects `x-gaze-session-id`. If the embedding host explicitly
 enables session continuity, send `x-gaze-session-id` on every request with a
 canonical lowercase UUIDv4 value. The proxy requires `x-api-key` and
