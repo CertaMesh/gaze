@@ -90,13 +90,18 @@ class CredentialCellsTests(unittest.TestCase):
         source = '[policy.rulepacks]\nbundled=["core","secrets"]\npaths=[]\n\n[[rule]]\nkind="default"\naction="tokenize"\n'
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            base, candidate = arm.prepare(source, root)
+            project = root / "repo"
+            pack = Path("crates/gaze-recognizers/embedded/secrets.toml")
+            (project / pack).parent.mkdir(parents=True)
+            (project / pack).write_bytes((arm.ROOT / pack).read_bytes())
+            with mock.patch.object(arm, "ROOT", project):
+                base, candidate = arm.prepare(source, root)
             paths = candidate["policy"]["rulepacks"].pop("paths")
             self.assertEqual(paths[:-1], base["policy"]["rulepacks"]["paths"])
             candidate["policy"]["rulepacks"]["paths"] = paths[:-1]
             self.assertEqual(base, candidate)
             old = tomllib.loads((root / "base-secrets.toml").read_text())
-            new = tomllib.loads((root / "password-code-credentials.toml").read_text())
+            new = tomllib.loads((project / arm.RULEPACK_PATH).read_text())
             self.assertEqual({r["id"] for r in old["recognizers"]}, {"password.field", "security_token.anchored"})
             self.assertEqual({r["id"] for r in new["recognizers"]}, arm.NEW_IDS)
             delta = tomllib.loads((root / "delta.toml").read_text())
