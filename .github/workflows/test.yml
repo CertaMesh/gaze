@@ -391,6 +391,10 @@ jobs:
         run: |
           cargo build --locked -p gaze-cli --bin gaze
           cargo build --locked -p gaze-recognizers --example clean_for_bench
+      - name: Prove exact native capture reuse on the committed fixture
+        env:
+          GAZE_CAPTURE_FIXTURE_BINARY: target/debug/examples/clean_for_bench
+        run: uv run --project scripts/bench --python 3.13 --group comparison-test python -m pytest -q scripts/bench/test_capture_reuse.py
       # `cargo test --workspace` builds examples but never runs their unit tests; the
       # leak ledger's pool-dump pins (normalizer copy vs the pipeline trace) live here.
       - name: Run bench producer example tests

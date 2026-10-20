@@ -649,7 +649,7 @@ class PolicyNerSettingsTests(unittest.TestCase):
 
             self.assertEqual(binary.parent.name, "release")
 
-    def test_exact_cache_hit_skips_build_probe_and_detector_execution(self) -> None:
+    def test_exact_cache_hit_binds_binaries_and_skips_probe_and_detector_execution(self) -> None:
         with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
             root = Path(directory)
             dataset = root / "dataset.parquet"
@@ -695,21 +695,19 @@ class PolicyNerSettingsTests(unittest.TestCase):
                 runner, "observation_cache_key", return_value=({"key": "exact"}, None),
             ))
             stack.enter_context(mock.patch.object(
-                runner.benchmark_cache, "lookup", return_value=(cached, "cache hit synthetic"),
+                runner.benchmark_cache, "restore_layers", return_value="hit",
             ))
-            stack.enter_context(mock.patch.object(runner.benchmark_cache, "copy_verified"))
-            stack.enter_context(mock.patch.object(runner.records, "mark_cache_replay"))
             stack.enter_context(mock.patch.object(
                 runner.records, "rescore", return_value={"cached": True},
             ))
             finish = stack.enter_context(mock.patch.object(runner, "finish_run", return_value=17))
-            build = stack.enter_context(mock.patch.object(runner.dataiku, "build_binary"))
-            probe = stack.enter_context(mock.patch.object(runner, "build_validator_probe"))
+            build = stack.enter_context(mock.patch.object(runner.dataiku, "build_binary", return_value=dataset))
+            probe = stack.enter_context(mock.patch.object(runner, "build_validator_probe", return_value=dataset))
             execute = stack.enter_context(mock.patch.object(runner, "execute_measurements"))
 
             self.assertEqual(runner.run(args), 17)
-            build.assert_not_called()
-            probe.assert_not_called()
+            build.assert_called_once()
+            probe.assert_called_once()
             execute.assert_not_called()
             finish.assert_called_once_with(args, output / "quick", {"cached": True})
 

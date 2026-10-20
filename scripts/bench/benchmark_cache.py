@@ -6,6 +6,7 @@ import fcntl
 import hashlib
 import json
 import shutil
+import gzip
 from pathlib import Path
 from typing import Mapping
 
@@ -15,7 +16,7 @@ RECORD = "observations-v1.jsonl.gz"
 
 
 def key_digest(key: Mapping[str, object]) -> str:
-    payload = json.dumps(key, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    payload = json.dumps(key, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -112,3 +113,95 @@ def copy_verified(source: Path, destination: Path, key: Mapping[str, object]) ->
     if _sha256(destination) != metadata["record_sha256"]:
         destination.unlink(missing_ok=True)
         raise ValueError("cache copy record sha256 mismatch")
+
+
+def store_layers(root: Path, key: Mapping[str, object], source: Path) -> None:
+    """Publish a bound header and independently hashed layer records, metadata last."""
+    import scorecard_record as records
+    import stage_timing as stages
+
+    header, observations = records._read(source)
+    digest = key_digest(key)
+    if header["scorecard"].get("capture_cache") != provenance(key):
+        raise ValueError("observation record is not bound to this full cache key")
+    entry = root / digest
+    entry.mkdir(parents=True, exist_ok=True)
+    with (entry / ".lock").open("w") as lock, stages.measure("artifact_write_compress", artifact="layer_cache"):
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        parts = {"header": [header]}
+        for index, row in enumerate(observations):
+            layer = row["layer"]
+            if layer not in {"C", "A", "D", "R"}:
+                raise ValueError("unsupported capture layer")
+            parts.setdefault(layer, []).append({"index": index, "observation": row})
+        hashes = {}
+        for layer, rows in parts.items():
+            temporary = entry / f".{layer}.jsonl.gz.tmp"
+            records._write_rows(temporary, rows)
+            path = entry / f"{layer}.jsonl.gz"
+            temporary.replace(path)
+            hashes[layer] = _sha256(path)
+        metadata = {"format": "layer-capture-v1", "key": key,
+                    "record_sha256": _sha256(source), "parts": hashes}
+        temporary = entry / ".layers.json.tmp"
+        temporary.write_text(json.dumps(metadata, sort_keys=True) + "\n", encoding="utf-8")
+        temporary.replace(entry / "layers.json")
+
+
+def provenance(key: Mapping[str, object]) -> dict:
+    # Execution-specific hit/miss lives in the linked evidence, preserving scorecard bytes.
+    return {"format": "layer-capture-v1", "key_sha256": key_digest(key),
+            "execution_evidence": "run-evidence.json"}
+
+
+def restore_layers(root: Path, key: Mapping[str, object], destination: Path) -> str:
+    """All-or-nothing exact replay. Invalid/missing parts are a miss, never a fallback."""
+    import scorecard_record as records
+    import stage_timing as stages
+
+    entry = root / key_digest(key)
+    if not (entry / "layers.json").is_file():
+        return "miss_absent"
+    temporary = destination.with_suffix(destination.suffix + ".cache-tmp")
+    try:
+        with (entry / ".lock").open("r") as lock, stages.measure("cache_verify"):
+            fcntl.flock(lock, fcntl.LOCK_SH)
+            metadata = _read_metadata(entry / "layers.json")
+            if (metadata.get("format") != "layer-capture-v1" or metadata["key"] != key
+                    or key_digest(metadata["key"]) != key_digest(key)):
+                return "miss_key"
+            parts = metadata.get("parts")
+            if (not isinstance(parts, dict) or "header" not in parts
+                    or not set(parts) <= {"header", "C", "A", "D", "R"}):
+                return "miss_metadata"
+            rows = {}
+            header = None
+            for layer, expected in parts.items():
+                part = entry / f"{layer}.jsonl.gz"
+                if _sha256(part) != expected:
+                    return "miss_record_hash"
+                with gzip.open(part, "rt", encoding="utf-8") as stream:
+                    data = [json.loads(line) for line in stream]
+                if layer == "header":
+                    if len(data) != 1 or data[0]["scorecard"].get("capture_cache") != provenance(key):
+                        return "miss_binding"
+                    header = data[0]
+                else:
+                    for item in data:
+                        index = item["index"]
+                        if type(index) is not int or index in rows or item["observation"]["layer"] != layer:
+                            return "miss_inventory"
+                        rows[index] = item["observation"]
+            if sorted(rows) != list(range(len(rows))):
+                return "miss_inventory"
+            records._write_rows(temporary, [header, *(rows[i] for i in range(len(rows)))])
+            if _sha256(temporary) != metadata["record_sha256"]:
+                return "miss_record_hash"
+            records._read(temporary)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary.replace(destination)
+            return "hit"
+    except (OSError, UnicodeError, ValueError, KeyError, TypeError, EOFError):
+        return "miss_invalid"
+    finally:
+        temporary.unlink(missing_ok=True)

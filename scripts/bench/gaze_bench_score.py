@@ -2147,6 +2147,7 @@ def _validate_validator_probe_response(
 
 
 @producer_boundary
+@stages.timed("validator_measurements")
 def collect_validator_measurements(
     probe_binary: Path,
     documents: Sequence[Document],
