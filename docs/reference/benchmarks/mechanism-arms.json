@@ -2572,6 +2572,154 @@
         }
       ],
       "shipped": "default-on in the policy from gaze setup"
+    },
+    {
+      "id": "password-code-credentials",
+      "title": "Password hashes and code credentials",
+      "added_in": "v0.18",
+      "policy_delta": {
+        "file": "scripts/bench/mechanisms/password-code-credentials.toml",
+        "sha256": "d5b25b1e913fd9ea39ed20cbc57f027f6814ba2d65abb98e6f193fccb5729d17"
+      },
+      "measurements": [
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/90550d3ac1b374b6479de9d674f76ace0d1926baece405bc9a67330077cb321d/base-c5bd3e1fbb28946d6d994488128792bffbe61f591c61b8f2a8b00b8dbf80ae97.jsonl.gz",
+              "sha256": "c5bd3e1fbb28946d6d994488128792bffbe61f591c61b8f2a8b00b8dbf80ae97"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/90550d3ac1b374b6479de9d674f76ace0d1926baece405bc9a67330077cb321d/candidate-4ef58408d724aa690ebb452ab419d43a5de4e38ff946b91ea8ccecacdbc6dce6.jsonl.gz",
+              "sha256": "4ef58408d724aa690ebb452ab419d43a5de4e38ff946b91ea8ccecacdbc6dce6"
+            }
+          },
+          "revision": "2068418bb89db000adcf880307974357ff716afe",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "c4ff3bddcf9e79d5d0f4c57482799653eb97a49428efe7cf217058a863dfcaf3",
+          "candidate_policy_sha256": "d0dd04ca1b312f2a757d3c2d8981fef65bfd381c4f0d486c71719a2420359682",
+          "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {}
+            },
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {}
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {},
+              "false_positive_by_class_delta": {}
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {},
+              "false_positive_by_class_delta": {}
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 205469,
+                "false_positive": 2993,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 71244,
+                "false_positive": 4589,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 10650,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 11580,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 389894,
+                "false_positive": 1347,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 120944,
+                "false_positive": 1341,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 403175, FP bytes changed by +2520"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 403175, FP bytes changed by +2520"
+            }
+          },
+          "attested": {
+            "binary_sha256": "22ee0dfa6204a913a467d6038af88f6bd1aec0d347029923682f16c21f3b32d4",
+            "crates_tree": "83331f0a72486dd682579f48e87c4e7d908fe827",
+            "machine": "Apple M5 Max, 18 physical cores, 64 GiB RAM, arm64, macOS 26.5, Rust 1.96.0",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
+          }
+        }
+      ],
+      "shipped": "on in gaze setup; explicit secrets bundle for library policies"
     }
   ]
 }

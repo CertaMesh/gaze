@@ -820,8 +820,10 @@ those sections. When the mechanism ships on by default, the release headline
 already includes its effect; this table isolates it and does not add to it.
 
 [`scripts/bench/mechanism_arms.py`](../../../scripts/bench/mechanism_arms.py)
-`record` takes the four runner outputs (base and candidate, contracts v2 and
-v1) and refuses them unless the candidate policy is exactly base plus delta,
+`record` takes four scorecards (base and candidate under contracts v2 and
+v1). Capture each side once under v2, then re-score its observation record for
+v1 with `scorecard_record.py`; no separate v1 capture is needed. It refuses the
+pair unless the candidate policy is exactly base plus delta,
 every run shares one commit, clean tree, corpus, seed and scored population,
 and each v1 run equals the v1 re-score of its v2 run's observation record.
 It commits both v2 observation records under
@@ -846,15 +848,17 @@ and a metadata-only audit row; address fields and other Nym labels remain
 eligible. The measured Nym rows below identify the source revision of each
 guard version.
 
-Current candidate ablations use fresh byte-quality measurements, including concurrent runs; they establish no latency or RSS comparison. The GLiNER DOB cost figures below retain their separately pinned historical quiet-host evidence and were not re-measured for this candidate.
+The retained v0.17 candidate ablations use byte-quality measurements, including concurrent runs; they establish no latency or RSS comparison. The GLiNER DOB cost figures below retain their separately pinned historical quiet-host evidence and were not re-measured for that candidate.
 
-The current Nym safety-net ablation **fails both v2 and v1 credit guards**: enabling Nym adds 18 false-positive bytes on the benign BSN counterweight (0 → 18). The fresh v0.16.0 → v0.17.0 release comparison has 18 bytes on both sides for that counterweight, and its numeric gain gates pass. The other five current mechanism ablations pass both contracts. The failed component verdict remains in [`mechanism-arms.json`](mechanism-arms.json).
+The retained v0.17 Nym safety-net ablation **fails both v2 and v1 credit guards**: enabling Nym adds 18 false-positive bytes on the benign BSN counterweight (0 → 18). The fresh v0.16.0 → v0.17.0 release comparison has 18 bytes on both sides for that counterweight, and its numeric gain gates pass. The other five retained v0.17 candidate mechanism ablations pass both contracts. The failed component verdict remains in [`mechanism-arms.json`](mechanism-arms.json).
+
+The separate [password-hash and code-credential arm](password-code-credentials/README.md) uses generator v22 and serial captures. Its v2 and replayed v1 gates pass. This is an unreleased measurement; it does not add a released v0.18 score.
 
 <!-- BEGIN GENERATED: mechanism-arms -->
 
 Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v4 headline counts false-positive bytes after gold-gap credit.
 
-14 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
+15 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
 
 Shipped releases, one column per release:
 
@@ -866,6 +870,7 @@ Shipped releases, one column per release:
 | Address-block growth | not measured for this release | not measured for this release | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
 | Credential rulepack | not measured for this release | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
 | Nym personal-name labels | not measured for this release | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
+| Password hashes and code credentials | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 |
 
 <!-- END GENERATED: mechanism-arms -->
 
@@ -2127,6 +2132,47 @@ match ran over) and none on the twins. Under the full `gaze setup` policy
 (NER and Nym, `fa3adffe`), main leaked 348 of those 3,527 bytes (NER and Nym cover 36
 bytes of the escaped URLs), put the same 570 false-positive bytes on the new
 A documents and none on the twins.
+
+### Stored password encodings and code literals (generators v21–v22)
+
+Generator v21 adds 970 A positives, 500 D counterweights and 970 R repeat
+cases per partition for stored password encodings and literal credential fields.
+The synthetic inputs cover 17 encoding formats in prose, logs, PHP, JSON and
+SQL, plus quoted password, passphrase, API-token and remember-token fields.
+Gold covers each complete credential. Truncated encodings, glued fragments,
+public scalars and unevaluated code expressions remain benign. Protecting them
+counts as a false positive.
+
+Generator v22 adds 1,070 A positives, 430 D counterweights and 1,070 R repeats
+per partition. The cases extend producer salt alphabets, compact and nested
+PHP arrays, weak password literals, generic-token credentials and metadata.
+Development and test partitions use separate rendered contexts and value pools.
+The 120 compact and nested PHP rows per partition share expression shapes;
+these results do not establish generalization to unseen PHP syntax.
+The [cell generator](../../../scripts/bench/credential_code_cells.py) contains
+the authored inputs. All earlier corpora and contracts remain frozen.
+The full test partition has 8,657 A, 6,122 D and 5,101 R documents.
+
+Generic `token` keys remain gold where the input declares a credential, so
+unprotected generic tokens remain visible as leaks. Log-probability output,
+tokenizer data and public schema examples remain benign. Password-labelled
+validation rules, translations and masked display values are also benign in
+these cells. The runtime protects those password fields conservatively, and
+the resulting false-positive bytes remain in the score.
+
+The unreleased credential change has [fresh base/candidate and isolated-mechanism
+evidence](password-code-credentials/README.md) on generator v22, corpus
+`ee25d9eefd2a…`. Both required gates (v2 and replayed v1) pass, as does the latest
+v4 headline contract: 403,175 fewer leaked bytes, 2,520 additional raw
+false-positive bytes, net 400,655 bytes. All 22,790 documents per side restore
+exactly with valid manifests and no refusals. The report includes per-layer
+raw FP, Refused and leaked-on-all-processed columns. No timing comparison is
+claimed.
+
+Historical release backfill is deferred to a separate job. The release rows
+below remain measured on generator v20 and its recorded corpus; they do not
+include v21/v22 cells and must not be compared directly with the v22 report.
+Their recorded scorecards, contracts and ledgers remain unchanged.
 
 ### Measured adjacency layer history
 

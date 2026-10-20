@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "native_contract": 1,
+  "source_record_contract": 2,
+  "side": "base",
+  "scorecard_sha256": {
+    "native": "c867d10ef04416f789ae8ecb5856eddf3ccbdeeb302434f2f68890684de11578",
+    "replay": "c15c710a661872e4053f060a41d1592770bd5537250921b801693be334345455"
+  },
+  "equality": {
+    "C": {
+      "metrics": true,
+      "pipeline_contract": true,
+      "pipeline_availability": true,
+      "per_label_recall": true
+    },
+    "A": {
+      "metrics": true,
+      "pipeline_contract": true,
+      "pipeline_availability": true,
+      "per_label_recall": true
+    },
+    "D": {
+      "metrics": true,
+      "pipeline_contract": true,
+      "pipeline_availability": true,
+      "per_label_recall": true
+    },
+    "R": {
+      "metrics": true,
+      "pipeline_contract": true,
+      "pipeline_availability": true,
+      "per_label_recall": true
+    }
+  },
+  "portable_scorecard_sha256": {
+    "native": "5ced81f336321dd8f7c55bd6dfc7ca18dd87d85cde753b615ce8fc09d37e3069",
+    "replay": "90b2021586dfbdffbb2709b176d077082c1839b7b59a3e3b0331e7ebdbe204e6"
+  },
+  "portable_hash_convention": "SHA-256 of compressed publication files; original capture scorecard hashes cover uncompressed JSON."
+}

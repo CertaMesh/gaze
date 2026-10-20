@@ -54,8 +54,13 @@ content even though restore works. Spaces, pipes and these exact values can
 also be real passwords, so excluding them globally would create leaks.
 Context-aware metadata exclusions require a separate design. The benchmark
 keeps complete benign contexts as layer D counterweights and actual spaced,
-pipe-containing and weak passwords as layer A/R gold; the pending gain gate
-must report the resulting false-positive bytes.
+pipe-containing and weak passwords as layer A/R gold. The completed gain gate
+retains these costs: layer D adds 930 false-positive bytes, layer A adds 1,596
+and layer R removes 6. The A/R change is Nym labelling the SQL keyword `VALUES`
+as a name; this can hide SQL syntax from an agent until restoration. The D
+change comes from the new password-code recognizer. Across all layers,
+403,175 leaked bytes are removed for 2,520 additional false-positive bytes
+under both required contracts.
 
 The labelled-identifier scanner is unsuitable here. Its group and next-label
 boundaries describe identifiers, while a quoted secret can contain arbitrary
@@ -72,10 +77,20 @@ logprob/tokenizer/schema/validation/language/masked contexts as benign
 counterweights. Alternative salts and PHP arrays are included. Generator v22
 preserves every v21 document byte-for-byte. Its added contexts use separate
 wording, structures and seeded value pools in each partition; tests reject
-shared rendered text or value-normalised templates. Fresh v2 and v1 gain-gate
-measurements, mechanism measurements,
-and historical-release remeasurement remain pending until the release
-benchmark machine is available. No performance or byte-gain result is claimed.
+shared rendered text or value-normalised templates. The 120 compact and
+nested PHP rows per partition share expression shapes, so these measurements
+do not establish generalization to unseen PHP syntax.
+
+Fresh base/candidate and isolated-mechanism measurements pass the v2 and v1
+gain gates and the current v4 headline contract. Each side's v2 observation
+record supplies the other contracts by re-scoring. An independent native v1
+pair completed earlier and agrees with the replay. All 22,790 documents per
+side restore exactly and have valid manifests; none is refused. The
+[evidence report](../../reference/benchmarks/password-code-credentials/README.md)
+records per-layer leaked and false-positive bytes, source and binary identities,
+commands and limits. Historical release backfill is a separate job: published
+history remains bound to generator v20, while this measurement uses v22.
+No latency or throughput result is claimed.
 
 The mechanism preparation command produces two policies for the same binary:
 
@@ -88,4 +103,5 @@ Both retain the same prior secrets definitions and all other setup settings.
 The candidate appends the new hash and code-field definitions. Use the emitted
 `delta.toml` with `agentic_layers.py gate --policy-delta` and
 `mechanism_arms.py record --policy-delta`. The emitted paths are local artifacts.
-Measurements and historical rows must be committed before this change can merge.
+The committed evidence records the policy delta and retains both value-free
+observation archives. Historical release rows are not re-labelled as v22.
