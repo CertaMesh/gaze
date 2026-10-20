@@ -32,7 +32,7 @@ fn check_matrix_ownership(workflow: &str) -> Result<(), String> {
             }
         }
     }
-    let expected = vec![
+    let expected = [
         (
             "workspace-default".to_owned(),
             "cargo run -p xtask -- ci-feature-matrix --partition ci-default".to_owned(),
@@ -56,17 +56,21 @@ fn test_workflow_runs_xtask_gates_only_through_the_matrix() {
 
 #[test]
 fn matrix_ownership_checks_plain_and_block_run_strings() {
-    let workflow = include_str!("../../../.github/workflows/test.yml");
-    let plain = "run: cargo run -p xtask -- ci-feature-matrix --partition ci-gates";
-    let block = "run: |\n          cargo run -p xtask -- ci-feature-matrix --partition ci-gates";
-    assert!(workflow.contains(plain));
-    check_matrix_ownership(&workflow.replace(plain, block)).unwrap();
-    for duplicate in [
-        "run: cargo run -p xtask -- safety-net-sanity",
-        "run: |\n          echo checking\n          cargo run -p xtask -- safety-net-sanity",
+    for matrix in [
+        "run: cargo run -p xtask -- ci-feature-matrix --partition ci-gates",
+        "run: |\n          cargo run -p xtask -- ci-feature-matrix --partition ci-gates",
     ] {
-        let changed = workflow.replace(plain, &format!("{plain}\n      - {duplicate}"));
-        assert!(check_matrix_ownership(&changed).is_err(), "{duplicate}");
+        let workflow = format!(
+            "jobs:\n  workspace-default:\n    steps:\n      - run: cargo run -p xtask -- ci-feature-matrix --partition ci-default\n  xtask-feature-gates:\n    steps:\n      - {matrix}\n"
+        );
+        check_matrix_ownership(&workflow).unwrap();
+        for duplicate in [
+            "run: cargo run -p xtask -- safety-net-sanity",
+            "run: |\n          echo checking\n          cargo run -p xtask -- safety-net-sanity",
+        ] {
+            let changed = format!("{workflow}      - {duplicate}\n");
+            assert!(check_matrix_ownership(&changed).is_err(), "{duplicate}");
+        }
     }
 }
 

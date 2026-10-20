@@ -343,8 +343,8 @@ mod tests {
 
     #[test]
     fn owner_side_hits_remain_outside_agent_visible_serde_path() {
-        static_assertions::assert_not_impl_any!(IndexEntity: serde::Serialize, serde::de::DeserializeOwned);
-        static_assertions::assert_not_impl_any!(IndexSearchHit: serde::Serialize, serde::de::DeserializeOwned);
+        static_assertions::assert_not_impl_any!(IndexEntity: serde::Serialize, serde::Deserialize<'static>);
+        static_assertions::assert_not_impl_any!(IndexSearchHit: serde::Serialize, serde::Deserialize<'static>);
         let response = BridgeSearchResponse {
             target_domain: DOMAIN.to_string(),
             audit_id: "audit-1".to_string(),
