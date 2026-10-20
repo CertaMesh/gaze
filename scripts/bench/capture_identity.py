@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.metadata
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -60,7 +61,8 @@ def tree(path: Path) -> dict[str, str]:
 
 
 def _command(*args: str) -> str:
-    return subprocess.check_output(args, text=True, stderr=subprocess.PIPE).strip()
+    return subprocess.check_output(args, text=True, stderr=subprocess.PIPE,
+                                   env={**os.environ, "LC_ALL": "C"}).strip()
 
 
 def native_runtime(binaries: dict[str, Path]) -> dict:
@@ -91,7 +93,8 @@ def native_runtime(binaries: dict[str, Path]) -> dict:
         hardware = _command("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string", "hw.machine", "hw.ncpu")
     elif system == "Linux":
         os_build = platform.platform()
-        hardware = _command("lscpu")
+        hardware = "\n".join(line for line in _command("lscpu").splitlines()
+                             if not line.startswith(("CPU MHz:", "CPU(s) scaling MHz:")))
         for binary in binaries.values():
             for line in _command("ldd", str(binary)).splitlines():
                 line = line.strip()

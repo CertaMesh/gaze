@@ -72,6 +72,24 @@ def write_capture(binary, directory, key):
 
 
 class CaptureIdentityTests(unittest.TestCase):
+    def test_linux_hardware_identity_ignores_live_clock_speed_but_binds_cpu_features(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            library = root / "synthetic-library"
+            library.write_bytes(b"synthetic")
+            hardware = "Architecture: x86_64\nFlags: synthetic\nCPU(s) scaling MHz: 70%\nCPU MHz: 2400"
+            def command(*args):
+                return hardware if args[0] == "lscpu" else f"{library} (0x000)"
+            with mock.patch.object(identity.platform, "system", return_value="Linux"), \
+                    mock.patch.object(identity, "_command", side_effect=command), \
+                    mock.patch.object(identity.importlib.metadata, "distributions", return_value=[]), \
+                    mock.patch.object(identity.sysconfig, "get_path", return_value=str(root)):
+                original = identity.native_runtime({"detector": library})
+                hardware = hardware.replace("70%", "95%").replace("2400", "3200")
+                self.assertEqual(identity.native_runtime({"detector": library}), original)
+                hardware = hardware.replace("Flags: synthetic", "Flags: changed")
+                self.assertNotEqual(identity.native_runtime({"detector": library}), original)
+
     def test_reusable_base_cannot_bypass_existing_fresh_release_admission(self):
         with self.assertRaisesRegex(renderer.RenderError, "run evidence"):
             renderer.history_entry_from_scorecard(
