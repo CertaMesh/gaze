@@ -125,11 +125,7 @@ def check(event, needs, context):
         if result != 'success' and not (job not in required and result == 'skipped'):
             raise ValueError(f'{context}: {job} must succeed, got {result!r}')
     lane = 'FULL INTEGRATION' if plan['integration'] else 'PR FAST LANE ONLY; full integration has not run'
-    message = f'{lane}: all mandatory {context} owners succeeded.'
-    print(message)
-    if os.environ.get('GITHUB_STEP_SUMMARY'):
-        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-            summary.write(f'## {lane}\n\n{message}\n')
+    return f'{lane}: all mandatory {context} owners succeeded.'
 
 
 def changed_paths(base, head):
@@ -182,7 +178,11 @@ def main():
             for key, value in outputs(result).items():
                 output.write(f'{key}={value}\n')
     elif args.command == 'check':
-        check(os.environ['EVENT_NAME'], json.loads(os.environ['NEEDS_JSON']), args.context)
+        message = check(os.environ['EVENT_NAME'], json.loads(os.environ['NEEDS_JSON']), args.context)
+        print(message)
+        if os.environ.get('GITHUB_STEP_SUMMARY'):
+            with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                summary.write(message + '\n')
     else:
         run_fast(json.loads(os.environ['PACKAGES_JSON']))
 
