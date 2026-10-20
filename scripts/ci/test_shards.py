@@ -184,11 +184,35 @@ def prove(evidence, output):
             stream.write(report)
 
 
+def covered_package(output, package):
+    workspace = json.loads((output / "after.json").read_text())
+    inventory = json.loads(subprocess.check_output(
+        ["cargo", "nextest", "list", "--locked", "-p", package, "--message-format", "json"],
+        cwd=ROOT,
+    ))
+    suites = inventory["rust-suites"]
+    if not suites or any(suite["status"] != "listed" for suite in suites.values()):
+        raise ValueError(f"{package}: every binary must be successfully listed")
+    standalone = normalized_inventory(inventory)
+    for binary, tests in standalone.items():
+        if binary not in workspace or any(
+            name not in workspace[binary] or workspace[binary][name] != ignored
+            for name, ignored in tests.items()
+        ):
+            raise ValueError(f"{package}: workspace does not cover {binary}")
+    (output / f"{package}.json").write_text(json.dumps(standalone, indent=2) + "\n")
+    print(f"Covered {package}: {len(standalone)} binaries, "
+          f"{sum(len(tests) for tests in standalone.values())} names, identical ignored status")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     listing = commands.add_parser("collect")
     listing.add_argument("--output", type=Path, required=True)
+    covered = commands.add_parser("covered-package")
+    covered.add_argument("--evidence", type=Path, required=True)
+    covered.add_argument("--package", required=True)
     selection = commands.add_parser("filter")
     selection.add_argument("shard", choices=SHARDS)
     proof = commands.add_parser("prove")
@@ -197,6 +221,8 @@ def main():
     args = parser.parse_args()
     if args.command == "collect":
         collect(args.output)
+    elif args.command == "covered-package":
+        covered_package(args.evidence, args.package)
     elif args.command == "filter":
         print(filterset(load_roster(), args.shard))
     else:
