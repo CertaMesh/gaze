@@ -28,8 +28,10 @@ row stays reproducible) and the harness commit, driver and binary digest under
       --model-env GAZE_KIJI_DISTILBERT_MODEL_DIR=<model-cache>/kiji-distilbert \\
       --model-bundle kiji-distilbert=<model-cache>/kiji-distilbert=<SHA256SUMS digest> \\
       --manifest-actions tokenize \\
-      --scored-labels docs/reference/benchmarks/scored-labels-v2.json \\
       --output target/bench-data/past-release/scorecard-v4.json
+
+Capture each release once; use `rescore.py` on its observation record for every
+contract. Independent contract captures require `--cross-check`.
 """
 
 from __future__ import annotations
@@ -150,7 +152,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=int,
         help="smoke check only: a sampled run is never recorded as a release row",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--cross-check", action="store_true",
+        help="explicit independent contract capture for replay-equivalence checks only",
+    )
+    args = parser.parse_args(argv)
+    if (args.scored_labels is not None or args.agentic_scored_labels is not None) and not args.cross_check:
+        parser.error("capture once, then use rescore.py; independent capture requires --cross-check")
+    return args
 
 
 def run(args: argparse.Namespace) -> Path:

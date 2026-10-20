@@ -22,11 +22,11 @@ Resolves #
 ## Benchmark evidence (AGENTS.md → "Benchmark gain gate")
 
 - [ ] Not a detection change and not a benchmark change. Tick this only to skip the rest of this block.
-- [ ] Changes the benchmark (layer, contract, corpus or generated data, scorer, or benchmark doc): past-release rows re-measured with the current runner on each tag's code; rows that could not be re-measured give the reason in the doc.
+- [ ] Changes the benchmark: immutable specification recorded, integrity checks passed, and no comparison across specifications. History backfills are off the PR path. Before release, measure the current and previous release on the same specification.
 
 Detection changes (adds, widens, narrows or removes rules, cues, locale buckets, mechanisms, models, or safety-net/resolver behaviour) fill in the table. Layers are C, A, D and R.
 
-Base sha (`main` the branch starts from, scored fresh):
+Base sha (`main` the branch starts from, captured once or verified exact-key reuse):
 Candidate sha:
 Scorecard paths:
 

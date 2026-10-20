@@ -203,7 +203,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--no-cache", action="store_true", help="measure without reading or writing the observation cache")
     parser.add_argument("--score-jobs", type=int, default=None, help="bounded observation replay workers (default: 4)")
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--cross-check", action="store_true",
+        help="explicit independent contract capture for replay-equivalence checks only",
+    )
+    args = parser.parse_args(argv)
+    if (args.scored_labels is not None or args.agentic_scored_labels is not None) and not args.cross_check:
+        parser.error(
+            "capture once without scoring-contract flags, then use rescore.py for every contract; "
+            "independent capture requires --cross-check"
+        )
+    return args
 
 
 def repo_path(repo_root: Path, path: Path) -> Path:

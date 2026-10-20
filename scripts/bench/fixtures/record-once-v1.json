@@ -1,0 +1,280 @@
+{
+  "schema_version": 4,
+  "generated_at": "synthetic",
+  "gaze": {
+    "revision": "synthetic",
+    "dirty": false
+  },
+  "dataset": {
+    "integrity": {
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "validator_gold_census": {
+      "EMAIL": {
+        "applicability": "validator_not_configured",
+        "validator_kinds": [],
+        "gold_spans": 1,
+        "validator_passed_gold_spans": null,
+        "validator_failed_gold_spans": null
+      },
+      "PASSWORD": {
+        "applicability": "not_applicable",
+        "validator_kinds": [],
+        "gold_spans": 1,
+        "validator_passed_gold_spans": null,
+        "validator_failed_gold_spans": null
+      }
+    }
+  },
+  "scoring": {
+    "scored_label_contract": {
+      "id": "scored-labels-v1",
+      "version": 1,
+      "file": null,
+      "file_sha256": null,
+      "excluded_labels": [],
+      "neutral_prediction_classes": [],
+      "scored_gold_entities": 2,
+      "scored_gold_utf8_bytes": 27,
+      "excluded_gold_entities": 0,
+      "excluded_gold_utf8_bytes": 0,
+      "scored_gold_digest": {
+        "algorithm": "sha256",
+        "value": "8663da4830060ac2ab73f2c950820d2c2c3f17658e2e8d798c1bc7a8a8bac3e1"
+      }
+    }
+  },
+  "parameters": {
+    "ner_threshold": 0.3,
+    "configs": [
+      "policy-file"
+    ]
+  },
+  "runs": [
+    {
+      "config": "policy-file",
+      "scored_population": {
+        "documents": 1,
+        "document_ids": [
+          "synthetic-1"
+        ],
+        "document_ids_digest": {
+          "algorithm": "sha256",
+          "value": "732115ccb456597c4df174fc9572ddbe152afc59584b76e3ddf7470349c87a1d"
+        }
+      },
+      "failed_closed_population": {
+        "documents": 0,
+        "document_ids": [],
+        "document_ids_digest": {
+          "algorithm": "sha256",
+          "value": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "excluded_documents": [],
+        "reason_counts": {},
+        "stage_counts": {}
+      },
+      "metrics": {
+        "documents": 1,
+        "zero_leak_document_rate": 0.0,
+        "documents_without_leaks": 0,
+        "documents_with_false_positives": 1,
+        "utf8_bytes": {
+          "pii": 27,
+          "predicted": 21,
+          "true_positive": 0,
+          "false_positive": 21,
+          "leaked": 27,
+          "precision": 0.0,
+          "recall": 0.0,
+          "leak_rate": 1.0,
+          "f1": 1.0,
+          "f2": 1.0,
+          "false_positive_rate": 0.9130434782608695
+        },
+        "entities": {
+          "gold": 2,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "exact_boundary": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "exact_boundary_recall": 0.0
+        },
+        "prediction_spans": {
+          "total": 1,
+          "overlapped_gold": 0,
+          "overlap_precision": 0.0
+        }
+      },
+      "direct_identifier_recall": {
+        "entities": 1,
+        "fully_covered": 0,
+        "overlapped": 0,
+        "full_coverage_recall": 0.0,
+        "overlap_recall": 0.0,
+        "utf8_bytes": 21,
+        "covered_utf8_bytes": 0,
+        "byte_recall": 0.0,
+        "leaked_utf8_bytes": 21
+      },
+      "contextual_pii_recall": {
+        "entities": 1,
+        "fully_covered": 0,
+        "overlapped": 0,
+        "full_coverage_recall": 0.0,
+        "overlap_recall": 0.0,
+        "utf8_bytes": 6,
+        "covered_utf8_bytes": 0,
+        "byte_recall": 0.0,
+        "leaked_utf8_bytes": 6
+      },
+      "pipeline_contract": {
+        "documents": 1,
+        "restore_exact_documents": 1,
+        "restore_exact_rate": 1.0,
+        "restore_success_decisions": 1,
+        "restore_success_decision_rate": 1.0,
+        "manifest_spans": 1,
+        "manifest_valid_documents": 1,
+        "manifest_valid_document_rate": 1.0,
+        "manifest_integrity_errors": {
+          "invalid_clean_bounds": 0,
+          "invalid_raw_bounds": 0,
+          "non_monotonic_raw_spans": 0,
+          "overlapping_clean_spans": 0,
+          "raw_value_mismatches": 0,
+          "token_restore_failures": 0
+        },
+        "initial_safety_net_suspects": 0,
+        "initial_actionable_suspects": 0,
+        "initial_class_mismatches": 0,
+        "strict_would_reject_documents": 0,
+        "strict_acceptance_rate": 1.0,
+        "post_policy_scanned_documents": 0,
+        "post_policy_suspects": 0,
+        "final_protection_trace_items": 1,
+        "tokenize_actions": 1,
+        "redact_actions": 0,
+        "documents_with_redact": 0,
+        "post_policy_zero_suspect_documents": 0,
+        "post_policy_zero_suspect_rate": null
+      },
+      "pipeline_availability": {
+        "attempted_documents": 1,
+        "completed_documents": 1,
+        "completion_rate": 1.0,
+        "failed_closed_documents": 0,
+        "errors": {},
+        "error_stages": {}
+      },
+      "per_language": {
+        "en": {
+          "documents": 1,
+          "zero_leak_document_rate": 0.0,
+          "documents_without_leaks": 0,
+          "documents_with_false_positives": 1,
+          "utf8_bytes": {
+            "pii": 27,
+            "predicted": 21,
+            "true_positive": 0,
+            "false_positive": 21,
+            "leaked": 27,
+            "precision": 0.0,
+            "recall": 0.0,
+            "leak_rate": 1.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "false_positive_rate": 0.9130434782608695
+          },
+          "entities": {
+            "gold": 2,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 0.0,
+            "overlap_recall": 0.0,
+            "exact_boundary_recall": 0.0
+          },
+          "prediction_spans": {
+            "total": 1,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        }
+      },
+      "per_label_recall": {
+        "EMAIL": {
+          "entities": 1,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 21,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 21
+        },
+        "PASSWORD": {
+          "entities": 1,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 6,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 6
+        }
+      },
+      "validator_recall_by_label": {
+        "EMAIL": {
+          "applicability": "validator_not_configured",
+          "validator_kinds": [],
+          "gold_spans": 1,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null,
+          "production_recall_by_gold_validity": null
+        },
+        "PASSWORD": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 1,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null,
+          "production_recall_by_gold_validity": null
+        }
+      },
+      "per_negative_category": {},
+      "latency_ms": {
+        "clean_ms": {
+          "mean": 1.0,
+          "median": 1.0,
+          "p95": 1.0,
+          "p99": 1.0,
+          "max": 1.0
+        },
+        "restore_ms": {
+          "mean": 1.0,
+          "median": 1.0,
+          "p95": 1.0,
+          "p99": 1.0,
+          "max": 1.0
+        }
+      },
+      "warm_latency_ms": {},
+      "process": {
+        "wall_seconds": 0.00010304199531674385,
+        "documents_per_second": 1000.0,
+        "start_to_first_response_ms": 0.0,
+        "cold_start_to_first_validated_response_ms": 0.0,
+        "warmup_count": 0,
+        "discarded_warmup_samples": []
+      }
+    }
+  ]
+}

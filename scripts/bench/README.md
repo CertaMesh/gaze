@@ -53,8 +53,10 @@ The `clean_for_bench` producer derives a repeatable session prefix from each
 fixture ID by default. Set `GAZE_BENCH_RANDOM_SESSION=1` when measuring the
 effect of fresh random prefixes; record that setting with the scorecard.
 
-When the generated adjacency layers change, measure the displayed past releases
-with `agentic_layers.py measure`, then pass their scorecard files to
+Before release, measure the current and previous release on the same immutable
+benchmark specification. Additional history backfills are non-blocking and off
+the PR critical path. Never compare across specifications. Capture each release
+once with `rescore_past_release.py --agentic-layers`, then pass its scorecard to
 `render_agentic_adjacency_doc.py --record <file>` (repeat `--record` for each
 release). That command writes the committed measurement ledger and its table
 in `docs/reference/benchmarks/README.md`; `--check` verifies both in CI.
@@ -70,10 +72,15 @@ A scored-label contract says which corpus labels count as gold PII. Without
 `--scored-labels` the runner uses contract **v1**, which scores every corpus
 label, so every row measured before contracts existed stays reproducible.
 
+Capture once without `--scored-labels`; every contract uses the same record.
+The runner rejects contract-specific captures unless `--cross-check` explicitly
+requests an independent equivalence check.
+
 ```bash
-uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py \
-  full --seed 20260710 --no-download \
-  --scored-labels docs/reference/benchmarks/scored-labels-v2.json
+uv run --project scripts/bench python scripts/bench/rescore.py \
+  target/bench-data/no-opf/full/observations-v1.jsonl.gz \
+  --scored-labels docs/reference/benchmarks/scored-labels-v2.json \
+  --output target/bench-data/no-opf/full/scorecard-v2.json
 ```
 
 [`scored-labels-v2.json`](../../docs/reference/benchmarks/scored-labels-v2.json)
@@ -171,6 +178,9 @@ uv run --project scripts/bench python scripts/bench/rescore.py \
 Omit `--scored-labels` for v1. Use `--agentic-scored-labels` to change the
 generated layer contract too; otherwise replay uses the layer contract pinned
 inside the record. The same scoring accumulators compute the new scorecard.
+`mechanism_arms.py record` accepts only `--base` and `--candidate` runner
+directories, one capture each. It re-scores both records under every contract
+and validates both gated contracts with the mechanism policy delta.
 The v0.15.1 records remain committed as replay proof. Starting with v0.16.0,
 upload release records as assets on the matching GitHub release, using
 `observations-vX.Y.Z.jsonl.gz` and, when generated layers are measured,
