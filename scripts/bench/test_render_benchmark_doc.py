@@ -804,8 +804,15 @@ class ShippedDefaultChartsTest(unittest.TestCase):
             for group in render.displayed_groups(committed)
         }
 
-    def test_committed_history_trend_has_every_distinct_result(self):
+    def test_historical_trend_keeps_both_defaults_and_coalesces_duplicate_results(self):
         committed = render.load_history(render.DEFAULT_HISTORY)
+        committed = {
+            **committed,
+            "releases": [
+                row for row in committed["releases"]
+                if row["version"] in ("v0.14.0", "v0.15.0", "v0.15.1")
+            ],
+        }
         expected = [
             (label, arm["surviving_pii_utf8_bytes"])
             for label, arm in self.committed_group_defaults(committed).items()
@@ -820,6 +827,27 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         )
         charts = render.render_charts(committed)
         self.assertIn(f"line [{', '.join(str(value) for _, value in expected)}]", charts)
+
+    def test_committed_history_trend_has_every_distinct_result(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        defaults = self.committed_default_arms(committed)
+        # Independent of displayed_groups and group_label: the current window
+        # has three results, with the two v0.15 releases sharing one point.
+        expected = [
+            ("v0.15.0 – v0.15.1", defaults["v0.15.1"]["surviving_pii_utf8_bytes"]),
+            ("v0.16.0", defaults["v0.16.0"]["surviving_pii_utf8_bytes"]),
+            ("v0.17.0", defaults["v0.17.0"]["surviving_pii_utf8_bytes"]),
+        ]
+        self.assertEqual(
+            render.shipped_default_trend(committed, "surviving_pii_utf8_bytes"), expected
+        )
+        charts = render.render_charts(committed)
+        self.assertIn(f"line [{', '.join(str(value) for _, value in expected)}]", charts)
+        self.assertNotIn("v0.14.0", charts)
+        self.assertEqual(
+            [row["version"] for row in committed["releases"]],
+            ["v0.14.0", "v0.15.0", "v0.15.1", "v0.16.0", "v0.17.0"],
+        )
 
     def test_comparison_bars_on_committed_history(self):
         committed = render.load_history(render.DEFAULT_HISTORY)
@@ -996,7 +1024,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
     def test_panels_hold_tagged_gaze_and_declared_competitors(self):
         own, *third = self.panels()
         gaze = [bar.name for bar in own.bars if bar.gaze]
-        self.assertEqual(gaze, ["Gaze 0.15", "Gaze 0.16"])
+        self.assertEqual(gaze, ["Gaze 0.16", "Gaze 0.17"])
         competitors = [bar.name for bar in own.bars if not bar.gaze]
         self.assertEqual(
             competitors, [charts.SHORT_NAMES[key] for key in self.declared]
@@ -1016,7 +1044,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         )
         # Gaze's F2 is the released row's own recorded measurement, not the main run's.
         release = json.loads(render.RELEASE_CHAR_LEVEL.read_text(encoding="utf-8"))["releases"]
-        for bar, version in zip((b for b in own.bars if b.gaze), ("v0.15.1", "v0.16.0")):
+        for bar, version in zip((b for b in own.bars if b.gaze), ("v0.16.0", "v0.17.0")):
             self.assertEqual(bar.f2, release[version]["char_level"]["f2"])
             self.assertEqual(bar.leaked, release[version]["leaked_bytes"])
 
@@ -1044,7 +1072,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         history["releases"] = [row for row in history["releases"] if not row.get("provisional")]
         history["releases"][-1]["provisional"] = True
         self.assertEqual(
-            [r.version for r in render.chart_gaze_rows(history)], ["v0.14.0", "v0.15.1"]
+            [r.version for r in render.chart_gaze_rows(history)], ["v0.15.1", "v0.16.0"]
         )
 
     def test_provisional_candidate_keeps_the_released_comparison_panels(self):
@@ -1152,6 +1180,22 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             self.assertIsNone(bar.f2)
             self.assertEqual(gaze_cells(panel), ["pending"] * 3)
 
+    def test_external_panels_keep_the_latest_measured_release_without_relabelling(self):
+        their = copy.deepcopy(self.their)
+        baseline = their["presidio-research"]["rows"]["gaze-v0.16.0"]
+        their["presidio-research"]["rows"]["gaze-v0.99.0"] = baseline
+        own, external, _ = self.panels(their=their)
+        self.assertEqual([bar.name for bar in own.bars if bar.gaze], ["Gaze 0.16", "Gaze 0.17"])
+        [retained] = [bar for bar in external.bars if bar.gaze]
+        self.assertEqual((retained.name, retained.f2, retained.leaked),
+                         ("Gaze 0.16", baseline["product_coverage"]["char_level"]["f2"],
+                          baseline["product_coverage"]["leaked_bytes"]))
+        current = copy.deepcopy(baseline)
+        current["product_coverage"]["leaked_bytes"] = 1
+        their["presidio-research"]["rows"]["gaze-v0.17.0"] = current
+        [admitted] = [bar for bar in self.panels(their=their)[1].bars if bar.gaze]
+        self.assertEqual((admitted.name, admitted.leaked), ("Gaze 0.17", 1))
+
     def test_presidio_research_charts_presidios_own_tuned_setup_only(self):
         _, presidio, piibench = self.panels()
         names = [b.name for b in presidio.bars]
@@ -1210,7 +1254,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         tables = charts.model_card_tables([own, presidio, piibench])
         self.assertIn("skipped 0 of the own corpus's 2,910 documents", tables)
         self.assertIn("Refused documents", tables)
-        self.assertIn("Gaze 0.15 0", tables)
+        self.assertIn("Gaze 0.17 0", tables)
 
     def test_false_positive_rate_uses_one_metrics_block(self):
         """Numerator and denominator come from the same block of the same tool."""
@@ -1334,15 +1378,23 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             self.assertEqual(render.main(args + ["--check"]), 0)
             svgs = sorted((root / render.CHART_ASSETS).glob("*.svg"))
             self.assertEqual([p.name for p in svgs],
-                             ["benchmark-panels-dark.svg", "benchmark-panels-light.svg"])
+                             ["benchmark-panels-dark.svg", "benchmark-panels-light.svg",
+                              "external-release-panels-dark.svg", "external-release-panels-light.svg"])
             changed = copy.deepcopy(self.comparison)
             changed["tools"]["gliner"]["contracts"]["v4"]["C"]["metrics"]["product_coverage"]["full"]["leaked_bytes"] += 1000
             report.write_text(json.dumps(changed), encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 1)
             report.write_text(json.dumps(self.comparison), encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 0)
+            # The separate byte-micro figures are checked by the same command.
+            external = svgs[-1]
+            saved = external.read_text(encoding="utf-8")
+            external.write_text(saved.replace("0.64238", "0.99999"), encoding="utf-8")
+            self.assertEqual(render.main(args + ["--check"]), 1)
+            external.write_text(saved, encoding="utf-8")
             # A hand-edited value on an SVG bar is drift too.
-            svgs[0].write_text(svgs[0].read_text(encoding="utf-8").replace("0.836", "0.936"),
+            self.assertIn("0.901", svgs[0].read_text(encoding="utf-8"))
+            svgs[0].write_text(svgs[0].read_text(encoding="utf-8").replace("0.901", "0.999"),
                                encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 1)
             svgs[0].unlink()

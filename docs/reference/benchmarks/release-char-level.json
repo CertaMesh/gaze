@@ -86,6 +86,27 @@
       "leaked_bytes": 13291,
       "record_sha256": "c05d061b95a4d230a60dbdec6bb60be243c4b2cadecc119f653e09d67d564a42",
       "total_bytes": 959025
+    },
+    "v0.17.0": {
+      "arm": "policy-file",
+      "char_level": {
+        "f1": 0.8678713371260834,
+        "f2": 0.9011949437837723,
+        "f5": 0.9202207631892255,
+        "fn": 9703,
+        "fp": 26667,
+        "precision": 0.8174905723652242,
+        "recall": 0.924869724117105,
+        "tp": 119446,
+        "unit": "unicode_code_point"
+      },
+      "contract": "v4",
+      "crates_tree": "5a3c6502bd64eabf40f009eb05ca55da3ed50dfe",
+      "documents": 2910,
+      "false_positive_bytes": 27021,
+      "leaked_bytes": 9717,
+      "record_sha256": "f20e0cfc47b7e7867bdf1a07708314c36d1213226a7ee08592d5c99ae71b4313",
+      "total_bytes": 959025
     }
   },
   "schema_version": 1

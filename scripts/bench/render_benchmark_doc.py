@@ -37,6 +37,7 @@ from typing import Any, Mapping, Sequence
 
 import bench_json
 import benchmark_charts as charts
+import external_release_panels
 from tagged_gaze import check_public, require_release_tag
 from layer_display import layer_display_name
 from markdown_table import table_header
@@ -1612,15 +1613,26 @@ def chart_panels(
 def attach_presidio_tuned(comparison: Mapping[str, Any], comparison_path: Path) -> Mapping[str, Any]:
     """The comparison plus `presidio-tuned.json` when it sits beside it and is sound.
 
-    The tuned report must name these exact comparison bytes, reproduce the
-    comparison's presidio-all row from its own records, and have run each chosen
-    configuration live on its fixed sample covering the same bytes as the replay.
+    The tuned report must name the original comparison snapshot, reproduce its
+    presidio-all row, and have run each chosen configuration live on its fixed
+    sample covering the same bytes as the replay. Composed reports retain that
+    anchor only after validation against both snapshots and the native receipt.
     """
     path = comparison_path.parent / TUNED_PRESIDIO_NAME
     if not path.exists():
         return comparison
     tuned = json.loads(path.read_text(encoding="utf-8"))
-    if tuned["comparison_sha256"] != _sha256(comparison_path):
+    anchor_path = comparison_path
+    if "row_sources" in comparison:
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "compare"))
+        import row_sources
+
+        try:
+            row_sources.validate(comparison, comparison_path)
+        except (ValueError, OSError, KeyError, TypeError) as error:
+            raise RenderError(f"invalid comparison row sources: {error}") from error
+        anchor_path = comparison_path.parent / comparison["row_sources"]["base"]["path"]
+    if tuned["comparison_sha256"] != _sha256(anchor_path):
         raise RenderError(f"{TUNED_PRESIDIO_NAME} was measured beside a different comparison.json")
     if tuned.get("harness_dirty") is not False or not tuned["anchor"]["equal"]:
         raise RenderError(f"{TUNED_PRESIDIO_NAME} needs a clean harness and a reproduced presidio-all anchor")
@@ -1700,6 +1712,17 @@ def render_readme_chart(
         "Methods, competitor setups and how to "
         "reproduce: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels)."
         + _pending_note(panel_set)
+    )
+    scopes = [
+        f"{panel.title}: " + ", ".join(
+            bar.name if bar.f2 is not None else "no tagged Gaze measurement"
+            for bar in panel.bars if bar.gaze
+        )
+        for panel in panel_set[1:]
+    ]
+    caption += (
+        " External character panels keep their measured scope (" + "; ".join(scopes) + "). "
+        "The fresh external receipts above contain byte-micro scores, not character scores."
     )
     return "\n\n".join([_picture("", _PANEL_ALT), caption])
 
@@ -2375,6 +2398,29 @@ def main(argv: Sequence[str] | None = None) -> int:
                 outputs.append(
                     (target, target.read_text(encoding="utf-8") if target.exists() else None, svg)
                 )
+
+        if args.history.resolve() == DEFAULT_HISTORY.resolve():
+            try:
+                external = external_release_panels.load(args.history.parent)
+            except (ValueError, KeyError, OSError) as error:
+                raise RenderError(f"external release panels: {error}") from error
+            for path, root in ((args.doc, False), (readme, True)):
+                if path is not None:
+                    index = next(i for i, item in enumerate(outputs) if item[0] == path)
+                    target, original, rendered = outputs[index]
+                    start = "<!-- BEGIN GENERATED: external-release -->"
+                    end = "<!-- END GENERATED: external-release -->"
+                    begin, stop = rendered.find(start), rendered.find(end)
+                    if begin < 0 or stop < begin:
+                        raise RenderError("document is missing ordered 'external-release' generated markers")
+                    body = check_public(external_release_panels.markdown(external, root=root),
+                                        "external release panels")
+                    outputs[index] = (target, original, rendered[:begin + len(start)] + "\n\n" +
+                                      body + "\n\n" + rendered[stop:])
+            if readme is not None:
+                for name, svg in external_release_panels.files(external).items():
+                    target = readme.parent / CHART_ASSETS / name
+                    outputs.append((target, target.read_text() if target.exists() else None, svg))
 
         if args.check:
             drifted = [path for path, original, rendered in outputs if rendered != original]

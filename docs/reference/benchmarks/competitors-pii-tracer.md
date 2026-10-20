@@ -1,6 +1,8 @@
 # PII-Tracer on Gaze's corpus
 
-Perplexity's [PII-Tracer](https://huggingface.co/perplexity-ai/PII-Tracer) is a 0.6B on-device PII detector. This page scores it on the same corpus, scorer and scored-label contracts as the other competitors in [competitors.md](competitors.md), full-corpus layer C. Byte leaks, false positives and character F2 use the shared scorer. Only aggregates are published. Gaze rows appear on competitors.md, where only tagged releases are shown.
+Perplexity's [PII-Tracer](https://huggingface.co/perplexity-ai/PII-Tracer/blob/d25c16f2e57e321f6d2527715c01df9112f956f5/README.md) is a 0.6B on-device PII detector. This page scores it on the same corpus, scorer and scored-label contracts as the other competitors in [competitors.md](competitors.md), full-corpus layer C. Byte leaks, false positives and character F2 use the shared scorer. Only aggregates are published. Gaze rows appear on competitors.md, where only tagged releases are shown.
+
+This PII-Tracer model capture retains its original provenance. The [fresh v0.17.0 PII-TRACE dataset comparison](README.md#v017-final-candidate-evidence) measures Gaze on a separate external dataset using byte-micro F2; it does not refresh this model's own-corpus results.
 
 **Declared configuration** (fixed from the model card before any result): model `perplexity-ai/PII-Tracer` at revision `d25c16f2e57e321f6d2527715c01df9112f956f5` (MIT); cpu, stored bfloat16, `predict()` decoding, non-overlapping 4080-token windows for longer documents, no threshold (the card documents none, so there is no sweep). torch 2.14.0, transformers 5.17.0. The checkpoint's own Python code runs under `trust_remote_code`; the worker refuses to load unless five pinned file hashes match.
 

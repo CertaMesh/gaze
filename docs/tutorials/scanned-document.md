@@ -1,5 +1,7 @@
 # Clean a scanned document into a SafeBundle
 
+<!-- tutorial-gate: start=checkout -->
+
 We will turn a fictional invoice image into tokenized Markdown and keep its
 restore manifest in a separate owner directory. Allow fifteen minutes.
 
@@ -81,10 +83,19 @@ print("Sample PII checks: OK")
 PY
 ```
 
-The name, email, and phone appear as tokens. Session prefixes change on each
-run. The final lines are:
+You see the protected Markdown, followed by the report checks. The session
+prefix changes on each run:
 
 ```text
+# gaze-document safe bundle
+
+Source kind: `png`
+
+---
+
+Bill to: <{session_hex}:Name_1>
+Email: <{session_hex}:Email_1>
+Phone: <{session_hex}:Custom:phone_1>
 Report version: 2
 Sample PII checks: OK
 ```

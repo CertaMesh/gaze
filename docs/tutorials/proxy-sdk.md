@@ -1,5 +1,7 @@
 # Route an SDK call through the proxy
 
+<!-- tutorial-gate: start=checkout -->
+
 We will send an OpenAI SDK request through Gaze to a local echo server.
 The server receives tokens; the caller receives its restored reply. Allow fifteen minutes.
 
@@ -16,7 +18,7 @@ umask 077
 mkdir -p target/proxy-tutorial
 cd target/proxy-tutorial
 python3 -m venv .venv
-.venv/bin/python -m pip install --quiet openai
+.venv/bin/python -m pip install --quiet openai==2.31.0
 cat > policy.toml <<'TOML'
 [session]
 scope = "ephemeral"
@@ -169,8 +171,14 @@ Stop the sample's processes and wait for them:
 
 ```sh
 kill "$proxy_pid" "$mock_pid"
-wait "$proxy_pid" 2>/dev/null || true
-wait "$mock_pid" 2>/dev/null || true
+for pid in "$proxy_pid" "$mock_pid"; do
+	if wait "$pid" 2>/dev/null; then
+		:
+	else
+		exit_status=$?
+		[ "$exit_status" -eq 143 ] || exit "$exit_status"
+	fi
+done
 trap - EXIT
 printf 'Proxy and mock stopped\n'
 ```
@@ -180,6 +188,9 @@ You should see:
 ```text
 Proxy and mock stopped
 ```
+
+The checked waits accept a normal exit or status 143 from the requested
+SIGTERM. Any other exit status fails the exercise.
 
 For real provider keys, Anthropic and Gemini configuration, streaming, and
 deployment limits, use [Set up the proxy](../how-to/proxy/set-up-proxy.md).

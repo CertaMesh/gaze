@@ -10,16 +10,16 @@
 <line x1="22.0" x2="420.9" y1="296.0" y2="296.0" stroke="#d1d9e0" stroke-width="1"/>
 <line x1="22.0" x2="420.9" y1="208.0" y2="208.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
 <line x1="22.0" x2="420.9" y1="120.0" y2="120.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
-<rect x="31.5" y="148.9" width="30.9" height="147.1" rx="3" fill="#0969da"/>
-<text x="46.9" y="142.9" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">0.836</text>
+<rect x="31.5" y="141.3" width="30.9" height="154.7" rx="3" fill="#0969da"/>
+<text x="46.9" y="135.3" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">0.879</text>
 <text x="46.9" y="312" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
-<text x="46.9" y="324" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.15</text>
-<text x="46.9" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">19,556</text>
-<rect x="81.3" y="141.3" width="30.9" height="154.7" rx="3" fill="#0969da"/>
-<text x="96.8" y="135.3" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">0.879</text>
+<text x="46.9" y="324" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.16</text>
+<text x="46.9" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">13,291</text>
+<rect x="81.3" y="137.4" width="30.9" height="158.6" rx="3" fill="#0969da"/>
+<text x="96.8" y="131.4" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">0.901</text>
 <text x="96.8" y="312" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
-<text x="96.8" y="324" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.16</text>
-<text x="96.8" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">13,291</text>
+<text x="96.8" y="324" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.17</text>
+<text x="96.8" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">9,717</text>
 <rect x="131.2" y="139.5" width="30.9" height="156.5" rx="3" fill="#a8b1bb"/>
 <text x="146.7" y="133.5" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.889</text>
 <text x="146.7" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.9" lengthAdjust="spacingAndGlyphs">Presidio</text>
@@ -143,14 +143,14 @@
 <line x1="22.0" x2="420.9" y1="658.0" y2="658.0" stroke="#d1d9e0" stroke-width="1"/>
 <line x1="22.0" x2="420.9" y1="570.0" y2="570.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
 <line x1="22.0" x2="420.9" y1="482.0" y2="482.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
-<rect x="31.5" y="646.4" width="30.9" height="11.6" rx="3" fill="#0969da"/>
-<text x="46.9" y="640.4" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">19.3</text>
+<rect x="31.5" y="648.5" width="30.9" height="9.5" rx="3" fill="#0969da"/>
+<text x="46.9" y="642.5" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">15.8</text>
 <text x="46.9" y="674" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
-<text x="46.9" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.15</text>
-<rect x="81.3" y="648.5" width="30.9" height="9.5" rx="3" fill="#0969da"/>
-<text x="96.8" y="642.5" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">15.8</text>
+<text x="46.9" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.16</text>
+<rect x="81.3" y="648.4" width="30.9" height="9.6" rx="3" fill="#0969da"/>
+<text x="96.8" y="642.4" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">15.9</text>
 <text x="96.8" y="674" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
-<text x="96.8" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.16</text>
+<text x="96.8" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.17</text>
 <rect x="131.2" y="626.2" width="30.9" height="31.8" rx="3" fill="#a8b1bb"/>
 <text x="146.7" y="620.2" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">52.7</text>
 <text x="146.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.9" lengthAdjust="spacingAndGlyphs">Presidio</text>

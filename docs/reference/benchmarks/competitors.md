@@ -6,9 +6,11 @@ Leaked and false-positive byte counts are class-agnostic. A skipped document's s
 
 Gaze is not listed: the comparison run measured an unreleased build, and this page shows tagged Gaze releases only. Released Gaze numbers are in the [release history](README.md#release-history) and the benchmark panels. Home-normalized setup policy SHA-256: `3bc3d0451640558e249638690c9825f6b9d8143ae595fc0cab525871750366fc`.
 
+Fresh v0.17.0 external byte-micro scores are in the [external release panels](README.md#v017-final-candidate-evidence). They measure different datasets and do not refresh the comparator captures on this page. Only the two scrubadub rows were freshly measured for the v0.17 release; other comparator and tuned Presidio measurements keep their original identities.
+
 Competitor runtimes: Presidio 2.2.364 with spaCy 3.7.5; GLiNER 0.2.29 at model snapshot `1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d`. GLiNER uses model-card labels, library threshold 0.5. OpenAI Privacy Filter (OPF) unavailable after two 600-second socket timeouts.
 
-Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are not published. The original scrubadub measurements predate the Spanish adapter correction; their Spanish inputs count as fully missed.
+Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are not published. Mixed-source publication: only scrubadub-base and scrubadub-spacy were freshly measured with native Spanish support. The other eleven configurations, Gaze measurements, threshold choices and OPF unavailable receipt retain their original identities. Base snapshot: [`comparison-sources/original.json`](comparison-sources/original.json), SHA-256 `119e24993cc47ae9b6b53af052b2266a8f83a4903675f72327eb4c419602851d`. Supplement snapshot: [`comparison-sources/spanish.json`](comparison-sources/spanish.json), SHA-256 `d0b476ca86901e545211143358c9b8b04e9990cac86c6de53ec24231356d6a95`. Snapshot source revisions, adapter hashes, collection/replay times and per-row provenance remain authoritative; the row_sources aggregation time records composition only. Timing comparisons remain withheld.
 
 | Contract | Layer | Tool | Leaked B | FP B | Processed | Skipped | Skipped gold B | Latency |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -21,8 +23,8 @@ Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are
 | v4 | Synthetic identifiers in agentic formats | datafog-regex | 111,524 | 1,420 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v4 | Synthetic identifiers in agentic formats | datafog-spacy | 87,945 | 69,841 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v4 | Synthetic identifiers in agentic formats | datafog-gliner | 99,475 | 9,365 | 6,617 | 0 | 0 | not measured under a quiet machine |
-| v4 | Synthetic identifiers in agentic formats | scrubadub-base | 128,648 | 133 | 6,587 | 30 | 330 | not measured under a quiet machine |
-| v4 | Synthetic identifiers in agentic formats | scrubadub-spacy | 115,176 | 40,448 | 6,587 | 30 | 330 | not measured under a quiet machine |
+| v4 | Synthetic identifiers in agentic formats | scrubadub-base | 128,648 | 133 | 6,617 | 0 | 0 | not measured under a quiet machine |
+| v4 | Synthetic identifiers in agentic formats | scrubadub-spacy | 115,176 | 40,448 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v4 | Synthetic identifiers in agentic formats | gliner | 87,287 | 13,706 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v4 | Synthetic identifiers in agentic formats | gliner-high-recall | 58,495 | 23,105 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v4 | Synthetic identifiers in agentic formats | opf | N/A | N/A | N/A | N/A | N/A | unavailable |
@@ -49,8 +51,8 @@ Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are
 | v4 | Synthetic benign lookalikes | datafog-regex | 0 | 5,293 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v4 | Synthetic benign lookalikes | datafog-spacy | 0 | 77,221 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v4 | Synthetic benign lookalikes | datafog-gliner | 0 | 17,145 | 5,192 | 0 | 0 | not measured under a quiet machine |
-| v4 | Synthetic benign lookalikes | scrubadub-base | 0 | 865 | 5,162 | 30 | 0 | not measured under a quiet machine |
-| v4 | Synthetic benign lookalikes | scrubadub-spacy | 0 | 56,858 | 5,162 | 30 | 0 | not measured under a quiet machine |
+| v4 | Synthetic benign lookalikes | scrubadub-base | 0 | 865 | 5,192 | 0 | 0 | not measured under a quiet machine |
+| v4 | Synthetic benign lookalikes | scrubadub-spacy | 0 | 56,858 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v4 | Synthetic benign lookalikes | gliner | 0 | 14,028 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v4 | Synthetic benign lookalikes | gliner-high-recall | 0 | 35,363 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v4 | Synthetic benign lookalikes | opf | N/A | N/A | N/A | N/A | N/A | unavailable |
@@ -77,8 +79,8 @@ Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are
 | v3 | Synthetic identifiers in agentic formats | datafog-regex | 111,524 | 1,420 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v3 | Synthetic identifiers in agentic formats | datafog-spacy | 87,945 | 69,841 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v3 | Synthetic identifiers in agentic formats | datafog-gliner | 99,475 | 9,365 | 6,617 | 0 | 0 | not measured under a quiet machine |
-| v3 | Synthetic identifiers in agentic formats | scrubadub-base | 128,648 | 133 | 6,587 | 30 | 330 | not measured under a quiet machine |
-| v3 | Synthetic identifiers in agentic formats | scrubadub-spacy | 115,176 | 40,448 | 6,587 | 30 | 330 | not measured under a quiet machine |
+| v3 | Synthetic identifiers in agentic formats | scrubadub-base | 128,648 | 133 | 6,617 | 0 | 0 | not measured under a quiet machine |
+| v3 | Synthetic identifiers in agentic formats | scrubadub-spacy | 115,176 | 40,448 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v3 | Synthetic identifiers in agentic formats | gliner | 87,287 | 13,706 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v3 | Synthetic identifiers in agentic formats | gliner-high-recall | 58,495 | 23,105 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v3 | Synthetic identifiers in agentic formats | opf | N/A | N/A | N/A | N/A | N/A | unavailable |
@@ -105,8 +107,8 @@ Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are
 | v3 | Synthetic benign lookalikes | datafog-regex | 0 | 5,293 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v3 | Synthetic benign lookalikes | datafog-spacy | 0 | 77,221 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v3 | Synthetic benign lookalikes | datafog-gliner | 0 | 17,145 | 5,192 | 0 | 0 | not measured under a quiet machine |
-| v3 | Synthetic benign lookalikes | scrubadub-base | 0 | 865 | 5,162 | 30 | 0 | not measured under a quiet machine |
-| v3 | Synthetic benign lookalikes | scrubadub-spacy | 0 | 56,858 | 5,162 | 30 | 0 | not measured under a quiet machine |
+| v3 | Synthetic benign lookalikes | scrubadub-base | 0 | 865 | 5,192 | 0 | 0 | not measured under a quiet machine |
+| v3 | Synthetic benign lookalikes | scrubadub-spacy | 0 | 56,858 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v3 | Synthetic benign lookalikes | gliner | 0 | 14,028 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v3 | Synthetic benign lookalikes | gliner-high-recall | 0 | 35,363 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v3 | Synthetic benign lookalikes | opf | N/A | N/A | N/A | N/A | N/A | unavailable |
@@ -133,8 +135,8 @@ Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are
 | v2 | Synthetic identifiers in agentic formats | datafog-regex | 111,524 | 1,420 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v2 | Synthetic identifiers in agentic formats | datafog-spacy | 87,945 | 69,841 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v2 | Synthetic identifiers in agentic formats | datafog-gliner | 99,475 | 9,365 | 6,617 | 0 | 0 | not measured under a quiet machine |
-| v2 | Synthetic identifiers in agentic formats | scrubadub-base | 128,648 | 133 | 6,587 | 30 | 330 | not measured under a quiet machine |
-| v2 | Synthetic identifiers in agentic formats | scrubadub-spacy | 115,176 | 40,448 | 6,587 | 30 | 330 | not measured under a quiet machine |
+| v2 | Synthetic identifiers in agentic formats | scrubadub-base | 128,648 | 133 | 6,617 | 0 | 0 | not measured under a quiet machine |
+| v2 | Synthetic identifiers in agentic formats | scrubadub-spacy | 115,176 | 40,448 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v2 | Synthetic identifiers in agentic formats | gliner | 87,287 | 13,706 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v2 | Synthetic identifiers in agentic formats | gliner-high-recall | 58,495 | 23,105 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v2 | Synthetic identifiers in agentic formats | opf | N/A | N/A | N/A | N/A | N/A | unavailable |
@@ -161,8 +163,8 @@ Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are
 | v2 | Synthetic benign lookalikes | datafog-regex | 0 | 5,293 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v2 | Synthetic benign lookalikes | datafog-spacy | 0 | 77,221 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v2 | Synthetic benign lookalikes | datafog-gliner | 0 | 17,145 | 5,192 | 0 | 0 | not measured under a quiet machine |
-| v2 | Synthetic benign lookalikes | scrubadub-base | 0 | 865 | 5,162 | 30 | 0 | not measured under a quiet machine |
-| v2 | Synthetic benign lookalikes | scrubadub-spacy | 0 | 56,858 | 5,162 | 30 | 0 | not measured under a quiet machine |
+| v2 | Synthetic benign lookalikes | scrubadub-base | 0 | 865 | 5,192 | 0 | 0 | not measured under a quiet machine |
+| v2 | Synthetic benign lookalikes | scrubadub-spacy | 0 | 56,858 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v2 | Synthetic benign lookalikes | gliner | 0 | 14,028 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v2 | Synthetic benign lookalikes | gliner-high-recall | 0 | 35,363 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v2 | Synthetic benign lookalikes | opf | N/A | N/A | N/A | N/A | N/A | unavailable |
@@ -189,8 +191,8 @@ Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are
 | v1 | Synthetic identifiers in agentic formats | datafog-regex | 111,524 | 1,420 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v1 | Synthetic identifiers in agentic formats | datafog-spacy | 87,945 | 69,841 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v1 | Synthetic identifiers in agentic formats | datafog-gliner | 99,475 | 9,365 | 6,617 | 0 | 0 | not measured under a quiet machine |
-| v1 | Synthetic identifiers in agentic formats | scrubadub-base | 128,648 | 133 | 6,587 | 30 | 330 | not measured under a quiet machine |
-| v1 | Synthetic identifiers in agentic formats | scrubadub-spacy | 115,176 | 40,448 | 6,587 | 30 | 330 | not measured under a quiet machine |
+| v1 | Synthetic identifiers in agentic formats | scrubadub-base | 128,648 | 133 | 6,617 | 0 | 0 | not measured under a quiet machine |
+| v1 | Synthetic identifiers in agentic formats | scrubadub-spacy | 115,176 | 40,448 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v1 | Synthetic identifiers in agentic formats | gliner | 87,287 | 13,706 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v1 | Synthetic identifiers in agentic formats | gliner-high-recall | 58,495 | 23,105 | 6,617 | 0 | 0 | not measured under a quiet machine |
 | v1 | Synthetic identifiers in agentic formats | opf | N/A | N/A | N/A | N/A | N/A | unavailable |
@@ -217,8 +219,8 @@ Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are
 | v1 | Synthetic benign lookalikes | datafog-regex | 0 | 5,293 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v1 | Synthetic benign lookalikes | datafog-spacy | 0 | 77,221 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v1 | Synthetic benign lookalikes | datafog-gliner | 0 | 17,145 | 5,192 | 0 | 0 | not measured under a quiet machine |
-| v1 | Synthetic benign lookalikes | scrubadub-base | 0 | 865 | 5,162 | 30 | 0 | not measured under a quiet machine |
-| v1 | Synthetic benign lookalikes | scrubadub-spacy | 0 | 56,858 | 5,162 | 30 | 0 | not measured under a quiet machine |
+| v1 | Synthetic benign lookalikes | scrubadub-base | 0 | 865 | 5,192 | 0 | 0 | not measured under a quiet machine |
+| v1 | Synthetic benign lookalikes | scrubadub-spacy | 0 | 56,858 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v1 | Synthetic benign lookalikes | gliner | 0 | 14,028 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v1 | Synthetic benign lookalikes | gliner-high-recall | 0 | 35,363 | 5,192 | 0 | 0 | not measured under a quiet machine |
 | v1 | Synthetic benign lookalikes | opf | N/A | N/A | N/A | N/A | N/A | unavailable |
@@ -237,7 +239,7 @@ Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are
 | v1 | Repeated PII values with decoys | gliner-high-recall | 65,542 | 4,026 | 3,061 | 0 | 0 | not measured under a quiet machine |
 | v1 | Repeated PII values with decoys | opf | N/A | N/A | N/A | N/A | N/A | unavailable |
 
-Skipped-language document counts: presidio-all/Synthetic identifiers in agentic formats: es=30; presidio-all/Synthetic benign lookalikes: es=30; presidio-en/Synthetic identifiers in agentic formats: de=1,811, es=30, fr=248, nl=280, pt=176; presidio-en/Kiji EN/DE holdout and A4 negatives: de=1,365; presidio-en/Synthetic benign lookalikes: de=1,172, es=30, fr=117, nl=30, pt=60; presidio-en/Repeated PII values with decoys: de=868, fr=48; presidio-en-de/Synthetic identifiers in agentic formats: es=30, fr=248, nl=280, pt=176; presidio-en-de/Synthetic benign lookalikes: es=30, fr=117, nl=30, pt=60; presidio-en-de/Repeated PII values with decoys: fr=48; presidio-strong/Synthetic identifiers in agentic formats: es=30; presidio-strong/Synthetic benign lookalikes: es=30; presidio-strong-high-recall/Synthetic identifiers in agentic formats: es=30; presidio-strong-high-recall/Synthetic benign lookalikes: es=30; scrubadub-base/Synthetic identifiers in agentic formats: es=30; scrubadub-base/Synthetic benign lookalikes: es=30; scrubadub-spacy/Synthetic identifiers in agentic formats: es=30; scrubadub-spacy/Synthetic benign lookalikes: es=30. Every skipped document counts as fully missed, including all its gold bytes.
+Skipped-language document counts: presidio-all/Synthetic identifiers in agentic formats: es=30; presidio-all/Synthetic benign lookalikes: es=30; presidio-en/Synthetic identifiers in agentic formats: de=1,811, es=30, fr=248, nl=280, pt=176; presidio-en/Kiji EN/DE holdout and A4 negatives: de=1,365; presidio-en/Synthetic benign lookalikes: de=1,172, es=30, fr=117, nl=30, pt=60; presidio-en/Repeated PII values with decoys: de=868, fr=48; presidio-en-de/Synthetic identifiers in agentic formats: es=30, fr=248, nl=280, pt=176; presidio-en-de/Synthetic benign lookalikes: es=30, fr=117, nl=30, pt=60; presidio-en-de/Repeated PII values with decoys: fr=48; presidio-strong/Synthetic identifiers in agentic formats: es=30; presidio-strong/Synthetic benign lookalikes: es=30; presidio-strong-high-recall/Synthetic identifiers in agentic formats: es=30; presidio-strong-high-recall/Synthetic benign lookalikes: es=30. Every skipped document counts as fully missed, including all its gold bytes.
 
 **OPF: N/A (unavailable).** Two unchanged attempts reached the declared 600-second socket timeout. No partial metrics are published; the cause remains unproven. Attempt log SHA-256 receipts: `8bfd93468285a446fa9a357bc3497aa1ba89083e8ffc6e63eed6292289d45d48`, `9d1c6b5967f795baa4290892af41b7d6681147ca03e4548884c239ade3bb4a71`.
 
@@ -802,28 +804,28 @@ Test half (product coverage):
 | v1 | Repeated PII values with decoys | presidio-strong | 47,219 | 2,796 | 0.321 | 0.022 |
 | v1 | Repeated PII values with decoys | presidio-strong-high-recall | 45,023 | 4,902 | 0.355 | 0.021 |
 
-Against the latest Gaze release (v0.16.0) on all of Kiji EN/DE holdout and A4 negatives, the only layer that release was measured on in this corpus's form. The tuned-here rows include the validation half they were selected on, which can only flatter them. False positives are after v4's gold-gap credit.
+Against the latest Gaze release (v0.17.0) on all of Kiji EN/DE holdout and A4 negatives. This table covers layer C. The tuned-here rows include the validation half they were selected on, which can only flatter them. False positives are after v4's gold-gap credit.
 
 | Contract | Configuration | Leaked B | FP B | Char F2 |
 | --- | --- | ---: | ---: | ---: |
-| v4 | Gaze v0.16.0 | 13,291 | 15,141 | 0.879 |
+| v4 | Gaze v0.17.0 | 9,717 | 15,224 | 0.901 |
 | v4 | Presidio (tuned by its authors) | 6,748 | 74,113 | 0.851 |
 | v4 | Presidio (tuned here, leak-first) | 2,079 | 111,220 | 0.837 |
 | v4 | Presidio (tuned here, F2) | 4,782 | 50,513 | 0.889 |
-| v3 | Gaze v0.16.0 | 7,348 | 15,141 | n/a |
+| v3 | Gaze v0.17.0 | 6,652 | 15,224 | n/a |
 | v3 | Presidio (tuned by its authors) | 4,752 | 74,113 | n/a |
 | v3 | Presidio (tuned here, leak-first) | 102 | 111,220 | n/a |
 | v3 | Presidio (tuned here, F2) | 1,281 | 50,513 | n/a |
-| v2 | Gaze v0.16.0 | 7,348 | 26,902 | n/a |
+| v2 | Gaze v0.17.0 | 6,652 | 27,004 | n/a |
 | v2 | Presidio (tuned by its authors) | 4,752 | 80,797 | n/a |
 | v2 | Presidio (tuned here, leak-first) | 102 | 116,019 | n/a |
 | v2 | Presidio (tuned here, F2) | 1,281 | 58,804 | n/a |
-| v1 | Gaze v0.16.0 | 13,291 | 26,902 | n/a |
+| v1 | Gaze v0.17.0 | 9,717 | 27,021 | n/a |
 | v1 | Presidio (tuned by its authors) | 6,748 | 80,797 | n/a |
 | v1 | Presidio (tuned here, leak-first) | 2,079 | 116,019 | n/a |
 | v1 | Presidio (tuned here, F2) | 4,782 | 58,804 | n/a |
 
-Where tuned Presidio beats Gaze v0.16.0 here: Presidio (tuned by its authors) leaks fewer v4 bytes; Presidio (tuned here, leak-first) leaks fewer v4 bytes; Presidio (tuned here, F2) leaks fewer v4 bytes; Presidio (tuned here, F2) has the higher v4 character F2; Presidio (tuned by its authors) leaks fewer v3 bytes; Presidio (tuned here, leak-first) leaks fewer v3 bytes; Presidio (tuned here, F2) leaks fewer v3 bytes; Presidio (tuned by its authors) leaks fewer v2 bytes; Presidio (tuned here, leak-first) leaks fewer v2 bytes; Presidio (tuned here, F2) leaks fewer v2 bytes; Presidio (tuned by its authors) leaks fewer v1 bytes; Presidio (tuned here, leak-first) leaks fewer v1 bytes; Presidio (tuned here, F2) leaks fewer v1 bytes.
+Where tuned Presidio beats Gaze v0.17.0 here: Presidio (tuned by its authors) leaks fewer v4 bytes; Presidio (tuned here, leak-first) leaks fewer v4 bytes; Presidio (tuned here, F2) leaks fewer v4 bytes; Presidio (tuned by its authors) leaks fewer v3 bytes; Presidio (tuned here, leak-first) leaks fewer v3 bytes; Presidio (tuned here, F2) leaks fewer v3 bytes; Presidio (tuned by its authors) leaks fewer v2 bytes; Presidio (tuned here, leak-first) leaks fewer v2 bytes; Presidio (tuned here, F2) leaks fewer v2 bytes; Presidio (tuned by its authors) leaks fewer v1 bytes; Presidio (tuned here, leak-first) leaks fewer v1 bytes; Presidio (tuned here, F2) leaks fewer v1 bytes.
 
 Live check: each chosen configuration also ran live on a fixed sample (about one document in eight, every layer, both halves); Presidio (tuned here, F2): 2,228 documents, 4 differed on the first run, 4 on every rerun (4 with identical bytes and a different entity label, from Presidio's tie-break between equal-score results on one span); Presidio (tuned here, leak-first): 2,228 documents, 7 differed on the first run, 7 on every rerun (7 with identical bytes and a different entity label, from Presidio's tie-break between equal-score results on one span).
 

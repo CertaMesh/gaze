@@ -1,0 +1,346 @@
+{
+  "criterion": "byte_micro_f2",
+  "formula": "5*TP/(5*TP+4*FN+FP)",
+  "all_benchmarks_pass": true,
+  "results": {
+    "sealed": {
+      "aggregate_gate_sha256": "5d8361a6574026f74eb0ce0fe99114794aa7d5626533099cca2270afb9d8ce4c",
+      "legacy_gate": {
+        "verdict": "pass",
+        "reason": "net_bytes_improved",
+        "regressions": [],
+        "summed_sets": [
+          "openpii/all",
+          "gretel/en",
+          "gretel/de",
+          "gretel/fr"
+        ],
+        "leaked_bytes_decrease": 20738,
+        "false_positive_bytes_increase": 5282
+      },
+      "f2_gate": "pass",
+      "sets": {
+        "base": {
+          "openpii/all": {
+            "attempted_documents": 9990,
+            "completed_documents": 9990,
+            "failed_closed_documents": 0,
+            "contract_documents": 9990,
+            "restore_exact_documents": 9990,
+            "restore_success_decisions": 9990,
+            "manifest_valid_documents": 9990,
+            "restore_failures": 0,
+            "restore_decision_failures": 0,
+            "manifest_invalid_documents": 0,
+            "leaked_bytes": 318118,
+            "gold_bytes": 767081,
+            "false_positive_bytes": 49732
+          },
+          "openpii/en-de-fr": {
+            "attempted_documents": 999,
+            "completed_documents": 999,
+            "failed_closed_documents": 0,
+            "contract_documents": 999,
+            "restore_exact_documents": 999,
+            "restore_success_decisions": 999,
+            "manifest_valid_documents": 999,
+            "restore_failures": 0,
+            "restore_decision_failures": 0,
+            "manifest_invalid_documents": 0,
+            "leaked_bytes": 31020,
+            "gold_bytes": 76581,
+            "false_positive_bytes": 3017
+          },
+          "gretel/en": {
+            "attempted_documents": 2891,
+            "completed_documents": 2891,
+            "failed_closed_documents": 0,
+            "contract_documents": 2891,
+            "restore_exact_documents": 2891,
+            "restore_success_decisions": 2891,
+            "manifest_valid_documents": 2891,
+            "restore_failures": 0,
+            "restore_decision_failures": 0,
+            "manifest_invalid_documents": 0,
+            "leaked_bytes": 61203,
+            "gold_bytes": 232862,
+            "false_positive_bytes": 155789
+          },
+          "gretel/de": {
+            "attempted_documents": 453,
+            "completed_documents": 453,
+            "failed_closed_documents": 0,
+            "contract_documents": 453,
+            "restore_exact_documents": 453,
+            "restore_success_decisions": 453,
+            "manifest_valid_documents": 453,
+            "restore_failures": 0,
+            "restore_decision_failures": 0,
+            "manifest_invalid_documents": 0,
+            "leaked_bytes": 8613,
+            "gold_bytes": 29674,
+            "false_positive_bytes": 21904
+          },
+          "gretel/fr": {
+            "attempted_documents": 443,
+            "completed_documents": 443,
+            "failed_closed_documents": 0,
+            "contract_documents": 443,
+            "restore_exact_documents": 443,
+            "restore_success_decisions": 442,
+            "manifest_valid_documents": 443,
+            "restore_failures": 0,
+            "restore_decision_failures": 1,
+            "manifest_invalid_documents": 0,
+            "leaked_bytes": 11224,
+            "gold_bytes": 35026,
+            "false_positive_bytes": 19532
+          }
+        },
+        "candidate": {
+          "openpii/all": {
+            "attempted_documents": 9990,
+            "completed_documents": 9990,
+            "failed_closed_documents": 0,
+            "contract_documents": 9990,
+            "restore_exact_documents": 9990,
+            "restore_success_decisions": 9990,
+            "manifest_valid_documents": 9990,
+            "restore_failures": 0,
+            "restore_decision_failures": 0,
+            "manifest_invalid_documents": 0,
+            "leaked_bytes": 300232,
+            "gold_bytes": 767081,
+            "false_positive_bytes": 52791
+          },
+          "openpii/en-de-fr": {
+            "attempted_documents": 999,
+            "completed_documents": 999,
+            "failed_closed_documents": 0,
+            "contract_documents": 999,
+            "restore_exact_documents": 999,
+            "restore_success_decisions": 999,
+            "manifest_valid_documents": 999,
+            "restore_failures": 0,
+            "restore_decision_failures": 0,
+            "manifest_invalid_documents": 0,
+            "leaked_bytes": 29318,
+            "gold_bytes": 76581,
+            "false_positive_bytes": 3065
+          },
+          "gretel/en": {
+            "attempted_documents": 2891,
+            "completed_documents": 2891,
+            "failed_closed_documents": 0,
+            "contract_documents": 2891,
+            "restore_exact_documents": 2891,
+            "restore_success_decisions": 2891,
+            "manifest_valid_documents": 2891,
+            "restore_failures": 0,
+            "restore_decision_failures": 0,
+            "manifest_invalid_documents": 0,
+            "leaked_bytes": 59055,
+            "gold_bytes": 232862,
+            "false_positive_bytes": 157550
+          },
+          "gretel/de": {
+            "attempted_documents": 453,
+            "completed_documents": 453,
+            "failed_closed_documents": 0,
+            "contract_documents": 453,
+            "restore_exact_documents": 453,
+            "restore_success_decisions": 453,
+            "manifest_valid_documents": 453,
+            "restore_failures": 0,
+            "restore_decision_failures": 0,
+            "manifest_invalid_documents": 0,
+            "leaked_bytes": 8354,
+            "gold_bytes": 29674,
+            "false_positive_bytes": 22082
+          },
+          "gretel/fr": {
+            "attempted_documents": 443,
+            "completed_documents": 443,
+            "failed_closed_documents": 0,
+            "contract_documents": 443,
+            "restore_exact_documents": 443,
+            "restore_success_decisions": 442,
+            "manifest_valid_documents": 443,
+            "restore_failures": 0,
+            "restore_decision_failures": 1,
+            "manifest_invalid_documents": 0,
+            "leaked_bytes": 10779,
+            "gold_bytes": 35026,
+            "false_positive_bytes": 19816
+          }
+        }
+      },
+      "summed_sets": [
+        "openpii/all",
+        "gretel/en",
+        "gretel/de",
+        "gretel/fr"
+      ],
+      "base": {
+        "gold_bytes": 1064643,
+        "true_positive_bytes": 665485,
+        "false_negative_bytes": 399158,
+        "false_positive_bytes": 246957,
+        "f2_numerator": 3327425,
+        "f2_denominator": 5171014,
+        "f2_percent": 64.34763085151191
+      },
+      "candidate": {
+        "gold_bytes": 1064643,
+        "true_positive_bytes": 686223,
+        "false_negative_bytes": 378420,
+        "false_positive_bytes": 252239,
+        "f2_numerator": 3431115,
+        "f2_denominator": 5197034,
+        "f2_percent": 66.0206379254013
+      }
+    },
+    "piibench-commercial": {
+      "aggregate_gate_sha256": "1ab31fce4c1e8abd908433002bc40b59eb4547b29a016bdc6338d7e9048e8cce",
+      "legacy_gate": {
+        "verdict": "pass",
+        "reason": "net_bytes_improved",
+        "regressions": [],
+        "summed_sets": [
+          "test"
+        ],
+        "leaked_bytes_decrease": 4520,
+        "false_positive_bytes_increase": 815
+      },
+      "f2_gate": "pass",
+      "sets": {
+        "base": {
+          "test": {
+            "attempted_documents": 5000,
+            "completed_documents": 5000,
+            "failed_closed_documents": 0,
+            "contract_documents": 5000,
+            "restore_exact_documents": 5000,
+            "restore_success_decisions": 5000,
+            "manifest_valid_documents": 5000,
+            "restore_failures": 0,
+            "restore_decision_failures": 0,
+            "manifest_invalid_documents": 0,
+            "gold_bytes": 262703,
+            "leaked_bytes": 105077,
+            "false_positive_bytes": 48309
+          }
+        },
+        "candidate": {
+          "test": {
+            "attempted_documents": 5000,
+            "completed_documents": 5000,
+            "failed_closed_documents": 0,
+            "contract_documents": 5000,
+            "restore_exact_documents": 5000,
+            "restore_success_decisions": 5000,
+            "manifest_valid_documents": 5000,
+            "restore_failures": 0,
+            "restore_decision_failures": 0,
+            "manifest_invalid_documents": 0,
+            "gold_bytes": 262703,
+            "leaked_bytes": 100557,
+            "false_positive_bytes": 49124
+          }
+        }
+      },
+      "summed_sets": [
+        "test"
+      ],
+      "base": {
+        "gold_bytes": 262703,
+        "true_positive_bytes": 157626,
+        "false_negative_bytes": 105077,
+        "false_positive_bytes": 48309,
+        "f2_numerator": 788130,
+        "f2_denominator": 1256747,
+        "f2_percent": 62.71190621501384
+      },
+      "candidate": {
+        "gold_bytes": 262703,
+        "true_positive_bytes": 162146,
+        "false_negative_bytes": 100557,
+        "false_positive_bytes": 49124,
+        "f2_numerator": 405365,
+        "f2_denominator": 631041,
+        "f2_percent": 64.23750596237012
+      }
+    },
+    "pii-trace": {
+      "aggregate_gate_sha256": "17e0b506efd7ab09bbf80c9e10200afb01ae3b4ff449ff1c42d8e9e019419280",
+      "legacy_gate": {
+        "verdict": "fail",
+        "reason": "no_eligible_gain",
+        "regressions": [],
+        "summed_sets": [
+          "test"
+        ],
+        "leaked_bytes_decrease": 284,
+        "false_positive_bytes_increase": 353
+      },
+      "f2_gate": "pass",
+      "sets": {
+        "base": {
+          "test": {
+            "attempted_documents": 4500,
+            "completed_documents": 4500,
+            "failed_closed_documents": 0,
+            "contract_documents": 4500,
+            "restore_exact_documents": 4500,
+            "restore_success_decisions": 4500,
+            "manifest_valid_documents": 4500,
+            "restore_failures": 0,
+            "restore_decision_failures": 0,
+            "manifest_invalid_documents": 0,
+            "gold_bytes": 55580,
+            "leaked_bytes": 15739,
+            "false_positive_bytes": 357
+          }
+        },
+        "candidate": {
+          "test": {
+            "attempted_documents": 4500,
+            "completed_documents": 4500,
+            "failed_closed_documents": 0,
+            "contract_documents": 4500,
+            "restore_exact_documents": 4500,
+            "restore_success_decisions": 4500,
+            "manifest_valid_documents": 4500,
+            "restore_failures": 0,
+            "restore_decision_failures": 0,
+            "manifest_invalid_documents": 0,
+            "gold_bytes": 55580,
+            "leaked_bytes": 15455,
+            "false_positive_bytes": 710
+          }
+        }
+      },
+      "summed_sets": [
+        "test"
+      ],
+      "base": {
+        "gold_bytes": 55580,
+        "true_positive_bytes": 39841,
+        "false_negative_bytes": 15739,
+        "false_positive_bytes": 357,
+        "f2_numerator": 199205,
+        "f2_denominator": 262518,
+        "f2_percent": 75.88241568197229
+      },
+      "candidate": {
+        "gold_bytes": 55580,
+        "true_positive_bytes": 40125,
+        "false_negative_bytes": 15455,
+        "false_positive_bytes": 710,
+        "f2_numerator": 40125,
+        "f2_denominator": 52631,
+        "f2_percent": 76.23833862172484
+      }
+    }
+  }
+}
