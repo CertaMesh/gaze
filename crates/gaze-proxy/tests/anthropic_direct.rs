@@ -1,4 +1,5 @@
-use std::net::SocketAddr;
+mod support;
+
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -338,11 +339,7 @@ async fn spawn_upstream_with_mode(
             split_carrier,
             provider_text,
         });
-    let backend_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let backend_addr = backend_listener.local_addr().unwrap();
-    let backend_handle = tokio::spawn(async move {
-        axum::serve(backend_listener, app).await.unwrap();
-    });
+    let (backend_addr, backend_handle) = support::spawn_upstream(app).await;
     let forwarding_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let forwarding_addr = forwarding_listener.local_addr().unwrap();
     let connections = Arc::new(AtomicUsize::new(0));
@@ -407,35 +404,19 @@ async fn spawn_proxy_with_observability(
         Some((producer, consumer)) => (config.with_inspection(producer), Some(consumer)),
         None => (config, None),
     };
-    let handle = tokio::spawn(async move {
-        gaze_proxy::serve_with_listener(config, Arc::new(pipeline), listener)
-            .await
-            .unwrap();
-    });
-    wait_for_proxy(bind).await;
+    let handle = support::spawn_proxy(
+        config,
+        Arc::new(pipeline),
+        listener,
+        support::Readiness::Poll {
+            interval: Duration::from_millis(20),
+        },
+    )
+    .await;
     RunningServer {
         base_url: format!("http://{bind}"),
         handle,
         _inspection_consumer: inspection_consumer,
-    }
-}
-
-async fn wait_for_proxy(bind: SocketAddr) {
-    let client = Client::new();
-    let health_url = format!("http://{bind}/_gaze_proxy/healthz");
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
-    loop {
-        if client
-            .get(&health_url)
-            .timeout(Duration::from_secs(60))
-            .send()
-            .await
-            .is_ok_and(|response| response.status().is_success())
-        {
-            return;
-        }
-        assert!(tokio::time::Instant::now() < deadline);
-        tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }
 
@@ -564,7 +545,13 @@ async fn compatibility_constructor_keeps_default_deny_and_serves_ordinary_reques
         handle,
         _inspection_consumer: None,
     };
-    wait_for_proxy(bind).await;
+    support::wait_for_proxy(
+        bind,
+        support::Readiness::Poll {
+            interval: Duration::from_millis(20),
+        },
+    )
+    .await;
     let denied = sdk_client_request(&Client::new(), &proxy, false)
         .header("anthropic-beta", "tools-2025-01-01")
         .send()

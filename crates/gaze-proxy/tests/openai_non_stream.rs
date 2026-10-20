@@ -1,10 +1,8 @@
-use std::net::SocketAddr;
+mod support;
+
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::State;
-use axum::routing::post;
-use axum::{Json, Router};
 use gaze::{
     token_shape, Action, ClassRule, CleanDocument, DefaultRule, PiiClass, Pipeline, RawDocument,
     Scope, Session,
@@ -24,12 +22,6 @@ fn email_pipeline() -> Pipeline {
         .rule(DefaultRule::new(Action::Preserve))
         .build()
         .unwrap()
-}
-
-#[derive(Clone)]
-struct UpstreamState {
-    forwarded: Arc<Mutex<Vec<Value>>>,
-    response: Arc<dyn Fn(Value) -> Value + Send + Sync>,
 }
 
 struct MockUpstream {
@@ -62,32 +54,12 @@ impl Drop for ProxyServer {
 }
 
 async fn spawn_upstream(response: impl Fn(Value) -> Value + Send + Sync + 'static) -> MockUpstream {
-    let forwarded = Arc::new(Mutex::new(Vec::new()));
-    let state = UpstreamState {
-        forwarded: forwarded.clone(),
-        response: Arc::new(response),
-    };
-    let app = Router::new()
-        .route("/{*path}", post(capture_upstream))
-        .with_state(state);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let handle = tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let (base_url, forwarded, handle) = support::spawn_json_upstream(response).await;
     MockUpstream {
-        base_url: Url::parse(&format!("http://{addr}")).unwrap(),
+        base_url,
         forwarded,
         handle,
     }
-}
-
-async fn capture_upstream(
-    State(state): State<UpstreamState>,
-    Json(body): Json<Value>,
-) -> Json<Value> {
-    state.forwarded.lock().await.push(body.clone());
-    Json((state.response)(body))
 }
 
 async fn spawn_proxy(upstream: Url) -> ProxyServer {
@@ -98,38 +70,18 @@ async fn spawn_proxy(upstream: Url) -> ProxyServer {
         vec![Arc::new(OpenAiAdapter::new(upstream)) as Arc<dyn ProviderAdapter>],
     );
     let pipeline = Arc::new(email_pipeline());
-    let handle = tokio::spawn(async move {
-        gaze_proxy::serve_with_listener(config, pipeline, listener)
-            .await
-            .unwrap();
-    });
-    wait_for_proxy(bind).await;
+    let handle = support::spawn_proxy(
+        config,
+        pipeline,
+        listener,
+        support::Readiness::Poll {
+            interval: Duration::from_millis(10),
+        },
+    )
+    .await;
     ProxyServer {
         base_url: format!("http://{bind}"),
         handle,
-    }
-}
-
-async fn wait_for_proxy(bind: SocketAddr) {
-    let client = Client::new();
-    let health_url = format!("http://{bind}/_gaze_proxy/healthz");
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
-    loop {
-        if let Ok(response) = client
-            .get(&health_url)
-            .timeout(Duration::from_secs(60))
-            .send()
-            .await
-        {
-            if response.status().is_success() {
-                return;
-            }
-        }
-        assert!(
-            tokio::time::Instant::now() < deadline,
-            "proxy did not start at {bind}"
-        );
-        tokio::time::sleep(Duration::from_millis(10)).await;
     }
 }
 

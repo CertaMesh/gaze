@@ -1,3 +1,5 @@
+mod support;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::{SocketAddr, TcpListener as StdTcpListener};
 use std::sync::Arc;
@@ -78,11 +80,7 @@ async fn spawn_upstream() -> MockUpstream {
     let app = Router::new()
         .route("/{*path}", post(capture_upstream))
         .with_state(state);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let handle = tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let (addr, handle) = support::spawn_upstream(app).await;
     MockUpstream {
         base_url: Url::parse(&format!("http://{addr}")).unwrap(),
         captured,
@@ -143,12 +141,15 @@ async fn spawn_proxy(
     let mut config = ProxyConfig::new(bind, adapters);
     config.body_limit_bytes = body_limit_bytes;
     let pipeline = Arc::new(email_pipeline());
-    let handle = tokio::spawn(async move {
-        gaze_proxy::serve_with_listener(config, pipeline, listener)
-            .await
-            .unwrap();
-    });
-    wait_for_proxy(bind).await;
+    let handle = support::spawn_proxy(
+        config,
+        pipeline,
+        listener,
+        support::Readiness::Poll {
+            interval: Duration::from_millis(10),
+        },
+    )
+    .await;
     ProxyServer {
         bind,
         base_url: format!("http://{bind}"),
@@ -159,29 +160,6 @@ async fn spawn_proxy(
 fn unused_local_addr() -> SocketAddr {
     let listener = StdTcpListener::bind("127.0.0.1:0").unwrap();
     listener.local_addr().unwrap()
-}
-
-async fn wait_for_proxy(bind: SocketAddr) {
-    let client = Client::new();
-    let health_url = format!("http://{bind}/_gaze_proxy/healthz");
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
-    loop {
-        if let Ok(response) = client
-            .get(&health_url)
-            .timeout(Duration::from_secs(60))
-            .send()
-            .await
-        {
-            if response.status().is_success() {
-                return;
-            }
-        }
-        assert!(
-            tokio::time::Instant::now() < deadline,
-            "proxy did not start at {bind}"
-        );
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
 }
 
 fn adapters_for(upstream: &Url) -> Vec<Arc<dyn ProviderAdapter>> {

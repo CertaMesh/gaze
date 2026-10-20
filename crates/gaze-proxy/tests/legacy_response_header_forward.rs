@@ -14,7 +14,8 @@
 //!
 //! Fixtures are synthetic-only per AGENTS.md rule 2.
 
-use std::net::SocketAddr;
+mod support;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -191,11 +192,7 @@ async fn spawn_upstream_with(handler: axum::routing::MethodRouter<UpstreamState>
         responded: responded.clone(),
     };
     let app = Router::new().route("/{*path}", handler).with_state(state);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let handle = tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let (addr, handle) = support::spawn_upstream(app).await;
     MockUpstream {
         base_url: Url::parse(&format!("http://{addr}")).unwrap(),
         _responded: responded,
@@ -220,38 +217,18 @@ async fn spawn_proxy(adapter: Arc<dyn ProviderAdapter>) -> ProxyServer {
     let bind = listener.local_addr().unwrap();
     let config = ProxyConfig::new(bind, vec![adapter]);
     let pipeline = Arc::new(email_pipeline());
-    let handle = tokio::spawn(async move {
-        gaze_proxy::serve_with_listener(config, pipeline, listener)
-            .await
-            .unwrap();
-    });
-    wait_for_proxy(bind).await;
+    let handle = support::spawn_proxy(
+        config,
+        pipeline,
+        listener,
+        support::Readiness::Poll {
+            interval: Duration::from_millis(20),
+        },
+    )
+    .await;
     ProxyServer {
         base_url: format!("http://{bind}"),
         handle,
-    }
-}
-
-async fn wait_for_proxy(bind: SocketAddr) {
-    let client = Client::new();
-    let health_url = format!("http://{bind}/_gaze_proxy/healthz");
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
-    loop {
-        if let Ok(response) = client
-            .get(&health_url)
-            .timeout(Duration::from_secs(60))
-            .send()
-            .await
-        {
-            if response.status().is_success() {
-                return;
-            }
-        }
-        assert!(
-            tokio::time::Instant::now() < deadline,
-            "proxy did not start at {bind}"
-        );
-        tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }
 
