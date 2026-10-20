@@ -10,11 +10,37 @@ class LaneSelection(unittest.TestCase):
         return gate.make_plan(event, paths)
 
     def test_documentation_only_is_lightweight(self):
-        plan = self.plan('README.md', 'docs/guides/setup.md')
+        plan = self.plan('CODE_OF_CONDUCT.md', 'LICENSE-MIT')
         self.assertEqual(plan['packages'], [])
         self.assertFalse(plan['msrv'])
         self.assertFalse(plan['bench'])
         self.assertFalse(plan['dylint'])
+
+    def test_rust_consumed_inputs_fall_back_wide(self):
+        for path in [
+                'docs/how-to/rust-library.md', 'docs/reference/policy.md',
+                'docs/reference/policy.example.toml', 'CHANGELOG.md', 'README.md',
+                'UPGRADE.md', 'docs/reference/redaction-classes.md',
+                'docs/reference/benchmarks/README.md',
+                'docs/explanation/how-gaze-works.md', 'docs/tutorials/getting-started.md',
+                'docs/reference/cli.md', 'docs/new-input.md',
+                'scripts/bench/fixtures/evidence/mcp_route_v1.golden.json',
+                'scripts/bench/fixtures/jwt_payload/policy.toml',
+                'tests/fixtures/new-input.md', 'dylint.toml',
+                'scripts/fetch/fetch-ner-model.sh']:
+            with self.subTest(path=path):
+                plan = self.plan(path)
+                self.assertTrue(plan['wide'])
+                self.assertEqual(set(plan['packages']), set(gate.workspace()[0].values()))
+
+    def test_crate_local_inputs_select_their_consumers(self):
+        for path, owner in [
+                ('crates/gaze/tests/fixtures/session_snapshot_v3_text_only.bin', 'gaze-pii'),
+                ('crates/gaze-cli/README.md', 'gaze-cli'),
+                ('crates/gaze-recognizers/embedded/core.toml', 'gaze-pii'),
+                ('crates/gaze-proxy-dashboard/assets/index.html', 'gaze-cli')]:
+            with self.subTest(path=path):
+                self.assertIn(owner, self.plan(path)['packages'])
 
     def test_rust_includes_every_reverse_dependency(self):
         plan = self.plan('crates/gaze-inspection/src/lib.rs')

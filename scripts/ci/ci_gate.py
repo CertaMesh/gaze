@@ -11,6 +11,9 @@ FULL_JOBS = {'msrv', 'test-support', 'workspace-shards', 'test-coverage',
              'benchmark-model-free', 'xtask-feature-gates', 'workspace-default', 'dylint'}
 ALL_JOBS = FULL_JOBS | {'plan', 'fast', 'test', 'xtask-gates'}
 EVENTS = {'pull_request', 'merge_group', 'push', 'workflow_dispatch'}
+# Audited prose only. Docs, root Markdown and external fixtures can be Rust
+# inputs (including the release scrubber's dynamically followed doc links).
+PROSE_ONLY = {'CODE_OF_CONDUCT.md', 'LICENSE-APACHE', 'LICENSE-MIT'}
 
 
 def workspace():
@@ -53,7 +56,10 @@ def make_plan(event, paths):
                 or Path(path).name in {'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml'}):
             wide = True
             continue
-        if path.startswith(('scripts/bench/', 'docs/reference/benchmarks/')):
+        if path.startswith(('docs/', 'scripts/bench/fixtures/')):
+            wide = True
+            continue
+        if path.startswith('scripts/bench/'):
             bench = True
             if path.endswith('.rs'):
                 wide = True
@@ -65,8 +71,7 @@ def make_plan(event, paths):
             if '/examples/' in path:
                 bench = True
             continue
-        if (path.startswith('docs/') or ('/' not in path and path.endswith('.md'))
-                or path in {'LICENSE-APACHE', 'LICENSE-MIT', '.gitignore'}):
+        if path in PROSE_ONLY:
             continue
         wide = True
     if wide:
