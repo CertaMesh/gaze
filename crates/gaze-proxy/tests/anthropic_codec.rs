@@ -723,7 +723,7 @@ fn request_signed_and_opaque_surfaces_are_explicit_and_fail_closed() {
 }
 
 #[test]
-fn actionable_opaque_reporting_preserves_the_rejected_request_set() {
+fn actionable_opaque_reporting_allows_inspected_text_urls() {
     let cases = [
         ("ordinary synthetic prose", None),
         (
@@ -731,14 +731,8 @@ fn actionable_opaque_reporting_preserves_the_rejected_request_set() {
             Some(OpaqueCarrierScheme::Data),
         ),
         ("file:synthetic-carrier", Some(OpaqueCarrierScheme::File)),
-        (
-            "http://synthetic.example.invalid/carrier",
-            Some(OpaqueCarrierScheme::Http),
-        ),
-        (
-            "https://synthetic.example.invalid/carrier",
-            Some(OpaqueCarrierScheme::Https),
-        ),
+        ("http://synthetic.example.invalid/carrier", None),
+        ("https://synthetic.example.invalid/carrier", None),
     ];
     let mut rejected = Vec::new();
 
@@ -779,7 +773,7 @@ fn actionable_opaque_reporting_preserves_the_rejected_request_set() {
         assert_eq!(result.is_err(), expected_scheme.is_some());
     }
 
-    assert_eq!(rejected, vec![false, true, true, true, true]);
+    assert_eq!(rejected, vec![false, true, true, false, false]);
 }
 
 #[test]
@@ -1614,4 +1608,69 @@ fn numeric_schema_literals_not_flagged_pass_unchanged() {
             std::str::from_utf8(proved.bytes()).unwrap()
         );
     }
+}
+
+#[test]
+fn count_tokens_has_closed_request_and_response_contracts() {
+    let codec = anthropic::AnthropicCountTokensCodec;
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    let mut pseudonymizer = SyntheticPseudonymizer {
+        transaction: &mut transaction,
+    };
+    for extra in [
+        r#", "stream": true"#,
+        r#", "max_tokens": 32"#,
+        r#", "unknown": "alice@example.invalid""#,
+    ] {
+        let request = format!(
+            r#"{{"model":"claude-test","messages":[{{"role":"user","content":"synthetic"}}]{extra}}}"#
+        );
+        let error = codec
+            .protect_request(request.as_bytes(), &mut request_context(&mut pseudonymizer))
+            .unwrap_err();
+        assert_eq!(error.code(), CodecErrorCode::UnsupportedRequestSurface);
+    }
+    let snapshot = transaction.commit().unwrap();
+    let mut residual = SyntheticResidualValidator;
+    for input in [r#"{"input_tokens":0}"#, r#"{"input_tokens":7}"#] {
+        let mut ctx = ResponseTransformContext::new(
+            &snapshot,
+            &mut residual,
+            WireFormat::Json,
+            CodecLimits::default(),
+        );
+        let proved = codec.restore_response(input.as_bytes(), &mut ctx).unwrap();
+        assert_eq!(proved.bytes(), input.as_bytes());
+        assert!(proved.provenance().final_buffer_verified());
+    }
+    for input in [
+        r#"{"input_tokens":-1}"#,
+        r#"{"input_tokens":"alice@example.invalid"}"#,
+        r#"{"input_tokens":7,"extra":"alice@example.invalid"}"#,
+        r#"{"input_tokens":7,"input_tokens":8}"#,
+    ] {
+        let mut ctx = ResponseTransformContext::new(
+            &snapshot,
+            &mut residual,
+            WireFormat::Json,
+            CodecLimits::default(),
+        );
+        assert!(codec.restore_response(input.as_bytes(), &mut ctx).is_err());
+    }
+}
+
+#[test]
+fn context_instructions_join_the_complete_prompt_proof() {
+    let input = br#"{"model":"claude-test","max_tokens":32,"system":"alice@","output_config":{"effort":"medium"},"messages":[{"role":"user","content":"synthetic"}],"context_management":{"edits":[{"type":"compact_20260112","instructions":"example.invalid"}]}}"#;
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    let mut pseudonymizer = SyntheticPseudonymizer {
+        transaction: &mut transaction,
+    };
+    let error = AnthropicMessagesCodec
+        .protect_request(input, &mut request_context(&mut pseudonymizer))
+        .unwrap_err();
+    assert_eq!(error.code(), CodecErrorCode::ControlWouldMutate);
+    assert_eq!(error.phase(), CodecPhase::RequestProof);
 }

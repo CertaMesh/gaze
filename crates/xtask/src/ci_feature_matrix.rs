@@ -22,11 +22,6 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         ],
     },
     MatrixCommand {
-        label: "cargo run -p xtask -- bundle-tokenization-drift",
-        program: "cargo",
-        args: &["run", "-p", "xtask", "--", "bundle-tokenization-drift"],
-    },
-    MatrixCommand {
         label: "cargo run -p xtask -- bundle-tokenization-drift --verify-ack",
         program: "cargo",
         args: &[
@@ -185,11 +180,6 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
             "--",
             "recognizer-composition-validator",
         ],
-    },
-    MatrixCommand {
-        label: "cargo run -p xtask -- dylint-gate  # compiled lint runs in the separate dylint.yml PR job",
-        program: "cargo",
-        args: &["run", "-p", "xtask", "--", "dylint-gate"],
     },
     MatrixCommand {
         label: "cargo test --workspace --all-features",

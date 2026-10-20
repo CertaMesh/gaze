@@ -17,6 +17,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   code-field rule; ambiguous password metadata stays fail-closed. Whole Argon2
   encodings no longer split at an inner postal-code candidate (#824).
 
+### Fixed
+
+- Anthropic proxy accepts the literal `?beta=true` query, individually allowlisted
+  comma-separated beta headers (policy or repeatable `--anthropic-beta`), and
+  inspected `count_tokens` requests. Adaptive thinking, output configuration and
+  documented context edits use closed schemas; plain HTTP(S) URLs are inspected
+  as text. Unsupported fields and disallowed queries on admitted routes return
+  Anthropic-shaped `400` errors. Unknown paths retain `404`. Unverified
+  `safeguards`, message-level system roles and opaque media remain refused (#814).
+
+### Benchmark
+
+- Release scorecards are committed gzipped as `scorecard-*.json.gz` (about 70 MB
+  and 1.7 million lines of JSON become 3 MB). Recorded `scorecard_sha256` values
+  are unchanged: they hash the decompressed JSON, and
+  `render_benchmark_doc.py --check` now verifies every one. Publish a new
+  scorecard with `scripts/bench/bench_json.py compress`.
 
 ## [0.17.0] - 2026-10-19
 

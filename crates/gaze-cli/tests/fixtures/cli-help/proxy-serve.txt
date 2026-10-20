@@ -9,6 +9,8 @@ Options:
           [default: https://api.openai.com]
       --upstream-anthropic <UPSTREAM_ANTHROPIC>
           [default: https://api.anthropic.com]
+      --anthropic-beta <ANTHROPIC_BETAS>
+          Allow one Anthropic beta value; repeat for each required beta
       --upstream-gemini <UPSTREAM_GEMINI>
           [default: https://generativelanguage.googleapis.com]
       --policy <POLICY>

@@ -20,6 +20,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import agentic_layers as agentic
+import bench_json
 import gaze_bench_score as score
 
 
@@ -2886,7 +2887,7 @@ class ReleaseGateCreditTests(unittest.TestCase):
             with self.subTest(version=version):
                 with gzip.open(self.BENCH / f"agentic-layers-{version}.json.gz") as stream:
                     layers = json.load(stream)["layers"]
-                card = json.loads((self.BENCH / f"scorecard-{version}-scored-labels-v2.json").read_text())
+                card = bench_json.load(self.BENCH / f"scorecard-{version}-scored-labels-v2.json.gz")
                 card["layers"] = layers
                 before = self.totals(card, {"IBAN": agentic.CreditScope.ALL,
                                            "CREDITCARDNUMBER": agentic.CreditScope.ALL})

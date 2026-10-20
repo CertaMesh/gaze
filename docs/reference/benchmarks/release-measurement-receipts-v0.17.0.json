@@ -25,19 +25,19 @@
       },
       "views": {
         "1": {
-          "file": "scorecard-v0.14.0.json",
+          "file": "scorecard-v0.14.0.json.gz",
           "sha256": "713479df6505331f9f79e9250edeab600c97624fc02f7e943f684cae1984287b"
         },
         "2": {
-          "file": "scorecard-v0.14.0-scored-labels-v2.json",
+          "file": "scorecard-v0.14.0-scored-labels-v2.json.gz",
           "sha256": "315ffc325884c7047da73b6ae37fc0bc4e06a38e9a76eee7fe20e730d1084ccb"
         },
         "3": {
-          "file": "scorecard-v0.14.0-scored-labels-v3.json",
+          "file": "scorecard-v0.14.0-scored-labels-v3.json.gz",
           "sha256": "3e5633cbf195a677d277eb529d4e523fbe15d74a28e562092e494f1a73baf6a1"
         },
         "4": {
-          "file": "scorecard-v0.14.0-scored-labels-v4.json",
+          "file": "scorecard-v0.14.0-scored-labels-v4.json.gz",
           "sha256": "44ba6e06f931d8e235e5dd36bc3775f726bbc7b335122dcc34d62fcf56fff617"
         }
       },
@@ -66,19 +66,19 @@
       },
       "views": {
         "1": {
-          "file": "scorecard-v0.15.0.json",
+          "file": "scorecard-v0.15.0.json.gz",
           "sha256": "81a2b4daffd945347543c0a0e22dc28b4973e8d1ff089d317626b06b4e0c6b62"
         },
         "2": {
-          "file": "scorecard-v0.15.0-scored-labels-v2.json",
+          "file": "scorecard-v0.15.0-scored-labels-v2.json.gz",
           "sha256": "6fb9de86548f88b7ff9b931a74c36157c14b9ca4547c269bc2005e6a16ce999b"
         },
         "3": {
-          "file": "scorecard-v0.15.0-scored-labels-v3.json",
+          "file": "scorecard-v0.15.0-scored-labels-v3.json.gz",
           "sha256": "0369ccbe618953276a8577bde90269ecbef51b231366fa7845c23e0932e4a98c"
         },
         "4": {
-          "file": "scorecard-v0.15.0-scored-labels-v4.json",
+          "file": "scorecard-v0.15.0-scored-labels-v4.json.gz",
           "sha256": "0b634d5245ddc3c89915f6abd2f234d1e3d9d7aad3df48e066e1da586ce46ea9"
         }
       },
@@ -107,19 +107,19 @@
       },
       "views": {
         "1": {
-          "file": "scorecard-v0.15.1.json",
+          "file": "scorecard-v0.15.1.json.gz",
           "sha256": "4a3f6dd478c0e4232971b56deb7f19e3016a2b4b9f4b2e42af7ebf5604ae106d"
         },
         "2": {
-          "file": "scorecard-v0.15.1-scored-labels-v2.json",
+          "file": "scorecard-v0.15.1-scored-labels-v2.json.gz",
           "sha256": "036c7504c21d92c0d8b9956f4e93535a8b88b9b1fea1843f48150b4b5c4b3294"
         },
         "3": {
-          "file": "scorecard-v0.15.1-scored-labels-v3.json",
+          "file": "scorecard-v0.15.1-scored-labels-v3.json.gz",
           "sha256": "baca208e3db14b638ff9e0db63abb92fcf3eeda26d8dae524fc388619bc434c8"
         },
         "4": {
-          "file": "scorecard-v0.15.1-scored-labels-v4.json",
+          "file": "scorecard-v0.15.1-scored-labels-v4.json.gz",
           "sha256": "23b074b4ab5548129ad5d93be6dc5f9ce23e9a3ff9adf9407b9dda292a66f0f5"
         }
       },
@@ -148,19 +148,19 @@
       },
       "views": {
         "1": {
-          "file": "scorecard-v0.16.0.json",
+          "file": "scorecard-v0.16.0.json.gz",
           "sha256": "a1ed33b5f941385fd7278f4d37e5b2c6a2e6b0f3ca798702f1d65111f763b6d4"
         },
         "2": {
-          "file": "scorecard-v0.16.0-scored-labels-v2.json",
+          "file": "scorecard-v0.16.0-scored-labels-v2.json.gz",
           "sha256": "1b4a467156faae25d96513812640b553bdad00a6735c14d028efffb64f0a337d"
         },
         "3": {
-          "file": "scorecard-v0.16.0-scored-labels-v3.json",
+          "file": "scorecard-v0.16.0-scored-labels-v3.json.gz",
           "sha256": "f889c342abe26d7d275fb7bb9c7040d6dac7a8b3ea5656d06564c4e57c86253e"
         },
         "4": {
-          "file": "scorecard-v0.16.0-scored-labels-v4.json",
+          "file": "scorecard-v0.16.0-scored-labels-v4.json.gz",
           "sha256": "9e055feb011691cbf7087b316cee92a0cf7f8f9d4bc79f94c8fd165fbd660029"
         }
       },
@@ -189,19 +189,19 @@
       },
       "views": {
         "1": {
-          "file": "scorecard-v0.17.0.json",
+          "file": "scorecard-v0.17.0.json.gz",
           "sha256": "48038f42f665fc41d45aab2c3b12c65eaa23854d055c99b49308b8c553a59f75"
         },
         "2": {
-          "file": "scorecard-v0.17.0-scored-labels-v2.json",
+          "file": "scorecard-v0.17.0-scored-labels-v2.json.gz",
           "sha256": "41fe2764e982c7f7cd9637b4c273c5bc4083b104d8af9ed3db24a0fbbcac1765"
         },
         "3": {
-          "file": "scorecard-v0.17.0-scored-labels-v3.json",
+          "file": "scorecard-v0.17.0-scored-labels-v3.json.gz",
           "sha256": "cdfec65479d0db7f0e00018b12dd86c8c2b30ac1e855f50afe8525a010590802"
         },
         "4": {
-          "file": "scorecard-v0.17.0-scored-labels-v4.json",
+          "file": "scorecard-v0.17.0-scored-labels-v4.json.gz",
           "sha256": "7944d60a003fd8e5d6ace066003b7a6ad291b1c644ed19dd24469bd33aaa285f"
         }
       },

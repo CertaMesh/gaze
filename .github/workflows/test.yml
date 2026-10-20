@@ -115,8 +115,6 @@ jobs:
         run: python3 -m unittest discover -s scripts/ci
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
-      - name: README version check
-        run: cargo run -p xtask -- readme-version-check
       # Linux-only: the canonical harness uses a POSIX producer transport.
       # Call its build function so flags/features cannot diverge from bench runs.
       - name: Cache detached validator probe target
@@ -165,16 +163,23 @@ jobs:
           printf '%s  %s\n' "$NYM_SMALL_INT8_BUNDLE_SHA256" "$bundle/SHA256SUMS" | sha256sum -c -
           (cd "$bundle" && sha256sum -c SHA256SUMS)
           chmod 600 "$bundle"/*
-      - name: Test live Nym policy attachment
+      - name: Test live Nym leak detection and restore
         shell: bash
         env:
           GAZE_NYM_MODEL_DIR: ${{ runner.temp }}/gaze/models/nym-small-int8
         run: |
           set -euo pipefail
-          for name in live_nym_net_tokenizes_a_plate_the_rules_miss policy_nym_model_dir_activates_live_bundle live_nym_suspects_ignore_random_session_hex; do
+          for name in live_plate_in_prose_is_a_suspect live_salutation_protects_surname_but_not_unsupported_secret live_long_document_is_scanned_to_the_end live_capture_matches_the_committed_fixture; do
+            cargo test -p gaze-recognizers --features safety-net-nym,test-support --test nym_safety_net "$name" -- --ignored --exact --nocapture 2>&1 | tee "$RUNNER_TEMP/$name.log"
+            grep -Fq "test $name ... ok" "$RUNNER_TEMP/$name.log"
+          done
+          for name in live_nym_net_tokenizes_a_plate_the_rules_miss policy_nym_model_dir_activates_live_bundle live_nym_suspects_ignore_random_session_hex live_person_name_is_one_restorable_token_with_thresholds_in_audit live_nym_fallback_never_replaces_an_owned_placeholder; do
             cargo test -p gaze-cli --all-features --test nym_cli "$name" -- --ignored --exact --nocapture 2>&1 | tee "$RUNNER_TEMP/$name.log"
             grep -Fq "test $name ... ok" "$RUNNER_TEMP/$name.log"
           done
+          name=eval_and_clean_protect_the_same_nym_policy_bytes
+          cargo test -p gaze-cli --all-features --test eval_cli "$name" -- --ignored --exact --nocapture 2>&1 | tee "$RUNNER_TEMP/$name.log"
+          grep -Fq "test $name ... ok" "$RUNNER_TEMP/$name.log"
       - name: Cache pinned Davlan NER bundle
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -453,38 +458,6 @@ jobs:
           key: ${{ runner.os }}-cargo-xtask-gates-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-xtask-gates-
-      - name: xtask symmetric-potemkin
-        run: cargo run -p xtask -- symmetric-potemkin
-      - name: xtask class-map-override-safety
-        run: cargo run -p xtask -- class-map-override-safety
-      - name: xtask recognizer-composition-validator
-        run: cargo run -p xtask -- recognizer-composition-validator
-      - name: xtask no-tenant-knowledge
-        run: cargo run -p xtask -- no-tenant-knowledge
-      - name: xtask bundle-tokenization-drift
-        # --verify-ack: any committed snapshot change (e.g. an emitted class
-        # rename) must carry a `// drift-ack:` comment and a CHANGELOG line —
-        # the v0.8 `custom:iban` -> `custom:family:payment-card-or-iban` change
-        # merged silently without this and leaked downstream (issue #360).
-        run: cargo run -p xtask -- bundle-tokenization-drift --verify-ack
-      - name: xtask family-policy-table-coherence
-        run: cargo run -p xtask -- family-policy-table-coherence
-      - name: xtask locale-cue-bundle-coherence
-        run: cargo run -p xtask -- locale-cue-bundle-coherence
-      - name: xtask fixture-citation-lint
-        run: cargo run -p xtask -- fixture-citation-lint
-      - name: xtask trybuild-fixture-hygiene
-        run: cargo run -p xtask -- trybuild-fixture-hygiene
-      - name: xtask cargo-metadata-audit-isolation
-        run: cargo run -p xtask -- cargo-metadata-audit-isolation
-      - name: xtask readme-version-check
-        run: cargo run -p xtask -- readme-version-check
-      - name: xtask safety-net-sanity
-        run: cargo run -p xtask -- safety-net-sanity
-      - name: xtask dashboard-isolation
-        run: cargo run -p xtask -- dashboard-isolation
-      - name: xtask mcp-tier-isolation
-        run: cargo run -p xtask -- mcp-tier-isolation
       - name: xtask ci-feature-matrix
         run: cargo run -p xtask -- ci-feature-matrix --partition ci-gates
 

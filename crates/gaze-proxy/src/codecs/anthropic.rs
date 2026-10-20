@@ -73,97 +73,7 @@ impl BodyCodec for AnthropicMessagesCodec {
         input: &[u8],
         ctx: &mut RequestTransformContext<'_>,
     ) -> Result<ProvedRequestBody, CodecError> {
-        ctx.clear_opaque_carrier();
-        ctx.replace_content_block_index(None);
-        if ctx.format() != WireFormat::Json {
-            return Err(codec_error(
-                CodecErrorCode::InvalidWireFormat,
-                CodecPhase::RequestParse,
-            ));
-        }
-        if input.len()
-            > ctx
-                .limits()
-                .max_body_bytes()
-                .min(MAX_ANTHROPIC_REQUEST_BODY_BYTES)
-        {
-            return Err(codec_error(
-                CodecErrorCode::BodyLimitExceeded,
-                CodecPhase::RequestParse,
-            ));
-        }
-        let mut document = parse_json(input, ctx.limits(), CodecPhase::RequestParse)?;
-        let mut ledger = CoverageLedger::new(document.occurrence_count);
-        transform_request_root(&mut document.root, input, ctx, &mut ledger)
-            .map_err(|code| request_codec_error(code, CodecPhase::RequestProtection, ctx))?;
-        ledger
-            .finish()
-            .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
-        let expected_signed = collect_signed_slices(&document.root, input)
-            .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
-        let expected_authorized = collect_authorized_wire_chunks(&document.root)
-            .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
-        let (bytes, mut provenance) = write_document(&document, input)
-            .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
-        if bytes.len()
-            > ctx
-                .limits()
-                .max_body_bytes()
-                .min(MAX_ANTHROPIC_REQUEST_BODY_BYTES)
-        {
-            return Err(codec_error(
-                CodecErrorCode::BodyLimitExceeded,
-                CodecPhase::RequestProof,
-            ));
-        }
-        if !ctx
-            .limits()
-            .output_within_growth_limit(input.len(), bytes.len())
-        {
-            return Err(codec_error(
-                CodecErrorCode::GrowthLimitExceeded,
-                CodecPhase::RequestProof,
-            ));
-        }
-        let mut reparsed = parse_json(&bytes, ctx.limits(), CodecPhase::RequestProof)?;
-        let mut final_ledger = CoverageLedger::new(reparsed.occurrence_count);
-        transform_request_root(&mut reparsed.root, &bytes, ctx, &mut final_ledger)
-            .map_err(|code| request_codec_error(code, CodecPhase::RequestProof, ctx))?;
-        final_ledger
-            .finish()
-            .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
-        if !json_semantically_equal(&document.root, &reparsed.root) {
-            return Err(codec_error(
-                CodecErrorCode::InternalCoverageFailure,
-                CodecPhase::RequestProof,
-            ));
-        }
-        let (reproved, _) = write_document(&reparsed, &bytes)
-            .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
-        if reproved != bytes {
-            return Err(codec_error(
-                CodecErrorCode::InternalCoverageFailure,
-                CodecPhase::RequestProof,
-            ));
-        }
-        prove_request_logical_domains(&reparsed.root, reparsed.occurrence_count, ctx)
-            .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
-        provenance.set_occurrence_count(reparsed.occurrence_count);
-        verify_final_wire_proof(&bytes, &provenance, &expected_authorized, &expected_signed)
-            .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
-        provenance.mark_final_buffer_verified();
-        if ctx.inspection_projection_requested() && provenance.signed_opaque_ranges().is_empty() {
-            Ok(ProvedRequestBody::new_with_inspection_parsed_facts(
-                bytes,
-                WireFormat::Json,
-                provenance,
-                InspectionParsedFactsV1::AnthropicJson(JsonInspectionParsedFactsV1 {
-                    root: reparsed.root,
-                }),
-            ))
-        } else {
-            Ok(ProvedRequestBody::new(bytes, WireFormat::Json, provenance))
-        }
+        protect_anthropic_request(input, ctx, false)
     }
 
     fn restore_response(
@@ -196,6 +106,137 @@ impl BodyCodec for AnthropicMessagesCodec {
                 CodecPhase::ResponseParse,
             )),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AnthropicCountTokensCodec;
+
+impl BodyCodec for AnthropicCountTokensCodec {
+    fn protect_request(
+        &self,
+        input: &[u8],
+        ctx: &mut RequestTransformContext<'_>,
+    ) -> Result<ProvedRequestBody, CodecError> {
+        protect_anthropic_request(input, ctx, true)
+    }
+
+    fn restore_response(
+        &self,
+        input: &[u8],
+        ctx: &mut ResponseTransformContext<'_>,
+    ) -> Result<ProvedResponseBody, CodecError> {
+        if ctx.format() != WireFormat::Json || input.len() > ctx.limits().max_body_bytes() {
+            return Err(codec_error(
+                CodecErrorCode::InvalidWireFormat,
+                CodecPhase::ResponseParse,
+            ));
+        }
+        restore_json_response_for(input, ctx, true)
+    }
+}
+
+fn protect_anthropic_request(
+    input: &[u8],
+    ctx: &mut RequestTransformContext<'_>,
+    count_tokens: bool,
+) -> Result<ProvedRequestBody, CodecError> {
+    ctx.clear_opaque_carrier();
+    ctx.replace_content_block_index(None);
+    if ctx.format() != WireFormat::Json {
+        return Err(codec_error(
+            CodecErrorCode::InvalidWireFormat,
+            CodecPhase::RequestParse,
+        ));
+    }
+    if input.len()
+        > ctx
+            .limits()
+            .max_body_bytes()
+            .min(MAX_ANTHROPIC_REQUEST_BODY_BYTES)
+    {
+        return Err(codec_error(
+            CodecErrorCode::BodyLimitExceeded,
+            CodecPhase::RequestParse,
+        ));
+    }
+    let mut document = parse_json(input, ctx.limits(), CodecPhase::RequestParse)?;
+    let mut ledger = CoverageLedger::new(document.occurrence_count);
+    transform_request_root(&mut document.root, input, ctx, &mut ledger, count_tokens)
+        .map_err(|code| request_codec_error(code, CodecPhase::RequestProtection, ctx))?;
+    ledger
+        .finish()
+        .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
+    let expected_signed = collect_signed_slices(&document.root, input)
+        .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
+    let expected_authorized = collect_authorized_wire_chunks(&document.root)
+        .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
+    let (bytes, mut provenance) = write_document(&document, input)
+        .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
+    if bytes.len()
+        > ctx
+            .limits()
+            .max_body_bytes()
+            .min(MAX_ANTHROPIC_REQUEST_BODY_BYTES)
+    {
+        return Err(codec_error(
+            CodecErrorCode::BodyLimitExceeded,
+            CodecPhase::RequestProof,
+        ));
+    }
+    if !ctx
+        .limits()
+        .output_within_growth_limit(input.len(), bytes.len())
+    {
+        return Err(codec_error(
+            CodecErrorCode::GrowthLimitExceeded,
+            CodecPhase::RequestProof,
+        ));
+    }
+    let mut reparsed = parse_json(&bytes, ctx.limits(), CodecPhase::RequestProof)?;
+    let mut final_ledger = CoverageLedger::new(reparsed.occurrence_count);
+    transform_request_root(
+        &mut reparsed.root,
+        &bytes,
+        ctx,
+        &mut final_ledger,
+        count_tokens,
+    )
+    .map_err(|code| request_codec_error(code, CodecPhase::RequestProof, ctx))?;
+    final_ledger
+        .finish()
+        .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
+    if !json_semantically_equal(&document.root, &reparsed.root) {
+        return Err(codec_error(
+            CodecErrorCode::InternalCoverageFailure,
+            CodecPhase::RequestProof,
+        ));
+    }
+    let (reproved, _) = write_document(&reparsed, &bytes)
+        .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
+    if reproved != bytes {
+        return Err(codec_error(
+            CodecErrorCode::InternalCoverageFailure,
+            CodecPhase::RequestProof,
+        ));
+    }
+    prove_request_logical_domains(&reparsed.root, reparsed.occurrence_count, ctx)
+        .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
+    provenance.set_occurrence_count(reparsed.occurrence_count);
+    verify_final_wire_proof(&bytes, &provenance, &expected_authorized, &expected_signed)
+        .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
+    provenance.mark_final_buffer_verified();
+    if ctx.inspection_projection_requested() && provenance.signed_opaque_ranges().is_empty() {
+        Ok(ProvedRequestBody::new_with_inspection_parsed_facts(
+            bytes,
+            WireFormat::Json,
+            provenance,
+            InspectionParsedFactsV1::AnthropicJson(JsonInspectionParsedFactsV1 {
+                root: reparsed.root,
+            }),
+        ))
+    } else {
+        Ok(ProvedRequestBody::new(bytes, WireFormat::Json, provenance))
     }
 }
 
@@ -255,15 +296,49 @@ fn restore_json_response(
     input: &[u8],
     ctx: &mut ResponseTransformContext<'_>,
 ) -> Result<ProvedResponseBody, CodecError> {
+    restore_json_response_for(input, ctx, false)
+}
+
+fn restore_json_response_for(
+    input: &[u8],
+    ctx: &mut ResponseTransformContext<'_>,
+    count_tokens: bool,
+) -> Result<ProvedResponseBody, CodecError> {
     let mut document = parse_json(input, ctx.limits(), CodecPhase::ResponseParse)?;
     let mut ledger = CoverageLedger::new(document.occurrence_count);
-    transform_response_root(&mut document.root, input, ctx, &mut ledger)
-        .map_err(|code| codec_error(code, CodecPhase::ResponseRestore))?;
+    if count_tokens {
+        let members = object_members(&document.root)
+            .map_err(|code| codec_error(code, CodecPhase::ResponseRestore))?;
+        if members.len() != 1 || members[0].key.value != "input_tokens" {
+            return Err(codec_error(
+                CodecErrorCode::UnsupportedResponseSurface,
+                CodecPhase::ResponseRestore,
+            ));
+        }
+        request_integer_control(
+            &members[0].value,
+            &mut CoverageLedger::new(document.occurrence_count),
+            false,
+        )
+        .map_err(|_| {
+            codec_error(
+                CodecErrorCode::UnsupportedResponseSurface,
+                CodecPhase::ResponseRestore,
+            )
+        })?;
+        account_subtree(&document.root, &mut ledger)
+            .map_err(|code| codec_error(code, CodecPhase::ResponseRestore))?;
+    } else {
+        transform_response_root(&mut document.root, input, ctx, &mut ledger)
+            .map_err(|code| codec_error(code, CodecPhase::ResponseRestore))?;
+    }
     ledger
         .finish()
         .map_err(|code| codec_error(code, CodecPhase::ResponseProof))?;
-    validate_adjacent_response_text(&document.root, ctx)
-        .map_err(|code| codec_error(code, CodecPhase::ResponseProof))?;
+    if !count_tokens {
+        validate_adjacent_response_text(&document.root, ctx)
+            .map_err(|code| codec_error(code, CodecPhase::ResponseProof))?;
+    }
     let expected_signed = collect_signed_slices(&document.root, input)
         .map_err(|code| codec_error(code, CodecPhase::ResponseProof))?;
     let expected_authorized = collect_authorized_wire_chunks(&document.root)
@@ -1189,6 +1264,8 @@ const ROOT_SEMANTIC_FIELDS: &[&str] = &[
     "stream",
     "stop_sequences",
     "thinking",
+    "output_config",
+    "context_management",
     "tool_choice",
     "cache_control",
 ];
@@ -1247,7 +1324,7 @@ const SCHEMA_SEMANTIC_FIELDS: &[&str] = &[
     "maximum",
 ];
 const CACHE_CONTROL_SEMANTIC_FIELDS: &[&str] = &["type", "ttl"];
-const THINKING_CONTROL_SEMANTIC_FIELDS: &[&str] = &["type", "budget_tokens"];
+const THINKING_CONTROL_SEMANTIC_FIELDS: &[&str] = &["type", "budget_tokens", "display"];
 const TOOL_CHOICE_SEMANTIC_FIELDS: &[&str] = &["type", "name", "disable_parallel_tool_use"];
 
 fn collect_inventory_expectations(
@@ -1338,6 +1415,9 @@ fn classify_request_root<'a>(
                 None,
                 inventory,
             )?,
+            "output_config" | "context_management" => {
+                classify_configuration(&member.value, inventory)?
+            }
             "thinking" => classify_thinking_control(&member.value, inventory)?,
             "tool_choice" => classify_tool_choice_control(&member.value, inventory)?,
             "cache_control" => classify_cache_control(&member.value, inventory)?,
@@ -2159,6 +2239,7 @@ fn transform_request_root(
     input: &[u8],
     ctx: &mut RequestTransformContext<'_>,
     ledger: &mut CoverageLedger,
+    count_tokens: bool,
 ) -> Result<(), CodecErrorCode> {
     ledger.mark(node.occurrence)?;
     let JsonKind::Object(members) = &mut node.kind else {
@@ -2180,14 +2261,18 @@ fn transform_request_root(
                 ctx,
                 ledger,
             )?,
-            "max_tokens" => {
+            "max_tokens" if !count_tokens => {
                 request_integer_control(&member.value, ledger, true)?;
                 saw_max_tokens = true;
             }
-            "top_k" => request_integer_control(&member.value, ledger, false)?,
-            "temperature" | "top_p" => request_unit_interval_control(&member.value, ledger)?,
-            "stream" => request_bool_control(&member.value, ledger)?,
-            "stop_sequences" => request_string_array_control(&mut member.value, ctx, ledger)?,
+            "top_k" if !count_tokens => request_integer_control(&member.value, ledger, false)?,
+            "temperature" | "top_p" if !count_tokens => {
+                request_unit_interval_control(&member.value, ledger)?
+            }
+            "stream" if !count_tokens => request_bool_control(&member.value, ledger)?,
+            "stop_sequences" if !count_tokens => {
+                request_string_array_control(&mut member.value, ctx, ledger)?
+            }
             "system" => transform_request_system(&mut member.value, input, ctx, ledger)?,
             "messages" => {
                 transform_request_messages(&mut member.value, input, ctx, ledger)?;
@@ -2195,13 +2280,15 @@ fn transform_request_root(
             }
             "tools" => transform_request_tools(&mut member.value, input, ctx, ledger)?,
             "metadata" => transform_request_mutable(&mut member.value, ctx, ledger)?,
+            "output_config" => transform_output_config(&mut member.value, ctx, ledger)?,
+            "context_management" => transform_context_management(&mut member.value, ctx, ledger)?,
             "thinking" => transform_thinking_control(&mut member.value, ctx, ledger)?,
             "tool_choice" => transform_tool_choice_control(&mut member.value, ctx, ledger)?,
             "cache_control" => transform_cache_control(&mut member.value, ctx, ledger)?,
             _ => return Err(CodecErrorCode::UnsupportedRequestSurface),
         }
     }
-    if saw_model && saw_max_tokens && saw_messages {
+    if saw_model && (count_tokens || saw_max_tokens) && saw_messages {
         Ok(())
     } else {
         Err(CodecErrorCode::UnsupportedRequestSurface)
@@ -2871,13 +2958,240 @@ fn validate_cache_control_probe(
     }
 }
 
+fn transform_output_config(
+    node: &mut JsonNode,
+    ctx: &mut RequestTransformContext<'_>,
+    ledger: &mut CoverageLedger,
+) -> Result<(), CodecErrorCode> {
+    ledger.mark(node.occurrence)?;
+    let JsonKind::Object(members) = &mut node.kind else {
+        return Err(CodecErrorCode::UnsupportedRequestSurface);
+    };
+    for member in members {
+        ledger.mark(member.key_occurrence)?;
+        match member.key.value.as_str() {
+            "effort" => request_enum_string_control(
+                &mut member.value,
+                &["low", "medium", "high", "xhigh", "max"],
+                ctx,
+                ledger,
+            )?,
+            "format" => {
+                ledger.mark(member.value.occurrence)?;
+                let JsonKind::Object(format) = &mut member.value.kind else {
+                    return Err(CodecErrorCode::UnsupportedRequestSurface);
+                };
+                let mut saw_type = false;
+                let mut saw_schema = false;
+                for field in format {
+                    ledger.mark(field.key_occurrence)?;
+                    match field.key.value.as_str() {
+                        "type" => {
+                            request_enum_string_control(
+                                &mut field.value,
+                                &["json_schema"],
+                                ctx,
+                                ledger,
+                            )?;
+                            saw_type = true;
+                        }
+                        "schema" => {
+                            transform_request_schema(&mut field.value, ctx, ledger)?;
+                            saw_schema = true;
+                        }
+                        _ => return Err(CodecErrorCode::UnsupportedRequestSurface),
+                    }
+                }
+                if !saw_type || !saw_schema {
+                    return Err(CodecErrorCode::UnsupportedRequestSurface);
+                }
+            }
+            _ => return Err(CodecErrorCode::UnsupportedRequestSurface),
+        }
+    }
+    Ok(())
+}
+
+fn transform_context_management(
+    node: &mut JsonNode,
+    ctx: &mut RequestTransformContext<'_>,
+    ledger: &mut CoverageLedger,
+) -> Result<(), CodecErrorCode> {
+    ledger.mark(node.occurrence)?;
+    let JsonKind::Object(members) = &mut node.kind else {
+        return Err(CodecErrorCode::UnsupportedRequestSurface);
+    };
+    for member in members {
+        ledger.mark(member.key_occurrence)?;
+        if member.key.value != "edits" {
+            return Err(CodecErrorCode::UnsupportedRequestSurface);
+        }
+        ledger.mark(member.value.occurrence)?;
+        let JsonKind::Array(edits) = &mut member.value.kind else {
+            return Err(CodecErrorCode::UnsupportedRequestSurface);
+        };
+        for edit in edits {
+            transform_context_edit(edit, ctx, ledger)?;
+        }
+    }
+    Ok(())
+}
+
+fn transform_context_edit(
+    node: &mut JsonNode,
+    ctx: &mut RequestTransformContext<'_>,
+    ledger: &mut CoverageLedger,
+) -> Result<(), CodecErrorCode> {
+    let kind = object_string(node, "type")?.to_owned();
+    if !matches!(
+        kind.as_str(),
+        "clear_thinking_20251015" | "clear_tool_uses_20250919" | "compact_20260112"
+    ) {
+        return Err(CodecErrorCode::UnsupportedRequestSurface);
+    }
+    ledger.mark(node.occurrence)?;
+    let JsonKind::Object(members) = &mut node.kind else {
+        return Err(CodecErrorCode::UnsupportedRequestSurface);
+    };
+    for member in members {
+        ledger.mark(member.key_occurrence)?;
+        match (kind.as_str(), member.key.value.as_str()) {
+            (_, "type") => {
+                // These exact provider literals resemble bare manifest tokens. They are
+                // schema constants, not owner text; no other spelling is admitted.
+                ledger.mark(member.value.occurrence)?;
+            }
+            ("compact_20260112", "instructions") => {
+                transform_request_string(&mut member.value, ctx, ledger)?
+            }
+            ("compact_20260112", "pause_after_compaction") => {
+                request_bool_control(&member.value, ledger)?
+            }
+            ("compact_20260112", "trigger") | ("clear_tool_uses_20250919", "clear_at_least") => {
+                transform_context_quantity(&mut member.value, &["input_tokens"], ledger, ctx)?
+            }
+            ("clear_tool_uses_20250919", "trigger") => transform_context_quantity(
+                &mut member.value,
+                &["input_tokens", "tool_uses"],
+                ledger,
+                ctx,
+            )?,
+            ("clear_tool_uses_20250919", "keep") => {
+                transform_context_quantity(&mut member.value, &["tool_uses"], ledger, ctx)?
+            }
+            ("clear_thinking_20251015", "keep") => {
+                if matches!(member.value.kind, JsonKind::String(_)) {
+                    request_enum_string_control(&mut member.value, &["all"], ctx, ledger)?;
+                } else {
+                    transform_context_quantity(
+                        &mut member.value,
+                        &["thinking_turns", "all"],
+                        ledger,
+                        ctx,
+                    )?;
+                }
+            }
+            ("clear_tool_uses_20250919", "exclude_tools") => {
+                request_string_array_control(&mut member.value, ctx, ledger)?
+            }
+            ("clear_tool_uses_20250919", "clear_tool_inputs") => {
+                if matches!(member.value.kind, JsonKind::Bool(_)) {
+                    request_bool_control(&member.value, ledger)?;
+                } else {
+                    request_string_array_control(&mut member.value, ctx, ledger)?;
+                }
+            }
+            _ => return Err(CodecErrorCode::UnsupportedRequestSurface),
+        }
+    }
+    Ok(())
+}
+
+fn transform_context_quantity(
+    node: &mut JsonNode,
+    allowed: &[&str],
+    ledger: &mut CoverageLedger,
+    ctx: &mut RequestTransformContext<'_>,
+) -> Result<(), CodecErrorCode> {
+    let kind = object_string(node, "type")?.to_owned();
+    ledger.mark(node.occurrence)?;
+    let JsonKind::Object(members) = &mut node.kind else {
+        return Err(CodecErrorCode::UnsupportedRequestSurface);
+    };
+    let mut saw_value = false;
+    for member in members {
+        ledger.mark(member.key_occurrence)?;
+        match member.key.value.as_str() {
+            "type" => request_enum_string_control(&mut member.value, allowed, ctx, ledger)?,
+            "value" if kind != "all" => {
+                request_integer_control(&member.value, ledger, false)?;
+                saw_value = true;
+            }
+            _ => return Err(CodecErrorCode::UnsupportedRequestSurface),
+        }
+    }
+    if kind == "all" || saw_value {
+        Ok(())
+    } else {
+        Err(CodecErrorCode::UnsupportedRequestSurface)
+    }
+}
+
+fn classify_configuration<'a>(
+    node: &'a JsonNode,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    match &node.kind {
+        JsonKind::Object(members) => {
+            inventory.set_object_order(node.occurrence, SemanticObjectOrder::DecodedKeys)?;
+            for member in members {
+                classify_key(
+                    member,
+                    RequestCarrierClass::ReviewedConstant,
+                    None,
+                    inventory,
+                )?;
+                if member.key.value == "schema" {
+                    classify_request_schema(&member.value, inventory)?;
+                } else if member.key.value == "instructions" {
+                    classify_string_node(
+                        &member.value,
+                        RequestCarrierClass::PromptMutable,
+                        Some(PromptComponent::System),
+                        inventory,
+                    )?;
+                } else if member.key.value == "type" {
+                    classify_string_node(
+                        &member.value,
+                        RequestCarrierClass::ReviewedConstant,
+                        None,
+                        inventory,
+                    )?;
+                } else {
+                    classify_configuration(&member.value, inventory)?;
+                }
+            }
+        }
+        JsonKind::Array(values) => {
+            for value in values {
+                classify_configuration(value, inventory)?;
+            }
+        }
+        JsonKind::String(_) => {
+            classify_string_node(node, RequestCarrierClass::RoutingControl, None, inventory)?
+        }
+        JsonKind::Number(_) | JsonKind::Bool(_) | JsonKind::Null => {}
+    }
+    Ok(())
+}
+
 fn transform_thinking_control(
     node: &mut JsonNode,
     ctx: &mut RequestTransformContext<'_>,
     ledger: &mut CoverageLedger,
 ) -> Result<(), CodecErrorCode> {
     let thinking_type = object_string(node, "type")?.to_owned();
-    if !matches!(thinking_type.as_str(), "enabled" | "disabled") {
+    if !matches!(thinking_type.as_str(), "enabled" | "disabled" | "adaptive") {
         return Err(CodecErrorCode::UnsupportedRequestSurface);
     }
     ledger.mark(node.occurrence)?;
@@ -2898,6 +3212,12 @@ fn transform_thinking_control(
                 )?;
                 saw_type = true;
             }
+            "display" if thinking_type != "disabled" => request_enum_string_control(
+                &mut member.value,
+                &["summarized", "omitted", "updates"],
+                ctx,
+                ledger,
+            )?,
             "budget_tokens" if thinking_type == "enabled" => {
                 request_integer_control(&member.value, ledger, true)?;
                 saw_budget = true;
@@ -2905,7 +3225,7 @@ fn transform_thinking_control(
             _ => return Err(CodecErrorCode::UnsupportedRequestSurface),
         }
     }
-    if saw_type && (thinking_type == "disabled" || saw_budget) {
+    if saw_type && (thinking_type != "enabled" || saw_budget) {
         Ok(())
     } else {
         Err(CodecErrorCode::UnsupportedRequestSurface)
@@ -3131,6 +3451,10 @@ fn request_bool_control(
 }
 
 fn guard_mutable_text(value: &str) -> Result<(), CodecErrorCode> {
+    guard_text(value, false)
+}
+
+fn guard_text(value: &str, allow_text_urls: bool) -> Result<(), CodecErrorCode> {
     let mut inspected = value;
     let mut wrapper_depth = 0usize;
     while let Some(inner) = inspected
@@ -3154,7 +3478,7 @@ fn guard_mutable_text(value: &str) -> Result<(), CodecErrorCode> {
                     | '\u{202a}'..='\u{202e}'
                     | '\u{2066}'..='\u{2069}'
             )
-    }) || find_carrier_scheme(&lower).is_some()
+    }) || find_carrier_scheme_filtered(&lower, allow_text_urls).is_some()
         || inspected.as_bytes().windows(3).any(|window| {
             window[0] == b'%' && hex_value(window[1]).is_some() && hex_value(window[2]).is_some()
         })
@@ -3173,7 +3497,7 @@ fn guard_request_mutable_text(
     value: &str,
     ctx: &mut RequestTransformContext<'_>,
 ) -> Result<(), CodecErrorCode> {
-    let result = guard_mutable_text(value);
+    let result = guard_text(value, true);
     if result == Err(CodecErrorCode::OpaqueMediaUninspected) {
         let lower = value.to_ascii_lowercase();
         if let Some((scheme, byte_offset, byte_length)) = find_carrier_scheme(&lower) {
@@ -3184,6 +3508,13 @@ fn guard_request_mutable_text(
 }
 
 fn find_carrier_scheme(value: &str) -> Option<(OpaqueCarrierScheme, usize, usize)> {
+    find_carrier_scheme_filtered(value, false)
+}
+
+fn find_carrier_scheme_filtered(
+    value: &str,
+    allow_text_urls: bool,
+) -> Option<(OpaqueCarrierScheme, usize, usize)> {
     value.char_indices().find_map(|(index, _)| {
         let candidate = &value[index..];
         let (scheme, matched) = [
@@ -3193,7 +3524,14 @@ fn find_carrier_scheme(value: &str) -> Option<(OpaqueCarrierScheme, usize, usize
             (OpaqueCarrierScheme::Https, "https://"),
         ]
         .into_iter()
-        .find(|(_, literal)| candidate.starts_with(literal))?;
+        .find(|(scheme, literal)| {
+            !(allow_text_urls
+                && matches!(
+                    scheme,
+                    OpaqueCarrierScheme::Http | OpaqueCarrierScheme::Https
+                ))
+                && candidate.starts_with(literal)
+        })?;
         let boundary = index == 0
             || !value[..index].chars().next_back().is_some_and(|character| {
                 character.is_ascii_alphanumeric() || matches!(character, '_' | '-')

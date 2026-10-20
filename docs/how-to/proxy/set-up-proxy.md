@@ -84,12 +84,39 @@ export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
 ```
 
 Do not append `/v1`: the strict Anthropic client base URL is the proxy root and
-the SDK must issue exactly `POST /v1/messages`. The direct constructor is
+the SDK may issue `POST /v1/messages` or `POST /v1/messages/count_tokens`,
+with an optional literal `?beta=true`. Other queries return an Anthropic-shaped
+`400 invalid_request_error` before any upstream connection; unknown paths return
+`404`. The direct constructor is
 ephemeral and rejects `x-gaze-session-id`. If the embedding host explicitly
 enables session continuity, send `x-gaze-session-id` on every request with a
 canonical lowercase UUIDv4 value. The proxy requires `x-api-key` and
 `anthropic-version`; the default version allowlist contains only `2023-06-01`.
-`anthropic-beta` is denied until its complete value is explicitly allowlisted.
+`anthropic-beta` is denied until each comma-separated value is explicitly allowlisted.
+
+For Claude Code, enable only the betas your client sends, for example:
+
+```sh
+gaze proxy serve --policy ./policy.toml \
+  --anthropic-beta claude-code-20250219 \
+  --anthropic-beta interleaved-thinking-2025-05-14 \
+  --anthropic-beta effort-2025-11-24
+```
+
+Alternatively add individual entries to your policy (also used by `proxy start`):
+
+```toml
+[proxy]
+anthropic_betas = ["claude-code-20250219", "interleaved-thinking-2025-05-14", "effort-2025-11-24"]
+```
+
+The default list is empty. CLI entries extend the policy list. A beta flag permits
+only that header value; every body field still needs a supported schema.
+Adaptive thinking, output effort/JSON schema, and the documented context edits
+are inspected. Plain HTTP(S) URLs in text are inspected without fetching them.
+`safeguards`, message-level `role: "system"`, unknown fields and opaque media
+remain explicit refusals. See the [full contract](../../explanation/proxy/anthropic-messages-contract.md)
+for supported request shapes and limits.
 
 Only `content-type`, `x-api-key`, `anthropic-version`, and the optional
 allowlisted beta header can reach the Anthropic upstream. Unconfigured
@@ -133,7 +160,8 @@ gaze proxy logs --follow
 For a local health check, call the reserved proxy endpoint:
 
 ```sh
-curl http://127.0.0.1:8787/_gaze_proxy/healthz
+proxy_base=http://127.0.0.1:8787
+curl "$proxy_base/_gaze_proxy/healthz"
 ```
 
 ## Stop, restart, and supervise the proxy

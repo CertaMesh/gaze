@@ -216,6 +216,13 @@ impl AnthropicAdapterBuilder {
         Ok(self)
     }
 
+    /// Use one manifest per request without requiring a session header.
+    #[must_use]
+    pub fn ephemeral_sessions(mut self) -> Self {
+        self.adapter.session_policy = SessionPolicy::EphemeralSingleRequest;
+        self
+    }
+
     pub fn allow_version(mut self, version: impl Into<String>) -> Result<Self, DirectProxyError> {
         let version = version.into();
         validate_allowlist_value(&version)?;
@@ -354,7 +361,7 @@ impl ProviderAdapter for AnthropicAdapter {
     }
 
     fn matches_path(&self, method: &Method, path: &str) -> bool {
-        method == Method::POST && path == "/v1/messages"
+        method == Method::POST && matches!(path, "/v1/messages" | "/v1/messages/count_tokens")
     }
 
     fn upstream_base(&self) -> &Url {
