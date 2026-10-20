@@ -136,24 +136,59 @@ whether the word boundary passes. Neither header nor rows contain document or
 protected values. Rows omit run-dependent timing; the header keeps the original
 scorecard timing. A re-score needs no corpus, binary or model:
 
-The runner caches this value-free record under the shared checkout's
-`target/bench-data/cache/`, so linked worktrees can reuse the same base. An
-exact key binds the measured revision and crates tree, record schema, Cargo
-lockfile and repository/Cargo-home configuration contents, benchmark-harness tree, policy path and referenced dependencies,
-corpus and generated-layer identities, sampling seed, both scored-label
-contracts, model bundle manifests, observation-affecting environment, threshold,
-hardware, profile, build mode, repetitions, and sampled document IDs. A later
-run with the same key prints the cache key, verifies a private copy, marks its
-cache provenance, and re-scores it with the current harness without
-building or running the detector. Any changed field, malformed metadata,
-missing record, or record SHA-256 mismatch prints the miss reason and measures
-afresh. Dirty or untracked measured sources and `--skip-build` bypass the cache.
-Use `--no-cache` for release evidence or a deliberately fresh measurement, or `--cache-dir` to
-choose another local cache root.
+### Capture reuse and timing
 
-Release evidence must be measured with `--no-cache`. Cache replay records and
-scorecards carry `cache_replay: true` and `cache_key_sha256`; the release-history
-renderer refuses these scorecards. Fresh measurements carry `cache_replay: false`.
+The runner stores the value-free header and separate C/A/D/R observation files
+under an exact content key in the shared checkout's `target/bench-data/cache/`.
+The key binds actual detector and validator binary hashes, policy bytes and
+referenced files, complete model trees (including hidden files), corpus and
+generator identity, layer specification, seed, sampled IDs, contracts, harness
+and record schema, Cargo inputs, inherited environment (including locale),
+Python runtime and package contents, OS build, hardware and native libraries.
+Environment values are hashed rather than copied into evidence.
+
+A hit verifies the complete key, every part hash, the header's key binding and
+the reconstructed record hash before re-scoring. A missing or invalid part
+causes a fresh capture; the runner never substitutes a nearby key or combines
+partial hits. It builds or checks both native binaries before lookup so the
+key identifies actual artifacts. A hit skips model loading, validator execution
+and detection. Inputs are checked again before accepting a replay or publishing
+a fresh capture. Inputs that change during capture cause refusal.
+
+`scorecard.capture_cache` pins the key and links to `run-evidence.json`. That
+sidecar records this execution's hit/miss, key, reason and wall/CPU stage times.
+The original scorecard, timestamp, source provenance and observation bytes stay
+unchanged, so a hit reproduces the fresh scorecard byte for byte. The original
+`cache_replay: false` describes the captured measurement; it does not describe
+the current execution. Use the linked evidence to distinguish fresh execution
+from reuse. Older cache entries without the complete bound key remain ineligible.
+
+Dirty sources, `--skip-build`, performance gating, random-session mode and
+unresolved native inputs bypass reuse. External safety-net execution, loader
+injection and external ORT overrides also bypass it. Hashing the complete
+environment and runtime deliberately permits conservative misses. Use
+`--no-cache` for fresh measurements or `--cache-dir` for another cache root.
+Release admission still requires `--no-cache`: its existing renderer cannot
+validate the linked local run evidence and refuses reusable base scorecards.
+This change does not expand historical or competitor cache admission.
+
+Each runner execution writes `run-evidence.json`, including on failure. It
+reports build wall/CPU, native startup/model-load, detection and restore by
+layer/config/repetition, parent scoring time, replay scoring by contract, and
+artifact writing/compression. Native CPU uses the producer process clock;
+parent scoring excludes transport waits. Mechanism recording writes
+`mechanism-evidence.json` beside its candidate run with total arm-processing
+and per-contract replay timings. Spans are inclusive; do not sum nested spans.
+Native phase measurements include warmups and all attempted documents. Cache
+hits have no detection or model-load samples because those stages did not run.
+Missing native telemetry is reported as unavailable, never as zero CPU.
+
+The small committed fixture can prove all four layers without models:
+
+```bash
+cargo build --locked -p gaze-recognizers --example clean_for_bench
+PYTHONDONTWRITEBYTECODE=1 uv run --project scripts/bench --python 3.13 python -m pytest -q scripts/bench/test_capture_reuse.py
+```
 
 Observation replay uses at most four workers by default while retaining the
 recorded layer/config order, so serialized scorecards remain byte-identical.
