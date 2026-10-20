@@ -106,7 +106,7 @@ impl InspectionSink for RecordingSink {
     fn try_emit(&self, event: InspectionEventV1) -> Result<(), InspectionSinkErrorV1> {
         let logical_id = event.meta().logical_id();
         if let Some(gate) = &self.gate {
-            let class = gate.classify(logical_id);
+            let class = gate.classify(&event);
             if let Some(control) = &self.test_control {
                 control.before_event(class, event.meta().stage_domain());
             }
@@ -355,7 +355,6 @@ impl SinkGate {
     }
 
     fn prepare_completion(&self, real_request_count: usize) {
-        assert!(real_request_count > 0);
         self.real_request_count
             .set(real_request_count)
             .unwrap_or_else(|_| {
@@ -363,7 +362,8 @@ impl SinkGate {
             });
     }
 
-    fn classify(&self, logical_id: LogicalInspectionIdV1) -> SinkEventClass {
+    fn classify(&self, event: &InspectionEventV1) -> SinkEventClass {
+        let logical_id = event.meta().logical_id();
         if !self.armed.load(Ordering::Acquire) {
             return SinkEventClass::Real;
         }
@@ -386,6 +386,27 @@ impl SinkGate {
         let expected_real = *self.real_request_count.get().unwrap_or_else(|| {
             panic!("real inspection event reached the sink before completion preparation")
         });
+        // Zero-event checks cannot identify the sentinel by counting expected requests:
+        // the first unexpected event would otherwise be mistaken for completion.
+        if expected_real == 0 {
+            if let InspectionEventViewV1::OwnerRequest(projection) = event.view() {
+                if let ProjectionAvailabilityV1::Present(payload) = projection.payload() {
+                    let is_completion = payload.with_declassified_bytes(|bytes| {
+                        serde_json::from_slice::<Value>(bytes).is_ok_and(|request| {
+                            request["messages"][0]["content"] == COMPLETION_PLACEHOLDER
+                        })
+                    });
+                    if is_completion {
+                        self.completion_id.set(logical_id).unwrap();
+                    }
+                }
+            }
+            return if self.completion_id.get() == Some(&logical_id) {
+                SinkEventClass::Completion
+            } else {
+                SinkEventClass::Real
+            };
+        }
         {
             let mut real_ids = self
                 .real_ids
@@ -1576,13 +1597,12 @@ async fn panicking_sink_never_changes_proxy_enforcement() {
 #[tokio::test]
 async fn split_logical_domain_rejection_emits_no_inspection_event() {
     let upstream = spawn_upstream().await;
-    let sink = Arc::new(RecordingSink::new(SinkBehavior::Capture));
-    let (inspection, finished) =
-        install_with_completion_ack(CaptureDomainsV1::MetadataOnly, Arc::clone(&sink));
-    let proxy = spawn_proxy(&upstream, Some(inspection)).await;
+    // Full capture lets the sink identify the completion request independently of
+    // the expected event count, including any forbidden events from the rejection.
+    let harness = PrimedInspectionHarness::new(&upstream, CaptureDomainsV1::All).await;
 
     let response = request_json(
-        &proxy,
+        &harness.proxy,
         "/v1/messages",
         json!({
             "model": "claude-test",
@@ -1600,8 +1620,8 @@ async fn split_logical_domain_rejection_emits_no_inspection_event() {
 
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let _: Value = response.json().await.unwrap();
-    stop_and_join_inspection(proxy, finished).await;
-    assert_eq!(sink.len(), 0);
+    let events = harness.release_and_collect(0).await;
+    assert!(events.is_empty());
 }
 
 #[tokio::test]
