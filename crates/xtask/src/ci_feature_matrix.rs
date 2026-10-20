@@ -424,7 +424,8 @@ fn configured_command(command: MatrixCommand) -> Result<ProcessCommand> {
     cmd.env_clear();
     // Bound artifacts in this build and inherited nested/adversarial builds.
     // These are fixed policy values, never caller-controlled overrides.
-    cmd.env("CARGO_INCREMENTAL", "0")
+    cmd.env("CARGO_BUILD_JOBS", "4")
+        .env("CARGO_INCREMENTAL", "0")
         .env("CARGO_PROFILE_DEV_DEBUG", "0")
         .env("CARGO_PROFILE_TEST_DEBUG", "0");
     // Keep matrix children deterministic: no caller Cargo/Rust pollution, only

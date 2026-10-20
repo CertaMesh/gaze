@@ -306,6 +306,11 @@ jobs:
           cargo nextest --version
       - name: Verify binary ownership and Cargo test-name equivalence
         run: python3 scripts/ci/test_shards.py collect --output target/shard-evidence/${{ matrix.shard }}
+      - name: Verify removed dashboard workflow test coverage
+        if: ${{ matrix.shard == 'gates' }}
+        run: |
+          python3 scripts/ci/test_shards.py covered-package --evidence target/shard-evidence/gates --package gaze-proxy-dashboard
+          python3 scripts/ci/test_shards.py covered-package --evidence target/shard-evidence/gates --package gaze-inspection
       - name: Run workspace shard with per-test timing
         shell: bash
         run: |

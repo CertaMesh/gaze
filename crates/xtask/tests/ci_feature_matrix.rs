@@ -70,6 +70,13 @@ fn ci_workflow_keeps_all_coverage_owners_and_required_contexts() {
     assert!(
         shards.contains("cargo nextest run --workspace --all-features --profile ci --no-fail-fast")
     );
+    for command in [
+        "if: ${{ matrix.shard == 'gates' }}",
+        "python3 scripts/ci/test_shards.py covered-package --evidence target/shard-evidence/gates --package gaze-proxy-dashboard",
+        "python3 scripts/ci/test_shards.py covered-package --evidence target/shard-evidence/gates --package gaze-inspection",
+    ] {
+        assert!(shards.contains(command), "shards must retain {command}");
+    }
     let proof = job_section(workflow, "test-coverage");
     assert!(proof.contains("needs: [workspace-shards]"));
     assert!(proof.contains("python3 scripts/ci/test_shards.py prove"));
