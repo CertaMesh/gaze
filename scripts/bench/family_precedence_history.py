@@ -193,10 +193,7 @@ def capture(release: str, tree: Path, receipt_file: Path, probe: Path, output: P
         selected = [row for row in raw_records if row.layer == layer]
         documents = [row.to_document() for row in selected]
         measurements = score.collect_validator_measurements(probe, documents, [doc.uid for doc in documents])
-        writer = records.RecordWriter(
-            documents, measurements, corpus_sha256=corpus,
-            binary=tree / "target/release/examples/clean_for_bench",
-        )
+        writer = records.RecordWriter(documents, measurements, corpus_sha256=corpus)
         with patch.object(score, "COMMITTED_SOURCE_ID_VOCABULARY", score.load_committed_source_id_vocabulary(tree)):
             run = score.run_config(
                 repo_root=ROOT, binary=tree / "target/release/examples/clean_for_bench", config="policy-file",
