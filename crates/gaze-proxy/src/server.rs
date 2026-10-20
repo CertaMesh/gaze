@@ -283,6 +283,7 @@ enum DirectIngressSession {
 }
 
 struct PreparedDirectIngress {
+    endpoint: Url,
     outbound_headers: HeaderMap,
     session: DirectIngressSession,
 }
@@ -801,7 +802,9 @@ async fn discard_error_body(response: reqwest::Response, limit: usize) {
 fn validate_direct_url(url: &Url) -> Result<(), DirectProxyError> {
     let safe_authority = url.username().is_empty()
         && url.password().is_none()
-        && url.query().is_none()
+        && (url.query().is_none()
+            || (matches!(url.path(), "/v1/messages" | "/v1/messages/count_tokens")
+                && url.query() == Some("beta=true")))
         && url.fragment().is_none()
         && url.host().is_some();
     let safe_scheme = match (url.scheme(), url.host()) {
@@ -818,7 +821,7 @@ fn validate_direct_url(url: &Url) -> Result<(), DirectProxyError> {
 }
 
 fn validate_direct_origin(url: &Url) -> Result<(), DirectProxyError> {
-    if url.path() != "/" {
+    if url.path() != "/" || url.query().is_some() {
         return Err(
             ProxyErrorCode::InvalidUpstreamUrl.error(ProxyErrorPhase::UpstreamConfiguration)
         );
@@ -1926,8 +1929,8 @@ async fn proxy(
     request: Request<Body>,
 ) -> Response {
     let (parts, body) = request.into_parts();
-    let direct_route_candidate =
-        state.direct.is_some() && matches!(parts.uri.path(), "/v1/messages" | "/v1/messages/");
+    let direct_route_candidate = state.direct.is_some()
+        && (parts.uri.path() == "/v1/messages" || parts.uri.path().starts_with("/v1/messages/"));
     let direct_ingress = if direct_route_candidate {
         match prepare_direct_ingress(&state, peer, &parts.method, &parts.uri, &parts.headers) {
             Ok(ingress) => Some(ingress),
@@ -2168,8 +2171,12 @@ fn prepare_direct_ingress(
         .direct
         .as_ref()
         .ok_or_else(|| ProxyErrorCode::ProxyConfiguration.error(ProxyErrorPhase::Framework))?;
-    if method != Method::POST || uri.path() != "/v1/messages" || uri.query().is_some() {
+    if method != Method::POST || !matches!(uri.path(), "/v1/messages" | "/v1/messages/count_tokens")
+    {
         return Err(ProxyErrorCode::RouteRejected.error(ProxyErrorPhase::Ingress));
+    }
+    if !matches!(uri.query(), None | Some("beta=true")) {
+        return Err(ProxyErrorCode::InvalidRequestFormat.error(ProxyErrorPhase::Ingress));
     }
     let outbound_headers = validate_direct_request_headers(headers, runtime)?;
     let session = match runtime.session_policy {
@@ -2200,7 +2207,11 @@ fn prepare_direct_ingress(
             DirectIngressSession::Continuity(lease)
         }
     };
+    let mut endpoint = runtime.endpoint.clone();
+    endpoint.set_path(uri.path());
+    endpoint.set_query(uri.query());
     Ok(PreparedDirectIngress {
+        endpoint,
         outbound_headers,
         session,
     })
@@ -2221,6 +2232,12 @@ async fn direct_proxy_inner(
             ProxyErrorCode::RequestBodyLimitExceeded.error(ProxyErrorPhase::RequestValidation)
         );
     }
+    let count_codec = crate::codecs::anthropic::AnthropicCountTokensCodec;
+    let codec = if ingress.endpoint.path() == "/v1/messages/count_tokens" {
+        &count_codec as &dyn BodyCodec
+    } else {
+        codec
+    };
     let expected_response = parse_request_stream_format(body)?;
     let mut inspection = state
         .config
@@ -2240,7 +2257,7 @@ async fn direct_proxy_inner(
                 &session,
                 codec,
                 body,
-                &runtime.endpoint,
+                &ingress.endpoint,
                 &ingress.outbound_headers,
                 expected_response,
                 runtime.codec_limits,
@@ -2259,7 +2276,7 @@ async fn direct_proxy_inner(
                 lease.session(),
                 codec,
                 body,
-                &runtime.endpoint,
+                &ingress.endpoint,
                 &ingress.outbound_headers,
                 expected_response,
                 runtime.codec_limits,
@@ -2483,11 +2500,10 @@ fn validate_direct_request_headers(
         let beta_text = std::str::from_utf8(beta.as_bytes()).map_err(|_| {
             ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation)
         })?;
-        if !runtime
-            .allowed_betas
-            .iter()
-            .any(|allowed| allowed == beta_text)
-        {
+        if !beta_text.split(',').all(|item| {
+            let item = item.trim_matches([' ', '\t']);
+            !item.is_empty() && runtime.allowed_betas.iter().any(|allowed| allowed == item)
+        }) {
             return Err(ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation));
         }
     }
@@ -2625,6 +2641,13 @@ fn map_codec_error(error: CodecError) -> DirectProxyError {
         CodecPhase::RequestParse | CodecPhase::RequestProtection | CodecPhase::RequestProof
     );
     let code = match error.code() {
+        CodecErrorCode::UnsupportedRequestSurface
+        | CodecErrorCode::InvalidJson
+        | CodecErrorCode::InvalidUtf8
+            if request_direction =>
+        {
+            ProxyErrorCode::InvalidRequestFormat
+        }
         CodecErrorCode::DuplicateObjectKey => ProxyErrorCode::DuplicateObjectKey,
         CodecErrorCode::InternalCoverageFailure => ProxyErrorCode::InternalCoverageFailure,
         CodecErrorCode::ControlWouldMutate => ProxyErrorCode::ControlWouldMutate,
@@ -2711,8 +2734,10 @@ fn log_refusal(refusal: &BoundaryRefusal) {
 
 fn direct_error_response(error: DirectProxyError) -> Response {
     let mut error_body = serde_json::json!({
-        "type": "api_error",
-        "message": "proxy_validation_failed",
+        "type": if error.http_status().is_client_error() { "invalid_request_error" } else { "api_error" },
+        "message": if error.code() == ProxyErrorCode::InvalidRequestFormat {
+            "unsupported_or_invalid_request_surface; see the Anthropic proxy contract"
+        } else { "proxy_validation_failed" },
         "code": format!("{:?}", error.code()),
         "phase": format!("{:?}", error.phase()),
     });
@@ -3624,6 +3649,7 @@ mod tests {
     ) -> PreparedDirectIngress {
         let request = direct_request(endpoint, expected, body).unwrap();
         PreparedDirectIngress {
+            endpoint: request.url,
             outbound_headers: request.headers,
             session,
         }
@@ -4759,6 +4785,7 @@ mod tests {
             started_at: Instant::now(),
         };
         let ingress = PreparedDirectIngress {
+            endpoint: probe_request.url.clone(),
             outbound_headers: probe_request.headers.clone(),
             session: DirectIngressSession::Continuity(request_lease),
         };
@@ -5159,7 +5186,7 @@ mod tests {
             serde_json::json!({
                 "type": "error",
                 "error": {
-                    "type": "api_error",
+                    "type": "invalid_request_error",
                     "message": "proxy_validation_failed",
                     "code": "RequestBodyLimitExceeded",
                     "phase": "RequestValidation"

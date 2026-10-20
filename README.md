@@ -150,6 +150,11 @@ export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
 export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
 ```
 
+Claude Code also needs an explicit beta allowlist. See
+[proxy setup](docs/how-to/proxy/set-up-proxy.md#point-your-sdk-at-the-proxy)
+for the flags, supported request shapes, and documented refusals.
+
+
 For MCP hosts (Claude Code, Claude Desktop, Cursor):
 
 ```sh

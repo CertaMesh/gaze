@@ -285,6 +285,9 @@ enum ProxyCmd {
         upstream_openai: url::Url,
         #[arg(long, default_value = "https://api.anthropic.com")]
         upstream_anthropic: url::Url,
+        /// Allow one Anthropic beta value; repeat for each required beta.
+        #[arg(long = "anthropic-beta")]
+        anthropic_betas: Vec<String>,
         #[arg(long, default_value = "https://generativelanguage.googleapis.com")]
         upstream_gemini: url::Url,
         #[arg(long)]
@@ -820,6 +823,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 bind,
                 upstream_openai,
                 upstream_anthropic,
+                anthropic_betas,
                 upstream_gemini,
                 policy,
                 rulepack,
@@ -833,6 +837,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 bind,
                 upstream_openai,
                 upstream_anthropic,
+                anthropic_betas,
                 upstream_gemini,
                 policy,
                 rulepack,
