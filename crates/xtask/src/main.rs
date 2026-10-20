@@ -1,8 +1,18 @@
-use std::collections::{hash_map::Entry, HashMap};
+#[cfg(test)]
 use std::process::Command as ProcessCommand;
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use clap::{Parser, Subcommand};
+
+mod test_commands;
+#[cfg(test)]
+use test_commands::{
+    describe, exact_test_command, exact_test_command_with_args, list_test_command,
+    list_test_command_with_args,
+};
+use test_commands::{
+    ensure_test_exists, ensure_tests_exist, run_behavioral_test, BehavioralTarget, BehavioralTest,
+};
 
 mod bundle_tokenization_drift;
 mod cargo_metadata_audit_isolation;
@@ -88,20 +98,6 @@ fn main() -> Result<()> {
         Command::ReadmeVersionCheck => readme_version_check::run(),
         Command::ScrubPublicText(args) => scrub_public_text::run(args),
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum BehavioralTarget {
-    Lib,
-    Bin(&'static str),
-    Integration(&'static str),
-}
-
-#[derive(Debug, Clone, Copy)]
-struct BehavioralTest {
-    package: &'static str,
-    target: BehavioralTarget,
-    name: &'static str,
 }
 
 // Self-test path for reviewers:
@@ -241,95 +237,6 @@ fn run_recognizer_composition_validator_gate() -> Result<()> {
     Ok(())
 }
 
-fn ensure_tests_exist(tests: &[BehavioralTest]) -> Result<()> {
-    let mut listed = HashMap::<(&'static str, BehavioralTarget), String>::new();
-
-    for test in tests {
-        let key = (test.package, test.target);
-        let stdout = match listed.entry(key) {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => entry.insert(list_tests(*test)?),
-        };
-        let expected_line = format!("{}: test", test.name);
-        if !stdout.lines().any(|line| line == expected_line) {
-            bail!("missing behavioral test: {}", describe(*test));
-        }
-    }
-
-    Ok(())
-}
-
-fn ensure_test_exists(test: BehavioralTest) -> Result<()> {
-    ensure_tests_exist(&[test])
-}
-
-fn list_tests(test: BehavioralTest) -> Result<String> {
-    let output = list_test_command(test)
-        .output()
-        .with_context(|| format!("failed to list tests for {}", test.package))?;
-    if !output.status.success() {
-        bail!(
-            "failed to list tests for {}: {}",
-            describe(test),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    String::from_utf8(output.stdout)
-        .with_context(|| format!("failed to decode test list for {}", describe(test)))
-}
-
-fn run_behavioral_test(gate: &str, test: BehavioralTest) -> Result<()> {
-    println!("{gate}: running {}", describe(test));
-    let status = exact_test_command(test)
-        .status()
-        .with_context(|| format!("failed to run {}", describe(test)))?;
-    if !status.success() {
-        bail!("behavioral test failed: {}", describe(test));
-    }
-    Ok(())
-}
-
-fn cargo_test_command(test: BehavioralTest) -> ProcessCommand {
-    let mut command = ProcessCommand::new("cargo");
-    command.arg("test").arg("-p").arg(test.package);
-    match test.target {
-        BehavioralTarget::Lib => {
-            command.arg("--lib");
-        }
-        BehavioralTarget::Bin(name) => {
-            command.arg("--bin").arg(name);
-        }
-        BehavioralTarget::Integration(name) => {
-            command.arg("--test").arg(name);
-        }
-    }
-    command
-}
-
-fn list_test_command(test: BehavioralTest) -> ProcessCommand {
-    let mut command = cargo_test_command(test);
-    command.arg("--").arg("--list");
-    command
-}
-
-fn exact_test_command(test: BehavioralTest) -> ProcessCommand {
-    let mut command = cargo_test_command(test);
-    command.arg(test.name).arg("--").arg("--exact");
-    command
-}
-
-fn describe(test: BehavioralTest) -> String {
-    match test.target {
-        BehavioralTarget::Lib => format!("{} --lib {}", test.package, test.name),
-        BehavioralTarget::Bin(name) => {
-            format!("{} --bin {} {}", test.package, name, test.name)
-        }
-        BehavioralTarget::Integration(name) => {
-            format!("{} --test {} {}", test.package, name, test.name)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,6 +251,11 @@ mod tests {
     #[test]
     fn behavioral_target_argv_is_explicit_for_list_and_exact_run() {
         let cases: &[(BehavioralTarget, &[&str], &str)] = &[
+            (
+                BehavioralTarget::All,
+                &[],
+                "fixture-package fixture::behavior",
+            ),
             (
                 BehavioralTarget::Lib,
                 &["--lib"],
@@ -381,6 +293,17 @@ mod tests {
             assert_eq!(command_args(&list), expected_list);
             assert_eq!(command_args(&exact), expected_exact);
             assert_eq!(describe(test), expected_description);
+            let features = ["--all-features"];
+            expected_list.insert(3 + target_args.len(), "--all-features");
+            expected_exact.insert(3 + target_args.len(), "--all-features");
+            assert_eq!(
+                command_args(&list_test_command_with_args(test, &features)),
+                expected_list
+            );
+            assert_eq!(
+                command_args(&exact_test_command_with_args(test, &features)),
+                expected_exact
+            );
         }
     }
 }

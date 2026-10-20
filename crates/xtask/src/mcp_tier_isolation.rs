@@ -39,6 +39,8 @@
 
 use std::process::Command as ProcessCommand;
 
+use crate::test_commands::{cargo_test_command, BehavioralTarget};
+
 use anyhow::{bail, Context, Result};
 
 const CORE_PACKAGE: &str = "gaze-mcp-core";
@@ -191,12 +193,10 @@ fn run_core_under(graph: FeatureGraph) -> Result<()> {
         "mcp_tier_isolation: package={CORE_PACKAGE} graph={}",
         graph.label
     );
-    let mut cmd = ProcessCommand::new("cargo");
-    cmd.arg("test")
-        .arg("-p")
-        .arg(CORE_PACKAGE)
-        .arg("--test")
-        .arg(CORE_TEST_TARGET);
+    let mut cmd = cargo_test_command(
+        CORE_PACKAGE,
+        BehavioralTarget::Integration(CORE_TEST_TARGET),
+    );
     cmd.args(graph.cargo_args);
     let output = cmd.output().with_context(|| {
         format!(

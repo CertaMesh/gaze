@@ -8,6 +8,8 @@ mod fixture_citation;
 mod publish_plan;
 #[path = "../src/repo.rs"]
 mod repo;
+#[path = "../src/test_commands.rs"]
+mod test_commands;
 
 use fixture_citation::{scan_source_dirs_with_tests, FixtureCitationError};
 
