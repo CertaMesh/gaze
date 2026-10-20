@@ -1,4 +1,5 @@
-use std::net::SocketAddr;
+mod support;
+
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
@@ -1057,12 +1058,8 @@ async fn echo_anthropic_request(request: Request<Body>) -> axum::response::Respo
 }
 
 async fn spawn_upstream() -> RunningServer {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
     let app = Router::new().route("/v1/messages", post(echo_anthropic_request));
-    let handle = tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let (address, handle) = support::spawn_upstream(app).await;
     RunningServer {
         base_url: format!("http://{address}"),
         handle,
@@ -1149,12 +1146,15 @@ async fn spawn_proxy(
         Some((producer, consumer)) => (config.with_inspection(producer), Some(consumer)),
         None => (config, None),
     };
-    let handle = tokio::spawn(async move {
-        gaze_proxy::serve_with_listener(config, Arc::new(inspection_pipeline()), listener)
-            .await
-            .unwrap();
-    });
-    wait_for_proxy(bind).await;
+    let handle = support::spawn_proxy(
+        config,
+        || Arc::new(inspection_pipeline()),
+        listener,
+        support::Readiness::HealthJson {
+            adapter: "anthropic",
+        },
+    )
+    .await;
     RunningProxy {
         server: RunningServer {
             base_url: format!("http://{bind}"),
@@ -1162,26 +1162,6 @@ async fn spawn_proxy(
         },
         consumer,
     }
-}
-
-async fn wait_for_proxy(bind: SocketAddr) {
-    // The owned listener queues this request until our server is accepting.
-    let response = tokio::time::timeout(Duration::from_secs(60), async {
-        Client::new()
-            .get(format!("http://{bind}/_gaze_proxy/healthz"))
-            .send()
-            .await
-            .unwrap()
-            .error_for_status()
-            .unwrap()
-            .json::<Value>()
-            .await
-            .unwrap()
-    })
-    .await
-    .expect("owned proxy listener did not become ready");
-    assert_eq!(response["bind"], bind.to_string());
-    assert_eq!(response["adapters"][0]["name"], "anthropic");
 }
 
 async fn wait_for_events(sink: &RecordingSink, count: usize) {
