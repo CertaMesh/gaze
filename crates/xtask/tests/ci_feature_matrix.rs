@@ -1,26 +1,77 @@
+use std::collections::BTreeMap;
+
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct Workflow {
+    jobs: BTreeMap<String, Job>,
+}
+
+#[derive(Deserialize)]
+struct Job {
+    #[serde(default)]
+    steps: Vec<Step>,
+}
+
+#[derive(Deserialize)]
+struct Step {
+    run: Option<String>,
+}
+
+fn check_matrix_ownership(workflow: &str) -> Result<(), String> {
+    let workflow: Workflow = serde_saphyr::from_str(workflow).map_err(|error| error.to_string())?;
+    let mut commands = Vec::new();
+    for (job, body) in workflow.jobs {
+        for step in body.steps {
+            if let Some(run) = step.run {
+                for line in run.lines().map(str::trim) {
+                    if line.starts_with("cargo run -p xtask -- ") {
+                        commands.push((job.clone(), line.to_owned()));
+                    }
+                }
+            }
+        }
+    }
+    let expected = [
+        (
+            "workspace-default".to_owned(),
+            "cargo run -p xtask -- ci-feature-matrix --partition ci-default".to_owned(),
+        ),
+        (
+            "xtask-feature-gates".to_owned(),
+            "cargo run -p xtask -- ci-feature-matrix --partition ci-gates".to_owned(),
+        ),
+    ];
+    if commands == expected {
+        Ok(())
+    } else {
+        Err(format!("standalone or missing xtask gates: {commands:?}"))
+    }
+}
+
 #[test]
 fn test_workflow_runs_xtask_gates_only_through_the_matrix() {
-    let workflow = include_str!("../../../.github/workflows/test.yml");
-    let gates = job_section(workflow, "xtask-feature-gates");
-    let command = "run: cargo run -p xtask -- ci-feature-matrix --partition ci-gates";
-    assert_eq!(
-        gates.lines().filter(|line| line.trim() == command).count(),
-        1,
-        "the feature-gates job must run the matrix exactly once"
-    );
-    let direct_xtask_commands: Vec<_> = workflow
-        .lines()
-        .map(str::trim)
-        .filter(|line| line.starts_with("run: cargo run -p xtask -- "))
-        .collect();
-    assert_eq!(
-        direct_xtask_commands,
-        [
-            command,
-            "run: cargo run -p xtask -- ci-feature-matrix --partition ci-default",
-        ],
-        "standalone xtask gates duplicate commands owned by the matrix"
-    );
+    check_matrix_ownership(include_str!("../../../.github/workflows/test.yml")).unwrap();
+}
+
+#[test]
+fn matrix_ownership_checks_plain_and_block_run_strings() {
+    for matrix in [
+        "run: cargo run -p xtask -- ci-feature-matrix --partition ci-gates",
+        "run: |\n          cargo run -p xtask -- ci-feature-matrix --partition ci-gates",
+    ] {
+        let workflow = format!(
+            "jobs:\n  workspace-default:\n    steps:\n      - run: cargo run -p xtask -- ci-feature-matrix --partition ci-default\n  xtask-feature-gates:\n    steps:\n      - {matrix}\n"
+        );
+        check_matrix_ownership(&workflow).unwrap();
+        for duplicate in [
+            "run: cargo run -p xtask -- safety-net-sanity",
+            "run: |\n          echo checking\n          cargo run -p xtask -- safety-net-sanity",
+        ] {
+            let changed = format!("{workflow}      - {duplicate}\n");
+            assert!(check_matrix_ownership(&changed).is_err(), "{duplicate}");
+        }
+    }
 }
 
 fn job_section(workflow: &str, job: &str) -> String {

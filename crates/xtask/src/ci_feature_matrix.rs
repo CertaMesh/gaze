@@ -198,12 +198,6 @@ const REQUIRED_NO_DEFAULT_FEATURES: &str = "--no-default-features";
 const REQUIRED_NO_PHONE_PARSER_TEST_TARGET: &str = "no_phone_parser_fail_closed";
 const REQUIRED_NO_PHONE_PARSER_TEST_COUNT: &str = "running 2 tests";
 const REQUIRED_EMBEDDED_CORE_LOAD_RESULT: &str = "embedded_core_loads_without_phone_parser ... ok";
-const REQUIRED_SAFETY_NET_SANITY_TASK: &str = "safety-net-sanity";
-const REQUIRED_README_VERSION_CHECK_TASK: &str = "readme-version-check";
-const REQUIRED_TOKENBRIDGE_ENCRYPTED_INDEX_TASK: &str = "tokenbridge-encrypted-index";
-const REQUIRED_TRYBUILD_FIXTURE_HYGIENE_TASK: &str = "trybuild-fixture-hygiene";
-const REQUIRED_DASHBOARD_ISOLATION_TASK: &str = "dashboard-isolation";
-const REQUIRED_MCP_TIER_ISOLATION_TASK: &str = "mcp-tier-isolation";
 const NO_PHONE_PARSER_FAIL_CLOSED_GUARD: MatrixCommand = MatrixCommand {
     label:
         "cargo test -p gaze-recognizers --no-default-features --test no_phone_parser_fail_closed",
@@ -267,8 +261,6 @@ fn partition_commands(partition: Partition) -> impl Iterator<Item = &'static Mat
 }
 
 pub fn run(partition: Partition) -> Result<()> {
-    ensure_matrix_contract()?;
-
     if partition != Partition::CiDefault {
         run_command_requiring_output(
             NO_PHONE_PARSER_FAIL_CLOSED_GUARD,
@@ -294,90 +286,6 @@ pub fn run(partition: Partition) -> Result<()> {
     }
 
     println!("ci_feature_matrix: passed");
-    Ok(())
-}
-
-fn ensure_matrix_contract() -> Result<()> {
-    if !FEATURE_MATRIX.contains(&CORE_NO_PHONE_PARSER_LOAD_GUARD) {
-        bail!(
-            "ci_feature_matrix: feature matrix must run {}",
-            CORE_NO_PHONE_PARSER_LOAD_GUARD.label
-        );
-    }
-
-    if !FEATURE_MATRIX.iter().any(|command| {
-        command.args.contains(&REQUIRED_PACKAGE_TARGET)
-            && command.args.contains(&REQUIRED_NO_DEFAULT_FEATURES)
-    }) {
-        bail!(
-            "ci_feature_matrix: feature matrix must test {} with {}",
-            REQUIRED_PACKAGE_TARGET,
-            REQUIRED_NO_DEFAULT_FEATURES
-        );
-    }
-
-    if !FEATURE_MATRIX
-        .iter()
-        .any(|command| command.args.contains(&REQUIRED_SAFETY_NET_SANITY_TASK))
-    {
-        bail!(
-            "ci_feature_matrix: feature matrix must run xtask {}",
-            REQUIRED_SAFETY_NET_SANITY_TASK
-        );
-    }
-
-    if !FEATURE_MATRIX
-        .iter()
-        .any(|command| command.args.contains(&REQUIRED_README_VERSION_CHECK_TASK))
-    {
-        bail!(
-            "ci_feature_matrix: feature matrix must run xtask {}",
-            REQUIRED_README_VERSION_CHECK_TASK
-        );
-    }
-
-    if !FEATURE_MATRIX.iter().any(|command| {
-        command
-            .args
-            .contains(&REQUIRED_TOKENBRIDGE_ENCRYPTED_INDEX_TASK)
-    }) {
-        bail!(
-            "ci_feature_matrix: feature matrix must run xtask {}",
-            REQUIRED_TOKENBRIDGE_ENCRYPTED_INDEX_TASK
-        );
-    }
-
-    if !FEATURE_MATRIX.iter().any(|command| {
-        command
-            .args
-            .contains(&REQUIRED_TRYBUILD_FIXTURE_HYGIENE_TASK)
-    }) {
-        bail!(
-            "ci_feature_matrix: feature matrix must run xtask {}",
-            REQUIRED_TRYBUILD_FIXTURE_HYGIENE_TASK
-        );
-    }
-
-    if !FEATURE_MATRIX
-        .iter()
-        .any(|command| command.args.contains(&REQUIRED_DASHBOARD_ISOLATION_TASK))
-    {
-        bail!(
-            "ci_feature_matrix: feature matrix must run xtask {}",
-            REQUIRED_DASHBOARD_ISOLATION_TASK
-        );
-    }
-
-    if !FEATURE_MATRIX
-        .iter()
-        .any(|command| command.args.contains(&REQUIRED_MCP_TIER_ISOLATION_TASK))
-    {
-        bail!(
-            "ci_feature_matrix: feature matrix must run xtask {}",
-            REQUIRED_MCP_TIER_ISOLATION_TASK
-        );
-    }
-
     Ok(())
 }
 

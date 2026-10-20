@@ -10,9 +10,9 @@
 use gaze_types::inspection::{
     AttestationTraceV1, DashboardCaptureDescriptorV1, DecisionTraceV1, InspectionDomainV1,
     InspectionDropCodeV1, InspectionEmissionIdV1, InspectionEpochV1, InspectionEventMetaV1,
-    InspectionMeasurementV1, InspectionSafeFieldsV1, InspectionSequenceV1, InspectionStageDomainV1,
-    JsonShapeSummaryV1, LogicalInspectionIdV1, PiiSummaryV1, ProjectionAvailabilityV1,
-    ProjectionOmissionReasonV1, SseTimelineMetaV1,
+    InspectionMeasurementV1, InspectionQueueSnapshotV1, InspectionSafeFieldsV1,
+    InspectionSequenceV1, InspectionStageDomainV1, JsonShapeSummaryV1, LogicalInspectionIdV1,
+    PiiSummaryV1, ProjectionAvailabilityV1, ProjectionOmissionReasonV1, SseTimelineMetaV1,
 };
 use std::cell::Cell;
 use std::collections::VecDeque;
@@ -659,6 +659,9 @@ struct RegistrationState {
     changed: Condvar,
     accounting: Arc<QueueAccounting>,
     producer_open: AtomicBool,
+    admitted: AtomicU64,
+    dropped: AtomicU64,
+    delivered: AtomicU64,
     #[cfg(test)]
     hooks: Mutex<DispatchHooks>,
 }
@@ -696,6 +699,12 @@ fn lock_without_recovery<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn increment_saturating(counter: &AtomicU64) {
+    let _ = counter.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+        Some(value.saturating_add(1))
+    });
 }
 
 fn next_bounded_id(counter: &AtomicU64) -> Option<u64> {
@@ -800,6 +809,9 @@ pub fn install_inspection_v1(
             bytes: AtomicUsize::new(0),
         }),
         producer_open: AtomicBool::new(true),
+        admitted: AtomicU64::new(0),
+        dropped: AtomicU64::new(0),
+        delivered: AtomicU64::new(0),
         #[cfg(test)]
         hooks: Mutex::new(DispatchHooks::default()),
     });
@@ -875,6 +887,7 @@ fn dispatcher_loop(state: Arc<RegistrationState>, sink: Arc<dyn InspectionSink>)
         } = queued;
         let delivered = catch_unwind(AssertUnwindSafe(|| sink.try_emit(event)));
         drop(reservation);
+        increment_saturating(&state.delivered);
         let mut inner = lock_without_recovery(&state.inner);
         match delivered {
             Ok(Ok(())) => {}
@@ -1073,6 +1086,27 @@ impl InspectionLogicalEmitterV1 {
         F: FnOnce() -> ProjectionAvailabilityV1<T>,
         W: FnOnce(ProjectionAvailabilityV1<T>) -> InspectionEventBodyV1,
     {
+        let outcome = self.try_emit_inner(stage_domain, safe, build, wrap);
+        match outcome {
+            InspectionAdmissionOutcomeV1::Accepted { .. } => {
+                increment_saturating(&self.state.admitted)
+            }
+            InspectionAdmissionOutcomeV1::Dropped(_) => increment_saturating(&self.state.dropped),
+        }
+        outcome
+    }
+
+    fn try_emit_inner<T, F, W>(
+        &mut self,
+        stage_domain: InspectionStageDomainV1,
+        safe: InspectionSafeFieldsV1,
+        build: F,
+        wrap: W,
+    ) -> InspectionAdmissionOutcomeV1
+    where
+        F: FnOnce() -> ProjectionAvailabilityV1<T>,
+        W: FnOnce(ProjectionAvailabilityV1<T>) -> InspectionEventBodyV1,
+    {
         if self.exhausted {
             return InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::SequenceOverflow);
         }
@@ -1202,6 +1236,17 @@ pub struct ActivatedInspectionConsumerV1 {
 }
 
 impl ActivatedInspectionConsumerV1 {
+    /// Content-independent lifetime counters. Concurrent emissions may advance individual
+    /// counters between reads; after producers stop and callbacks finish they are stable.
+    #[must_use]
+    pub fn queue_snapshot(&self) -> InspectionQueueSnapshotV1 {
+        InspectionQueueSnapshotV1::new(
+            self.state.admitted.load(Ordering::Relaxed),
+            self.state.dropped.load(Ordering::Relaxed),
+            self.state.delivered.load(Ordering::Relaxed),
+        )
+    }
+
     /// Begins a reusable purge and returns its self-bound completion guard.
     pub fn begin_purge(&mut self) -> Result<InspectionPurgeGuardV1, InspectionPurgeErrorV1> {
         let mut inner = lock_without_recovery(&self.state.inner);
@@ -1439,6 +1484,9 @@ mod tests {
                 bytes: AtomicUsize::new(0),
             }),
             producer_open: AtomicBool::new(true),
+            admitted: AtomicU64::new(0),
+            dropped: AtomicU64::new(0),
+            delivered: AtomicU64::new(0),
             hooks: Mutex::new(DispatchHooks::default()),
         })
     }
@@ -2502,7 +2550,7 @@ mod tests {
     #[test]
     fn queue_contention_drops_before_projection_without_waiting() {
         let descriptor = DashboardCaptureDescriptorV1::new(CaptureDomainsV1::ProviderVisible);
-        let (producer, _consumer) = install_inspection_v1(
+        let (producer, consumer) = install_inspection_v1(
             PendingInspectionProducerV1::new(descriptor),
             PendingInspectionConsumerV1::new(
                 descriptor,
@@ -2522,6 +2570,10 @@ mod tests {
             InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::QueueContended)
         );
         assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            consumer.queue_snapshot(),
+            InspectionQueueSnapshotV1::new(0, 1, 0)
+        );
         drop(locked);
     }
 
