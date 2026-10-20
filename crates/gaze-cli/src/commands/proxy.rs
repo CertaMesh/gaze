@@ -16,6 +16,7 @@ pub(crate) struct ServeArgs {
     pub(crate) bind: SocketAddr,
     pub(crate) upstream_openai: Url,
     pub(crate) upstream_anthropic: Url,
+    pub(crate) anthropic_betas: Vec<String>,
     pub(crate) upstream_gemini: Url,
     pub(crate) policy: Option<PathBuf>,
     pub(crate) rulepack: String,
@@ -52,10 +53,29 @@ pub(crate) fn serve(args: ServeArgs) -> Result<(), CliError> {
     if args.foreground_daemon {
         daemon::init_foreground_daemon(&paths, args.bind).map_err(map_proxy)?;
     }
+    let mut betas = if let Some(path) = &args.policy {
+        gaze::Policy::load_for_cli(path)
+            .map_err(map_policy_error)?
+            .proxy
+            .anthropic_betas
+    } else {
+        Vec::new()
+    };
+    betas.extend(args.anthropic_betas);
+    let mut anthropic =
+        AnthropicAdapter::builder(args.upstream_anthropic.clone()).ephemeral_sessions();
+    for beta in betas {
+        anthropic = anthropic
+            .allow_beta(beta)
+            .map_err(|_| CliError::ProxyDetail("invalid Anthropic beta allowlist value".into()))?;
+    }
+    let anthropic = anthropic
+        .build()
+        .map_err(|_| CliError::ProxyDetail("invalid Anthropic proxy configuration".into()))?;
     let mut config = proxy_config(
         args.bind,
         args.upstream_openai,
-        args.upstream_anthropic,
+        anthropic,
         args.upstream_gemini,
     );
     config.session_ttl = parse_duration(&args.session_ttl)?;
@@ -289,17 +309,17 @@ fn preflight_policy(config: &DaemonConfig) -> Result<(), CliError> {
 fn proxy_config(
     bind: SocketAddr,
     upstream_openai: Url,
-    upstream_anthropic: Url,
+    anthropic: AnthropicAdapter,
     upstream_gemini: Url,
 ) -> ProxyConfig {
-    ProxyConfig::new(
-        bind,
-        vec![
-            Arc::new(OpenAiAdapter::new(upstream_openai)),
-            Arc::new(AnthropicAdapter::new(upstream_anthropic)),
-            Arc::new(GeminiAdapter::new(upstream_gemini)),
-        ],
-    )
+    let mut config = ProxyConfig::anthropic_direct(bind, anthropic);
+    config
+        .adapters
+        .insert(0, Arc::new(OpenAiAdapter::new(upstream_openai)));
+    config
+        .adapters
+        .push(Arc::new(GeminiAdapter::new(upstream_gemini)));
+    config
 }
 
 fn apply_start_overrides(config: &mut DaemonConfig, args: StartArgs) {

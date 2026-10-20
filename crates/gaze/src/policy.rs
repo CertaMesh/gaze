@@ -46,6 +46,8 @@ pub const DEFAULT_POLICY_SCHEMA_VERSION: &str = "0.1.0";
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct Policy {
+    /// Explicit beta header values allowed by the Anthropic proxy.
+    pub proxy: ProxyPolicy,
     pub session: SessionPolicy,
     pub detectors: Vec<DetectorSpec>,
     pub dictionaries: Vec<RulepackDict>,
@@ -74,6 +76,7 @@ pub struct Policy {
 impl Default for Policy {
     fn default() -> Self {
         Self {
+            proxy: ProxyPolicy::default(),
             session: SessionPolicy::default(),
             detectors: Vec::new(),
             dictionaries: Vec::new(),
@@ -87,6 +90,14 @@ impl Default for Policy {
             schema_version: DEFAULT_POLICY_SCHEMA_VERSION.to_string(),
         }
     }
+}
+
+/// Provider protocol options; these never bypass request inspection.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProxyPolicy {
+    #[serde(default)]
+    pub anthropic_betas: Vec<String>,
 }
 
 /// `[safety_net.*]` tables.
@@ -348,6 +359,8 @@ impl Policy {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawPolicy {
+    #[serde(default)]
+    proxy: ProxyPolicy,
     #[serde(default = "default_raw_schema_version")]
     schema_version: String,
     session: RawSessionPolicy,
@@ -579,6 +592,7 @@ impl TryFrom<RawPolicy> for Policy {
         };
 
         Ok(Self {
+            proxy: raw.proxy,
             session,
             detectors,
             dictionaries,
@@ -980,6 +994,33 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn proxy_beta_policy_is_explicit_and_rejects_unknown_options() {
+        let raw: super::RawPolicy = toml::from_str(
+            r#"
+[session]
+scope = "ephemeral"
+[proxy]
+anthropic_betas = ["claude-code-20250219", "effort-2025-11-24"]
+"#,
+        )
+        .unwrap();
+        let policy = super::Policy::try_from(raw).unwrap();
+        assert_eq!(
+            policy.proxy.anthropic_betas,
+            ["claude-code-20250219", "effort-2025-11-24"]
+        );
+        assert!(toml::from_str::<super::RawPolicy>(
+            r#"
+[session]
+scope = "ephemeral"
+[proxy]
+allow_all_betas = true
+"#
+        )
+        .is_err());
+    }
 
     /// Root reads a mode-000 file, so a permission-denied test proves nothing there.
     #[cfg(unix)]
