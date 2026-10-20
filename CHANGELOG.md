@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- rustls-webpki 0.103.16 and webpki-roots 1.0.10 fix RUSTSEC-2026-0382 and
+  RUSTSEC-2026-0381: certificate paths through distrusted emSign intermediates
+  were accepted.
+
 ### Fixed
 
 - Anthropic proxy accepts the literal `?beta=true` query, individually allowlisted
