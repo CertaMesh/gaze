@@ -472,7 +472,7 @@ Two consequences worth stating plainly:
 | Measured | 2026-10-19 |
 | Machine | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) |
 | Harness | [`scripts/bench/run_no_opf_benchmark.py`](../../../scripts/bench/run_no_opf_benchmark.py) |
-| Scorecard | [`scorecard-v0.17.0.json`](scorecard-v0.17.0.json) |
+| Scorecard | [`scorecard-v0.17.0.json.gz`](scorecard-v0.17.0.json.gz) |
 | Scorecard sha256 | `48038f42f665fc41d45aab2c3b12c65eaa23854d055c99b49308b8c553a59f75` |
 | Corpus | `DataikuNLP/kiji-pii-training-data+gaze` @ `0275550f0b1f1b8f2dc9356fd31ac1c788b8228b+a4-negative-v1` |
 | Corpus sha256 | `11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2` |
@@ -484,11 +484,11 @@ Two consequences worth stating plainly:
 | NER threshold | `0.3` |
 | Model bundle `davlan-mbert-ner-hrl-onnx` | `7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16` |
 | Model bundle `nym-small-int8` | `71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767` |
-| Scorecard, scored labels v2 | [`scorecard-v0.17.0-scored-labels-v2.json`](scorecard-v0.17.0-scored-labels-v2.json) |
+| Scorecard, scored labels v2 | [`scorecard-v0.17.0-scored-labels-v2.json.gz`](scorecard-v0.17.0-scored-labels-v2.json.gz) |
 | Scorecard sha256, scored labels v2 | `41fe2764e982c7f7cd9637b4c273c5bc4083b104d8af9ed3db24a0fbbcac1765` |
-| Scorecard, scored labels v3 | [`scorecard-v0.17.0-scored-labels-v3.json`](scorecard-v0.17.0-scored-labels-v3.json) |
+| Scorecard, scored labels v3 | [`scorecard-v0.17.0-scored-labels-v3.json.gz`](scorecard-v0.17.0-scored-labels-v3.json.gz) |
 | Scorecard sha256, scored labels v3 | `cdfec65479d0db7f0e00018b12dd86c8c2b30ac1e855f50afe8525a010590802` |
-| Scorecard, scored labels v4 | [`scorecard-v0.17.0-scored-labels-v4.json`](scorecard-v0.17.0-scored-labels-v4.json) |
+| Scorecard, scored labels v4 | [`scorecard-v0.17.0-scored-labels-v4.json.gz`](scorecard-v0.17.0-scored-labels-v4.json.gz) |
 | Scorecard sha256, scored labels v4 | `7944d60a003fd8e5d6ace066003b7a6ad291b1c644ed19dd24469bd33aaa285f` |
 
 **Scored labels v4 (headline: credentials counted, with protected repeats of a labelled value credited).** Gold PII bytes: 130,282.
@@ -737,16 +737,16 @@ provisional status, while clean p95 latency, date, commit and machine are
 ignored because they vary with the host. The table and trend
 charts show the last three such rows, and a merged row shows its newest
 release. [`release-history.json`](release-history.json) keeps every release,
-and every row's numbers come from the `scorecard-vX.Y.Z.json` files it links,
+and every row's numbers come from the `scorecard-vX.Y.Z.json.gz` files it links,
 which stay committed as the machine-readable evidence.
 
 <!-- BEGIN GENERATED: history -->
 
 | Release | Measured | Commit | Machine | Scorecards | Shipped arm | Refused ↓ | Leaked PII bytes, all processed, v4 ↓ | Leaked PII bytes, common documents, v4 ↓ | False-positive bytes, v4 ↔ | Leaked PII bytes, all processed, v3 ↓ | Leaked PII bytes, common documents, v3 ↓ | False-positive bytes, v3 ↔ | Leaked PII bytes, all processed, v2 ↓ | Leaked PII bytes, common documents, v2 ↓ | False-positive bytes, v2 ↔ | Leaked PII bytes, all processed, v1 ↓ | Leaked PII bytes, common documents, v1 ↓ | False-positive bytes, v1 ↔ | Restore exact ↑ | clean p95 ms ↓ |
 | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| v0.15.0 – v0.15.1 | 2026-10-15 | `4927f7c` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.0-scored-labels-v2.json`](scorecard-v0.15.0-scored-labels-v2.json), [`scorecard-v0.15.0-scored-labels-v3.json`](scorecard-v0.15.0-scored-labels-v3.json), [`scorecard-v0.15.0-scored-labels-v4.json`](scorecard-v0.15.0-scored-labels-v4.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json), [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json), [`scorecard-v0.15.1-scored-labels-v3.json`](scorecard-v0.15.1-scored-labels-v3.json), [`scorecard-v0.15.1-scored-labels-v4.json`](scorecard-v0.15.1-scored-labels-v4.json) | `policy-file` | 0 | 19,556 | 19,556 | 18,488 | 13,319 | 13,319 | 18,488 | 13,319 | 13,319 | 30,073 | 19,556 | 19,556 | 30,073 | 100.0000% | 127.00 |
-| v0.16.0 | 2026-10-15 | `5a7dac0` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.16.0.json`](scorecard-v0.16.0.json), [`scorecard-v0.16.0-scored-labels-v2.json`](scorecard-v0.16.0-scored-labels-v2.json), [`scorecard-v0.16.0-scored-labels-v3.json`](scorecard-v0.16.0-scored-labels-v3.json), [`scorecard-v0.16.0-scored-labels-v4.json`](scorecard-v0.16.0-scored-labels-v4.json) | `policy-file` | 0 | 13,291 | 13,291 | 15,141 | 7,348 | 7,348 | 15,141 | 7,348 | 7,348 | 26,902 | 13,291 | 13,291 | 26,902 | 100.0000% | 275.84 |
-| v0.17.0 | 2026-10-19 | `86195a8` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.17.0.json`](scorecard-v0.17.0.json), [`scorecard-v0.17.0-scored-labels-v2.json`](scorecard-v0.17.0-scored-labels-v2.json), [`scorecard-v0.17.0-scored-labels-v3.json`](scorecard-v0.17.0-scored-labels-v3.json), [`scorecard-v0.17.0-scored-labels-v4.json`](scorecard-v0.17.0-scored-labels-v4.json) | `policy-file` | 0 | 9,717 | 9,717 | 15,224 | 6,652 | 6,652 | 15,224 | 6,652 | 6,652 | 27,004 | 9,717 | 9,717 | 27,021 | 100.0000% | 453.44 |
+| v0.15.0 – v0.15.1 | 2026-10-15 | `4927f7c` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json.gz`](scorecard-v0.15.0.json.gz), [`scorecard-v0.15.0-scored-labels-v2.json.gz`](scorecard-v0.15.0-scored-labels-v2.json.gz), [`scorecard-v0.15.0-scored-labels-v3.json.gz`](scorecard-v0.15.0-scored-labels-v3.json.gz), [`scorecard-v0.15.0-scored-labels-v4.json.gz`](scorecard-v0.15.0-scored-labels-v4.json.gz), [`scorecard-v0.15.1.json.gz`](scorecard-v0.15.1.json.gz), [`scorecard-v0.15.1-scored-labels-v2.json.gz`](scorecard-v0.15.1-scored-labels-v2.json.gz), [`scorecard-v0.15.1-scored-labels-v3.json.gz`](scorecard-v0.15.1-scored-labels-v3.json.gz), [`scorecard-v0.15.1-scored-labels-v4.json.gz`](scorecard-v0.15.1-scored-labels-v4.json.gz) | `policy-file` | 0 | 19,556 | 19,556 | 18,488 | 13,319 | 13,319 | 18,488 | 13,319 | 13,319 | 30,073 | 19,556 | 19,556 | 30,073 | 100.0000% | 127.00 |
+| v0.16.0 | 2026-10-15 | `5a7dac0` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.16.0.json.gz`](scorecard-v0.16.0.json.gz), [`scorecard-v0.16.0-scored-labels-v2.json.gz`](scorecard-v0.16.0-scored-labels-v2.json.gz), [`scorecard-v0.16.0-scored-labels-v3.json.gz`](scorecard-v0.16.0-scored-labels-v3.json.gz), [`scorecard-v0.16.0-scored-labels-v4.json.gz`](scorecard-v0.16.0-scored-labels-v4.json.gz) | `policy-file` | 0 | 13,291 | 13,291 | 15,141 | 7,348 | 7,348 | 15,141 | 7,348 | 7,348 | 26,902 | 13,291 | 13,291 | 26,902 | 100.0000% | 275.84 |
+| v0.17.0 | 2026-10-19 | `86195a8` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB RAM, macOS 26.5 (25F71) | [`scorecard-v0.17.0.json.gz`](scorecard-v0.17.0.json.gz), [`scorecard-v0.17.0-scored-labels-v2.json.gz`](scorecard-v0.17.0-scored-labels-v2.json.gz), [`scorecard-v0.17.0-scored-labels-v3.json.gz`](scorecard-v0.17.0-scored-labels-v3.json.gz), [`scorecard-v0.17.0-scored-labels-v4.json.gz`](scorecard-v0.17.0-scored-labels-v4.json.gz) | `policy-file` | 0 | 9,717 | 9,717 | 15,224 | 6,652 | 6,652 | 15,224 | 6,652 | 6,652 | 27,004 | 9,717 | 9,717 | 27,021 | 100.0000% | 453.44 |
 
 - **v0.15.0, scored labels v2:** v0.15.0's own `clean_for_bench` (sha256 `d3696c1483cd…`, built from `5127788b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
 - **v0.15.0, scored labels v3:** v0.15.0's own `clean_for_bench` (sha256 `d3696c1483cd…`, built from `5127788b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `034cd744`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
@@ -789,9 +789,9 @@ the measured tree only in docs and version pins.
   Kiji feature and the same pinned Kiji bundle) under today's corpus loaders,
   validation and scoring. Scored under v1 the same way, it reproduces this row
   exactly on all three arms
-  ([`scorecard-v0.14.0-rescore-calibration-v1.json`](scorecard-v0.14.0-rescore-calibration-v1.json)),
+  ([`scorecard-v0.14.0-rescore-calibration-v1.json.gz`](scorecard-v0.14.0-rescore-calibration-v1.json.gz)),
   so the v2 numbers
-  ([`scorecard-v0.14.0-scored-labels-v2.json`](scorecard-v0.14.0-scored-labels-v2.json))
+  ([`scorecard-v0.14.0-scored-labels-v2.json.gz`](scorecard-v0.14.0-scored-labels-v2.json.gz))
   differ from v1 only by the contract. One validator rule is the release's own:
   v0.14.0 did not yet record safety-net redactions as manifest entries (#623
   changed that), so trace/manifest agreement is checked on tokenizations only,
@@ -1278,10 +1278,11 @@ uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full
   --output-dir target/bench-data/release-v1
 
 # 2. Commit it under its release name and regenerate this document.
-cp target/bench-data/release-v1/full/scorecard-v4.json \
-   docs/reference/benchmarks/scorecard-vX.Y.Z.json
+python3 scripts/bench/bench_json.py compress \
+  target/bench-data/release-v1/full/scorecard-v4.json \
+  docs/reference/benchmarks/scorecard-vX.Y.Z.json.gz
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
-  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z.json \
+  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z.json.gz \
   --version vX.Y.Z \
   --machine "<CPU, cores, RAM, OS and build>" \
   --shipped-default-arm policy-file \
@@ -1300,10 +1301,11 @@ uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full
   --policy target/bench-data/release-policy.toml \
   --output-dir target/bench-data/release-v2 \
   --scored-labels docs/reference/benchmarks/scored-labels-v2.json
-cp target/bench-data/release-v2/full/scorecard-v4.json \
-   docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json
+python3 scripts/bench/bench_json.py compress \
+  target/bench-data/release-v2/full/scorecard-v4.json \
+  docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json.gz
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
-  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json \
+  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json.gz \
   --version vX.Y.Z \
   --append-contract-result
 
@@ -1312,9 +1314,12 @@ uv run --project scripts/bench python scripts/bench/rescore.py \
   target/bench-data/release-v2/full/observations-v1.jsonl.gz \
   --scored-labels docs/reference/benchmarks/scored-labels-v3.json \
   --agentic-scored-labels docs/reference/benchmarks/scored-labels-agentic.json \
-  --output docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v3.json
+  --output target/bench-data/release-v2/full/scorecard-v3-rescore.json
+python3 scripts/bench/bench_json.py compress \
+  target/bench-data/release-v2/full/scorecard-v3-rescore.json \
+  docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v3.json.gz
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
-  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v3.json \
+  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v3.json.gz \
   --version vX.Y.Z \
   --append-contract-result
 
@@ -1323,9 +1328,12 @@ uv run --project scripts/bench python scripts/bench/rescore.py \
   target/bench-data/release-v2/full/observations-v1.jsonl.gz \
   --scored-labels docs/reference/benchmarks/scored-labels-v4.json \
   --agentic-scored-labels docs/reference/benchmarks/scored-labels-agentic.json \
-  --output docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v4.json
+  --output target/bench-data/release-v2/full/scorecard-v4-rescore.json
+python3 scripts/bench/bench_json.py compress \
+  target/bench-data/release-v2/full/scorecard-v4-rescore.json \
+  docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v4.json.gz
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
-  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v4.json \
+  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v4.json.gz \
   --version vX.Y.Z \
   --append-contract-result
 ```

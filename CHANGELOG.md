@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as text. Unsupported fields return Anthropic-shaped `400` errors. Unverified
   `safeguards`, message-level system roles and opaque media remain refused (#814).
 
+### Benchmark
+
+- Release scorecards are committed gzipped as `scorecard-*.json.gz` (about 70 MB
+  and 1.7 million lines of JSON become 3 MB). Recorded `scorecard_sha256` values
+  are unchanged: they hash the decompressed JSON, and
+  `render_benchmark_doc.py --check` now verifies every one. Publish a new
+  scorecard with `scripts/bench/bench_json.py compress`.
+
 ## [0.17.0] - 2026-10-19
 
 v0.17.0 expands credential and personal-name protection, tightens fail-closed

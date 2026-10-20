@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 from typing import Sequence
 
+import bench_json
 import gaze_bench_score as score
 import scorecard_record as record
 
@@ -53,8 +54,8 @@ def verify(record_path: Path, v1_path: Path, v2_path: Path, v2_contract: Path,
     v3 = record.rescore(record_path, score.load_scored_label_contract(
         v3_contract, display_path="docs/reference/benchmarks/scored-labels-v3.json"
     ))
-    expected_v1 = json.loads(v1_path.read_text(encoding="utf-8"))
-    expected_v2 = json.loads(v2_path.read_text(encoding="utf-8"))
+    expected_v1 = bench_json.load(v1_path)
+    expected_v2 = bench_json.load(v2_path)
     result = {
         "v1_exact_except_timing": exact_except_timing(v1, expected_v1),
         "v2_exact_except_timing": exact_except_timing(v2, expected_v2),
@@ -99,8 +100,8 @@ def verify_capture(record_path: Path, v1_path: Path, v2_path: Path, v2_contract:
         ),
     }
     committed = {
-        "v1": json.loads(v1_path.read_text(encoding="utf-8")),
-        "v2": json.loads(v2_path.read_text(encoding="utf-8")),
+        "v1": bench_json.load(v1_path),
+        "v2": bench_json.load(v2_path),
     }
     skipped = set(ignore)
     if not skipped <= HARNESS_RUN_FIELDS:

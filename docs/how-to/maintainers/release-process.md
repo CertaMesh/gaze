@@ -45,6 +45,38 @@ After the seed publish, add the crate's Trusted Publisher on crates.io for `Cert
 After gates pass, create a signed `vX.Y.Z` tag on the merge commit on `main`
 and push it. Both workflows fire; seeded, linked crates need no manual publish.
 
+## Replay account-bound tutorial steps
+
+Before tagging, require `tutorial execution` to pass on the exact release head.
+Download its `tutorial-execution` artifact and check that every tutorial has
+executed blocks. Replay every printed `SKIP` with the required account and the
+release-head binary, then record the commit, tutorial, command, and result in
+the release PR. Keep account transcripts and restore material private.
+
+The current manual replay is step 3 of
+[Protect a coding assistant's document read](../../tutorials/mcp-coding-assistant.md).
+Run steps 1 and 2 first in a fresh checkout directory, then run the marked
+Claude Code call and its Python assertions. Require both `Called gaze_read_file:
+true` and `Tool returned name, email, and phone tokens: true`. A skipped or
+failed manual replay blocks the release.
+
+The [tutorial gate contract](../../reference/tutorial-gate.md) defines markers,
+exact output matching, pinned dependencies, and the mutation probes.
+
+## Replay the published Rust tutorial
+
+After the release's crates are available on crates.io, replay
+[Protect a model call from Rust](../../tutorials/getting-started.md) in a fresh
+directory outside a source checkout. Use normal Cargo commands, without the
+tutorial gate's path-dependency substitution. In step 1, pin both dependencies
+to the released version with
+`cargo add gaze-pii@<version> gaze-assembly@<version>`.
+
+Require tokenized model input and the program's exact-restore assertions to
+pass. Record the released version and result in the release PR before marking
+the release complete. The pre-tag CI gate builds source paths and does not
+test installation from crates.io.
+
 ## Pre-tag model-setup ownership gate
 
 Before the first `gaze-model-setup` publication, dispatch `release.yml` on the

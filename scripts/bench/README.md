@@ -184,8 +184,8 @@ valid v3 scoring. `observations-v0.15.1-agentic.jsonl.gz` also replays A/D/R:
 ```bash
 uv run --project scripts/bench python scripts/bench/verify_record_scorecards.py \
   docs/reference/benchmarks/observations-v0.15.1.jsonl.gz \
-  --v1 docs/reference/benchmarks/scorecard-v0.15.1.json \
-  --v2 docs/reference/benchmarks/scorecard-v0.15.1-scored-labels-v2.json \
+  --v1 docs/reference/benchmarks/scorecard-v0.15.1.json.gz \
+  --v2 docs/reference/benchmarks/scorecard-v0.15.1-scored-labels-v2.json.gz \
   --v2-contract docs/reference/benchmarks/scored-labels-v2.json \
   --v3-contract docs/reference/benchmarks/scored-labels-v3.json
 ```
@@ -199,8 +199,8 @@ by name, and the result reports whether it differed:
 ```bash
 uv run --project scripts/bench python scripts/bench/verify_record_scorecards.py \
   docs/reference/benchmarks/observations-v0.15.0.jsonl.gz \
-  --v1 docs/reference/benchmarks/scorecard-v0.15.0.json \
-  --v2 docs/reference/benchmarks/scorecard-v0.15.0-scored-labels-v2.json \
+  --v1 docs/reference/benchmarks/scorecard-v0.15.0.json.gz \
+  --v2 docs/reference/benchmarks/scorecard-v0.15.0-scored-labels-v2.json.gz \
   --v2-contract docs/reference/benchmarks/scored-labels-v2.json \
   --v3-contract docs/reference/benchmarks/scored-labels-v3.json \
   --capture --ignore-run-field validator_recall_by_label
@@ -396,10 +396,11 @@ Every release measures its own tree and updates the single benchmark document.
 After a full run on the release commit:
 
 ```bash
-cp target/bench-data/no-opf/full/scorecard-v4.json \
-   docs/reference/benchmarks/scorecard-vX.Y.Z.json
+python3 scripts/bench/bench_json.py compress \
+  target/bench-data/no-opf/full/scorecard-v4.json \
+  docs/reference/benchmarks/scorecard-vX.Y.Z.json.gz
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
-  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z.json \
+  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z.json.gz \
   --version vX.Y.Z \
   --machine "<CPU, cores, RAM, OS and build>" \
   --append-history
