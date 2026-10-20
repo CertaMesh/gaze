@@ -40,6 +40,28 @@ class CredentialCellsTests(unittest.TestCase):
             old = agentic.records_as_of(21, agentic.generate(partition))
             self.assertEqual(hashlib.sha256(agentic.corpus_bytes(old)).hexdigest(), previous[partition])
 
+    def test_v22_is_reconstructed_without_any_changed_document(self):
+        previous = {"dev": "cb82d249cd9b672ed0103aeeccb5999b7011e613131d54a5b3882d697c293479",
+                    "test": "ee25d9eefd2af48c99214002e5cdfc909222e6e1efa72e5bd98874246acb82ac"}
+        for partition in agentic.PARTITIONS:
+            old = agentic.records_as_of(22, agentic.generate(partition))
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(old)).hexdigest(), previous[partition])
+
+    def test_source_escapes_have_whole_source_gold_and_benign_boundaries(self):
+        for partition in agentic.PARTITIONS:
+            rows = cells.source_escape_records(agentic, partition)
+            positives = [row for row in rows if row.layer == "A"]
+            self.assertTrue(any("''" in span.value for row in positives for span in row.gold))
+            self.assertTrue(any("\\'" in span.value for row in positives for span in row.gold))
+            self.assertTrue(any(r"\/" in span.value for row in positives for span in row.gold))
+            self.assertTrue({"md5crypt", "sha256crypt", "sha512crypt", "bcrypt", "argon2id"} <=
+                            {row.family for row in positives})
+            self.assertTrue(any("overlong" in row.surface for row in rows if row.layer == "D"))
+            for row in rows:
+                self.assertEqual(len(row.gold), 2 if row.layer == "R" else 0 if row.layer == "D" else 1)
+                for span in (*row.gold, *row.decoys):
+                    self.assertEqual(row.text.encode()[span.start:span.end].decode(), span.value)
+
     def test_review_contexts_measure_both_credential_and_metadata_boundaries(self):
         for partition in agentic.PARTITIONS:
             rows = cells.review_records(agentic, partition)

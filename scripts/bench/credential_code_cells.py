@@ -235,3 +235,62 @@ def review_records(api, partition):
             emit("D", family, "metadata_" + family, index,
                  templates[family], value, "decoy:credential_metadata")
     return result
+
+
+
+def source_escape_records(api, partition):
+    """v23 source-unit boundaries, with independent salt/digest draws per split."""
+    result = []
+    rng = api.Rng(api.PARTITION_SEEDS[partition], "credential-source-escapes")
+    templates = TEMPLATES[partition]
+    review = REVIEW_TEMPLATES[partition]
+
+    def emit(layer, family, surface, index, value):
+        template = (review["hash_invalid"] if layer == "D" else
+                    templates["bare" if surface == "salt_raw" else "sql" if surface.startswith("salt_") else "json"])
+        if layer == "R":
+            template += review["repeat"]
+        text, gold, decoys = api._fill_with_decoys(
+            template, {"V": (value, None if layer == "D" else "PASSWORD")})
+        result.append(api.Record(
+            uid=f"agentic-{partition}-{layer}-credentials-escapes-{family}-{surface}-{index}",
+            partition=partition, layer=layer, family=family,
+            surface="credentials_escapes_" + surface,
+            validity=api.BENIGN if layer == "D" else api.UNCHECKED,
+            group=f"{partition}-credentials-escapes-{family}-{index}",
+            template=f"credentials-escapes/{partition}/{surface}", language="en", region="US",
+            text=text, gold=gold, decoys=decoys,
+        ))
+
+    for index in range(api.DOCS_PER_FAMILY):
+        values = hashes(rng)
+        for family, kind, limit in (("md5crypt", "1", 8), ("sha256crypt", "5", 16),
+                                     ("sha512crypt", "6", 16)):
+            digest = values[family].rsplit("$", 1)[1]
+            salt = ("dv" if partition == "dev" else "ts") + rng.digits(limit - 3) + "'"
+            for surface, escape in (("salt_raw", "'"), ("salt_sql", "''"), ("salt_mysql", r"\'")):
+                encoded_salt = salt.replace("'", escape)
+                value = f"${kind}${encoded_salt}${digest}"
+                for layer in ("A", "R"):
+                    emit(layer, family, surface, index, value)
+                emit("D", family, surface + "_overlong", index, f"${kind}$a{encoded_salt}${digest}")
+                emit("D", family, surface + "_truncated", index, value[:-1])
+                emit("D", family, surface + "_checksum_overlong", index, value + "A")
+        for family in ("bcrypt", "argon2id", "scrypt_phc", "scrypt_crypt", "yescrypt",
+                       "phpass_p", "django_pbkdf2_sha256", "django_pbkdf2_sha1", "django_scrypt"):
+            # Force an escaped alphabet member in both fixed and variable fields;
+            # the rest of each value remains independently generated.
+            parts = values[family].split("$")
+            for slot in (-1, -2) if family in ("argon2id", "scrypt_phc", "yescrypt") else (-1,):
+                component = parts[slot]
+                parts[slot] = component[:4] + "/" + component[5:]
+            value = "$".join(parts).replace("/", r"\/")
+            for layer in ("A", "R"):
+                emit(layer, family, "json_slash", index, value)
+            for surface, broken in (("escape_tail", value + r"\q"),
+                                     ("glued", value + "_tail"),
+                                     ("truncated", value.rsplit("$", 1)[0] if family == "argon2id" else value[:-1])):
+                emit("D", family, "json_" + surface, index, broken)
+            if family != "argon2id":
+                emit("D", family, "json_overlong", index, value.replace("=", "") + "A" + ("==" if family == "django_scrypt" else "=" if "pbkdf2" in family else ""))
+    return result
