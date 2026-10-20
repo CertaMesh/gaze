@@ -1557,7 +1557,21 @@ async fn signed_request_non_stream_and_sse_surfaces_are_omitted_whole() {
 
 #[tokio::test]
 async fn panicking_sink_never_changes_proxy_enforcement() {
-    let upstream = spawn_upstream().await;
+    let app = Router::new().route(
+        "/v1/messages",
+        post(|request: Request<Body>| async {
+            let body = to_bytes(request.into_body(), 2 * 1024 * 1024)
+                .await
+                .unwrap();
+            assert!(!String::from_utf8_lossy(&body).contains(SYNTHETIC_EMAIL));
+            echo_anthropic_request(Request::new(Body::from(body))).await
+        }),
+    );
+    let (address, handle) = support::spawn_upstream(app).await;
+    let upstream = RunningServer {
+        base_url: format!("http://{address}"),
+        handle,
+    };
     let sink = Arc::new(RecordingSink::new(SinkBehavior::Panic));
     let proxy = spawn_proxy(
         &upstream,
@@ -1565,13 +1579,48 @@ async fn panicking_sink_never_changes_proxy_enforcement() {
     )
     .await;
 
-    assert_eq!(
-        request(&proxy, SYNTHETIC_EMAIL, "/v1/messages")
-            .await
-            .status(),
-        StatusCode::OK
-    );
-    wait_for_events(&sink, 4).await;
+    tokio::time::timeout(SINK_GATE_TIMEOUT, async {
+        let mut expected = 0;
+        loop {
+            let response = request(&proxy, SYNTHETIC_EMAIL, "/v1/messages").await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let body: Value = response.json().await.unwrap();
+            assert_eq!(body["content"][0]["text"], SYNTHETIC_EMAIL);
+            expected += 4;
+
+            let snapshot = loop {
+                let snapshot = proxy.consumer.as_ref().unwrap().queue_snapshot();
+                if snapshot.delivered() + snapshot.dropped() == expected {
+                    break snapshot;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            };
+            assert_eq!(snapshot.admitted(), snapshot.delivered());
+            assert_eq!(sink.len() as u64, snapshot.delivered());
+            if snapshot.delivered() > 0 {
+                break;
+            }
+            // All four attempts can legitimately lose admission. Try another
+            // enforced request so this test also witnesses an actual sink panic.
+        }
+    })
+    .await
+    .expect("inspection emissions did not finish or reach the panicking sink");
+
+    let rejected = request_json(
+        &proxy,
+        "/v1/messages",
+        json!({
+            "model": "claude-test",
+            "max_tokens": 32,
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "text": "alice@"},
+                {"type": "text", "text": "example.invalid"}
+            ]}]
+        }),
+    )
+    .await;
+    assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[tokio::test]
