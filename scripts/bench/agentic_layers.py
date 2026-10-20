@@ -5829,7 +5829,7 @@ def _measure(args: argparse.Namespace) -> None:
     prepared = prepare(repo_root)
     writer = records.RecordWriter(
         [], {"documents": {}},
-        corpus_sha256=prepared.manifest["corpus_sha256"],
+        corpus_sha256=prepared.manifest["corpus_sha256"], binary=args.binary.resolve(),
         extra_documents=[record.to_document() for record in generate(PUBLISHED_PARTITION)],
         layer_contract=prepared.contract,
     )
@@ -5853,7 +5853,7 @@ def _measure(args: argparse.Namespace) -> None:
         "schema_version": score.SCORECARD_SCHEMA_VERSION,
         "measured": args.label,
         "gaze": score.git_metadata(repo_root),
-        "binary_sha256": score.sha256_file(args.binary),
+        "binary_sha256": writer.binary_sha256,
         "binary_commit": score.git_metadata(vocabulary_root),
         "parameters": {
             "configs": list(args.config),

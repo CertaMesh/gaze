@@ -126,8 +126,8 @@ class CommittedContractTests(unittest.TestCase):
         doc = document(EMAIL, PASSWORD)
         self.assertEqual(score.apply_scored_label_contract([doc], contract), [doc])
 
-    def test_runner_accepts_the_flag(self) -> None:
-        args = runner.parse_args(["quick", "--scored-labels", str(V2_PATH)])
+    def test_runner_accepts_contract_for_explicit_cross_check(self) -> None:
+        args = runner.parse_args(["quick", "--cross-check", "--scored-labels", str(V2_PATH)])
         self.assertEqual(args.scored_labels, V2_PATH)
         self.assertIsNone(runner.parse_args(["quick"]).scored_labels)
         contract = runner.load_scored_label_contract(REPO_ROOT, args.scored_labels)
@@ -269,8 +269,8 @@ class RunnerWiringTests(unittest.TestCase):
                     runner.run(args)
         return measured, recorded["scored_label_contract"]
 
-    def test_v2_flag_scores_and_records_v2(self) -> None:
-        measured, contract = self.run_until_scorecard("--scored-labels", str(V2_PATH))
+    def test_v2_cross_check_scores_and_records_v2(self) -> None:
+        measured, contract = self.run_until_scorecard("--cross-check", "--scored-labels", str(V2_PATH))
         self.assertEqual([span.label for span in measured[0].spans], ["EMAIL"])
         self.assertEqual(contract["id"], "scored-labels-v2")
         self.assertEqual(contract["file_sha256"], v2().sha256)

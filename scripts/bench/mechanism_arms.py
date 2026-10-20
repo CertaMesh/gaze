@@ -2,8 +2,8 @@
 """Measure one detection mechanism on its own: the stack with it versus without it.
 
 A mechanism is a policy delta: TOML sections that the candidate policy adds to
-the base policy and nothing else. `record` takes two full runner outputs per
-contract (base and candidate, v2 and v1), proves they are one comparable pair,
+the base policy and nothing else. `record` takes one full runner output per side
+(base and candidate), re-scores both records under every contract,
 copies both observation records into the repository and writes one ledger row.
 `check` re-derives every ledger number from those committed records (no corpus,
 model or binary) and fails if the ledger or the rendered table drifted.
@@ -72,10 +72,6 @@ SCHEMA_VERSION = 1
 # value (same rule as render_benchmark_doc.headline_arms).
 # The contracts a pair is measured (and gated) under; the others are re-scored.
 GATED_CONTRACTS = (2, 1)
-# The one scorecard field a v1 run may differ in from the v1 rescore of the v2
-# run's record: it names the record file, which is a different file by
-# construction. Everything else, timing aside, must match.
-REPLAY_ALLOWED_DIFFERENCES = frozenset({"observation_record"})
 MECHANISM_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 ADDED_IN = re.compile(r"^v\d+\.\d+(?:\.\d+)?$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -300,7 +296,11 @@ def derive(
                 }
                 for layer in ("A", "D", "R")
             }
-    return {**identity, "contracts": contracts, "agentic_layers": layers, "gate": gate}
+    digests = [record.binary_sha256(path) for path in (base_record, candidate_record)]
+    if digests[0] != digests[1]:
+        raise MechanismError("base and candidate records bind different binaries")
+    binding = {"binary_sha256": digests[0]} if digests[0] is not None else {}
+    return {**identity, **binding, "contracts": contracts, "agentic_layers": layers, "gate": gate}
 
 
 # --------------------------------------------------------------------------
@@ -334,72 +334,57 @@ def _identity(scorecard: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _replay_matches(record_path: Path, measured: Mapping[str, Any]) -> list[str]:
-    """Top-level fields where the v1 rescore of `record_path` differs from a measured v1 run."""
-    replay = verify.without_timing(record.rescore(record_path, _contract(1)))
-    expected = verify.without_timing(measured)
-    return sorted(
-        key for key in replay.keys() | expected.keys()
-        if replay.get(key) != expected.get(key)
-    )
-
-
 def check_pair(
-    arms: Mapping[str, tuple[dict[str, Any], Path]], delta: Path
+    arms: Mapping[str, tuple[dict[str, Any], Path]], delta: Path, *, binary_sha256: str
 ) -> dict[str, Any]:
-    """Refuse anything but one comparable base/candidate pair per contract."""
-    for name, (scorecard, _) in arms.items():
-        want = 2 if name.endswith("v2") else 1
-        if contract_version(scorecard) != want:
-            raise MechanismError(f"{name} was measured under v{contract_version(scorecard)}, not v{want}")
-        if scorecard["gaze"]["dirty"] is not False:
+    """Bind each capture to its record, then gate both contracts by replay."""
+    if set(arms) != {"base", "candidate"}:
+        raise MechanismError("record needs exactly one base and one candidate capture")
+    for name, (card, path) in arms.items():
+        try:
+            bound = record.binary_sha256(path, required=True)
+        except record.RecordError as error:
+            raise MechanismError(f"{name}: {error}") from error
+        if bound != binary_sha256:
+            raise MechanismError(f"{name} record binary SHA-256 differs from supplied executable")
+        if card["gaze"]["dirty"] is not False:
             raise MechanismError(f"{name} was measured from a dirty tree")
-        if scorecard["parameters"]["profile"] != "full":
+        if card["parameters"]["profile"] != "full":
             raise MechanismError(f"{name} is not a full profile")
-        _single_run(scorecard)
-    identities = {name: _identity(scorecard) for name, (scorecard, _) in arms.items()}
-    reference = identities["base-v2"]
+        _single_run(card)
+        replay = record.rescore(path, _contract(contract_version(card)))
+        if verify.without_timing(replay) != verify.without_timing(card):
+            raise MechanismError(f"{name} scorecard differs from its observation replay")
+    identities = {name: _identity(card) for name, (card, _) in arms.items()}
+    reference = identities["base"]
     for name, identity in identities.items():
         differing = sorted(key for key in reference if identity[key] != reference[key])
         if differing:
-            raise MechanismError(f"{name} differs from base-v2 in {differing}")
-    policies: dict[str, set[str]] = {"base": set(), "candidate": set()}
-    gates: dict[str, Any] = {}
-    for suffix in ("v2", "v1"):
-        base, candidate = arms[f"base-{suffix}"][0], arms[f"candidate-{suffix}"][0]
-        policies["base"].add(base["parameters"]["policy_sha256"])
-        policies["candidate"].add(candidate["parameters"]["policy_sha256"])
+            raise MechanismError(f"{name} differs from base in {differing}")
+    gates = {}
+    for version in GATED_CONTRACTS:
+        base, candidate = (
+            record.rescore(arms[name][1], _contract(version))
+            for name in ("base", "candidate")
+        )
         result = agentic.gate(base, candidate, policy_delta=delta)
         if result["verdict"] == "not_comparable":
             raise MechanismError(
-                f"{suffix} pair is not comparable: {result.get('policy_delta_reason')}; "
+                f"v{version} pair is not comparable: {result.get('policy_delta_reason')}; "
                 f"differing: {result.get('differing')}"
             )
-        gates[suffix] = {"verdict": result["verdict"], "reason": result["reason"]}
-    for arm, digests in policies.items():
-        if len(digests) != 1:
-            raise MechanismError(f"{arm} policy differs between the v2 and v1 runs")
-    for arm in ("base", "candidate"):
-        differing = _replay_matches(arms[f"{arm}-v2"][1], arms[f"{arm}-v1"][0])
-        unexpected = sorted(set(differing) - REPLAY_ALLOWED_DIFFERENCES)
-        if unexpected:
-            raise MechanismError(
-                f"{arm}: the v1 run differs from the v1 rescore of the v2 record in {unexpected}"
-            )
+        gates[f"v{version}"] = {"verdict": result["verdict"], "reason": result["reason"]}
     return {
         "revision": reference["revision"],
+        "binary_sha256": binary_sha256,
         "corpus_sha256": reference["corpus_sha256"],
         "sampling_seed": reference["sampling_seed"],
-        "base_policy_sha256": policies["base"].pop(),
-        "candidate_policy_sha256": policies["candidate"].pop(),
+        "base_policy_sha256": arms["base"][0]["parameters"]["policy_sha256"],
+        "candidate_policy_sha256": arms["candidate"][0]["parameters"]["policy_sha256"],
         "gate": gates,
     }
 
 
-ATTESTED_NOTE = (
-    "Recorded at record time from --binary, git and --machine; the observation records "
-    "do not carry them, so check cannot re-derive them."
-)
 # Fields a measurement holds besides what `derive` recomputes from its records.
 NON_DERIVED_FIELDS = frozenset({"release", "records", "attested"})
 
@@ -436,9 +421,8 @@ def record_measurement(
     if not shipped.strip():
         raise MechanismError("--shipped is required: say how the mechanism ships today")
     arms = {name: _load_arm(path) for name, path in runs.items()}
-    if set(arms) != {"base-v2", "candidate-v2", "base-v1", "candidate-v1"}:
-        raise MechanismError("record needs base-v2, candidate-v2, base-v1 and candidate-v1")
-    pair = check_pair(arms, delta)
+    measured_binary = sha256(binary)
+    pair = check_pair(arms, delta, binary_sha256=measured_binary)
     validate(ledger, root)
     indexes = _identity_index(ledger, root)
     key = target_key({"release": release, "revision": pair["revision"]})
@@ -467,7 +451,7 @@ def record_measurement(
                 raise MechanismError(f"{mechanism}: short revision-prefix alias")
     stem = f"{mechanism}-{release or pair['revision'][:12]}"
     targets = {
-        arm: _evidence_path(evidence_dir, stem, arm, sha256(arms[f"{arm}-v2"][1]))
+        arm: _evidence_path(evidence_dir, stem, arm, sha256(arms[arm][1]))
         for arm in ("base", "candidate")
     }
     # Resolve paths before copying; evidence must stay under the repository root.
@@ -481,7 +465,7 @@ def record_measurement(
         files = {}
         for arm, target in targets.items():
             path = staging / target.name
-            shutil.copyfile(arms[f"{arm}-v2"][1], path)
+            shutil.copyfile(arms[arm][1], path)
             staged[target] = path
             files[arm] = {"file": target.relative_to(root).as_posix(), "sha256": sha256(path)}
         derived = derive(staged[targets["base"]], staged[targets["candidate"]])
@@ -491,8 +475,11 @@ def record_measurement(
         measurement = {
             "release": release, "records": files, **derived,
             "attested": {
-                "binary_sha256": sha256(binary), "crates_tree": crates_tree,
-                "machine": machine, "note": ATTESTED_NOTE,
+                "binary_sha256": measured_binary, "crates_tree": crates_tree,
+                "machine": machine, "note": (
+                    "Binary SHA-256 verified against both capture-time record bindings and --binary; "
+                    "crates tree and machine are attested, not re-derivable."
+                ),
             },
         }
         entry["measurements"] = [
@@ -693,12 +680,21 @@ def _validate_measurement(
     ):
         if not isinstance(value, str) or not pattern.fullmatch(value):
             raise MechanismError(f"{where}: {key} is missing or malformed")
+    for arm in ("base", "candidate"):
+        _check_file(measurement.get("records", {}).get(arm), f"{where} {arm} record", root, staged_files)
+    bound = measurement.get("binary_sha256")
+    if bound is not None:
+        if bound != attested["binary_sha256"]:
+            raise MechanismError(f"{where}: binary attestation differs from capture binding")
+        for arm in ("base", "candidate"):
+            path = (root / measurement["records"][arm]["file"]).resolve()
+            path = (staged_files or {}).get(path, path)
+            if record.binary_sha256(path, required=True) != bound:
+                raise MechanismError(f"{where}: {arm} binary differs from capture binding")
     if measurement["base_policy_sha256"] == measurement["candidate_policy_sha256"]:
         raise MechanismError(f"{where}: base and candidate policies are identical")
     if not isinstance(attested.get("machine"), str) or not attested["machine"].strip():
         raise MechanismError(f"{where}: attested.machine is missing")
-    for arm in ("base", "candidate"):
-        _check_file(measurement.get("records", {}).get(arm), f"{where} {arm} record", root, staged_files)
     contracts = measurement.get("contracts", {})
     if not all(isinstance(key, str) and key.isdigit() for key in contracts) or not {
         str(version) for version in GATED_CONTRACTS
@@ -850,9 +846,16 @@ def render(ledger: Mapping[str, Any], releases: Sequence[str], root: Path = ROOT
             f"({_link(entry['policy_delta']['file'])}); evidence "
             f"[base]({_link(measurement['records']['base']['file'])}) and "
             f"[candidate]({_link(measurement['records']['candidate']['file'])}) "
-            f"observation records. Attested, not re-derivable: `crates/` tree "
-            f"`{measurement['attested']['crates_tree'][:12]}`, binary "
-            f"`{measurement['attested']['binary_sha256'][:12]}`, {measurement['attested']['machine']}."
+            + (
+                f"observation records. Verified from both capture bindings: binary "
+                f"`{measurement['binary_sha256'][:12]}`. Attested, not re-derivable: "
+                f"`crates/` tree `{measurement['attested']['crates_tree'][:12]}`, "
+                f"{measurement['attested']['machine']}."
+                if "binary_sha256" in measurement else
+                f"observation records. Attested, not re-derivable: `crates/` tree "
+                f"`{measurement['attested']['crates_tree'][:12]}`, binary "
+                f"`{measurement['attested']['binary_sha256'][:12]}`, {measurement['attested']['machine']}."
+            )
         )
     lines += [
         "",
@@ -925,11 +928,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     add.add_argument("--shipped", required=True,
                      help="how the mechanism ships today, e.g. 'opt-in (gaze setup --dob-judge)'")
     add.add_argument("--policy-delta", type=Path, required=True)
-    for name in ("base-v2", "candidate-v2", "base-v1", "candidate-v1"):
+    for name in ("base", "candidate"):
         add.add_argument(f"--{name}", type=Path, required=True,
                          help="runner output directory holding scorecard-v4.json")
     add.add_argument("--binary", type=Path, required=True,
-                     help="the clean_for_bench binary all four runs used")
+                     help="the clean_for_bench binary both captures used")
     add.add_argument("--machine", required=True)
     add.add_argument("--latency", type=Path,
                      help="mechanism_latency.py output (verdict valid) to pin beside the row")
@@ -945,13 +948,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         apply(original, "")  # Refuse missing markers before a record publishes evidence.
         ledger = load_ledger()
         if args.command == "record":
-            with stages.session(args.candidate_v2 / "mechanism-evidence.json"):
+            with stages.session(args.candidate / "mechanism-evidence.json"):
                 record_measurement(
                     ledger, mechanism=args.mechanism, title=args.title, added_in=args.added_in,
                     shipped=args.shipped,
                     delta=args.policy_delta,
-                    runs={name: getattr(args, name.replace("-", "_"))
-                          for name in ("base-v2", "candidate-v2", "base-v1", "candidate-v1")},
+                    runs={name: getattr(args, name) for name in ("base", "candidate")},
                     binary=args.binary, machine=args.machine, release=args.release,
                     latency=args.latency,
                 )

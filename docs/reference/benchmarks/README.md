@@ -1259,9 +1259,10 @@ Pull requests that change detection or the benchmark use these commands under th
 
 ### The release run
 
-Each release measures its own tree. Capture contracts v1 and v2 independently,
-then replay the v2 observation record under v3 and v4. Contract v4 is the
-headline; v1 and v2 remain the release gates.
+Each release measures its own tree once. Re-score that observation record under
+v1, v2, v3 and v4. Contract v4 is the headline; v1 and v2 remain the release gates.
+Never repeat inference for a scoring contract. Independent equivalence checks
+require the runner's explicit `--cross-check` flag.
 
 Release evidence must be measured with `--no-cache`. Reusable base captures
 carry `capture_cache`, which links their exact input key to `run-evidence.json`;
@@ -1296,32 +1297,31 @@ uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
 
 Record contracts v2, v3 and v4 on the row just appended. Use the same commit,
 corpus and policy; the renderer refuses a result that differs in any of them.
-The v2 result is a fresh capture. The v3 and v4 results replay its retained
-observation record without new inference.
+Every contract result replays the same retained observation record without
+new inference.
 
 ```bash
-# 3. Capture contract v2 independently and record it on the row.
-uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
-  --seed 20260710 --no-download --no-cache --release \
-  --policy target/bench-data/release-policy.toml \
-  --output-dir target/bench-data/release-v2 \
-  --scored-labels docs/reference/benchmarks/scored-labels-v2.json
+# 3. Replay the retained record under contract v2.
+uv run --project scripts/bench python scripts/bench/rescore.py \
+  target/bench-data/release-v1/full/observations-v1.jsonl.gz \
+  --scored-labels docs/reference/benchmarks/scored-labels-v2.json \
+  --output target/bench-data/release-v1/full/scorecard-v2-rescore.json
 python3 scripts/bench/bench_json.py compress \
-  target/bench-data/release-v2/full/scorecard-v4.json \
+  target/bench-data/release-v1/full/scorecard-v2-rescore.json \
   docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json.gz
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json.gz \
   --version vX.Y.Z \
   --append-contract-result
 
-# 4. Replay the v2 observation record under contract v3.
+# 4. Replay the same observation record under contract v3.
 uv run --project scripts/bench python scripts/bench/rescore.py \
-  target/bench-data/release-v2/full/observations-v1.jsonl.gz \
+  target/bench-data/release-v1/full/observations-v1.jsonl.gz \
   --scored-labels docs/reference/benchmarks/scored-labels-v3.json \
   --agentic-scored-labels docs/reference/benchmarks/scored-labels-agentic.json \
-  --output target/bench-data/release-v2/full/scorecard-v3-rescore.json
+  --output target/bench-data/release-v1/full/scorecard-v3-rescore.json
 python3 scripts/bench/bench_json.py compress \
-  target/bench-data/release-v2/full/scorecard-v3-rescore.json \
+  target/bench-data/release-v1/full/scorecard-v3-rescore.json \
   docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v3.json.gz
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v3.json.gz \
@@ -1330,12 +1330,12 @@ uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
 
 # 5. Replay the same observation record under contract v4 (the headline).
 uv run --project scripts/bench python scripts/bench/rescore.py \
-  target/bench-data/release-v2/full/observations-v1.jsonl.gz \
+  target/bench-data/release-v1/full/observations-v1.jsonl.gz \
   --scored-labels docs/reference/benchmarks/scored-labels-v4.json \
   --agentic-scored-labels docs/reference/benchmarks/scored-labels-agentic.json \
-  --output target/bench-data/release-v2/full/scorecard-v4-rescore.json
+  --output target/bench-data/release-v1/full/scorecard-v4-rescore.json
 python3 scripts/bench/bench_json.py compress \
-  target/bench-data/release-v2/full/scorecard-v4-rescore.json \
+  target/bench-data/release-v1/full/scorecard-v4-rescore.json \
   docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v4.json.gz
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v4.json.gz \
@@ -1841,18 +1841,23 @@ published, its failures belong in the next dev generation.
 
 **The rule gate.** The merge rule lives in
 [Benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate). This section
-only describes how `agentic_layers.py gate` measures it. Run a fresh base and
-candidate pair of full-profile runs on the same policy, seed and corpus, once
-per scored-label contract, then compare them:
+only describes how `agentic_layers.py gate` measures it. Capture one base and
+one candidate full-profile run on the same policy, seed and corpus. Re-score
+those records for each contract, then compare them:
 
 ```bash
+# Run once in each side's worktree with its own setup policy.
 uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
   --seed 20260710 --no-download --release --policy <gaze-setup-policy.toml> \
+  --output-dir target/bench-data/gate-base   # then candidate
+uv run --project scripts/bench python scripts/bench/rescore.py \
+  target/bench-data/gate-base/full/observations-v1.jsonl.gz \
   --scored-labels docs/reference/benchmarks/scored-labels-v2.json \
-  --output-dir target/bench-data/gate-base-v2   # then candidate, then both under v1
+  --output target/bench-data/gate-base/full/scorecard-v2.json
+# Repeat replay for the candidate, then gate v2 and the original v1 scorecards.
 python3 scripts/bench/agentic_layers.py gate \
-  --base target/bench-data/gate-base-v2/full/scorecard-v4.json \
-  --candidate target/bench-data/gate-cand-v2/full/scorecard-v4.json
+  --base target/bench-data/gate-base/full/scorecard-v2.json \
+  --candidate target/bench-data/gate-candidate/full/scorecard-v2.json
 ```
 
 The gate checks the production arm of layers C, A, D and R. It checks leaked
@@ -1875,7 +1880,7 @@ uv run --project scripts/bench python scripts/bench/agentic_layers.py gate \
   --output "$GATE_JSON"
 ```
 
-For v1, re-score those same records with `scorecard_record.py` without
+For v1, re-score those same records with `rescore.py` without
 `--scored-labels`, then omit that option from the gate command. The freeze
 checks complete document and gold-span inventories, binds each scorecard to its
 record replay, and changes only layer C gold-verdict metadata in memory. It
