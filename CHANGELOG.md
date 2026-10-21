@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   protects whole bcrypt, Argon2, scrypt/yescrypt, crypt, phpass and Django
   encodings, including broader crypt/Django salts and hashes in SQL dumps.
   SQL-escaped quotes count toward the decoded salt limit, and JSON-escaped
-  slashes stay inside the complete restorable hash.
+  slashes stay inside the complete restorable hash. Other valid JSON escapes
+  end a complete hash span. Malformed escape tails remain rejected.
   Complete quoted password and credential-token fields in PHP arrays and JSON
   retain their keys and punctuation. Generic `token` keys remain outside the
   code-field rule; ambiguous password metadata stays fail-closed. Whole Argon2

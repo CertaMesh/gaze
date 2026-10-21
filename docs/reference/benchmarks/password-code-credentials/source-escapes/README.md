@@ -1,4 +1,6 @@
-# Escaped password hashes: fresh gain evidence
+# Escaped password hashes: retained generator-v23 evidence
+
+This is the retained generator-v23 measurement. The [JSON-separator report](../json-separators/README.md) supplies the current generator-v24 gain evidence. The exact policies added here repair this report's empty-checkout replay.
 
 The v4 headline and required v2/v1 main and mechanism gain gates **PASS**. The main comparison removes **442,135 leaked bytes** for **2,874 additional raw false-positive bytes**, a net 439,261 bytes. No latency or throughput improvement is claimed.
 

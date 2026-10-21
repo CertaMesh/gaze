@@ -1,6 +1,6 @@
 # Password hashes and code credentials: gain evidence
 
-This is the retained **generator-v22** measurement. The fresh [source-escape report](source-escapes/README.md) measures the repaired head on generator v23 and supplies the latest gain-gate evidence. The tables and records below keep their original identities.
+This is the retained **generator-v22** measurement. The [JSON-separator report](json-separators/README.md) supplies the latest generator-v24 gain evidence. The retained [source-escape report](source-escapes/README.md) records generator v23. The tables and records below keep their original identities.
 
 The v4 headline and both required gain gates (v2 and v1) pass: **403,175 fewer leaked bytes, 2,520 additional raw false-positive bytes, net 400,655 bytes**. The isolated mechanism passes the same contracts. These are byte-quality results; no latency or throughput improvement is claimed.
 

@@ -85,19 +85,23 @@ preserves every v21 document byte-for-byte. Its added contexts use separate
 wording, structures and seeded value pools in each partition; tests reject
 shared rendered text or value-normalised templates. Generator v23 adds SQL
 quote escapes at the salt limit, JSON escaped slashes and malformed/over-limit
-counterweights while preserving every v22 document. The 120 compact and
+counterweights while preserving every v22 document. Generator v24 adds complete
+literal and escaped-slash hashes immediately followed by JSON newline, tab, CR,
+quote, backslash and Unicode separator escapes. Exact source spans restore
+without consuming those separators; malformed tails remain benign. It preserves
+every v23 document. The 120 compact and
 nested PHP rows per partition share expression shapes, so these measurements
 do not establish generalization to unseen PHP syntax.
 
 Fresh base/candidate and isolated-mechanism measurements pass the v2 and v1
 gain gates and the current v4 headline contract. Each side's single observation
 record supplies every contract by re-scoring. No independent contract capture
-is needed. All 23,770 documents per
+is needed. All 25,270 documents per
 side restore exactly and have valid manifests; none is refused. The
-[evidence report](../../reference/benchmarks/password-code-credentials/source-escapes/README.md)
+[evidence report](../../reference/benchmarks/password-code-credentials/json-separators/README.md)
 records per-layer leaked and false-positive bytes, source and binary identities,
 commands and limits. Historical release backfill is a separate job: published
-history remains bound to generator v20, while this measurement uses v23.
+history remains bound to generator v20, while this measurement uses v24.
 No latency or throughput result is claimed.
 
 The mechanism preparation command produces two policies for the same binary:
@@ -112,4 +116,4 @@ The candidate appends the new hash and code-field definitions. Use the emitted
 `delta.toml` with `agentic_layers.py gate --policy-delta` and
 `mechanism_arms.py record --policy-delta`. The emitted paths are local artifacts.
 The committed evidence records the policy delta and retains both value-free
-observation archives. Historical release rows are not re-labelled as v23.
+observation archives. Historical release rows are not re-labelled as v24.
