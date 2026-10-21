@@ -334,3 +334,45 @@ def json_separator_records(api, partition):
                             template=f"credentials-separators/{partition}/{encoding}/{name}",
                             language="en", region="US", text=text, gold=gold, decoys=decoys))
     return result
+
+
+
+def json_prefix_records(api, partition):
+    """v25 hashes after escaped separators and distinct hashes in one JSON string."""
+    result = []
+    rng = api.Rng(api.PARTITION_SEEDS[partition], "credential-json-prefixes")
+    separators = {"newline": r"\n", "tab": r"\t", "cr": r"\r", "quote": r'\"',
+                  "backslash": r"\\", "unicode_lf": r"\u000a", "unicode_slash": r"\u002f",
+                  "unicode_upper": r"\uABCD", "backspace": r"\b", "formfeed": r"\f"}
+    broken = {"dangling": "\\", "unknown": r"\q", "short_unicode": r"\u000",
+              "bad_unicode": r"\u00xz", "identifier": "_head", "letter": "identifier",
+              "separator_identifier": r"\nidentifier", "unicode_identifier": r"\u000a_tail"}
+    for index in range(api.DOCS_PER_FAMILY):
+        first, second = hashes(rng), hashes(rng)
+        for family in ("bcrypt", "argon2id", "sha512crypt"):
+            for encoding in ("literal", "slash"):
+                values = [first[family], second[family]]
+                if encoding == "slash":
+                    for slot, value in enumerate(values):
+                        parts = value.split("$")
+                        parts[-1] = "/" + parts[-1][1:]
+                        values[slot] = "$".join(parts).replace("/", r"\/")
+                assert values[0] != values[1]
+                for name, prefix in {**separators, **broken}.items():
+                    for layer in (("A", "R") if name in separators else ("D",)):
+                        stream = "dev-prefix" if partition == "dev" else "test-prefix"
+                        content = ("heading" + prefix + "{V}" if layer != "R" else "{V}" + prefix + "{W}")
+                        template = '{"stdout":"' + content + r'\n","stream":"' + stream + '"}'
+                        fields = {"V": (values[0], None if layer == "D" else "PASSWORD")}
+                        if layer == "R":
+                            fields["W"] = (values[1], "PASSWORD")
+                        text, gold, decoys = api._fill_with_decoys(template, fields)
+                        surface = f"credentials_prefixes_{encoding}_{name}"
+                        result.append(api.Record(
+                            uid=f"agentic-{partition}-{layer}-{surface}-{family}-{index}",
+                            partition=partition, layer=layer, family=family, surface=surface,
+                            validity=api.BENIGN if layer == "D" else api.UNCHECKED,
+                            group=f"{partition}-credentials-prefixes-{family}-{index}",
+                            template=f"credentials-prefixes/{partition}/{encoding}/{name}",
+                            language="en", region="US", text=text, gold=gold, decoys=decoys))
+    return result

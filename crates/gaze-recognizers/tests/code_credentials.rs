@@ -511,3 +511,80 @@ fn json_separators_after_complete_hashes_preserve_source_spans() {
         }
     }
 }
+
+#[test]
+fn hash_after_serialized_line_prefix_is_protected() {
+    let raw = serde_json::json!({"stdout": format!("heading\n{BCRYPT}\n")}).to_string();
+    assert_escaped_hash(&raw, BCRYPT);
+}
+
+#[test]
+fn distinct_hashes_inside_one_serialized_string_are_protected() {
+    let audit = HashAudit::default();
+    let core = CorePipelineConfig::new()
+        .with_bundled_rulepack("secrets")
+        .build()
+        .unwrap()
+        .into_pipeline()
+        .with_redaction_logger(audit.clone());
+    let second = BCRYPT.replace("$2y$10$", "$2b$12$");
+    for separator in [
+        r"\n", r"\t", r"\r", r#"\""#, r"\\", r"\u000a", r"\u002F", r"\b", r"\f",
+    ] {
+        audit.0.lock().unwrap().clear();
+        let raw = format!(r#"{{"stdout":"{BCRYPT}{separator}{second}{separator}"}}"#);
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let (clean, spans, _, _) = core
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                &raw,
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .unwrap();
+        assert_eq!(spans.len(), 2, "both hashes: {raw}; {spans:?}");
+        assert_eq!(&raw[spans[0].raw_span.clone()], BCRYPT);
+        assert_eq!(&raw[spans[1].raw_span.clone()], second);
+        let gaze::CleanDocument::Text(clean) = clean else {
+            panic!("text")
+        };
+        assert!(!clean.contains(BCRYPT) && !clean.contains(&second), "{raw}");
+        assert_eq!(core.restore_strict_text(&session, &clean).unwrap(), raw);
+        assert_eq!(
+            audit
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|entry| !entry.conflict_loser
+                    && entry.recognizer_id.as_deref() == Some("password.hash"))
+                .count(),
+            2
+        );
+    }
+}
+
+#[test]
+fn serialized_hash_prefixes_reject_malformed_escapes_and_glued_identifiers() {
+    for prefix in [
+        r"\",
+        r"\q",
+        r"\u",
+        r"\u000",
+        r"\u00xz",
+        "_head",
+        "identifier",
+        r"\nidentifier",
+        r"\u000a_tail",
+    ] {
+        assert!(
+            found(
+                "password.hash",
+                &format!(r#"{{"stdout":"{prefix}{BCRYPT}\n"}}"#)
+            )
+            .is_empty(),
+            "{prefix}"
+        );
+    }
+}

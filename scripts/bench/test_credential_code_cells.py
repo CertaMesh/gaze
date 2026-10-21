@@ -74,6 +74,26 @@ class CredentialCellsTests(unittest.TestCase):
                 for span in (*row.gold, *row.decoys):
                     self.assertEqual(row.text.encode()[span.start:span.end].decode(), span.value)
 
+    def test_v24_identity_and_serialized_prefixes(self):
+        previous = {"dev": "17740479bea088e0db84392c35e0495ba289f98713efb8a2939856d86fc3ee74",
+                    "test": "37f80cfb8b5f9ac67cdf7a0eba14fb501ead0ba53644867dfceb891412d6278b"}
+        for partition in agentic.PARTITIONS:
+            old = agentic.records_as_of(24, agentic.generate(partition))
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(old)).hexdigest(), previous[partition])
+            rows = cells.json_prefix_records(agentic, partition)
+            self.assertEqual({row.family for row in rows}, {"bcrypt", "argon2id", "sha512crypt"})
+            for row in rows:
+                self.assertEqual(len(row.gold), 2 if row.layer == "R" else 0 if row.layer == "D" else 1)
+                for span in (*row.gold, *row.decoys):
+                    self.assertEqual(row.text.encode()[span.start:span.end].decode(), span.value)
+                if row.layer == "R":
+                    self.assertNotEqual(row.gold[0].value, row.gold[1].value)
+                    self.assertEqual(row.text.count('"stdout"'), 1)
+                elif row.layer == "A":
+                    self.assertIn('"stdout":"heading', row.text)
+            self.assertTrue(any("short_unicode" in row.surface for row in rows if row.layer == "D"))
+            self.assertTrue(any("separator_identifier" in row.surface for row in rows if row.layer == "D"))
+
     def test_review_contexts_measure_both_credential_and_metadata_boundaries(self):
         for partition in agentic.PARTITIONS:
             rows = cells.review_records(agentic, partition)
