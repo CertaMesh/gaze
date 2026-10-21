@@ -50,12 +50,19 @@ gaze restore --session-file owner-session.json < reply.txt > restored.txt
 `gaze clean --session-out <PATH>` writes `{"session_blob":"<base64>"}` to a
 new file and prints only the clean text, byte for byte, with no added newline.
 The session and the raw `entries` values never reach stdout. The file is
-created exclusively with mode `0600` on macOS or Linux. Before writing any session
-bytes, Gaze clears its extended ACL on the open descriptor and verifies that
-no entries remain. If clearing or verification fails, Gaze removes the empty
-file and fails with `SessionFile` (exit `4`). Replacement files receive the same
-checks before being written and renamed; a failed check leaves the old session
-untouched. Filesystems that cannot provide this verification fail closed.
+created with mode `0600` inside a fresh staging directory beside the target on
+macOS or Linux. Gaze creates the directory with mode `0700`, clears and verifies
+its ACL on the directory descriptor, and verifies ownership and the absence of
+symlinks before creating the session file. Linux also clears the directory's
+default ACL so it cannot pass grants to the file. Gaze clears and verifies the
+file's ACL before writing any session bytes, then writes, syncs, and atomically
+renames the file into place. Creation refuses an existing destination even if it
+appears during processing. `--overwrite-session-out` atomically replaces it.
+The directory prevents another user from opening the empty file and retaining a
+reader across ACL removal. Gaze removes staging files and the directory on
+success and failure. A failed permission check returns `SessionFile` (exit `4`)
+without replacing the old session. Filesystems that cannot verify permissions or
+perform the requested atomic rename fail closed.
 `--session-out` is refused with `SessionFile` on Windows and other unsupported
 platforms; owner-only creation is not implemented there. Reading existing
 sessions with `--session-file` remains available.
