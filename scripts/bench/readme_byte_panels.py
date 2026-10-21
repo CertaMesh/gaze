@@ -251,6 +251,7 @@ def markdown(measured, comparison, their, declared):
               "using [`readme_release_build.py`](../../../scripts/bench/readme_release_build.py), "
               "use its own `gaze setup` policy, and run the receipt's command on the pinned inputs. "
               "Each new dataset measurement is captured once per binary and replayed from that private record. "
+              "Offline checks verify receipt integrity and recompute aggregates; only capture/replay on the pinned inputs proves the underlying byte counts. "
               "The v0.16 rows reuse existing byte counts and retain their original provenance, including Presidio Research's Rust 1.95 build. "
               "Only aggregate receipts are published; "
               "external text, document identifiers and prediction spans stay private. This refresh covers v0.16.0 and v0.17.0 only; "

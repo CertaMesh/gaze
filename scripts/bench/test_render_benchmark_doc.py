@@ -1306,8 +1306,8 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
 
     def test_the_benchmark_page_discloses_the_limit_of_the_offline_check(self):
         text = render.DEFAULT_DOC.read_text(encoding="utf-8")
-        for phrase in ("only `record` (the corpus replay) proves the character counts",
-                       "must include the replay command's output"):
+        for phrase in ("Offline checks verify receipt integrity and recompute aggregates",
+                       "only capture/replay on the pinned inputs proves the underlying byte counts"):
             self.assertIn(phrase, text)
 
     def test_a_charted_version_must_be_a_real_git_tag(self):
@@ -1337,10 +1337,12 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
     def test_metric_definition_is_stated_in_the_benchmark_readme(self):
         for path in (render.DEFAULT_DOC,):
             text = path.read_text(encoding="utf-8")
-            for phrase in ("Unicode code points (not grapheme clusters)", "ignores labels",
-                           "micro", "0/0 = 0", "skipped document's gold characters as missed",
-                           "counts every false-positive character for every tool",
-                           "also credits a protected repeat"):
+            for phrase in ("Byte-micro F2 pools UTF-8 bytes across documents",
+                           "5*TP/(5*TP+4*FN+FP)", "Labels do not affect overlap",
+                           "False positives in F2 are raw, without gold-gap credit",
+                           "Competitor skips count their gold as leaked",
+                           "Refused documents are reported separately",
+                           "including partial protection"):
                 self.assertIn(phrase, text, (path.name, phrase))
 
     def test_model_card_bolds_the_best_value_per_row(self):

@@ -663,11 +663,11 @@ def render(data: Mapping[str, Any]) -> str:
         "",
     ]
     lines += [
-        "Fresh v0.17.0 byte-micro release comparisons for PIIBench-commercial and PII-TRACE "
-        "are shown in the [external release panels](#v017-final-candidate-evidence). "
+        "Tagged v0.16.0/v0.17.0 byte-micro measurements for Presidio Research, PIIBench-commercial and PII-TRACE "
+        "are shown in the [dataset panels](#benchmark-panels). "
         "Those receipts contain neither character counts nor vendor-evaluator results, so "
         "the historical v0.16 rows below retain their original scope and identities. "
-        "Presidio Research has no fresh v0.17 measurement.", "",
+        "The new byte measurements do not add character or vendor-evaluator rows here.", "",
     ]
     for name, entry in data["benchmarks"].items():
         checked_harness_commits(entry)
