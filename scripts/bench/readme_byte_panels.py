@@ -235,9 +235,10 @@ def markdown(measured, comparison, their, declared):
                          f"{block['false_positive_bytes']:,} | — | [Counts]({source}) |")
     setup = comparison.get("presidio_tuned")
     own_setup = charts.TUNED_CAPTIONS[setup["chart"]["row"]] if setup else "the declared comparison configuration"
+    selection = f" Retained own-corpus selection rule: {setup['chart']['rule']}." if setup else ""
     vendor = their["presidio-research"].get("vendor_tuned", {}).get("presidio")
     vendor_setup = vendor["caption"] if vendor else "the declared comparison configuration"
-    lines += ["", charts.RECEIPT_NOTE, "", f"Own corpus: {own_setup}. Presidio Research: {vendor_setup}. "
+    lines += ["", charts.RECEIPT_NOTE, "", f"Own corpus: {own_setup}.{selection} Presidio Research: {vendor_setup}. "
               "PIIBench publishes no tuned setup, so its declared best configuration is shown. "
               "PII-Tracer on PII-TRACE is an upper bound because of possible training overlap. "
               "Competitor skips count their gold as leaked; a dash in Refused means the tool has no Gaze refusal contract.", "",
