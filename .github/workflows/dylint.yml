@@ -1,10 +1,9 @@
-# Run on every PR to main so protected paths and their dependencies stay covered.
+# Called by the fast PR lane when relevant, and by every integration candidate.
 # Keep the weekly run to detect toolchain or infrastructure drift.
 name: dylint
 
 on:
-  pull_request:
-    branches: [main]
+  workflow_call:
   schedule:
     - cron: '0 8 * * 1'   # Mondays 08:00 UTC
   workflow_dispatch:
@@ -14,7 +13,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   dylint:
