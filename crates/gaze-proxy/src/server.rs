@@ -25,7 +25,8 @@ use tokio::sync::RwLock;
 use url::{Host, Url};
 
 use crate::adapter::{
-    CoveragePolicy, ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent, SurfaceSyntax,
+    CoveragePolicy, ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent, SseStreamKey,
+    SurfaceSyntax,
 };
 use crate::adapters::anthropic::{AnthropicAdapter, DEFAULT_ANTHROPIC_VERSION};
 use crate::codec::{
@@ -3117,17 +3118,22 @@ fn restore_surfaces(
 ) {
     let json_spelled_tokens = session.json_spelled_tokens();
     for surface in surfaces {
-        let into_json_string = match surface.syntax {
-            SurfaceSyntax::Text => false,
-            SurfaceSyntax::Json => true,
-            SurfaceSyntax::ModelOutput => json_output,
-        };
         *surface.text = restore_text(
             &session.session,
             &json_spelled_tokens,
             surface.text,
-            into_json_string,
+            restores_into_json_string(surface.syntax, json_output),
         );
+    }
+}
+
+/// Whether a surface of `syntax` holds serialized JSON, given the request's
+/// [`ProviderAdapter::requests_json_output`] answer.
+fn restores_into_json_string(syntax: SurfaceSyntax, json_output: bool) -> bool {
+    match syntax {
+        SurfaceSyntax::Text => false,
+        SurfaceSyntax::Json => true,
+        SurfaceSyntax::ModelOutput => json_output,
     }
 }
 
@@ -3179,6 +3185,25 @@ fn is_json_string_content(text: &str) -> bool {
     serde_json::from_str::<String>(&format!("\"{text}\"")).is_ok()
 }
 
+/// One frame of a buffered legacy SSE response.
+struct LegacySseFrame {
+    /// Lines other than `event:` and `data:`, replayed verbatim before the event.
+    passthrough: String,
+    event_name: Option<String>,
+    /// `None` for the `[DONE]` sentinel.
+    event: Option<SseEvent>,
+}
+
+/// Restores a buffered SSE response.
+///
+/// Providers stream a value in fragments of about one model token per event, so a pseudonym
+/// token is usually split across events and restoring each event alone never sees it whole.
+/// Every fragment of one logical stream ([`crate::adapter::SseStreamSurface::stream`]) is
+/// therefore concatenated across the whole response, restored once, and replayed in the
+/// stream's first fragment; its later fragments are emptied. The response is already buffered
+/// in full. A token the session never minted stays as it is, split or
+/// whole: the client sees the pseudonym, never a raw value. Missing required identity fields
+/// disable joining for every compatible stream; their fragments restore only within each event.
 fn transform_sse(
     adapter: &Arc<dyn ProviderAdapter>,
     session: &LegacySession,
@@ -3188,11 +3213,12 @@ fn transform_sse(
     let text = std::str::from_utf8(bytes).map_err(|err| ProxyError::SsePartialFrame {
         reason: err.to_string(),
     })?;
-    let mut out = String::new();
+    let mut frames = Vec::new();
     for frame in text.split("\n\n") {
         if frame.trim().is_empty() {
             continue;
         }
+        let mut passthrough = String::new();
         let mut event_name = None;
         let mut data_lines = Vec::new();
         for line in frame.lines() {
@@ -3201,41 +3227,103 @@ fn transform_sse(
             } else if let Some(rest) = line.strip_prefix("data:") {
                 data_lines.push(rest.trim_start());
             } else {
-                out.push_str(line);
-                out.push('\n');
+                passthrough.push_str(line);
+                passthrough.push('\n');
             }
         }
         let data = data_lines.join("\n");
-        if data == "[DONE]" {
-            if let Some(name) = event_name {
-                out.push_str("event: ");
-                out.push_str(&name);
-                out.push('\n');
-            }
-            out.push_str("data: [DONE]\n\n");
-            continue;
-        }
-        let mut event = SseEvent {
-            event: event_name.clone(),
-            data: serde_json::from_str(&data)
-                .map_err(|source| ProxyError::InvalidJson { source })?,
+        let event = if data == "[DONE]" {
+            None
+        } else {
+            Some(SseEvent {
+                event: event_name.clone(),
+                data: serde_json::from_str(&data)
+                    .map_err(|source| ProxyError::InvalidJson { source })?,
+            })
         };
-        restore_surfaces(
-            session,
-            adapter.sse_event_pii_surfaces(&mut event),
-            json_output,
-        );
-        if let Some(name) = event_name {
+        frames.push(LegacySseFrame {
+            passthrough,
+            event_name,
+            event,
+        });
+    }
+
+    // Pass 1: the logical text of every stream, in event order.
+    let mut streams = HashMap::<SseStreamKey, String>::new();
+    let mut ambiguous = HashSet::new();
+    for event in frames.iter_mut().filter_map(|frame| frame.event.as_mut()) {
+        for fragment in adapter.sse_event_stream_surfaces(event) {
+            if let Some(stream) = fragment.stream {
+                if stream.is_ambiguous() {
+                    ambiguous.insert(stream);
+                } else {
+                    streams
+                        .entry(stream)
+                        .or_default()
+                        .push_str(fragment.surface.text);
+                }
+            }
+        }
+    }
+
+    // An unidentified fragment may belong to any compatible stream, including streams not
+    // seen until later. Fall back for the whole affected stream, never bridge across it.
+    let ambiguous_streams: HashSet<_> = streams
+        .keys()
+        .filter(|stream| {
+            ambiguous
+                .iter()
+                .any(|unknown| unknown.could_continue(stream))
+        })
+        .cloned()
+        .collect();
+    streams.retain(|stream, _| !ambiguous_streams.contains(stream));
+
+    // Pass 2: restore complete/ambiguous surfaces in place, and trusted streams once.
+    let json_spelled_tokens = session.json_spelled_tokens();
+    for event in frames.iter_mut().filter_map(|frame| frame.event.as_mut()) {
+        for fragment in adapter.sse_event_stream_surfaces(event) {
+            let surface = fragment.surface;
+            let into_json_string = restores_into_json_string(surface.syntax, json_output);
+            let logical = match fragment.stream {
+                Some(stream) if !stream.is_ambiguous() && !ambiguous_streams.contains(&stream) => {
+                    streams.remove(&stream)
+                }
+                _ => Some(std::mem::take(surface.text)),
+            };
+            *surface.text = match logical {
+                Some(logical) => restore_text(
+                    &session.session,
+                    &json_spelled_tokens,
+                    &logical,
+                    into_json_string,
+                ),
+                // An earlier fragment already carries the whole restored stream.
+                None => String::new(),
+            };
+        }
+    }
+    drop(json_spelled_tokens);
+
+    let mut out = String::new();
+    for frame in frames {
+        out.push_str(&frame.passthrough);
+        if let Some(name) = frame.event_name {
             out.push_str("event: ");
             out.push_str(&name);
             out.push('\n');
         }
-        out.push_str("data: ");
-        out.push_str(
-            &serde_json::to_string(&event.data)
-                .map_err(|source| ProxyError::InvalidJson { source })?,
-        );
-        out.push_str("\n\n");
+        match frame.event {
+            None => out.push_str("data: [DONE]\n\n"),
+            Some(event) => {
+                out.push_str("data: ");
+                out.push_str(
+                    &serde_json::to_string(&event.data)
+                        .map_err(|source| ProxyError::InvalidJson { source })?,
+                );
+                out.push_str("\n\n");
+            }
+        }
     }
     Ok(out.into_bytes())
 }

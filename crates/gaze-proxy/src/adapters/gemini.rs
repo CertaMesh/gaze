@@ -5,7 +5,8 @@ use serde_json::Value;
 use url::Url;
 
 use crate::adapter::{
-    walk_all_strings, AdapterContract, PiiSurface, ProviderAdapter, SseEvent, SurfaceSyntax,
+    walk_all_strings, AdapterContract, PiiSurface, ProviderAdapter, SseEvent, SseStreamKey,
+    SseStreamSurface, SurfaceSyntax,
 };
 
 /// Canonicalizes a protobuf-JSON field name to its lowerCamelCase spelling.
@@ -82,6 +83,13 @@ impl ProviderAdapter for GeminiAdapter {
         self.response_pii_surfaces(&mut event.data)
     }
 
+    /// Every `streamGenerateContent` chunk continues each candidate's text. Its answer text and
+    /// its thought summaries are separate streams, keyed by the candidate's `index`, which
+    /// protobuf JSON omits when it is the default 0. Function-call arguments arrive whole.
+    fn sse_event_stream_surfaces<'a>(&self, event: &'a mut SseEvent) -> Vec<SseStreamSurface<'a>> {
+        collect_gemini_stream_surfaces(&mut event.data, false, true)
+    }
+
     /// `generationConfig.responseMimeType = "application/json"` (which a response schema
     /// requires) makes every answer text part a JSON document.
     fn requests_json_output(&self, request: &Value) -> bool {
@@ -112,6 +120,19 @@ impl ProviderAdapter for GeminiAdapter {
 /// the request rather than protect it, so PII there is caught by the outbound residual re-scan and
 /// fails closed.
 fn collect_gemini_surfaces(body: &mut Value, request: bool) -> Vec<PiiSurface<'_>> {
+    collect_gemini_stream_surfaces(body, request, false)
+        .into_iter()
+        .map(|fragment| fragment.surface)
+        .collect()
+}
+
+/// [`collect_gemini_surfaces`], keying each response candidate's text fragments by the
+/// candidate when `streamed`.
+fn collect_gemini_stream_surfaces(
+    body: &mut Value,
+    request: bool,
+    streamed: bool,
+) -> Vec<SseStreamSurface<'_>> {
     let mut surfaces = Vec::new();
     if let Value::Object(root) = body {
         if request {
@@ -120,23 +141,28 @@ fn collect_gemini_surfaces(body: &mut Value, request: bool) -> Vec<PiiSurface<'_
                     "contents" => {
                         if let Value::Array(contents) = value {
                             for (index, content) in contents.iter_mut().enumerate() {
-                                collect_content(&mut surfaces, format!("{key}[{index}]"), content);
+                                collect_content(
+                                    &mut surfaces,
+                                    format!("{key}[{index}]"),
+                                    content,
+                                    None,
+                                );
                             }
                         }
                     }
                     "systemInstruction" => {
-                        collect_content(&mut surfaces, key.clone(), value);
+                        collect_content(&mut surfaces, key.clone(), value, None);
                     }
                     // Tool and schema declarations: names, descriptions, and enum members are
                     // all read by the model.
                     "tools" | "toolConfig" => {
-                        walk_all_strings(&mut surfaces, key.clone(), value);
+                        walk_complete(&mut surfaces, key.clone(), value);
                     }
                     // Covers `stopSequences`, which is matched against generated text. Numeric
                     // members of this subtree are untouched here and are classified by the
                     // outbound residual re-scan's non-carrier declaration instead.
                     "generationConfig" => {
-                        walk_all_strings(&mut surfaces, key.clone(), value);
+                        walk_complete(&mut surfaces, key.clone(), value);
                     }
                     _ => {}
                 }
@@ -144,11 +170,20 @@ fn collect_gemini_surfaces(body: &mut Value, request: bool) -> Vec<PiiSurface<'_
         } else if let Some(Value::Array(candidates)) = root.get_mut("candidates") {
             for (index, candidate) in candidates.iter_mut().enumerate() {
                 if let Value::Object(candidate) = candidate {
+                    let stream = streamed.then(|| {
+                        // Proto3 JSON omits a default zero index. An explicit malformed
+                        // index is unknown, and must not be guessed to be candidate zero.
+                        match candidate.get("index") {
+                            None => Some(0),
+                            Some(index) => index.as_u64(),
+                        }
+                    });
                     if let Some(content) = candidate.get_mut("content") {
                         collect_content(
                             &mut surfaces,
                             format!("candidates[{index}].content"),
                             content,
+                            stream,
                         );
                     }
                 }
@@ -158,7 +193,24 @@ fn collect_gemini_surfaces(body: &mut Value, request: bool) -> Vec<PiiSurface<'_
     surfaces
 }
 
-fn collect_content<'a>(surfaces: &mut Vec<PiiSurface<'a>>, prefix: String, value: &'a mut Value) {
+fn walk_complete<'a>(
+    surfaces: &mut Vec<SseStreamSurface<'a>>,
+    prefix: String,
+    value: &'a mut Value,
+) {
+    let mut complete = Vec::new();
+    walk_all_strings(&mut complete, prefix, value);
+    surfaces.extend(complete.into_iter().map(SseStreamSurface::complete));
+}
+
+/// Surfaces one `Content`. With a candidate `stream`, its text parts are fragments of that
+/// candidate's answer stream, or of its thought stream for a thought summary.
+fn collect_content<'a>(
+    surfaces: &mut Vec<SseStreamSurface<'a>>,
+    prefix: String,
+    value: &'a mut Value,
+    stream: Option<Option<u64>>,
+) {
     let Value::Object(content) = value else {
         return;
     };
@@ -174,20 +226,26 @@ fn collect_content<'a>(surfaces: &mut Vec<PiiSurface<'a>>, prefix: String, value
             continue;
         };
         // A thought summary stays prose even when the answer is JSON.
-        let text_syntax = if part.get("thought").and_then(Value::as_bool) == Some(true) {
-            SurfaceSyntax::Text
-        } else {
-            SurfaceSyntax::ModelOutput
-        };
+        let (text_syntax, text_stream) =
+            if part.get("thought").and_then(Value::as_bool) == Some(true) {
+                (SurfaceSyntax::Text, "thought")
+            } else {
+                (SurfaceSyntax::ModelOutput, "text")
+            };
         for (key, value) in part {
             let part_prefix = format!("{parts_prefix}[{index}].{key}");
             match canonical_field_name(key).as_ref() {
                 "text" => {
                     if let Value::String(text) = value {
-                        surfaces.push(PiiSurface {
-                            field_path: part_prefix,
-                            text,
-                            syntax: text_syntax,
+                        surfaces.push(SseStreamSurface {
+                            stream: stream.map(|index| {
+                                SseStreamKey::new(format!("candidates.{text_stream}"), [index])
+                            }),
+                            surface: PiiSurface {
+                                field_path: part_prefix,
+                                text,
+                                syntax: text_syntax,
+                            },
                         });
                     }
                 }
@@ -196,7 +254,7 @@ fn collect_content<'a>(surfaces: &mut Vec<PiiSurface<'a>>, prefix: String, value
                         .as_object_mut()
                         .and_then(|call| call.iter_mut().find(|(key, _)| *key == "args"))
                     {
-                        walk_all_strings(surfaces, format!("{part_prefix}.{args_key}"), args);
+                        walk_complete(surfaces, format!("{part_prefix}.{args_key}"), args);
                     }
                 }
                 "functionResponse" => {
@@ -204,11 +262,7 @@ fn collect_content<'a>(surfaces: &mut Vec<PiiSurface<'a>>, prefix: String, value
                         .as_object_mut()
                         .and_then(|call| call.iter_mut().find(|(key, _)| *key == "response"))
                     {
-                        walk_all_strings(
-                            surfaces,
-                            format!("{part_prefix}.{response_key}"),
-                            response,
-                        );
+                        walk_complete(surfaces, format!("{part_prefix}.{response_key}"), response);
                     }
                 }
                 _ => {}
