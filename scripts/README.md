@@ -14,6 +14,7 @@ Run these helpers from the repository root.
 | Script | Purpose |
 |---|---|
 | `scripts/gate/mcp-tier-isolation-mutation-probe.sh` | Un-gates the operator-tier surface and requires `cargo run -p xtask -- mcp-tier-isolation` to go red, then reverts, rebuilds, and requires green. |
+| `scripts/gate/cued-short-values-mutation-probe.py` | Checks that the cued-value tests reject 15 independent rulepack weakenings after a passing baseline. Restores the rulepack after the run. Commit before running this manual probe. |
 
 ## Bench
 
@@ -33,4 +34,4 @@ Run these helpers from the repository root.
 
 | Script | Purpose |
 |---|---|
-| `scripts/verify/cli-help-surface.sh` | Builds `gaze` at a base revision and at the working tree in one run and diffs `--help` for the root command and every subcommand, so a CLI refactor can be shown not to have moved the published surface. Refreshes `crates/gaze-cli/tests/fixtures/cli-help/` with `--write-fixtures`. |
+| `scripts/verify/cli-help-surface.sh` | Builds `gaze` at a base revision and at the working tree in one run and diffs `--help` for the root command and every subcommand, so a CLI refactor can be shown not to have moved the published surface. Refreshes `crates/gaze-cli/tests/fixtures/cli-help/` with `--write-fixtures` only when the revisions match. The `cli_help_surface` test checks those captures in the normal all-features suite. |
