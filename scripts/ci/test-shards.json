@@ -210,6 +210,7 @@
     "xtask::scrub_public_text",
     "xtask::snapshot_ack",
     "xtask::tokenbridge_encrypted_index",
-    "xtask::tokenbridge_no_raw_index"
+    "xtask::tokenbridge_no_raw_index",
+    "feature-graph-probe::bin/feature-graph-probe"
   ]
 }
