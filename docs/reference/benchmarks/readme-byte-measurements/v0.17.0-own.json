@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "tag": "v0.17.0",
+  "revision": "8a19d8c64a007a990ab5efc8a22d33f08bbe9f11",
+  "dataset": "own",
+  "contract": "v4",
+  "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
+  "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+  "harness_revision": "97f7f026483457a2b54f7d8d3de15038c30012e5",
+  "driver_sha256": "577a10ac24948bd1a6dba498f85569dd481f3563e91a8a7bc4af6455e3811733",
+  "inputs_sha256": {
+    "dataiku": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+    "negative_corpus": "d9e5807b9f9152932973214e38e1c44a75e9a413f53b5c8954fba0f3f25b1116"
+  },
+  "hardware": {
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "cpu": "arm",
+    "cores": 18
+  },
+  "model_manifests_sha256": {
+    "ner": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+    "nym": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767"
+  },
+  "command": [
+    "uv",
+    "run",
+    "--project",
+    "scripts/bench",
+    "--python",
+    "3.13",
+    "python",
+    "scripts/bench/readme_byte_measurements.py",
+    "--tag",
+    "v0.17.0",
+    "--dataset",
+    "own",
+    "--runtime-root",
+    "<tag-checkout>",
+    "--binary",
+    "<tag-checkout>/target/release/examples/clean_for_bench",
+    "--policy",
+    "<setup-policy>",
+    "--input",
+    "<pinned-dataset>",
+    "--output",
+    "<private-record-directory>",
+    "--build-receipts",
+    "<build-receipts>"
+  ],
+  "build_commands": [
+    [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "-p",
+      "gaze-cli"
+    ],
+    [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "-p",
+      "gaze-recognizers",
+      "--example",
+      "clean_for_bench",
+      "--features",
+      "safety-net-nym"
+    ],
+    [
+      "/tmp/readme-v017/runtime-v017/target/release/gaze",
+      "setup",
+      "--non-interactive",
+      "--force",
+      "--policy-out",
+      "<setup-policy>"
+    ]
+  ],
+  "toolchain": "1.96.0",
+  "cargo_build_jobs": 4,
+  "records": {
+    "holdout": {
+      "file": "holdout.jsonl.gz",
+      "sha256": "83364f44f8aca0659a75d34e65bad5c2957da5c0033f73181a47af72a2732a67",
+      "format": "gzip-jsonl",
+      "schema_version": 2,
+      "corpus_sha256": "34186b6e9f440d0b98b9509a22fee14064e9846002ece82d2d61ceefe8b1ec5c",
+      "observations": 2910,
+      "bytes": 862562
+    }
+  },
+  "sets": {
+    "holdout": {
+      "documents": 2910,
+      "processed": 2910,
+      "refused": 0,
+      "gold_bytes": 130282,
+      "leaked_bytes": 9717,
+      "false_positive_bytes": 27021,
+      "restore_exact": 2910,
+      "manifest_valid": 2910
+    }
+  },
+  "totals": {
+    "documents": 2910,
+    "processed": 2910,
+    "refused": 0,
+    "gold_bytes": 130282,
+    "leaked_bytes": 9717,
+    "false_positive_bytes": 27021,
+    "restore_exact": 2910,
+    "manifest_valid": 2910,
+    "byte_micro_f2": 0.9014690884294332
+  }
+}

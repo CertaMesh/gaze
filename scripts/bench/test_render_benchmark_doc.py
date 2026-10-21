@@ -1306,8 +1306,8 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
 
     def test_the_benchmark_page_discloses_the_limit_of_the_offline_check(self):
         text = render.DEFAULT_DOC.read_text(encoding="utf-8")
-        for phrase in ("only `record` (the corpus replay) proves the character counts",
-                       "must include the replay command's output"):
+        for phrase in ("Offline checks verify receipt integrity and recompute aggregates",
+                       "only capture/replay on the pinned inputs proves the underlying byte counts"):
             self.assertIn(phrase, text)
 
     def test_a_charted_version_must_be_a_real_git_tag(self):
@@ -1337,10 +1337,12 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
     def test_metric_definition_is_stated_in_the_benchmark_readme(self):
         for path in (render.DEFAULT_DOC,):
             text = path.read_text(encoding="utf-8")
-            for phrase in ("Unicode code points (not grapheme clusters)", "ignores labels",
-                           "micro", "0/0 = 0", "skipped document's gold characters as missed",
-                           "counts every false-positive character for every tool",
-                           "also credits a protected repeat"):
+            for phrase in ("Byte-micro F2 pools UTF-8 bytes across documents",
+                           "5*TP/(5*TP+4*FN+FP)", "Labels do not affect overlap",
+                           "False positives in F2 are raw, without gold-gap credit",
+                           "Competitor skips count their gold as leaked",
+                           "Refused documents are reported separately",
+                           "including partial protection"):
                 self.assertIn(phrase, text, (path.name, phrase))
 
     def test_model_card_bolds_the_best_value_per_row(self):
@@ -1378,18 +1380,18 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             self.assertEqual(render.main(args + ["--check"]), 0)
             svgs = sorted((root / render.CHART_ASSETS).glob("*.svg"))
             self.assertEqual([p.name for p in svgs],
-                             ["benchmark-panels-dark.svg", "benchmark-panels-light.svg",
-                              "external-release-panels-dark.svg", "external-release-panels-light.svg"])
+                             ["benchmark-panels-dark.svg", "benchmark-panels-light.svg"])
             changed = copy.deepcopy(self.comparison)
             changed["tools"]["gliner"]["contracts"]["v4"]["C"]["metrics"]["product_coverage"]["full"]["leaked_bytes"] += 1000
             report.write_text(json.dumps(changed), encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 1)
             report.write_text(json.dumps(self.comparison), encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 0)
-            # The separate byte-micro figures are checked by the same command.
+            # Every external dataset now shares the byte-micro figure.
             external = svgs[-1]
             saved = external.read_text(encoding="utf-8")
-            external.write_text(saved.replace("0.64238", "0.99999"), encoding="utf-8")
+            self.assertIn("0.642", saved)
+            external.write_text(saved.replace("0.642", "0.999"), encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 1)
             external.write_text(saved, encoding="utf-8")
             # A hand-edited value on an SVG bar is drift too.
