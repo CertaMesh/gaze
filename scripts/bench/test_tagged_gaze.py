@@ -20,7 +20,7 @@ sys.path.insert(0, str(HERE))
 
 import mechanism_arms  # noqa: E402
 import render_benchmark_doc as render  # noqa: E402
-from tagged_gaze import UntaggedGazeError, check_public, require_tag  # noqa: E402
+from tagged_gaze import UntaggedGazeError, check_public, require_tag, tag_commit  # noqa: E402
 
 BENCH = render.BENCH_DIR
 PUBLIC_BLOCKS = {
@@ -77,14 +77,15 @@ class CommittedSurfacesTest(unittest.TestCase):
     def test_every_gaze_bar_and_column_resolves_to_a_released_tag(self):
         history = render.load_history(render.DEFAULT_HISTORY)
         versions = {entry["version"] for entry in history["releases"]}
-        minors = {v[1:].rsplit(".", 1)[0] for v in versions}
         panels_text = block(render.DEFAULT_DOC.read_text(encoding="utf-8"), "panels")
-        names = set(re.findall(r"\bGaze (\d+\.\d+)\b", panels_text))
+        names = set(re.findall(r"\bGaze (v\d+\.\d+\.\d+)\b", panels_text))
         self.assertTrue(names)
-        self.assertLessEqual(names, minors)
+        self.assertLessEqual(names, versions)
+        for version in names:
+            self.assertRegex(tag_commit(version), r"^[0-9a-f]{40}$")
         for svg in (render.DEFAULT_README.parent / render.CHART_ASSETS).glob("*.svg"):
-            found = set(re.findall(r"Gaze</text>\s*<text[^>]*>(\d+\.\d+)<", svg.read_text(encoding="utf-8")))
-            self.assertLessEqual(found, minors, svg.name)
+            found = set(re.findall(r"Gaze</text>\s*<text[^>]*>(v\d+\.\d+\.\d+)<", svg.read_text(encoding="utf-8")))
+            self.assertEqual(found, names, svg.name)
 
 
 class RendererFiltersTest(unittest.TestCase):
