@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Benchmark
 
+- Benchmark captures can reuse exact content-addressed observation records and
+  report stage wall/CPU times separately. Reuse binds native dictionary paths,
+  Python and extension-library dependencies, and the full capture key. Gain
+  admission rejects incomplete execution evidence or scorecard/record hash
+  mismatches; unresolved inputs disable reuse.
+
 - Release scorecards are committed gzipped as `scorecard-*.json.gz` (about 70 MB
   and 1.7 million lines of JSON become 3 MB). Recorded `scorecard_sha256` values
   are unchanged: they hash the decompressed JSON, and

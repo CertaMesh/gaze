@@ -6,6 +6,15 @@ use std::fs;
 use std::process::Command;
 
 #[test]
+fn readme_version_check_is_owned_by_feature_gates() {
+    use super::{partition_commands, Partition};
+
+    let command = &["run", "-p", "xtask", "--", "readme-version-check"];
+    assert!(partition_commands(Partition::CiGates).any(|entry| entry.args == command));
+    assert!(!partition_commands(Partition::CiDefault).any(|entry| entry.args == command));
+}
+
+#[test]
 fn cli_preserves_full_local_matrix_and_rejects_unknown_partitions() {
     use super::Partition;
     use crate::{Cli, Command as XtaskCommand};

@@ -44,6 +44,7 @@ from typing import Any, Mapping, Sequence
 import agentic_layers as agentic
 import gaze_bench_score as score
 import scorecard_record as record
+import stage_timing as stages
 from tagged_gaze import TAG, check_public
 import verify_record_scorecards as verify
 from render_benchmark_doc import (
@@ -317,6 +318,10 @@ def _load_arm(directory: Path) -> tuple[dict[str, Any], Path]:
     pinned = scorecard.get("observation_record", {}).get("sha256")
     if pinned != sha256(record_path):
         raise MechanismError(f"{record_path} does not match its scorecard's pinned SHA-256")
+    try:
+        stages.validate_execution(scorecard, scorecard_path, record_path)
+    except ValueError as error:
+        raise MechanismError(str(error)) from error
     return scorecard, record_path
 
 
@@ -340,6 +345,10 @@ def check_pair(
     if set(arms) != {"base", "candidate"}:
         raise MechanismError("record needs exactly one base and one candidate capture")
     for name, (card, path) in arms.items():
+        try:
+            stages.validate_execution(card, path.parent / "scorecard-v4.json", path)
+        except ValueError as error:
+            raise MechanismError(f"{name}: {error}") from error
         try:
             bound = record.binary_sha256(path, required=True)
         except record.RecordError as error:
@@ -366,7 +375,8 @@ def check_pair(
             record.rescore(arms[name][1], _contract(version))
             for name in ("base", "candidate")
         )
-        result = agentic.gate(base, candidate, policy_delta=delta)
+        # Original artifacts were admitted above; these cards are independent record replays.
+        result = agentic.compare_layers(base, candidate, policy_delta=delta)
         if result["verdict"] == "not_comparable":
             raise MechanismError(
                 f"v{version} pair is not comparable: {result.get('policy_delta_reason')}; "
@@ -400,6 +410,7 @@ def git_crates_tree(revision: str) -> str:
         raise MechanismError(f"cannot resolve the crates tree of {revision}: {error}") from error
 
 
+@stages.timed("mechanism_arm")
 def record_measurement(
     ledger: dict[str, Any], *, mechanism: str, title: str, added_in: str, shipped: str,
     delta: Path,
@@ -946,16 +957,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         apply(original, "")  # Refuse missing markers before a record publishes evidence.
         ledger = load_ledger()
         if args.command == "record":
-            record_measurement(
-                ledger, mechanism=args.mechanism, title=args.title, added_in=args.added_in,
-                shipped=args.shipped,
-                delta=args.policy_delta,
-                runs={name: getattr(args, name.replace("-", "_"))
-                      for name in ("base", "candidate")},
-                binary=args.binary, machine=args.machine, release=args.release,
-                latency=args.latency,
-            )
-            _persist_ledger(ledger, LEDGER)
+            with stages.session(args.candidate / "mechanism-evidence.json"):
+                record_measurement(
+                    ledger, mechanism=args.mechanism, title=args.title, added_in=args.added_in,
+                    shipped=args.shipped,
+                    delta=args.policy_delta,
+                    runs={name: getattr(args, name) for name in ("base", "candidate")},
+                    binary=args.binary, machine=args.machine, release=args.release,
+                    latency=args.latency,
+                )
+                _persist_ledger(ledger, LEDGER)
         elif args.command == "refresh":
             refresh(ledger)
             _persist_ledger(ledger, LEDGER)

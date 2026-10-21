@@ -14,6 +14,9 @@ import sys
 import time
 from dataclasses import dataclass
 
+from stage_timing import NativeProfileReader
+import stage_timing as stages
+
 
 CODES = frozenset({
     "unsupported_platform", "invalid_limits", "invalid_state", "input_limit",
@@ -122,6 +125,19 @@ class BenchSubprocess:
         self.phase = "start"
         self.finished = False
         self.message_deadline = 0.0
+        effective_environment = os.environ if env is None else env
+        if stages.CURRENT.get() is not None and os.path.basename(str(command[0])) in {
+            "clean_for_bench", "clean_for_bench.exe",
+        }:
+            effective_environment = {**effective_environment, "GAZE_BENCH_PROFILE": "1"}
+            self.env = effective_environment
+        self.profile_reader = (
+            NativeProfileReader() if effective_environment.get("GAZE_BENCH_PROFILE") == "1" else None
+        )
+
+    @property
+    def native_profile(self):
+        return self.profile_reader.result if self.profile_reader is not None else None
 
     def _check(self, deadline):
         if time.monotonic() >= deadline:
@@ -131,6 +147,7 @@ class BenchSubprocess:
         self._check(self.invocation_deadline)
 
     @producer_boundary
+    @stages.transport_call
     def __enter__(self):
         if os.name != "posix" or sys.platform not in ("darwin", "linux"):
             raise ProducerFailure("unsupported_platform", "start")
@@ -180,6 +197,11 @@ class BenchSubprocess:
         self.stderr_seen += len(chunk)
         if self.stderr_seen > self.limits.stderr_bytes:
             raise ProducerFailure("stderr_limit", self.phase)
+        if self.profile_reader is not None:
+            try:
+                self.profile_reader.feed(chunk)
+            except (ValueError, UnicodeError):
+                raise ProducerFailure("protocol", self.phase) from None
 
     def _idle_output(self):
         # Bytes already waiting before a request cannot be its response.
@@ -354,6 +376,7 @@ class BenchSubprocess:
         return self._receive(deadline)
 
     @producer_boundary
+    @stages.transport_call
     def exchange(self, request):
         if self.finished or self.process is None or self.process.stdin.closed:
             raise ProducerFailure("invalid_state", "exchange")
@@ -433,6 +456,7 @@ class BenchSubprocess:
                 self.selector.close()
         return clean
 
+    @stages.transport_call
     def __exit__(self, kind, error, traceback):
         failure = None
         try:
@@ -446,4 +470,6 @@ class BenchSubprocess:
             _raise_closed("cleanup", "cleanup")
         if failure is not None:
             _raise_closed(*failure)
+        if self.profile_reader is not None:
+            stages.native(self.native_profile)
         return False

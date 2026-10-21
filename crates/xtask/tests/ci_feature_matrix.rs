@@ -105,15 +105,10 @@ fn ci_workflow_keeps_all_coverage_owners_and_required_contexts() {
     assert!(!required_test
         .lines()
         .any(|line| line.starts_with("    name:")));
-    assert!(required_test.contains("    needs: [test-support, workspace-shards, test-coverage]\n"));
+    assert!(required_test
+        .contains("    needs: [plan, fast, test-support, workspace-shards, test-coverage]\n"));
     assert!(required_test.contains("    if: ${{ always() }}\n"));
-    for (variable, job) in [
-        ("SUPPORT_RESULT", "test-support"),
-        ("SHARDS_RESULT", "workspace-shards"),
-        ("COVERAGE_RESULT", "test-coverage"),
-    ] {
-        assert!(required_test.contains(&format!("{variable}: ${{{{ needs.{job}.result }}}}")));
-    }
+    assert!(required_test.contains("python3 scripts/ci/ci_gate.py check --context test"));
     let shards = job_section(workflow, "workspace-shards");
     assert!(shards.contains("fail-fast: false"));
     assert!(shards.contains("shard: [cli, runtime, gates]"));
@@ -129,69 +124,53 @@ fn ci_workflow_keeps_all_coverage_owners_and_required_contexts() {
         assert!(shards.contains(command), "shards must retain {command}");
     }
     let proof = job_section(workflow, "test-coverage");
-    assert!(proof.contains("needs: [workspace-shards]"));
+    assert!(proof.contains("needs: [plan, workspace-shards]"));
     assert!(proof.contains("python3 scripts/ci/test_shards.py prove"));
     let defaults = job_section(workflow, "workspace-default");
     assert!(
         defaults.contains("run: cargo run -p xtask -- ci-feature-matrix --partition ci-default")
     );
-    assert!(!defaults.contains("    needs:"));
-    assert!(!job_section(workflow, "xtask-feature-gates").contains("    needs:"));
+    assert!(defaults.contains("    needs: [plan]"));
+    assert!(job_section(workflow, "xtask-feature-gates").contains("    needs: [plan]"));
     let aggregate = job_section(workflow, "xtask-gates");
     assert!(aggregate.contains("    name: xtask gates\n"));
-    assert!(aggregate.contains("    needs: [test, xtask-feature-gates, workspace-default]\n"));
+    assert!(aggregate
+        .contains("    needs: [plan, fast, test, xtask-feature-gates, workspace-default]\n"));
     assert!(aggregate.contains("    if: ${{ always() }}\n"));
-    for (variable, job) in [
-        ("TEST_RESULT", "test"),
-        ("FEATURE_GATES_RESULT", "xtask-feature-gates"),
-        ("DEFAULT_RESULT", "workspace-default"),
-    ] {
-        assert!(aggregate.contains(&format!("{variable}: ${{{{ needs.{job}.result }}}}")));
-    }
+    assert!(aggregate.contains("python3 scripts/ci/ci_gate.py check --context xtask"));
     assert!(!workflow.contains("continue-on-error"));
 }
 
 #[test]
-fn required_aggregator_rejects_failure_skip_cancel_and_missing_results() {
+fn integration_context_depends_on_every_full_suite_owner() {
     let workflow = include_str!("../../../.github/workflows/test.yml");
-    for (job, variables) in [
-        (
-            "xtask-gates",
-            ["TEST_RESULT", "FEATURE_GATES_RESULT", "DEFAULT_RESULT"],
-        ),
-        (
-            "test",
-            ["SUPPORT_RESULT", "SHARDS_RESULT", "COVERAGE_RESULT"],
-        ),
+    let aggregate = job_section(workflow, "integration");
+    assert!(aggregate.contains("    name: ci/integration\n"));
+    assert!(aggregate.contains("    if: ${{ always() }}\n"));
+    assert!(aggregate.contains("    needs: [plan, fast, msrv, test-support, workspace-shards, test-coverage, test, benchmark-model-free, xtask-feature-gates, workspace-default, xtask-gates, dylint]\n"));
+    assert!(aggregate.contains("NEEDS_JSON: ${{ toJSON(needs) }}"));
+    assert!(aggregate.contains("python3 scripts/ci/ci_gate.py check --context integration"));
+    assert!(workflow.contains("  merge_group:\n    types: [checks_requested]"));
+    assert!(workflow.contains("  workflow_dispatch:"));
+    for job in [
+        "test-support",
+        "workspace-shards",
+        "xtask-feature-gates",
+        "workspace-default",
     ] {
-        let aggregate = job_section(workflow, job);
-        let script: String = aggregate
-            .split_once("        run: |\n")
-            .expect("aggregator has a shell check")
-            .1
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(|line| format!("{}\n", line.strip_prefix("          ").unwrap()))
-            .collect();
-        for test in ["success", "failure", "skipped", "cancelled", ""] {
-            for gates in ["success", "failure", "skipped", "cancelled", ""] {
-                for defaults in ["success", "failure", "skipped", "cancelled", ""] {
-                    let output = std::process::Command::new("bash")
-                        .args(["-e", "-c", &script])
-                        .env(variables[0], test)
-                        .env(variables[1], gates)
-                        .env(variables[2], defaults)
-                        .output()
-                        .unwrap();
-                    assert_eq!(
-                        output.status.success(),
-                        [test, gates, defaults]
-                            .iter()
-                            .all(|result| *result == "success"),
-                        "aggregator result for {test:?}/{gates:?}/{defaults:?}"
-                    );
-                }
-            }
-        }
+        assert!(job_section(workflow, job)
+            .contains("if: ${{ needs.plan.outputs.integration == 'true' }}"));
     }
+    for (job, flag) in [
+        ("msrv", "msrv"),
+        ("benchmark-model-free", "bench"),
+        ("dylint", "dylint"),
+    ] {
+        assert!(job_section(workflow, job).contains(&format!(
+            "if: ${{{{ needs.plan.outputs.{flag} == 'true' }}}}"
+        )));
+    }
+    let dylint = include_str!("../../../.github/workflows/dylint.yml");
+    assert!(dylint.contains("  workflow_call:"));
+    assert!(dylint.contains("GAZE_DYLINT_REQUIRED: \"1\""));
 }
