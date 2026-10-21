@@ -45,6 +45,12 @@ jobs:
       - name: leak ledger matches its committed observation record
         run: python3 scripts/bench/leak_ledger.py check
 
+      - name: tracked gzip evidence carries no absolute home path
+        run: python3 scripts/bench/evidence_home_paths.py check
+
+      - name: scrubbed evidence archives equal their originals except path fields
+        run: python3 scripts/bench/evidence_home_paths.py verify-receipts
+
       - name: release character-level scores match the release history
         run: python3 scripts/bench/compare/release_char_level.py check
 
