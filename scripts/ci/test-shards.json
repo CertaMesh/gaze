@@ -42,6 +42,7 @@
     "gaze-pii::canary_e2e",
     "gaze-pii::contracts",
     "gaze-pii::custom_class_validation",
+    "gaze-pii::docs_policy_blocks",
     "gaze-pii::evidence_containment",
     "gaze-pii::family_emission",
     "gaze-pii::final_safety_admission",
