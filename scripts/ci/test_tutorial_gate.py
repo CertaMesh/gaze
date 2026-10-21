@@ -134,7 +134,7 @@ class RealTutorialMutations(unittest.TestCase):
             self.assertGreater(gate.run_tutorial(page, root, root, binary)["executed"], 0)
             mutations = [
                 (first.replace("Byte-exact restore: OK\n```", "WRONG OUTPUT\n```"), "stdout mismatch"),
-                (first.replace("gaze clean <", "gaze nonexistent-tutorial-command <"), "shell failed"),
+                (first.replace("gaze clean --session-out", "gaze nonexistent-tutorial-command --session-out"), "shell failed"),
                 (gate.MANUAL.sub("", mcp), "needs a manual marker"),
             ]
             fences = first.split("```sh\n")

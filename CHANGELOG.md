@@ -9,9 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Plain-text session files on macOS/Linux clear and verify their extended ACL
+  before any restore-key bytes are written, including overwrite replacements.
+  ACL failures and unsupported platforms (including Windows) refuse
+  `--session-out` with `SessionFile` (exit 4).
 - rustls-webpki 0.103.16 and webpki-roots 1.0.10 fix RUSTSEC-2026-0382 and
   RUSTSEC-2026-0381: certificate paths through distrusted emSign intermediates
   were accepted.
+
+### Added
+
+- `gaze clean --session-out <path>` writes the session to a new owner-only file
+  and prints only the clean text; `gaze restore --session-file <path>` restores
+  plain text from stdin. A shell round trip no longer needs JSON glue. Existing
+  files are refused unless `--overwrite-session-out` is passed. A missing or
+  non-session file fails with the new `SessionFile` error (exit 4). The JSON
+  stdin and stdout contracts are unchanged.
 
 ### Fixed
 
@@ -21,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Robert "Bob" Smith`. Each token keeps the spelling it was first minted with,
   so a value first seen in plain text never gains a JSON reading later.
   Plain-text destinations still restore the bytes the client sent.
+- `gaze proxy start` and `restart` now return only after the daemon has bound
+  its port. Before, they reported success after a 250 ms liveness window, so an
+  immediate request could be refused, and a daemon that died later in startup
+  (for example while loading a model) still returned exit 0. The daemon writes a
+  `proxy.ready` marker after binding; start fails with `DaemonExitedEarly` if
+  the daemon exits first, or stops it and fails with `DaemonStartTimeout` after
+  120 seconds.
 - Anthropic proxy accepts the literal `?beta=true` query, individually allowlisted
   comma-separated beta headers (policy or repeatable `--anthropic-beta`), and
   inspected `count_tokens` requests. Adaptive thinking, output configuration and

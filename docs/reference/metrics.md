@@ -688,7 +688,7 @@ error: `{"error":"<Variant>","exit":<N>, ...}`.
 | `1` | Stdin parse / empty input / input-too-large / invalid-encoding. | `StdinParse` / `EmptyInput` / `InputTooLarge` / `InvalidEncoding` | Closed |
 | `2` | Config-level error: policy malformed, unsupported policy schema, ISO-8601 parse failure on `audit purge`, pinned SafetyNet artifact missing. | `PolicyConfig` / `PolicySchemaUnsupported` / `AuditPurgeIso8601` / `SafetyNetArtifactMissing` | Closed |
 | `3` | Runtime fail-closed: SafetyNet config rejected, SafetyNet runtime suspect (strict mode), pipeline error, unknown token at restore, invalid signature, invalid blob version, blob expired. The dedicated "audit-logger fatal" path also exits 3 via `std::process::exit(3)` (`crates/gaze-cli/src/logger.rs:12`). | `SafetyNetConfig` / `SafetyNet` / `Pipeline` / `UnknownToken` / `InvalidSignature` / `InvalidBlobVersion` / `BlobExpired` | Closed |
-| `4` | I/O or policy-file-open error. | `Io` / `PolicyOpen` | Closed |
+| `4` | I/O, policy-file-open, or session-file error (`--session-out` path exists or cannot be written; `--session-file` missing, unreadable, or not a session file). | `Io` / `PolicyOpen` / `SessionFile` | Closed |
 | `5` | Document subcommand error (feature `document` only). | `Document` | Closed |
 | `6` | MCP subcommand error (feature `mcp` only). | `Mcp` | Closed |
 | `7` | Proxy subcommand error (feature `proxy` only). | `Proxy` | Closed |
