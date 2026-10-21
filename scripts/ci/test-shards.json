@@ -189,6 +189,7 @@
     "gaze-model-setup",
     "gaze-token-bridge",
     "gaze-token-bridge::local_demo_assertions",
+    "gaze-token-bridge::output_safety_net_backstop",
     "gaze-token-bridge::residual_fragment_ingest",
     "gaze-token-bridge::token_class_roundtrip",
     "gaze-token-bridge::track_a_policy",
