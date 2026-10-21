@@ -167,6 +167,17 @@ directory:
 - Linux: `$XDG_DATA_HOME/gaze/proxy.pid` or `~/.local/share/gaze/proxy.pid`
 - Windows: `%LOCALAPPDATA%\gaze\proxy.pid`
 
+Once the child has bound its port it writes a readiness marker, `proxy.ready`,
+next to the pidfile. The marker holds the child's PID and bound address. It is
+written to a temporary file and renamed into place, and on Unix it is owner-only
+(`0600`). `gaze proxy start` and `restart` report success only after the marker
+names the child they spawned, so the first request after a successful start
+connects. Start removes any marker left from an earlier run before it spawns.
+If the child exits first, at any point during startup, start fails with
+`DaemonExitedEarly`. If the child neither binds nor exits within 120 seconds,
+start stops it and fails with `DaemonStartTimeout`. Both failures remove the
+pidfile and marker. Stop and stale cleanup remove the marker too.
+
 Status and start always validate the recorded PID with process liveness checks.
 If the PID is dead, the command treats the pidfile as stale and removes it
 before continuing. Stop is signal-only: `SIGTERM`, bounded wait, optional
