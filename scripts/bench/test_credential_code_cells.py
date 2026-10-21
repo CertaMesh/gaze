@@ -83,11 +83,12 @@ class CredentialCellsTests(unittest.TestCase):
             rows = cells.json_prefix_records(agentic, partition)
             self.assertEqual({row.family for row in rows}, {"bcrypt", "argon2id", "sha512crypt"})
             for row in rows:
-                self.assertEqual(len(row.gold), 2 if row.layer == "R" else 0 if row.layer == "D" else 1)
+                self.assertEqual(len(row.gold), 4 if row.layer == "R" else 0 if row.layer == "D" else 1)
                 for span in (*row.gold, *row.decoys):
                     self.assertEqual(row.text.encode()[span.start:span.end].decode(), span.value)
                 if row.layer == "R":
                     self.assertNotEqual(row.gold[0].value, row.gold[1].value)
+                    self.assertEqual([g.value for g in row.gold], [row.gold[0].value, row.gold[1].value] * 2)
                     self.assertEqual(row.text.count('"stdout"'), 1)
                 elif row.layer == "A":
                     self.assertIn('"stdout":"heading', row.text)

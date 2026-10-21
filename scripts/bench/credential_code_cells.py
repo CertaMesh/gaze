@@ -361,7 +361,7 @@ def json_prefix_records(api, partition):
                 for name, prefix in {**separators, **broken}.items():
                     for layer in (("A", "R") if name in separators else ("D",)):
                         stream = "dev-prefix" if partition == "dev" else "test-prefix"
-                        content = ("heading" + prefix + "{V}" if layer != "R" else "{V}" + prefix + "{W}")
+                        content = ("heading" + prefix + "{V}" if layer != "R" else prefix.join(("{V}", "{W}", "{V}", "{W}")))
                         template = '{"stdout":"' + content + r'\n","stream":"' + stream + '"}'
                         fields = {"V": (values[0], None if layer == "D" else "PASSWORD")}
                         if layer == "R":
