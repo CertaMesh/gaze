@@ -5,8 +5,8 @@ use serde_json::Value;
 use url::Url;
 
 use crate::adapter::{
-    walk_all_strings, AdapterContract, PiiSurface, ProviderAdapter, SseEvent, SseStreamSurface,
-    SurfaceSyntax,
+    walk_all_strings, AdapterContract, PiiSurface, ProviderAdapter, SseEvent, SseStreamKey,
+    SseStreamSurface, SurfaceSyntax,
 };
 
 /// Canonicalizes a protobuf-JSON field name to its lowerCamelCase spelling.
@@ -171,8 +171,12 @@ fn collect_gemini_stream_surfaces(
             for (index, candidate) in candidates.iter_mut().enumerate() {
                 if let Value::Object(candidate) = candidate {
                     let stream = streamed.then(|| {
-                        let index = candidate.get("index").and_then(Value::as_u64).unwrap_or(0);
-                        format!("candidates[{index}]")
+                        // Proto3 JSON omits a default zero index. An explicit malformed
+                        // index is unknown, and must not be guessed to be candidate zero.
+                        match candidate.get("index") {
+                            None => Some(0),
+                            Some(index) => index.as_u64(),
+                        }
                     });
                     if let Some(content) = candidate.get_mut("content") {
                         collect_content(
@@ -205,7 +209,7 @@ fn collect_content<'a>(
     surfaces: &mut Vec<SseStreamSurface<'a>>,
     prefix: String,
     value: &'a mut Value,
-    stream: Option<String>,
+    stream: Option<Option<u64>>,
 ) {
     let Value::Object(content) = value else {
         return;
@@ -234,9 +238,9 @@ fn collect_content<'a>(
                 "text" => {
                     if let Value::String(text) = value {
                         surfaces.push(SseStreamSurface {
-                            stream: stream
-                                .as_ref()
-                                .map(|stream| format!("{stream}.{text_stream}")),
+                            stream: stream.map(|index| {
+                                SseStreamKey::new(format!("candidates.{text_stream}"), [index])
+                            }),
                             surface: PiiSurface {
                                 field_path: part_prefix,
                                 text,

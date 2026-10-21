@@ -25,9 +25,15 @@ Adapters implement `ProviderAdapter`:
   usually split across events. The legacy proxy buffers the whole response,
   concatenates each stream's fragments, restores the result once, and replays
   it in the stream's first fragment. Keys come from the provider's own indices,
-  never from an array position, so parallel tool calls never merge. The
-  default marks every surface complete, which leaves a split token
-  pseudonymized.
+  never from an array position, so parallel tool calls never merge.
+  `SseStreamKey` records the field kind and ordered provider indices. A missing
+  or invalid required index disables joining for every stream of the same kind
+  whose known indices agree. Those fragments restore within their own events,
+  preserving wire order and leaving split tokens pseudonymized. A different
+  kind or a known differing index keeps an independent stream eligible to join.
+  Gemini's omitted candidate index is the protobuf JSON default 0; an explicit
+  malformed index is ambiguous. The default adapter method marks every surface
+  complete, which leaves a split token pseudonymized.
 - `requests_json_output(request)` reports whether the request asked the model
   for JSON output. It defaults to `false`.
 

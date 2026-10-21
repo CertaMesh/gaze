@@ -4,7 +4,7 @@ use url::Url;
 
 use crate::adapter::{
     push_string, push_text_blocks, walk_all_strings, AdapterContract, PiiSurface, ProviderAdapter,
-    SseEvent, SseStreamSurface, SurfaceSyntax,
+    SseEvent, SseStreamKey, SseStreamSurface, SurfaceSyntax,
 };
 
 #[derive(Clone, Debug)]
@@ -279,7 +279,7 @@ fn collect_output_part<'a>(
 /// Appends `complete` surfaces as fragments of `stream`, or as complete surfaces without one.
 fn extend_stream<'a>(
     surfaces: &mut Vec<SseStreamSurface<'a>>,
-    stream: Option<String>,
+    stream: Option<SseStreamKey>,
     complete: Vec<PiiSurface<'a>>,
 ) {
     surfaces.extend(complete.into_iter().map(|surface| SseStreamSurface {
@@ -304,9 +304,10 @@ fn collect_responses_event_surfaces<'a>(
     let content_index = index("content_index");
     let summary_index = index("summary_index");
     let content_stream = |part: &str| {
-        output_index.zip(content_index).map(|(output, content)| {
-            format!("responses.output[{output}].content[{content}].{part}")
-        })
+        Some(SseStreamKey::new(
+            format!("responses.content.{part}"),
+            [output_index, content_index],
+        ))
     };
     let (field, syntax, stream) = match kind {
         "output_text.delta" => ("delta", SurfaceSyntax::ModelOutput, content_stream("text")),
@@ -320,14 +321,15 @@ fn collect_responses_event_surfaces<'a>(
         "reasoning_summary_text.delta" => (
             "delta",
             SurfaceSyntax::Text,
-            output_index.zip(summary_index).map(|(output, summary)| {
-                format!("responses.output[{output}].summary[{summary}].text")
-            }),
+            Some(SseStreamKey::new(
+                "responses.summary.text",
+                [output_index, summary_index],
+            )),
         ),
         "function_call_arguments.delta" | "mcp_call_arguments.delta" => (
             "delta",
             SurfaceSyntax::Json,
-            output_index.map(|output| format!("responses.output[{output}].arguments")),
+            Some(SseStreamKey::new("responses.arguments", [output_index])),
         ),
         "function_call_arguments.done" | "mcp_call_arguments.done" => {
             ("arguments", SurfaceSyntax::Json, None)
@@ -382,8 +384,8 @@ fn collect_responses_snapshot_surfaces<'a>(
 }
 
 /// Surfaces the `choices` of a Chat Completions chunk. Streamed fragments are keyed by the
-/// choice's `index` and, for tool calls, the call's `index`; a fragment without them restores
-/// alone.
+/// choice's `index` and, for tool calls, the call's `index`. Missing required indices disable
+/// joining for every compatible stream, preserving only streams whose separation is known.
 fn collect_choice_stream_surfaces<'a>(
     surfaces: &mut Vec<SseStreamSurface<'a>>,
     choices: &'a mut Value,
@@ -408,7 +410,7 @@ fn collect_choice_stream_surfaces<'a>(
                 "text" => {
                     let mut fragment = Vec::new();
                     push_string(&mut fragment, prefix, value, SurfaceSyntax::ModelOutput);
-                    let stream = choice_index.map(|index| format!("choices[{index}].text"));
+                    let stream = Some(SseStreamKey::new("choices.text", [choice_index]));
                     extend_stream(surfaces, stream, fragment);
                 }
                 _ => {}
@@ -437,7 +439,7 @@ fn collect_delta_stream_surfaces<'a>(
                     value,
                     SurfaceSyntax::ModelOutput,
                 );
-                let stream = choice_index.map(|index| format!("choices[{index}].content"));
+                let stream = Some(SseStreamKey::new("choices.content", [choice_index]));
                 extend_stream(surfaces, stream, fragment);
             }
             "tool_calls" => {
@@ -452,9 +454,10 @@ fn collect_delta_stream_surfaces<'a>(
                         &format!("{prefix}.tool_calls[{position}]"),
                         tool_call,
                     );
-                    let stream = choice_index.zip(call_index).map(|(choice, call)| {
-                        format!("choices[{choice}].tool_calls[{call}].arguments")
-                    });
+                    let stream = Some(SseStreamKey::new(
+                        "choices.tool_calls.arguments",
+                        [choice_index, call_index],
+                    ));
                     extend_stream(surfaces, stream, fragment);
                 }
             }

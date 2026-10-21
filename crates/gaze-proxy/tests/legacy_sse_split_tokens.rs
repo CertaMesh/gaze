@@ -643,3 +643,398 @@ async fn openai_responses_stream_deltas_split_across_events_restore() {
             .expect("completed arguments parse");
     assert_eq!(parsed, json!({"alias": RAW_ALIAS}));
 }
+#[tokio::test]
+async fn review_missing_indices_keep_split_tokens_pseudonymized() {
+    for missing_choice in [true, false] {
+        let payloads = stream_through_proxy(
+            move |tokens| {
+                let mut chunks =
+                    tool_call_chunks(0, "set_alias", &json!({"alias": tokens.alias}).to_string());
+                for chunk in &mut chunks {
+                    if missing_choice {
+                        chunk["choices"][0].as_object_mut().unwrap().remove("index");
+                    } else {
+                        chunk["choices"][0]["delta"]["tool_calls"][0]
+                            .as_object_mut()
+                            .unwrap()
+                            .remove("index");
+                    }
+                }
+                chat_sse(chunks)
+            },
+            "/v1/chat/completions",
+            chat_request(),
+        )
+        .await;
+        let args: String = payloads
+            .iter()
+            .filter_map(|p| {
+                p["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"].as_str()
+            })
+            .collect();
+        let parsed: Value = serde_json::from_str(&args).unwrap();
+        assert_eq!(
+            token_shape::find_tokens(parsed["alias"].as_str().unwrap()).count(),
+            1
+        );
+        assert!(!args.contains("Doktor"));
+    }
+    let payloads = stream_through_proxy(
+        |tokens| {
+            chat_sse(
+                fragments(&tokens.person)
+                    .into_iter()
+                    .map(|s| json!({"choices":[{"delta":{"content":s}}]}))
+                    .collect(),
+            )
+        },
+        "/v1/chat/completions",
+        chat_request(),
+    )
+    .await;
+    let text: String = payloads
+        .iter()
+        .filter_map(|p| p["choices"][0]["delta"]["content"].as_str())
+        .collect();
+    assert_eq!(token_shape::find_tokens(&text).count(), 1);
+    assert!(!text.contains(RAW_PERSON));
+}
+
+#[tokio::test]
+async fn review_truncated_token_stays_pseudonymized() {
+    let payloads = stream_through_proxy(
+        |tokens| {
+            chat_sse(
+                fragments(&tokens.person[..tokens.person.len() - 1])
+                    .into_iter()
+                    .map(|s| chunk(0, json!({"content":s})))
+                    .collect(),
+            )
+        },
+        "/v1/chat/completions",
+        chat_request(),
+    )
+    .await;
+    let text = &chat_contents(&payloads)[&0];
+    assert!(
+        text.starts_with('<') && text.ends_with("person_1"),
+        "{text:?}"
+    );
+    assert!(!text.contains(RAW_PERSON));
+}
+
+#[tokio::test]
+async fn review_chat_json_mode_escapes_joined_output() {
+    let mut request = chat_request();
+    request["response_format"] = json!({"type":"json_object"});
+    let payloads = stream_through_proxy(
+        |tokens| {
+            chat_sse(
+                fragments(&json!({"alias":tokens.alias}).to_string())
+                    .into_iter()
+                    .map(|s| chunk(0, json!({"content":s})))
+                    .collect(),
+            )
+        },
+        "/v1/chat/completions",
+        request,
+    )
+    .await;
+    assert_eq!(
+        serde_json::from_str::<Value>(&chat_contents(&payloads)[&0]).unwrap(),
+        json!({"alias":RAW_ALIAS})
+    );
+}
+
+#[tokio::test]
+async fn review_gemini_candidates_and_thoughts_do_not_merge() {
+    let payloads = stream_through_proxy(|tokens| {
+        let streams = [fragments(&json!({"alias":tokens.alias}).to_string()),fragments(&json!({"to":tokens.person}).to_string()),fragments(&format!("Thinking {}",tokens.alias))];
+        let mut events = Vec::new();
+        for i in 0..streams.iter().map(Vec::len).max().unwrap() {
+            for (s, pieces) in streams.iter().enumerate() {
+                if let Some(piece)=pieces.get(i) {
+                    let index = if s==1 {1} else {0};
+                    let mut candidate = json!({"index":index,"content":{"role":"model","parts":[{"text":piece,"thought":s==2}]}});
+                    if index==0 {candidate.as_object_mut().unwrap().remove("index");}
+                    events.push((None,json!({"candidates":[candidate]})));
+                }
+            }
+        }
+        sse_body(events)
+    }, "/v1beta/models/gemini-test:streamGenerateContent?alt=sse", json!({"contents":[{"role":"user","parts":[{"text":user_text()}]}],"generationConfig":{"responseMimeType":"application/json"}})).await;
+    let mut streams = BTreeMap::<(u64, bool), String>::new();
+    for payload in payloads {
+        for candidate in payload["candidates"].as_array().unwrap() {
+            for part in candidate["content"]["parts"].as_array().unwrap() {
+                streams
+                    .entry((
+                        candidate["index"].as_u64().unwrap_or(0),
+                        part["thought"].as_bool().unwrap_or(false),
+                    ))
+                    .or_default()
+                    .push_str(part["text"].as_str().unwrap());
+            }
+        }
+    }
+    assert_eq!(streams.len(), 3);
+    assert_eq!(
+        serde_json::from_str::<Value>(&streams[&(0, false)]).unwrap(),
+        json!({"alias":RAW_ALIAS})
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&streams[&(1, false)]).unwrap(),
+        json!({"to":RAW_PERSON})
+    );
+    assert_eq!(streams[&(0, true)], format!("Thinking {RAW_ALIAS}"));
+}
+
+#[tokio::test]
+async fn review_responses_parallel_items_parts_and_summaries() {
+    let payloads = stream_through_proxy(|tokens| {
+        let cases = [
+            ("output_text",0,0,format!("Text {}",tokens.person)),
+            ("output_text",0,1,format!("Other {}",tokens.person)),
+            ("refusal",0,0,format!("Refuse {}",tokens.alias)),
+            ("reasoning_text",1,0,format!("Reason {}",tokens.alias)),
+            ("reasoning_summary_text",1,0,format!("Summary {}",tokens.alias)),
+            ("reasoning_summary_text",1,1,format!("Second {}",tokens.person)),
+            ("function_call_arguments",2,0,json!({"alias":tokens.alias}).to_string()),
+            ("mcp_call_arguments",3,0,json!({"to":tokens.person}).to_string())];
+        let parts: Vec<_> = cases.iter().map(|(_,_,_,s)|fragments(s)).collect();
+        let mut events = Vec::new();
+        for i in 0..parts.iter().map(Vec::len).max().unwrap() { for (case,pieces) in cases.iter().zip(&parts) { if let Some(piece)=pieces.get(i) {
+            events.push((None,json!({"type":format!("response.{}.delta",case.0),"output_index":case.1,"content_index":case.2,"summary_index":case.2,"delta":piece})));
+        }}}
+        sse_body(events)
+    },"/v1/responses",json!({"model":"gpt-test","input":user_text(),"stream":true})).await;
+    let mut streams = BTreeMap::<(String, u64, u64), String>::new();
+    for p in payloads {
+        streams
+            .entry((
+                p["type"].as_str().unwrap().to_string(),
+                p["output_index"].as_u64().unwrap(),
+                p["content_index"].as_u64().unwrap(),
+            ))
+            .or_default()
+            .push_str(p["delta"].as_str().unwrap());
+    }
+    let get = |kind: &str, o, c| &streams[&(format!("response.{kind}.delta"), o, c)];
+    assert_eq!(streams.len(), 8);
+    assert_eq!(get("output_text", 0, 0), &format!("Text {RAW_PERSON}"));
+    assert_eq!(get("output_text", 0, 1), &format!("Other {RAW_PERSON}"));
+    assert_eq!(get("refusal", 0, 0), &format!("Refuse {RAW_ALIAS}"));
+    assert_eq!(get("reasoning_text", 1, 0), &format!("Reason {RAW_ALIAS}"));
+    assert_eq!(
+        get("reasoning_summary_text", 1, 0),
+        &format!("Summary {RAW_ALIAS}")
+    );
+    assert_eq!(
+        get("reasoning_summary_text", 1, 1),
+        &format!("Second {RAW_PERSON}")
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(get("function_call_arguments", 2, 0)).unwrap(),
+        json!({"alias":RAW_ALIAS})
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(get("mcp_call_arguments", 3, 0)).unwrap(),
+        json!({"to":RAW_PERSON})
+    );
+}
+
+#[tokio::test]
+async fn review_missing_index_must_not_bridge_ambiguous_fragment() {
+    let payloads = stream_through_proxy(
+        |tokens| {
+            let (a, b) = tokens.person.split_at(tokens.person.len() / 2);
+            chat_sse(vec![
+                chunk(0, json!({"content":a})),
+                json!({"choices":[{"delta":{"content":"X"}}]}),
+                chunk(0, json!({"content":b})),
+            ])
+        },
+        "/v1/chat/completions",
+        chat_request(),
+    )
+    .await;
+    let text: String = payloads
+        .iter()
+        .filter_map(|p| p["choices"][0]["delta"]["content"].as_str())
+        .collect();
+    assert!(
+        !text.contains(RAW_PERSON),
+        "Ambiguous fragments restored a raw value: {text:?}"
+    );
+}
+
+#[tokio::test]
+async fn openai_missing_tool_identity_preserves_independent_streams() {
+    for missing_choice in [true, false] {
+        let payloads = stream_through_proxy(
+            move |tokens| {
+                let (a, b) = tokens.person.split_at(tokens.person.len() / 2);
+                let call = |choice, index, text| {
+                    chunk(
+                        choice,
+                        json!({"tool_calls": [{"index": index, "function": {"arguments": text}}]}),
+                    )
+                };
+                let mut unknown = call(0, 0, "X");
+                let (trusted_choice, trusted_call) = if missing_choice {
+                    unknown["choices"][0]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("index");
+                    // A known call index still separates this from call 1.
+                    (0, 1)
+                } else {
+                    unknown["choices"][0]["delta"]["tool_calls"][0]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("index");
+                    // A known choice index still separates this from choice 1.
+                    (1, 0)
+                };
+                chat_sse(vec![
+                    call(0, 0, a),
+                    call(trusted_choice, trusted_call, a),
+                    chunk(0, json!({"content": a})),
+                    unknown,
+                    call(0, 0, b),
+                    call(trusted_choice, trusted_call, b),
+                    chunk(0, json!({"content": b})),
+                ])
+            },
+            "/v1/chat/completions",
+            chat_request(),
+        )
+        .await;
+        let argument = |position: usize| {
+            payloads[position]["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"]
+                .as_str()
+                .unwrap()
+        };
+        // Both affected fragments stay at their original positions, on either side of X.
+        assert!(!argument(0).is_empty());
+        assert_eq!(argument(3), "X");
+        assert!(!argument(4).is_empty());
+        let affected = format!("{}{}", argument(0), argument(4));
+        assert_eq!(token_shape::find_tokens(&affected).count(), 1);
+        assert!(!affected.contains(RAW_PERSON));
+        assert_eq!(format!("{}{}", argument(1), argument(5)), RAW_PERSON);
+        assert_eq!(chat_contents(&payloads)[&0], RAW_PERSON);
+    }
+}
+
+#[tokio::test]
+async fn gemini_invalid_candidate_identity_does_not_bridge_text_fragments() {
+    for invalid_index in [Value::Null, json!("invalid"), json!(-1)] {
+        let payloads = stream_through_proxy(
+            move |tokens| {
+                let (a, b) = tokens.person.split_at(tokens.person.len() / 2);
+                let candidate = |index: Value, thought, text| {
+                    (None, json!({"candidates": [{"index": index, "content": {"parts": [{"text": text, "thought": thought}]}}]}))
+                };
+                sse_body(vec![
+                    candidate(json!(1), false, a),
+                    candidate(json!(1), true, a),
+                    candidate(invalid_index.clone(), false, "X"),
+                    candidate(json!(1), false, b),
+                    candidate(json!(1), true, b),
+                ])
+            },
+            "/v1beta/models/gemini-test:streamGenerateContent?alt=sse",
+            json!({"contents": [{"role": "user", "parts": [{"text": user_text()}]}]}),
+        ).await;
+        let part = |position: usize| {
+            payloads[position]["candidates"][0]["content"]["parts"][0]["text"]
+                .as_str()
+                .unwrap()
+        };
+        assert!(!part(0).is_empty());
+        assert_eq!(part(2), "X");
+        assert!(!part(3).is_empty());
+        let affected = format!("{}{}", part(0), part(3));
+        assert_eq!(token_shape::find_tokens(&affected).count(), 1);
+        assert!(!affected.contains(RAW_PERSON));
+        assert_eq!(format!("{}{}", part(1), part(4)), RAW_PERSON);
+    }
+}
+
+#[tokio::test]
+async fn responses_missing_identity_only_disables_compatible_streams() {
+    for (kind, missing) in [
+        ("output_text", "output_index"),
+        ("output_text", "content_index"),
+        ("refusal", "content_index"),
+        ("reasoning_text", "output_index"),
+        ("reasoning_summary_text", "output_index"),
+        ("reasoning_summary_text", "summary_index"),
+        ("function_call_arguments", "output_index"),
+        ("mcp_call_arguments", "output_index"),
+    ] {
+        let payloads = stream_through_proxy(
+            move |tokens| {
+                let (a, b) = tokens.person.split_at(tokens.person.len() / 2);
+                let event = |kind: &str, output, part, text| {
+                    json!({"type": format!("response.{kind}.delta"), "output_index": output, "content_index": part, "summary_index": part, "delta": text})
+                };
+                let mut unknown = event(kind, 0, 0, "X");
+                unknown.as_object_mut().unwrap().remove(missing);
+                // Preserve a stream separated by a known index, or by surface kind when
+                // the only identity field (an argument stream's output_index) is missing.
+                let trusted_kind = if kind.ends_with("arguments") { "output_text" } else { kind };
+                let trusted_output = u64::from(missing != "output_index");
+                let trusted_part = u64::from(missing == "output_index");
+                sse_body(vec![
+                    (None, event(kind, 0, 0, a)),
+                    (None, event(trusted_kind, trusted_output, trusted_part, a)),
+                    (None, unknown),
+                    (None, event(kind, 0, 0, b)),
+                    (None, event(trusted_kind, trusted_output, trusted_part, b)),
+                ])
+            },
+            "/v1/responses",
+            json!({"model": "gpt-test", "input": user_text(), "stream": true}),
+        ).await;
+        let delta = |position: usize| payloads[position]["delta"].as_str().unwrap();
+        assert!(!delta(0).is_empty(), "{kind}, {missing}");
+        assert_eq!(delta(2), "X");
+        assert!(!delta(3).is_empty(), "{kind}, {missing}");
+        let affected = format!("{}{}", delta(0), delta(3));
+        assert_eq!(token_shape::find_tokens(&affected).count(), 1);
+        assert!(!affected.contains(RAW_PERSON));
+        assert_eq!(
+            format!("{}{}", delta(1), delta(4)),
+            RAW_PERSON,
+            "{kind}, {missing}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn openai_completion_text_missing_index_preserves_fragment_order() {
+    let payloads = stream_through_proxy(
+        |tokens| {
+            let (a, b) = tokens.person.split_at(tokens.person.len() / 2);
+            chat_sse(vec![
+                json!({"choices": [{"index": 0, "text": a}]}),
+                json!({"choices": [{"text": "X"}]}),
+                json!({"choices": [{"index": 0, "text": b}]}),
+            ])
+        },
+        "/v1/completions",
+        json!({"model": "gpt-test", "prompt": user_text(), "stream": true}),
+    )
+    .await;
+    let text = |position: usize| payloads[position]["choices"][0]["text"].as_str().unwrap();
+    assert!(!text(0).is_empty());
+    assert_eq!(text(1), "X");
+    assert!(!text(2).is_empty());
+    assert_eq!(
+        token_shape::find_tokens(&format!("{}{}", text(0), text(2))).count(),
+        1
+    );
+    assert!(!format!("{}{}{}", text(0), text(1), text(2)).contains(RAW_PERSON));
+}

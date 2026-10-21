@@ -477,10 +477,10 @@ pub trait ProviderAdapter: Send + Sync + 'static {
     ///
     /// Providers stream a value such as a message's text or a tool call's `arguments` as a
     /// series of fragments, roughly one model token per event, so a pseudonym token is usually
-    /// split across events. The legacy proxy concatenates every fragment of one
+    /// split across events. The legacy proxy concatenates the fragments of each identified
     /// [`SseStreamSurface::stream`] across the whole response, restores the result once, and
-    /// replays it in that stream's first fragment. A surface without a stream is complete in
-    /// its event and restores alone.
+    /// replays it in that stream's first fragment. An ambiguous key disables joining for every
+    /// compatible stream. A surface without a stream is complete in its event and restores alone.
     ///
     /// The default treats every surface of [`Self::sse_event_pii_surfaces`] as complete, which
     /// never restores a split token: the client sees the pseudonym, never a wrong raw value.
@@ -523,6 +523,43 @@ pub struct PiiSurface<'a> {
     pub syntax: SurfaceSyntax,
 }
 
+/// A logical SSE value, including any missing identity fields that make joining ambiguous.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct SseStreamKey {
+    kind: String,
+    indices: Vec<Option<u64>>,
+}
+
+impl SseStreamKey {
+    /// Identifies a surface kind and its provider indices, ordered from outermost to innermost.
+    /// Missing or invalid required indices must be `None`, never an array position or a guess.
+    /// Each kind must use the same number and order of indices throughout a response.
+    pub fn new(kind: impl Into<String>, indices: impl IntoIterator<Item = Option<u64>>) -> Self {
+        Self {
+            kind: kind.into(),
+            indices: indices.into_iter().collect(),
+        }
+    }
+
+    pub(crate) fn is_ambiguous(&self) -> bool {
+        self.indices.iter().any(Option::is_none)
+    }
+
+    /// Unknown indices may refer to any stream whose known indices agree.
+    pub(crate) fn could_continue(&self, other: &Self) -> bool {
+        self.kind == other.kind
+            && self.indices.len() == other.indices.len()
+            && self
+                .indices
+                .iter()
+                .zip(&other.indices)
+                .all(|(a, b)| match (a, b) {
+                    (Some(a), Some(b)) => a == b,
+                    _ => true,
+                })
+    }
+}
+
 /// A response surface of one SSE event and the logical stream it is a fragment of.
 ///
 /// See [`ProviderAdapter::sse_event_stream_surfaces`].
@@ -533,8 +570,10 @@ pub struct SseStreamSurface<'a> {
     /// their own. Derive it from the provider's own indices, never from an array position that
     /// restarts in every event. All fragments of one stream must share one [`SurfaceSyntax`].
     ///
-    /// `None` marks a surface that is complete in its event.
-    pub stream: Option<String>,
+    /// A key with a missing index disables joining for every compatible stream in the
+    /// response. Those fragments restore individually, preserving their original wire order.
+    /// `None` marks a surface that is complete in its event, not an unidentified fragment.
+    pub stream: Option<SseStreamKey>,
     pub surface: PiiSurface<'a>,
 }
 
@@ -548,9 +587,9 @@ impl<'a> SseStreamSurface<'a> {
     }
 
     /// A fragment of the logical stream `stream`.
-    pub fn fragment(stream: impl Into<String>, surface: PiiSurface<'a>) -> Self {
+    pub fn fragment(stream: SseStreamKey, surface: PiiSurface<'a>) -> Self {
         Self {
-            stream: Some(stream.into()),
+            stream: Some(stream),
             surface,
         }
     }

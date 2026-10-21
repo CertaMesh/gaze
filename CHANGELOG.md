@@ -22,7 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is now restored once across the buffered response. OpenAI Responses API
   streaming events are now restored too; they were not surfaced at all. Adapters
   key streams with the new `ProviderAdapter::sse_event_stream_surfaces`, whose
-  default keeps the previous per-event behavior.
+  default keeps the previous per-event behavior. Missing or invalid required
+  indices disable joining for every compatible stream, preserving fragment
+  order and leaving ambiguous split tokens pseudonymized. Streams separated by
+  a known index or a different field kind still restore across events.
 - `gaze proxy start` and `restart` now return only after the daemon has bound
   its port. Before, they reported success after a 250 ms liveness window, so an
   immediate request could be refused, and a daemon that died later in startup

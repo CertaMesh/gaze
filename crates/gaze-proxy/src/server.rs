@@ -25,7 +25,8 @@ use tokio::sync::RwLock;
 use url::{Host, Url};
 
 use crate::adapter::{
-    CoveragePolicy, ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent, SurfaceSyntax,
+    CoveragePolicy, ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent, SseStreamKey,
+    SurfaceSyntax,
 };
 use crate::adapters::anthropic::{AnthropicAdapter, DEFAULT_ANTHROPIC_VERSION};
 use crate::codec::{
@@ -3200,8 +3201,9 @@ struct LegacySseFrame {
 /// Every fragment of one logical stream ([`crate::adapter::SseStreamSurface::stream`]) is
 /// therefore concatenated across the whole response, restored once, and replayed in the
 /// stream's first fragment; its later fragments are emptied. The response is already buffered
-/// in full, so this adds no latency. A token the session never minted stays as it is, split or
-/// whole: the client sees the pseudonym, never a raw value.
+/// in full. A token the session never minted stays as it is, split or
+/// whole: the client sees the pseudonym, never a raw value. Missing required identity fields
+/// disable joining for every compatible stream; their fragments restore only within each event.
 fn transform_sse(
     adapter: &Arc<dyn ProviderAdapter>,
     session: &LegacySession,
@@ -3247,27 +3249,47 @@ fn transform_sse(
     }
 
     // Pass 1: the logical text of every stream, in event order.
-    let mut streams = HashMap::<String, String>::new();
+    let mut streams = HashMap::<SseStreamKey, String>::new();
+    let mut ambiguous = HashSet::new();
     for event in frames.iter_mut().filter_map(|frame| frame.event.as_mut()) {
         for fragment in adapter.sse_event_stream_surfaces(event) {
             if let Some(stream) = fragment.stream {
-                streams
-                    .entry(stream)
-                    .or_default()
-                    .push_str(fragment.surface.text);
+                if stream.is_ambiguous() {
+                    ambiguous.insert(stream);
+                } else {
+                    streams
+                        .entry(stream)
+                        .or_default()
+                        .push_str(fragment.surface.text);
+                }
             }
         }
     }
 
-    // Pass 2: restore complete surfaces in place, and each stream once into its first fragment.
+    // An unidentified fragment may belong to any compatible stream, including streams not
+    // seen until later. Fall back for the whole affected stream, never bridge across it.
+    let ambiguous_streams: HashSet<_> = streams
+        .keys()
+        .filter(|stream| {
+            ambiguous
+                .iter()
+                .any(|unknown| unknown.could_continue(stream))
+        })
+        .cloned()
+        .collect();
+    streams.retain(|stream, _| !ambiguous_streams.contains(stream));
+
+    // Pass 2: restore complete/ambiguous surfaces in place, and trusted streams once.
     let json_spelled_tokens = session.json_spelled_tokens();
     for event in frames.iter_mut().filter_map(|frame| frame.event.as_mut()) {
         for fragment in adapter.sse_event_stream_surfaces(event) {
             let surface = fragment.surface;
             let into_json_string = restores_into_json_string(surface.syntax, json_output);
             let logical = match fragment.stream {
-                None => Some(std::mem::take(surface.text)),
-                Some(stream) => streams.remove(&stream),
+                Some(stream) if !stream.is_ambiguous() && !ambiguous_streams.contains(&stream) => {
+                    streams.remove(&stream)
+                }
+                _ => Some(std::mem::take(surface.text)),
             };
             *surface.text = match logical {
                 Some(logical) => restore_text(
