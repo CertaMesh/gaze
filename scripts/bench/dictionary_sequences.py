@@ -165,7 +165,7 @@ def capture(repo, binary, probe, output, seed=SEED, partition="published"):
             corpus = digest([[d.uid, d.text, [(s.start, s.end, s.label) for s in d.spans]]
                              for d in docs])
             measurements = score.collect_validator_measurements(probe, docs, (d.uid for d in docs))
-            writer = records.RecordWriter(docs, measurements, corpus_sha256=corpus)
+            writer = records.RecordWriter(docs, measurements, corpus_sha256=corpus, binary=binary)
             environment = {**os.environ, "GAZE_BENCH_DICTIONARY_SEQUENCE": sequence}
             with patch.object(score, "BenchSubprocess", Transport):
                 run = score.run_config(

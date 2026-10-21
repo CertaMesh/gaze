@@ -831,6 +831,24 @@ pub struct InspectionQueueSnapshotV1 {
 }
 
 impl InspectionQueueSnapshotV1 {
+    /// Events accepted by admission, including ones later purged or disabled.
+    #[must_use]
+    pub const fn admitted(self) -> u64 {
+        self.admitted
+    }
+
+    /// Emission attempts refused by admission.
+    #[must_use]
+    pub const fn dropped(self) -> u64 {
+        self.dropped
+    }
+
+    /// Sink callbacks completed, including rejected and panicking callbacks.
+    #[must_use]
+    pub const fn delivered(self) -> u64 {
+        self.delivered
+    }
+
     #[must_use]
     pub const fn new(admitted: u64, dropped: u64, delivered: u64) -> Self {
         Self {

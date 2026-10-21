@@ -8,6 +8,7 @@ import gzip
 import hashlib
 import json
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -108,8 +109,16 @@ def unavailable_receipt(path: Path, inputs: HistoryInputs) -> dict:
         raise HistoryError('unavailability receipt needs a harness revision')
     _hex64(value['binary_sha256'], 'binary_sha256')
     _hex64(value['driver_sha256'], 'driver_sha256')
-    if inputs.version == agentic_layers.GENERATOR_VERSION and value['driver_sha256'] != sha256(ROOT / 'scripts/bench/rescore_past_release.py'):
-        raise HistoryError('unavailability receipt must use the current measurement driver')
+    if value['driver_sha256'] != sha256(ROOT / 'scripts/bench/rescore_past_release.py'):
+        try:
+            measured_driver = subprocess.check_output(
+                ['git', 'show', f"{value['harness_revision']}:scripts/bench/rescore_past_release.py"],
+                cwd=ROOT, stderr=subprocess.PIPE,
+            )
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise HistoryError('cannot verify the original measurement driver; fetch its harness commit') from error
+        if hashlib.sha256(measured_driver).hexdigest() != value['driver_sha256']:
+            raise HistoryError('unavailability receipt differs from its original measurement driver')
     if (value['configs'] != ['rule-floor-extended', 'pass2-ner', 'full-stack-kiji-resolve']
             or value['manifest_replacing_actions'] != ['tokenize']):
         raise HistoryError('unavailability receipt does not describe the legacy release arms')
