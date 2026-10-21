@@ -73,6 +73,49 @@ def write_capture(binary, directory, key):
 
 
 class CaptureIdentityTests(unittest.TestCase):
+    def test_python_and_extension_native_library_mutations_invalidate_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stdlib = root / "stdlib"
+            stdlib.mkdir()
+            python, detector, libpython, extension, dependency = (
+                root / name for name in ("python", "detector", "libpython.so", "extension.so", "dependency.so"))
+            for path in (python, detector, libpython, extension, dependency):
+                path.write_bytes(b"synthetic original")
+            calls = []
+            def command(*args):
+                calls.append(args)
+                if args[0] == "lscpu":
+                    return "Architecture: synthetic"
+                library = libpython if args[1] == str(python) else dependency
+                return f"{library} (0x000)"
+            with mock.patch.object(identity.platform, "system", return_value="Linux"), \
+                    mock.patch.object(identity, "_command", side_effect=command), \
+                    mock.patch.object(identity.importlib.metadata, "distributions", return_value=[]), \
+                    mock.patch.object(identity.sysconfig, "get_path", return_value=str(stdlib)), \
+                    mock.patch.object(identity.sys, "executable", str(python)), \
+                    mock.patch.dict(identity.sys.modules, {"synthetic_extension": SimpleNamespace(__file__=str(extension))}):
+                original = identity.native_runtime({"detector": detector})
+                self.assertIn(("ldd", str(python)), calls)
+                self.assertIn(("ldd", str(extension)), calls)
+                for path in (libpython, dependency):
+                    with self.subTest(library=path.name):
+                        path.write_bytes(b"synthetic changed")
+                        self.assertNotEqual(identity.native_runtime({"detector": detector}), original)
+                        path.write_bytes(b"synthetic original")
+
+    def test_unresolved_python_loader_disables_runtime_inventory(self):
+        def command(*args):
+            if args[0] == "lscpu":
+                return "Architecture: synthetic"
+            return "libpython.so => not found"
+        with mock.patch.object(identity.platform, "system", return_value="Linux"), \
+                mock.patch.object(identity, "_command", side_effect=command), \
+                mock.patch.object(identity.importlib.metadata, "distributions", return_value=[]), \
+                mock.patch.object(identity.sysconfig, "get_path", return_value="/nonexistent"):
+            with self.assertRaisesRegex(ValueError, "unresolved dynamic library"):
+                identity.native_runtime({})
+
     def test_linux_hardware_identity_ignores_live_clock_speed_but_binds_cpu_features(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -193,12 +236,16 @@ class NativeCaptureReuseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             fresh = root / "fresh"
+            try:
+                runtime = identity.native_runtime({"detector": BINARY})
+            except (OSError, ValueError) as error:
+                self.skipTest(f"native reuse is disabled: {error}")
             key = {"schema_version": identity.SCHEMA_VERSION,
                    "binary_sha256": identity.file_digest(BINARY), "corpus_sha256": identity.file_digest(CORPUS),
                    "policy_sha256": "synthetic", "model_bundle": {}, "seed": 20260710,
                    "generator_version": "fixture-v1", "layer_spec": ["C", "A", "D", "R"],
                    "locale_environment": "synthetic", "harness_schema": records.SCHEMA_VERSION,
-                   "runtime": identity.native_runtime({"detector": BINARY})}
+                   "runtime": runtime}
             original, card = write_capture(BINARY, fresh, key)
             self.assertEqual(card["observation_record"]["binary_sha256"], key["binary_sha256"])
             destination = root / "hit" / original.name
