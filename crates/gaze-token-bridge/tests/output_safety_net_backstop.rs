@@ -8,7 +8,8 @@
 //! - a net suspect drops the offending hit, and its raw bytes appear nowhere in
 //!   the agent-visible response;
 //! - an output pipeline with no registered net denies;
-//! - a bridge with no output net installed denies.
+//! - a bridge with no output net installed denies;
+//! - a net that is installed but skipped for locale coverage denies.
 
 use std::ops::Range;
 
@@ -296,6 +297,35 @@ fn bridge_without_output_net_denies() {
 
     assert_eq!(
         bridge.search(&session, &support_customer_request(&token)),
+        BridgeSearchOutcome::Denied(DenyReason::TranslatorFailed)
+    );
+}
+
+#[test]
+fn output_net_skipped_for_locale_coverage_denies() {
+    // The net would flag the missed value, but it only claims `de-DE` while the
+    // bridge scans under `Global`, so the pipeline skips it. A skipped net scanned
+    // nothing and must not count as coverage.
+    let de_only = LiteralOutputSafetyNet {
+        needle: MISSED_RAW,
+        locales: vec![LocaleTag::DeDe],
+    };
+    let mut bridge =
+        TokenBridge::from_policy_json_and_store(POLICY_JSON, store_with_missed_residual())
+            .expect("store bridge builds")
+            .with_output_safety_net(output_pipeline(de_only), vec![LocaleTag::Global]);
+    let (session, token) = support_session_and_token();
+
+    let outcome = bridge.search(&session, &support_customer_request(&token));
+
+    for rendering in agent_visible_renderings(&outcome) {
+        assert!(
+            !rendering.contains(MISSED_RAW),
+            "unscanned raw value reached agent-visible output: {rendering}"
+        );
+    }
+    assert_eq!(
+        outcome,
         BridgeSearchOutcome::Denied(DenyReason::TranslatorFailed)
     );
 }

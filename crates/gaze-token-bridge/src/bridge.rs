@@ -145,7 +145,8 @@ impl<S: CorpusIndexStore> TokenBridge<S> {
 
     /// Install the mandatory output SafetyNet used after response translation.
     ///
-    /// The bridge denies searches when this scanner is absent or unavailable, so
+    /// The bridge denies searches when this scanner is absent or unavailable, or
+    /// when any installed net does not support `locale_chain` and is skipped, so
     /// callers cannot accidentally return unscanned snippets to an agent.
     pub fn with_output_safety_net(
         mut self,
@@ -346,6 +347,12 @@ impl<S: CorpusIndexStore> TokenBridge<S> {
                 .scan_safety_nets(&scan_session, &hit.snippet, locale_chain)
                 .map_err(|_| DenyReason::TranslatorFailed)?;
             if scan.nets_run == 0 {
+                return Err(DenyReason::TranslatorFailed);
+            }
+            // `nets_run` counts installed nets, including ones the pipeline skipped
+            // because their locales miss this chain. A skipped net scanned nothing,
+            // so treat it as missing coverage and fail closed.
+            if scan.report.stats.locale_skipped_count > 0 {
                 return Err(DenyReason::TranslatorFailed);
             }
             if scan.report.stats.suspect_count == 0 {
