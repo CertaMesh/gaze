@@ -59,7 +59,21 @@ impl DaemonPaths {
             stderr_file: log_dir.join("proxy-stderr.log"),
         })
     }
+
+    /// The readiness marker next to the pidfile (`proxy.ready` for `proxy.pid`).
+    ///
+    /// The daemon child publishes it only after it has bound its port, and
+    /// `start` reports success only once it names the child it spawned.
+    pub fn ready_marker(&self) -> PathBuf {
+        self.pidfile.with_extension("ready")
+    }
 }
+
+/// How long `start` waits for the daemon child to bind before giving up.
+///
+/// Generous on purpose: loading a large NER or safety-net model can take a
+/// while on a loaded host, and the cap exists only so `start` never hangs.
+pub const DEFAULT_READY_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -136,6 +150,8 @@ pub struct StartOptions {
     pub paths: DaemonPaths,
     pub config: DaemonConfig,
     pub extra_args: Vec<String>,
+    /// Cap on waiting for the readiness marker; see [`DEFAULT_READY_TIMEOUT`].
+    pub ready_timeout: Duration,
 }
 
 impl StartOptions {
@@ -144,7 +160,13 @@ impl StartOptions {
             paths,
             config,
             extra_args: Vec::new(),
+            ready_timeout: DEFAULT_READY_TIMEOUT,
         }
+    }
+
+    pub fn with_ready_timeout(mut self, ready_timeout: Duration) -> Self {
+        self.ready_timeout = ready_timeout;
+        self
     }
 
     pub fn with_extra_args(mut self, extra_args: Vec<String>) -> Self {
@@ -283,6 +305,9 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
 
     let mut child = {
         let spawn_result = (|| {
+            // No daemon is running and this start holds the lifecycle lock, so
+            // any marker left behind is from an earlier run and never trusted.
+            remove_ready_marker(&options.paths, |_| true)?;
             let stdout = OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -329,37 +354,45 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
             }
         }
     };
-    confirm_started(&mut child, &options.paths, owned_file)
+    confirm_started(
+        &mut child,
+        &options.paths,
+        owned_file,
+        options.ready_timeout,
+    )
 }
 
-/// Confirms the spawned child is still alive after a short probe window and
-/// returns its pid.
+/// Waits until the spawned child has bound its port, then returns its pid.
 ///
-/// The child resolves the configured policy, so a fail-closed load error
-/// surfaces as an immediate exit. `kill(pid, 0)` cannot see that: an unreaped
-/// child is a zombie and still answers as alive, which reported a dead daemon as
-/// started. `try_wait` reaps and reports the real status
-/// within the same 250ms budget, returning early on failure.
+/// Readiness is the marker the child publishes after its bind
+/// ([`mark_ready`]), and only a marker naming this child counts: `start`
+/// removes any earlier marker before spawning, and a marker for another pid is
+/// ignored. A liveness window alone reported success before the port was bound
+/// and missed a daemon that died later in startup, such as while loading a model.
 ///
-/// A failure slower than the probe window still reports success; that daemon is
-/// dead rather than serving unprotected, and `gaze proxy status` shows it.
+/// `try_wait` reaps the child, so an exit at any point before readiness is
+/// reported as [`ProxyError::DaemonExitedEarly`]; `kill(pid, 0)` would count an
+/// unreaped zombie as alive. A child that neither binds nor exits within
+/// `timeout` is killed and reported as [`ProxyError::DaemonStartTimeout`].
+/// Both failures remove the child's pidfile and marker.
 fn confirm_started(
     child: &mut Child,
     paths: &DaemonPaths,
     owned_file: File,
+    timeout: Duration,
 ) -> Result<u32, ProxyError> {
-    let deadline = Instant::now() + Duration::from_millis(250);
+    let pid = child.id();
+    let deadline = Instant::now() + timeout;
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                cleanup_owned(&paths.pidfile, owned_file, CleanupRule::Stale)?;
+                discard_failed_start(paths, pid, owned_file)?;
                 return Err(ProxyError::DaemonExitedEarly {
                     code: status.code(),
                     stderr_file: paths.stderr_file.clone(),
                 });
             }
-            Ok(None) if Instant::now() >= deadline => return Ok(child.id()),
-            Ok(None) => std::thread::sleep(Duration::from_millis(25)),
+            Ok(None) => {}
             Err(source) => {
                 return Err(ProxyError::DaemonIo {
                     path: PathBuf::from("gaze proxy serve"),
@@ -367,7 +400,102 @@ fn confirm_started(
                 });
             }
         }
+        if read_ready_marker(paths)?.is_some_and(|marker| marker.pid == pid) {
+            return Ok(pid);
+        }
+        if Instant::now() >= deadline {
+            // Kill and reap so the pidfile's pid is provably dead before cleanup.
+            let _ = child.kill();
+            let _ = child.wait();
+            discard_failed_start(paths, pid, owned_file)?;
+            return Err(ProxyError::DaemonStartTimeout {
+                timeout,
+                stderr_file: paths.stderr_file.clone(),
+            });
+        }
+        std::thread::sleep(Duration::from_millis(25));
     }
+}
+
+fn discard_failed_start(paths: &DaemonPaths, pid: u32, owned_file: File) -> Result<(), ProxyError> {
+    remove_owned_ready_marker(paths, pid)?;
+    cleanup_owned(&paths.pidfile, owned_file, CleanupRule::Stale)?;
+    Ok(())
+}
+
+/// Publishes the readiness marker for this process once it has bound `bind`.
+///
+/// The marker is written to a private temporary file and renamed into place,
+/// so a reader sees either no marker or a complete one. On Unix it is created
+/// owner-only (`0600`).
+pub fn mark_ready(paths: &DaemonPaths, bind: SocketAddr) -> Result<(), ProxyError> {
+    let marker = paths.ready_marker();
+    create_parent(&marker)?;
+    let pid = std::process::id();
+    let mut name = marker.as_os_str().to_os_string();
+    name.push(format!(".{pid}.tmp"));
+    let tmp = PathBuf::from(name);
+    let _ = fs::remove_file(&tmp);
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let written = options.open(&tmp).and_then(|mut file| {
+        use std::io::Write;
+        file.write_all(format!("{pid}\nbind={bind}\n").as_bytes())?;
+        file.sync_all()
+    });
+    if let Err(source) = written.and_then(|()| fs::rename(&tmp, &marker)) {
+        let _ = fs::remove_file(&tmp);
+        return Err(daemon_io(&marker, source));
+    }
+    Ok(())
+}
+
+struct ReadyMarker {
+    pid: u32,
+}
+
+/// Reads the readiness marker. A missing marker is `None`; an unparseable one
+/// is treated as missing because only a complete marker naming a pid counts.
+fn read_ready_marker(paths: &DaemonPaths) -> Result<Option<ReadyMarker>, ProxyError> {
+    let marker = paths.ready_marker();
+    let text = match fs::read_to_string(&marker) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(source) => return Err(daemon_io(&marker, source)),
+    };
+    Ok(text
+        .lines()
+        .next()
+        .and_then(|line| line.parse::<u32>().ok())
+        .map(|pid| ReadyMarker { pid }))
+}
+
+/// Removes the readiness marker when `permits` accepts what it records.
+fn remove_ready_marker(
+    paths: &DaemonPaths,
+    permits: impl FnOnce(Option<&ReadyMarker>) -> bool,
+) -> Result<(), ProxyError> {
+    let marker = paths.ready_marker();
+    if !marker.exists() || !permits(read_ready_marker(paths)?.as_ref()) {
+        return Ok(());
+    }
+    match fs::remove_file(&marker) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(daemon_io(&marker, source)),
+    }
+}
+
+/// Removes the marker of daemon `pid`, or one whose recorded pid is dead.
+fn remove_owned_ready_marker(paths: &DaemonPaths, pid: u32) -> Result<(), ProxyError> {
+    remove_ready_marker(paths, |marker| {
+        marker.is_none_or(|marker| marker.pid == pid || !process_exists(marker.pid))
+    })
 }
 
 pub fn init_foreground_daemon(paths: &DaemonPaths, bind: SocketAddr) -> Result<(), ProxyError> {
@@ -387,6 +515,7 @@ pub fn stop(options: StopOptions) -> Result<(), ProxyError> {
     let started = Instant::now();
     while started.elapsed() < options.timeout {
         if !process_exists(status.pid) {
+            remove_owned_ready_marker(&options.paths, status.pid)?;
             if let Some(file) = owned_file {
                 cleanup_owned(&options.paths.pidfile, file, CleanupRule::Pid(status.pid))?;
             }
@@ -396,6 +525,7 @@ pub fn stop(options: StopOptions) -> Result<(), ProxyError> {
     }
     if options.force {
         terminate(status.pid, true)?;
+        remove_owned_ready_marker(&options.paths, status.pid)?;
         if let Some(file) = owned_file {
             cleanup_owned(&options.paths.pidfile, file, CleanupRule::Pid(status.pid))?;
         }
@@ -434,6 +564,9 @@ pub fn status(paths: &DaemonPaths) -> Result<Option<DaemonStatus>, ProxyError> {
 }
 
 pub fn cleanup_stale(paths: &DaemonPaths) -> Result<(), ProxyError> {
+    remove_ready_marker(paths, |marker| {
+        marker.is_none_or(|marker| !process_exists(marker.pid))
+    })?;
     let Some(file) = open_pidfile(&paths.pidfile)? else {
         return Ok(());
     };
@@ -1011,18 +1144,257 @@ mod tests {
             .unwrap();
         child.wait().unwrap();
         assert!(matches!(
-            confirm_started(&mut child, &paths, original),
+            confirm_started(&mut child, &paths, original, DEFAULT_READY_TIMEOUT),
             Err(ProxyError::DaemonExitedEarly { .. })
         ));
         assert!(paths.pidfile.exists());
     }
 
+    const READY_FIXTURE_MODE: &str = "GAZE_PROXY_READY_FIXTURE_MODE";
+    const READY_FIXTURE_DIR: &str = "GAZE_PROXY_READY_FIXTURE_DIR";
+
+    /// Stand-in for the detached daemon child, re-executed from this test
+    /// binary by [`spawn_ready_fixture`]. In an ordinary test run it does nothing.
+    ///
+    /// Like the real child it first publishes its pidfile, then spends longer
+    /// than the old 250 ms liveness window "loading" before it either binds and
+    /// publishes the readiness marker, dies, or hangs.
+    #[test]
+    fn ready_fixture_child() {
+        let Ok(mode) = std::env::var(READY_FIXTURE_MODE) else {
+            return;
+        };
+        let dir = PathBuf::from(std::env::var(READY_FIXTURE_DIR).unwrap());
+        let paths = paths_in(&dir);
+        init_foreground_daemon(&paths, "127.0.0.1:0".parse().unwrap()).unwrap();
+        std::thread::sleep(Duration::from_millis(750));
+        match mode.as_str() {
+            "bind-late" => {
+                let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+                mark_ready(&paths, listener.local_addr().unwrap()).unwrap();
+                for stream in listener.incoming() {
+                    drop(stream);
+                }
+            }
+            "die-late" => std::process::exit(3),
+            "never-ready" => loop {
+                std::thread::sleep(Duration::from_secs(60));
+            },
+            other => panic!("unknown fixture mode {other}"),
+        }
+    }
+
+    /// Kills the fixture however the test ends.
+    struct FixtureChild(Child);
+
+    impl Drop for FixtureChild {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    /// Mirrors `start`: lock the pidfile, keep a clone as the ownership
+    /// witness, release the lock, then spawn the fixture daemon child.
+    fn spawn_ready_fixture(dir: &tempfile::TempDir, mode: &str) -> (FixtureChild, File) {
+        let paths = temp_paths(dir);
+        let lock = lock_pidfile(&paths).unwrap();
+        let owned = lock.file.try_clone().unwrap();
+        drop(lock);
+        let child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "daemon::tests::ready_fixture_child",
+                "--test-threads=1",
+            ])
+            .env(READY_FIXTURE_MODE, mode)
+            .env(READY_FIXTURE_DIR, dir.path())
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        (FixtureChild(child), owned)
+    }
+
+    fn marker_bind(paths: &DaemonPaths) -> SocketAddr {
+        let text = fs::read_to_string(paths.ready_marker()).unwrap();
+        text.lines()
+            .find_map(|line| line.strip_prefix("bind="))
+            .unwrap()
+            .parse()
+            .unwrap()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn start_waits_for_a_bind_slower_than_the_old_liveness_window() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        let (mut child, owned) = spawn_ready_fixture(&dir, "bind-late");
+
+        let pid = confirm_started(&mut child.0, &paths, owned, DEFAULT_READY_TIMEOUT).unwrap();
+
+        assert_eq!(pid, child.0.id());
+        assert!(
+            paths.ready_marker().exists(),
+            "start reported success before the daemon published readiness"
+        );
+        // The first request after a successful start must reach the daemon.
+        std::net::TcpStream::connect(marker_bind(&paths)).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn start_reports_a_daemon_that_dies_after_the_old_liveness_window() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        let (mut child, owned) = spawn_ready_fixture(&dir, "die-late");
+
+        let result = confirm_started(&mut child.0, &paths, owned, DEFAULT_READY_TIMEOUT);
+
+        assert!(
+            matches!(
+                result,
+                Err(ProxyError::DaemonExitedEarly { code: Some(3), .. })
+            ),
+            "{result:?}"
+        );
+        assert!(!paths.pidfile.exists(), "a failed start left its pidfile");
+        assert!(!paths.ready_marker().exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn start_never_trusts_a_marker_from_another_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        // A live but unrelated pid: this test process.
+        mark_ready(&paths, "127.0.0.1:9".parse().unwrap()).unwrap();
+        let (mut child, owned) = spawn_ready_fixture(&dir, "die-late");
+
+        let result = confirm_started(&mut child.0, &paths, owned, DEFAULT_READY_TIMEOUT);
+
+        assert!(
+            matches!(result, Err(ProxyError::DaemonExitedEarly { .. })),
+            "a marker naming another process was taken as readiness: {result:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn start_stops_a_daemon_that_never_becomes_ready() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        let (mut child, owned) = spawn_ready_fixture(&dir, "never-ready");
+        let timeout = Duration::from_secs(2);
+
+        let result = confirm_started(&mut child.0, &paths, owned, timeout);
+
+        assert!(
+            matches!(result, Err(ProxyError::DaemonStartTimeout { timeout: found, .. }) if found == timeout),
+            "{result:?}"
+        );
+        assert!(
+            child.0.try_wait().unwrap().is_some(),
+            "the unready daemon was left running"
+        );
+        assert!(!paths.pidfile.exists(), "a failed start left its pidfile");
+    }
+
+    #[test]
+    fn start_removes_a_leftover_marker_before_spawning() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        mark_ready(&paths, "127.0.0.1:9".parse().unwrap()).unwrap();
+        // Fail the spawn after the lock is taken, so no child can write one.
+        fs::create_dir(&paths.stderr_file).unwrap();
+
+        let result = start(StartOptions::new(paths.clone(), DaemonConfig::default()));
+
+        assert!(matches!(result, Err(ProxyError::DaemonIo { .. })));
+        assert!(!paths.ready_marker().exists());
+    }
+
+    #[test]
+    fn cleanup_stale_removes_a_dead_daemons_marker_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        fs::write(paths.ready_marker(), "999999\nbind=127.0.0.1:9\n").unwrap();
+        cleanup_stale(&paths).unwrap();
+        assert!(!paths.ready_marker().exists());
+
+        mark_ready(&paths, "127.0.0.1:9".parse().unwrap()).unwrap();
+        cleanup_stale(&paths).unwrap();
+        assert!(
+            paths.ready_marker().exists(),
+            "removed a live daemon's marker"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ready_marker_is_owner_only_and_names_the_bound_address() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        let bind: SocketAddr = "127.0.0.1:8787".parse().unwrap();
+        mark_ready(&paths, bind).unwrap();
+        let mode = fs::metadata(paths.ready_marker())
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
+        assert_eq!(
+            fs::read_to_string(paths.ready_marker()).unwrap(),
+            format!("{}\nbind={bind}\n", std::process::id())
+        );
+        assert_eq!(
+            fs::read_dir(dir.path()).unwrap().count(),
+            1,
+            "temp file left"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stop_removes_the_stopped_daemons_marker() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        let child = FixtureChild(
+            Command::new("sleep")
+                .arg("60")
+                .stdout(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let pid = child.0.id();
+        // Publish the pidfile and marker as a ready daemon would.
+        write_pidfile(
+            &paths.pidfile,
+            pid,
+            "127.0.0.1:9".parse().unwrap(),
+            Utc::now(),
+        )
+        .unwrap();
+        fs::write(paths.ready_marker(), format!("{pid}\nbind=127.0.0.1:9\n")).unwrap();
+
+        stop(StopOptions::new(paths.clone(), Duration::ZERO, true)).unwrap();
+
+        assert!(!paths.ready_marker().exists());
+        drop(child);
+    }
+
     fn temp_paths(dir: &tempfile::TempDir) -> DaemonPaths {
+        paths_in(dir.path())
+    }
+
+    fn paths_in(dir: &Path) -> DaemonPaths {
         DaemonPaths {
-            pidfile: dir.path().join("proxy.pid"),
-            config: dir.path().join("proxy.toml"),
-            log_file: dir.path().join("proxy.log"),
-            stderr_file: dir.path().join("proxy-stderr.log"),
+            pidfile: dir.join("proxy.pid"),
+            config: dir.join("proxy.toml"),
+            log_file: dir.join("proxy.log"),
+            stderr_file: dir.join("proxy-stderr.log"),
         }
     }
 
