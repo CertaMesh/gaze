@@ -12,12 +12,18 @@ ROOT = Path(__file__).resolve().parents[2]
 PACK = ROOT / "crates/gaze-recognizers/embedded/secrets.toml"
 MUTATIONS = [
     ("hash-left", "password.hash", r"(?:\A|[^A-Za-z0-9_./+$-])", "", "hash_shapes"),
-    ("hash-right", "password.hash", r"(?:\z|[^A-Za-z0-9_./+$=-])", "", "hash_shapes"),
+    ("hash-right", "password.hash", r"(?:\z|[^A-Za-z0-9_./+$=\\-])", "", "hash_shapes"),
     ("bcrypt-width", "password.hash", "{53}", "{1,53}", "hash_shapes"),
-    ("scrypt-width", "password.hash", r"{0,1366}\$[A-Za-z0-9+/]{43}", r"{0,1366}\$[A-Za-z0-9+/]{42,43}", "every_supported_hash_format"),
+    ("scrypt-width", "password.hash", r"{0,1366}\$(?:[A-Za-z0-9+/]|\\/){43}", r"{0,1366}\$(?:[A-Za-z0-9+/]|\\/){42,43}", "every_supported_hash_format"),
     ("md5-salt", "password.hash", "{0,8}", "{0,16}", "every_supported_hash_format"),
     ("phpass-width", "password.hash", "{31}", "{30,31}", "every_supported_hash_format"),
 ]
+MUTATIONS.extend([
+    ('crypt-source-units', 'password.hash', "(?:''|\\\\'|[^$:\\n\\x00])", '[^$:\\n\\x00]', 'escaped_crypt_salts_count_decoded_units_at_producer_limits'),
+    ('bcrypt-source-units', 'password.hash', '(?:[.A-Za-z0-9/]|\\\\/){53}', '[./A-Za-z0-9]{53}', 'escaped_json_slashes_are_complete_hash_alphabet_units'),
+    ('argon-source-units', 'password.hash', '(?:[A-Za-z0-9+/]|\\\\/){4,}', '[A-Za-z0-9+/]{4,}', 'escaped_json_slashes_are_complete_hash_alphabet_units'),
+])
+
 for source in ("password.code", "security_token.code"):
     MUTATIONS.extend([
         (source + "-left", source, r"(?:\A|[\s{\[(,;])", "", "code_literal"),
