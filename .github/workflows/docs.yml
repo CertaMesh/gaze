@@ -17,6 +17,30 @@ jobs:
           # release_char_level.py check resolves release tags and their commits' crates trees.
           fetch-depth: 0
 
+      - name: Select full evidence scan for changed publication inputs
+        id: evidence
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import sys
+          sys.path.insert(0, 'scripts/ci')
+          from ci_gate import changed_paths
+
+          inputs = {
+              'scripts/bench/evidence_home_paths.py',
+              'scripts/bench/export_portable_record.py',
+              'docs/reference/benchmarks/portable-evidence-receipts.json',
+          }
+          paths = changed_paths(os.environ['BASE_SHA'], os.environ['HEAD_SHA'])
+          changed = any(path.endswith('.gz') or path in inputs for path in paths)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'changed={str(changed).lower()}\n')
+          PY
+
       # Stdlib-only, no external corpus and no model: fails if the benchmark document
       # drifts from the release scorecards it reports.
       - name: benchmark document matches its committed evidence
@@ -44,6 +68,13 @@ jobs:
 
       - name: leak ledger matches its committed observation record
         run: python3 scripts/bench/leak_ledger.py check
+
+      - name: tracked gzip evidence carries no absolute home path
+        if: ${{ github.event_name == 'push' || steps.evidence.outputs.changed == 'true' }}
+        run: python3 scripts/bench/evidence_home_paths.py check
+
+      - name: scrubbed evidence archives equal their originals except path fields
+        run: python3 scripts/bench/evidence_home_paths.py verify-receipts
 
       - name: release character-level scores match the release history
         run: python3 scripts/bench/compare/release_char_level.py check
