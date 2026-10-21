@@ -1,0 +1,96 @@
+# Anvil >= 1.13. Rustup proxies bind nested Cargo/trybuild/rustdoc children too.
+env:
+  RUSTUP_TOOLCHAIN: "1.96.0"
+  PATH: "${HOME}/.cargo/bin:${PATH}"
+  RUSTC: "${HOME}/.cargo/bin/rustc"
+  RUSTDOC: "${HOME}/.cargo/bin/rustdoc"
+  CARGO_BUILD_JOBS: "4"
+  PYTHONDONTWRITEBYTECODE: "1"
+# Keep Cargo's cwd-relative target/. Nested mutation gates rely on that layout.
+
+components:
+  - name: bench-python
+    path: scripts/bench
+    requires: [uv]
+    override: true
+    prepare:
+      - run: uv sync --python 3.13 --locked --group comparison-test
+        inputs: [pyproject.toml, uv.lock]
+        outputs: [.venv/pyvenv.cfg]
+
+# Optional, used in place. Consumers verify their SHA-pinned bundles on load.
+resources:
+  shared:
+    - name: ner
+      path: ~/.local/share/gaze/models/davlan-mbert-ner-hrl
+      env: GAZE_NER_MODEL_DIR
+      required: false
+    - name: nym
+      path: ~/.local/share/gaze/models/nym-small-int8
+      env: GAZE_NYM_MODEL_DIR
+      required: false
+    - name: gliner-dob
+      path: ~/.local/share/gaze/models/gliner-multi-pii-dob-int8
+      required: false
+    - name: opf
+      path: ~/.opf/privacy_filter
+      env: OPF_CHECKPOINT
+      required: false
+
+roles:
+  review:
+    env_unset:
+      - CARGO_REGISTRY_TOKEN
+      - CARGO_REGISTRIES_CRATES_IO_TOKEN
+      - NPM_TOKEN
+      - NODE_AUTH_TOKEN
+      - PYPI_TOKEN
+      - UV_PUBLISH_TOKEN
+
+checks:
+  fmt:
+    reusable: true
+    inputs: &rust-inputs [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/anvil, .github/workflows, anvil.yaml]
+    toolchain: &rust-tools [rustc -Vv, rustdoc -V, cargo -V, cargo fmt --version, cargo clippy --version]
+    commands:
+      - cargo fmt --all -- --check
+  clippy:
+    reusable: true
+    locks: [workspace-build]
+    inputs: *rust-inputs
+    toolchain: *rust-tools
+    commands:
+      - cargo clippy --workspace --all-features --all-targets -- -D warnings
+  fast:
+    description: Format and lint before full verification
+    reusable: true
+    locks: [workspace-build]
+    inputs: *rust-inputs
+    toolchain: *rust-tools
+    commands:
+      - cargo fmt --all -- --check
+      - cargo clippy --workspace --all-features --all-targets -- -D warnings
+  test:
+    description: Workspace tests, with at least one executed test
+    expensive: true
+    locks: [workspace-build]
+    inputs: *rust-inputs
+    toolchain: *rust-tools
+    commands:
+      - python3 -m unittest discover -s scripts/anvil -p 'test_test_*.py'
+      - python3 scripts/anvil/test_nonempty.py cargo test --workspace --all-features
+  feature-matrix:
+    expensive: true
+    locks: [workspace-build]
+    inputs: *rust-inputs
+    toolchain: *rust-tools
+    commands:
+      - cargo run -p xtask -- ci-feature-matrix
+  bench-py:
+    description: CI model-free benchmark Python tests
+    expensive: true
+    locks: [bench-machine, workspace-build]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, crates, scripts/bench/*.py, scripts/bench/pyproject.toml, scripts/bench/uv.lock, scripts/ci, docs/reference/benchmarks, .github/workflows, anvil.yaml]
+    toolchain: [rustc -Vv, cargo -V, uv --version, uv run --project scripts/bench --python 3.13 --group comparison-test python --version]
+    commands:
+      - uv run --project scripts/bench --python 3.13 --group comparison-test python -m pytest -q scripts/bench --durations=30
