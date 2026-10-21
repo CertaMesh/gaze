@@ -1,10 +1,12 @@
 //! Australian state-anchored postcode fixtures. All example strings are synthetic.
 
+mod support;
+
 use gaze::RawMatch;
 use gaze::{
-    Action, CleanDocument, ConflictTier, Context, DictionaryBundle, LocaleChain, LocaleTag,
-    PiiClass, Pipeline, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec,
-    Rulepack, RulepackSource, Scope, Session,
+    Action, CleanDocument, ConflictTier, DictionaryBundle, LocaleTag, PiiClass, Pipeline,
+    RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec, Rulepack,
+    RulepackSource, Scope, Session,
 };
 use gaze_recognizers::embedded;
 use std::sync::{Arc, Mutex};
@@ -14,47 +16,26 @@ mod token_assertions;
 use token_assertions::without_tokens;
 
 fn pipeline_for(locales: &[LocaleTag]) -> Pipeline {
-    let rulepack = Rulepack::load(RulepackSource::Embedded(
-        embedded("core").expect("core rulepack"),
-    ))
-    .expect("core loads");
-    let mut policy = gaze::Policy::default();
-    policy.rules = vec![
-        RuleSpec::Class {
-            class: PiiClass::custom("postal_code").expect("postal class"),
-            action: Action::Tokenize,
-        },
-        RuleSpec::Default {
-            action: Action::Preserve,
-        },
-    ];
-    policy.rulepacks.bundled = vec!["core".to_string()];
-    policy.rulepacks.auto_activate_locale_gated = false;
-    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(locales));
-    let context = Context {
-        dictionaries: std::collections::HashMap::new(),
-        class_map: std::collections::HashMap::new(),
-        fields: serde_json::Map::new(),
-        record_match_kinds: Default::default(),
-        record_value_rejections: Default::default(),
-    };
-    gaze_assembly::build_pipeline(&policy, &context, &[rulepack], &chain, None).expect("pipeline")
+    support::pipeline_for(
+        locales,
+        &["core"],
+        vec![
+            RuleSpec::Class {
+                class: PiiClass::custom("postal_code").expect("postal class"),
+                action: Action::Tokenize,
+            },
+            RuleSpec::Default {
+                action: Action::Preserve,
+            },
+        ],
+        false,
+    )
 }
 
 fn clean_and_restore_with_chain(locales: &[LocaleTag], original: &str) -> String {
     let pipeline = pipeline_for(locales);
     let session = Session::new(Scope::Ephemeral).expect("session");
-    let (clean, _, _) = pipeline
-        .clean_with_safety_net_detect_context(
-            &session,
-            RawDocument::Text(original.to_string()),
-            locales,
-            &DictionaryBundle::default(),
-        )
-        .expect("clean");
-    let CleanDocument::Text(cleaned) = clean else {
-        panic!("expected text");
-    };
+    let cleaned = support::clean(&pipeline, &session, original, locales);
     assert_eq!(
         pipeline
             .restore_strict_text(&session, &cleaned)

@@ -21,22 +21,14 @@
 //! `192.0.3.0/24`, plus link-local `fe80::` and the short form `::2`. Loopback addresses
 //! (`::1`, `127.0.0.0/8`) are not personal data and leave raw; see `validator_veto.rs`.
 
+mod support;
+
 use gaze::Context;
 use gaze::{
     Action, CleanDocument, DictionaryBundle, LocaleChain, LocaleTag, PiiClass, Pipeline,
     RawDocument, RuleSpec, Rulepack, RulepackSource, Scope, Session,
 };
 use gaze_recognizers::embedded;
-
-fn empty_context() -> Context {
-    Context {
-        dictionaries: std::collections::HashMap::new(),
-        class_map: std::collections::HashMap::new(),
-        fields: serde_json::Map::new(),
-        record_match_kinds: Default::default(),
-        record_value_rejections: Default::default(),
-    }
-}
 
 fn ip_class() -> PiiClass {
     PiiClass::custom("ip_address").expect("valid custom class")
@@ -45,25 +37,20 @@ fn ip_class() -> PiiClass {
 /// The core bundle through the real activation path, with only `custom:ip_address` tokenized so
 /// any change in the output is this rule's doing.
 fn pipeline_for_locales(locales: &[LocaleTag]) -> Pipeline {
-    let rulepack = Rulepack::load(RulepackSource::Embedded(
-        embedded("core").expect("core rulepack"),
-    ))
-    .expect("core loads");
-    let mut policy = gaze::Policy::default();
-    policy.rules = vec![
-        RuleSpec::Class {
-            class: ip_class(),
-            action: Action::Tokenize,
-        },
-        RuleSpec::Default {
-            action: Action::Preserve,
-        },
-    ];
-    policy.rulepacks.bundled = vec!["core".to_string()];
-    policy.rulepacks.auto_activate_locale_gated = false;
-    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(locales));
-    gaze_assembly::build_pipeline(&policy, &empty_context(), &[rulepack], &chain, None)
-        .expect("pipeline")
+    support::pipeline_for(
+        locales,
+        &["core"],
+        vec![
+            RuleSpec::Class {
+                class: ip_class(),
+                action: Action::Tokenize,
+            },
+            RuleSpec::Default {
+                action: Action::Preserve,
+            },
+        ],
+        false,
+    )
 }
 
 fn pipeline() -> Pipeline {
@@ -72,18 +59,7 @@ fn pipeline() -> Pipeline {
 
 fn clean(text: &str) -> String {
     let session = Session::new(Scope::Ephemeral).expect("session");
-    let (clean, _, _) = pipeline()
-        .clean_with_safety_net_detect_context(
-            &session,
-            RawDocument::Text(text.to_string()),
-            &LOCALES,
-            &DictionaryBundle::default(),
-        )
-        .expect("clean");
-    match clean {
-        CleanDocument::Text(text) => text,
-        other => panic!("expected text, got {other:?}"),
-    }
+    support::clean(&pipeline(), &session, text, &LOCALES)
 }
 
 fn assert_adjacent_addresses(raw: &str, protected: &[&str]) {

@@ -26,22 +26,13 @@
 //! base64url strings. The JWT ownership regressions use only alice@example.invalid
 //! and a synthetic signature, and make no holdout coverage claim.
 
-use gaze::Context;
+mod support;
+
 use gaze::{
-    Action, CleanDocument, DictionaryBundle, LocaleChain, LocaleTag, PiiClass, Pipeline,
-    RawDocument, RuleSpec, Rulepack, RulepackSource, Scope, Session,
+    Action, CleanDocument, DictionaryBundle, LocaleTag, PiiClass, Pipeline, RawDocument, RuleSpec,
+    Rulepack, RulepackSource, Scope, Session,
 };
 use gaze_recognizers::embedded;
-
-fn empty_context() -> Context {
-    Context {
-        dictionaries: std::collections::HashMap::new(),
-        class_map: std::collections::HashMap::new(),
-        fields: serde_json::Map::new(),
-        record_match_kinds: Default::default(),
-        record_value_rejections: Default::default(),
-    }
-}
 
 fn security_token_class() -> PiiClass {
     PiiClass::custom("security_token").expect("valid custom class")
@@ -73,36 +64,12 @@ fn pipeline_for(chain: &[LocaleTag]) -> Pipeline {
 }
 
 fn pipeline_with_rules(chain: &[LocaleTag], rules: Vec<RuleSpec>) -> Pipeline {
-    let rulepacks = ["core", "secrets"].map(|bundle| {
-        Rulepack::load(RulepackSource::Embedded(
-            embedded(bundle).expect("bundled rulepack"),
-        ))
-        .expect("bundled rulepack loads")
-    });
-    let mut policy = gaze::Policy::default();
-    policy.rules = rules;
-    policy.rulepacks.bundled = vec!["core".to_string(), "secrets".to_string()];
-    policy.rulepacks.auto_activate_locale_gated = false;
-    let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(chain));
-    gaze_assembly::build_pipeline(&policy, &empty_context(), &rulepacks, &locale_chain, None)
-        .expect("pipeline")
+    support::pipeline_for(chain, &["core", "secrets"], rules, false)
 }
 
 fn clean_under(chain: &[LocaleTag], text: &str) -> String {
-    let pipeline = pipeline_for(chain);
     let session = Session::new(Scope::Ephemeral).expect("session");
-    let (clean, _, _) = pipeline
-        .clean_with_safety_net_detect_context(
-            &session,
-            RawDocument::Text(text.to_string()),
-            chain,
-            &DictionaryBundle::default(),
-        )
-        .expect("clean");
-    match clean {
-        CleanDocument::Text(text) => text,
-        _ => panic!("expected text"),
-    }
+    support::clean(&pipeline_for(chain), &session, text, chain)
 }
 
 fn clean(text: &str) -> String {

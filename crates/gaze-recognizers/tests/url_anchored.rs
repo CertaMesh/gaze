@@ -19,7 +19,9 @@
 //!
 //! Fixture values are synthetic and use reserved `.invalid` hosts only.
 
-use gaze::Context;
+mod support;
+use support::empty_context;
+
 use gaze::{
     Action, CleanDocument, DictionaryBundle, LocaleChain, LocaleTag, PiiClass, Pipeline,
     RawDocument, RuleSpec, Rulepack, RulepackSource, Scope, Session,
@@ -29,16 +31,6 @@ use gaze_recognizers::embedded;
 /// `global` only, which is what `core`'s `default_locales` already resolves to.
 fn global_chain() -> LocaleChain {
     LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(&[LocaleTag::Global]))
-}
-
-fn empty_context() -> Context {
-    Context {
-        dictionaries: std::collections::HashMap::new(),
-        class_map: std::collections::HashMap::new(),
-        fields: serde_json::Map::new(),
-        record_match_kinds: Default::default(),
-        record_value_rejections: Default::default(),
-    }
 }
 
 fn url_class() -> PiiClass {
@@ -60,49 +52,28 @@ fn pipeline() -> Pipeline {
 }
 
 fn pipeline_with_actions(url_action: Action, email_action: Action) -> Pipeline {
-    let rulepack = Rulepack::load(RulepackSource::Embedded(
-        embedded("core").expect("core rulepack"),
-    ))
-    .expect("core loads");
-    let mut policy = gaze::Policy::default();
-    policy.rules = vec![
-        RuleSpec::Class {
-            class: url_class(),
-            action: url_action,
-        },
-        RuleSpec::Class {
-            class: PiiClass::Email,
-            action: email_action,
-        },
-        RuleSpec::Default {
-            action: Action::Preserve,
-        },
-    ];
-    policy.rulepacks.bundled = vec!["core".to_string()];
-    policy.rulepacks.auto_activate_locale_gated = false;
-    gaze_assembly::build_pipeline(
-        &policy,
-        &empty_context(),
-        &[rulepack],
-        &global_chain(),
-        None,
+    support::pipeline_for(
+        &[LocaleTag::Global],
+        &["core"],
+        vec![
+            RuleSpec::Class {
+                class: url_class(),
+                action: url_action,
+            },
+            RuleSpec::Class {
+                class: PiiClass::Email,
+                action: email_action,
+            },
+            RuleSpec::Default {
+                action: Action::Preserve,
+            },
+        ],
+        false,
     )
-    .expect("pipeline")
 }
 
 fn clean_with(pipeline: &Pipeline, session: &Session, text: &str) -> String {
-    let (clean, _, _) = pipeline
-        .clean_with_safety_net_detect_context(
-            session,
-            RawDocument::Text(text.to_string()),
-            &[LocaleTag::Global],
-            &DictionaryBundle::default(),
-        )
-        .expect("clean");
-    match clean {
-        CleanDocument::Text(text) => text,
-        _ => panic!("expected text"),
-    }
+    support::clean(pipeline, session, text, &[LocaleTag::Global])
 }
 
 fn clean(text: &str) -> String {
