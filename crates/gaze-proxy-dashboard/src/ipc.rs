@@ -442,7 +442,7 @@ impl RuntimeStatusFrameV1 {
 
 /// One decoded inbound frame on the child inspection channel.
 pub(crate) enum InboundFrameV1 {
-    Event(DecodedInspectionFrame),
+    Event(Box<DecodedInspectionFrame>),
     Status(RuntimeStatusFrameV1),
 }
 
@@ -451,7 +451,8 @@ impl InboundFrameV1 {
         if bytes.starts_with(STATUS_MAGIC) {
             RuntimeStatusFrameV1::decode(bytes).map(Self::Status)
         } else {
-            DecodedInspectionFrame::decode(bytes, max_bytes).map(Self::Event)
+            DecodedInspectionFrame::decode(bytes, max_bytes)
+                .map(|frame| Self::Event(Box::new(frame)))
         }
     }
 }

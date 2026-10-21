@@ -124,14 +124,17 @@ pub(crate) fn safe_fields() -> InspectionSafeFieldsV1 {
     )
 }
 
-fn present_components() -> (
+/// Every projection component of one stage, in constructor order.
+type ProjectionComponents = (
     ProjectionAvailabilityV1<InspectionMeasurementV1>,
     ProjectionAvailabilityV1<JsonShapeSummaryV1>,
     ProjectionAvailabilityV1<SseTimelineMetaV1>,
     ProjectionAvailabilityV1<PiiSummaryV1>,
     ProjectionAvailabilityV1<DecisionTraceV1>,
     ProjectionAvailabilityV1<AttestationTraceV1>,
-) {
+);
+
+fn present_components() -> ProjectionComponents {
     use ProjectionAvailabilityV1::{Omitted, Present};
     (
         Present(InspectionMeasurementV1::new(1_421, 3)),

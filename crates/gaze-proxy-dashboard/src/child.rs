@@ -342,7 +342,7 @@ fn inspection_loop(
         let mut child = state.lock().unwrap_or_else(|poison| poison.into_inner());
         match frame {
             InboundFrameV1::Event(frame) => {
-                let _ = child.store.admit(frame, Instant::now());
+                let _ = child.store.admit(*frame, Instant::now());
             }
             InboundFrameV1::Status(status) => child.status = Some(status),
         }
