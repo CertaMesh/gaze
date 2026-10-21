@@ -494,6 +494,7 @@
     "docs/reference/benchmarks/personal-id-checksum-v18-cell-diff.json",
     "docs/reference/benchmarks/personal-id-checksum-v18-contract-replay.json",
     "docs/reference/benchmarks/personal-id-checksum-v18-kiji-identity-diff.json",
+    "docs/reference/benchmarks/portable-evidence-receipts.json",
     "docs/reference/benchmarks/presidio-tuned-overlap.json",
     "docs/reference/benchmarks/presidio-tuned-search-log.jsonl.gz",
     "docs/reference/benchmarks/presidio-tuned-selection.json",

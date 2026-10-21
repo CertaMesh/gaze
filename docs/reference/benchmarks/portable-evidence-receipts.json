@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "comment": "Original -> public hashes for evidence archives whose policy path named a home directory. Checked by scripts/bench/evidence_home_paths.py verify-receipts against the originals in git history.",
+  "source_commit": "5ac6c0628a62b4d85456e9941117306a0c4b3350",
+  "archives": [
+    {
+      "file": "docs/reference/benchmarks/leak-ledger/observations-74701b227385.jsonl.gz",
+      "source_sha256": "f457afe767aae0d111d4024407f532bc3705d6de3ce62470187063136e117470",
+      "exported_sha256": "a26f9979edaf70e6abc97030c07b21e086cc33c7724de0ad95822bdd35010f53",
+      "metadata_normalization": "policy-path-repo-relative",
+      "changed_fields": [
+        "scorecard.runner_provenance.policy.path"
+      ],
+      "observation_rows": 6160
+    },
+    {
+      "file": "docs/reference/benchmarks/mechanisms/davlan-ner-491df871dd57-base.jsonl.gz",
+      "source_sha256": "b7fd110e416ceacddd6c80a665b4d896d7b96d79382fd6cb410f480b81293a4c",
+      "exported_sha256": "4293cd9132b7dbee9bc51168b31ec81745beb30ee6ce287529cfb18055b4d778",
+      "metadata_normalization": "policy-path-repo-relative",
+      "changed_fields": [
+        "scorecard.runner_provenance.policy.path"
+      ],
+      "observation_rows": 6160
+    },
+    {
+      "file": "docs/reference/benchmarks/mechanisms/davlan-ner-491df871dd57-candidate.jsonl.gz",
+      "source_sha256": "d99a4f35271fc054c0dc8ae0ee43047e614f93e40155788a3d5cd554cf19931f",
+      "exported_sha256": "baf03845aaf32d3d5384183ad90e0f32f0d0bdd24cf93229695133e1cb63e34d",
+      "metadata_normalization": "policy-path-repo-relative",
+      "changed_fields": [
+        "scorecard.runner_provenance.policy.path"
+      ],
+      "observation_rows": 6160
+    },
+    {
+      "file": "docs/reference/benchmarks/mechanisms/nym-safety-net-491df871dd57-base.jsonl.gz",
+      "source_sha256": "c12c48a0930ace5d39a9e8f0fe8205532df2eae2a171c39726ab457ba18151f9",
+      "exported_sha256": "aa158bac7356cec706ac1e2161032f8cabdd04da51c74a742e7b4b45c817092f",
+      "metadata_normalization": "policy-path-repo-relative",
+      "changed_fields": [
+        "scorecard.runner_provenance.policy.path"
+      ],
+      "observation_rows": 6160
+    },
+    {
+      "file": "docs/reference/benchmarks/mechanisms/nym-safety-net-491df871dd57-candidate.jsonl.gz",
+      "source_sha256": "d99a4f35271fc054c0dc8ae0ee43047e614f93e40155788a3d5cd554cf19931f",
+      "exported_sha256": "baf03845aaf32d3d5384183ad90e0f32f0d0bdd24cf93229695133e1cb63e34d",
+      "metadata_normalization": "policy-path-repo-relative",
+      "changed_fields": [
+        "scorecard.runner_provenance.policy.path"
+      ],
+      "observation_rows": 6160
+    },
+    {
+      "file": "docs/reference/benchmarks/observations-v0.15.1-agentic.jsonl.gz",
+      "source_sha256": "8c5ea0f675f8c7ed330741cea018b7ffb4410139b363cdee2431892e73f345de",
+      "exported_sha256": "8467cd30971be99e9225059d2be054377d3192990e207a8a5bc26c0003924686",
+      "metadata_normalization": "policy-path-home-prefix",
+      "changed_fields": [
+        "scorecard.runner_provenance.policy.path"
+      ],
+      "observation_rows": 5440
+    }
+  ]
+}
