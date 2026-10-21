@@ -100,6 +100,9 @@ pidfiles are revalidated with process liveness checks and cleaned before start.
 Lifecycle operations coordinate through a persistent `<pidfile>.lock` sidecar.
 Do not remove this sidecar or edit the pidfile while daemon commands are active;
 cleanup removes only the owned pidfile and leaves the sidecar in place.
+`gaze proxy start` returns only after the daemon has bound its port and written
+the `proxy.ready` marker next to the pidfile. A daemon that exits during startup
+or does not bind within 120 seconds makes `start` fail with a typed error.
 
 `gaze proxy logs --follow` is also available for local daemon inspection.
 

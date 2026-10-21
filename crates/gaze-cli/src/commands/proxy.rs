@@ -110,14 +110,21 @@ pub(crate) fn serve(args: ServeArgs) -> Result<(), CliError> {
         .with_dictionaries(dictionaries);
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|err| CliError::ProxyDetail(format!("runtime: {err}")))?;
+    let foreground_daemon = args.foreground_daemon;
     runtime
-        .block_on(gaze_proxy::server::serve_with_ready(
+        .block_on(gaze_proxy::server::serve_with_bound_ready(
             config,
             Arc::new(pipeline),
-            move || {
+            move |bound| {
                 for notice in notices {
                     eprintln!("{notice}");
                 }
+                // `gaze proxy start` reports success only once this marker names
+                // the child, so it is written after the bind and never before.
+                if foreground_daemon {
+                    daemon::mark_ready(&paths, bound)?;
+                }
+                Ok(())
             },
         ))
         .map_err(map_proxy)

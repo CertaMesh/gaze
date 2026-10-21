@@ -1839,12 +1839,32 @@ pub async fn serve_with_ready(
     pipeline: Arc<Pipeline>,
     ready: impl FnOnce(),
 ) -> Result<(), ProxyError> {
+    serve_with_bound_ready(config, pipeline, |_| {
+        ready();
+        Ok(())
+    })
+    .await
+}
+
+/// Invoke `ready` with the bound address after configuration validation and a
+/// successful bind, before any connection is served.
+///
+/// An error from `ready` stops the server without serving, so a caller that
+/// cannot publish its readiness signal fails closed instead of running unseen.
+pub async fn serve_with_bound_ready(
+    config: ProxyConfig,
+    pipeline: Arc<Pipeline>,
+    ready: impl FnOnce(SocketAddr) -> Result<(), ProxyError>,
+) -> Result<(), ProxyError> {
     let bind = config.bind;
     let app = build_app(config, pipeline)?;
     let listener = TcpListener::bind(bind)
         .await
         .map_err(|source| ProxyError::Server { source })?;
-    ready();
+    let bound = listener
+        .local_addr()
+        .map_err(|source| ProxyError::Server { source })?;
+    ready(bound)?;
     serve_app(listener, app).await
 }
 
@@ -3364,6 +3384,7 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::DaemonIo { .. } => "DaemonIo",
         ProxyError::DaemonConfig { .. } => "DaemonConfig",
         ProxyError::DaemonExitedEarly { .. } => "DaemonExitedEarly",
+        ProxyError::DaemonStartTimeout { .. } => "DaemonStartTimeout",
     }
 }
 

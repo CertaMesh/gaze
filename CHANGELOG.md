@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   streaming events are now restored too; they were not surfaced at all. Adapters
   key streams with the new `ProviderAdapter::sse_event_stream_surfaces`, whose
   default keeps the previous per-event behavior.
+- `gaze proxy start` and `restart` now return only after the daemon has bound
+  its port. Before, they reported success after a 250 ms liveness window, so an
+  immediate request could be refused, and a daemon that died later in startup
+  (for example while loading a model) still returned exit 0. The daemon writes a
+  `proxy.ready` marker after binding; start fails with `DaemonExitedEarly` if
+  the daemon exits first, or stops it and fails with `DaemonStartTimeout` after
+  120 seconds.
 - Anthropic proxy accepts the literal `?beta=true` query, individually allowlisted
   comma-separated beta headers (policy or repeatable `--anthropic-beta`), and
   inspected `count_tokens` requests. Adaptive thinking, output configuration and
