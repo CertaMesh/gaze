@@ -19,6 +19,10 @@ pub const EXEMPT_CRATES: &[CrateExemption] = &[
         reason: "repository gate runner; its denylist and synthetic-fixture definitions are not production runtime code",
     },
     CrateExemption {
+        name: "feature-graph-probe",
+        reason: "unpublished CI probe binary run by ci-feature-matrix; its synthetic probe input is not production runtime code",
+    },
+    CrateExemption {
         name: "gaze_dylint",
         reason: "detached compile-time Dylint crate; it is not linked into any production runtime",
     },

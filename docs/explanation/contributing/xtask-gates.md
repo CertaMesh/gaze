@@ -17,6 +17,15 @@ Unqualified `ci-feature-matrix` runs the full local matrix. CI splits ownership:
 | `xtask feature gates` | `ci-feature-matrix --partition ci-gates`: remaining features and gates |
 | `workspace default features` | `ci-feature-matrix --partition ci-default`: default-feature suite with sanitized build environment |
 
+The `ci-gates` partition (and the full local matrix) starts with library-graph
+checks. Every published crate gets `RUSTFLAGS='-D warnings' cargo check --locked
+-p <crate>` under its default features and under `--no-default-features`, and
+the unpublished `feature-graph-probe` binary runs the bundled `core` rulepack in
+the `gaze-pii` default and no-default graphs and builds the bundled core
+pipeline in the `gaze-assembly` graph. Neither command builds a test, example
+or bench target, so dev-dependencies cannot re-enable library features (for
+example `gaze-types/phone-parser`) and hide a broken adopter graph.
+
 Required `xtask gates` waits for all three. Failure, skip, or cancellation fails
 it. Required `test` and `Check DCO sign-off` names are unchanged.
 
@@ -32,7 +41,7 @@ it. Required `test` and `Check DCO sign-off` names are unchanged.
 | `FamilyPolicyTableCoherence` | `cargo run -p xtask -- family-policy-table-coherence` | Parses embedded rulepacks and checks collision-family declarations compile into the expected family precedence table, including IBAN-over-PAN and same-variant phone non-arbitration. |
 | `LocaleCueBundleCoherence` | `cargo run -p xtask -- locale-cue-bundle-coherence` | Checks every mandatory-anchor declaration in core bundles has a matching cue key in embedded locale bundles. |
 | `FixtureCitationLint` | `cargo run -p xtask -- fixture-citation-lint` | Scans fixture-shaped PII literals in workspace production `src/` directories, with explicit exemptions in `crates/xtask/src/repo.rs`. Each production fixture literal must carry `// fixture-cited(<test-path>:<fully-qualified-test-name>)`, and the fully qualified test name must appear exactly in `cargo test --workspace -- --list`. |
-| `CiFeatureMatrix` | `cargo run -p xtask -- ci-feature-matrix` | Runs the CI feature matrix, including the no-phone-parser fail-closed configuration. |
+| `CiFeatureMatrix` | `cargo run -p xtask -- ci-feature-matrix` | Runs the CI feature matrix, including the no-phone-parser fail-closed configuration and the library-graph checks and probes that run without dev-dependency unification. |
 | `CargoMetadataAuditIsolation` | `cargo run -p xtask -- cargo-metadata-audit-isolation` | Parses `cargo metadata --format-version=1` and fails if any non-audit-responsible workspace package has a normal dependency path to `gaze-audit` in default, `--no-default-features`, or safety-net graphs. The explicit audit-responsible allowlist is documented in source; currently `gaze-cli` is allowed because its audit command consumes the passive sink directly. |
 | `ReadmeVersionCheck` | `cargo run -p xtask -- readme-version-check` | Parses effective workspace package versions via `cargo metadata`, verifies fixture pass/fail tests, then rejects stale crate README install pins before publish. |
 | `DylintGate` | `cargo run -p xtask -- dylint-gate` | Verifies the `lint/dylint/ui` fixture corpus has exactly 18 enabled fixtures, rejects `*_disabled.rs`, and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. The lint is `GAZE_MODULE_ISOLATION`, the canonical rustc-resolver-based gate for audit-sink protected-path isolation. |
