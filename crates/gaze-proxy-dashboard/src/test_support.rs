@@ -45,6 +45,32 @@ pub(crate) const ALL_REASONS: [ProjectionOmissionReasonV1; 11] = [
     ProjectionOmissionReasonV1::UnknownFuture,
 ];
 
+/// Declaration position of each reason. The match is exhaustive, so a new upstream
+/// variant fails to compile here until it is given a position and added to
+/// [`ALL_REASONS`]; the test below then proves the list is complete and ordered.
+const fn reason_position(reason: ProjectionOmissionReasonV1) -> usize {
+    match reason {
+        ProjectionOmissionReasonV1::NotCapturedByPolicy => 0,
+        ProjectionOmissionReasonV1::NotApplicable => 1,
+        ProjectionOmissionReasonV1::UnsupportedFormat => 2,
+        ProjectionOmissionReasonV1::MalformedFailClosed => 3,
+        ProjectionOmissionReasonV1::LimitExceeded => 4,
+        ProjectionOmissionReasonV1::SignedOrEncryptedSurface => 5,
+        ProjectionOmissionReasonV1::Purging => 6,
+        ProjectionOmissionReasonV1::Disabled => 7,
+        ProjectionOmissionReasonV1::QueueClosed => 8,
+        ProjectionOmissionReasonV1::ProjectionFailedClosed => 9,
+        ProjectionOmissionReasonV1::UnknownFuture => 10,
+    }
+}
+
+#[test]
+fn all_reasons_lists_every_closed_omission_reason_once() {
+    for (index, reason) in ALL_REASONS.iter().enumerate() {
+        assert_eq!(reason_position(*reason), index, "{reason:?}");
+    }
+}
+
 /// Every stage, in pipeline order.
 pub(crate) const ALL_STAGES: [InspectionStageDomainV1; 4] = [
     InspectionStageDomainV1::OwnerRequest,

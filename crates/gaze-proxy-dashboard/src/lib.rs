@@ -8,6 +8,8 @@
 
 mod assets;
 mod auth;
+#[cfg(test)]
+mod browser_fixtures;
 mod child;
 mod collector;
 mod config;

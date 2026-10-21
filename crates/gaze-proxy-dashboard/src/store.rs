@@ -313,6 +313,12 @@ impl EventStore {
         self.logical.len()
     }
 
+    /// Fixture seam: lets browser fixtures show non-zero store counters.
+    #[cfg(test)]
+    pub(crate) fn counters_mut(&mut self) -> &mut StoreCounters {
+        &mut self.counters
+    }
+
     pub(crate) const fn safe_counters(&self) -> StoreCounters {
         self.counters
     }

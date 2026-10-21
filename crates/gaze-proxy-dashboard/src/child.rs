@@ -988,6 +988,23 @@ pub(crate) fn contract_documents(store: EventStore, now: Instant) -> Vec<serde_j
     ]
 }
 
+/// Browser-fixture seam: the exact snapshot body for one store and parent status.
+#[cfg(test)]
+pub(crate) fn fixture_snapshot(
+    store: EventStore,
+    status: Option<RuntimeStatusFrameV1>,
+    now: Instant,
+) -> serde_json::Value {
+    let secret = PairingSecret::generate().unwrap();
+    let child = ChildState {
+        store,
+        auth: AuthRegistry::new(&secret, 1),
+        reveals: RevealRegistry::new(Duration::from_secs(30)),
+        status,
+    };
+    serde_json::from_slice(&snapshot_body(&child, now)).unwrap()
+}
+
 /// Contract-test seam: the browser key for one closed omission reason.
 #[cfg(test)]
 pub(crate) fn contract_reason_key(
