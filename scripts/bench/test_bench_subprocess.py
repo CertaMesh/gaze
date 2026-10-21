@@ -183,6 +183,15 @@ def invoke(mode, root, *, late=False, post=False, owners=None):
 SUCCESS_MODES = ("score", "score-refusal", "probe")
 
 
+def boundary_summary(result):
+    # Report only sizes, status and closed transport labels, never child bytes.
+    failures = [f"{code}:{phase}" for code in sorted(transport.CODES)
+                for phase in sorted(transport.PHASES)
+                if f"{code}:{phase}".encode() in result.stderr]
+    return (f"returncode={result.returncode} stdout_bytes={len(result.stdout)} "
+            f"stderr_bytes={len(result.stderr)} failures={','.join(failures) or 'unknown'}")
+
+
 def assert_success_counts(mode, result):
     """A tolerated failure is not a pass: pin what each success actually produced."""
     from test_openpii_gaze_bench import ResponseValidationTests
@@ -253,7 +262,7 @@ def _boundary_scenario(mode, root, owners):
             raise AssertionError("caller-reaping")
     assert not list(root.iterdir()), "file-boundary"
     if mode in SUCCESS_MODES:
-        assert error is None, "success-required"
+        assert error is None, f"success-required: {error[0]}:{error[1]}"
         assert_success_counts(mode, result)
     else:
         assert error is not None, "failure-required"
@@ -511,9 +520,11 @@ class TransportTests(unittest.TestCase):
                     self.assertTrue(result.returncode != 0 and b"ProducerFailure" in result.stderr, "uncaught-error")
                 elif mode in SUCCESS_MODES:
                     # An always-failing transport must die here, not merely elsewhere.
-                    self.assertTrue(result.returncode == 0 and not result.stdout and not result.stderr, "success-required")
+                    self.assertTrue(result.returncode == 0 and not result.stdout and not result.stderr,
+                                    "success-required: " + boundary_summary(result))
                 else:
-                    self.assertTrue(result.returncode == 0 and not result.stdout and not result.stderr, "boundary-result")
+                    self.assertTrue(result.returncode == 0 and not result.stdout and not result.stderr,
+                                    "boundary-result: " + boundary_summary(result))
 
     # ---- review round r1 regressions ------------------------------------------
 
