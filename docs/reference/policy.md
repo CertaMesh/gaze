@@ -50,8 +50,36 @@ Run it:
 
 ```console
 $ printf 'Email %s@%s now' alice example.invalid | gaze clean --policy=minimal.toml
-{"clean_text":"Email <{session_hex}:Email_1> now","session_blob":"<base64>","stats":{"detections":1}}
 ```
+
+`gaze clean` prints one JSON line; it is wrapped here for reading:
+
+```json
+{
+  "clean_text": "Email <{session_hex}:Email_1> now",
+  "session_blob": "<base64>",
+  "entries": [
+    {"class": "Email", "raw": "alice [at] example.invalid", "token": "<{session_hex}:Email_1>", "family": "counter"}
+  ],
+  "stats": {"detections": 1, "locale_chain": ["global"], "dictionaries_loaded": []},
+  "leak_report": {
+    "stats": {
+      "suspect_count": 0,
+      "uncovered_count": 0,
+      "partial_bleed_count": 0,
+      "class_mismatch_count": 0,
+      "locale_skipped_count": 0
+    },
+    "suspects": [],
+    "telemetry": []
+  }
+}
+```
+
+The real `raw` value contains the `@` from the synthetic input; this page shows
+it as `[at]`. `entries` carries raw values, so keep the whole output owner-side
+and send only `clean_text` to the model. `leak_report` is present even when no
+safety net runs; its counts are then zero.
 
 The policy omits `[policy.rulepacks]`, so the bundled `core` rulepack
 supplies the email recognizer. Do not add a generic email regex as a custom
