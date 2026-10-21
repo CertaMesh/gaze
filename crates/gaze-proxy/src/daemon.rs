@@ -307,7 +307,7 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
         let spawn_result = (|| {
             // No daemon is running and this start holds the lifecycle lock, so
             // any marker left behind is from an earlier run and never trusted.
-            remove_ready_marker(&options.paths, |_| true)?;
+            remove_file_if_present(&options.paths.ready_marker())?;
             let stdout = OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -374,7 +374,8 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
 /// reported as [`ProxyError::DaemonExitedEarly`]; `kill(pid, 0)` would count an
 /// unreaped zombie as alive. A child that neither binds nor exits within
 /// `timeout` is killed and reported as [`ProxyError::DaemonStartTimeout`].
-/// Both failures remove the child's pidfile and marker.
+/// Every startup failure kills and reaps the child and attempts both marker
+/// and owned pidfile cleanup, even when one cleanup operation fails.
 fn confirm_started(
     child: &mut Child,
     paths: &DaemonPaths,
@@ -382,44 +383,48 @@ fn confirm_started(
     timeout: Duration,
 ) -> Result<u32, ProxyError> {
     let pid = child.id();
-    let deadline = Instant::now() + timeout;
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                discard_failed_start(paths, pid, owned_file)?;
+    let result = (|| {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Some(status) = child
+                .try_wait()
+                .map_err(|source| daemon_io(Path::new("gaze proxy serve"), source))?
+            {
                 return Err(ProxyError::DaemonExitedEarly {
                     code: status.code(),
                     stderr_file: paths.stderr_file.clone(),
                 });
             }
-            Ok(None) => {}
-            Err(source) => {
-                return Err(ProxyError::DaemonIo {
-                    path: PathBuf::from("gaze proxy serve"),
-                    source,
+            if read_ready_marker(paths)?.is_some_and(|marker| marker.pid == pid) {
+                return Ok(pid);
+            }
+            if Instant::now() >= deadline {
+                return Err(ProxyError::DaemonStartTimeout {
+                    timeout,
+                    stderr_file: paths.stderr_file.clone(),
                 });
             }
+            std::thread::sleep(Duration::from_millis(25));
         }
-        if read_ready_marker(paths)?.is_some_and(|marker| marker.pid == pid) {
-            return Ok(pid);
-        }
-        if Instant::now() >= deadline {
-            // Kill and reap so the pidfile's pid is provably dead before cleanup.
-            let _ = child.kill();
-            let _ = child.wait();
-            discard_failed_start(paths, pid, owned_file)?;
-            return Err(ProxyError::DaemonStartTimeout {
-                timeout,
-                stderr_file: paths.stderr_file.clone(),
-            });
-        }
-        std::thread::sleep(Duration::from_millis(25));
+    })();
+    if result.is_err() {
+        // Kill can fail if the child already exited; wait still reaps it.
+        let _ = child.kill();
+        let reaped = child
+            .wait()
+            .map_err(|source| daemon_io(Path::new("gaze proxy serve"), source));
+        let cleaned = discard_failed_start(paths, pid, owned_file);
+        reaped?;
+        cleaned?;
     }
+    result
 }
 
 fn discard_failed_start(paths: &DaemonPaths, pid: u32, owned_file: File) -> Result<(), ProxyError> {
-    remove_owned_ready_marker(paths, pid)?;
-    cleanup_owned(&paths.pidfile, owned_file, CleanupRule::Stale)?;
+    let marker_cleanup = remove_owned_ready_marker(paths, pid);
+    let pidfile_cleanup = cleanup_owned(&paths.pidfile, owned_file, CleanupRule::Stale);
+    marker_cleanup?;
+    pidfile_cleanup?;
     Ok(())
 }
 
@@ -431,6 +436,8 @@ fn discard_failed_start(paths: &DaemonPaths, pid: u32, owned_file: File) -> Resu
 pub fn mark_ready(paths: &DaemonPaths, bind: SocketAddr) -> Result<(), ProxyError> {
     let marker = paths.ready_marker();
     create_parent(&marker)?;
+    let _namespace = PidfileGuard::namespace(&paths.pidfile)
+        .map_err(|source| daemon_io(&paths.pidfile, source))?;
     let pid = std::process::id();
     let mut name = marker.as_os_str().to_os_string();
     name.push(format!(".{pid}.tmp"));
@@ -463,31 +470,66 @@ struct ReadyMarker {
 /// is treated as missing because only a complete marker naming a pid counts.
 fn read_ready_marker(paths: &DaemonPaths) -> Result<Option<ReadyMarker>, ProxyError> {
     let marker = paths.ready_marker();
-    let text = match fs::read_to_string(&marker) {
-        Ok(text) => text,
+    let bytes = match fs::read(&marker) {
+        Ok(bytes) => bytes,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(source) => return Err(daemon_io(&marker, source)),
     };
-    Ok(text
+    Ok(parse_ready_marker(&bytes))
+}
+
+fn parse_ready_marker(bytes: &[u8]) -> Option<ReadyMarker> {
+    std::str::from_utf8(bytes)
+        .ok()?
         .lines()
-        .next()
-        .and_then(|line| line.parse::<u32>().ok())
-        .map(|pid| ReadyMarker { pid }))
+        .next()?
+        .parse::<u32>()
+        .ok()
+        .map(|pid| ReadyMarker { pid })
 }
 
 /// Removes the readiness marker when `permits` accepts what it records.
+/// Publication can replace it while the predicate runs. Keep the observed file
+/// open and revalidate its identity under the namespace lock before unlinking.
 fn remove_ready_marker(
     paths: &DaemonPaths,
     permits: impl FnOnce(Option<&ReadyMarker>) -> bool,
 ) -> Result<(), ProxyError> {
     let marker = paths.ready_marker();
-    if !marker.exists() || !permits(read_ready_marker(paths)?.as_ref()) {
+    let mut file = match File::open(&marker) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(source) => return Err(daemon_io(&marker, source)),
+    };
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .map_err(|source| daemon_io(&marker, source))?;
+    let observed =
+        same_file::Handle::from_file(file).map_err(|source| daemon_io(&marker, source))?;
+    if !permits(parse_ready_marker(&bytes).as_ref()) {
         return Ok(());
     }
-    match fs::remove_file(&marker) {
+    let _namespace = match PidfileGuard::namespace(&paths.pidfile) {
+        Ok(lock) => lock,
+        Err(e) if lock_contended(&e) => return Ok(()),
+        Err(source) => return Err(daemon_io(&paths.pidfile, source)),
+    };
+    let current = match same_file::Handle::from_path(&marker) {
+        Ok(current) => current,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(source) => return Err(daemon_io(&marker, source)),
+    };
+    if observed != current {
+        return Ok(());
+    }
+    remove_file_if_present(&marker)
+}
+
+fn remove_file_if_present(path: &Path) -> Result<(), ProxyError> {
+    match fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(source) => Err(daemon_io(&marker, source)),
+        Err(source) => Err(daemon_io(path, source)),
     }
 }
 
@@ -641,7 +683,8 @@ impl CleanupRule {
 ///
 /// The sidecar is never unlinked: startup takes it before creating the pidfile,
 /// foreground publication holds it through the write, and every removal (stale,
-/// failed spawn, early exit, stop) goes through this guard. Thus no competing
+/// failed spawn, early exit, stop) goes through this guard. Marker publication
+/// and removal also hold the namespace lock through rename or unlink. No competing
 /// lifecycle path can replace the pathname between identity check and unlink.
 /// Lock order is always sidecar then pidfile; contention never blocks a handoff.
 /// External programs must not remove the sidecar or mutate the pidfile while
@@ -1349,9 +1392,12 @@ mod tests {
             fs::read_to_string(paths.ready_marker()).unwrap(),
             format!("{}\nbind={bind}\n", std::process::id())
         );
-        assert_eq!(
-            fs::read_dir(dir.path()).unwrap().count(),
-            1,
+        assert!(
+            fs::read_dir(dir.path()).unwrap().all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".tmp")),
             "temp file left"
         );
     }
@@ -1631,5 +1677,137 @@ mod tests {
             paths.pidfile.exists(),
             "the stale pidfile must remain when unlink failed"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn regression_marker_read_error_must_reap_child_and_remove_pidfile() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        let (mut child, owned) = spawn_ready_fixture(&dir, "never-ready");
+        // Parent owns a live child, but its marker cannot be decoded.
+        fs::write(paths.ready_marker(), [0xff]).unwrap();
+        let result = confirm_started(&mut child.0, &paths, owned, Duration::from_secs(2));
+        assert!(result.is_err());
+        assert!(
+            child.0.try_wait().unwrap().is_some(),
+            "failed start left child running"
+        );
+        assert!(!paths.pidfile.exists(), "failed start left pidfile");
+        assert!(matches!(result, Err(ProxyError::DaemonStartTimeout { .. })));
+    }
+
+    #[test]
+    fn regression_stale_cleanup_must_preserve_a_concurrently_published_marker() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        fs::write(paths.ready_marker(), "999999\nbind=127.0.0.1:9\n").unwrap();
+        assert!(!process_exists(999999));
+        remove_ready_marker(&paths, |observed| {
+            assert_eq!(observed.unwrap().pid, 999999);
+            // Deterministically interleave mark_ready between read and unlink,
+            // exactly where another process can publish after binding.
+            mark_ready(&paths, "127.0.0.1:8787".parse().unwrap()).unwrap();
+            observed.is_none_or(|marker| !process_exists(marker.pid))
+        })
+        .unwrap();
+        assert!(
+            paths.ready_marker().exists(),
+            "cleanup deleted replacement live marker"
+        );
+    }
+
+    #[test]
+    fn regression_non_utf8_stale_marker_must_not_brick_lifecycle() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        fs::write(paths.ready_marker(), [0xff]).unwrap();
+        cleanup_stale(&paths).unwrap();
+        assert!(!paths.ready_marker().exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn regression_marker_read_error_during_exit_must_still_remove_pidfile() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        let (mut child, owned) = spawn_ready_fixture(&dir, "die-late");
+        child.0.wait().unwrap();
+        fs::write(paths.ready_marker(), [0xff]).unwrap();
+        let result = confirm_started(&mut child.0, &paths, owned, Duration::from_secs(2));
+        assert!(result.is_err());
+        assert!(
+            !paths.pidfile.exists(),
+            "marker cleanup error bypassed pidfile cleanup"
+        );
+        assert!(matches!(result, Err(ProxyError::DaemonExitedEarly { .. })));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn regression_marker_storage_error_must_reap_child_and_remove_pidfile() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        let (mut child, owned) = spawn_ready_fixture(&dir, "never-ready");
+        // A directory is a genuine read error, unlike malformed marker bytes.
+        fs::create_dir(paths.ready_marker()).unwrap();
+        let result = confirm_started(&mut child.0, &paths, owned, Duration::from_secs(2));
+        assert!(
+            matches!(result, Err(ProxyError::DaemonIo { path, .. }) if path == paths.ready_marker())
+        );
+        assert!(
+            child.0.try_wait().unwrap().is_some(),
+            "failed start left child running"
+        );
+        assert!(
+            !paths.pidfile.exists(),
+            "marker error bypassed pidfile cleanup"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn regression_marker_storage_error_during_exit_must_still_remove_pidfile() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        let (mut child, owned) = spawn_ready_fixture(&dir, "die-late");
+        child.0.wait().unwrap();
+        fs::create_dir(paths.ready_marker()).unwrap();
+        let result = confirm_started(&mut child.0, &paths, owned, Duration::from_secs(2));
+        assert!(
+            matches!(result, Err(ProxyError::DaemonIo { path, .. }) if path == paths.ready_marker())
+        );
+        assert!(
+            !paths.pidfile.exists(),
+            "marker error bypassed pidfile cleanup"
+        );
+    }
+
+    #[test]
+    fn regression_marker_publication_obeys_lifecycle_namespace_lock() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        let namespace = PidfileGuard::namespace(&paths.pidfile).unwrap();
+        let result = mark_ready(&paths, "127.0.0.1:9".parse().unwrap());
+        assert!(
+            matches!(result, Err(ProxyError::DaemonIo { source, .. }) if lock_contended(&source))
+        );
+        assert!(!paths.ready_marker().exists());
+        drop(namespace);
+        mark_ready(&paths, "127.0.0.1:9".parse().unwrap()).unwrap();
+        assert!(paths.ready_marker().exists());
+    }
+
+    #[test]
+    fn regression_marker_cleanup_defers_while_lifecycle_namespace_is_locked() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        fs::write(paths.ready_marker(), "999999\nbind=127.0.0.1:9\n").unwrap();
+        let namespace = PidfileGuard::namespace(&paths.pidfile).unwrap();
+        cleanup_stale(&paths).unwrap();
+        assert!(paths.ready_marker().exists());
+        drop(namespace);
+        cleanup_stale(&paths).unwrap();
+        assert!(!paths.ready_marker().exists());
     }
 }
