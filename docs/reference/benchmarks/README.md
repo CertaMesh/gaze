@@ -4,9 +4,9 @@ The signed v0.17.0 tag targets merge `8a19d8c64a007a990ab5efc8a22d33f08bbe9f11`.
 Its measurements retain source `86195a8fbff001489b4eee385020c94c15e502b3`, with
 identical raw crates tree `5a3c6502bd64eabf40f009eb05ca55da3ed50dfe`, including
 crate READMEs and manifests. The [release evidence](#v017-final-candidate-evidence)
-keeps its original capture identities. The own-corpus panel, current table and
-inline trends include tagged v0.17.0. Fresh external byte-micro panels show
-v0.17.0 alongside v0.16.0; historical character panels keep their original rows.
+keeps its original capture identities. The five dataset panels compare tagged
+v0.16.0 and v0.17.0 using byte-micro F2 and leaked bytes. Measured competitors
+share each dataset's metric; pre-receipt competitor bars retain their † marker.
 
 The single benchmark document for Gaze. It carries the current release's
 measured numbers as a table and as charts, the methodology behind them, and the
@@ -96,23 +96,7 @@ rows in [their benchmarks](#competitors-own-benchmarks).
 
 <!-- BEGIN GENERATED: external-release -->
 
-Fresh external release measurements use byte-micro F2, `5*TP/(5*TP+4*FN+FP)`. These are separate from the character-level and vendor-evaluator scores below.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../../assets/benchmarks/external-release-panels-dark.svg">
-  <img alt="Fresh external byte-micro F2 for Gaze v0.16.0 and v0.17.0, with leaked bytes and original net-byte verdicts." src="../../assets/benchmarks/external-release-panels-light.svg">
-</picture>
-
-| Benchmark | Version | Byte-micro F2 % | Leaked bytes | FP bytes | Original net-byte gate | Accepted F2 gate |
-| --- | --- | ---: | ---: | ---: | --- | --- |
-| Sealed OpenPII/Gretel | v0.16.0 | 64.3476308515 | 399,158 | 246,957 | baseline | baseline |
-| Sealed OpenPII/Gretel | v0.17.0 | 66.0206379254 | 378,420 | 252,239 | PASS | PASS |
-| PIIBench-commercial | v0.16.0 | 62.7119062150 | 105,077 | 48,309 | baseline | baseline |
-| PIIBench-commercial | v0.17.0 | 64.2375059624 | 100,557 | 49,124 | PASS | PASS |
-| PII-TRACE | v0.16.0 | 75.8824156820 | 15,739 | 357 | baseline | baseline |
-| PII-TRACE | v0.17.0 | 76.2383386217 | 15,455 | 710 | FAIL | PASS |
-
-[Evidence and limits](release-v0.17.0/external-f2-release-review.json): all three accepted external F2 comparisons pass. TRACE's original net-byte gate fails. Strict own-policy identity remains `not_comparable`; zero-leak readiness remains unmet.
+Historical release acceptance remains in the [external F2 review](release-v0.17.0/external-f2-release-review.json). TRACE's original net-byte gate failed; strict own-policy identity was `not_comparable`. The unified [dataset panels](#benchmark-panels) below use tagged-binary measurements. Zero-leak readiness remains unmet.
 
 <!-- END GENERATED: external-release -->
 
@@ -201,9 +185,9 @@ the older Gaze revisions cannot emit that label, and their composed mappings and
 common-label intersections are unchanged. The committed
 [`refresh_age_mapping.py`](../../../scripts/bench/compare/refresh_age_mapping.py)
 audit verifies those claims against each row’s recorded harness revision. Release
-character scores are replayed from the committed observations. Historical
-third-party v0.16 character and vendor rows come from paired tag builds; fresh
-v0.17 byte-micro results retain their separately pinned source and harness.
+character scores remain in their original evidence files. Historical
+third-party character and vendor rows come from paired tag builds. The README
+panels use byte counts from tagged releases and retain separate measurement receipts.
 
 Warm per-document latency of the Nym arm is measured by
 [`scripts/bench/nym-warm-latency.py`](../../../scripts/bench/nym-warm-latency.py)
@@ -539,65 +523,69 @@ Validator-backed labels on `policy-file`, scored labels v1. Gold that fails its 
 
 ## Benchmark panels
 
-One panel per benchmark, released Gaze versions and declared competitor configurations only. The chart and both tables are generated from the committed JSON by [`render_benchmark_doc.py`](../../../scripts/bench/render_benchmark_doc.py); untagged builds are never drawn.
+One panel per dataset, one metric: byte-micro F2 with leaked bytes. Each panel
+shows Gaze v0.16.0 and v0.17.0 plus measured competitor configurations.
+[`render_benchmark_doc.py`](../../../scripts/bench/render_benchmark_doc.py)
+generates the chart and table from pinned receipts and committed competitor counts.
 
 <!-- BEGIN GENERATED: panels -->
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../../../docs/assets/benchmarks/benchmark-panels-dark.svg">
-  <img alt="Bar panels of character-level F2 and false-positive bytes per 1,000 bytes for Gaze releases and competitors on three benchmarks; the values are printed on the bars." src="../../../docs/assets/benchmarks/benchmark-panels-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="../../assets/benchmarks/benchmark-panels-dark.svg">
+  <img alt="One byte-micro F2 panel per dataset, Gaze v0.16 and v0.17 with measured competitors; leaked PII bytes under each bar." src="../../assets/benchmarks/benchmark-panels-light.svg">
 </picture>
 
-**Character-level F2 (β=2, label-agnostic, micro)** (higher is better; best per row in bold):
+Byte-micro F2 pools UTF-8 bytes across documents: `5*TP/(5*TP+4*FN+FP)`. Labels do not affect overlap. Own-corpus bars use contract v4, including credentials; external bars count all gold under contract v1. False positives in F2 are raw, without gold-gap credit. Refused documents are reported separately; leaked-on-all-processed counts every successfully processed document, including partial protection.
 
-| Benchmark | Gaze 0.16 | Gaze 0.17 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 0.879 | **0.901** | 0.889 (tuned) | 0.184 | 0.561 | 0.356 | 0.765 | N/A |
-| Presidio Research | 0.825 | not run | **0.918 (tuned)** | 0.147† | 0.639† | 0.538† | 0.692† | 0.663† |
-| PIIBench-commercial | 0.627 | not run | **0.665†** | 0.183† | 0.522† | 0.441† | 0.532† | 0.400† |
-
-**Leaked PII bytes** (lower is better; best per row in bold):
-
-| Benchmark | Gaze 0.16 | Gaze 0.17 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 13,291 | 9,717 | **4,782 (tuned)** | 110,273 | 33,270 | 89,546 | 26,515 | N/A |
-| Presidio Research | 7,984 | not run | **2,857 (tuned)** | 34,810† | 15,769† | 20,226† | 13,326† | 15,305† |
-| PIIBench-commercial | 105,077 | not run | **87,853†** | 222,697† | 114,880† | 145,119† | 127,361† | 170,336† |
-
-**False-positive bytes per 1,000 bytes** (lower is better; best per row in bold):
-
-| Benchmark | Gaze 0.16 | Gaze 0.17 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 15.8 | 15.9 | 52.7 (tuned) | **6.1** | 253.8 | 12.5 | 53.6 | N/A |
-| Presidio Research | 10.7 | not run | 38.6 (tuned) | **0.0†** | 31.5† | 14.6† | 38.3† | 5.2† |
-| PIIBench-commercial | 20.7 | not run | 38.0† | **1.9†** | 94.1† | 71.2† | 36.6† | 5.2† |
-
-A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.16 0, Gaze 0.17 0.
-
-Own corpus: Presidio tuned for this corpus on its validation half (highest F2), the best of three tuned Presidio rows by test-half F2; like every bar it shows all of layer C, validation half included; Presidio's defaults are in competitors.md.
-Presidio Research: Presidio tuned for this dataset by its authors (their published custom setup).
-PIIBench-commercial: PIIBench publishes no vendor-tuned Presidio, so Presidio is the declared best configuration.
+| Dataset | Tool | Byte-micro F2 | Leaked on all processed (bytes) | FP bytes | Refused | Evidence |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| Own corpus | Gaze v0.16.0 | 0.879604 | 13,291 | 26,902 | 0 | [Receipt](readme-byte-measurements/v0.16.0-own.json) |
+| Own corpus | Gaze v0.17.0 | 0.901469 | 9,717 | 27,021 | 0 | [Receipt](readme-byte-measurements/v0.17.0-own.json) |
+| Own corpus | Presidio (tuned) | 0.889526 | 4,782 | 58,804 | — | [Counts](competitors.md) |
+| Own corpus | DataFog core | 0.182855 | 110,273 | 5,992 | — | [Counts](competitors.md) |
+| Own corpus | DataFog spaCy | 0.560692 | 33,270 | 246,970 | — | [Counts](competitors.md) |
+| Own corpus | scrubadub | 0.352892 | 89,546 | 15,310 | — | [Counts](competitors.md) |
+| Own corpus | GLiNER | 0.764961 | 26,515 | 53,355 | — | [Counts](competitors.md) |
+| Sealed OpenPII/Gretel | Gaze v0.16.0 | 0.643476 | 399,158 | 246,957 | 0 | [Receipt](readme-byte-measurements/v0.16.0-sealed.json) |
+| Sealed OpenPII/Gretel | Gaze v0.17.0 | 0.660206 | 378,420 | 252,239 | 0 | [Receipt](readme-byte-measurements/v0.17.0-sealed.json) |
+| Presidio Research | Gaze v0.16.0 | 0.825686 | 7,984 | 1,364 | 0 | [Receipt](readme-byte-measurements/v0.16.0-presidio-research.json) |
+| Presidio Research | Gaze v0.17.0 | 0.836725 | 7,463 | 1,436 | 0 | [Receipt](readme-byte-measurements/v0.17.0-presidio-research.json) |
+| Presidio Research | Presidio (tuned) | 0.918154 | 2,857 | 4,918 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | DataFog core† | 0.144954 | 34,810 | 0 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | DataFog spaCy† | 0.639104 | 15,769 | 4,015 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | scrubadub† | 0.538389 | 20,226 | 1,856 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | GLiNER† | 0.692474 | 13,326 | 4,884 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | OPF† | 0.661851 | 15,305 | 667 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | Gaze v0.16.0 | 0.627119 | 105,077 | 48,309 | 0 | [Receipt](readme-byte-measurements/v0.16.0-piibench-commercial.json) |
+| PIIBench-commercial | Gaze v0.17.0 | 0.642375 | 100,557 | 49,124 | 0 | [Receipt](readme-byte-measurements/v0.17.0-piibench-commercial.json) |
+| PIIBench-commercial | Presidio† | 0.665144 | 87,853 | 88,715 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | DataFog core† | 0.182618 | 222,697 | 4,529 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | DataFog spaCy† | 0.521220 | 114,880 | 219,413 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | scrubadub† | 0.440551 | 145,119 | 166,114 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | GLiNER† | 0.532256 | 127,361 | 85,245 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | OPF† | 0.399735 | 170,336 | 12,174 | — | [Counts](their-benchmarks.json) |
+| PII-TRACE | Gaze v0.16.0 | 0.758824 | 15,739 | 357 | 0 | [Receipt](readme-byte-measurements/v0.16.0-pii-trace.json) |
+| PII-TRACE | Gaze v0.17.0 | 0.762383 | 15,455 | 710 | 0 | [Receipt](readme-byte-measurements/v0.17.0-pii-trace.json) |
+| PII-TRACE | PII-Tracer† | 0.977742 | 1,083 | 1,871 | — | [Counts](their-benchmarks.json) |
 
 † Pre-receipt evidence: not receipt-verified; regeneration pending.
 
-- **Own corpus:** Kiji EN/DE holdout and A4 negatives, 2,910 documents, scored labels v4 (credentials counted; protected repeats credited). Gaze from [`release-history.json`](release-history.json) (the shipped default of each tagged release); competitors from [`comparison.json`](comparison.json).
-- **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
-- **PIIBench-commercial:** pritesh-2711/pii-bench (5,000 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
-- **Configurations:** competitors use the rows declared in [`chart-configs.json`](../../../scripts/bench/compare/chart-configs.json), chosen before results were reviewed; full versions and settings are in [`competitors.md`](competitors.md). On the own corpus the Presidio bar is instead the best tuned Presidio row from [`presidio-tuned.json`](presidio-tuned.json) (selection and every tuned number in [`competitors.md`](competitors.md#tuned-presidio)).
-- **Metric:** F2 counts Unicode code points (not grapheme clusters) inside the merged byte spans of each document, ignores labels, pools every document (micro), weights recall four times precision, scores 0 when precision and recall are both 0 (0/0 = 0), and counts all of a skipped document's gold characters as missed.
-- **False positives:** F2 counts every false-positive character for every tool; the false-positive row (bytes redacted that are not PII, per 1,000 bytes of the scored documents) also credits a protected repeat of a labelled value on the own corpus (contract v4). Every tool is treated identically within each row, and the third-party sets have no such credit.
-- **Gaze release scores:** each tagged release is scored by replaying its committed observation record over the corpus (`compare/release_char_level.py record`). The offline `check` that CI runs proves the stored numbers are consistent with the committed record, its evidence file and the UTF-8 structure of that evidence; only `record` (the corpus replay) proves the character counts, so a pull request that changes `release-char-level.json` or its evidence file must include the replay command's output in its description.
-- **Vendors' own metrics:** Presidio Research: F2, binary PII vs O (presidio-evaluator); PIIBench-commercial: span F1, exact span + type (PIIBench seqeval). They appear in the third-party tables below, not in the panels.
+Own corpus: Presidio tuned for this corpus on its validation half (highest F2), the best of three tuned Presidio rows by test-half F2; like every bar it shows all of layer C, validation half included; Presidio's defaults are in competitors.md. Retained own-corpus selection rule: highest test-half layer C v3 character-level F2 among the tuned rows. Presidio Research: Presidio tuned for this dataset by its authors (their published custom setup). PIIBench publishes no tuned setup, so its declared best configuration is shown. PII-Tracer on PII-TRACE is an upper bound because of possible training overlap. Competitor skips count their gold as leaked; a dash in Refused means the tool has no Gaze refusal contract.
+
+Committed evidence has no competitor row for the sealed combined set. PII-TRACE currently has only PII-Tracer's competitor measurement. OPF has no own-corpus bar after two 600-second socket timeouts. Unmeasured configurations have no bar or N/A slot. Legacy competitor byte counts keep their † status until regenerated; converting retained byte counts to F2 does not verify receipts.
+
+The existing [panel configuration choices](../../../scripts/bench/compare/chart-configs.json) select one configuration per compared tool. Other configuration variants remain in the linked comparison evidence.
+
+[Pinned receipt index](readme-byte-panels.json). Reproduce with [`readme_byte_measurements.py`](../../../scripts/bench/readme_byte_measurements.py): build each signed tag with Rust 1.96.0, using [`readme_release_build.py`](../../../scripts/bench/readme_release_build.py), use its own `gaze setup` policy, and run the receipt's command on the pinned inputs. Each new dataset measurement is captured once per binary and replayed from that private record. Offline checks verify receipt integrity and recompute aggregates; only capture/replay on the pinned inputs proves the underlying byte counts. The v0.16 rows reuse existing byte counts and retain their original provenance, including Presidio Research's Rust 1.95 build. Only aggregate receipts are published; external text, document identifiers and prediction spans stay private. This refresh covers v0.16.0 and v0.17.0 only; historical release tables retain their original benchmark specifications.
 
 <!-- END GENERATED: panels -->
 
 ## Charts
 
-The inline trends and own-corpus panel include tagged v0.17.0, using the retained
-measured source and replayed character counts. The fresh external byte-micro
-panels above show v0.17.0. External character panels retain their original
-v0.16 measurements because the new receipts contain byte counts, not character
-counts or vendor-evaluator results. No new inference is run for this projection.
+The inline trends include tagged v0.17.0 using the retained release measurements.
+The dataset panels above have a separate tagged-binary capture and byte-micro
+receipt for each release and dataset. Historical character scores and vendor
+evaluator results remain in their original evidence files.
 The rolling display keeps three distinct result groups. Older entries, including
 v0.14 and its C-only limitation, remain in the committed history.
 
@@ -975,7 +963,7 @@ in [`scripts/bench/compare/theirbench/`](../../../scripts/bench/compare/theirben
 
 Report-only: these sets are never used to design or tune Gaze rules. Every gold label counts (no scored-label contract). Leaked and false-positive bytes use the same scorer code as the main comparison; each benchmark's own metric comes from its own evaluator, fed the same spans. Lower leaked bytes is better. The table lists every measured competitor row and every tagged Gaze release; untagged builds are not shown. No latency is published here: the machine was shared during these runs, and per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the main comparison's configurations; Presidio's default rows keep score threshold 0.0, so they differ from the notebook's vanilla configuration (threshold 0.4). Every set here is English only, so Presidio's three language configurations give identical rows.
 
-Fresh v0.17.0 byte-micro release comparisons for PIIBench-commercial and PII-TRACE are shown in the [external release panels](#v017-final-candidate-evidence). Those receipts contain neither character counts nor vendor-evaluator results, so the historical v0.16 rows below retain their original scope and identities. Presidio Research has no fresh v0.17 measurement.
+Tagged v0.16.0/v0.17.0 byte-micro measurements for Presidio Research, PIIBench-commercial and PII-TRACE are shown in the [dataset panels](#benchmark-panels). Those receipts contain neither character counts nor vendor-evaluator results, so the historical v0.16 rows below retain their original scope and identities. The new byte measurements do not add character or vendor-evaluator rows here.
 
 #### PII-TRACE public subset (500 English conversations, 4,500 messages)
 

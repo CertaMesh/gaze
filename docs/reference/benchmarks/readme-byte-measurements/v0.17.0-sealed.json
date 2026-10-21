@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "tag": "v0.17.0",
+  "revision": "8a19d8c64a007a990ab5efc8a22d33f08bbe9f11",
+  "dataset": "sealed",
+  "contract": "all-gold",
+  "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
+  "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+  "harness_revision": "97f7f026483457a2b54f7d8d3de15038c30012e5",
+  "driver_sha256": "577a10ac24948bd1a6dba498f85569dd481f3563e91a8a7bc4af6455e3811733",
+  "inputs_sha256": {
+    "openpii_validation.jsonl": "bb15da1b5fbb11b3cc6fd4c95eca256197573ecd066230eb3c1fe6898f27a578",
+    "gretel_English.parquet": "c02b06d3c5b7c375525136d6f74acc52ab8fc07fa863d0aa50734910ec0ef2ad",
+    "gretel_German.parquet": "bfc64380bc24453f3460ffee6afbd7a3442b60dd26d5341c9fe0f1cca43216c3",
+    "gretel_France.parquet": "39fc2777822bbecab2d89bb23cbed40d9825ff4117897b8b025c02287f4ba845"
+  },
+  "hardware": {
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "cpu": "arm",
+    "cores": 18
+  },
+  "model_manifests_sha256": {
+    "ner": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+    "nym": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767"
+  },
+  "command": [
+    "uv",
+    "run",
+    "--project",
+    "scripts/bench",
+    "--python",
+    "3.13",
+    "python",
+    "scripts/bench/readme_byte_measurements.py",
+    "--tag",
+    "v0.17.0",
+    "--dataset",
+    "sealed",
+    "--runtime-root",
+    "<tag-checkout>",
+    "--binary",
+    "<tag-checkout>/target/release/examples/clean_for_bench",
+    "--policy",
+    "<setup-policy>",
+    "--input",
+    "<pinned-dataset>",
+    "--output",
+    "<private-record-directory>",
+    "--build-receipts",
+    "<build-receipts>"
+  ],
+  "build_commands": [
+    [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "-p",
+      "gaze-cli"
+    ],
+    [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "-p",
+      "gaze-recognizers",
+      "--example",
+      "clean_for_bench",
+      "--features",
+      "safety-net-nym"
+    ],
+    [
+      "/tmp/readme-v017/runtime-v017/target/release/gaze",
+      "setup",
+      "--non-interactive",
+      "--force",
+      "--policy-out",
+      "<setup-policy>"
+    ]
+  ],
+  "toolchain": "1.96.0",
+  "cargo_build_jobs": 4,
+  "records": {
+    "openpii/all": {
+      "file": "openpii-all.jsonl.gz",
+      "sha256": "449ec339c946c964d14cbe7710b62876a65826ac46770702e8fbde3a1ce6c408",
+      "format": "gzip-jsonl",
+      "schema_version": 2,
+      "corpus_sha256": "07df0a8ee28700b71620973339197aa999a53ea887aed436203d15a40ac4cd5b",
+      "observations": 9990,
+      "bytes": 2452085
+    },
+    "gretel/en": {
+      "file": "gretel-en.jsonl.gz",
+      "sha256": "f37503d78c30013fac3a4fd987a0cc5d3729bac68b6cffbeff3c2502d5eaf702",
+      "format": "gzip-jsonl",
+      "schema_version": 2,
+      "corpus_sha256": "d89b5904e370bfdccfac486d020d28c9fb4b1e3a4c71fb7b4a60a6823716fd27",
+      "observations": 2891,
+      "bytes": 1399143
+    },
+    "gretel/de": {
+      "file": "gretel-de.jsonl.gz",
+      "sha256": "7a7a44f89f744957e8eb918874a5d4a651d764b75d0f428616f41ed04a77c27c",
+      "format": "gzip-jsonl",
+      "schema_version": 2,
+      "corpus_sha256": "056ef487f6fca3af93407ba7b554c2353c42d84ce8b9344f961070e6c491e236",
+      "observations": 453,
+      "bytes": 173704
+    },
+    "gretel/fr": {
+      "file": "gretel-fr.jsonl.gz",
+      "sha256": "7c5d3fe41cdbfc54999abd62fb14aa2657003b7c60dd0e642fa4bb9be6ebea36",
+      "format": "gzip-jsonl",
+      "schema_version": 2,
+      "corpus_sha256": "470e0e323ce2b631533539aed23c936365b287016bcec1e399ab81f7143b6ec0",
+      "observations": 443,
+      "bytes": 169506
+    }
+  },
+  "sets": {
+    "openpii/all": {
+      "documents": 9990,
+      "processed": 9990,
+      "refused": 0,
+      "gold_bytes": 767081,
+      "leaked_bytes": 300232,
+      "false_positive_bytes": 52791,
+      "restore_exact": 9990,
+      "manifest_valid": 9990
+    },
+    "gretel/en": {
+      "documents": 2891,
+      "processed": 2891,
+      "refused": 0,
+      "gold_bytes": 232862,
+      "leaked_bytes": 59055,
+      "false_positive_bytes": 157550,
+      "restore_exact": 2891,
+      "manifest_valid": 2891
+    },
+    "gretel/de": {
+      "documents": 453,
+      "processed": 453,
+      "refused": 0,
+      "gold_bytes": 29674,
+      "leaked_bytes": 8354,
+      "false_positive_bytes": 22082,
+      "restore_exact": 453,
+      "manifest_valid": 453
+    },
+    "gretel/fr": {
+      "documents": 443,
+      "processed": 443,
+      "refused": 0,
+      "gold_bytes": 35026,
+      "leaked_bytes": 10779,
+      "false_positive_bytes": 19816,
+      "restore_exact": 443,
+      "manifest_valid": 443
+    }
+  },
+  "totals": {
+    "documents": 13777,
+    "processed": 13777,
+    "refused": 0,
+    "gold_bytes": 1064643,
+    "leaked_bytes": 378420,
+    "false_positive_bytes": 252239,
+    "restore_exact": 13777,
+    "manifest_valid": 13777,
+    "byte_micro_f2": 0.6602063792540129
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "tag": "v0.16.0",
+  "revision": "5a7dac0fa198f20a628ed6b7fa2b5c9d41a91eb0",
+  "dataset": "own",
+  "contract": "v4",
+  "method": "retained-byte-counts",
+  "sets": {
+    "holdout": {
+      "documents": 2910,
+      "processed": 2910,
+      "refused": 0,
+      "gold_bytes": 130282,
+      "leaked_bytes": 13291,
+      "false_positive_bytes": 26902,
+      "restore_exact": 2910,
+      "manifest_valid": 2910
+    }
+  },
+  "totals": {
+    "documents": 2910,
+    "processed": 2910,
+    "refused": 0,
+    "gold_bytes": 130282,
+    "leaked_bytes": 13291,
+    "false_positive_bytes": 26902,
+    "restore_exact": 2910,
+    "manifest_valid": 2910,
+    "byte_micro_f2": 0.8796038019852005
+  },
+  "inputs_sha256": {
+    "dataiku": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+    "negative_corpus": "d9e5807b9f9152932973214e38e1c44a75e9a413f53b5c8954fba0f3f25b1116"
+  },
+  "source": {
+    "file": "scorecard-v0.16.0-scored-labels-v4.json.gz",
+    "sha256": "67d0a5283ac2706dcc04fae59d6f7195dc3a2c9fbfc46811158c067d3affab69"
+  },
+  "original_provenance": {
+    "entry_point": "scripts/bench/rescore_past_release.py",
+    "method": "release detection code, today's harness: the release's own clean_for_bench (built from the measured commit) scored by the harness commit below",
+    "harness_revision": "034cd7447c9a736fccb6a9c2b165fc48fd38dd98",
+    "manifest_replacing_actions": [
+      "redact",
+      "tokenize"
+    ],
+    "binary_sha256": "afe7a2000945126cd08363c3dcc5203c1a7a1e89d121bb6c743d98ac0356e2b4",
+    "policy": {
+      "path": "~/.local/share/gaze-release-evidence/20261015-v017/policy-v0.16.0.toml",
+      "sha256": "65cd6aa588ce6923f9e2156699893fcffb9a870967d9a0db5018deaa0c22c8cc"
+    },
+    "profile": "full",
+    "model_bundles": [
+      {
+        "model_id": "davlan-mbert-ner-hrl-onnx",
+        "hf_repo": "onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX",
+        "hf_commit": "cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8",
+        "runtime": "onnxruntime",
+        "digest_kind": "SHA256SUMS",
+        "bundle_sha": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "expected_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "observed_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "verified_artifacts": 7
+      }
+    ],
+    "policy_dependencies": {
+      "files": {
+        "ner.model_dir/SHA256SUMS": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "ner.model_dir/config.json": "8e5caefadaf9923a9e7d3de42ca97780c68fc4d83519d333f141b299e40af638",
+        "ner.model_dir/labels.json": "8498e2bafc017a793571c3c2f7092390a93a757f5ca45004f21db2560a8c6fdb",
+        "ner.model_dir/model.onnx": "1213fdd405d295768b0d41d8214062f2f278f0e3acff6af67d8fd47360d2be0f",
+        "ner.model_dir/special_tokens_map.json": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+        "ner.model_dir/tokenizer.json": "bf1b59b7b11c95f194f51708d918eea378e09d05f84c0e1656dc5180e8117088",
+        "ner.model_dir/tokenizer_config.json": "470cff6e0353b08e2a6e9b4f61729ecdc47ccb3ced335fa5520e9ce334572d59",
+        "ner.model_dir/vocab.txt": "fe0fda7c425b48c516fc8f160d594c8022a0808447475c1a7c6d6479763f310c",
+        "safety_net.nym.model_dir/SHA256SUMS": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767",
+        "safety_net.nym.model_dir/config.json": "3f07065571e22bb73eba28ddb1fae4509c0cf703762e3bfa7a6ab2111cf7cb88",
+        "safety_net.nym.model_dir/model_int8.onnx": "139006aea2cbd8e709d322f056232570de54661f624143be4893aaa387190286",
+        "safety_net.nym.model_dir/tokenizer.json": "c299144e68dfec1dc536204a7ae3712710c5c6cade9269a83f5042250d47d8de"
+      }
+    },
+    "hardware": "macOS-26.5-arm64-arm-64bit; arm",
+    "warmup_count": 1,
+    "measured_repetitions": 1
+  },
+  "command": [
+    "python",
+    "scripts/bench/readme_byte_panels.py",
+    "--reuse-v016",
+    "--capture-dir",
+    "<private-capture-directory>"
+  ]
+}
