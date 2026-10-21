@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -24,7 +24,8 @@ use crate::pipeline::build::{
 use crate::pipeline::run::{
     clean_overrides_from_options, enforce_safety_net_mode, entry_class_to_string,
     map_safety_net_pipeline_error, maybe_register_safety_net, policy_nym_was_overridden,
-    safety_net_policy, validate_safety_net_tolerant_gate, CleanOptions, CORE_EXTENDED_DEPRECATION,
+    safety_net_policy, validate_safety_net_tolerant_gate, wire_ordered_entries, CleanOptions,
+    CORE_EXTENDED_DEPRECATION,
 };
 use gaze::{
     Action, ConflictTier, DictionaryBundle, DocumentKind, EmittedTokenSpan, LeakReport, LocaleTag,
@@ -291,11 +292,13 @@ impl Daemon {
             gaze::CleanDocument::Text(text) => text,
             _ => return Err((request.session_id, DaemonError::Invariant)),
         };
-        let tokens = session
-            .snapshot_entries()
-            .into_iter()
-            .map(TokenJson::from)
-            .collect();
+        let tokens = wire_ordered_entries(
+            session.snapshot_entries(),
+            &first_token_starts(&clean_text, &manifest),
+        )
+        .into_iter()
+        .map(TokenJson::from)
+        .collect();
         Ok(DaemonResponse::Clean {
             session_id: request.session_id,
             clean_text,
@@ -335,12 +338,15 @@ impl Daemon {
 
     fn evict_idle_sessions(&mut self) {
         let now = Instant::now();
-        let expired = self
+        let mut expired = self
             .sessions
             .iter()
             .filter(|(_, entry)| now.duration_since(entry.last_seen) >= self.session_idle_timeout)
             .map(|(id, _)| id.clone())
             .collect::<Vec<_>>();
+        // `sessions` is a `HashMap`: sort so eviction audit rows and stderr lines come out
+        // in the same order on every run.
+        expired.sort();
         for evicted in expired {
             if let Some(entry) = self.sessions.remove(&evicted) {
                 self.lru.retain(|existing| existing != &evicted);
@@ -555,6 +561,21 @@ impl DaemonResponse {
             detail: detail.into(),
         }
     }
+}
+
+/// First clean-text start of each emitted token in this response's manifest.
+fn first_token_starts<'a>(
+    clean_text: &'a str,
+    manifest: &[EmittedTokenSpan],
+) -> BTreeMap<&'a str, usize> {
+    let mut starts = BTreeMap::new();
+    for span in manifest {
+        if let Some(token) = clean_text.get(span.clean_span.clone()) {
+            let start = starts.entry(token).or_insert(span.clean_span.start);
+            *start = (*start).min(span.clean_span.start);
+        }
+    }
+    starts
 }
 
 #[derive(Serialize)]

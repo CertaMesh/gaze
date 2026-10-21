@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -182,11 +183,13 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         ),
     };
 
-    let entries = session
-        .snapshot_entries()
-        .into_iter()
-        .map(EntryJson::from)
-        .collect();
+    let entries = wire_ordered_entries(
+        session.snapshot_entries(),
+        &first_token_starts_in_clean_text(&clean_text),
+    )
+    .into_iter()
+    .map(EntryJson::from)
+    .collect();
     let snapshot: SensitiveSnapshot = session.export().map_err(|_| CliError::Pipeline)?;
     let session_blob = BASE64.encode(snapshot.into_bytes());
 
@@ -681,6 +684,50 @@ struct CleanResponse {
     entries: Vec<EntryJson>,
     stats: Stats,
     leak_report: LeakReportResponse,
+}
+
+/// Orders a session's mappings for the wire: by where the token first starts in this
+/// document's clean text, tokens absent from it last; then by token, family, class and
+/// raw value. The key is total, so the emitted bytes never depend on the session's
+/// `HashMap` seed. `gaze clean` and `gaze daemon` both use it.
+pub(crate) fn wire_ordered_entries(
+    mut entries: Vec<SessionSnapshotEntry>,
+    first_starts: &BTreeMap<&str, usize>,
+) -> Vec<SessionSnapshotEntry> {
+    let start_of = |entry: &SessionSnapshotEntry| {
+        first_starts
+            .get(entry.token.as_str())
+            .copied()
+            .unwrap_or(usize::MAX)
+    };
+    entries.sort_by(|left, right| {
+        (
+            start_of(left),
+            &left.token,
+            &left.family,
+            &left.class,
+            &left.raw,
+        )
+            .cmp(&(
+                start_of(right),
+                &right.token,
+                &right.family,
+                &right.class,
+                &right.raw,
+            ))
+    });
+    entries
+}
+
+/// First start of every token-shaped run in `clean_text`. `gaze clean` gets no manifest
+/// back from the pipeline, so this recovers each token's span start from the clean text;
+/// runs that are not session tokens are simply never looked up.
+fn first_token_starts_in_clean_text(clean_text: &str) -> BTreeMap<&str, usize> {
+    let mut starts = BTreeMap::new();
+    for found in gaze::token_shape::pattern().find_iter(clean_text) {
+        starts.entry(found.as_str()).or_insert(found.start());
+    }
+    starts
 }
 
 #[derive(Debug, Clone, Serialize)]
