@@ -8,6 +8,17 @@ import scorecard_record
 
 
 class PortableExportTests(unittest.TestCase):
+    def test_windows_home_case_variants_are_portable_on_posix(self):
+        for component in ("users", "USERS", "UsErS"):
+            for separator in ("\\", "/"):
+                path = separator.join(("C:", component, "someone", "policy.toml"))
+                with self.subTest(path=path):
+                    header = {"scorecard": {"runner_provenance": {"policy": {"path": path}}}}
+                    normalized = export.portable_header(header)
+                    self.assertEqual(normalized["scorecard"]["runner_provenance"]["policy"]["path"],
+                                     "~/policy.toml")
+                    self.assertEqual(header["scorecard"]["runner_provenance"]["policy"]["path"], path)
+
     def test_only_policy_path_changes(self):
         header = {'scorecard': {'runner_provenance': {'policy': {
             'path': str(Path.home() / 'synthetic/policy.toml'), 'sha256': 'a' * 64}},

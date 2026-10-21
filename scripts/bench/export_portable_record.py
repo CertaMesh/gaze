@@ -23,7 +23,7 @@ def sha256(path: Path) -> str:
 
 
 # Any user's home directory, not only the exporting machine's own.
-HOME_PREFIX = re.compile(r'^(?:/Users/[^/]+|/home/[^/]+|[A-Za-z]:[\\/]+Users[\\/]+[^\\/]+)(?=[\\/]|$)')
+HOME_PREFIX = re.compile(r'^(?:/Users/[^/]+|/home/[^/]+|[A-Za-z]:[\\/]+(?i:Users)[\\/]+[^\\/]+)(?=[\\/]|$)')
 # An Anvil worktree is a repository checkout: `~/anvil/workspaces/<project>/<worktree>/<repo path>`.
 ANVIL_WORKTREE = re.compile(r'^~/anvil/workspaces/[^/]+/[^/]+/(?P<repo_path>.+)$')
 

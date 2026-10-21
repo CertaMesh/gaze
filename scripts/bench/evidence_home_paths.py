@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RECEIPTS = ROOT / "docs/reference/benchmarks/portable-evidence-receipts.json"
 
 # Raw text and JSON-escaped spellings: `C:\Users\` appears as `C:\\Users\\` in JSON.
-HOME_PATH = re.compile(rb"/Users/|/home/|[A-Za-z]:(?:\\+|/)Users(?:\\+|/)")
+HOME_PATH = re.compile(rb"/Users/|/home/|[A-Za-z]:(?:\\+|/)(?i:Users)(?:\\+|/)")
 
 # Intentional fixtures that must carry a home path (for example scrubber tests).
 # Repo-relative POSIX paths; keep empty unless a fixture genuinely needs one.
@@ -43,8 +43,30 @@ def tracked_gz(root: Path = ROOT) -> list[str]:
     return sorted(item.decode() for item in output.split(b"\0") if item)
 
 
+def _decoded_hits(value) -> int:
+    if isinstance(value, str):
+        return len(HOME_PATH.findall(value.encode("utf-8")))
+    if isinstance(value, dict):
+        return sum(_decoded_hits(key) + _decoded_hits(item) for key, item in value.items())
+    if isinstance(value, list):
+        return sum(_decoded_hits(item) for item in value)
+    return 0
+
+
 def home_path_hits(data: bytes) -> int:
-    return len(HOME_PATH.findall(gzip.decompress(data)))
+    raw = gzip.decompress(data)
+    raw_hits = len(HOME_PATH.findall(raw))
+    try:
+        decoded_hits = _decoded_hits(json.loads(raw))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        decoded_hits = 0
+        for line in raw.splitlines():
+            try:
+                decoded_hits += _decoded_hits(json.loads(line))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue  # Non-JSON evidence is still covered by the raw scan.
+    # Raw and decoded scans usually see the same path; don't count it twice.
+    return max(raw_hits, decoded_hits)
 
 
 def scan(root: Path = ROOT, files: list[str] | None = None) -> dict[str, int]:
@@ -98,7 +120,7 @@ def compare_records(original: bytes, published: bytes, fields: list[str]) -> lis
     for index, (old, new) in enumerate(zip(left[1:], right[1:]), start=1):
         if old != new:
             problems.append(f"observation row {index} differs")
-    if HOME_PATH.search(gzip.decompress(published)):
+    if home_path_hits(published):
         problems.append("published record still carries a home path")
     for field in fields:
         try:

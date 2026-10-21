@@ -59,6 +59,34 @@ class PlantedPathTests(unittest.TestCase):
         finally:
             evidence.ROOT = original
 
+    def test_json_escaped_slashes_fail_scan_and_check(self):
+        for path in ("/Users/someone/policy.toml", "/home/someone/policy.toml"):
+            with self.subTest(path=path):
+                text = json.dumps({"nested": [{"path": path}]}).replace("/", r"\/")
+                root = self.planted_repo(text)
+                self.assertEqual(evidence.scan(root), {"planted.jsonl.gz": 1})
+                original = evidence.ROOT
+                evidence.ROOT = root
+                try:
+                    self.assertEqual(evidence.main(["check"]), 1)
+                finally:
+                    evidence.ROOT = original
+
+    def test_windows_case_variants_fail_scan_and_check(self):
+        for component in ("users", "USERS", "UsErS"):
+            for separator in ("\\", "/"):
+                path = separator.join(("C:", component, "someone", "policy.toml"))
+                for text in (path, json.dumps({"path": path})):
+                    with self.subTest(text=text):
+                        root = self.planted_repo(text)
+                        self.assertEqual(evidence.scan(root), {"planted.jsonl.gz": 1})
+                        original = evidence.ROOT
+                        evidence.ROOT = root
+                        try:
+                            self.assertEqual(evidence.main(["check"]), 1)
+                        finally:
+                            evidence.ROOT = original
+
     def test_portable_paths_pass_the_scan(self):
         self.assertEqual(evidence.home_path_hits(_gz([{"p": "~/gaze-bench/policy.toml"}])), 0)
 
@@ -89,6 +117,17 @@ class CompareRecordsTests(unittest.TestCase):
     def test_an_unscrubbed_path_is_reported(self):
         problems = evidence.compare_records(_gz([HEADER, *ROWS]), _gz([HEADER, *ROWS]), self.FIELD)
         self.assertIn("published record still carries a home path", problems)
+
+    def test_allowed_path_field_cannot_hide_escaped_or_case_variant_home(self):
+        for path in ("/Users/someone/policy.toml", "/home/someone/policy.toml",
+                     r"C:\users\someone\policy.toml", r"C:\USERS\someone\policy.toml",
+                     "C:/users/someone/policy.toml", "C:/USERS/someone/policy.toml"):
+            with self.subTest(path=path):
+                header = copy.deepcopy(HEADER)
+                header["scorecard"]["runner_provenance"]["policy"]["path"] = path
+                published = gzip.compress(gzip.decompress(_gz([header, *ROWS])).replace(b"/", b"\\/"))
+                problems = evidence.compare_records(_gz([HEADER, *ROWS]), published, self.FIELD)
+                self.assertIn("published record still carries a home path", problems)
 
 
 class PortablePathTests(unittest.TestCase):
