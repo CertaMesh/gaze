@@ -1063,6 +1063,7 @@ fn daemonized_proxy_start_fails_closed_when_the_policy_cannot_be_loaded() {
 // ---------------------------------------------------------------------------
 
 /// The Pass-3 safety-net subprocess budget, mirroring `safety_net_cli.rs`.
+#[cfg(feature = "safety-net-openai")]
 fn safety_net_timeout_ms() -> String {
     let seconds = std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS")
         .map(|value| {
@@ -1075,6 +1076,7 @@ fn safety_net_timeout_ms() -> String {
     seconds.saturating_mul(1_000).to_string()
 }
 
+#[cfg(feature = "safety-net-openai")]
 fn write_executable(path: &Path, body: &str) {
     fs::write(path, body).unwrap();
     #[cfg(unix)]
@@ -1087,6 +1089,7 @@ fn write_executable(path: &Path, body: &str) {
 /// A policy that tokenizes nothing in the fixtures below, so the daemon's
 /// `clean_text` is byte-identical to the request text and any difference is
 /// attributable to the Pass-3 safety net rather than to Pass-1 detection.
+#[cfg(feature = "safety-net-openai")]
 fn write_preserve_default_policy() -> (tempfile::TempDir, PathBuf) {
     let dir = tempdir().unwrap();
     let path = dir.path().join("policy.toml");
@@ -1142,6 +1145,7 @@ fn daemon_request(policy: &Path, extra_args: &[String], text: &str) -> (Value, O
 
 /// An `opf` stand-in that reports nothing: a backend with no coverage for the
 /// text it is handed.
+#[cfg(feature = "safety-net-openai")]
 fn write_blind_opf(dir: &Path) -> PathBuf {
     let path = dir.join("blind-opf");
     write_executable(&path, &echoing_opf_script("[]"));
@@ -1150,12 +1154,14 @@ fn write_blind_opf(dir: &Path) -> PathBuf {
 
 /// An `opf` stand-in reporting `spans`. The OPF adapter only accepts output that echoes the
 /// exact text it analysed.
+#[cfg(feature = "safety-net-openai")]
 fn echoing_opf_script(spans: &str) -> String {
     format!(
         "#!/bin/sh\nexec python3 -c 'import json,sys; print(json.dumps({{\"text\": open(\"/dev/stdin\", encoding=\"utf-8\").read(), \"detected_spans\": json.loads(sys.argv[1])}}))' '{spans}'\n"
     )
 }
 
+#[cfg(feature = "safety-net-openai")]
 fn opf_checkpoint(dir: &Path) -> PathBuf {
     let path = dir.join("opf-checkpoint");
     fs::create_dir(&path).unwrap();

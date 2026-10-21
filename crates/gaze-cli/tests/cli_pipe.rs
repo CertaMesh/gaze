@@ -13,6 +13,7 @@ use base64::Engine;
 use regex::Regex;
 use rusqlite::{params, params_from_iter, Connection};
 use serde_json::{json, Value};
+#[cfg(feature = "safety-net-openai")]
 use serial_test::file_serial;
 use tempfile::tempdir;
 
@@ -34,6 +35,7 @@ fn all_audit_columns() -> PresentColumns {
     )
 }
 
+#[cfg(feature = "safety-net-openai")]
 fn test_subprocess_timeout_ms() -> u64 {
     let seconds = std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS")
         .map(|value| {
