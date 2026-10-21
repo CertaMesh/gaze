@@ -50,8 +50,18 @@ gaze restore --session-file owner-session.json < reply.txt > restored.txt
 `gaze clean --session-out <PATH>` writes `{"session_blob":"<base64>"}` to a
 new file and prints only the clean text, byte for byte, with no added newline.
 The session and the raw `entries` values never reach stdout. The file is
-created exclusively with mode `0600` on Unix. An existing path, including a
-symlink, fails with `SessionFile` (exit `4`) before any work runs.
+created exclusively with mode `0600` on macOS or Linux. Before writing any session
+bytes, Gaze clears its extended ACL on the open descriptor and verifies that
+no entries remain. If clearing or verification fails, Gaze removes the empty
+file and fails with `SessionFile` (exit `4`). Replacement files receive the same
+checks before being written and renamed; a failed check leaves the old session
+untouched. Filesystems that cannot provide this verification fail closed.
+`--session-out` is refused with `SessionFile` on Windows and other unsupported
+platforms; owner-only creation is not implemented there. Reading existing
+sessions with `--session-file` remains available.
+
+An existing path, including a symlink, fails with `SessionFile` (exit `4`)
+before any work runs.
 `--overwrite-session-out` replaces it with a fresh owner-only file.
 
 `gaze restore --session-file <PATH>` reads UTF-8 text on stdin and prints the

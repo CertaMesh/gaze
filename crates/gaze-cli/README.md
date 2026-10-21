@@ -82,7 +82,7 @@ Flags:
 |------|---------|
 | `--policy <path>` | Optional `policy.toml` path. Production integrations should pass one. |
 | `--format <json\|text>` | Output format. Defaults to `json`, or `text` with `--session-out`. `text` requires `--session-out`. |
-| `--session-out <path>` | Write the session as `{"session_blob"}` JSON to a new owner-only (`0600`) file and print only the clean text. Refuses an existing path with `SessionFile` (exit `4`). |
+| `--session-out <path>` | Write the session as `{"session_blob"}` JSON to a new owner-only (`0600`) file on macOS/Linux and print only the clean text. Clear and verify the descriptor's extended ACL before writing any session bytes. Refuse an existing path, an ACL failure, or an unsupported platform (including Windows) with `SessionFile` (exit `4`). |
 | `--overwrite-session-out` | Replace an existing `--session-out` file with a fresh owner-only file. |
 | `--session-ttl <secs>` | Override persistent session TTL from policy. |
 | `--session-scope <scope>` | Override `[session].scope` from policy. |

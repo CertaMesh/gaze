@@ -25,6 +25,11 @@ remaining steps.
 
 ## 2. Replace the address with a token
 
+This file-based workflow requires macOS or Linux with verifiable file ACLs.
+Gaze clears and checks the session file's ACL before writing its restore key.
+On Windows, Gaze refuses `--session-out` with `SessionFile` (exit `4`). Use the
+[JSON interface](../../crates/gaze-cli/README.md#clean) there.
+
 Clean the input. `--session-out` saves the session to a new owner-only file and
 prints only the cleaned text:
 
