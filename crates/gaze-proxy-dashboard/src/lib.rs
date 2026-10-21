@@ -17,6 +17,7 @@ mod runtime;
 mod security_headers;
 mod server;
 mod sink;
+mod snapshot;
 #[cfg(test)]
 mod snapshot_contract;
 mod store;

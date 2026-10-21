@@ -11,6 +11,7 @@ use serde::Serialize;
 use zeroize::Zeroizing;
 
 use crate::ipc::DecodedInspectionFrame;
+use crate::snapshot::{EventV1, PayloadAvailabilityV1, RetentionFactsV1, StageV1, StagesV1};
 use crate::RetentionLimits;
 
 const SENSITIVE_ENVELOPE_HEADER_BYTES: usize = 11;
@@ -215,8 +216,10 @@ impl EventStore {
     ) -> Option<ResponseLease> {
         self.expire(now);
         let stored = self.global.get(&emission_id)?;
+        // An omitted payload is never leasable, whatever bytes or route are presented.
         if stored.frame.logical_id != logical_id
             || stored.frame.stage_domain != stage_domain
+            || stored.frame.projection.payload() != PayloadAvailabilityV1::Present
             || now >= stored.deadline
             || now >= reveal_deadline
         {
@@ -314,55 +317,43 @@ impl EventStore {
         self.counters
     }
 
-    pub(crate) fn safe_snapshot_events(&self) -> Vec<serde_json::Value> {
+    /// Retention facts for the snapshot runtime header.
+    pub(crate) fn retention_facts(&self) -> RetentionFactsV1 {
+        RetentionFactsV1 {
+            epoch: self.accepted_epoch.get(),
+            retained: self.logical.len() as u64,
+            capacity: self.limits.max_events() as u64,
+            ttl_seconds: self.limits.ttl().as_secs(),
+        }
+    }
+
+    /// Typed, payload-free snapshot events, newest logical first.
+    pub(crate) fn snapshot_events(&self, now: Instant) -> Vec<EventV1> {
         let mut logical_ids = self.logical.keys().copied().collect::<Vec<_>>();
-        logical_ids.sort_by_key(|id| id.get());
+        logical_ids.sort_by_key(|id| std::cmp::Reverse(id.get()));
         logical_ids
             .into_iter()
             .filter_map(|logical_id| {
                 let logical = self.logical.get(&logical_id)?;
-                let mut stages = serde_json::Map::new();
+                let mut stages = StagesV1::default();
+                let mut newest: Option<&DecodedInspectionFrame> = None;
                 for emission_id in &logical.emissions {
                     let Some(stored) = self.global.get(emission_id) else {
                         continue;
                     };
-                    let stage = match stored.frame.stage_domain {
-                        InspectionStageDomainV1::OwnerRequest => "ownerRequest",
-                        InspectionStageDomainV1::ProviderRequest => "providerRequest",
-                        InspectionStageDomainV1::ProviderResponse => "providerResponse",
-                        InspectionStageDomainV1::OwnerRestoredResponse => "ownerRestoredResponse",
-                    };
-                    let safe_meta =
-                        serde_json::from_slice::<serde_json::Value>(&stored.frame.safe_meta)
-                            .unwrap_or_else(|_| {
-                                serde_json::json!({
-                                    "state": "Omitted",
-                                    "reason": "ProjectionFailedClosed"
-                                })
-                            });
-                    let projection =
-                        serde_json::from_slice::<serde_json::Value>(&stored.frame.projection)
-                            .unwrap_or_else(|_| {
-                                serde_json::json!({
-                                    "state": "Omitted",
-                                    "reason": "ProjectionFailedClosed"
-                                })
-                            });
+                    let frame = &stored.frame;
                     stages.insert(
-                        stage.to_owned(),
-                        serde_json::json!({
-                            "emissionId": stored.frame.emission_id.get(),
-                            "sequence": stored.frame.sequence.get(),
-                            "safeMeta": safe_meta,
-                            "projection": projection,
-                            "domainState": { "kind": "Available" }
-                        }),
+                        frame.stage_domain,
+                        StageV1::new(&frame.meta, &frame.projection),
                     );
+                    if newest.is_none_or(|current| current.sequence < frame.sequence) {
+                        newest = Some(frame);
+                    }
                 }
-                Some(serde_json::json!({
-                    "logicalId": logical_id.get(),
-                    "stages": stages
-                }))
+                let newest = newest?;
+                let remaining = logical.deadline.saturating_duration_since(now);
+                let ttl_seconds = remaining.as_secs() + u64::from(remaining.subsec_nanos() > 0);
+                Some(EventV1::new(&newest.meta, ttl_seconds, stages))
             })
             .collect()
     }
@@ -501,7 +492,6 @@ impl RevealRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zeroize::Zeroizing;
 
     fn frame(
         logical: u64,
@@ -511,16 +501,7 @@ mod tests {
         stage_domain: InspectionStageDomainV1,
         payload: &[u8],
     ) -> DecodedInspectionFrame {
-        DecodedInspectionFrame {
-            logical_id: LogicalInspectionIdV1::new(logical),
-            emission_id: InspectionEmissionIdV1::new(emission),
-            sequence: InspectionSequenceV1::new(sequence),
-            epoch: InspectionEpochV1::new(epoch),
-            stage_domain,
-            safe_meta: br#"{"version":"v1"}"#.to_vec(),
-            projection: br#"{"measurement":{"omitted":"not_applicable"}}"#.to_vec(),
-            payload: Zeroizing::new(payload.to_vec()),
-        }
+        DecodedInspectionFrame::for_test(logical, emission, sequence, epoch, stage_domain, payload)
     }
 
     #[test]
@@ -707,5 +688,44 @@ mod tests {
         drop(second);
         drop(first);
         assert_eq!(store.active_response_bytes.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn omitted_payloads_are_never_leasable_and_present_ones_are() {
+        use crate::test_support::{admit_all, emit_logical, StageShape, ALL_STAGES};
+        use gaze_types::inspection::{CaptureDomainsV1, ProjectionOmissionReasonV1};
+        let now = Instant::now();
+        for stage in ALL_STAGES {
+            for (shape, leasable) in [
+                (StageShape::Present, true),
+                (StageShape::PresentEmptyPayload, true),
+                (
+                    StageShape::PayloadOmitted(ProjectionOmissionReasonV1::LimitExceeded),
+                    false,
+                ),
+                (
+                    StageShape::ProjectionOmitted(ProjectionOmissionReasonV1::NotCapturedByPolicy),
+                    false,
+                ),
+            ] {
+                let mut store = crate::test_support::fixture_store();
+                admit_all(
+                    &mut store,
+                    &emit_logical(CaptureDomainsV1::All, &[(stage, shape)]),
+                    now,
+                );
+                let (emission, stored) = store.global.iter().next().unwrap();
+                let logical = stored.frame.logical_id;
+                let lease = store.lease(
+                    logical,
+                    *emission,
+                    stage,
+                    now,
+                    now + Duration::from_secs(30),
+                    0,
+                );
+                assert_eq!(lease.is_some(), leasable, "{stage:?} {shape:?}");
+            }
+        }
     }
 }

@@ -63,6 +63,7 @@ fn state(secret: &PairingSecret) -> Arc<Mutex<ChildState>> {
         ),
         auth: AuthRegistry::new(secret, 2),
         reveals: RevealRegistry::new(Duration::from_secs(30)),
+        status: None,
     }))
 }
 fn purge_frame() -> [u8; 9] {
