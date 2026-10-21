@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The legacy OpenAI and Gemini proxy paths restore a pseudonym token that a
+  stream splits across SSE events. Each event was restored alone, so a token
+  streamed in pieces, the common case, reached the client unrestored. Each
+  choice's text, each tool call's arguments and each Gemini candidate's text
+  is now restored once across the buffered response. OpenAI Responses API
+  streaming events are now restored too; they were not surfaced at all. Adapters
+  key streams with the new `ProviderAdapter::sse_event_stream_surfaces`, whose
+  default keeps the previous per-event behavior.
 - Anthropic proxy accepts the literal `?beta=true` query, individually allowlisted
   comma-separated beta headers (policy or repeatable `--anthropic-beta`), and
   inspected `count_tokens` requests. Adaptive thinking, output configuration and

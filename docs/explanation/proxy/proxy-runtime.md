@@ -19,6 +19,15 @@ Adapters implement `ProviderAdapter`:
 - `response_pii_surfaces(body)` returns mutable text leaves to restore on the
   owner-visible response.
 - `sse_event_pii_surfaces(event)` handles provider-native event payloads.
+- `sse_event_stream_surfaces(event)` pairs each event surface with the logical
+  stream it continues, such as one choice's text or one tool call's arguments.
+  Providers stream about one model token per event, so a pseudonym token is
+  usually split across events. The legacy proxy buffers the whole response,
+  concatenates each stream's fragments, restores the result once, and replays
+  it in the stream's first fragment. Keys come from the provider's own indices,
+  never from an array position, so parallel tool calls never merge. The
+  default marks every surface complete, which leaves a split token
+  pseudonymized.
 - `requests_json_output(request)` reports whether the request asked the model
   for JSON output. It defaults to `false`.
 
@@ -46,9 +55,9 @@ OpenAI detects `json_object` / `json_schema` in `response_format.type`
 
 | Provider | Request surfaces | Response surfaces | Streaming surfaces |
 | --- | --- | --- | --- |
-| OpenAI | `messages[].content`, `system`, `tool_calls[].function.arguments`, `input` | `choices[].message.content`, `choices[].message.tool_calls[].function.arguments`, `output` | `choices[].delta.content`, `choices[].delta.tool_calls[].function.arguments` |
+| OpenAI | `messages[].content`, `system`, `tool_calls[].function.arguments`, `input` | `choices[].message.content`, `choices[].message.tool_calls[].function.arguments`, `output` | `choices[].delta.content`, `choices[].delta.tool_calls[].function.arguments` (keyed by choice `index` and tool call `index`); Responses API `response.output_text.delta`, `response.function_call_arguments.delta` and their `.done`, output item, content part and `response.completed` events |
 | Anthropic | Strict, schema-aware Messages codec; see the [public contract](anthropic-messages-contract.md) | Strict, schema-aware Messages codec; see the [public contract](anthropic-messages-contract.md) | Strict lifecycle with proved replay; see the [public contract](anthropic-messages-contract.md) |
-| Gemini | `contents[].parts[].text`, `functionCall.args`, `functionResponse.response`, `systemInstruction.parts[].text` | `candidates[].content.parts[].text`, `functionCall.args` | same parts shape per chunk |
+| Gemini | `contents[].parts[].text`, `functionCall.args`, `functionResponse.response`, `systemInstruction.parts[].text` | `candidates[].content.parts[].text`, `functionCall.args` | same parts shape per chunk; text keyed by candidate `index` |
 
 The legacy OpenAI and Gemini adapters walk tool and function objects as native
 JSON without provider-shape transcoding. The strict Anthropic direct profile is
