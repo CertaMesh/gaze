@@ -83,10 +83,39 @@ def false_positives():
     return dict(schema_version=1,method='Non-gold byte portions of retained final protection traces in every generated cell with changed raw false positives; joined to committed synthetic generator inputs.',changed_cell_totals=changed,source_context_deltas=attribution)
 
 
+def materialize_policies():
+    manifest = json.loads((EVIDENCE / 'policies.json').read_text())
+    for comparison in ('main', 'mechanism'):
+        for side in ('base', 'candidate'):
+            entry = manifest[f'{comparison}-{side}']
+            snapshot = EVIDENCE / entry['file']
+            assert snapshot.resolve().is_relative_to((EVIDENCE / 'policies').resolve())
+            raw = snapshot.read_bytes()
+            digest = hashlib.sha256(raw).hexdigest()
+            assert digest == entry['sha256']
+            for version in (1, 2, 3, 4):
+                source = card(comparison, side, version)
+                proof = source['runner_provenance']['policy']
+                assert digest == proof['sha256'] == source['parameters']['policy_sha256']
+                assert proof['path'] == entry['recorded_path']
+            # The gate reads these exact bytes through the original provenance.
+            # Main policies are checked above; only mechanism gates open a policy.
+            if comparison == 'mechanism':
+                destination = Path(entry['recorded_path'])
+                assert not destination.is_absolute() and '~' not in destination.parts
+                assert destination.resolve().is_relative_to(ROOT.resolve())
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if destination.exists():
+                    assert destination.read_bytes() == raw, destination
+                else:
+                    destination.write_bytes(raw)
+
+
 def main():
     if sys.argv[1:] not in ([],['--record']):
         raise SystemExit('Usage: python3 verify.py [--record]')
     os.chdir(ROOT)
+    materialize_policies()
     checks=[]
     for comparison in ('main','mechanism'):
         for side in ('base','candidate'):

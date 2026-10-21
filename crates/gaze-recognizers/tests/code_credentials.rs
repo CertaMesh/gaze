@@ -463,7 +463,7 @@ fn escaped_json_slashes_are_complete_hash_alphabet_units() {
     ] {
         let encoded = hash.replace('/', r"\/");
         assert_escaped_hash(&format!(r#"{{"stored_digest":"{encoded}"}}"#), &encoded);
-        for suffix in [r"\", r"\q", r"\u002f", "_tail"] {
+        for suffix in [r"\", r"\q", r"\u002", r"\u00xz", "_tail"] {
             assert!(found("password.hash", &format!("{encoded}{suffix}")).is_empty());
         }
     }
@@ -482,5 +482,32 @@ fn escaped_json_slashes_are_complete_hash_alphabet_units() {
         // letter must never leave a complete component or a truncated match.
         let broken = invalid.replace("aaa", "aa");
         assert!(found("password.hash", &broken).is_empty());
+    }
+}
+
+#[test]
+fn json_separators_after_complete_hashes_preserve_source_spans() {
+    for hash in [
+        "$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi".to_string(),
+        "$argon2id$v=19$m=8192,t=1,p=1$aaaa$bbbb".to_string(),
+        format!("$6$salt${}", "a".repeat(86)),
+    ] {
+        for value in [hash.clone(), hash.replace('/', r"\/")] {
+            for separator in [
+                r"\n", r"\t", r"\r", r#"\""#, r"\\", r"\u000a", r"\u002f", r"\uABCD", r"\b", r"\f",
+            ] {
+                let raw = format!(r#"{{"stdout":"{value}{separator}"}}"#);
+                assert_escaped_hash(&raw, &value);
+            }
+            for tail in [r"\", r"\q", r"\u", r"\u000", r"\u00xz", "_tail"] {
+                assert!(found("password.hash", &format!("{value}{tail}")).is_empty());
+            }
+        }
+    }
+    for width in [52, 54] {
+        let hash = format!("$2b$12${}", "a".repeat(width));
+        for separator in [r"\n", r"\t", r"\r", r#"\""#, r"\\", r"\u000a"] {
+            assert!(found("password.hash", &format!("{hash}{separator}")).is_empty());
+        }
     }
 }

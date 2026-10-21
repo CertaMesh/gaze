@@ -294,3 +294,40 @@ def source_escape_records(api, partition):
             if family != "argon2id":
                 emit("D", family, "json_overlong", index, value.replace("=", "") + "A" + ("==" if family == "django_scrypt" else "=" if "pbkdf2" in family else ""))
     return result
+
+
+def json_separator_records(api, partition):
+    """v24 complete hashes in JSON command output; malformed tails stay benign."""
+    result = []
+    rng = api.Rng(api.PARTITION_SEEDS[partition], "credential-json-separators")
+    separators = {"newline": r"\n", "tab": r"\t", "cr": r"\r", "quote": r'\"',
+                  "backslash": r"\\", "unicode_lf": r"\u000a", "unicode_slash": r"\u002f",
+                  "unicode_upper": r"\uABCD", "backspace": r"\b", "formfeed": r"\f"}
+    broken = {"dangling": "\\", "unknown": r"\q", "short_unicode": r"\u000", "bad_unicode": r"\u00xz",
+              "identifier": "_tail"}
+    for index in range(api.DOCS_PER_FAMILY):
+        values = hashes(rng)
+        for family in ("bcrypt", "argon2id", "sha512crypt"):
+            for encoding in ("literal", "slash"):
+                value = values[family]
+                if encoding == "slash":
+                    parts = value.split("$")
+                    parts[-1] = "/" + parts[-1][1:]
+                    value = "$".join(parts).replace("/", r"\/")
+                for name, suffix in {**separators, **broken}.items():
+                    for layer in (("A", "R") if name in separators else ("D",)):
+                        # Each partition has independent context and hash draws.
+                        template = ('{"stdout":"{V}' + suffix + '","stream":"' +
+                                    ("dev-output" if partition == "dev" else "test-output") + '"}')
+                        if layer == "R":
+                            template += '\n' + template
+                        text, gold, decoys = api._fill_with_decoys(template, {"V": (value, None if layer == "D" else "PASSWORD")})
+                        surface = f"credentials_separators_{encoding}_{name}"
+                        result.append(api.Record(
+                            uid=f"agentic-{partition}-{layer}-{surface}-{family}-{index}",
+                            partition=partition, layer=layer, family=family, surface=surface,
+                            validity=api.BENIGN if layer == "D" else api.UNCHECKED,
+                            group=f"{partition}-credentials-separators-{family}-{index}",
+                            template=f"credentials-separators/{partition}/{encoding}/{name}",
+                            language="en", region="US", text=text, gold=gold, decoys=decoys))
+    return result

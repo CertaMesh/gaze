@@ -102,4 +102,6 @@ Run the model-free public proof from a checkout of this evidence:
 uv run --project scripts/bench --python 3.13 python docs/reference/benchmarks/password-code-credentials/source-escapes/verify.py
 ```
 
+The verifier loads committed exact policy snapshots from `policies/`, verifies each SHA-256 against both `runner_provenance.policy.sha256` and `parameters.policy_sha256` for every contract, and materializes the original relative mechanism policy paths before calling the unchanged provenance-enforcing gate. Captured model paths inside these inert TOML snapshots document the original execution; replay never loads models or private data. An existing policy at a materialization path must have identical bytes. An empty checkout and empty `target/` are sufficient.
+
 It re-derives all 16 scorecards and eight gates from four portable observation archives, checks archive hashes, attributes false-positive deltas and checks the new-cell totals. [Verification receipt](verification.json). Export receipts prove observation rows are unchanged; only a policy-path home prefix may be normalized. Every scorecard links its exact archive.

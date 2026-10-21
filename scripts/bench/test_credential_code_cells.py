@@ -62,6 +62,18 @@ class CredentialCellsTests(unittest.TestCase):
                 for span in (*row.gold, *row.decoys):
                     self.assertEqual(row.text.encode()[span.start:span.end].decode(), span.value)
 
+    def test_v23_and_json_separator_boundaries(self):
+        previous = {"dev": "b4f8f8fbfcfef922f7aa1b21aa1da91a712ac07efdeade00a51b7e284f91e1b2", "test": "5b9a3ad435210a3c2543989a0cd41255b60ff24a4f7efef5d21dee4db1e9713e"}
+        for partition in agentic.PARTITIONS:
+            old = agentic.records_as_of(23, agentic.generate(partition))
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(old)).hexdigest(), previous[partition])
+            rows = cells.json_separator_records(agentic, partition)
+            self.assertEqual({row.family for row in rows}, {"bcrypt", "argon2id", "sha512crypt"})
+            for row in rows:
+                self.assertEqual(len(row.gold), 2 if row.layer == "R" else 0 if row.layer == "D" else 1)
+                for span in (*row.gold, *row.decoys):
+                    self.assertEqual(row.text.encode()[span.start:span.end].decode(), span.value)
+
     def test_review_contexts_measure_both_credential_and_metadata_boundaries(self):
         for partition in agentic.PARTITIONS:
             rows = cells.review_records(agentic, partition)
