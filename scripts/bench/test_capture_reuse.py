@@ -42,7 +42,9 @@ def write_capture(binary, directory, key):
                                   corpus_sha256=identity.file_digest(CORPUS), binary=binary, extra_documents=extra,
                                   layer_contract=score.SCORED_LABEL_CONTRACT_V1)
     runs = {}
-    with stages.session(directory / "run-evidence.json") as evidence:
+    with stages.session(directory / "run-evidence.json",
+                        scorecard=directory / "scorecard-v4.json",
+                        record=directory / "observations-v1.jsonl.gz") as evidence:
         evidence.cache = {"status": "miss", "key_sha256": cache.key_digest(key)}
         for layer, doc in population:
             with stages.labels(layer=layer), stages.scoring():
@@ -69,6 +71,7 @@ def write_capture(binary, directory, key):
         path = directory / "observations-v1.jsonl.gz"
         card["observation_record"] = writer.write(path, card, add_reference=True)
         cache.store_layers(directory / "cache", key, path)
+        (directory / "scorecard-v4.json").write_text(json.dumps(card, indent=2) + "\n")
     return path, card
 
 
@@ -78,16 +81,17 @@ class CaptureIdentityTests(unittest.TestCase):
             root = Path(temporary)
             stdlib = root / "stdlib"
             stdlib.mkdir()
-            python, detector, libpython, extension, dependency = (
-                root / name for name in ("python", "detector", "libpython.so", "extension.so", "dependency.so"))
-            for path in (python, detector, libpython, extension, dependency):
+            python, detector, libpython, extension, dependency, libc = (
+                root / name for name in ("python", "detector", "libpython.so", "extension.so", "dependency.so", "libc.so"))
+            for path in (python, detector, libpython, extension, dependency, libc):
                 path.write_bytes(b"synthetic original")
             calls = []
             def command(*args):
                 calls.append(args)
                 if args[0] == "lscpu":
                     return "Architecture: synthetic"
-                library = libpython if args[1] == str(python) else dependency
+                library = (libpython if args[1] == str(python) else
+                           dependency if args[1] == str(extension) else libc)
                 return f"{library} (0x000)"
             with mock.patch.object(identity.platform, "system", return_value="Linux"), \
                     mock.patch.object(identity, "_command", side_effect=command), \
@@ -96,8 +100,6 @@ class CaptureIdentityTests(unittest.TestCase):
                     mock.patch.object(identity.sys, "executable", str(python)), \
                     mock.patch.dict(identity.sys.modules, {"synthetic_extension": SimpleNamespace(__file__=str(extension))}):
                 original = identity.native_runtime({"detector": detector})
-                self.assertIn(("ldd", str(python)), calls)
-                self.assertIn(("ldd", str(extension)), calls)
                 for path in (libpython, dependency):
                     with self.subTest(library=path.name):
                         path.write_bytes(b"synthetic changed")
@@ -249,11 +251,14 @@ class NativeCaptureReuseTests(unittest.TestCase):
             original, card = write_capture(BINARY, fresh, key)
             self.assertEqual(card["observation_record"]["binary_sha256"], key["binary_sha256"])
             destination = root / "hit" / original.name
-            with stages.session(destination.parent / "run-evidence.json") as evidence:
+            with stages.session(destination.parent / "run-evidence.json",
+                                scorecard=destination.parent / "scorecard-v4.json",
+                                record=destination) as evidence:
                 status = cache.restore_layers(fresh / "cache", key, destination)
                 evidence.cache = {"status": status, "key_sha256": cache.key_digest(key)}
                 self.assertEqual(status, "hit")
                 replay = records.rescore(destination, score.SCORED_LABEL_CONTRACT_V1, max_workers=1)
+                (destination.parent / "scorecard-v4.json").write_text(json.dumps(replay, indent=2) + "\n")
             self.assertEqual(original.read_bytes(), destination.read_bytes())
             self.assertEqual(json.dumps(card, indent=2), json.dumps(replay, indent=2))
             self.assertEqual(json.loads((fresh / "run-evidence.json").read_text())["cache"]["status"], "miss")

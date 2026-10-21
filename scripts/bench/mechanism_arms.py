@@ -318,6 +318,10 @@ def _load_arm(directory: Path) -> tuple[dict[str, Any], Path]:
     pinned = scorecard.get("observation_record", {}).get("sha256")
     if pinned != sha256(record_path):
         raise MechanismError(f"{record_path} does not match its scorecard's pinned SHA-256")
+    try:
+        stages.validate_execution(scorecard, scorecard_path, record_path)
+    except ValueError as error:
+        raise MechanismError(str(error)) from error
     return scorecard, record_path
 
 
@@ -341,6 +345,10 @@ def check_pair(
     if set(arms) != {"base", "candidate"}:
         raise MechanismError("record needs exactly one base and one candidate capture")
     for name, (card, path) in arms.items():
+        try:
+            stages.validate_execution(card, path.parent / "scorecard-v4.json", path)
+        except ValueError as error:
+            raise MechanismError(f"{name}: {error}") from error
         try:
             bound = record.binary_sha256(path, required=True)
         except record.RecordError as error:
@@ -367,7 +375,8 @@ def check_pair(
             record.rescore(arms[name][1], _contract(version))
             for name in ("base", "candidate")
         )
-        result = agentic.gate(base, candidate, policy_delta=delta)
+        # Original artifacts were admitted above; these cards are independent record replays.
+        result = agentic.compare_layers(base, candidate, policy_delta=delta)
         if result["verdict"] == "not_comparable":
             raise MechanismError(
                 f"v{version} pair is not comparable: {result.get('policy_delta_reason')}; "

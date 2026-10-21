@@ -700,7 +700,12 @@ class PolicyNerSettingsTests(unittest.TestCase):
             stack.enter_context(mock.patch.object(
                 runner.records, "rescore", return_value={"cached": True},
             ))
-            finish = stack.enter_context(mock.patch.object(runner, "finish_run", return_value=17))
+            def publish(_args, directory, card):
+                directory.mkdir(parents=True, exist_ok=True)
+                (directory / "scorecard-v4.json").write_text(json.dumps(card))
+                (directory / "observations-v1.jsonl.gz").write_bytes(b"synthetic restored record")
+                return 17
+            finish = stack.enter_context(mock.patch.object(runner, "finish_run", side_effect=publish))
             build = stack.enter_context(mock.patch.object(runner.dataiku, "build_binary", return_value=dataset))
             probe = stack.enter_context(mock.patch.object(runner, "build_validator_probe", return_value=dataset))
             execute = stack.enter_context(mock.patch.object(runner, "execute_measurements"))

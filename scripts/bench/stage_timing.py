@@ -5,8 +5,10 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import functools
+import hashlib
 import json
 import math
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,6 +41,7 @@ class Evidence:
     events: list[dict] = field(default_factory=list)
     cache: dict = field(default_factory=lambda: {"status": "disabled", "key_sha256": None})
     outcome: str = "running"
+    artifacts: dict | None = None
 
     def add(self, stage: str, duration: tuple[float, float, float], **details) -> None:
         wall, own, children = duration
@@ -49,24 +52,84 @@ class Evidence:
             "cpu_seconds": own + children if resource else None,
         })
 
+    def bind(self, scorecard: Path, record: Path) -> None:
+        self.artifacts = {
+            "scorecard": {"file": scorecard.name, "sha256": file_sha256(scorecard)},
+            "record": {"file": record.name, "sha256": file_sha256(record)},
+        }
+
     def write(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(path.suffix + ".tmp")
         temporary.write_text(json.dumps({
-            "schema_version": 1, "outcome": self.outcome, "cache": self.cache,
+            "schema_version": 2, "outcome": self.outcome, "cache": self.cache,
+            "artifacts": self.artifacts,
             "timing_semantics": "inclusive spans; native stages use child process CPU; scoring excludes transport",
             "stages": self.events,
         }, indent=2, allow_nan=False) + "\n")
         temporary.replace(path)
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def validate_execution(card: dict, scorecard: Path | None, record: Path | None = None) -> None:
+    """Admit reusable captures only with completed evidence for these exact bytes."""
+    if not any(name in card for name in ("capture_cache", "cache_key_sha256")) and not card.get("cache_replay"):
+        return
+    provenance = card.get("capture_cache")
+    if (not isinstance(provenance, dict) or provenance.get("format") != "layer-capture-v1"
+            or provenance.get("execution_evidence") != "run-evidence.json"
+            or not re.fullmatch(r"[0-9a-f]{64}", str(provenance.get("key_sha256", "")))):
+        raise ValueError("invalid capture execution provenance")
+    if scorecard is None:
+        raise ValueError("reusable capture requires a scorecard path and execution evidence")
+    try:
+        if json.loads(scorecard.read_text(encoding="utf-8")) != card:
+            raise ValueError("admitted scorecard differs from the execution artifact")
+        pointer = card.get("observation_record")
+        if (not isinstance(pointer, dict) or not isinstance(pointer.get("file"), str)
+                or Path(pointer["file"]).name != pointer["file"]):
+            raise ValueError("invalid execution record reference")
+        record = record if record is not None else scorecard.parent / pointer["file"]
+        if record.name != pointer["file"]:
+            raise ValueError("execution record filename mismatch")
+        evidence = json.loads((scorecard.parent / "run-evidence.json").read_text(encoding="utf-8"))
+        if (not isinstance(evidence, dict) or evidence.get("schema_version") != 2
+                or evidence.get("outcome") != "completed" or not isinstance(evidence.get("stages"), list)):
+            raise ValueError("execution evidence is incomplete or malformed")
+        cache = evidence.get("cache")
+        if (not isinstance(cache, dict) or cache.get("status") not in ("hit", "miss")
+                or cache.get("key_sha256") != provenance["key_sha256"]):
+            raise ValueError("execution evidence cache key mismatch")
+        expected = {
+            "scorecard": {"file": scorecard.name, "sha256": file_sha256(scorecard)},
+            "record": {"file": record.name, "sha256": file_sha256(record)},
+        }
+        if evidence.get("artifacts") != expected:
+            raise ValueError("execution evidence artifact hash mismatch")
+        if pointer.get("sha256") != expected["record"]["sha256"]:
+            raise ValueError("scorecard execution record hash mismatch")
+    except (OSError, UnicodeError, TypeError, KeyError, json.JSONDecodeError) as error:
+        raise ValueError("missing or malformed capture execution evidence") from error
+
+
 @contextlib.contextmanager
-def session(path: Path):
+def session(path: Path, *, scorecard: Path | None = None, record: Path | None = None):
     evidence = Evidence()
     token = CURRENT.set(evidence)
     label_token = LABELS.set({})
     try:
         yield evidence
+        if scorecard is not None or record is not None:
+            if scorecard is None or record is None:
+                raise ValueError("execution binding requires both artifacts")
+            evidence.bind(scorecard, record)
         evidence.outcome = "completed"
     except BaseException:
         evidence.outcome = "failed"

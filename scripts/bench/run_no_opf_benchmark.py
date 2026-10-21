@@ -1321,7 +1321,8 @@ def finish_run(
 def run(args: argparse.Namespace) -> int:
     root = Path(__file__).resolve().parents[2]
     output = repo_path(root, args.output_dir) / args.profile / "run-evidence.json"
-    with stages.session(output):
+    with stages.session(output, scorecard=output.parent / "scorecard-v4.json",
+                        record=output.parent / "observations-v1.jsonl.gz"):
         return _run(args)
 
 

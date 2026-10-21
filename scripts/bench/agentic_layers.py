@@ -5679,8 +5679,24 @@ def gate(
     base: Mapping[str, object], candidate: Mapping[str, object], config: str | None = None,
     policy_delta: Path | None = None,
     allow_legacy_policy_inputs: bool = False,
+    *, scorecard_paths: tuple[Path, Path] | None = None,
 ) -> dict[str, object]:
-    """Identity check, then `decide` on the production arm's layer totals."""
+    """Admit capture artifacts before comparing their scored layer totals."""
+    import stage_timing as stages
+    for card, path in zip((base, candidate), scorecard_paths or (None, None), strict=True):
+        try:
+            stages.validate_execution(card, path)
+        except ValueError as error:
+            raise LayerError(str(error)) from error
+    return compare_layers(base, candidate, config, policy_delta, allow_legacy_policy_inputs)
+
+
+def compare_layers(
+    base: Mapping[str, object], candidate: Mapping[str, object], config: str | None = None,
+    policy_delta: Path | None = None,
+    allow_legacy_policy_inputs: bool = False,
+) -> dict[str, object]:
+    """Compare admitted captures or verified record replays; this is not artifact admission."""
     base_identity = _layer_identity(base)
     candidate_identity = _layer_identity(candidate)
     delta_result: dict[str, object] = {}
@@ -5716,12 +5732,13 @@ def gate_frozen_records(
     base_record: Path, candidate_record: Path, contract: score.ScoredLabelContract,
     config: str | None = None, policy_delta: Path | None = None,
     allow_legacy_policy_inputs: bool = False,
+    *, scorecard_paths: tuple[Path, Path] | None = None,
 ) -> dict[str, object]:
     """Explicit base oracle plus candidate-oracle sensitivity; ordinary gate stays strict."""
     import scorecard_record as record
     kwargs = {"config": config, "policy_delta": policy_delta,
               "allow_legacy_policy_inputs": allow_legacy_policy_inputs}
-    raw = gate(base, candidate, **kwargs)
+    raw = gate(base, candidate, scorecard_paths=scorecard_paths, **kwargs)
     if raw["verdict"] == "not_comparable" and raw["differing"] != ["layer_c_gold_validity"]:
         return raw
     try:
@@ -5743,7 +5760,7 @@ def gate_frozen_records(
             cards = [record.rescore(path, contract, max_workers=1,
                                     gold_verdict_reference=reference)
                      for path in (base_record, candidate_record)]
-            views[oracle] = gate(*cards, **kwargs)
+            views[oracle] = compare_layers(*cards, **kwargs)
             changed[oracle] = {side: card["frozen_gold_verdicts"]["changed_verdicts"]
                                for side, card in zip(("base", "candidate"), cards, strict=True)}
     except record.RecordError as error:
@@ -5965,11 +5982,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                             if args.scored_labels else score.SCORED_LABEL_CONTRACT_V1)
                 result = gate_frozen_records(base, candidate, args.base_record, args.candidate_record,
                                              contract, args.config, args.policy_delta,
-                                             args.allow_legacy_policy_inputs)
+                                             args.allow_legacy_policy_inputs,
+                                             scorecard_paths=(args.base, args.candidate))
             else:
                 if args.base_record or args.candidate_record or args.scored_labels:
                     raise LayerError("record replay arguments require --freeze-gold-verdicts base")
-                result = gate(base, candidate, args.config, args.policy_delta, args.allow_legacy_policy_inputs)
+                result = gate(base, candidate, args.config, args.policy_delta, args.allow_legacy_policy_inputs,
+                              scorecard_paths=(args.base, args.candidate))
             if args.output:
                 args.output.parent.mkdir(parents=True, exist_ok=True)
                 args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
