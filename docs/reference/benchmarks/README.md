@@ -1269,9 +1269,14 @@ v1, v2, v3 and v4. Contract v4 is the headline; v1 and v2 remain the release gat
 Never repeat inference for a scoring contract. Independent equivalence checks
 require the runner's explicit `--cross-check` flag.
 
-Release evidence must be measured with `--no-cache`. Cache replay records and
-scorecards carry `cache_replay: true` and `cache_key_sha256`; the release-history
-renderer refuses these scorecards. Fresh measurements carry `cache_replay: false`.
+Release evidence must be measured with `--no-cache`. Reusable base captures
+carry `capture_cache`, which links their exact input key to `run-evidence.json`;
+the original scorecard bytes and measurement timestamps remain unchanged.
+That sidecar identifies the current execution as a hit or miss and records stage
+wall/CPU times. The release-history renderer cannot validate this local sidecar
+and refuses reusable base scorecards, as well as legacy `cache_replay: true`
+scorecards. See [capture reuse and timing](../../../scripts/bench/README.md#capture-reuse-and-timing)
+for the input key and integrity checks.
 
 ```bash
 # 1. Produce the scorecard on the release commit.

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import agentic_layers as agentic
 import benchmark_cache as cache
 import gaze_bench_score as score
 import run_no_opf_benchmark as runner
@@ -17,6 +18,36 @@ import scorecard_record as records
 
 
 class CacheReviewTests(unittest.TestCase):
+    def test_rulepack_dictionary_hashes_literal_native_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home = root / "home"
+            home.mkdir()
+            literal = root / "~" / "terms.txt"
+            literal.parent.mkdir()
+            literal.write_text("synthetic literal A")
+            (home / "terms.txt").write_text("synthetic expanded")
+            (root / "rulepack.toml").write_text(
+                '[[recognizers]]\n[recognizers.match]\nterms_file = "~/terms.txt"\n')
+            policy = {"policy": {"rulepacks": {"paths": ["rulepack.toml"]}}}
+            with mock.patch.dict("os.environ", {"HOME": str(home)}):
+                before = agentic.policy_dependency_files(policy, root)
+                source = root / "record"
+                source.write_bytes(b"synthetic observation")
+                cache.store(root / "cache", before, source)
+                literal.write_text("synthetic literal B")
+                after = agentic.policy_dependency_files(policy, root)
+                self.assertNotEqual(before, after)
+                self.assertIsNone(cache.lookup(root / "cache", after)[0])
+
+    def test_policy_home_expansion_matches_rust(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "~synthetic").mkdir()
+            (root / "~synthetic/terms").write_text("synthetic literal")
+            policy = {"policy": {"custom_recognizers": [{"terms_file": "~synthetic/terms"}]}}
+            self.assertEqual(len(agentic.policy_dependency_files(policy, root)), 1)
+
     def test_real_key_contains_and_invalidates_each_measured_input(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -26,19 +57,25 @@ class CacheReviewTests(unittest.TestCase):
             (root / '.cargo').mkdir()
             (root / '.cargo/config.toml').write_text('[build]\njobs=2\n')
             (cargo_home / 'config.toml').write_text('[net]\noffline=true\n')
+            (root / 'docs/reference/benchmarks').mkdir(parents=True)
+            for name in ('policy.toml', 'dataset', 'negative', 'detector', 'validator', 'docs/reference/benchmarks/README.md'):
+                (root / name).write_text('')
+            policy_sha = score.sha256_file(root / 'policy.toml')
             identity = {'revision': '1'*40, 'crates_tree_hash': '2'*40, 'harness_tree_hash': '3'*40}
-            inputs = dict(repo_root=root, args=runner.parse_args(['full', '--release']),
-                          policy_path=root/'policy.toml', policy_sha256='4'*64,
+            inputs = dict(repo_root=root, args=runner.parse_args(['full', '--release', '--dataset', str(root/'dataset'), '--negative-corpus', str(root/'negative')]),
+                          policy_path=root/'policy.toml', policy_sha256=policy_sha,
                           corpus_sha256='5'*64, contract=SimpleNamespace(sha256='6'*64),
                           model_provenance=[{'model_id':'synthetic', 'observed_sha256':'7'*64}],
                           policy_dependencies={}, agentic_prepared=SimpleNamespace(
                               contract=SimpleNamespace(sha256='8'*64), manifest={'corpus_sha256':'9'*64}),
                           document_ids=['synthetic-one'], threshold=0.5,
-                          source_environment={'RUSTFLAGS':'synthetic-flags', 'CARGO_HOME':str(cargo_home)})
-            with mock.patch.object(runner, 'source_tree_identity', side_effect=lambda _: (dict(identity), None)):
+                          source_environment={'RUSTFLAGS':'synthetic-flags', 'CARGO_HOME':str(cargo_home)},
+                          binary=root/'detector', validator_probe=root/'validator', davlan_model=root/'model')
+            with mock.patch.object(runner, 'source_tree_identity', side_effect=lambda _: (dict(identity), None)), \
+                 mock.patch.object(runner.capture_identity, 'native_runtime', return_value={'fixture': True}):
                 key, reason = runner.observation_cache_key(**inputs)
                 self.assertIsNone(reason)
-                expected = dict(identity, policy_sha256='4'*64, seed=inputs['args'].seed,
+                expected = dict(identity, policy_sha256=policy_sha, seed=inputs['args'].seed,
                                 corpus_sha256='5'*64, scored_labels_sha256='6'*64,
                                 agentic_scored_labels_sha256='8'*64,
                                 model_bundle_sha256={'synthetic':'7'*64}, release=True,
@@ -68,6 +105,9 @@ class CacheReviewTests(unittest.TestCase):
                     changed = copy.deepcopy(inputs)
                     mutate(changed)
                     candidate, _ = runner.observation_cache_key(**changed)
+                    if name == 'policy_sha256':
+                        self.assertIsNone(candidate)
+                        continue
                     self.assertNotEqual(key[name], candidate[name], name)
                     self.assertIsNone(cache.lookup(root/'cache', candidate)[0], name)
                 for name in identity:
@@ -83,13 +123,12 @@ class CacheReviewTests(unittest.TestCase):
                     self.assertNotEqual(key['cargo_config_sha256'],candidate['cargo_config_sha256'])
                     self.assertIsNone(cache.lookup(root/'cache',candidate)[0])
 
-    def test_dirty_or_changed_source_is_never_stored(self):
-        key = {'revision':'original','crates_tree_hash':'tree','harness_tree_hash':'harness'}
-        for identity, reason in [(None,'measured source inputs are dirty or untracked'),
-                                  ({**key,'revision':'changed'},None)]:
-            with mock.patch.object(runner,'source_tree_identity',return_value=(identity,reason)), \
-                 mock.patch.object(cache,'store') as store:
-                self.assertFalse(runner.store_observations_if_unchanged(Path('.'),Path('cache'),key,Path('record')))
+    def test_dirty_or_changed_inputs_are_never_stored(self):
+        key = {'revision': 'original', 'binary_sha256': 'synthetic', 'policy_sha256': 'synthetic'}
+        for current in (None, *({**key, field: 'changed'} for field in key)):
+            with mock.patch.object(cache, 'store_layers') as store:
+                with self.assertRaisesRegex(runner.CandidateError, 'effective inputs changed'):
+                    runner.store_observations_if_unchanged(Path('cache'), key, Path('record'), lambda: (current, None))
                 store.assert_not_called()
 
     def test_copy_rejects_record_changed_after_lookup(self):

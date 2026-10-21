@@ -17,6 +17,7 @@ from typing import Mapping, Sequence
 
 import gaze_bench_score as score
 import agentic_layers as agentic
+import stage_timing as stages
 
 
 # v2: every trace item's provenance also carries typed lineage (`settlement`
@@ -260,6 +261,7 @@ def validate_response_lineage(response: Mapping[str, object], utf8_bytes: int, w
             raise RecordError(f"{where}: candidate event missing from its trace item")
 
 
+@stages.timed("artifact_write_compress")
 def _write_rows(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as raw:
@@ -798,6 +800,7 @@ def freeze_gold_header(header: dict, reference: Mapping[str, object]) -> int:
     return changed
 
 
+@stages.timed("scoring", mode="replay", contract_version=lambda path, contract, *args, **kwargs: contract.version)
 def rescore(
     path: Path,
     contract: score.ScoredLabelContract,
@@ -927,6 +930,18 @@ def _rescore_one(request):
     return rescore(path, contract, layer_contract, max_workers=1)
 
 
+def _profiled_rescore_one(indexed_request):
+    index, request = indexed_request
+    evidence = stages.Evidence()
+    token = stages.CURRENT.set(evidence)
+    try:
+        with stages.labels(request_index=index):
+            card = _rescore_one(request)
+        return card, evidence.events
+    finally:
+        stages.CURRENT.reset(token)
+
+
 def rescore_many(
     requests: Sequence[
         tuple[Path, score.ScoredLabelContract, score.ScoredLabelContract | None]
@@ -940,6 +955,16 @@ def rescore_many(
     workers = max_workers if max_workers is not None else min(4, os.cpu_count() or 1)
     if workers < 1:
         raise RecordError("max_workers must be positive")
+    evidence = stages.CURRENT.get()
+    if evidence is not None:
+        if workers == 1 or len(requests) == 1:
+            results = [_profiled_rescore_one(item) for item in enumerate(requests)]
+        else:
+            with ProcessPoolExecutor(max_workers=min(workers, len(requests))) as executor:
+                results = list(executor.map(_profiled_rescore_one, enumerate(requests)))
+        for _, events in results:
+            evidence.events.extend(events)
+        return [card for card, _ in results]
     if workers == 1 or len(requests) == 1:
         return [_rescore_one(request) for request in requests]
     with ProcessPoolExecutor(max_workers=min(workers, len(requests))) as executor:
@@ -985,7 +1010,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             agentic.load_contract(root, args.agentic_scored_labels)
             if args.agentic_scored_labels else None
         )
-        card = rescore(args.record, contract, layer_contract, max_workers=args.jobs)
+        with stages.session(args.output.with_name(args.output.name + ".evidence.json")):
+            card = rescore(args.record, contract, layer_contract, max_workers=args.jobs)
     except RecordError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
