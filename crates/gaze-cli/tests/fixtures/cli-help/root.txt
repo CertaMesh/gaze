@@ -3,10 +3,10 @@ Channel-agnostic PII redaction for LLM pipes
 Usage: gaze <COMMAND>
 
 Commands:
-  clean     Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON to stdout
+  clean     Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON, or only the clean text with --session-out
   eval      Score Gaze against owner-side annotated JSONL without printing document text
   daemon    Run a long-lived JSON-lines stdio cleaning daemon
-  restore   Read `{session_blob, text}` JSON from stdin; emit `{text}` JSON to stdout
+  restore   Read `{session_blob, text}` JSON from stdin; emit `{text}` JSON, or plain text with --session-file
   audit     Query, export, or maintain redaction-log metadata without reading raw PII payloads
   setup     Install the pinned local model, write a working policy, and run a doctor check
   document  Ingest a document (PNG/JPG/PDF) into a split SafeBundle

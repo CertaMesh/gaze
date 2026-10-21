@@ -107,6 +107,7 @@ impl CleanPipelineArgs {
             safety_net_input_limit_bytes: self.safety_net_limits.safety_net_input_limit_bytes,
             safety_net_mode: self.safety_net_limits.safety_net_mode,
             safety_net_fallback: self.safety_net_limits.safety_net_fallback,
+            session_out: None,
         }
     }
 }

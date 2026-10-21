@@ -13,6 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   RUSTSEC-2026-0381: certificate paths through distrusted emSign intermediates
   were accepted.
 
+### Added
+
+- `gaze clean --session-out <path>` writes the session to a new owner-only file
+  and prints only the clean text; `gaze restore --session-file <path>` restores
+  plain text from stdin. A shell round trip no longer needs JSON glue. Existing
+  files are refused unless `--overwrite-session-out` is passed. A missing or
+  non-session file fails with the new `SessionFile` error (exit 4). The JSON
+  stdin and stdout contracts are unchanged.
+
 ### Fixed
 
 - Anthropic proxy accepts the literal `?beta=true` query, individually allowlisted

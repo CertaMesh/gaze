@@ -57,6 +57,10 @@ pub(crate) enum CliError {
     /// The policy exists but this account may not read it; the detail names the file and the
     /// chmod/chown fix. Same `PolicyOpen` variant name and exit code as a missing policy.
     PolicyOpenDetail(String),
+    /// A `clean --session-out` or `restore --session-file` path is missing,
+    /// already exists, cannot be read or written, or is not a session file.
+    /// Signature, version and expiry failures keep their own variants.
+    SessionFile(String),
     /// `gaze index ingest` has no pinned NER bundle to detect prose names and organizations.
     #[cfg(feature = "index")]
     IndexNerModelMissing(String),
@@ -94,7 +98,7 @@ impl CliError {
             | Self::InvalidBlobVersion
             | Self::BlobExpired
             | Self::Pipeline => 3,
-            Self::Io | Self::PolicyOpen | Self::PolicyOpenDetail(_) => 4,
+            Self::Io | Self::PolicyOpen | Self::PolicyOpenDetail(_) | Self::SessionFile(_) => 4,
             #[cfg(feature = "document")]
             Self::DocumentDetail(_) => 5,
             #[cfg(feature = "mcp")]
@@ -131,6 +135,7 @@ impl CliError {
             Self::Pipeline => "Pipeline",
             Self::Io => "Io",
             Self::PolicyOpen | Self::PolicyOpenDetail(_) => "PolicyOpen",
+            Self::SessionFile(_) => "SessionFile",
             #[cfg(feature = "document")]
             Self::DocumentDetail(_) => "Document",
             #[cfg(feature = "mcp")]
@@ -170,6 +175,7 @@ impl CliError {
             }
             Self::PolicyConfigDetail(detail)
             | Self::PolicyOpenDetail(detail)
+            | Self::SessionFile(detail)
             | Self::SafetyNetConfigDetail(detail)
             | Self::SafetyNetPolicyConfigDetail(detail)
             | Self::SafetyNetUsageDetail(detail) => {
