@@ -112,3 +112,5 @@ The [document identity and gain receipt](measurement-identity-and-gain.json) pro
 | `primary_C` | 0 |
 
 The sum equals the main v2 gate's leaked-byte reduction. Existing credential families account for part of the gain, while the new separator family measures the boundary repair. Residual leakage in other document shapes bounds this result; this is not a claim of complete detection on arbitrary text. The claim applies to these committed generated cells and the checksum-pinned primary corpus. No latency or throughput was compared.
+
+The [empty-checkout receipt](empty-checkout-verification.json) records both documented commands on separate committed checkouts with absent targets. The [final CI input audit](ci-input-audit.json) reviews every newly registered path and records the integrated contract check.
