@@ -91,19 +91,28 @@ mod darwin {
 
 #[cfg(target_os = "linux")]
 pub(super) fn clear_and_verify(file: &std::fs::File) -> std::io::Result<()> {
-    use std::io::{Error, ErrorKind};
     use std::os::fd::AsRawFd;
 
-    let name = c"system.posix_acl_access";
-    // SAFETY: file owns the descriptor and name is a NUL-terminated constant.
-    if unsafe { libc::fremovexattr(file.as_raw_fd(), name.as_ptr()) } != 0 {
+    remove_and_verify(file.as_raw_fd(), c"system.posix_acl_access")?;
+    if file.metadata()?.is_dir() {
+        // An inherited default ACL would grant access to the future session file.
+        remove_and_verify(file.as_raw_fd(), c"system.posix_acl_default")?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn remove_and_verify(fd: std::os::fd::RawFd, name: &std::ffi::CStr) -> std::io::Result<()> {
+    use std::io::{Error, ErrorKind};
+    // SAFETY: the caller holds the descriptor and name is NUL-terminated.
+    if unsafe { libc::fremovexattr(fd, name.as_ptr()) } != 0 {
         let err = Error::last_os_error();
         if err.raw_os_error() != Some(libc::ENODATA) {
             return Err(err);
         }
     }
     // SAFETY: size zero requests only the attribute's size, with no buffer.
-    let size = unsafe { libc::fgetxattr(file.as_raw_fd(), name.as_ptr(), std::ptr::null_mut(), 0) };
+    let size = unsafe { libc::fgetxattr(fd, name.as_ptr(), std::ptr::null_mut(), 0) };
     if size >= 0 {
         return Err(Error::new(
             ErrorKind::PermissionDenied,
@@ -116,12 +125,4 @@ pub(super) fn clear_and_verify(file: &std::fs::File) -> std::io::Result<()> {
     } else {
         Err(err)
     }
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-pub(super) fn clear_and_verify(_file: &std::fs::File) -> std::io::Result<()> {
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Unsupported,
-        "owner-only session creation is unsupported on this platform",
-    ))
 }

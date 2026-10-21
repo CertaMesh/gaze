@@ -3,11 +3,18 @@ use std::fs;
 use std::path::Path;
 
 fn run(overwrite: bool, fault: Option<&str>) {
+    run_fault(overwrite, fault, false);
+}
+
+fn run_fault(overwrite: bool, fault: Option<&str>, file_only: bool) {
     let root = tempfile::tempdir().unwrap();
     let parent = root.path().join("inherited");
     fs::create_dir(&parent).unwrap();
     let chmod = std::process::Command::new("chmod")
-        .args(["+a", "everyone allow read,file_inherit"])
+        .args([
+            "+a",
+            "everyone allow read,execute,file_inherit,directory_inherit",
+        ])
         .arg(&parent)
         .output()
         .unwrap();
@@ -44,7 +51,11 @@ fn run(overwrite: bool, fault: Option<&str>) {
     }
     command
         .env("DYLD_INSERT_LIBRARIES", &library)
-        .env("GAZE_ACL_PROBE_LOG", &log);
+        .env("GAZE_ACL_PROBE_LOG", &log)
+        .env("GAZE_ACL_PROBE_PARENT", &parent);
+    if file_only {
+        command.env("GAZE_ACL_PROBE_FILE_ONLY", "1");
+    }
     if let Some(fault) = fault {
         command.env(fault, "1");
     }
@@ -53,7 +64,7 @@ fn run(overwrite: bool, fault: Option<&str>) {
         .output()
         .unwrap();
     let calls = fs::read_to_string(log).unwrap_or_default();
-    if fault.is_some() {
+    if fault.is_some() && fault != Some("GAZE_ACL_PROBE_RETAIN_READER") {
         assert_session_file_error(&result, "cannot write session file");
         if overwrite {
             assert_eq!(fs::read(&session).unwrap(), b"keep existing session");
@@ -64,12 +75,25 @@ fn run(overwrite: bool, fault: Option<&str>) {
             fs::read_dir(&parent).unwrap().count(),
             usize::from(overwrite)
         );
-        assert!(calls.starts_with("clear-before-write\n"), "calls={calls:?}");
+        assert!(calls.starts_with("clear-directory\n"), "calls={calls:?}");
+        if file_only {
+            assert!(calls.contains("clear-before-write\n"), "calls={calls:?}");
+        }
     } else {
         assert!(result.status.success(), "result={result:?}");
         assert_eq!(file_mode(&session), 0o600);
         assert_eq!(acl(&session).lines().count(), 1, "no extended ACL entries");
-        assert_eq!(calls, "clear-before-write\nverify-before-write\n");
+        let expected = if fault == Some("GAZE_ACL_PROBE_RETAIN_READER") {
+            "reader-denied\nclear-before-write\nverify-before-write\n"
+        } else {
+            "clear-before-write\nverify-before-write\n"
+        };
+        assert_eq!(
+            calls,
+            format!("clear-directory\nverify-directory\n{expected}"),
+            "no reader can retain the empty session inode"
+        );
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 1, "staging removed");
         assert!(!String::from_utf8_lossy(&result.stdout).contains("alice@example.invalid"));
         let restored = super::gaze_with_stdin(
             &["restore", "--session-file", session.to_str().unwrap()],
@@ -108,7 +132,19 @@ fn session_out_acl_failures_remove_empty_file_and_preserve_existing_session() {
             "GAZE_ACL_PROBE_DENY_VERIFY",
             "GAZE_ACL_PROBE_KEEP_ACL",
         ] {
-            run(overwrite, Some(fault));
+            for file_only in [false, true] {
+                run_fault(overwrite, Some(fault), file_only);
+            }
         }
     }
+}
+
+#[test]
+fn session_out_denies_reader_before_file_acl_clear() {
+    run(false, Some("GAZE_ACL_PROBE_RETAIN_READER"));
+}
+
+#[test]
+fn session_out_overwrite_denies_reader_before_file_acl_clear() {
+    run(true, Some("GAZE_ACL_PROBE_RETAIN_READER"));
 }
