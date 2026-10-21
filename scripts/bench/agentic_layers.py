@@ -30,6 +30,7 @@ import base64
 import copy
 import hashlib
 import json
+import os
 import re
 import sys
 import tomllib
@@ -5069,16 +5070,24 @@ def policy_dependency_files(policy: Mapping[str, object], working_dir: Path) -> 
     """Hash external policy inputs by logical reference, independent of worktree path."""
     files: dict[str, str] = {}
 
-    def resolved(value: object, reference: str) -> Path:
+    def resolved(value: object, reference: str, *, literal: bool = False) -> Path:
         if not isinstance(value, str) or not value:
             raise LayerError(f"invalid {reference} path in policy")
-        path = Path(value).expanduser()
+        # Rulepack dictionaries use std::fs::read_to_string on the literal string.
+        # Policy-level paths expand only "~/", exactly as Rust's expand_home does.
+        if not literal and value.startswith("~/"):
+            home = os.environ.get("HOME")
+            if home is None:
+                raise LayerError(f"HOME is unset for {reference}")
+            path = Path(home) / value[2:]
+        else:
+            path = Path(value)
         return path if path.is_absolute() else working_dir / path
 
-    def add_file(value: object, reference: str) -> Path:
+    def add_file(value: object, reference: str, *, literal: bool = False) -> Path:
         if _dependency_owner(reference) is None:
             raise LayerError(f"unknown policy dependency reference {reference}")
-        path = resolved(value, reference)
+        path = resolved(value, reference, literal=literal)
         try:
             if not path.is_file():
                 raise OSError("not a regular file")
@@ -5118,7 +5127,7 @@ def policy_dependency_files(policy: Mapping[str, object], working_dir: Path) -> 
                     match = recognizer.get("match") if isinstance(recognizer, dict) else None
                     if isinstance(match, dict) and "terms_file" in match:
                         add_file(match["terms_file"],
-                                 f"{reference}.recognizers[{recognizer_index}].terms_file")
+                                 f"{reference}.recognizers[{recognizer_index}].terms_file", literal=True)
         for index, recognizer in enumerate(rules.get("custom_recognizers", [])):
             if isinstance(recognizer, dict) and "terms_file" in recognizer:
                 add_file(recognizer["terms_file"], f"policy.custom_recognizers[{index}].terms_file")

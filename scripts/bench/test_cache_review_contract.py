@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import agentic_layers as agentic
 import benchmark_cache as cache
 import gaze_bench_score as score
 import run_no_opf_benchmark as runner
@@ -17,6 +18,36 @@ import scorecard_record as records
 
 
 class CacheReviewTests(unittest.TestCase):
+    def test_rulepack_dictionary_hashes_literal_native_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home = root / "home"
+            home.mkdir()
+            literal = root / "~" / "terms.txt"
+            literal.parent.mkdir()
+            literal.write_text("synthetic literal A")
+            (home / "terms.txt").write_text("synthetic expanded")
+            (root / "rulepack.toml").write_text(
+                '[[recognizers]]\n[recognizers.match]\nterms_file = "~/terms.txt"\n')
+            policy = {"policy": {"rulepacks": {"paths": ["rulepack.toml"]}}}
+            with mock.patch.dict("os.environ", {"HOME": str(home)}):
+                before = agentic.policy_dependency_files(policy, root)
+                source = root / "record"
+                source.write_bytes(b"synthetic observation")
+                cache.store(root / "cache", before, source)
+                literal.write_text("synthetic literal B")
+                after = agentic.policy_dependency_files(policy, root)
+                self.assertNotEqual(before, after)
+                self.assertIsNone(cache.lookup(root / "cache", after)[0])
+
+    def test_policy_home_expansion_matches_rust(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "~synthetic").mkdir()
+            (root / "~synthetic/terms").write_text("synthetic literal")
+            policy = {"policy": {"custom_recognizers": [{"terms_file": "~synthetic/terms"}]}}
+            self.assertEqual(len(agentic.policy_dependency_files(policy, root)), 1)
+
     def test_real_key_contains_and_invalidates_each_measured_input(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
