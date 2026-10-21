@@ -105,8 +105,9 @@ anvil check bench-py --allow-expensive --json
 
 `fast` runs fmt and clippy. Individual `fmt` and `clippy` checks also exist.
 Accept a result only when `assessment.passing_and_current` is true. Reuse is
-per worktree in Anvil 1.13. Delegates may inspect the original result's commit
-and provenance, but an independent review copy cannot import that cached pass.
+per worktree in Anvil 1.13 and requires an identical environment. A different
+Solo process or shell environment can invalidate reuse. Delegates may inspect
+the original commit and provenance, but a review copy cannot import that pass.
 Tests and feature checks are not reusable because optional shared models can
 change outside Git. The Python suite also consults external release builds.
 
