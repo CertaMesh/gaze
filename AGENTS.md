@@ -74,6 +74,72 @@ The workspace now has 15 published crates plus `xtask`; see the canonical
    ids from PR titles/bodies, commits, CHANGELOG, docs, code/test comments and scripts. Describe
    behavior ("tracked as a follow-up"). Public GitHub numbers (`#723`) stay.
 
+## Working in worktrees (Anvil)
+
+Use Anvil 1.13 or newer for implementation, review copies, and local gates.
+Run these commands from a linked Gaze checkout:
+
+```sh
+anvil ensure <branch> --json --lease-owner <agent> --task-id <id>
+anvil ensure --review <sha> --json
+```
+
+Save the returned lease token privately as `ANVIL_LEASE_TOKEN`. Use the returned
+worktree path for edits. Review copies are detached at the exact SHA. Review
+commands omit registry and publish tokens, while retaining GitHub authentication.
+Preparation runs the locked CI Python install with the `comparison-test` group.
+It does not build Rust or copy model bundles, environment files, or `target/`.
+
+Inside the prepared worktree, run:
+
+```sh
+anvil context --json
+anvil run -- rustc -V
+anvil check fast --json
+anvil check --list --json
+anvil check --reuse fast --json
+anvil check test --allow-expensive --json
+anvil check feature-matrix --allow-expensive --json
+anvil check bench-py --allow-expensive --json
+```
+
+`fast` runs fmt and clippy. Individual `fmt` and `clippy` checks also exist.
+Accept a result only when `assessment.passing_and_current` is true. Reuse is
+per worktree in Anvil 1.13. Delegates may inspect the original result's commit
+and provenance, but an independent review copy cannot import that cached pass.
+Tests and feature checks are not reusable because optional shared models can
+change outside Git. The Python suite also consults external release builds.
+
+The environment binds Cargo, trybuild, and rustdoc to Rust 1.96.0 through rustup
+proxies, with four build jobs. Install rustup under `~/.cargo` and the pinned
+rustfmt and clippy components. Never export `CARGO_TARGET_DIR`, including to the
+worktree's own `target/`. Nested mutation gates require cwd-relative targets.
+
+Full workspace builds share the exclusive `workspace-build` Anvil lock. Use
+`--lock-wait 30m` when another check owns it. This conservatively allows one
+Anvil workspace build at a time on the shared machine. The model-free Python
+suite also holds `bench-machine` because it reports durations. Before any real
+benchmark capture, acquire the Solo `bench-machine` lease as well. Solo remains
+the cross-tool authority; an Anvil lock alone does not reserve the machine.
+
+Shared bundles use the standard `~/.local/share/gaze/models/` directories and
+`~/.opf/privacy_filter`. They are optional and used read-only in place. Missing
+bundles do not block preparation. Anvil reports their existence in `context`;
+model-dependent commands still fail closed on missing or invalid bundles.
+GLiNER has no model-directory environment variable in Gaze; use
+`ANVIL_SHARED_GLINER_DOB` when explicitly configuring that opt-in bundle.
+Anvil 1.13 exports optional resource paths even when absent and does not expand
+shell default-value expressions. For a custom XDG model location, use explicit
+model paths in the policy or command.
+
+After the work is harvested, release your lease and preview cleanup:
+
+```sh
+anvil lease release <worktree> --json
+anvil remove <worktree> --dry-run
+anvil remove <worktree>
+```
+
 ## Benchmark gain gate
 
 Every detection-output change must be measured and improve the benchmark:
