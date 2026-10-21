@@ -1,0 +1,22 @@
+{
+  "crates": {
+    "tested": "7885cd27670b96792451836d7310e4124bc5fe8f",
+    "measured": "7885cd27670b96792451836d7310e4124bc5fe8f",
+    "identical": true
+  },
+  "scripts/bench": {
+    "tested": "a97d03fcb501a510ba6fae8aacd97f465e55782f",
+    "measured": "a97d03fcb501a510ba6fae8aacd97f465e55782f",
+    "identical": true
+  },
+  "crates/gaze-recognizers/embedded/secrets.toml": {
+    "tested": "a25dfb844a8be271bdbe9c27cedf6cc447a80ff2",
+    "measured": "a25dfb844a8be271bdbe9c27cedf6cc447a80ff2",
+    "identical": true
+  },
+  "crates/gaze-recognizers/tests/code_credentials.rs": {
+    "tested": "8230bbb6588264cd63eb4ab87e2576ba4a79c8b7",
+    "measured": "8230bbb6588264cd63eb4ab87e2576ba4a79c8b7",
+    "identical": true
+  }
+}

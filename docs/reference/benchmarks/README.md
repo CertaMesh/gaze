@@ -852,13 +852,13 @@ The retained v0.17 candidate ablations use byte-quality measurements, including 
 
 The retained v0.17 Nym safety-net ablation **fails both v2 and v1 credit guards**: enabling Nym adds 18 false-positive bytes on the benign BSN counterweight (0 → 18). The fresh v0.16.0 → v0.17.0 release comparison has 18 bytes on both sides for that counterweight, and its numeric gain gates pass. The other five retained v0.17 candidate mechanism ablations pass both contracts. The failed component verdict remains in [`mechanism-arms.json`](mechanism-arms.json).
 
-The separate [password-hash and code-credential arm](password-code-credentials/README.md) uses generator v22 and serial captures. Its v2 and replayed v1 gates pass. This is an unreleased measurement; it does not add a released v0.18 score.
+The fresh [password-hash and code-credential arm](password-code-credentials/source-escapes/README.md) uses generator v23 and serial captures. Its replayed v2 and v1 gates pass. This is an unreleased measurement; it does not add a released v0.18 score.
 
 <!-- BEGIN GENERATED: mechanism-arms -->
 
 Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v4 headline counts false-positive bytes after gold-gap credit.
 
-15 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
+16 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
 
 Shipped releases, one column per release:
 
@@ -2138,7 +2138,7 @@ match ran over) and none on the twins. Under the full `gaze setup` policy
 bytes of the escaped URLs), put the same 570 false-positive bytes on the new
 A documents and none on the twins.
 
-### Stored password encodings and code literals (generators v21–v22)
+### Stored password encodings and code literals (generators v21–v23)
 
 Generator v21 adds 970 A positives, 500 D counterweights and 970 R repeat
 cases per partition for stored password encodings and literal credential fields.
@@ -2156,7 +2156,10 @@ The 120 compact and nested PHP rows per partition share expression shapes;
 these results do not establish generalization to unseen PHP syntax.
 The [cell generator](../../../scripts/bench/credential_code_cells.py) contains
 the authored inputs. All earlier corpora and contracts remain frozen.
-The full test partition has 8,657 A, 6,122 D and 5,101 R documents.
+Generator v23 adds 180 A positives, 620 D counterweights and 180 R repeats
+per partition for SQL quote escapes and JSON escaped hash alphabets. It retains
+every v22 document and decoded producer-width limits.
+The full test partition has 8,837 A, 6,742 D and 5,281 R documents.
 
 Generic `token` keys remain gold where the input declares a credential, so
 unprotected generic tokens remain visible as leaks. Log-probability output,
@@ -2166,17 +2169,17 @@ these cells. The runtime protects those password fields conservatively, and
 the resulting false-positive bytes remain in the score.
 
 The unreleased credential change has [fresh base/candidate and isolated-mechanism
-evidence](password-code-credentials/README.md) on generator v22, corpus
-`ee25d9eefd2a…`. Both required gates (v2 and replayed v1) pass, as does the latest
-v4 headline contract: 403,175 fewer leaked bytes, 2,520 additional raw
-false-positive bytes, net 400,655 bytes. All 22,790 documents per side restore
+evidence](password-code-credentials/source-escapes/README.md) on generator v23, corpus
+`5b9a3ad43521…`. Both required gates (replayed v2 and v1) pass, as does the latest
+v4 headline contract: 442,135 fewer leaked bytes, 2,874 additional raw
+false-positive bytes, net 439,261 bytes. All 23,770 documents per side restore
 exactly with valid manifests and no refusals. The report includes per-layer
 raw FP, Refused and leaked-on-all-processed columns. No timing comparison is
 claimed.
 
 Historical release backfill is deferred to a separate job. The release rows
 below remain measured on generator v20 and its recorded corpus; they do not
-include v21/v22 cells and must not be compared directly with the v22 report.
+include v21/v22/v23 cells and must not be compared directly with the v23 report.
 Their recorded scorecards, contracts and ledgers remain unchanged.
 
 ### Measured adjacency layer history

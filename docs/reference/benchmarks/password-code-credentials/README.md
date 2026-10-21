@@ -1,5 +1,7 @@
 # Password hashes and code credentials: gain evidence
 
+This is the retained **generator-v22** measurement. The fresh [source-escape report](source-escapes/README.md) measures the repaired head on generator v23 and supplies the latest gain-gate evidence. The tables and records below keep their original identities.
+
 The v4 headline and both required gain gates (v2 and v1) pass: **403,175 fewer leaked bytes, 2,520 additional raw false-positive bytes, net 400,655 bytes**. The isolated mechanism passes the same contracts. These are byte-quality results; no latency or throughput improvement is claimed.
 
 Measured main base: `4c15ca80f85bbd3258eb856ac71ea424b1cc6bb5`. Measured candidate: `2068418bb89db000adcf880307974357ff716afe`. A later signed merge of main `3aa5c95fe5d996d29a774aa99dc827c0ec7cddfb` produced `0a25d8458465cfd4cf529b90f3eb1aca8fe2d296`. The [merge proof](post-capture-merge-proof.json) lists every changed file and confirms that detection runtime and benchmark implementations, dependencies, toolchain, corpus and contracts are unchanged. CI-equivalent checks ran again after that merge.
