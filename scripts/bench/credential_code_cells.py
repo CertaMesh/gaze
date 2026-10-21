@@ -319,6 +319,9 @@ def json_separator_records(api, partition):
                         # Each partition has independent context and hash draws.
                         template = ('{"stdout":"{V}' + suffix + '","stream":"' +
                                     ("dev-output" if partition == "dev" else "test-output") + '"}')
+                        if name == "dangling":
+                            # End at the backslash: a following quote would be a valid separator.
+                            template = '{"stdout":"{V}' + suffix
                         if layer == "R":
                             template += '\n' + template
                         text, gold, decoys = api._fill_with_decoys(template, {"V": (value, None if layer == "D" else "PASSWORD")})
