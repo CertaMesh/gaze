@@ -71,6 +71,19 @@ pattern = '''(?m)^Share: (\S+)$'''
 capture_groups = [1]
 
 [[recognizers]]
+id = "adopter.unc_secret"
+safety_tier = "safe_default"
+class = "custom:unc_secret"
+enabled = true
+locales = ["global"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''Secret: (\\\\[a-z]+\\[a-z]+)'''
+capture_groups = [1]
+
+[[recognizers]]
 id = "adopter.customer_name"
 safety_tier = "safe_default"
 class = "custom:customer_name"
@@ -990,4 +1003,335 @@ async fn anthropic_stream_input_json_delta_and_text_delta_restore_tokens_split_a
         .collect();
     assert_exact_text("anthropic stream text_delta", &text);
     assert_exact_json("anthropic stream input_json_delta", &partial_json);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Values captured in their JSON-escaped source spelling
+// ---------------------------------------------------------------------------------------------
+
+/// A JSON document as a client sends it in a text block or a tool result: one value with escaped
+/// quotes, one with the `\u00fc` escape Python's `json.dumps(ensure_ascii=True)` writes. The
+/// `customer_name` recognizer captures both values in this escaped source spelling.
+const JSON_CUSTOMER_DOCUMENT: &str =
+    r#"{"customer": "Robert \"Bob\" Smith", "contact": "Robert M\u00fcller Smith"}"#;
+/// The values the document above means once a JSON parser reads it.
+const SEMANTIC_CUSTOMER: &str = "Robert \"Bob\" Smith";
+const SEMANTIC_CONTACT: &str = "Robert M\u{fc}ller Smith";
+/// The same values in the exact bytes the client sent.
+const SOURCE_CUSTOMER: &str = r#"Robert \"Bob\" Smith"#;
+const SOURCE_CONTACT: &str = r"Robert M\u00fcller Smith";
+
+/// A UNC path written in plain text. The same bytes inside a JSON string literal would decode
+/// `\\` to one backslash and `\n` to a newline.
+const PLAIN_UNC_SECRET: &str = r"\\srv\new";
+
+/// The forwarded `customer_name` tokens, in request order.
+fn customer_tokens(request: &Value) -> Vec<String> {
+    let serialized = request.to_string();
+    let names: Vec<String> = token_shape::find_tokens(&serialized)
+        .filter(|token| token.contains("customer_name"))
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(
+        names.len(),
+        2,
+        "two customer names tokenized in {serialized}"
+    );
+    assert!(
+        !serialized.contains("Bob") && !serialized.contains("ller Smith"),
+        "raw customer names reached the provider: {serialized}"
+    );
+    names
+}
+
+fn unc_secret_token(request: &Value) -> String {
+    let serialized = request.to_string();
+    let found: Vec<&str> = token_shape::find_tokens(&serialized)
+        .filter(|token| token.contains("unc_secret"))
+        .collect();
+    assert!(
+        !found.is_empty() && found.iter().all(|token| *token == found[0]),
+        "one unc_secret token, minted once and reused, expected in {serialized}"
+    );
+    assert!(
+        !serialized.contains("srv"),
+        "raw secret reached the provider: {serialized}"
+    );
+    found[0].to_owned()
+}
+
+async fn post_anthropic_messages(proxy: &Proxy, messages: Value, stream: bool) -> String {
+    let response = Client::new()
+        .post(format!("{}/v1/messages", proxy.base_url))
+        .header("x-api-key", "synthetic-key")
+        .header("anthropic-version", "2023-06-01")
+        .json(&json!({
+            "model": "claude-test",
+            "max_tokens": 64,
+            "messages": messages,
+            "stream": stream
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    assert!(
+        status.is_success(),
+        "/v1/messages returned {status}: {text}"
+    );
+    text
+}
+
+/// A user turn whose second text block is a JSON document.
+fn json_text_block_messages() -> Value {
+    json!([{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": user_text()},
+            {"type": "text", "text": JSON_CUSTOMER_DOCUMENT}
+        ]
+    }])
+}
+
+fn anthropic_message(content: Value) -> String {
+    json!({
+        "id": "msg_1",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-test",
+        "content": content,
+        "stop_reason": "tool_use",
+        "stop_sequence": null,
+        "usage": {"input_tokens": 1, "output_tokens": 1}
+    })
+    .to_string()
+}
+
+/// `tool_use.input` is a decoded JSON value: the agent reads `customer` as the string the client's
+/// JSON document meant, not as its escaped spelling. A text block has no JSON syntax to decode,
+/// so it restores the exact bytes the client sent.
+#[tokio::test]
+async fn anthropic_tool_use_input_restores_the_semantic_value_of_a_json_spelled_capture() {
+    let upstream = spawn_upstream(|request, _| {
+        let names = customer_tokens(request);
+        let body = anthropic_message(json!([
+            {"type": "text", "text": format!("{} / {}", names[0], names[1])},
+            {
+                "type": "tool_use",
+                "id": "toolu_01Lookup",
+                "name": "send_letter",
+                "input": {"customer": names[0], "contact": names[1]}
+            }
+        ]));
+        ("application/json", body)
+    })
+    .await;
+    let proxy = spawn_anthropic(&upstream).await;
+
+    let body = post_anthropic_messages(&proxy, json_text_block_messages(), false).await;
+    let response: Value = serde_json::from_str(&body).expect("proxy response is JSON");
+    let input = &response["content"][1]["input"];
+    assert_eq!(input["customer"], SEMANTIC_CUSTOMER, "{input}");
+    assert_eq!(input["contact"], SEMANTIC_CONTACT, "{input}");
+    assert_eq!(
+        response["content"][0]["text"],
+        format!("{SOURCE_CUSTOMER} / {SOURCE_CONTACT}"),
+        "a plain-text destination restores the source bytes"
+    );
+}
+
+#[tokio::test]
+async fn anthropic_stream_input_json_delta_restores_the_semantic_value_of_a_json_spelled_capture() {
+    let upstream = spawn_upstream(|request, _| {
+        let names = customer_tokens(request);
+        let document = json!({"customer": names[0], "contact": names[1]}).to_string();
+        let middle = document.find(names[0].as_str()).expect("token in document") + 3;
+        let mut frames = vec![
+            json!({"type": "message_start", "message": {
+                "id": "msg_1", "type": "message", "role": "assistant", "model": "claude-test",
+                "content": [], "stop_reason": null, "stop_sequence": null,
+                "usage": {"input_tokens": 1, "output_tokens": 0}
+            }}),
+            json!({"type": "content_block_start", "index": 0, "content_block": {
+                "type": "tool_use", "id": "toolu_01Lookup", "name": "send_letter", "input": {}
+            }}),
+        ];
+        for fragment in [&document[..middle], &document[middle..]] {
+            frames.push(json!({"type": "content_block_delta", "index": 0,
+                "delta": {"type": "input_json_delta", "partial_json": fragment}}));
+        }
+        frames.push(json!({"type": "content_block_stop", "index": 0}));
+        frames.push(json!({"type": "message_delta",
+            "delta": {"stop_reason": "tool_use", "stop_sequence": null},
+            "usage": {"output_tokens": 1}}));
+        frames.push(json!({"type": "message_stop"}));
+        let body: String = frames.iter().map(anthropic_frame).collect();
+        ("text/event-stream", body)
+    })
+    .await;
+    let proxy = spawn_anthropic(&upstream).await;
+
+    let body = post_anthropic_messages(&proxy, json_text_block_messages(), true).await;
+    let partial_json: String = sse_payloads(&body)
+        .iter()
+        .filter_map(|payload| payload["delta"]["partial_json"].as_str())
+        .collect();
+    let input: Value = serde_json::from_str(&partial_json)
+        .unwrap_or_else(|error| panic!("restored input does not parse ({error}): {partial_json}"));
+    assert_eq!(input["customer"], SEMANTIC_CUSTOMER, "{partial_json}");
+    assert_eq!(input["contact"], SEMANTIC_CONTACT, "{partial_json}");
+}
+
+/// A JSON tool result carried as a text string is the common case: the agent's own tool returned
+/// the record, and the model passes a field of it on to the next tool call.
+#[tokio::test]
+async fn anthropic_value_from_a_json_tool_result_string_restores_into_tool_use_input_semantically()
+{
+    let upstream = spawn_upstream(|request, _| {
+        let names = customer_tokens(request);
+        let body = anthropic_message(json!([{
+            "type": "tool_use",
+            "id": "toolu_02Answer",
+            "name": "send_letter",
+            "input": {"customer": names[0], "contact": names[1]}
+        }]));
+        ("application/json", body)
+    })
+    .await;
+    let proxy = spawn_anthropic(&upstream).await;
+
+    let messages = json!([
+        {"role": "user", "content": user_text()},
+        {"role": "assistant", "content": [{
+            "type": "tool_use", "id": "toolu_01Lookup", "name": "lookup_customer", "input": {"id": "7"}
+        }]},
+        {"role": "user", "content": [{
+            "type": "tool_result", "tool_use_id": "toolu_01Lookup", "content": JSON_CUSTOMER_DOCUMENT
+        }]}
+    ]);
+    let body = post_anthropic_messages(&proxy, messages, false).await;
+    let response: Value = serde_json::from_str(&body).expect("proxy response is JSON");
+    let input = &response["content"][0]["input"];
+    assert_eq!(input["customer"], SEMANTIC_CUSTOMER, "{input}");
+    assert_eq!(input["contact"], SEMANTIC_CONTACT, "{input}");
+}
+
+/// The same bytes first appear in plain text, then inside a JSON tool result. The token was
+/// minted with the plain-text reading, and it keeps it: `\n` stays a backslash and an `n`.
+#[tokio::test]
+async fn anthropic_token_keeps_the_plain_reading_it_was_first_minted_with() {
+    let upstream = spawn_upstream(|request, _| {
+        let secret = unc_secret_token(request);
+        let body = anthropic_message(json!([{
+            "type": "tool_use",
+            "id": "toolu_02Answer",
+            "name": "open_share",
+            "input": {"path": secret}
+        }]));
+        ("application/json", body)
+    })
+    .await;
+    let proxy = spawn_anthropic(&upstream).await;
+
+    let messages = json!([
+        {"role": "user", "content": format!("{}Secret: {PLAIN_UNC_SECRET}\n", user_text())},
+        {"role": "assistant", "content": [{
+            "type": "tool_use", "id": "toolu_01Lookup", "name": "read_note", "input": {"id": "7"}
+        }]},
+        {"role": "user", "content": [{
+            "type": "tool_result",
+            "tool_use_id": "toolu_01Lookup",
+            "content": format!("{{\"note\": \"Secret: {PLAIN_UNC_SECRET}\"}}")
+        }]}
+    ]);
+    let body = post_anthropic_messages(&proxy, messages, false).await;
+    let response: Value = serde_json::from_str(&body).expect("proxy response is JSON");
+    assert_eq!(
+        response["content"][0]["input"]["path"], PLAIN_UNC_SECRET,
+        "the token flipped to a JSON reading"
+    );
+}
+
+async fn post_legacy_in_session(proxy: &Proxy, session: &str, body: Value) -> String {
+    let response = Client::new()
+        .post(format!("{}/v1/chat/completions", proxy.base_url))
+        .header("x-gaze-session-id", session)
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    assert!(status.is_success(), "returned {status}: {text}");
+    text
+}
+
+/// Turn 1 mints the token from plain text. Turn 2 of the same conversation carries the same bytes
+/// inside a JSON tool result. Restoring into tool-call arguments must still yield the plain path.
+#[tokio::test]
+async fn openai_chat_token_keeps_the_plain_reading_across_turns() {
+    let upstream = spawn_upstream(|request, _| {
+        let tool_turn = request["messages"]
+            .as_array()
+            .is_some_and(|messages| messages.iter().any(|message| message["role"] == "tool"));
+        let content = if tool_turn {
+            json!({
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [{
+                    "id": "call_2",
+                    "type": "function",
+                    "function": {
+                        "name": "open_share",
+                        "arguments": json!({"path": unc_secret_token(request)}).to_string()
+                    }
+                }]
+            })
+        } else {
+            json!({"role": "assistant", "content": "noted"})
+        };
+        ("application/json", chat_completion(content))
+    })
+    .await;
+    let proxy = spawn_legacy(&upstream).await;
+    let session = "json-spelling-collision";
+
+    post_legacy_in_session(
+        &proxy,
+        session,
+        json!({"model": "gpt-test", "messages": [{
+            "role": "user",
+            "content": format!("{}Secret: {PLAIN_UNC_SECRET}\n", user_text())
+        }]}),
+    )
+    .await;
+    let body = post_legacy_in_session(
+        &proxy,
+        session,
+        json!({
+            "model": "gpt-test",
+            "messages": [
+                {"role": "user", "content": user_text()},
+                {"role": "assistant", "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "read_note", "arguments": "{\"id\":7}"}
+                }]},
+                {"role": "tool", "tool_call_id": "call_1",
+                    "content": format!("{{\"note\": \"Secret: {PLAIN_UNC_SECRET}\"}}")}
+            ]
+        }),
+    )
+    .await;
+    let response: Value = serde_json::from_str(&body).expect("proxy response is JSON");
+    let arguments = response["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"]
+        .as_str()
+        .expect("arguments stay a string");
+    let parsed: Value = serde_json::from_str(arguments)
+        .unwrap_or_else(|error| panic!("restored arguments do not parse ({error}): {arguments:?}"));
+    assert_eq!(
+        parsed["path"], PLAIN_UNC_SECRET,
+        "the token flipped to a JSON reading: {arguments:?}"
+    );
 }
