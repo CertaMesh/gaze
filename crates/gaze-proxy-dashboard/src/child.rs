@@ -946,6 +946,31 @@ fn snapshot_body(child: &ChildState) -> Vec<u8> {
     .unwrap_or_else(|_| br#"{"version":1,"runtime":{"lifecycle":"Disabled","disabledCode":"ProjectionFailedClosed"},"events":[]}"#.to_vec())
 }
 
+/// Contract-test seam: the exact snapshot and follow bodies the HTTP routes write.
+#[cfg(test)]
+pub(crate) fn contract_documents(store: EventStore, _now: Instant) -> Vec<serde_json::Value> {
+    let secret = PairingSecret::generate().unwrap();
+    let child = ChildState {
+        store,
+        auth: AuthRegistry::new(&secret, 1),
+        reveals: RevealRegistry::new(Duration::from_secs(30)),
+    };
+    let snapshot = snapshot_body(&child);
+    let follow = snapshot_body(&child);
+    vec![
+        serde_json::from_slice(&snapshot).unwrap(),
+        serde_json::from_slice(&follow).unwrap(),
+    ]
+}
+
+/// Contract-test seam: the browser key for one closed omission reason.
+#[cfg(test)]
+pub(crate) fn contract_reason_key(
+    reason: gaze_types::inspection::ProjectionOmissionReasonV1,
+) -> &'static str {
+    crate::ipc::projection_reason_wire(reason)
+}
+
 fn write_constant(stream: &mut TcpStream, status: u16, body: &[u8]) -> std::io::Result<()> {
     write_response(stream, status, "text/plain; charset=utf-8", body)
 }

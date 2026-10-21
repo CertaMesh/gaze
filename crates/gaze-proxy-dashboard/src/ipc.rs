@@ -330,7 +330,7 @@ where
     }
 }
 
-const fn projection_reason_wire(
+pub(crate) const fn projection_reason_wire(
     reason: gaze_types::inspection::ProjectionOmissionReasonV1,
 ) -> &'static str {
     use gaze_types::inspection::ProjectionOmissionReasonV1 as Reason;
