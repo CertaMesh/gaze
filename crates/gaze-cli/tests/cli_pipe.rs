@@ -25,6 +25,10 @@ use gaze_audit::{
 mod token_assertions;
 use token_assertions::without_tokens;
 
+#[cfg(target_os = "macos")]
+#[path = "support/session_acl.rs"]
+mod session_acl;
+
 fn all_audit_columns() -> PresentColumns {
     PresentColumns::new(
         AUDIT_RESTRICTED_COLUMNS
@@ -5940,13 +5944,47 @@ fn assert_session_file_error(out: &std::process::Output, needle: &str) {
     );
 }
 
-#[cfg(unix)]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn file_mode(path: &std::path::Path) -> u32 {
     use std::os::unix::fs::PermissionsExt;
     fs::metadata(path).unwrap().permissions().mode() & 0o777
 }
 
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 #[test]
+fn session_out_refuses_unsupported_platform_but_existing_sessions_restore() {
+    let dir = tempdir().unwrap();
+    let session = dir.path().join("owner.json");
+    for overwrite in [false, true] {
+        let mut args = vec!["clean", "--session-out", session.to_str().unwrap()];
+        if overwrite {
+            fs::write(&session, b"keep me").unwrap();
+            args.push("--overwrite-session-out");
+        }
+        let out = gaze_with_stdin(&args, b"alice@example.invalid");
+        assert_session_file_error(&out, "supported only on macOS and Linux");
+        if overwrite {
+            assert_eq!(fs::read(&session).unwrap(), b"keep me");
+        } else {
+            assert!(!session.exists());
+        }
+    }
+    let (clean_text, blob, _) = clean_ok("alice@example.invalid");
+    fs::write(
+        &session,
+        serde_json::to_vec(&json!({"session_blob": blob})).unwrap(),
+    )
+    .unwrap();
+    let restored = gaze_with_stdin(
+        &["restore", "--session-file", session.to_str().unwrap()],
+        clean_text.as_bytes(),
+    );
+    assert!(restored.status.success());
+    assert_eq!(restored.stdout, b"alice@example.invalid");
+}
+
+#[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn session_file_clean_and_restore_round_trip_as_plain_text() {
     let dir = tempdir().unwrap();
     let session = dir.path().join("owner.json");
@@ -6029,6 +6067,7 @@ fn session_file_clean_and_restore_round_trip_as_plain_text() {
 }
 
 #[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn session_out_refuses_to_overwrite_without_explicit_flag() {
     let dir = tempdir().unwrap();
     let session = dir.path().join("owner.json");
@@ -6077,7 +6116,7 @@ fn session_out_refuses_to_overwrite_without_explicit_flag() {
     assert_eq!(restore.stdout, b"Mail alice@example.invalid");
 }
 
-#[cfg(unix)]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn session_out_does_not_follow_a_dangling_symlink() {
     let dir = tempdir().unwrap();
@@ -6097,6 +6136,7 @@ fn session_out_does_not_follow_a_dangling_symlink() {
 }
 
 #[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn session_file_restore_fails_closed_on_missing_corrupt_tampered_and_foreign() {
     let dir = tempdir().unwrap();
     let session = dir.path().join("owner.json");
@@ -6175,6 +6215,7 @@ fn session_file_restore_fails_closed_on_missing_corrupt_tampered_and_foreign() {
 }
 
 #[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn session_file_tolerant_restore_reports_unknown_tokens_on_stderr() {
     let dir = tempdir().unwrap();
     let session = dir.path().join("owner.json");
@@ -6212,6 +6253,7 @@ fn session_file_tolerant_restore_reports_unknown_tokens_on_stderr() {
 }
 
 #[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn session_file_flags_reject_ambiguous_format_combinations() {
     let dir = tempdir().unwrap();
     let session = dir.path().join("owner.json");

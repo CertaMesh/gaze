@@ -1,7 +1,8 @@
 //! Owner-side session files for plain-shell `clean` → `restore` round trips.
 //!
 //! `gaze clean --session-out <PATH>` writes `{"session_blob": "<base64>"}` to a
-//! new owner-only (`0600` on Unix) file and prints only the clean text.
+//! new owner-only (`0600`, verified empty extended ACL on macOS/Linux) file
+//! and prints only the clean text. Other platforms refuse session creation.
 //! `gaze restore --session-file <PATH>` reads it back and restores plain text
 //! from stdin. The session holds raw values, so it never reaches stdout.
 
@@ -14,6 +15,8 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 use crate::error::CliError;
+
+mod acl;
 
 /// Read cap for a session file. Sessions are owner-side and grow with the
 /// number of distinct values; this only stops a wrong path from exhausting memory.
@@ -34,6 +37,11 @@ impl SessionOut<'_> {
     /// Refuse an existing path before any work is done. Symlinks count as
     /// existing, dangling or not, so a session is never written through one.
     pub(crate) fn preflight(&self) -> Result<(), CliError> {
+        if !cfg!(any(target_os = "macos", target_os = "linux")) {
+            return Err(CliError::SessionFile(
+                "owner-only --session-out creation is supported only on macOS and Linux".into(),
+            ));
+        }
         if !self.overwrite && fs::symlink_metadata(self.path).is_ok() {
             return Err(self.exists_error());
         }
@@ -123,7 +131,14 @@ fn create_owner_only(path: &Path) -> std::io::Result<File> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    options.open(path)
+    let file = options.open(path)?;
+    if let Err(err) = acl::clear_and_verify(&file) {
+        // No session bytes have been written; discard the unsafe empty file.
+        drop(file);
+        let _ = fs::remove_file(path);
+        return Err(err);
+    }
+    Ok(file)
 }
 
 fn write_and_sync(mut file: File, body: &[u8], path: &Path) -> Result<(), CliError> {

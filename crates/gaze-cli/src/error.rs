@@ -58,7 +58,8 @@ pub(crate) enum CliError {
     /// chmod/chown fix. Same `PolicyOpen` variant name and exit code as a missing policy.
     PolicyOpenDetail(String),
     /// A `clean --session-out` or `restore --session-file` path is missing,
-    /// already exists, cannot be read or written, or is not a session file.
+    /// already exists, cannot be read or written securely, or is not a session file.
+    /// Includes unsupported owner-only creation and ACL verification failures.
     /// Signature, version and expiry failures keep their own variants.
     SessionFile(String),
     /// `gaze index ingest` has no pinned NER bundle to detect prose names and organizations.
