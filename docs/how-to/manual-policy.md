@@ -7,6 +7,7 @@ use the [Quickstart](../../README.md#quickstart).
 
 Load `core` and tokenize all detected classes:
 
+<!-- policy -->
 ```toml
 # quickstart-policy.toml
 schema_version = "0.1.0"
@@ -72,6 +73,7 @@ Pass a directory to override. `gaze clean` uses local bundles; it downloads none
 
 Add to `quickstart-policy.toml`; its default rule tokenizes names:
 
+<!-- policy-fragment -->
 ```toml
 [ner]
 model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"

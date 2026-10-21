@@ -30,6 +30,7 @@ Use a policy for custom recognizers, dictionaries or actions.
 
 `minimal.toml`:
 
+<!-- policy -->
 ```toml
 [session]
 scope = "persistent"
@@ -74,6 +75,8 @@ use gaze_audit::SqliteLogger;
 
 The test `policy_md_minimal_working_example_loads` in
 `crates/gaze/tests/policy_example.rs` loads this exact block.
+`crates/gaze/tests/docs_policy_blocks.rs` loads every other TOML block on this
+page; see [Policy TOML blocks in docs](../../CONTRIBUTING.md#policy-toml-blocks-in-docs).
 
 ## Classes
 
@@ -103,6 +106,7 @@ class.
 
 #### Pattern 1 — domain-specific regex class
 
+<!-- policy-fragment -->
 ```toml
 [[policy.custom_recognizers]]
 kind = "regex"
@@ -126,6 +130,7 @@ Output: "Call <{session_hex}:Custom:phone_1> to confirm."
 
 #### Pattern 2 — tenant-specific dictionary class
 
+<!-- policy-fragment -->
 ```toml
 [[policy.custom_recognizers]]
 kind = "dictionary"
@@ -283,6 +288,7 @@ is rejected.
 
 ### `[session]`
 
+<!-- policy-fragment -->
 ```toml
 [session]
 scope = "persistent"   # required
@@ -329,6 +335,7 @@ treat the TTL as bypassed for forward-compatibility.)
 Rulepacks declare reusable recognizers outside the host policy file. The CLI
 loads bundled rulepacks by name and custom rulepack TOML files by path.
 
+<!-- policy-fragment -->
 ```toml
 [policy.rulepacks]
 bundled = ["core"]
@@ -348,6 +355,7 @@ loaded rulepack rather than a separate hand-maintained list.
 Use `core` with an explicit locale when you want document-basis,
 locale-shaped recognizers:
 
+<!-- policy-fragment -->
 ```toml
 [policy.rulepacks]
 bundled = ["core"]
@@ -360,6 +368,7 @@ Credentials (API keys, access tokens, JWTs, `password:` records) are not
 detected by `core`. `gaze setup` includes the separate `secrets` bundle; add it
 explicitly in a hand-authored policy:
 
+<!-- policy-fragment -->
 ```toml
 [policy.rulepacks]
 bundled = ["core", "secrets"]
@@ -389,6 +398,7 @@ Within a rulepack, every `[[recognizers]]` block has an `id`, `class`, and
 same `class`, at least one must explicitly list the other recognizer id in
 `cooperates_with`.
 
+<!-- policy-fragment: rulepack -->
 ```toml
 [[recognizers]]
 id = "email.header.name"
@@ -445,6 +455,7 @@ Regex rulepack recognizers may include an optional `[recognizers.validator]`
 table. Validators are deterministic, closed-registry names. Unknown validator
 strings fail policy load with `RulepackError::UnsupportedValidator`.
 
+<!-- policy-fragment: recognizer -->
 ```toml
 [recognizers.validator]
 kind = "luhn"
@@ -464,6 +475,7 @@ restore still uses the original matched bytes from the session manifest.
 Unknown normalizer strings fail policy load with
 `RulepackError::UnsupportedNormalizer`.
 
+<!-- policy-fragment: recognizer -->
 ```toml
 [recognizers.normalizer]
 kind = "iban_canonical"
@@ -480,6 +492,7 @@ contains `names = [...]`. Regex `pattern_template` values may reference those
 buckets with `{locale.<bucket>}`. Assembly lowers the placeholder after the
 active locale chain is known.
 
+<!-- policy-fragment: rulepack -->
 ```toml
 [locale.salutations]
 names = ["Dr", "Mx"]
@@ -508,12 +521,13 @@ the bundled `core` rulepack. To disable bundled rulepacks, set
 `[policy.rulepacks] bundled = []`; a policy with neither bundled/path rulepacks
 nor custom recognizers is rejected with `PolicyConfig`.
 
+<!-- policy-fragment -->
 ```toml
 [[policy.custom_recognizers]]
 kind = "regex"
-name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
-class = "email"
+name = "employee_ids"
+pattern = '\bEMP-\d{6}\b'
+class = "custom:employee_id"
 ```
 
 | Field                | Type      | Required | Notes                                                     |
@@ -535,6 +549,7 @@ rulepack recognizers and are gated by the active locale chain when they come
 from a rulepack. The CLI passes the merged dictionary bundle from rulepacks,
 policy inline terms, and `--context-json` into the runtime `DetectContext`.
 
+<!-- policy-fragment -->
 ```toml
 [[policy.custom_recognizers]]
 kind = "dictionary"
@@ -558,6 +573,7 @@ below claim the same shape for two classes: the lower `precedence` wins the
 overlap (`decided_by: collision_policy`), and an equal `precedence` emits the
 family token `custom:family:tenant-orders` instead of either class.
 
+<!-- policy-fragment -->
 ```toml
 [[policy.custom_recognizers]]
 kind = "regex"
@@ -629,6 +645,7 @@ rejected with `PolicyConfig`. Rules are evaluated in declaration order;
 the first rule whose match condition fires decides the action. If no rule
 matches, the pipeline falls back to `Action::Preserve`.
 
+<!-- policy-fragment -->
 ```toml
 [[rule]]
 kind = "class"
@@ -732,6 +749,7 @@ Two consequences of a derived action that is not `tokenize`:
 > class or the default is protective is an explicit rule for the family class
 > declared before your `default` rule:
 >
+> <!-- policy-fragment -->
 > ```toml
 > [[rule]]
 > kind = "class"
@@ -798,6 +816,7 @@ There is no `"passthrough"` action — the closest equivalent is `"preserve"`.
 
 ### `[ner]` (optional)
 
+<!-- policy-fragment -->
 ```toml
 [ner]
 model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
@@ -827,6 +846,7 @@ the canonical copy-paste policy block is
 
 ### `[dob_judge]` (optional)
 
+<!-- policy-fragment -->
 ```toml
 [dob_judge]
 enabled = true
@@ -852,6 +872,7 @@ them.
 
 ### `[address_blocks]` (optional)
 
+<!-- policy-fragment -->
 ```toml
 [address_blocks]
 enabled = true
@@ -872,6 +893,7 @@ load; `openai-filter` remains command-line only in this release. A Nym request
 without a usable, digest-verified bundle or the `safety-net-nym` feature fails
 closed. Install the bundle with `gaze setup --safety-net nym`.
 
+<!-- policy-fragment -->
 ```toml
 [safety_net]
 backend = "nym"
@@ -901,6 +923,7 @@ environment.
 
 ### `[proxy]`
 
+<!-- policy-fragment -->
 ```toml
 [proxy]
 anthropic_betas = ["claude-code-20250219", "effort-2025-11-24"]
@@ -941,10 +964,14 @@ Common idioms:
 punctuation can miss a value or capture the next amount, leaving bytes raw.
 Rust regex has no look-around. Guard digit/word edges; let symbols delimit themselves.
 
+<!-- policy-fragment: custom-recognizer -->
 ```toml
 # Broken beside symbols: misses "5000€" and can mis-span adjacent amounts.
 pattern = '\b(?:[$€£]\s?\d[\d.,]*|\d[\d.,]*\s?(?:€|£|EUR|USD|GBP))\b'
+```
 
+<!-- policy-fragment: custom-recognizer -->
+```toml
 # Guard only digit edges.
 pattern = '(?:[$€£]\s?\d[\d.,]*\d|[$€£]\s?\d|\b\d[\d.,]*\d\s?(?:€|£|EUR|USD|GBP)|\b\d\s?(?:€|£|EUR|USD|GBP))'
 ```
@@ -1101,6 +1128,7 @@ classes) live in [Write a policy: worked examples](../how-to/policy/policy-examp
 
 Every `policy.toml` declares the schema it was authored against:
 
+<!-- policy-fragment -->
 ```toml
 schema_version = "0.1.0"
 ```
