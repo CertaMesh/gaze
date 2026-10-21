@@ -1,5 +1,6 @@
 """Conservative PR selection and fail-closed integration status, using only stdlib."""
 import argparse
+from fnmatch import fnmatchcase
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,11 @@ EVENTS = {'pull_request', 'merge_group', 'push', 'workflow_dispatch'}
 # Audited prose only. Docs, root Markdown and external fixtures can be Rust
 # inputs (including the release scrubber's dynamically followed doc links).
 PROSE_ONLY = {'CODE_OF_CONDUCT.md', 'LICENSE-APACHE', 'LICENSE-MIT'}
+
+
+def full_input(path):
+    table = json.loads((ROOT / 'scripts/ci/full-inputs.json').read_text())
+    return path in table['paths'] or any(fnmatchcase(path, pattern) for pattern in table['patterns'])
 
 
 def workspace():
@@ -47,7 +53,8 @@ def make_plan(event, paths, fast_lane=''):
     paths = list(paths)
     if not all(isinstance(path, str) and path for path in paths):
         raise ValueError('changed paths must be nonempty strings')
-    integration = event != 'pull_request' or fast_lane != 'enabled'
+    integration = (event != 'pull_request' or fast_lane != 'enabled'
+                   or any(full_input(path) for path in paths))
     wide = integration or not paths
     selected = set()
     bench = dylint = msrv = integration
@@ -67,6 +74,10 @@ def make_plan(event, paths, fast_lane=''):
             continue
         member = next((member for member in names if path.startswith(member + '/')), None)
         if member:
+            # Crate-local assets/configs may be opened at runtime by tests or
+            # build scripts, without an include macro to discover statically.
+            if not path.endswith('.rs'):
+                wide = True
             selected.add(names[member])
             msrv = dylint = True
             if '/examples/' in path:
@@ -76,6 +87,7 @@ def make_plan(event, paths, fast_lane=''):
             continue
         wide = True
     if wide:
+        integration = True
         selected = set(names.values())
         msrv = bench = dylint = True
     pending = list(selected)
@@ -123,7 +135,7 @@ def check(event, needs, context, fast_lane=''):
         elif type(value) is not bool:
             raise ValueError(f'invalid boolean: {key}')
         plan[key] = value
-    if plan['integration'] != (event != 'pull_request' or fast_lane != 'enabled'):
+    if not plan['integration'] and (event != 'pull_request' or fast_lane != 'enabled'):
         raise ValueError('plan does not match the triggering event and activation variable')
     required = required_jobs(plan, context) | {'plan'}
     for job in sorted(required | set(needs)):

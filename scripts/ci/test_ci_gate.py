@@ -7,11 +7,74 @@ import tempfile
 import unittest
 
 import ci_gate as gate
+import ci_inputs
+
+FULL_OWNERS = {'msrv', 'test-support', 'workspace-shards', 'test-coverage',
+               'benchmark-model-free', 'xtask-feature-gates', 'workspace-default',
+               'dylint', 'test', 'xtask-gates'}
 
 
 class LaneSelection(unittest.TestCase):
     def plan(self, *paths, event='pull_request'):
         return gate.make_plan(event, paths, 'enabled')
+
+    def test_readme_requires_full_gate_owners(self):
+        plan = self.plan('crates/gaze-document/README.md')
+        self.assertEqual(gate.required_jobs(plan, 'integration'), FULL_OWNERS)
+
+    def test_every_declared_input_requires_actual_full_owners(self):
+        table = json.loads(ci_inputs.TABLE.read_text())
+        for path in table['paths'] + [
+                'docs/tutorials/new-page.md', 'crates/gaze-document/custom-readme.md',
+                'crates/gaze-types/src/new_module.rs', 'crates/xtask/fixtures/new.json',
+                'crates/gaze-types/build.rs', 'crates/gaze/tests/ui/new.rs',
+                'crates/gaze/tests/fixtures/new.rs', 'crates/gaze/testdata/new.rs',
+                'crates/gaze-recognizers/embedded/new.toml', 'tests/ui/new.stderr']:
+            with self.subTest(path=path):
+                plan = self.plan(path)
+                self.assertEqual(gate.required_jobs(plan, 'integration'), FULL_OWNERS)
+                self.assertEqual(gate.required_jobs(plan, 'xtask'),
+                                 {'test', 'xtask-feature-gates', 'workspace-default'})
+                self.assertEqual(gate.required_jobs(plan, 'test'),
+                                 {'test-support', 'workspace-shards', 'test-coverage'})
+
+    def test_full_input_table_has_no_undisclosed_includes_or_gate_reads(self):
+        ci_inputs.audit(json.loads(ci_inputs.TABLE.read_text()))
+
+    def test_new_include_and_xtask_read_targets_fail_the_audit(self):
+        for reader, before, after in [
+                ('crates/demo/src/lib.rs', 'include_str!("../../../inputs/old.txt");',
+                 'include_str!(\n r#"../../../inputs/new.txt"#\n);'),
+                ('crates/xtask/src/lib.rs',
+                 'const INPUT: &str = "inputs/old.txt"; fn run() { fs::read(INPUT); }',
+                 'const INPUT: &str = "inputs/new.txt"; fn run() { fs::read(INPUT); }')]:
+            with self.subTest(reader=reader), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                for name, content in [(reader, before), ('inputs/old.txt', 'old'),
+                                      ('inputs/new.txt', 'new')]:
+                    path = root / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(content)
+                subprocess.run(['git', 'init', '-q', str(root)], check=True)
+                subprocess.run(['git', 'add', reader, 'inputs/old.txt', 'inputs/new.txt'],
+                               cwd=root, check=True)
+                table = ci_inputs.discover(root)
+                ci_inputs.audit(table, root)
+                (root / reader).write_text(after)
+                with self.assertRaisesRegex(ValueError, 'missing paths: inputs/new.txt'):
+                    ci_inputs.audit(table, root)
+
+    def test_changed_computed_gate_reads_require_review(self):
+        table = json.loads(ci_inputs.TABLE.read_text())
+        table['gate_readers'].pop('crates/xtask/src/readme_version_check.rs')
+        with self.assertRaisesRegex(ValueError, 'audit computed reads'):
+            ci_inputs.audit(table)
+
+    def test_unresolved_include_fails_closed(self):
+        with self.assertRaisesRegex(ValueError, 'computed include'):
+            list(ci_inputs.includes(Path('src/lib.rs'),
+                                    'include!(concat!(env!("OUT_DIR"), "/generated.rs"));',
+                                    Path('.')))
 
     def test_documentation_only_is_lightweight(self):
         plan = self.plan('CODE_OF_CONDUCT.md', 'LICENSE-MIT')
@@ -48,7 +111,8 @@ class LaneSelection(unittest.TestCase):
                 self.assertIn(owner, self.plan(path)['packages'])
 
     def test_rust_includes_every_reverse_dependency(self):
-        plan = self.plan('crates/gaze-inspection/src/lib.rs')
+        plan = self.plan('crates/gaze-inspection/tests/compile_fail.rs')
+        self.assertFalse(plan['integration'])
         self.assertIn('gaze-inspection', plan['packages'])
         self.assertIn('gaze-proxy-dashboard', plan['packages'])
         self.assertIn('gaze-cli', plan['packages'])
@@ -172,14 +236,31 @@ class Aggregate(unittest.TestCase):
                         gate.check(event, needs, context, fast_lane)
                     needs[job]['result'] = 'success'
 
-    def test_aggregate_reports_lane_and_rejects_activation_mismatch(self):
+    def test_aggregate_reports_lane_and_rejects_fast_plan_without_activation(self):
         for value in ['', 'enabled']:
             plan = gate.make_plan('pull_request', ['CODE_OF_CONDUCT.md'], value)
             needs = self.needs(plan)
             message = gate.check('pull_request', needs, 'integration', value)
             self.assertIn('PR FAST LANE ONLY' if value else 'FULL INTEGRATION', message)
-            with self.assertRaises(ValueError):
-                gate.check('pull_request', needs, 'integration', '' if value else 'enabled')
+            if value:
+                with self.assertRaises(ValueError):
+                    gate.check('pull_request', needs, 'integration', '')
+            else:
+                self.assertIn('FULL INTEGRATION',
+                              gate.check('pull_request', needs, 'integration', 'enabled'))
+
+    def test_full_plan_is_accepted_on_enabled_pr_but_fast_is_rejected_elsewhere(self):
+        full = gate.make_plan('pull_request', ['crates/gaze-document/README.md'], 'enabled')
+        for context in ['integration', 'test', 'xtask']:
+            self.assertIn('FULL INTEGRATION',
+                          gate.check('pull_request', self.needs(full), context, 'enabled'))
+        fast = gate.make_plan('pull_request', ['CODE_OF_CONDUCT.md'], 'enabled')
+        for event in gate.EVENTS:
+            for value in ['', 'enabled']:
+                if event == 'pull_request' and value == 'enabled':
+                    continue
+                with self.subTest(event=event, value=value), self.assertRaises(ValueError):
+                    gate.check(event, self.needs(fast), 'integration', value)
 
     def test_cli_uses_activation_variable_for_planning_and_checking(self):
         with tempfile.TemporaryDirectory() as temporary:
