@@ -1,11 +1,21 @@
-/* Synthetic fixture data for the dashboard browser contract.
+/* Fixture data for the dashboard browser contract.
  *
- * Every value is synthetic: approved fixture PII only (alice@example.invalid,
- * Dr. Schmidt, +1-555-0142, +49 1555 0112233, <Email_1>). Payload sentinels
- * exist so tests can prove DOM-byte absence before reveal and after conceal.
- * The wire shapes model the closed typed view contract only; no provider
- * semantics, no raw bytes, no per-entry SSE byte counts or timing.
+ * Snapshot/follow bodies are NOT written here. They are the exact output of the
+ * Rust snapshot encoder (src/browser_fixtures.rs), generated into
+ * encoder-fixtures.json by `cargo test -p gaze-proxy-dashboard browser_fixtures`
+ * and verified against the committed encoder-fixtures.sha256 before use, so the
+ * browser contract runs against the wire the child really emits.
+ *
+ * Payload bodies (served only by the payload/reveal routes) are synthetic:
+ * approved fixture PII only (alice@example.invalid, Dr. Schmidt, +1-555-0142,
+ * +49 1555 0112233, <Email_1>). Payload sentinels exist so tests can prove
+ * DOM-byte absence before reveal and after conceal.
  */
+
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const LAUNCH_TOKEN = "CanaryLaunchTok_000000000000000000000000000"; // 43 base64url chars
 export const WRONG_TOKEN = "WrongLaunchToken000000000000000000000000000"; // 43 chars, rejected
@@ -34,393 +44,74 @@ const HOSTILE_PAYLOAD =
   '{"__proto__":{"polluted":true},"constructor":"x"}' +
   "bidi:‮gnihsihp‬ ctrl: zw:​ end";
 
-function avail(value) { return { state: "Present", value }; }
-function omitted(reason) { return { state: "Omitted", reason }; }
+const HERE = dirname(fileURLToPath(import.meta.url));
 
-function stage(emissionId, domainState, measurements) {
-  return { emissionId, domainState, measurements };
+function loadEncoderFixtures() {
+  const regenerate = "run `cargo test -p gaze-proxy-dashboard browser_fixtures` first";
+  let raw;
+  try {
+    raw = readFileSync(join(HERE, "encoder-fixtures.json"));
+  } catch (_err) {
+    throw new Error("encoder-fixtures.json is missing; " + regenerate);
+  }
+  const expected = readFileSync(join(HERE, "encoder-fixtures.sha256"), "utf-8").trim();
+  const actual = createHash("sha256").update(raw).digest("hex");
+  if (actual !== expected) {
+    throw new Error("encoder-fixtures.json is not the blessed encoder output; " + regenerate);
+  }
+  return JSON.parse(raw.toString("utf-8"));
 }
 
-const M = (bytes, chunks) => avail({ bytes, chunks });
+const ENCODED = loadEncoderFixtures();
 
-function smallStructure() {
-  return avail({
-    truncation: "Complete",
-    nodes: [
-      { ordinal: 0, type: "Object", depth: 0, children: 3 },
-      { ordinal: 1, type: "String", depth: 1 },
-      { ordinal: 2, type: "Array", depth: 1, children: 2 },
-      { ordinal: 3, type: "Number", depth: 2 },
-      { ordinal: 4, type: "Boolean", depth: 2 },
-      { ordinal: 5, type: "Null", depth: 1 },
-    ],
-  });
+/* A fresh deep copy per request, exactly as the encoder rendered it. */
+function encoded(id) {
+  if (!Object.prototype.hasOwnProperty.call(ENCODED, id)) {
+    throw new Error("no encoder fixture " + id);
+  }
+  const body = JSON.stringify(ENCODED[id]);
+  return () => JSON.parse(body);
 }
 
-function smallStream() {
-  return avail({
-    entries: [
-      { ordinal: 0, kind: "MessageStart" },
-      { ordinal: 1, kind: "ContentBlockStart", block: 0 },
-      { ordinal: 2, kind: "ContentBlockDelta", delta: "Text", block: 0 },
-      { ordinal: 3, kind: "ContentBlockDelta", delta: "Text", block: 0 },
-      { ordinal: 4, kind: "ContentBlockDelta", delta: "Thinking", block: 0 },
-      { ordinal: 5, kind: "ContentBlockDelta", delta: "Signature", block: 0 },
-      { ordinal: 6, kind: "ContentBlockStop", block: 0 },
-      { ordinal: 7, kind: "ContentBlockStart", block: 1 },
-      { ordinal: 8, kind: "ContentBlockDelta", delta: "InputJson", block: 1 },
-      { ordinal: 9, kind: "ContentBlockStop", block: 1 },
-      { ordinal: 10, kind: "MessageDelta" },
-      { ordinal: 11, kind: "MessageStop" },
-    ],
-  });
-}
-
-function fullDecisions() {
-  return avail([
-    { ordinal: 0, engine: "DeterministicRecognizer", outcome: "RanClean" },
-    { ordinal: 1, engine: "Ner", outcome: "RanFindings", piiClass: "PersonName", detected: 2, pseudonymized: 2 },
-    { ordinal: 2, engine: "NeuralSafetyNet", outcome: "SkippedNotApplicable" },
-    { ordinal: 3, engine: "ResidualScan", outcome: "UnavailableFailClosed" },
-  ]);
-}
-
-function baseEvent(overrides) {
-  return Object.assign({
-    logicalId: 1,
-    ttlSeconds: 300,
-    epoch: 1,
-    route: "AnthropicMessages",
-    profile: "AnthropicMessagesDirect",
-    endpoint: "OsAssignedLoopback",
-    port: "OsAssigned",
-    statusClass: "Http2xx",
-    durationBucket: "Under1s",
-    retryCount: 0,
-    stages: {
-      providerRequest: stage(101, { kind: "Available" }, M(1421, 3)),
-      providerResponse: stage(102, { kind: "Available" }, M(5230, 18)),
-    },
-    piiSummary: avail([
-      { cls: "PersonName", detected: 2, pseudonymized: 2 },
-      { cls: "Email", detected: 1, pseudonymized: 1 },
-    ]),
-    structure: smallStructure(),
-    stream: smallStream(),
-    decisions: fullDecisions(),
-    attestation: avail("ExactHit"),
-  }, overrides);
-}
-
-function runtime(overrides) {
-  return Object.assign({
-    lifecycle: "Running",
-    captureTier: "ProviderVisible",
-    ttlSeconds: 300,
-    retained: 5,
-    capacity: 64,
-    epoch: 1,
-  }, overrides);
-}
-
-const ZERO_COUNTERS = {
-  ingressFull: 0, ingressClosed: 0, oversize: 0, ttlExpired: 0,
-  capacityEvicted: 0, staleEpoch: 0, duplicateConflict: 0, followLag: 0,
+/* Terminal lifecycle frames the current child encoder never emits: app.js keeps
+ * fail-closed handling for them, so the harness still drives those branches.
+ * They carry no event, stage, or payload-domain field. */
+const TERMINAL_FRAMES = {
+  "fx-shutdown": { runtime: { lifecycle: "ShutdownPurged" }, events: [] },
+  "fx-purged": { runtime: { lifecycle: "Purged" }, events: [] },
 };
 
-const DROP_COUNTERS = {
-  ingressFull: 7, ingressClosed: 2, oversize: 1, ttlExpired: 4,
-  capacityEvicted: 3, staleEpoch: 2, duplicateConflict: 1, followLag: 0,
-};
-
-/* Default tier: five events covering representative profile, endpoint, and
- * port categories with no numeric/private value anywhere. */
-function defaultEvents() {
-  return [
-    baseEvent({ logicalId: 5, endpoint: "OsAssignedLoopback", port: "OsAssigned" }),
-    baseEvent({
-      logicalId: 4,
-      profile: "OpenAiCompatible",
-      endpoint: "DynamicallyDiscoveredLoopback",
-      port: "DynamicallyDiscovered",
-      portChangeCount: 2,
-      statusClass: "Http4xx",
-      durationBucket: "Under10s",
-      attestation: avail("NotApplicable"),
-    }),
-    baseEvent({
-      logicalId: 3,
-      profile: "GeminiCompatible",
-      endpoint: "RevalidatedLoopback",
-      port: "ChangedAndRevalidated",
-      portChangeCount: 1,
-      durationBucket: "Over10s",
-      retryCount: 1,
-      attestation: avail("MissExpired"),
-    }),
-    baseEvent({
-      logicalId: 2,
-      profile: "GenericLocalAnthropicCompatible",
-      endpoint: "ConfiguredHttpsOrigin",
-      port: "FixedConfigured",
-      statusClass: "Http5xx",
-      attestation: avail("UnavailableFailClosed"),
-      decisions: avail([
-        { ordinal: 0, engine: "DeterministicRecognizer", outcome: "RanClean" },
-        { ordinal: 1, engine: "Ner", outcome: "TimeoutFailClosed" },
-        { ordinal: 2, engine: "ResidualScan", outcome: "ErrorFailClosed" },
-      ]),
-    }),
-    baseEvent({
-      logicalId: 1,
-      route: "Rejected",
-      profile: "OtherReviewed",
-      endpoint: "UnavailableFailClosed",
-      port: "UnavailableFailClosed",
-      statusClass: "Rejected",
-      durationBucket: "Unknown",
-      stages: {
-        providerRequest: stage(11, { kind: "Omitted", reason: "ProjectionFailedClosed" }, omitted("ProjectionFailedClosed")),
-      },
-      piiSummary: omitted("ProjectionFailedClosed"),
-      structure: omitted("ProjectionFailedClosed"),
-      stream: omitted("NotApplicable"),
-      decisions: omitted("ProjectionFailedClosed"),
-      attestation: avail("AmbiguousFailClosed"),
-    }),
-  ];
+function terminal(id) {
+  const body = JSON.stringify(TERMINAL_FRAMES[id]);
+  return () => JSON.parse(body);
 }
 
-function ownerStages(rawState, restoredState) {
-  return {
-    ownerRequest: stage(201, rawState, rawState.kind === "Concealed" ? M(1500, 1) : omitted("NotCapturedByPolicy")),
-    providerRequest: stage(202, { kind: "Available" }, M(1421, 3)),
-    providerResponse: stage(203, { kind: "Available" }, M(5230, 18)),
-    ownerRestoredResponse: stage(204, restoredState, restoredState.kind === "Concealed" ? M(5300, 1) : omitted("NotCapturedByPolicy")),
-  };
-}
+const PV = { providerVisible: PSEUDO_PAYLOAD };
 
 export const FIXTURES = {
-  "fx-default": {
-    snapshot: () => ({
-      runtime: runtime({}),
-      counters: ZERO_COUNTERS,
-      queue: null,
-      events: defaultEvents(),
-    }),
-    payloads: { providerVisible: PSEUDO_PAYLOAD },
-  },
-
+  "fx-default": { snapshot: encoded("fx-default"), payloads: PV },
   "fx-owner-raw": {
-    snapshot: () => ({
-      runtime: runtime({ captureTier: "OwnerRaw" }),
-      counters: ZERO_COUNTERS,
-      queue: null,
-      events: [
-        baseEvent({
-          logicalId: 7,
-          stages: ownerStages({ kind: "Concealed" }, { kind: "NotCaptured" }),
-          attestation: avail("MissNoRecord"),
-        }),
-        baseEvent({ logicalId: 6, attestation: avail("MissEvicted") }),
-      ],
-    }),
+    snapshot: encoded("fx-owner-raw"),
     payloads: { providerVisible: PSEUDO_PAYLOAD, ownerRaw: RAW_PAYLOAD },
   },
-
   "fx-owner-restored": {
-    snapshot: () => ({
-      runtime: runtime({ captureTier: "OwnerRestored" }),
-      counters: ZERO_COUNTERS,
-      queue: null,
-      events: [
-        baseEvent({
-          logicalId: 9,
-          stages: ownerStages({ kind: "NotCaptured" }, { kind: "Concealed" }),
-          attestation: avail("InvalidatedPolicyOrRulepack"),
-        }),
-        baseEvent({ logicalId: 8, attestation: avail("InvalidatedContentBytes") }),
-      ],
-    }),
+    snapshot: encoded("fx-owner-restored"),
     payloads: { providerVisible: PSEUDO_PAYLOAD, ownerRestored: RESTORED_PAYLOAD },
   },
-
   "fx-owner-both": {
-    snapshot: () => ({
-      runtime: runtime({ captureTier: "Both", retained: 12 }),
-      counters: DROP_COUNTERS,
-      queue: null,
-      events: [
-        baseEvent({
-          logicalId: 12,
-          stages: ownerStages({ kind: "Concealed" }, { kind: "Concealed" }),
-          attestation: avail("AmbiguousFailClosed"),
-        }),
-        baseEvent({ logicalId: 11, attestation: avail("InvalidatedSessionEpoch") }),
-      ],
-    }),
+    snapshot: encoded("fx-owner-both"),
     payloads: { providerVisible: PSEUDO_PAYLOAD, ownerRaw: RAW_PAYLOAD, ownerRestored: RESTORED_PAYLOAD },
   },
-
-  "fx-content-pv-omitted": {
-    snapshot: () => ({
-      runtime: runtime({}),
-      counters: ZERO_COUNTERS,
-      queue: null,
-      events: [
-        baseEvent({
-          logicalId: 14,
-          stages: {
-            providerRequest: stage(301, { kind: "Available" }, M(1421, 3)),
-            providerResponse: stage(302, { kind: "Omitted", reason: "LimitExceeded" }, omitted("LimitExceeded")),
-          },
-        }),
-      ],
-    }),
-    payloads: { providerVisible: PSEUDO_PAYLOAD },
-  },
-
-  "fx-content-owner-omitted": {
-    snapshot: () => ({
-      runtime: runtime({ captureTier: "OwnerRaw" }),
-      counters: ZERO_COUNTERS,
-      queue: null,
-      events: [
-        baseEvent({
-          logicalId: 15,
-          stages: {
-            ownerRequest: stage(311, { kind: "Omitted", reason: "SignedOrEncryptedSurface" }, omitted("SignedOrEncryptedSurface")),
-            providerRequest: stage(312, { kind: "Available" }, M(1421, 3)),
-            providerResponse: stage(313, { kind: "Available" }, M(5230, 18)),
-          },
-        }),
-      ],
-    }),
-    payloads: { providerVisible: PSEUDO_PAYLOAD },
-  },
-
-  "fx-hostile": {
-    snapshot: () => ({
-      runtime: runtime({}),
-      counters: ZERO_COUNTERS,
-      queue: null,
-      events: [baseEvent({ logicalId: 16 })],
-    }),
-    payloads: { providerVisible: HOSTILE_PAYLOAD },
-  },
-
-  "fx-structure-deep": {
-    snapshot: () => {
-      const nodes = [];
-      for (let d = 0; d < 64; d++) {
-        nodes.push({ ordinal: d, type: d % 2 === 0 ? "Object" : "Array", depth: d, children: d < 63 ? 1 : 0 });
-      }
-      return {
-        runtime: runtime({}),
-        counters: ZERO_COUNTERS,
-        queue: null,
-        events: [baseEvent({ logicalId: 20, structure: avail({ truncation: "DepthLimit", nodes }) })],
-      };
-    },
-    payloads: { providerVisible: PSEUDO_PAYLOAD },
-  },
-
-  "fx-structure-wide": {
-    snapshot: () => {
-      const nodes = [{ ordinal: 0, type: "Object", depth: 0, children: 512 }];
-      for (let i = 1; i <= 512; i++) {
-        nodes.push({ ordinal: i, type: "String", depth: 1 });
-      }
-      return {
-        runtime: runtime({}),
-        counters: ZERO_COUNTERS,
-        queue: null,
-        events: [baseEvent({ logicalId: 21, structure: avail({ truncation: "NodeLimit", nodes }) })],
-      };
-    },
-    payloads: { providerVisible: PSEUDO_PAYLOAD },
-  },
-
-  "fx-structure-malformed": {
-    snapshot: () => ({
-      runtime: runtime({}),
-      counters: ZERO_COUNTERS,
-      queue: null,
-      events: [baseEvent({ logicalId: 22, structure: omitted("MalformedFailClosed") })],
-    }),
-    payloads: { providerVisible: PSEUDO_PAYLOAD },
-  },
-
-  "fx-sse-10k": {
-    snapshot: () => {
-      const entries = [];
-      entries.push({ ordinal: 0, kind: "MessageStart" });
-      for (let i = 1; i < 9998; i++) {
-        const mod = i % 5;
-        if (mod === 1) { entries.push({ ordinal: i, kind: "ContentBlockStart", block: Math.floor(i / 100) }); }
-        else if (mod === 2 || mod === 3) { entries.push({ ordinal: i, kind: "ContentBlockDelta", delta: "Text", block: Math.floor(i / 100) }); }
-        else if (mod === 4) { entries.push({ ordinal: i, kind: "ContentBlockStop", block: Math.floor(i / 100) }); }
-        else { entries.push({ ordinal: i, kind: "Ping" }); }
-      }
-      entries.push({ ordinal: 9998, kind: "MessageDelta" });
-      entries.push({ ordinal: 9999, kind: "MessageStop" });
-      return {
-        runtime: runtime({}),
-        counters: ZERO_COUNTERS,
-        queue: null,
-        events: [baseEvent({ logicalId: 23, stream: avail({ entries }) })],
-      };
-    },
-    payloads: { providerVisible: PSEUDO_PAYLOAD },
-  },
-
-  "fx-drops": {
-    snapshot: () => ({
-      runtime: runtime({ retained: 60, capacity: 64 }),
-      counters: DROP_COUNTERS,
-      queue: null,
-      events: defaultEvents(),
-    }),
-    payloads: { providerVisible: PSEUDO_PAYLOAD },
-  },
-
-  "fx-zero": {
-    snapshot: () => ({
-      runtime: runtime({ retained: 0 }),
-      counters: ZERO_COUNTERS,
-      queue: null,
-      events: [],
-    }),
-    payloads: {},
-  },
-
-  "fx-disconnected": {
-    snapshot: () => ({
-      runtime: { lifecycle: "Disabled", disabledCode: "ChildExit" },
-      counters: ZERO_COUNTERS,
-      queue: null,
-      events: [],
-    }),
-    payloads: {},
-  },
-
-  "fx-shutdown": {
-    snapshot: () => ({
-      runtime: { lifecycle: "ShutdownPurged" },
-      counters: ZERO_COUNTERS,
-      queue: null,
-      events: [],
-    }),
-    payloads: {},
-  },
-
-  "fx-purged": {
-    snapshot: () => ({
-      runtime: runtime({ lifecycle: "Purged", retained: 0 }),
-      counters: ZERO_COUNTERS,
-      queue: null,
-      events: [],
-    }),
-    payloads: {},
-  },
+  "fx-content-pv-omitted": { snapshot: encoded("fx-content-pv-omitted"), payloads: PV },
+  "fx-content-owner-omitted": { snapshot: encoded("fx-content-owner-omitted"), payloads: PV },
+  "fx-hostile": { snapshot: encoded("fx-hostile"), payloads: { providerVisible: HOSTILE_PAYLOAD } },
+  "fx-structure-deep": { snapshot: encoded("fx-structure-deep"), payloads: PV },
+  "fx-structure-wide": { snapshot: encoded("fx-structure-wide"), payloads: PV },
+  "fx-structure-malformed": { snapshot: encoded("fx-structure-malformed"), payloads: PV },
+  "fx-sse-10k": { snapshot: encoded("fx-sse-10k"), payloads: PV },
+  "fx-drops": { snapshot: encoded("fx-drops"), payloads: PV },
+  "fx-zero": { snapshot: encoded("fx-zero"), payloads: {} },
+  "fx-disconnected": { snapshot: encoded("fx-disconnected"), payloads: {} },
+  "fx-shutdown": { snapshot: terminal("fx-shutdown"), payloads: {} },
+  "fx-purged": { snapshot: terminal("fx-purged"), payloads: {} },
 };

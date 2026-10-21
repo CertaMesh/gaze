@@ -394,7 +394,8 @@ for (const vpKey of ["V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", "V9"]) {
         // Single-column layouts hide the list here, but V3 is side-by-side.
         await page.click("#tab-domains"); // leave overview state unchanged for list check
         const text = await bodyText(page);
-        for (const s of ["DYNAMICALLY DISCOVERED LOOPBACK", "REVALIDATED LOOPBACK", "CHANGED AND REVALIDATED", "SELECTION CHANGE"]) {
+        // The encoder emits closed selection codes only; there is no port-change count.
+        for (const s of ["DYNAMICALLY DISCOVERED LOOPBACK", "REVALIDATED LOOPBACK", "CHANGED AND REVALIDATED"]) {
           expect(text.includes(s), "missing: " + s).toBe(true);
         }
       });
@@ -510,6 +511,12 @@ for (const cfg of LAYER3) {
     if (cfg.kind === "pv-omitted") {
       await check(entry, "ProviderVisible response PAYLOAD OMITTED with exact closed code", async () => {
         await expect(page.locator(".lane-providervisible")).toContainText("PAYLOAD OMITTED (LIMIT EXCEEDED)");
+      });
+      await check(entry, "omitted response gets no show control; the available request keeps one", async () => {
+        const omittedStage = page.locator(".lane-providervisible .substage", { hasText: "PAYLOAD OMITTED" });
+        await expect(omittedStage).toHaveCount(1);
+        await expect(omittedStage.locator("button")).toHaveCount(0);
+        await expect(page.locator(".lane-providervisible button", { hasText: "Show pseudonymized payload" })).toHaveCount(1);
       });
       await check(entry, "capture badge remains selected (capture unchanged)", async () => {
         await expect(page.locator(".capture-badge").first()).toHaveText(PV_BADGE);
@@ -825,7 +832,8 @@ test("L5-DISCONNECTED dashboard-disabled terminal", async ({ browser }) => {
   const page = await openState(browser, "V2", "fx-disconnected", { expectTerminal: true });
   await check(entry, "states purged data + unaffected proxy with sanitized code only", async () => {
     const text = await bodyText(page);
-    expect(text.includes("DASHBOARD DISABLED (CHILD EXIT)")).toBe(true);
+    // The encoder's one fail-closed body carries ProjectionFailedClosed.
+    expect(text.includes("DASHBOARD DISABLED (PROJECTION FAILED CLOSED)")).toBe(true);
     expect(text.includes("The proxy is unaffected and continues running")).toBe(true);
   });
   await check(entry, "no stale events, no capture retry control", async () => {
