@@ -51,13 +51,14 @@ pub(crate) fn is_json_escaped_spelling(raw: &str) -> bool {
 /// Empty for any other text, including prose that merely contains JSON: only a text that parses
 /// as one JSON object or array gives its string literals an unambiguous JSON reading.
 #[derive(Debug, Default)]
-pub(crate) struct JsonStringLiterals {
+pub(crate) struct JsonStringLiterals<'a> {
+    text: &'a str,
     /// Byte ranges between the quotes of every string literal, keys included, in order.
     contents: Vec<Range<usize>>,
 }
 
-impl JsonStringLiterals {
-    pub(crate) fn scan(text: &str) -> Self {
+impl<'a> JsonStringLiterals<'a> {
+    pub(crate) fn scan(text: &'a str) -> Self {
         if !matches!(text.trim_start().as_bytes().first(), Some(b'{' | b'['))
             || serde_json::from_str::<serde::de::IgnoredAny>(text).is_err()
         {
@@ -79,7 +80,7 @@ impl JsonStringLiterals {
             }
             index += 1;
         }
-        Self { contents }
+        Self { text, contents }
     }
 
     /// The spelling of `raw`, captured at `span` of the scanned text.
@@ -87,11 +88,29 @@ impl JsonStringLiterals {
         let after = self
             .contents
             .partition_point(|literal| literal.end < span.end);
-        let inside = self
+        let Some(literal) = self
             .contents
             .get(after)
-            .is_some_and(|literal| literal.start <= span.start && span.end <= literal.end);
-        if inside && is_json_escaped_spelling(raw) {
+            .filter(|literal| literal.start <= span.start && span.end <= literal.end)
+        else {
+            return SourceSpelling::Plain;
+        };
+        if self.text.get(span.clone()) != Some(raw) {
+            return SourceSpelling::Plain;
+        }
+        let Some(decoded) = decode_json_string_content(raw).filter(|decoded| decoded != raw) else {
+            return SourceSpelling::Plain;
+        };
+        // A valid prefix ends between complete escapes, including a complete surrogate pair.
+        // Decoding both prefixes establishes the capture's offsets in the parsed string.
+        let (Some(before), Some(through), Some(value)) = (
+            decode_json_string_content(&self.text[literal.start..span.start]),
+            decode_json_string_content(&self.text[literal.start..span.end]),
+            decode_json_string_content(&self.text[literal.clone()]),
+        ) else {
+            return SourceSpelling::Plain;
+        };
+        if value.get(before.len()..through.len()) == Some(decoded.as_str()) {
             SourceSpelling::JsonEscaped
         } else {
             SourceSpelling::Plain
@@ -106,6 +125,36 @@ mod tests {
     fn spelling_of(text: &str, raw: &str) -> SourceSpelling {
         let start = text.find(raw).expect("raw in text");
         JsonStringLiterals::scan(text).spelling(&(start..start + raw.len()), raw)
+    }
+
+    #[test]
+    fn capture_must_not_start_in_the_middle_of_an_escape() {
+        assert_eq!(
+            spelling_of(r#"{"path":"\\new"}"#, r"\new"),
+            SourceSpelling::Plain
+        );
+    }
+
+    #[test]
+    fn captures_with_partial_escape_boundaries_keep_source_bytes() {
+        for (document, raw) in [
+            (r#"{"a":"x\n\\tail"}"#, r"x\n\"),
+            (r#"{"a":"x\n\u0041"}"#, r"x\n\u00"),
+            (r#"{"a":"\u0041\n"}"#, r"0041\n"),
+            (r#"{"a":"x\n\uD83D\uDE00"}"#, r"x\n\uD83D"),
+            (r#"{"a":"\uD83D\uDE00\n"}"#, r"\uDE00\n"),
+            (r#"{"a":"\uD83D\uDE00\n"}"#, r"DE00\n"),
+        ] {
+            assert_eq!(spelling_of(document, raw), SourceSpelling::Plain, "{raw}");
+        }
+    }
+
+    #[test]
+    fn complete_escape_boundaries_match_the_parsed_value_slice() {
+        let document = r#"{"a":"pré\\path\u0041\uD83D\uDE00\nsuffix"}"#;
+        for raw in [r"\\path", r"\u0041", r"\uD83D\uDE00", r"\n"] {
+            assert_eq!(spelling_of(document, raw), SourceSpelling::JsonEscaped);
+        }
     }
 
     #[test]
