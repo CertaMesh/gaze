@@ -1,16 +1,112 @@
 name: test
+run-name: "CI (${{ github.sha }})"
 
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+    inputs:
+      sample_paths:
+        description: 'Optional synthetic PR samples as JSON objects, e.g. [{"name":"docs","paths":["README.md"]}]'
+        type: string
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
+env:
+  CARGO_BUILD_JOBS: '4'
+  # Full PR integration until the queue and required checks are activated.
+  # Python compares this value exactly; only 'enabled' selects the fast PR lane.
+  GAZE_CI_FAST_LANE: ${{ vars.GAZE_CI_FAST_LANE }}
+
 jobs:
+  plan:
+    name: Select PR checks or full integration
+    runs-on: ubuntu-latest
+    outputs:
+      integration: ${{ steps.plan.outputs.integration }}
+      wide: ${{ steps.plan.outputs.wide }}
+      packages: ${{ steps.plan.outputs.packages }}
+      msrv: ${{ steps.plan.outputs.msrv }}
+      bench: ${{ steps.plan.outputs.bench }}
+      dylint: ${{ steps.plan.outputs.dylint }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+      - name: Select affected packages and mandatory owners
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/ci/ci_gate.py plan --event "$EVENT_NAME" --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  fast:
+    name: PR fmt, affected clippy and tests (not integration)
+    needs: [plan]
+    if: ${{ needs.plan.outputs.integration == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
+        with:
+          toolchain: 1.96.0
+      - name: Set up OCR and sample disk space
+        if: ${{ needs.plan.outputs.packages != '[]' }}
+        uses: ./.github/actions/setup-ocr
+      - name: Run conservative PR checks
+        env:
+          PACKAGES_JSON: ${{ needs.plan.outputs.packages }}
+        run: python3 scripts/ci/ci_gate.py fast
+
+  fast-sample:
+    name: Synthetic PR path sample (${{ matrix.name }})
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.sample_paths != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.sample_paths || '[{"name":"disabled","paths":[]}]') }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
+        with:
+          toolchain: 1.96.0
+      - name: Select synthetic paths with the real PR selector
+        id: sample
+        env:
+          SAMPLE_PATHS: ${{ toJSON(matrix.paths) }}
+          # Synthetic samples cannot change the actual full dispatch plan.
+          GAZE_CI_FAST_LANE: enabled
+        run: python3 scripts/ci/ci_gate.py plan --event pull_request --paths-json "$SAMPLE_PATHS"
+      - name: Set up OCR and sample disk space
+        if: ${{ steps.sample.outputs.packages != '[]' }}
+        uses: ./.github/actions/setup-ocr
+      - name: Run the real PR lane on the synthetic path sample
+        env:
+          PACKAGES_JSON: ${{ steps.sample.outputs.packages }}
+        run: python3 scripts/ci/ci_gate.py fast
+
+  dylint:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.dylint == 'true' }}
+    uses: ./.github/workflows/dylint.yml
+
   msrv:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.msrv == 'true' }}
     name: MSRV (Rust 1.89)
     runs-on: ubuntu-latest
     steps:
@@ -59,6 +155,8 @@ jobs:
           fi
 
   test-support:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.integration == 'true' }}
     name: test support and doctests
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -236,6 +334,8 @@ jobs:
           fi
 
   workspace-shards:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.integration == 'true' }}
     name: workspace tests (${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -322,8 +422,8 @@ jobs:
   test-coverage:
     name: workspace test coverage proof
     runs-on: ubuntu-latest
-    needs: [workspace-shards]
-    if: ${{ always() }}
+    needs: [plan, workspace-shards]
+    if: ${{ always() && needs.plan.outputs.integration == 'true' }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -347,25 +447,22 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Preserve the existing required context while ruleset changes are reviewed.
   test:
     runs-on: ubuntu-latest
-    needs: [test-support, workspace-shards, test-coverage]
+    needs: [plan, fast, test-support, workspace-shards, test-coverage]
     if: ${{ always() }}
     steps:
-      - name: Require every test owner and the coverage proof to succeed
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Require test owners for this lane
         env:
-          SUPPORT_RESULT: ${{ needs.test-support.result }}
-          SHARDS_RESULT: ${{ needs.workspace-shards.result }}
-          COVERAGE_RESULT: ${{ needs.test-coverage.result }}
-        run: |
-          for result in "$SUPPORT_RESULT" "$SHARDS_RESULT" "$COVERAGE_RESULT"; do
-            if [ "$result" != success ]; then
-              printf 'Required test coverage did not succeed: %s\n' "$result"
-              exit 1
-            fi
-          done
+          EVENT_NAME: ${{ github.event_name }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/ci_gate.py check --context test
 
   benchmark-model-free:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.bench == 'true' }}
     name: benchmark model-free Python tests
     runs-on: ubuntu-latest
     env:
@@ -391,6 +488,10 @@ jobs:
         run: |
           cargo build --locked -p gaze-cli --bin gaze
           cargo build --locked -p gaze-recognizers --example clean_for_bench
+      - name: Prove exact native capture reuse on the committed fixture
+        env:
+          GAZE_CAPTURE_FIXTURE_BINARY: target/debug/examples/clean_for_bench
+        run: uv run --project scripts/bench --python 3.13 --group comparison-test python -m pytest -q scripts/bench/test_capture_reuse.py
       # `cargo test --workspace` builds examples but never runs their unit tests; the
       # leak ledger's pool-dump pins (normalizer copy vs the pipeline trace) live here.
       - name: Run bench producer example tests
@@ -399,6 +500,8 @@ jobs:
         run: uv run --project scripts/bench --python 3.13 --group comparison-test python scripts/bench/check_policy_equivalence.py --self-check
 
   xtask-feature-gates:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.integration == 'true' }}
     name: xtask feature gates
     runs-on: ubuntu-latest
     steps:
@@ -446,6 +549,8 @@ jobs:
           fi
 
   workspace-default:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.integration == 'true' }}
     name: workspace default features
     runs-on: ubuntu-latest
     steps:
@@ -492,21 +597,31 @@ jobs:
             awk 'NR == 1 || $1 < min { min = $1 } END { printf "Minimum sampled free disk: %.2f GiB (%d KiB), %d samples, 5s interval\n", min / 1048576, min, NR }' "$RUNNER_TEMP/gaze-disk-free-kib.txt"
           fi
 
+  # Preserve the existing required context while ruleset changes are reviewed.
   xtask-gates:
     name: xtask gates
     runs-on: ubuntu-latest
-    needs: [test, xtask-feature-gates, workspace-default]
+    needs: [plan, fast, test, xtask-feature-gates, workspace-default]
     if: ${{ always() }}
     steps:
-      - name: Require every coverage owner to succeed
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Require coverage owners for this lane
         env:
-          TEST_RESULT: ${{ needs.test.result }}
-          FEATURE_GATES_RESULT: ${{ needs.xtask-feature-gates.result }}
-          DEFAULT_RESULT: ${{ needs.workspace-default.result }}
-        run: |
-          for result in "$TEST_RESULT" "$FEATURE_GATES_RESULT" "$DEFAULT_RESULT"; do
-            if [ "$result" != success ]; then
-              printf 'Required CI coverage did not succeed: %s\n' "$result"
-              exit 1
-            fi
-          done
+          EVENT_NAME: ${{ github.event_name }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/ci_gate.py check --context xtask
+
+  integration:
+    # The stable required name must report on PRs AND merge_group. The run name
+    # and job summary explicitly distinguish PR feedback from full integration.
+    name: ci/integration
+    runs-on: ubuntu-latest
+    needs: [plan, fast, msrv, test-support, workspace-shards, test-coverage, test, benchmark-model-free, xtask-feature-gates, workspace-default, xtask-gates, dylint]
+    if: ${{ always() }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Require every mandatory owner, including cancelled and missing results
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/ci_gate.py check --context integration

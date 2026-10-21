@@ -343,9 +343,8 @@ mod tests {
 
     #[test]
     fn owner_side_hits_remain_outside_agent_visible_serde_path() {
-        let model_source = include_str!("model.rs");
-        let index_entity_derive = derive_for(model_source, "IndexEntity");
-        let index_search_hit_derive = derive_for(model_source, "IndexSearchHit");
+        static_assertions::assert_not_impl_any!(IndexEntity: serde::Serialize, serde::Deserialize<'static>);
+        static_assertions::assert_not_impl_any!(IndexSearchHit: serde::Serialize, serde::Deserialize<'static>);
         let response = BridgeSearchResponse {
             target_domain: DOMAIN.to_string(),
             audit_id: "audit-1".to_string(),
@@ -353,24 +352,7 @@ mod tests {
         };
         let json = serde_json::to_string(&response).unwrap();
 
-        assert!(!index_entity_derive.contains("Serialize"));
-        assert!(!index_entity_derive.contains("Deserialize"));
-        assert!(!index_search_hit_derive.contains("Serialize"));
-        assert!(!index_search_hit_derive.contains("Deserialize"));
         assert!(!json.contains(EMAIL_FP));
         assert!(!json.contains("alice@example.invalid"));
-    }
-
-    fn derive_for<'a>(model_source: &'a str, struct_name: &str) -> &'a str {
-        model_source
-            .split(&format!("pub struct {struct_name}"))
-            .next()
-            .and_then(|before_struct| {
-                before_struct
-                    .lines()
-                    .rev()
-                    .find(|line| line.trim_start().starts_with("#[derive"))
-            })
-            .expect("model struct should have a derive attribute")
     }
 }
