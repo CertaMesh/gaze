@@ -161,20 +161,23 @@
     UnknownFuture: "UNKNOWN",
   };
 
+  /* Operational inspection status of the newest emission (not an HTTP status). */
   const STATUS_LABELS = {
-    Http2xx: "HTTP 2XX",
-    Http4xx: "HTTP 4XX",
-    Http5xx: "HTTP 5XX",
-    Rejected: "REJECTED",
-    Unknown: "UNKNOWN",
+    Accepted: "ACCEPTED",
+    Omitted: "OMITTED",
+    Purging: "PURGING",
+    Disabled: "DISABLED",
+    Closed: "CLOSED",
+    FailedClosed: "FAILED CLOSED",
   };
-  const STATUS_CAUTION = new Set(["Http5xx", "Rejected"]);
+  const STATUS_CAUTION = new Set(["Omitted", "Purging", "Disabled", "Closed", "FailedClosed"]);
 
   const DURATION_LABELS = {
-    Under1s: "UNDER 1 S",
-    Under10s: "UNDER 10 S",
-    Over10s: "OVER 10 S",
-    Unknown: "UNKNOWN",
+    NotMeasured: "NOT MEASURED",
+    UnderOneHundredMilliseconds: "UNDER 100 MS",
+    OneHundredMillisecondsToOneSecond: "100 MS TO 1 S",
+    OneToTenSeconds: "1 S TO 10 S",
+    OverTenSeconds: "OVER 10 S",
   };
 
   const DISABLED_LABELS = {
@@ -184,6 +187,7 @@
     Rotation: "ROTATION",
     Shutdown: "SHUTDOWN",
     ConnectionLost: "CONNECTION LOST",
+    ProjectionFailedClosed: "PROJECTION FAILED CLOSED",
     UnknownFuture: "UNKNOWN",
   };
 
@@ -192,7 +196,19 @@
     OwnerRaw: "OWNER RAW CAPTURE ENABLED",
     OwnerRestored: "OWNER RESTORED CAPTURE ENABLED",
     Both: "BOTH OWNER DOMAINS CAPTURED",
+    NotReported: "CAPTURE TIER NOT REPORTED — owner domains may be captured",
   };
+
+  /* Which owner lanes the startup capture tier authorizes. NotReported and
+   * unknown tiers authorize nothing and never claim NOT CAPTURED. */
+  const TIER_CAPTURES = {
+    ProviderVisible: { ownerRaw: false, ownerRestored: false },
+    OwnerRaw: { ownerRaw: true, ownerRestored: false },
+    OwnerRestored: { ownerRaw: false, ownerRestored: true },
+    Both: { ownerRaw: true, ownerRestored: true },
+  };
+
+  const STAGE_KEYS = ["ownerRequest", "providerRequest", "providerResponse", "ownerRestoredResponse"];
 
   const LANES = [
     { key: "ownerRaw", cls: "lane-ownerraw", glyph: "[RAW]", label: "OWNER RAW — PII may be present" },
@@ -207,7 +223,6 @@
   const REVEAL_WINDOW_MS = 30000;
   const FOLLOW_INTERVAL_MS = 2000;
   const SSE_WINDOW = 200;
-  const MAX_DEPTH_INDENT = 32;
 
   function label(table, code) {
     return Object.prototype.hasOwnProperty.call(table, code) ? table[code] : UNKNOWN_LABEL;
@@ -465,8 +480,8 @@
       proveSwAbsentAndEnable();
     }
   });
-  window.addEventListener("pageshow", (ev) => {
-    if (ev.persisted) {
+  window.addEventListener("pageshow", (pageEvent) => {
+    if (pageEvent.persisted) {
       hardTeardown("Restored page discarded. Pair again to continue.");
       disablePairEntry();
       proveSwAbsentAndEnable();
@@ -638,14 +653,15 @@
     if (tier === "OwnerRaw") { badges.push(CAPTURE_BADGES.OwnerRaw); }
     if (tier === "OwnerRestored") { badges.push(CAPTURE_BADGES.OwnerRestored); }
     if (tier === "Both") { badges.push(CAPTURE_BADGES.Both); }
+    if (!Object.prototype.hasOwnProperty.call(TIER_CAPTURES, tier)) { badges.push(CAPTURE_BADGES.NotReported); }
     return badges;
   }
 
-  function dropTotal(counters) {
-    if (!counters) { return 0; }
-    return boundedCount(counters.ingressFull) + boundedCount(counters.ingressClosed) +
-      boundedCount(counters.oversize) + boundedCount(counters.capacityEvicted) +
-      boundedCount(counters.staleEpoch) + boundedCount(counters.duplicateConflict);
+  function dropTotal(snap) {
+    if (!snap.counters) { return 0; }
+    return boundedCount(snap.counters.ingressFull) + boundedCount(snap.counters.ingressClosed) +
+      boundedCount(snap.counters.oversize) + boundedCount(snap.counters.capacityEvicted) +
+      boundedCount(snap.counters.staleEpoch) + boundedCount(snap.counters.duplicateConflict);
   }
 
   function renderSafetyBar(snap) {
@@ -657,18 +673,17 @@
         text: badgeText,
       }));
     }
-    const drops = dropTotal(snap.counters);
+    const drops = dropTotal(snap);
     if (drops > 0) {
-      const c = snap.counters || {};
       bar.appendChild(el("span", {
         className: "badge badge-caution capture-badge",
         text: "VIEW INCOMPLETE — DROPPED " + drops +
-          " (FULL " + boundedCount(c.ingressFull) +
-          " · CLOSED " + boundedCount(c.ingressClosed) +
-          " · OVERSIZE " + boundedCount(c.oversize) +
-          " · EVICTED " + boundedCount(c.capacityEvicted) +
-          " · STALE EPOCH " + boundedCount(c.staleEpoch) +
-          " · CONFLICT " + boundedCount(c.duplicateConflict) + ")",
+          " (FULL " + boundedCount(snap.counters.ingressFull) +
+          " · CLOSED " + boundedCount(snap.counters.ingressClosed) +
+          " · OVERSIZE " + boundedCount(snap.counters.oversize) +
+          " · EVICTED " + boundedCount(snap.counters.capacityEvicted) +
+          " · STALE EPOCH " + boundedCount(snap.counters.staleEpoch) +
+          " · CONFLICT " + boundedCount(snap.counters.duplicateConflict) + ")",
       }));
     }
     bar.appendChild(el("span", {
@@ -709,18 +724,22 @@
   function eventCautionMarks(ev) {
     const marks = [];
     if (ROUTE_CAUTION.has(ev.route)) { marks.push(label(ROUTE_LABELS, ev.route)); }
-    if (STATUS_CAUTION.has(ev.statusClass)) { marks.push(label(STATUS_LABELS, ev.statusClass)); }
+    if (STATUS_CAUTION.has(ev.status)) { marks.push(label(STATUS_LABELS, ev.status)); }
     if (ENDPOINT_CAUTION.has(ev.endpoint)) { marks.push(label(ENDPOINT_LABELS, ev.endpoint)); }
     if (PORT_CAUTION.has(ev.port)) { marks.push(label(PORT_LABELS, ev.port)); }
     return marks;
   }
 
+  /* The list row summarizes the provider-request emission: it is what the
+   * provider saw. Other stages are shown per stage in the detail pane. */
   function piiSummaryText(ev) {
-    const omission = availabilityText(ev.piiSummary);
-    if (omission) { return "PII " + omission.text; }
-    const entries = ev.piiSummary.value || [];
-    if (entries.length === 0) { return "PII: NONE REPORTED (not a verified-clean claim)"; }
-    return "PII " + entries.map((p) =>
+    const stage = (ev.stages || {}).providerRequest;
+    if (!stage) { return "PII (PROVIDER REQUEST): NO EMISSION"; }
+    const omission = availabilityText(stage.piiSummary);
+    if (omission) { return "PII (PROVIDER REQUEST) " + omission.text; }
+    const entries = stage.piiSummary.value || [];
+    if (entries.length === 0) { return "PII (PROVIDER REQUEST): NONE REPORTED (not a verified-clean claim)"; }
+    return "PII (PROVIDER REQUEST) " + entries.map((p) =>
       label(PII_CLASS_LABELS, p.cls) + " " + boundedCount(p.detected) + "/" + boundedCount(p.pseudonymized)
     ).join(" · ");
   }
@@ -739,14 +758,14 @@
       el("span", { className: "row-head" }, [
         el("span", { text: "LOG #" + boundedCount(ev.logicalId) }),
         el("span", { text: label(ROUTE_LABELS, ev.route) }),
-        el("span", { text: label(STATUS_LABELS, ev.statusClass) }),
+        el("span", { text: label(STATUS_LABELS, ev.status) }),
         marks.length ? el("span", { className: "row-caution", text: "⚠ " + marks.join(" · ") }) : null,
       ]),
       el("span", { className: "row-meta" }, [
         el("span", { text: label(PROFILE_LABELS, ev.profile) }),
         el("span", { text: label(ENDPOINT_LABELS, ev.endpoint) }),
-        el("span", { text: "PORT: " + label(PORT_LABELS, ev.port) + (ev.portChangeCount !== undefined && ev.portChangeCount !== null ? " · SELECTION CHANGE " + boundedCount(ev.portChangeCount) : "") }),
-        el("span", { text: label(DURATION_LABELS, ev.durationBucket) + " · RETRY " + boundedCount(ev.retryCount) }),
+        el("span", { text: "PORT: " + label(PORT_LABELS, ev.port) }),
+        el("span", { text: "DURATION " + label(DURATION_LABELS, ev.duration) }),
         el("span", { text: piiSummaryText(ev) }),
         el("span", { text: "TTL " + boundedCount(ev.ttlSeconds) + " S" }),
       ]),
@@ -852,6 +871,23 @@
     dl.appendChild(el("dd", { text: value, className: caution ? "caution" : "" }));
   }
 
+  function stageLabelOf(stageKey) {
+    return label(STAGE_LABELS, stageKey.charAt(0).toUpperCase() + stageKey.slice(1));
+  }
+
+  function piiStageText(stage) {
+    const pii = availabilityText(stage.piiSummary);
+    if (pii) { return { text: pii.text, caution: pii.caution }; }
+    const entries = stage.piiSummary.value || [];
+    return {
+      text: entries.length === 0 ?
+        "NONE REPORTED (not a verified-clean claim)" :
+        entries.map((p) => label(PII_CLASS_LABELS, p.cls) + " detected " +
+          boundedCount(p.detected) + ", pseudonymized " + boundedCount(p.pseudonymized)).join("; "),
+      caution: false,
+    };
+  }
+
   function renderOverviewTab(ev) {
     const wrap = el("div", { className: "tabpanel-body" });
     const dl = el("dl", { className: "kv" });
@@ -859,36 +895,23 @@
     kvRow(dl, "ROUTE", label(ROUTE_LABELS, ev.route), ROUTE_CAUTION.has(ev.route));
     kvRow(dl, "PROVIDER PROFILE", label(PROFILE_LABELS, ev.profile));
     kvRow(dl, "ENDPOINT", label(ENDPOINT_LABELS, ev.endpoint), ENDPOINT_CAUTION.has(ev.endpoint));
-    let portText = label(PORT_LABELS, ev.port);
-    if (ev.portChangeCount !== undefined && ev.portChangeCount !== null) {
-      portText += " · SELECTION CHANGE " + boundedCount(ev.portChangeCount);
-    }
-    kvRow(dl, "PORT", portText, PORT_CAUTION.has(ev.port));
-    kvRow(dl, "STATUS CLASS", label(STATUS_LABELS, ev.statusClass), STATUS_CAUTION.has(ev.statusClass));
-    kvRow(dl, "DURATION", label(DURATION_LABELS, ev.durationBucket));
-    kvRow(dl, "RETRIES", String(boundedCount(ev.retryCount)));
+    kvRow(dl, "PORT", label(PORT_LABELS, ev.port), PORT_CAUTION.has(ev.port));
+    kvRow(dl, "OPERATIONAL STATUS", label(STATUS_LABELS, ev.status), STATUS_CAUTION.has(ev.status));
+    kvRow(dl, "DURATION", label(DURATION_LABELS, ev.duration));
     kvRow(dl, "PRODUCER EPOCH", String(boundedCount(ev.epoch)));
     kvRow(dl, "TTL REMAINING", boundedCount(ev.ttlSeconds) + " S");
     const stages = ev.stages || {};
-    for (const stageKey of ["ownerRequest", "providerRequest", "providerResponse", "ownerRestoredResponse"]) {
+    for (const stageKey of STAGE_KEYS) {
       const stage = stages[stageKey];
-      const stageLabel = label(STAGE_LABELS, stageKey.charAt(0).toUpperCase() + stageKey.slice(1));
+      const stageLabel = stageLabelOf(stageKey);
       if (!stage) { kvRow(dl, stageLabel, "NO EMISSION"); continue; }
       const m = availabilityText(stage.measurements);
       const measurement = m ? m.text :
         boundedCount(stage.measurements.value.bytes) + " B · " +
         boundedCount(stage.measurements.value.chunks) + " CHUNKS";
       kvRow(dl, stageLabel, "EMISSION #" + boundedCount(stage.emissionId) + " · " + measurement, Boolean(m && m.caution));
-    }
-    const pii = availabilityText(ev.piiSummary);
-    if (pii) {
-      kvRow(dl, "PII SUMMARY", pii.text, pii.caution);
-    } else {
-      const entries = ev.piiSummary.value || [];
-      kvRow(dl, "PII SUMMARY", entries.length === 0 ?
-        "NONE REPORTED (not a verified-clean claim)" :
-        entries.map((p) => label(PII_CLASS_LABELS, p.cls) + " detected " +
-          boundedCount(p.detected) + ", pseudonymized " + boundedCount(p.pseudonymized)).join("; "));
+      const pii = piiStageText(stage);
+      kvRow(dl, stageLabel + " — PII SUMMARY", pii.text, pii.caution);
     }
     wrap.appendChild(dl);
     wrap.appendChild(el("p", { className: "limitation", text: QUEUE_LIMITATION }));
@@ -932,9 +955,22 @@
       el("span", { className: "lane-glyph", text: lane.glyph, attrs: { "aria-hidden": "true" } }),
       txt(lane.label),
     ]));
-    const d = stage && stage.domainState ? stage.domainState : { kind: "NotCaptured" };
+    if (!stage) {
+      // No emission for this stage: only the startup tier can say whether
+      // the domain was authorized at all.
+      const tier = ownerTierState(lane.key);
+      if (tier === "uncaptured") {
+        box.appendChild(laneStateNode("NotCaptured"));
+      } else if (tier === "captured") {
+        box.appendChild(el("p", { className: "lane-state", text: "NO EMISSION — nothing was captured for this stage." }));
+      } else {
+        box.appendChild(el("p", { className: "lane-state caution", text: "NO EMISSION — capture tier not reported." }));
+      }
+      return box;
+    }
+    const d = stage.domainState || {};
     box.appendChild(laneStateNode(d.kind, d.reason));
-    if (d.kind === "Concealed" && stage) {
+    if (d.kind === "Concealed") {
       const btn = el("button", {
         attrs: { type: "button" },
         text: "Reveal " + domainField + " (30 s window)",
@@ -945,6 +981,13 @@
       box.appendChild(btn);
     }
     return box;
+  }
+
+  function ownerTierState(laneKey) {
+    const snap = state.snapshot;
+    const tier = snap && snap.runtime ? snap.runtime.captureTier : null;
+    if (!Object.prototype.hasOwnProperty.call(TIER_CAPTURES, tier)) { return "unknown"; }
+    return TIER_CAPTURES[tier][laneKey] ? "captured" : "uncaptured";
   }
 
   function stageName(stageKey) {
@@ -958,7 +1001,7 @@
       el("span", { className: "lane-glyph", text: lane.glyph, attrs: { "aria-hidden": "true" } }),
       txt(lane.label),
     ]));
-    for (const stageKey of ["providerRequest", "providerResponse"]) {
+    for (const stageKey of STAGE_KEYS.slice(1, 3)) {
       const stage = stages[stageKey];
       const sub = el("div", { className: "substage" });
       sub.appendChild(el("h5", { className: "substage-title", text: label(STAGE_LABELS, stageName(stageKey)) }));
@@ -1071,14 +1114,32 @@
       ". It conceals automatically in 30 seconds.");
   }
 
-  function renderStructureTab(ev) {
+  /* Structure, stream, and trace are per-emission projections: each stage
+   * renders its own section and its own exact omission. */
+  function renderPerStage(ev, renderStage) {
     const wrap = el("div", { className: "tabpanel-body" });
-    const omission = availabilityText(ev.structure);
-    if (omission) {
-      wrap.appendChild(el("p", { className: OMISSION_NEUTRAL.has(ev.structure && ev.structure.reason) ? "limitation" : "omission", text: "STRUCTURE " + omission.text }));
-      return wrap;
+    const stages = ev.stages || {};
+    let any = false;
+    for (const stageKey of STAGE_KEYS) {
+      const stage = stages[stageKey];
+      if (!stage) { continue; }
+      any = true;
+      const section = el("section", { className: "stage-section", attrs: { "aria-label": stageLabelOf(stageKey) } });
+      section.appendChild(el("h3", { className: "substage-title", text: stageLabelOf(stageKey) + " · EMISSION #" + boundedCount(stage.emissionId) }));
+      renderStage(section, stage, stageKey);
+      wrap.appendChild(section);
     }
-    const shape = ev.structure.value || {};
+    if (!any) { wrap.appendChild(el("p", { className: "lane-state", text: "NO EMISSION" })); }
+    return wrap;
+  }
+
+  function renderStructureStage(wrap, stage) {
+    const omission = availabilityText(stage.structure);
+    if (omission) {
+      wrap.appendChild(el("p", { className: OMISSION_NEUTRAL.has(stage.structure && stage.structure.reason) ? "limitation" : "omission", text: "STRUCTURE " + omission.text }));
+      return;
+    }
+    const shape = stage.structure.value || {};
     const nodes = shape.nodes || [];
     if (!TRUNCATION_NEUTRAL.has(shape.truncation)) {
       wrap.appendChild(el("p", { className: "omission", text: label(TRUNCATION_LABELS, shape.truncation) }));
@@ -1089,47 +1150,41 @@
     const thead = el("thead", null, [el("tr", null, [
       el("th", { text: "ORDINAL", attrs: { scope: "col" } }),
       el("th", { text: "TYPE", attrs: { scope: "col" } }),
-      el("th", { text: "DEPTH", attrs: { scope: "col" } }),
-      el("th", { text: "CHILDREN", attrs: { scope: "col" } }),
     ])]);
     table.appendChild(thead);
     const tbody = el("tbody");
     for (const node of nodes.slice(0, 1024)) {
-      const depth = Math.min(boundedCount(node.depth), 64);
       const tr = el("tr", { className: "json-row" });
-      const ordCell = el("td", { text: "#" + boundedCount(node.ordinal) });
-      // Finite clamped numeric indent; depth is capped twice (data + render).
-      ordCell.style.paddingLeft = (4 + Math.min(depth, MAX_DEPTH_INDENT) * 8) + "px";
-      tr.appendChild(ordCell);
-      tr.appendChild(el("td", { text: label(JSON_TYPE_LABELS, node.type) + " · D" + depth }));
-      tr.appendChild(el("td", { text: String(depth) }));
-      tr.appendChild(el("td", { text: node.children === undefined ? "—" : String(boundedCount(node.children)) }));
+      tr.appendChild(el("td", { text: "#" + boundedCount(node.ordinal) }));
+      tr.appendChild(el("td", { text: label(JSON_TYPE_LABELS, node.type) }));
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
     tableWrap.appendChild(table);
     wrap.appendChild(tableWrap);
-    return wrap;
   }
 
-  const streamWindow = { start: 0 };
+  function renderStructureTab(ev) {
+    return renderPerStage(ev, renderStructureStage);
+  }
 
-  function renderStreamTab(ev) {
-    const wrap = el("div", { className: "tabpanel-body" });
-    const omission = availabilityText(ev.stream);
+  const streamWindow = {};
+
+  function renderStreamStage(wrap, stage, stageKey) {
+    const omission = availabilityText(stage.stream);
     if (omission) {
-      wrap.appendChild(el("p", { className: OMISSION_NEUTRAL.has(ev.stream && ev.stream.reason) ? "limitation" : "omission", text: "STREAM " + omission.text }));
-      return wrap;
+      wrap.appendChild(el("p", { className: OMISSION_NEUTRAL.has(stage.stream && stage.stream.reason) ? "limitation" : "omission", text: "STREAM " + omission.text }));
+      return;
     }
-    const entries = (ev.stream.value && ev.stream.value.entries) || [];
+    const entries = (stage.stream.value && stage.stream.value.entries) || [];
     const total = entries.length;
     wrap.appendChild(el("p", { className: "limitation", text: "SSE entries carry ordinal, kind, delta kind, and content-block index only. Per-entry byte counts and timing are not measured and never shown." }));
     if (total === 0) {
       wrap.appendChild(el("p", { className: "lane-state", text: "NO STREAM ENTRIES." }));
-      return wrap;
+      return;
     }
-    if (streamWindow.start >= total) { streamWindow.start = 0; }
-    const start = streamWindow.start;
+    if (!(streamWindow[stageKey] < total)) { streamWindow[stageKey] = 0; }
+    const start = streamWindow[stageKey];
     const end = Math.min(start + SSE_WINDOW, total);
 
     const windowing = el("div", { className: "windowing" });
@@ -1137,8 +1192,8 @@
     const next = el("button", { attrs: { type: "button" }, text: "Next " + SSE_WINDOW });
     prev.disabled = start === 0;
     next.disabled = end >= total;
-    prev.addEventListener("click", () => { streamWindow.start = Math.max(0, start - SSE_WINDOW); renderApp(); });
-    next.addEventListener("click", () => { streamWindow.start = end; renderApp(); });
+    prev.addEventListener("click", () => { streamWindow[stageKey] = Math.max(0, start - SSE_WINDOW); renderApp(); });
+    next.addEventListener("click", () => { streamWindow[stageKey] = end; renderApp(); });
     windowing.appendChild(el("span", { text: "ENTRIES " + (start + 1) + "–" + end + " OF " + total, attrs: { role: "status" } }));
     windowing.appendChild(prev);
     windowing.appendChild(next);
@@ -1169,14 +1224,16 @@
     table.appendChild(tbody);
     tableWrap.appendChild(table);
     wrap.appendChild(tableWrap);
-    return wrap;
   }
 
-  function renderTraceTab(ev) {
-    const wrap = el("div", { className: "tabpanel-body" });
-    const omission = availabilityText(ev.decisions);
+  function renderStreamTab(ev) {
+    return renderPerStage(ev, renderStreamStage);
+  }
+
+  function renderTraceStage(wrap, stage) {
+    const omission = availabilityText(stage.decisions);
     if (omission) {
-      wrap.appendChild(el("p", { className: OMISSION_NEUTRAL.has(ev.decisions && ev.decisions.reason) ? "limitation" : "omission", text: "DECISION TRACE " + omission.text }));
+      wrap.appendChild(el("p", { className: OMISSION_NEUTRAL.has(stage.decisions && stage.decisions.reason) ? "limitation" : "omission", text: "DECISION TRACE " + omission.text }));
     } else {
       const tableWrap = el("div", { className: "table-wrap" });
       const table = el("table", { className: "data-table" });
@@ -1189,7 +1246,7 @@
         el("th", { text: "DETECTED / PSEUDONYMIZED", attrs: { scope: "col" } }),
       ])]));
       const tbody = el("tbody");
-      for (const d of (ev.decisions.value || []).slice(0, 256)) {
+      for (const d of (stage.decisions.value || []).slice(0, 256)) {
         const tr = el("tr", { className: OUTCOME_CAUTION.has(d.outcome) ? "trace-row-caution" : "" });
         tr.appendChild(el("td", { text: "#" + boundedCount(d.ordinal) }));
         tr.appendChild(el("td", { text: label(ENGINE_LABELS, d.engine) }));
@@ -1205,15 +1262,19 @@
       tableWrap.appendChild(table);
       wrap.appendChild(tableWrap);
     }
-    const att = availabilityText(ev.attestation);
+    const att = availabilityText(stage.attestation);
     const dl = el("dl", { className: "kv" });
     if (att) {
       kvRow(dl, "ATTESTATION", att.text, att.caution);
     } else {
-      const code = ev.attestation.value;
+      const code = stage.attestation.value;
       kvRow(dl, "ATTESTATION", label(ATTESTATION_LABELS, code), !ATTESTATION_NEUTRAL.has(code));
     }
     wrap.appendChild(dl);
+  }
+
+  function renderTraceTab(ev) {
+    const wrap = renderPerStage(ev, renderTraceStage);
     wrap.appendChild(el("p", { className: "limitation", text: "Attestation is informational. EXACT HIT is not a verification or success claim." }));
     return wrap;
   }

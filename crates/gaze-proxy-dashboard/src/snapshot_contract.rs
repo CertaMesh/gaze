@@ -337,3 +337,238 @@ fn metadata_streams_never_carry_payload_sentinels() {
         }
     }
 }
+
+/// `const NAME = { Key: "Label", ... };` entries of one app.js table.
+fn js_table_entries(source: &str, table: &str) -> Vec<(String, String)> {
+    let start = source
+        .find(&format!("const {table} = {{"))
+        .unwrap_or_else(|| panic!("app.js must define {table}"));
+    let body = &source[start..];
+    let end = body.find("};").expect("table closes");
+    body[..end]
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let line = line.trim();
+            let colon = line.find(':')?;
+            let value = line[colon + 1..].trim().trim_end_matches(',');
+            Some((
+                line[..colon].trim().to_owned(),
+                value.strip_prefix('"')?.strip_suffix('"')?.to_owned(),
+            ))
+        })
+        .collect()
+}
+
+fn assert_table_covers<T: serde::Serialize + std::fmt::Debug>(table: &str, variants: &[T]) {
+    let keys = js_table_keys(APP_JS, table);
+    let codes = variants
+        .iter()
+        .map(crate::snapshot::browser_code)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(codes.len(), variants.len(), "{table}: codes are distinct");
+    assert_eq!(
+        keys, codes,
+        "{table} must label exactly the closed Rust codes"
+    );
+}
+
+/// Every closed code the encoder can emit has exactly one browser label, so no wire
+/// code renders as UNKNOWN and no stale label survives.
+#[test]
+fn browser_label_tables_match_the_closed_rust_codes_key_for_key() {
+    use gaze_types::inspection::*;
+    assert_table_covers(
+        "ROUTE_LABELS",
+        &[
+            RouteCodeV1::AnthropicMessages,
+            RouteCodeV1::Unknown,
+            RouteCodeV1::Rejected,
+        ],
+    );
+    assert_table_covers(
+        "PROFILE_LABELS",
+        &[
+            ProviderProfileCodeV1::AnthropicMessagesDirect,
+            ProviderProfileCodeV1::OpenAiCompatible,
+            ProviderProfileCodeV1::GeminiCompatible,
+            ProviderProfileCodeV1::GenericLocalAnthropicCompatible,
+            ProviderProfileCodeV1::OtherReviewed,
+        ],
+    );
+    assert_table_covers(
+        "ENDPOINT_LABELS",
+        &[
+            EndpointSelectionCodeV1::FixedHttpsOrigin,
+            EndpointSelectionCodeV1::ConfiguredHttpsOrigin,
+            EndpointSelectionCodeV1::OsAssignedLoopback,
+            EndpointSelectionCodeV1::DynamicallyDiscoveredLoopback,
+            EndpointSelectionCodeV1::RevalidatedLoopback,
+            EndpointSelectionCodeV1::UnavailableFailClosed,
+        ],
+    );
+    assert_table_covers(
+        "PORT_LABELS",
+        &[
+            PortSelectionCodeV1::NotApplicable,
+            PortSelectionCodeV1::FixedConfigured,
+            PortSelectionCodeV1::OsAssigned,
+            PortSelectionCodeV1::DynamicallyDiscovered,
+            PortSelectionCodeV1::ChangedAndRevalidated,
+            PortSelectionCodeV1::UnavailableFailClosed,
+        ],
+    );
+    assert_table_covers(
+        "STATUS_LABELS",
+        &[
+            InspectionOperationalStatusV1::Accepted,
+            InspectionOperationalStatusV1::Omitted,
+            InspectionOperationalStatusV1::Purging,
+            InspectionOperationalStatusV1::Disabled,
+            InspectionOperationalStatusV1::Closed,
+            InspectionOperationalStatusV1::FailedClosed,
+        ],
+    );
+    assert_table_covers(
+        "DURATION_LABELS",
+        &[
+            CoarseDurationBucketV1::NotMeasured,
+            CoarseDurationBucketV1::UnderOneHundredMilliseconds,
+            CoarseDurationBucketV1::OneHundredMillisecondsToOneSecond,
+            CoarseDurationBucketV1::OneToTenSeconds,
+            CoarseDurationBucketV1::OverTenSeconds,
+        ],
+    );
+    assert_table_covers(
+        "ENGINE_LABELS",
+        &[
+            DecisionEngineCodeV1::DeterministicRecognizer,
+            DecisionEngineCodeV1::Ner,
+            DecisionEngineCodeV1::NeuralSafetyNet,
+            DecisionEngineCodeV1::ResidualScan,
+        ],
+    );
+    assert_table_covers(
+        "OUTCOME_LABELS",
+        &[
+            DecisionOutcomeCodeV1::RanClean,
+            DecisionOutcomeCodeV1::RanFindings,
+            DecisionOutcomeCodeV1::SkippedNotApplicable,
+            DecisionOutcomeCodeV1::UnavailableFailClosed,
+            DecisionOutcomeCodeV1::TimeoutFailClosed,
+            DecisionOutcomeCodeV1::ErrorFailClosed,
+        ],
+    );
+    assert_table_covers(
+        "ATTESTATION_LABELS",
+        &[
+            AttestationTraceV1::NotApplicable,
+            AttestationTraceV1::ExactHit,
+            AttestationTraceV1::MissNoRecord,
+            AttestationTraceV1::MissExpired,
+            AttestationTraceV1::MissEvicted,
+            AttestationTraceV1::InvalidatedContentBytes,
+            AttestationTraceV1::InvalidatedStructuralIdentity,
+            AttestationTraceV1::InvalidatedPolicyOrRulepack,
+            AttestationTraceV1::InvalidatedRecognizerOrArtifact,
+            AttestationTraceV1::InvalidatedLocaleOrDictionary,
+            AttestationTraceV1::InvalidatedNormalizationVersion,
+            AttestationTraceV1::InvalidatedSessionEpoch,
+            AttestationTraceV1::InvalidatedConfigurationGeneration,
+            AttestationTraceV1::AmbiguousFailClosed,
+            AttestationTraceV1::UnavailableFailClosed,
+            AttestationTraceV1::UnknownFuture,
+        ],
+    );
+    assert_table_covers(
+        "PII_CLASS_LABELS",
+        &[
+            PiiClassCodeV1::PersonName,
+            PiiClassCodeV1::Email,
+            PiiClassCodeV1::Phone,
+            PiiClassCodeV1::Address,
+            PiiClassCodeV1::Organization,
+            PiiClassCodeV1::Credential,
+            PiiClassCodeV1::OtherReviewed,
+            PiiClassCodeV1::UnknownFuture,
+        ],
+    );
+    assert_table_covers(
+        "JSON_TYPE_LABELS",
+        &[
+            JsonTypeCodeV1::Object,
+            JsonTypeCodeV1::Array,
+            JsonTypeCodeV1::String,
+            JsonTypeCodeV1::Number,
+            JsonTypeCodeV1::Boolean,
+            JsonTypeCodeV1::Null,
+        ],
+    );
+    assert_table_covers(
+        "TRUNCATION_LABELS",
+        &[
+            JsonShapeTruncationCodeV1::Complete,
+            JsonShapeTruncationCodeV1::NodeLimit,
+            JsonShapeTruncationCodeV1::DepthLimit,
+            JsonShapeTruncationCodeV1::UnknownFuture,
+        ],
+    );
+    assert_table_covers(
+        "SSE_KIND_LABELS",
+        &[
+            SseEventKindV1::MessageStart,
+            SseEventKindV1::ContentBlockStart,
+            SseEventKindV1::ContentBlockDelta,
+            SseEventKindV1::ContentBlockStop,
+            SseEventKindV1::MessageDelta,
+            SseEventKindV1::MessageStop,
+            SseEventKindV1::Ping,
+            SseEventKindV1::Error,
+            SseEventKindV1::UnknownFuture,
+        ],
+    );
+    assert_table_covers(
+        "SSE_DELTA_LABELS",
+        &[
+            SseDeltaKindV1::Text,
+            SseDeltaKindV1::InputJson,
+            SseDeltaKindV1::Thinking,
+            SseDeltaKindV1::Signature,
+            SseDeltaKindV1::Citation,
+            SseDeltaKindV1::UnknownFuture,
+        ],
+    );
+    use crate::snapshot::CaptureTierV1;
+    assert_table_covers(
+        "CAPTURE_BADGES",
+        &[
+            CaptureTierV1::NotReported,
+            CaptureTierV1::ProviderVisible,
+            CaptureTierV1::OwnerRaw,
+            CaptureTierV1::OwnerRestored,
+            CaptureTierV1::Both,
+        ],
+    );
+    // The fail-closed body's disabled code is labelled.
+    assert!(js_table_keys(APP_JS, "DISABLED_LABELS").contains("ProjectionFailedClosed"));
+}
+
+/// The public view model's caution labels and the browser omission labels are one
+/// vocabulary.
+#[test]
+fn view_model_and_browser_omission_labels_agree() {
+    let browser = js_table_entries(APP_JS, "OMISSION_LABELS");
+    assert_eq!(browser.len(), ALL_REASONS.len());
+    for reason in ALL_REASONS {
+        let key = crate::child::contract_reason_key(reason);
+        let label = &browser
+            .iter()
+            .find(|(browser_key, _)| browser_key == key)
+            .unwrap_or_else(|| panic!("browser labels {key}"))
+            .1;
+        assert_eq!(
+            crate::view::ProjectionAvailabilityVm::Omitted(reason).label(),
+            label
+        );
+    }
+}
