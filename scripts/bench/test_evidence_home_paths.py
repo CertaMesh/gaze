@@ -141,9 +141,10 @@ class PlantedPathTests(unittest.TestCase):
                 self.assertEqual(evidence.home_path_hits(_gz([{"payload": payload}])), 0)
 
     def test_unc_homes_fail_scan_check_and_receipt_comparison(self):
-        for prefix in (r"\\server", r"\\?\UNC\server"):
+        for prefix in (r"\\server", r"\\?\UNC\server", "//server", "//?/UNC/server"):
             for component in ("Users", "users", "USERS"):
-                path = prefix + "\\" + component + r"\someone\policy.toml"
+                separator = "/" if prefix.startswith("//") else "\\"
+                path = separator.join((prefix, component, "someone", "policy.toml"))
                 for text in (path, json.dumps({"path": path})):
                     with self.subTest(text=text):
                         root = self.planted_repo(text)

@@ -26,7 +26,8 @@ RECEIPTS = ROOT / "docs/reference/benchmarks/portable-evidence-receipts.json"
 # Raw text and JSON-escaped spellings: `C:\Users\` appears as `C:\\Users\\` in JSON.
 HOME_PATH = re.compile(
     rb"/Users/|/home/|"
-    rb"(?:[A-Za-z]:|\\{2,}(?:\?\\+(?i:UNC)\\+)?[^\\/\r\n]+)(?:\\+|/)(?i:Users)(?:\\+|/)"
+    rb"(?:[A-Za-z]:|(?:\\{2,}|//)(?:\?(?:\\+|/)(?i:UNC)(?:\\+|/))?"
+    rb"[^\\/\r\n]+)(?:\\+|/)(?i:Users)(?:\\+|/)"
 )
 MAX_JSON_STRING_DEPTH = 4
 

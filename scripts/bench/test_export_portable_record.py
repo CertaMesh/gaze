@@ -11,7 +11,8 @@ class PortableExportTests(unittest.TestCase):
     def test_unc_homes_are_portable_on_posix(self):
         for prefix in (r"\\server", r"\\?\UNC\server", "//server", "//?/UNC/server"):
             for component in ("Users", "users", "USERS"):
-                path = prefix + "\\" + component + r"\someone\policy.toml"
+                separator = "/" if prefix.startswith("//") else "\\"
+                path = separator.join((prefix, component, "someone", "policy.toml"))
                 with self.subTest(path=path):
                     header = {"scorecard": {"runner_provenance": {"policy": {"path": path}}}}
                     normalized = export.portable_header(header)
