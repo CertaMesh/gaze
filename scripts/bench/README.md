@@ -430,18 +430,23 @@ runs on every pull request in `.github/workflows/docs.yml`:
 python3 scripts/bench/render_benchmark_doc.py --check
 ```
 
-The same run writes the benchmark panels: `benchmark_charts.py` turns the
-release history, `comparison.json` and `their-benchmarks.json` into a light and
-a dark SVG under `docs/assets/benchmarks/` (README `<picture>`) and the
-model-card tables in the benchmark reference. `--check` fails when either SVG
-drifts. Only tagged Gaze releases are drawn: the comparison report's main-branch
-run and the third-party files' `gaze-full` row are never read, `GazeRow`
-refuses a version that is not `vX.Y.Z`, and a tagged third-party run enters
-through `gaze_releases` in `their-benchmarks.json` (until then its slot reads
-"pending"). The panels' headline is character-level F2; `compare/release_char_level.py
-record` scores each tagged release from its committed observation record (needs the
-corpus) into `release-char-level.json`, and `check` (in `docs.yml`) verifies it against
-the release history and the metrics implementation without a corpus.
+The same run writes five dataset panels through `readme_byte_panels.py`.
+`readme-byte-panels.json` pins tagged Gaze receipts; `comparison.json` and
+`their-benchmarks.json` retain competitor byte counts. Each panel uses byte-micro
+F2, `5*TP/(5*TP+4*FN+FP)`, with leaked bytes beneath each bar. The renderer writes
+light and dark SVGs under `docs/assets/benchmarks/` and an evidence table with
+refusals and leaked-on-all-processed bytes. `--check` fails on drift or when the
+panel set omits the latest measured release from any dataset.
+
+`readme_byte_measurements.py` captures each signed tag's binary once per dataset,
+using its own setup policy, then replays the private record for scoring. Its
+aggregate receipt records commands, hardware, binary and policy digests, model
+manifests, input hashes, and record hashes. External document text and prediction
+spans stay private. The current panel refresh covers only v0.16.0 and v0.17.0.
+The v0.16 baseline reuses its retained byte counts with their original provenance.
+`readme_byte_panels.py --reuse-v016` derives those receipts without inference.
+Pre-receipt competitors keep †; unmeasured tools have no bar or N/A slot.
+Historical character scores remain in `release-char-level.json` and its evidence.
 
 ## Policy-matrix enumerations (base binary vs head binary)
 

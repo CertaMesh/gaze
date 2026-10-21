@@ -37,7 +37,7 @@ from typing import Any, Mapping, Sequence
 
 import bench_json
 import benchmark_charts as charts
-import external_release_panels
+import readme_byte_panels
 from tagged_gaze import check_public, require_release_tag
 from layer_display import layer_display_name
 from markdown_table import table_header
@@ -2401,24 +2401,35 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if args.history.resolve() == DEFAULT_HISTORY.resolve():
             try:
-                external = external_release_panels.load(args.history.parent)
+                measured = readme_byte_panels.load(args.history.parent)
+                declared = json.loads(CHART_CONFIGS.read_text())
+                panel_set = readme_byte_panels.panels(measured, comparison, their, declared)
             except (ValueError, KeyError, OSError) as error:
-                raise RenderError(f"external release panels: {error}") from error
+                raise RenderError(f"README byte panels: {error}") from error
             for path, root in ((args.doc, False), (readme, True)):
                 if path is not None:
                     index = next(i for i, item in enumerate(outputs) if item[0] == path)
                     target, original, rendered = outputs[index]
-                    start = "<!-- BEGIN GENERATED: external-release -->"
-                    end = "<!-- END GENERATED: external-release -->"
-                    begin, stop = rendered.find(start), rendered.find(end)
-                    if begin < 0 or stop < begin:
-                        raise RenderError("document is missing ordered 'external-release' generated markers")
-                    body = check_public(external_release_panels.markdown(external, root=root),
-                                        "external release panels")
-                    outputs[index] = (target, original, rendered[:begin + len(start)] + "\n\n" +
-                                      body + "\n\n" + rendered[stop:])
+                    bodies = {
+                        "external-release": "" if root else
+                        "Historical release acceptance remains in the [external F2 review](release-v0.17.0/external-f2-release-review.json). "
+                        "TRACE's original net-byte gate failed; strict own-policy identity was `not_comparable`. "
+                        "The unified [dataset panels](#benchmark-panels) below use tagged-binary measurements. Zero-leak readiness remains unmet.",
+                        "readme-chart" if root else "panels":
+                        readme_byte_panels.readme(measured) if root else
+                        readme_byte_panels.markdown(measured, comparison, their, declared),
+                    }
+                    for name, body in bodies.items():
+                        start, end = begin_marker(name), end_marker(name)
+                        begin, stop = rendered.find(start), rendered.find(end)
+                        if begin < 0 or stop < begin:
+                            raise RenderError(f"document is missing ordered {name!r} generated markers")
+                        rendered = rendered[:begin + len(start)] + "\n\n" + check_public(body, name) + "\n\n" + rendered[stop:]
+                    outputs[index] = (target, original, rendered)
             if readme is not None:
-                for name, svg in external_release_panels.files(external).items():
+                replacements = readme_byte_panels.files(panel_set)
+                outputs = [item for item in outputs if item[0].name not in replacements]
+                for name, svg in replacements.items():
                     target = readme.parent / CHART_ASSETS / name
                     outputs.append((target, target.read_text() if target.exists() else None, svg))
 

@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "receipts": {
+    "own": {
+      "v0.16.0": {
+        "file": "readme-byte-measurements/v0.16.0-own.json",
+        "sha256": "f833be8089ee7dd2d6b582a37aa6771f0a34c3f68ec87b2e77cfab9b769fe7a1"
+      },
+      "v0.17.0": {
+        "file": "readme-byte-measurements/v0.17.0-own.json",
+        "sha256": "b33e4d4401dfe6e4d7307eda176855f095870d72230b999fa7f20c8588f83c63"
+      }
+    },
+    "sealed": {
+      "v0.16.0": {
+        "file": "readme-byte-measurements/v0.16.0-sealed.json",
+        "sha256": "5c6b5dd63a2477bf1ae79e75372fc60411a6c7071d7703d4939fde6a93150244"
+      },
+      "v0.17.0": {
+        "file": "readme-byte-measurements/v0.17.0-sealed.json",
+        "sha256": "e6cb46e02402f465e493aeec941d941152a1703082138402ec871164d050eaff"
+      }
+    },
+    "presidio-research": {
+      "v0.16.0": {
+        "file": "readme-byte-measurements/v0.16.0-presidio-research.json",
+        "sha256": "ce849c927132b635a09e5573f89e98a57ed48b8e20683b1c9d458ef6728c5dcf"
+      },
+      "v0.17.0": {
+        "file": "readme-byte-measurements/v0.17.0-presidio-research.json",
+        "sha256": "91b3811ac722627da1cbe9bc7981c26b21a6d11af0df170542cfcb56474cc9ed"
+      }
+    },
+    "piibench-commercial": {
+      "v0.16.0": {
+        "file": "readme-byte-measurements/v0.16.0-piibench-commercial.json",
+        "sha256": "85aa027e4553d9ffd1ff8e564c6066d280c53136247ac369dd96a637b1eeee27"
+      },
+      "v0.17.0": {
+        "file": "readme-byte-measurements/v0.17.0-piibench-commercial.json",
+        "sha256": "c265963b34666583eb8199283dbab7aad923fb88a4f01f8ca3c26810ea46bf77"
+      }
+    },
+    "pii-trace": {
+      "v0.16.0": {
+        "file": "readme-byte-measurements/v0.16.0-pii-trace.json",
+        "sha256": "d45a8a17e12d7e1f75cd9009020903af3333bbd884dd0ea8f12aedb4889e6455"
+      },
+      "v0.17.0": {
+        "file": "readme-byte-measurements/v0.17.0-pii-trace.json",
+        "sha256": "c1147bcb00ba6632dc0ba107f87a976a4c9d510d1702326fad315bf10cb2361a"
+      }
+    }
+  },
+  "reused_v016": true,
+  "hardware": {
+    "machdep.cpu.brand_string": "Apple M5 Max",
+    "hw.memsize": "68719476736",
+    "hw.ncpu": "18",
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "commands": [
+      [
+        "sysctl",
+        "-n",
+        "machdep.cpu.brand_string"
+      ],
+      [
+        "sysctl",
+        "-n",
+        "hw.memsize"
+      ],
+      [
+        "sysctl",
+        "-n",
+        "hw.ncpu"
+      ]
+    ]
+  },
+  "inputs": {
+    "own": {
+      "repository": "DataikuNLP/kiji-pii-training-data",
+      "revision": "0275550f0b1f1b8f2dc9356fd31ac1c788b8228b",
+      "file": "data/test-00000-of-00001.parquet",
+      "sha256": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d"
+    },
+    "sealed": {
+      "openpii": {
+        "repository": "ai4privacy/pii-masking-micro-100k",
+        "revision": "3cd59c65631280839f830d3ba96dcdfe1785cab1",
+        "file": "data/validation.jsonl"
+      },
+      "gretel": {
+        "repository": "gretelai/synthetic_pii_finance_multilingual",
+        "revision": "7b844d16738527a04264f50214cb426a4cea0897",
+        "files": [
+          "data/English_test-00000-of-00001.parquet",
+          "data/German_test-00000-of-00001.parquet",
+          "data/France_test-00000-of-00001.parquet"
+        ]
+      },
+      "sha256": {
+        "openpii_validation.jsonl": "bb15da1b5fbb11b3cc6fd4c95eca256197573ecd066230eb3c1fe6898f27a578",
+        "gretel_English.parquet": "c02b06d3c5b7c375525136d6f74acc52ab8fc07fa863d0aa50734910ec0ef2ad",
+        "gretel_German.parquet": "bfc64380bc24453f3460ffee6afbd7a3442b60dd26d5341c9fe0f1cca43216c3",
+        "gretel_France.parquet": "39fc2777822bbecab2d89bb23cbed40d9825ff4117897b8b025c02287f4ba845"
+      }
+    },
+    "presidio-research": {
+      "commit": "6db3769a3388b4075b93ab2229c5e0b9c30137f7",
+      "documents": 1500,
+      "file": "data/synth_dataset_v2.json",
+      "licence": "MIT code; Fake Name Generator identities CC-BY-SA-3.0-US",
+      "repository": "microsoft/presidio-research",
+      "sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012"
+    },
+    "piibench-commercial": {
+      "documents": 5000,
+      "excluded": {
+        "Babelscape/multinerd": "CC-BY-NC-SA-4.0",
+        "Isotonic/pii-masking-200k": "CC-BY-NC-4.0 on its dataset card (the paper lists Apache-2.0)",
+        "ai4privacy/pii-masking-300k": "custom licence; commercial use requires a licence from ai4privacy",
+        "ai4privacy/pii-masking-400k": "custom licence; commercial use requires a licence from ai4privacy",
+        "conll2003": "Reuters corpus, non-commercial research agreement",
+        "wikiann": "dataset card licence is unknown"
+      },
+      "piibench": {
+        "commit": "f96e13645f217c507d0cafa12340b99a26c2d32c",
+        "licence": "Apache-2.0 (code)",
+        "repository": "pritesh-2711/pii-bench"
+      },
+      "published_full_mix": {
+        "f1": 0.1385,
+        "metric": "seqeval span-level, exact span + type",
+        "precision": 0.1522,
+        "recall": 0.1271,
+        "records": 1398,
+        "source": "arXiv 2604.15776 Table 5",
+        "sources": 10,
+        "system": "Presidio AnalyzerEngine() default, en_core_web_lg"
+      },
+      "sources": [
+        {
+          "dataset": "gretelai/synthetic_pii_finance_multilingual",
+          "id": "gretel_finance",
+          "licence": "Apache-2.0",
+          "revision": "7b844d16738527a04264f50214cb426a4cea0897"
+        },
+        {
+          "dataset": "nvidia/Nemotron-PII",
+          "id": "nvidia_nemotron",
+          "licence": "CC-BY-4.0",
+          "revision": "b70ffaf5ff39e079776134c5bf4381f00a9fd1ed"
+        },
+        {
+          "dataset": "DFKI-SLT/few-nerd",
+          "id": "few_nerd",
+          "licence": "CC-BY-SA-4.0",
+          "revision": "205f3e9c9f3577ea2561d43f2f62dc249ab92d5b"
+        },
+        {
+          "dataset": "nlpaueb/finer-139",
+          "id": "finer_139",
+          "licence": "CC-BY-SA-4.0",
+          "revision": "a8a2191f2ed8b5be966ac293721695cfea1410b5"
+        }
+      ],
+      "test_5k_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad"
+    },
+    "pii-trace": {
+      "conversations": 500,
+      "documents": 4500,
+      "file": "data/train.parquet",
+      "gold_spans": 2653,
+      "licence": "MIT",
+      "messages": 4500,
+      "repository": "perplexity-ai/PII-TRACE",
+      "revision": "1c3eb67bbd43e8571b4433a9d3d76271f9970eb9",
+      "scope": "the only published part of PII-TRACE: 500 English conversations; the paper's 13,148-conversation, 13-language set (1,922-document test split) is not public",
+      "sha256": "1f37039ca2a9c7a93d7b755e1603d5192424c61e61fcbf2ce9405f26705fd670"
+    }
+  }
+}

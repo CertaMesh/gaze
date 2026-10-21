@@ -1378,18 +1378,18 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             self.assertEqual(render.main(args + ["--check"]), 0)
             svgs = sorted((root / render.CHART_ASSETS).glob("*.svg"))
             self.assertEqual([p.name for p in svgs],
-                             ["benchmark-panels-dark.svg", "benchmark-panels-light.svg",
-                              "external-release-panels-dark.svg", "external-release-panels-light.svg"])
+                             ["benchmark-panels-dark.svg", "benchmark-panels-light.svg"])
             changed = copy.deepcopy(self.comparison)
             changed["tools"]["gliner"]["contracts"]["v4"]["C"]["metrics"]["product_coverage"]["full"]["leaked_bytes"] += 1000
             report.write_text(json.dumps(changed), encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 1)
             report.write_text(json.dumps(self.comparison), encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 0)
-            # The separate byte-micro figures are checked by the same command.
+            # Every external dataset now shares the byte-micro figure.
             external = svgs[-1]
             saved = external.read_text(encoding="utf-8")
-            external.write_text(saved.replace("0.64238", "0.99999"), encoding="utf-8")
+            self.assertIn("0.642", saved)
+            external.write_text(saved.replace("0.642", "0.999"), encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 1)
             external.write_text(saved, encoding="utf-8")
             # A hand-edited value on an SVG bar is drift too.
