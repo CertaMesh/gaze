@@ -8,6 +8,7 @@ import unittest
 from unittest import mock
 import xml.etree.ElementTree as ET
 
+from gaze_bench_score import SCORED_LABEL_CONTRACT_V1
 import readme_byte_panels as panels
 import readme_byte_measurements as measurements
 
@@ -86,6 +87,23 @@ class BytePanelTests(unittest.TestCase):
         self.assertIn("Refused", markdown)
         self.assertIn("Leaked on all processed", markdown)
         self.assertIn("GLiNER†", markdown)
+
+    def test_every_rendered_panel_names_its_scoring_contract(self):
+        comparison, their, declared = competitor_inputs()
+        result = panels.panels(measured(), comparison, their, declared)
+        external = f"All gold labels (contract v{SCORED_LABEL_CONTRACT_V1.version})"
+        for name, svg in panels.files(result).items():
+            with self.subTest(theme=name):
+                captions = list(ET.fromstring(svg).itertext())
+                self.assertEqual(captions.count("Scored labels (contract v4)"), 1)
+                self.assertEqual(captions.count(external), 4)
+
+    def test_generated_score_prose_names_its_scoring_contract(self):
+        comparison, their, declared = competitor_inputs()
+        self.assertIn("contract v4", panels.readme(measured()))
+        markdown = panels.markdown(measured(), comparison, their, declared)
+        self.assertIn("contract v4", markdown)
+        self.assertIn(f"contract v{SCORED_LABEL_CONTRACT_V1.version}", markdown)
 
     def test_receipt_digest_tag_contract_and_counters_are_checked(self):
         with tempfile.TemporaryDirectory() as temporary:

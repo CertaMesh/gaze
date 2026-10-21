@@ -10,6 +10,7 @@ import gzip
 from xml.sax.saxutils import escape
 
 import benchmark_charts as charts
+from gaze_bench_score import SCORED_LABEL_CONTRACT_V1
 from tagged_gaze import tag_commit
 
 DATASETS = {"own": "Own corpus", "sealed": "Sealed OpenPII/Gretel",
@@ -173,7 +174,8 @@ def panels(measured, comparison, their, declared):
         for label, block, legacy, _ in competitors(kind, comparison, their, declared):
             bars.append(charts.Bar(label, byte_f2(block), block["leaked_bytes"], None, receipt_unverified=legacy))
         documents = measured[kind][VERSIONS[-1]]["totals"]["documents"]
-        result.append(charts.Panel(title, f"{documents:,} documents", "Scored labels v4" if kind == "own" else "All gold labels",
+        contract = "Scored labels (contract v4)" if kind == "own" else f"All gold labels (contract v{SCORED_LABEL_CONTRACT_V1.version})"
+        result.append(charts.Panel(title, f"{documents:,} documents", contract,
                                    tuple(bars), documents=documents,
                                    note="† Pre-receipt; regeneration pending" if any(b.receipt_unverified for b in bars) else ""))
     return result
@@ -209,7 +211,7 @@ def picture(root):
 
 def readme(measured):
     newest = measured["own"]["v0.17.0"]["totals"]
-    return picture(True) + f"\n\nGaze v0.17.0 leaks {newest['leaked_bytes']:,} PII bytes on our holdout " \
+    return picture(True) + f"\n\nGaze v0.17.0 leaks {newest['leaked_bytes']:,} PII bytes on our holdout under contract v4 " \
         f"(byte-micro F2 {newest['byte_micro_f2']:.3f}). All five panels use byte-micro F2 and leaked bytes. " \
         "† marks competitor results awaiting receipt regeneration. " \
         "[Measurements, setups and limits](docs/reference/benchmarks/README.md#benchmark-panels)."
@@ -217,7 +219,8 @@ def readme(measured):
 
 def markdown(measured, comparison, their, declared):
     lines = [picture(False), "", "Byte-micro F2 pools UTF-8 bytes across documents: `5*TP/(5*TP+4*FN+FP)`. "
-             "Labels do not affect overlap. Own-corpus bars use contract v4, including credentials; external bars count all gold. "
+             "Labels do not affect overlap. Own-corpus bars use contract v4, including credentials; "
+             f"external bars count all gold under contract v{SCORED_LABEL_CONTRACT_V1.version}. "
              "False positives in F2 are raw, without gold-gap credit. Refused documents are reported separately; "
              "leaked-on-all-processed counts every successfully processed document, including partial protection.", "",
              "| Dataset | Tool | Byte-micro F2 | Leaked on all processed (bytes) | FP bytes | Refused | Evidence |",

@@ -45,7 +45,7 @@ the model. The target is zero.
   <img alt="One byte-micro F2 panel per dataset, Gaze v0.16 and v0.17 with measured competitors; leaked PII bytes under each bar." src="docs/assets/benchmarks/benchmark-panels-light.svg">
 </picture>
 
-Gaze v0.17.0 leaks 9,717 PII bytes on our holdout (byte-micro F2 0.901). All five panels use byte-micro F2 and leaked bytes. † marks competitor results awaiting receipt regeneration. [Measurements, setups and limits](docs/reference/benchmarks/README.md#benchmark-panels).
+Gaze v0.17.0 leaks 9,717 PII bytes on our holdout under contract v4 (byte-micro F2 0.901). All five panels use byte-micro F2 and leaked bytes. † marks competitor results awaiting receipt regeneration. [Measurements, setups and limits](docs/reference/benchmarks/README.md#benchmark-panels).
 
 <!-- END GENERATED: readme-chart -->
 

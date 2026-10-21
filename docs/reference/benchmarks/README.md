@@ -535,7 +535,7 @@ generates the chart and table from pinned receipts and committed competitor coun
   <img alt="One byte-micro F2 panel per dataset, Gaze v0.16 and v0.17 with measured competitors; leaked PII bytes under each bar." src="../../assets/benchmarks/benchmark-panels-light.svg">
 </picture>
 
-Byte-micro F2 pools UTF-8 bytes across documents: `5*TP/(5*TP+4*FN+FP)`. Labels do not affect overlap. Own-corpus bars use contract v4, including credentials; external bars count all gold. False positives in F2 are raw, without gold-gap credit. Refused documents are reported separately; leaked-on-all-processed counts every successfully processed document, including partial protection.
+Byte-micro F2 pools UTF-8 bytes across documents: `5*TP/(5*TP+4*FN+FP)`. Labels do not affect overlap. Own-corpus bars use contract v4, including credentials; external bars count all gold under contract v1. False positives in F2 are raw, without gold-gap credit. Refused documents are reported separately; leaked-on-all-processed counts every successfully processed document, including partial protection.
 
 | Dataset | Tool | Byte-micro F2 | Leaked on all processed (bytes) | FP bytes | Refused | Evidence |
 | --- | --- | ---: | ---: | ---: | ---: | --- |
