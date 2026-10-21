@@ -10,7 +10,7 @@ import argparse
 import copy
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import re
 import shutil
 
@@ -23,7 +23,10 @@ def sha256(path: Path) -> str:
 
 
 # Any user's home directory, not only the exporting machine's own.
-HOME_PREFIX = re.compile(r'^(?:/Users/[^/]+|/home/[^/]+|[A-Za-z]:[\\/]+(?i:Users)[\\/]+[^\\/]+)(?=[\\/]|$)')
+HOME_PREFIX = re.compile(
+    r'^(?:/Users/[^/]+|/home/[^/]+|'
+    r'(?:[A-Za-z]:|//(?:(?i:\?/UNC)/)?[^/]+)/(?i:Users)/[^/]+)(?=/|$)'
+)
 # An Anvil worktree is a repository checkout: `~/anvil/workspaces/<project>/<worktree>/<repo path>`.
 ANVIL_WORKTREE = re.compile(r'^~/anvil/workspaces/[^/]+/[^/]+/(?P<repo_path>.+)$')
 
@@ -31,9 +34,11 @@ ANVIL_WORKTREE = re.compile(r'^~/anvil/workspaces/[^/]+/[^/]+/(?P<repo_path>.+)$
 def portable_path(value: str) -> str:
     """Return a repo-relative or `~`-prefixed path; other values pass through unchanged."""
     normalized = agentic_layers.normalize_home_path(value)
-    match = HOME_PREFIX.match(normalized)
+    windows = PureWindowsPath(normalized)
+    candidate = windows.as_posix() if windows.is_absolute() else normalized
+    match = HOME_PREFIX.match(candidate)
     if match:
-        normalized = '~' + normalized[match.end():].replace('\\', '/')
+        normalized = '~' + candidate[match.end():]
     worktree = ANVIL_WORKTREE.match(normalized)
     if worktree:
         # Matches run_no_opf_benchmark.portable_repo_path for a policy inside the checkout.
@@ -47,7 +52,7 @@ def portable_header(header: dict) -> dict:
     if policy is not None:
         value = policy['path']
         policy['path'] = portable_path(value)
-        if Path(policy['path']).is_absolute() or HOME_PREFIX.match(policy['path']):
+        if Path(policy['path']).is_absolute() or PureWindowsPath(policy['path']).is_absolute():
             raise ValueError('policy provenance is not portable')
     return result
 

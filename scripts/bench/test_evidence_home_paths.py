@@ -90,6 +90,76 @@ class PlantedPathTests(unittest.TestCase):
     def test_portable_paths_pass_the_scan(self):
         self.assertEqual(evidence.home_path_hits(_gz([{"p": "~/gaze-bench/policy.toml"}])), 0)
 
+    def test_json_in_strings_fails_scan_check_and_receipt_comparison(self):
+        for prefix in ("/Users/", "/home/"):
+            for escape in (r"\/", r"\u002F"):
+                inner = json.dumps({"path": prefix + "someone/policy.toml"}).replace("/", escape)
+                for depth in (1, 4):
+                    payload = inner
+                    for _ in range(depth - 1):
+                        payload = json.dumps({"payload": payload})
+                    with self.subTest(prefix=prefix, escape=escape, depth=depth):
+                        row = {"payload": payload}
+                        root = self.planted_repo(json.dumps(row))
+                        self.assertGreater(evidence.scan(root).get("planted.jsonl.gz", 0), 0)
+                        original = evidence.ROOT
+                        evidence.ROOT = root
+                        try:
+                            self.assertEqual(evidence.main(["check"]), 1)
+                        finally:
+                            evidence.ROOT = original
+                        published = export.portable_header(HEADER)
+                        self.assertIn("published record still carries a home path",
+                                      evidence.compare_records(_gz([HEADER, row]),
+                                                               _gz([published, row]),
+                                                               CompareRecordsTests.FIELD))
+
+    def test_json_in_strings_depth_limit_fails_closed(self):
+        payload = json.dumps({"path": "target/policy.toml"})
+        for _ in range(3):
+            payload = json.dumps({"payload": payload})
+        self.assertEqual(evidence.home_path_hits(_gz([{"payload": payload}])), 0)
+        payload = json.dumps({"payload": payload})
+        row = {"payload": payload}
+        root = self.planted_repo(json.dumps(row))
+        self.assertGreater(evidence.scan(root).get("planted.jsonl.gz", 0), 0)
+        original = evidence.ROOT
+        evidence.ROOT = root
+        try:
+            self.assertEqual(evidence.main(["check"]), 1)
+        finally:
+            evidence.ROOT = original
+        self.assertIn("published record still carries a home path",
+                      evidence.compare_records(_gz([HEADER, row]),
+                                               _gz([export.portable_header(HEADER), row]),
+                                               CompareRecordsTests.FIELD))
+
+    def test_bounded_portable_json_in_strings_passes(self):
+        for payload in ('ordinary text', '{not JSON}', json.dumps({"path": "~/policy.toml"}),
+                        json.dumps([json.dumps({"path": "target/policy.toml"})])):
+            with self.subTest(payload=payload):
+                self.assertEqual(evidence.home_path_hits(_gz([{"payload": payload}])), 0)
+
+    def test_unc_homes_fail_scan_check_and_receipt_comparison(self):
+        for prefix in (r"\\server", r"\\?\UNC\server"):
+            for component in ("Users", "users", "USERS"):
+                path = prefix + "\\" + component + r"\someone\policy.toml"
+                for text in (path, json.dumps({"path": path})):
+                    with self.subTest(text=text):
+                        root = self.planted_repo(text)
+                        self.assertGreater(evidence.scan(root).get("planted.jsonl.gz", 0), 0)
+                        original = evidence.ROOT
+                        evidence.ROOT = root
+                        try:
+                            self.assertEqual(evidence.main(["check"]), 1)
+                        finally:
+                            evidence.ROOT = original
+                row = {"path": path}
+                self.assertIn("published record still carries a home path",
+                              evidence.compare_records(_gz([HEADER, row]),
+                                                       _gz([export.portable_header(HEADER), row]),
+                                                       CompareRecordsTests.FIELD))
+
 
 class CompareRecordsTests(unittest.TestCase):
     FIELD = ["scorecard.runner_provenance.policy.path"]

@@ -24,7 +24,11 @@ ROOT = Path(__file__).resolve().parents[2]
 RECEIPTS = ROOT / "docs/reference/benchmarks/portable-evidence-receipts.json"
 
 # Raw text and JSON-escaped spellings: `C:\Users\` appears as `C:\\Users\\` in JSON.
-HOME_PATH = re.compile(rb"/Users/|/home/|[A-Za-z]:(?:\\+|/)(?i:Users)(?:\\+|/)")
+HOME_PATH = re.compile(
+    rb"/Users/|/home/|"
+    rb"(?:[A-Za-z]:|\\{2,}(?:\?\\+(?i:UNC)\\+)?[^\\/\r\n]+)(?:\\+|/)(?i:Users)(?:\\+|/)"
+)
+MAX_JSON_STRING_DEPTH = 4
 
 # Intentional fixtures that must carry a home path (for example scrubber tests).
 # Repo-relative POSIX paths; keep empty unless a fixture genuinely needs one.
@@ -43,19 +47,30 @@ def tracked_gz(root: Path = ROOT) -> list[str]:
     return sorted(item.decode() for item in output.split(b"\0") if item)
 
 
-def _decoded_hits(value) -> int:
+def _decoded_hits(value, depth: int = 0) -> int:
     if isinstance(value, str):
-        return len(HOME_PATH.findall(value.encode("utf-8")))
+        hits = len(HOME_PATH.findall(value.encode("utf-8")))
+        if not value.lstrip().startswith(('{', '[', '"')):
+            return hits
+        if depth >= MAX_JSON_STRING_DEPTH:
+            return max(1, hits)  # Opaque serialized JSON cannot prove publication safe.
+        try:
+            nested = json.loads(value)
+        except json.JSONDecodeError:
+            return hits
+        return max(hits, _decoded_hits(nested, depth + 1))
     if isinstance(value, dict):
-        return sum(_decoded_hits(key) + _decoded_hits(item) for key, item in value.items())
+        return sum(_decoded_hits(key, depth) + _decoded_hits(item, depth) for key, item in value.items())
     if isinstance(value, list):
-        return sum(_decoded_hits(item) for item in value)
+        return sum(_decoded_hits(item, depth) for item in value)
     return 0
 
 
 def home_path_hits(data: bytes) -> int:
     raw = gzip.decompress(data)
     raw_hits = len(HOME_PATH.findall(raw))
+    if b"\\" not in raw:
+        return raw_hits  # Without JSON escapes, decoding cannot reveal another home path.
     try:
         decoded_hits = _decoded_hits(json.loads(raw))
     except (json.JSONDecodeError, UnicodeDecodeError):
