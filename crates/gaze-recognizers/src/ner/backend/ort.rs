@@ -2,11 +2,17 @@ use std::ops::Range;
 use std::path::Path;
 use std::sync::Mutex;
 
-use super::{NerBackend, NER_CHUNK_TOKEN_BUDGET, NER_CHUNK_TOKEN_OVERLAP};
+use super::NerBackend;
+#[cfg(test)]
+use super::{NER_CHUNK_TOKEN_BUDGET, NER_CHUNK_TOKEN_OVERLAP};
 use crate::ner::decode::softmax_confidence;
 use crate::ner::detector::NerDetector;
 use crate::ner::error::{NerLoadError, NerRuntimeError};
 use crate::ner::types::{LabelMap, NerSpanResult, MODEL_FILE, TOKENIZER_FILE};
+
+#[cfg(test)]
+use super::preparation::ENCODE_CALLS;
+use super::preparation::{encode_input, planning_encoding, prepare_windows};
 
 /// BERT-family token-classification backend. Owns its tokenizer, ONNX session,
 /// label map, and `id2label` vocab. BIO/IOB2 subword tags are merged via
@@ -54,16 +60,40 @@ impl NerBackend for OrtBackend {
         tokenized_chunk_ranges(&self.tokenizer, input)
     }
 
+    fn detect_document(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+        let windows = prepare_windows(&self.tokenizer, input)
+            .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
+        let mut spans = Vec::new();
+        for window in windows {
+            let (range, encoded) =
+                window.map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
+            spans.extend(
+                self.detect_encoded(&input[range.clone()], &encoded)?
+                    .into_iter()
+                    .map(|mut span| {
+                        span.span = span.span.start + range.start..span.span.end + range.start;
+                        span
+                    }),
+            );
+        }
+        Ok(spans)
+    }
+
     fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+        let encoded = encode_input(&self.tokenizer, input)
+            .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
+        self.detect_encoded(input, &encoded)
+    }
+}
+
+impl OrtBackend {
+    fn detect_encoded(
+        &self,
+        input: &str,
+        encoded: &tokenizers::Encoding,
+    ) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
         let labels = &self.labels;
         let id2label: &[String] = &self.id2label;
-        let tokenize_perf = gaze_types::perf_span!("ner_tokenize_ns");
-        gaze_types::perf_count!("ner_encodes", 1);
-        let encoded = self
-            .tokenizer
-            .encode(input, true)
-            .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
-        drop(tokenize_perf);
         let offsets = encoded.get_offsets();
         let ids = encoded.get_ids();
         let attention = encoded.get_attention_mask();
@@ -213,58 +243,16 @@ fn tokenized_chunk_ranges(
     tokenizer: &tokenizers::Tokenizer,
     input: &str,
 ) -> Result<Vec<Range<usize>>, NerRuntimeError> {
-    // Avoid copying the vocabulary when truncation is already disabled.
-    let mut untruncated;
-    let tokenizer = if tokenizer.get_truncation().is_none() {
-        tokenizer
-    } else {
-        untruncated = tokenizer.clone();
-        untruncated
-            .with_truncation(None)
-            .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
-        &untruncated
-    };
-    let tokenize_perf = gaze_types::perf_span!("ner_tokenize_ns");
-    gaze_types::perf_count!("ner_encodes", 1);
-    let encoded = tokenizer
-        .encode(input, true)
+    let encoded = planning_encoding(tokenizer, input)
         .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
-    drop(tokenize_perf);
-    let tokens: Vec<Range<usize>> = encoded
-        .get_offsets()
-        .iter()
-        .filter_map(|&(start, end)| {
-            if start < end
-                && end <= input.len()
-                && input.is_char_boundary(start)
-                && input.is_char_boundary(end)
-            {
-                Some(start..end)
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    if tokens.len() <= NER_CHUNK_TOKEN_BUDGET {
-        return Ok(std::iter::once(0..input.len()).collect());
-    }
-
-    const _: () = assert!(NER_CHUNK_TOKEN_OVERLAP < NER_CHUNK_TOKEN_BUDGET);
-    let stride = NER_CHUNK_TOKEN_BUDGET - NER_CHUNK_TOKEN_OVERLAP;
-    let mut chunks = Vec::new();
-    let mut token_start = 0;
-    while token_start < tokens.len() {
-        let token_end = (token_start + NER_CHUNK_TOKEN_BUDGET).min(tokens.len());
-        chunks.push(tokens[token_start].start..tokens[token_end - 1].end);
-        if token_end == tokens.len() {
-            break;
-        }
-        token_start += stride;
-    }
-
-    Ok(chunks)
+    Ok(super::preparation::chunk_ranges_from_encoding(
+        &encoded, input,
+    ))
 }
+
+#[cfg(test)]
+#[path = "tokenize_once_proof.rs"]
+mod tokenize_once_proof;
 
 #[cfg(test)]
 mod tests {
@@ -591,7 +579,7 @@ mod tests {
     }
 
     // Frozen pre-optimization helper, independent of the guarded production path.
-    fn original_chunk_ranges(
+    pub(super) fn original_chunk_ranges(
         tokenizer: &tokenizers::Tokenizer,
         input: &str,
     ) -> Result<Vec<Range<usize>>, NerRuntimeError> {

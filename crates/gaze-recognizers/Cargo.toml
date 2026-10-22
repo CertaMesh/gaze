@@ -99,3 +99,7 @@ harness = false
 [[bench]]
 name = "safety_net_matrix"
 harness = false
+
+[[bench]]
+name = "ner_prepare"
+harness = false
