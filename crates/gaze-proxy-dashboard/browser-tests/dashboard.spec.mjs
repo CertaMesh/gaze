@@ -1259,6 +1259,63 @@ test("LC-SCROLL-PAUSE upward page scroll pauses follow and blocks silent row rep
   await page.context().close();
 });
 
+test("LC-SCROLL-PENDING upward scroll queued before a follow render still pauses and buffers", async ({ browser }) => {
+  const entry = ledgerState({ id: "LC-SCROLL-PENDING", layer: "lifecycle", viewport: "V7", tier: "-", content: "pending-scroll", condition: "-", fixture: "fx-default" });
+  await control("/__fixture", { id: "fx-default" });
+  const page = await newPage(browser, "V7");
+  try {
+    await page.addInitScript(() => {
+      const originalFetch = window.fetch;
+      window.fetch = async (...args) => {
+        const response = await originalFetch(...args);
+        if (String(args[0]).includes("/events/follow")) {
+          const originalJson = response.json.bind(response);
+          response.json = async () => {
+            const snapshot = await originalJson();
+            return new Promise((resolve) => {
+              window.releaseFollow = () => {
+                window.releaseFollow = null;
+                resolve(snapshot);
+              };
+            });
+          };
+        }
+        return response;
+      };
+    });
+    await pair(page);
+    await expect(page.locator(".event-row").first()).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    expect(await page.evaluate(() => window.scrollY)).toBe(400);
+    await expect(page.locator("#follow-state")).toContainText("FOLLOW: LIVE");
+    await page.waitForFunction(() => typeof window.releaseFollow === "function");
+    await check(entry, "a follow response cannot erase an upward scroll whose native event is pending", async () => {
+      // The response continuation runs as microtasks before the native scroll
+      // event. Keep both actions in one browser task to enforce that ordering.
+      await page.evaluate(() => {
+        window.scrollTo(0, 320);
+        window.releaseFollow();
+      });
+      await expect(page.locator("#follow-state")).toContainText("FOLLOW PAUSED — 0 BUFFERED");
+    });
+    await check(entry, "subsequent rows buffer until an explicit Resume", async () => {
+      await control("/__fixture", { id: "fx-owner-both" });
+      await page.waitForFunction(() => typeof window.releaseFollow === "function");
+      await page.evaluate(() => window.releaseFollow());
+      await expect(page.locator("#follow-state")).toContainText("FOLLOW PAUSED — 2 BUFFERED");
+      await expect(page.locator('.event-row[data-logical-id="12"]')).toHaveCount(0);
+      await page.locator("#resume-follow").click();
+      await expect(page.locator('.event-row[data-logical-id="12"]')).toBeVisible();
+      await page.evaluate(() => new Promise(requestAnimationFrame));
+      await expect(page.locator("#follow-state")).toContainText("FOLLOW: LIVE");
+    });
+  } finally {
+    await page.context().close();
+    await control("/__fixture", { id: "fx-default" });
+  }
+});
+
 test("LC-BACK single-column back restores prior row focus without history entry", async ({ browser }) => {
   const entry = ledgerState({ id: "LC-BACK", layer: "lifecycle", viewport: "V7", tier: "-", content: "back-navigation", condition: "-", fixture: "fx-default" });
   const page = await openState(browser, "V7", "fx-default");
