@@ -39,7 +39,8 @@ pub(crate) fn prepare_windows<'a>(
     let ranges = chunk_ranges_from_encoding(&encoded, input);
     // Planning disables truncation. Reuse only when inference would encode exactly
     // the same input/configuration; mid-word chunk starts must be encoded afresh.
-    let reuse = tokenizer.get_truncation().is_none() && ranges == [0..input.len()];
+    let reuse =
+        tokenizer.get_truncation().is_none() && ranges.len() == 1 && ranges[0] == (0..input.len());
     let mut shared = reuse.then_some(encoded);
     Ok(ranges.into_iter().map(move |range| {
         let encoding = match shared.take() {

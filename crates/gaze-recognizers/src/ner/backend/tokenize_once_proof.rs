@@ -193,10 +193,13 @@ fn preparation_preserves_wordpiece_windows_and_truncation() {
                 .unwrap()
                 .map(Result::unwrap)
                 .collect();
-            assert_eq!(actual, expected, "{name}, truncated={truncated}");
+            assert!(
+                actual == expected,
+                "model-input mismatch: {name}, truncated={truncated}"
+            );
             assert_eq!(
                 ENCODE_CALLS.with(|calls| calls.get()),
-                if !truncated && ranges == [0..input.len()] {
+                if !truncated && ranges.len() == 1 && ranges[0] == (0..input.len()) {
                     1
                 } else {
                     ranges.len() + 1
