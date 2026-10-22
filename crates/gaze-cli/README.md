@@ -50,10 +50,10 @@ Current subcommands in [`src/commands/mod.rs`](src/commands/mod.rs):
 
 | Subcommand | Purpose |
 |------------|---------|
-| `clean` | Reads raw UTF-8 text from stdin and emits `{"clean_text","session_blob","stats"}` JSON. |
+| `clean` | Reads raw UTF-8 text from stdin and emits `{"clean_text","session_blob","stats"}` JSON, or with `--session-out` writes the session to an owner-only file and prints only the clean text. |
 | `setup` | Installs and verifies the pinned NER model, writes a policy, and runs a doctor check. Included in the default build. |
 | `daemon` | Runs a long-lived JSONL stdio cleaner with one process-level pipeline and per-`session_id` manifests. |
-| `restore` | Reads `{"session_blob","text"}` JSON from stdin and emits restored `{"text"}` JSON, plus `restore_warning` when tolerant restore allows an unknown token. |
+| `restore` | Reads `{"session_blob","text"}` JSON from stdin and emits restored `{"text"}` JSON, plus `restore_warning` when tolerant restore allows an unknown token. With `--session-file`, reads and prints plain text. |
 | `audit query` | Prints filtered audit metadata rows from a `--audit-db` SQLite log, opened read-only. |
 | `audit export` | Exports filtered audit metadata rows in JSONL (default) for downstream processing. |
 | `audit safety-net query` | Prints filtered `safety_net_log` rows from a `--audit-db` SQLite log, opened read-only. |
@@ -81,7 +81,9 @@ Flags:
 | Flag | Meaning |
 |------|---------|
 | `--policy <path>` | Optional `policy.toml` path. Production integrations should pass one. |
-| `--format <json>` | Output format. Only `json` is accepted. Defaults to `json`. |
+| `--format <json\|text>` | Output format. Defaults to `json`, or `text` with `--session-out`. `text` requires `--session-out`. |
+| `--session-out <path>` | Write the session as `{"session_blob"}` JSON to a new owner-only (`0600`) file on macOS/Linux and print only the clean text. Clear and verify the descriptor's extended ACL before writing any session bytes. Refuse an existing path, an ACL failure, or an unsupported platform (including Windows) with `SessionFile` (exit `4`). |
+| `--overwrite-session-out` | Replace an existing `--session-out` file with a fresh owner-only file. |
 | `--session-ttl <secs>` | Override persistent session TTL from policy. |
 | `--session-scope <scope>` | Override `[session].scope` from policy. |
 | `--locale <tag[,tag...]>` | Active locale fallback chain, comma separated and priority ordered. |
@@ -116,7 +118,16 @@ Full command reference: [CLI reference](../../docs/reference/cli.md). Safety-net
 $ printf '%s' '{"session_blob":"<base64>","text":"Email <token> now"}' | gaze restore
 ```
 
-`--restore-mode strict` (default) rejects unknown tokens. `tolerant` preserves them and returns `restore_warning`. Output is JSON (`--format json` only); `--max-bytes` defaults to `10485760`.
+`--restore-mode strict` (default) rejects unknown tokens. `tolerant` preserves them and returns `restore_warning`. Output is JSON by default; `--max-bytes` defaults to `10485760`.
+
+Plain-text form, with a session file from `gaze clean --session-out`:
+
+```console
+$ gaze clean --session-out owner-session.json < input.txt > clean.txt
+$ gaze restore --session-file owner-session.json < reply.txt > restored.txt
+```
+
+`--session-file` reads UTF-8 text on stdin and prints the restored text only. Tolerant warnings go to stderr as `{"warning":"UnknownToken","token":...}`. `--telemetry` is JSON-only and is refused with `--session-file`. See [plain-text round trip](../../docs/reference/cli.md#plain-text-round-trip).
 
 ## `setup`
 
@@ -394,7 +405,7 @@ Exit codes are defined by `CliError` in [`src/error.rs`](src/error.rs).
 | `1` | `StdinParse`, `EmptyInput`, `InputTooLarge`, `InvalidEncoding`. |
 | `2` | `PolicyConfig`, including unsupported format, invalid policy, invalid locale, invalid NER threshold, unknown rulepack, unsupported CLI column rules, `SafetyNetConfig` (missing backend command/checkpoint or safety-net flags supplied without the matching feature), or `SafetyNetArtifactMissing` (Axis-1 fail-closed when a backend's pinned artifact is absent, including a missing `SHA256SUMS`). |
 | `3` | `UnknownToken`, `InvalidSignature`, `InvalidBlobVersion`, `BlobExpired`, `Pipeline`, sanitized panic path, and `SafetyNetFailure` variants: `Unavailable`, `WeightsMissing`, `ModelUnavailable`, `InputTooLarge`, `Timeout`, `Runtime`, `InvalidOutput`, `SuspectedLeak` (strict mode only). |
-| `4` | `Io`, `PolicyOpen`. |
+| `4` | `Io`, `PolicyOpen`, `SessionFile` (missing, existing, unreadable, or non-session `--session-out` / `--session-file` path). |
 
 Safety-net summary: exit `3` means the safety net (or strict mode) closed
 the door; exit `0` with no `leak_report.stats.suspect_count` means a clean

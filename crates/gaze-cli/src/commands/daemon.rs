@@ -441,6 +441,9 @@ fn clean_options(args: &Args) -> CleanOptions<'_> {
         safety_net_input_limit_bytes: args.safety_net_limits.safety_net_input_limit_bytes,
         safety_net_mode: args.safety_net_limits.safety_net_mode,
         safety_net_fallback: args.safety_net_limits.safety_net_fallback,
+        // Sessions stay in the daemon's per-`session_id` registry; only one-shot
+        // `gaze clean` writes a session file.
+        session_out: None,
     }
 }
 
