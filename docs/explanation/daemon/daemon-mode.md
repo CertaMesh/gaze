@@ -42,6 +42,10 @@ uses the same strict unknown-token validation as `gaze restore` and never
 creates a session. The caller must buffer model output until it can restore it;
 after daemon exit or session eviction, unfinished output cannot be restored.
 
+Invalid JSON syntax returns unversioned `JsonMalformed`. A syntactically valid
+version 1 object with missing or wrongly typed fields returns versioned
+`ProtocolInvalid`, including when `session_id` is empty.
+
 ## Runtime shape
 
 Startup builds one `Pipeline` from `--policy` through the `gaze clean` build

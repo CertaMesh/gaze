@@ -168,3 +168,68 @@ fn interrupted_session_cannot_restore_after_restart() {
         "SessionMissing"
     );
 }
+
+#[test]
+fn restore_rejects_tokens_from_another_live_session_without_partial_output() {
+    let (_dir, policy) = policy();
+    let mut daemon = Daemon::start(&policy);
+    for session_id in ["run-a", "run-b"] {
+        assert_eq!(
+            daemon.request(json!({"version":1,"op":"open","session_id":session_id}))["op"],
+            "open"
+        );
+    }
+    let a = "alice@example.invalid";
+    let b = "bob@example.invalid";
+    let a_token = daemon.request(json!({"version":1,"op":"clean","session_id":"run-a","text":a}))
+        ["clean_text"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let b_token = daemon.request(json!({"version":1,"op":"clean","session_id":"run-b","text":b}))
+        ["clean_text"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_ne!(a_token, a);
+    assert_ne!(b_token, b);
+    assert_ne!(a_token, b_token);
+
+    for (session_id, own_token, foreign_token, original) in [
+        ("run-a", &a_token, &b_token, a),
+        ("run-b", &b_token, &a_token, b),
+    ] {
+        let own = daemon
+            .request(json!({"version":1,"op":"restore","session_id":session_id,"text":own_token}));
+        assert_eq!(own["text"], original);
+        for text in [
+            foreign_token.to_string(),
+            format!("{own_token} {foreign_token}"),
+        ] {
+            let rejected = daemon
+                .request(json!({"version":1,"op":"restore","session_id":session_id,"text":text}));
+            assert_eq!(rejected["version"], 1);
+            assert_eq!(rejected["error"], "UnknownToken");
+            assert!(
+                rejected.get("text").is_none(),
+                "restore returned output: {rejected}"
+            );
+        }
+    }
+}
+
+#[test]
+fn invalid_v1_request_shapes_return_versioned_protocol_errors() {
+    let (_dir, policy) = policy();
+    let mut daemon = Daemon::start(&policy);
+    for request in [
+        json!({"version":1,"op":"restore","session_id":"","text":"x"}),
+        json!({"version":1,"op":"restore","session_id":"run-a","text":42}),
+        json!({"version":1,"op":42,"session_id":"run-a","text":"x"}),
+    ] {
+        let response = daemon.request(request);
+        assert_eq!(response["version"], 1);
+        assert_eq!(response["error"], "ProtocolInvalid");
+        assert!(response.get("text").is_none());
+    }
+}

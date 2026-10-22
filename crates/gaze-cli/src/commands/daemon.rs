@@ -238,10 +238,36 @@ impl Daemon {
     fn handle_line(&mut self, line: &str) -> DaemonResponse {
         #[cfg(feature = "perf-timers")]
         let _perf = crate::perf::Document::from_env();
-        let request = match serde_json::from_str::<DaemonRequest>(line) {
-            Ok(request) if !request.session_id.trim().is_empty() => request,
-            Ok(_) => return DaemonResponse::error(None, "ProtocolInvalid", "missing session_id"),
+        let value: serde_json::Value = match serde_json::from_str(line) {
+            Ok(value) => value,
             Err(_) => return DaemonResponse::error(None, "JsonMalformed", "malformed JSON line"),
+        };
+        let version = value
+            .get("version")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|version| u32::try_from(version).ok());
+        let invalid_session_id = value
+            .get("session_id")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned);
+        let request = match serde_json::from_value::<DaemonRequest>(value) {
+            Ok(request) if !request.session_id.trim().is_empty() => request,
+            Ok(_) => {
+                return DaemonResponse::error_versioned(
+                    version,
+                    invalid_session_id,
+                    "ProtocolInvalid",
+                    "missing session_id",
+                )
+            }
+            Err(_) => {
+                return DaemonResponse::error_versioned(
+                    version,
+                    invalid_session_id,
+                    "ProtocolInvalid",
+                    "invalid request shape",
+                )
+            }
         };
         let session_id = request.session_id.clone();
         let version = request.version;
@@ -844,6 +870,8 @@ action = "preserve"
     #[test]
     fn clean_responses_distinguish_whole_spans_from_residual_fragments() {
         let response = DaemonResponse::Clean {
+            version: None,
+            op: None,
             session_id: "s-1".to_string(),
             clean_text: "Email <tok> <frag> now".to_string(),
             manifest: vec![
@@ -930,6 +958,8 @@ action = "preserve"
             panic!("text");
         };
         let response = DaemonResponse::Clean {
+            version: None,
+            op: None,
             session_id: "s-1".to_string(),
             clean_text: clean_text.clone(),
             manifest,
