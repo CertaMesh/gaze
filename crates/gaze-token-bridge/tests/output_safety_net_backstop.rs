@@ -329,3 +329,88 @@ fn output_net_skipped_for_locale_coverage_denies() {
         BridgeSearchOutcome::Denied(DenyReason::TranslatorFailed)
     );
 }
+
+fn store_with_numeric_residual() -> InMemoryCorpusIndexStore {
+    let registry = IndexDomainRegistry::from_json(POLICY_JSON).expect("policy loads");
+    let domain = registry
+        .domain(CUSTOMER_DOMAIN)
+        .expect("customer domain exists")
+        .clone();
+    let pipeline = Pipeline::builder()
+        .recognizer(NameOnlyRecognizer)
+        .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .expect("ingest pipeline builds");
+    let projector = HmacDomainProjector::new(&registry);
+    let ingestor = CorpusIngestor::new(&pipeline, &domain, &projector);
+
+    let mut store = InMemoryCorpusIndexStore::new();
+    let leaky = ingestor
+        .ingest_text_into_store(
+            &mut store,
+            LEAKY_DOC,
+            &format!(
+                "{} Customer profile {NAME} lists contact {MISSED_RAW}.",
+                "7".repeat(512)
+            ),
+        )
+        .expect("leaky doc ingests");
+    let clean = ingestor
+        .ingest_text_into_store(
+            &mut store,
+            CLEAN_DOC,
+            &format!(
+                "{} Customer profile {NAME} renewed the support plan.",
+                "7".repeat(512)
+            ),
+        )
+        .expect("clean doc ingests");
+
+    // Fixture guards: without them the drop assertion below could pass vacuously.
+    assert!(
+        leaky.snippet.contains(MISSED_RAW),
+        "fixture must leave the missed value in the owner-side snippet: {:?}",
+        leaky.snippet
+    );
+    assert!(!leaky.snippet.contains(NAME) && !clean.snippet.contains(NAME));
+    assert!(!clean.snippet.contains(MISSED_RAW));
+    store
+}
+
+#[test]
+fn reviewer_locale_skip_cannot_be_hidden_by_observer_optimization() {
+    let control_pipeline = output_pipeline(LiteralOutputSafetyNet {
+        needle: MISSED_RAW,
+        locales: vec![LocaleTag::DeDe],
+    });
+    let mut control =
+        TokenBridge::from_policy_json_and_store(POLICY_JSON, store_with_numeric_residual())
+            .unwrap()
+            .with_output_safety_net(control_pipeline, vec![LocaleTag::Global]);
+    let (control_session, control_token) = support_session_and_token();
+    assert_eq!(
+        control.search(&control_session, &support_customer_request(&control_token)),
+        BridgeSearchOutcome::Denied(DenyReason::TranslatorFailed),
+        "same numeric fixture must deny with observer optimization disabled"
+    );
+    let pipeline = Pipeline::builder()
+        .enable_capitals_heuristic_gate()
+        .register_safety_net(LiteralOutputSafetyNet {
+            needle: MISSED_RAW,
+            locales: vec![LocaleTag::DeDe],
+        })
+        .build()
+        .unwrap();
+    let mut bridge =
+        TokenBridge::from_policy_json_and_store(POLICY_JSON, store_with_numeric_residual())
+            .unwrap()
+            .with_output_safety_net(pipeline, vec![LocaleTag::Global]);
+    let (session, token) = support_session_and_token();
+    let outcome = bridge.search(&session, &support_customer_request(&token));
+    assert_eq!(
+        outcome,
+        BridgeSearchOutcome::Denied(DenyReason::TranslatorFailed),
+        "locale-skipped output net must not let raw residual through"
+    );
+}
