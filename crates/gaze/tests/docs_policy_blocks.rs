@@ -403,3 +403,62 @@ fn policy_md_boundary_pitfall_pair_behaves_as_documented() {
         Some("5000€")
     );
 }
+
+fn assert_container_policy_is_checked(prefix: &str, line_prefix: &str) {
+    for marker in ["", "<!-- policy-fragment -->\n"] {
+        let content = format!("{marker}```toml\n[ner]\ntreshold = 0.3\n```\n");
+        let page = format!(
+            "{prefix}{}",
+            content
+                .lines()
+                .map(|line| format!("{line_prefix}{line}\n"))
+                .collect::<String>()
+        );
+        let blocks = toml_blocks("fixture.md", &page);
+        assert_eq!(
+            blocks.len(),
+            1,
+            "container must expose its TOML block: {page}"
+        );
+        let error = check(&blocks[0]).expect_err("invalid container policy must fail");
+        let expected = if marker.is_empty() {
+            "no marker on the line before the fence"
+        } else {
+            "treshold"
+        };
+        assert!(error.contains(expected), "unexpected failure: {error}");
+        if !marker.is_empty() {
+            let fixed = page.replace("treshold", "threshold");
+            let blocks = toml_blocks("fixture.md", &fixed);
+            assert_eq!(blocks.len(), 1);
+            assert_eq!(check(&blocks[0]), Ok(None));
+        }
+    }
+}
+
+#[test]
+fn list_item_policy_fences_are_checked() {
+    assert_container_policy_is_checked("- Example\n\n", "    ");
+}
+
+#[test]
+fn indented_blockquote_policy_fences_are_checked() {
+    assert_container_policy_is_checked("", "  > ");
+}
+
+#[test]
+fn nested_blockquote_policy_fences_are_checked() {
+    assert_container_policy_is_checked("", "> > ");
+}
+
+#[test]
+fn cargo_exception_rejects_replacement_policy_body() {
+    let page = "# Use the `gaze setup` policy from Rust\n\n<!-- not-a-policy: cargo-dependencies -->\n```toml\n[ner]\ntreshold = 0.3\n```\n";
+    let blocks = toml_blocks("docs/how-to/rust-library.md", page);
+    assert_eq!(blocks.len(), 1);
+    let error = check(&blocks[0]).expect_err("Cargo exception must reject a changed body");
+    assert!(
+        error.contains("not-a-policy body SHA-256 changed"),
+        "unexpected failure: {error}"
+    );
+}
