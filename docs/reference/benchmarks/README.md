@@ -1010,8 +1010,8 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 | presidio-all | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
 | presidio-en | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
 | presidio-en-de | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
-| presidio-strong† | 87,853 | 88,715 | 70.2% | 0.301 | 0.318 | 32,815 | 0.247 |
-| presidio-strong-high-recall† | 84,965 | 92,491 | 70.1% | 0.294 | 0.315 | 32,770 | 0.242 |
+| presidio-strong | 87,853 | 88,715 | 70.2% | 0.301 | 0.318 | 32,815 | 0.247 |
+| presidio-strong-high-recall | 84,965 | 92,491 | 70.1% | 0.294 | 0.315 | 32,770 | 0.242 |
 | scrubadub-base | 223,156 | 9,971 | 100.0% | held (typed-metric review) | held (typed-metric review) | 66,342 | held (typed-metric review) |
 | scrubadub-spacy | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
 
@@ -1033,6 +1033,10 @@ presidio-all was measured separately on the same documents, with harness `922564
 presidio-en was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
 
 presidio-en-de was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-strong was measured separately on the same documents, with harness `1eaff62e` (typed metrics rescored with `1eaff62e`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-strong-high-recall was measured separately on the same documents, with harness `1eaff62e` (typed metrics rescored with `1eaff62e`); it changes neither the other rows nor the common-intersection labels.
 
 scrubadub-base was measured separately on the same documents, with harness `e7e018ce` (typed metrics rescored with `e7e018ce`); it changes neither the other rows nor the common-intersection labels.
 
@@ -1068,8 +1072,8 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 | presidio-all | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
 | presidio-en | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
 | presidio-en-de | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
-| presidio-strong† | 12,383 | 3,243 | 50.5% | 0.534 | 0.519 | 12,300 | 0.603 |
-| presidio-strong-high-recall† | 12,058 | 3,243 | 49.5% | 0.531 | 0.518 | 12,300 | 0.614 |
+| presidio-strong | 12,383 | 3,243 | 50.5% | 0.534 | 0.519 | 12,300 | 0.603 |
+| presidio-strong-high-recall | 12,058 | 3,243 | 49.5% | 0.531 | 0.518 | 12,300 | 0.614 |
 | presidio-tuned-presidio-research | 2,857 | 4,918 | 22.3% | 0.068 | 0.072 | 2,469 | 0.857 |
 | scrubadub-base | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
 | scrubadub-spacy | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
@@ -1092,6 +1096,10 @@ presidio-all was measured separately on the same documents, with harness `922564
 presidio-en was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
 
 presidio-en-de was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-strong was measured separately on the same documents, with harness `1eaff62e` (typed metrics rescored with `1eaff62e`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-strong-high-recall was measured separately on the same documents, with harness `1eaff62e` (typed metrics rescored with `1eaff62e`); it changes neither the other rows nor the common-intersection labels.
 
 scrubadub-base was measured separately on the same documents, with harness `e7e018ce` (typed metrics rescored with `e7e018ce`); it changes neither the other rows nor the common-intersection labels.
 

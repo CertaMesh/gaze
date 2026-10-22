@@ -982,6 +982,356 @@
         "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
       },
       "tool": "presidio-all"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.0,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.1
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 21.199,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 42.459
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 38.686,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 82.95
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "e175c98b4f1280f682c8c47e738ef5a60ae6ccb2521bfe8726d249dc9dfdae6f",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145",
+      "rescored_with": {
+        "at": "2026-10-22T05:07:18.776394+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145"
+      },
+      "tool": "presidio-strong"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.common_intersection.char_level.f1",
+          "published": 0.6995499599657639,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.699067431850789
+        },
+        {
+          "metric": "row.common_intersection.char_level.f2",
+          "published": 0.6413342546960389,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.641171960209228
+        },
+        {
+          "metric": "row.common_intersection.char_level.f5",
+          "published": 0.613828524359813,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.6137999276963846
+        },
+        {
+          "metric": "row.common_intersection.char_level.fp",
+          "published": 10805,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 10905
+        },
+        {
+          "metric": "row.common_intersection.char_level.precision",
+          "published": 0.8242489305291237,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.8229104077688822
+        },
+        {
+          "metric": "row.common_intersection.false_positive_bytes",
+          "published": 10864,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 10964
+        },
+        {
+          "metric": "row.common_intersection.predicted_bytes",
+          "published": 61652,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 61752
+        },
+        {
+          "metric": "row.common_intersection.redaction_load",
+          "published": 0.028633942824074398,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.028680387291121816
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f1",
+          "published": 0.4604330331481127,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.4599923430321593
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f2",
+          "published": 0.4561849798769838,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.45601184150599666
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.fp",
+          "published": 2735,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 2745
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.precision",
+          "published": 0.467691708836123,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.46678321678321677
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 30.079,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 35.707
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 318.774,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 359.326
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "a5100245f875b9a6586d459330337fe6ba12632aef34ef108407fc2ae43e4dfa",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145",
+      "rescored_with": {
+        "at": "2026-10-22T05:14:40.730032+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145"
+      },
+      "tool": "presidio-strong"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 20.861,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 24.624
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 36.135,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 49.621
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "f315dfad1d5c4b678793ef4aa34fd336852eaeabefc6d14bc82391d7d2ba9503",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145",
+      "rescored_with": {
+        "at": "2026-10-22T05:15:44.654773+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145"
+      },
+      "tool": "presidio-strong-high-recall"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "own_metric.precision",
+          "published": 0.2402,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.2401
+        },
+        {
+          "metric": "own_metric.recall",
+          "published": 0.2438,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.2437
+        },
+        {
+          "metric": "row.common_intersection.char_level.f1",
+          "published": 0.6997702798722397,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.6994807576938193
+        },
+        {
+          "metric": "row.common_intersection.char_level.f2",
+          "published": 0.6417689485005694,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.6416715164089978
+        },
+        {
+          "metric": "row.common_intersection.char_level.f5",
+          "published": 0.6143498656176347,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.6143326933908272
+        },
+        {
+          "metric": "row.common_intersection.char_level.fp",
+          "published": 10843,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 10903
+        },
+        {
+          "metric": "row.common_intersection.char_level.precision",
+          "published": 0.8238686202527533,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.8230664373113499
+        },
+        {
+          "metric": "row.common_intersection.false_positive_bytes",
+          "published": 10902,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 10962
+        },
+        {
+          "metric": "row.common_intersection.predicted_bytes",
+          "published": 61735,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 61795
+        },
+        {
+          "metric": "row.common_intersection.redaction_load",
+          "published": 0.028672491731723752,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.028700358411952204
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f1",
+          "published": 0.46059678653404745,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.4603326323838655
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f2",
+          "published": 0.45682197602064056,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.4567180031864046
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.fp",
+          "published": 2748,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 2754
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.precision",
+          "published": 0.4670287044220326,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.4664858581944983
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 29.875,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 43.072
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 317.759,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 382.545
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f1",
+          "published": 0.2939484282650766,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.2938961242742821
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f2",
+          "published": 0.3151107373142697,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.3150546677880572
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fn",
+          "published": 11359,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 11360
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fp",
+          "published": 15639,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 15640
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.precision",
+          "published": 0.26435862458252973,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.2643115856813585
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.recall",
+          "published": 0.3309971140821014,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.3309382177984569
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.tp",
+          "published": 5620,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 5619
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "5e4bf983c4dc203968a0f34030d1dd6b5018ba89578ff6fc10d7f551387dd003",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145",
+      "rescored_with": {
+        "at": "2026-10-22T05:24:49.792181+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145"
+      },
+      "tool": "presidio-strong-high-recall"
     }
   ],
   "schema_version": 1

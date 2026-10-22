@@ -85,7 +85,7 @@ def page(history: dict) -> str:
                   'streams and the dataset. It demonstrates order sensitivity in retained captures. '
                   'The original seed and predictions were not recorded, so its exact historical '
                   'type choices cannot be recovered. Product-coverage leaked and false-positive byte '
-                  'totals reproduce for the three plain Presidio configurations. Typed and '
+                  'totals reproduce for all five Presidio configurations. Typed and '
                   'common-intersection metrics can differ because a tie assigns different types '
                   'to the same protected bytes.', '']
     for item in history['rows']:

@@ -6,13 +6,13 @@ The tables keep every replaced numeric value from the published measurement. New
 
 Published aggregate before this campaign: `e7e018ce8c4fa590a5c28db7031f030712a83103`.
 
-Refreshed rows: 16 of 31.
+Refreshed rows: 20 of 31.
 
 ## Presidio overlap order
 
 This campaign records PYTHONHASHSEED=0. Presidio 2.2.364 deduplicates candidates through a Python set, then resolves equal-score overlaps in that order. Changing only the hash seed to 1 changed types in 31 PIIBench documents, with identical span coordinates. The pinned analyzer confirmed that every changed pair had equal scores.
 
-The [aggregate order diagnostic](presidio-order-diagnostic.json) pins both prediction streams and the dataset. It demonstrates order sensitivity in retained captures. The original seed and predictions were not recorded, so its exact historical type choices cannot be recovered. Product-coverage leaked and false-positive byte totals reproduce for the three plain Presidio configurations. Typed and common-intersection metrics can differ because a tie assigns different types to the same protected bytes.
+The [aggregate order diagnostic](presidio-order-diagnostic.json) pins both prediction streams and the dataset. It demonstrates order sensitivity in retained captures. The original seed and predictions were not recorded, so its exact historical type choices cannot be recovered. Product-coverage leaked and false-positive byte totals reproduce for all five Presidio configurations. Typed and common-intersection metrics can differ because a tie assigns different types to the same protected bytes.
 
 ## presidio-research: datafog-core
 
@@ -258,3 +258,82 @@ Capture commit: `9225644b9fb58b20a4b84aedd558e5d3cdcb78fd`. Previous capture com
 | `row.product_coverage.typed_entities.precision` | 0.17043780455558494 | 0.1704000302194689 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.product_coverage.typed_entities.recall` | 0.2657400318039932 | 0.26568113552034867 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.product_coverage.typed_entities.tp` | 4512 | 4511 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
+
+## presidio-research: presidio-strong
+
+Prediction SHA-256: `e175c98b4f1280f682c8c47e738ef5a60ae6ccb2521bfe8726d249dc9dfdae6f`. Dataset SHA-256: `ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012`.
+
+Capture commit: `1eaff62e7a45dfe3665e2a337ec1764d3496b145`. Previous capture commit: `a8293dc0bc3de251063848cfd3f7596e620ecb8b`.
+
+| Metric | Published (superseded) | Regenerated | Why |
+| --- | ---: | ---: | --- |
+| `own_metric.predict_seconds` | 0.0 | 0.1 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 21.199 | 42.459 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 38.686 | 82.95 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+
+## piibench-commercial: presidio-strong
+
+Prediction SHA-256: `a5100245f875b9a6586d459330337fe6ba12632aef34ef108407fc2ae43e4dfa`. Dataset SHA-256: `631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad`.
+
+Capture commit: `1eaff62e7a45dfe3665e2a337ec1764d3496b145`. Previous capture commit: `a8293dc0bc3de251063848cfd3f7596e620ecb8b`.
+
+| Metric | Published (superseded) | Regenerated | Why |
+| --- | ---: | ---: | --- |
+| `row.common_intersection.char_level.f1` | 0.6995499599657639 | 0.699067431850789 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.char_level.f2` | 0.6413342546960389 | 0.641171960209228 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.char_level.f5` | 0.613828524359813 | 0.6137999276963846 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.char_level.fp` | 10805 | 10905 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.char_level.precision` | 0.8242489305291237 | 0.8229104077688822 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.false_positive_bytes` | 10864 | 10964 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.predicted_bytes` | 61652 | 61752 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.redaction_load` | 0.028633942824074398 | 0.028680387291121816 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.typed_entities.f1` | 0.4604330331481127 | 0.4599923430321593 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.typed_entities.f2` | 0.4561849798769838 | 0.45601184150599666 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.typed_entities.fp` | 2735 | 2745 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.typed_entities.precision` | 0.467691708836123 | 0.46678321678321677 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.latency.p50_ms` | 30.079 | 35.707 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 318.774 | 359.326 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+
+## presidio-research: presidio-strong-high-recall
+
+Prediction SHA-256: `f315dfad1d5c4b678793ef4aa34fd336852eaeabefc6d14bc82391d7d2ba9503`. Dataset SHA-256: `ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012`.
+
+Capture commit: `1eaff62e7a45dfe3665e2a337ec1764d3496b145`. Previous capture commit: `a8293dc0bc3de251063848cfd3f7596e620ecb8b`.
+
+| Metric | Published (superseded) | Regenerated | Why |
+| --- | ---: | ---: | --- |
+| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 20.861 | 24.624 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 36.135 | 49.621 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+
+## piibench-commercial: presidio-strong-high-recall
+
+Prediction SHA-256: `5e4bf983c4dc203968a0f34030d1dd6b5018ba89578ff6fc10d7f551387dd003`. Dataset SHA-256: `631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad`.
+
+Capture commit: `1eaff62e7a45dfe3665e2a337ec1764d3496b145`. Previous capture commit: `a8293dc0bc3de251063848cfd3f7596e620ecb8b`.
+
+| Metric | Published (superseded) | Regenerated | Why |
+| --- | ---: | ---: | --- |
+| `own_metric.precision` | 0.2402 | 0.2401 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `own_metric.recall` | 0.2438 | 0.2437 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.char_level.f1` | 0.6997702798722397 | 0.6994807576938193 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.char_level.f2` | 0.6417689485005694 | 0.6416715164089978 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.char_level.f5` | 0.6143498656176347 | 0.6143326933908272 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.char_level.fp` | 10843 | 10903 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.char_level.precision` | 0.8238686202527533 | 0.8230664373113499 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.false_positive_bytes` | 10902 | 10962 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.predicted_bytes` | 61735 | 61795 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.redaction_load` | 0.028672491731723752 | 0.028700358411952204 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.typed_entities.f1` | 0.46059678653404745 | 0.4603326323838655 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.typed_entities.f2` | 0.45682197602064056 | 0.4567180031864046 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.typed_entities.fp` | 2748 | 2754 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.common_intersection.typed_entities.precision` | 0.4670287044220326 | 0.4664858581944983 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.latency.p50_ms` | 29.875 | 43.072 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 317.759 | 382.545 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.product_coverage.typed_entities.f1` | 0.2939484282650766 | 0.2938961242742821 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.product_coverage.typed_entities.f2` | 0.3151107373142697 | 0.3150546677880572 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.product_coverage.typed_entities.fn` | 11359 | 11360 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.product_coverage.typed_entities.fp` | 15639 | 15640 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.product_coverage.typed_entities.precision` | 0.26435862458252973 | 0.2643115856813585 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.product_coverage.typed_entities.recall` | 0.3309971140821014 | 0.3309382177984569 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+| `row.product_coverage.typed_entities.tp` | 5620 | 5619 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
