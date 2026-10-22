@@ -194,3 +194,47 @@ fn overlapping_family_tokens_do_not_restore_an_unknown_longer_label() {
     assert_eq!(assessment.into_restored().text, unknown);
     assert!(session.restore_strict_text(&unknown).is_err());
 }
+
+struct SyntheticNames;
+impl gaze::Detector for SyntheticNames {
+    fn detect(&self, input: &str) -> Vec<gaze::Detection> {
+        ["Synthetic1", "Synthetic2", "Synthetic3"]
+            .into_iter()
+            .flat_map(|raw| {
+                input.match_indices(raw).map(move |(start, _)| {
+                    gaze::Detection::new(start..start + raw.len(), PiiClass::Name, "synthetic")
+                })
+            })
+            .collect()
+    }
+}
+
+#[test]
+fn one_clean_call_roundtrips_adjacent_format_preserving_tokens() {
+    let pipeline = gaze::Pipeline::builder()
+        .detector(SyntheticNames)
+        .rule(gaze::ClassRule::new(
+            PiiClass::Name,
+            gaze::Action::FormatPreserve,
+        ))
+        .rule(gaze::DefaultRule::new(gaze::Action::Preserve))
+        .build()
+        .unwrap();
+    for raw in ["Synthetic1Synthetic2", "Synthetic1Synthetic2Synthetic3"] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let (gaze::CleanDocument::Text(clean), _, _) = pipeline
+            .clean_with_safety_net(&session, gaze::RawDocument::Text(raw.into()), &[])
+            .unwrap()
+        else {
+            panic!("text document")
+        };
+        let expected_tokens = if raw.ends_with("Synthetic3") { 3 } else { 2 };
+        assert_eq!(session.tokens().len(), expected_tokens);
+        assert_eq!(
+            clean.len(),
+            session.tokens().iter().map(String::len).sum::<usize>()
+        );
+        assert!(session.tokens().iter().all(|token| clean.contains(token)));
+        assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+    }
+}
