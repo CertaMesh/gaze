@@ -6,7 +6,7 @@ The tables keep every replaced numeric value from the published measurement. New
 
 Published aggregate before this campaign: `e7e018ce8c4fa590a5c28db7031f030712a83103`.
 
-Refreshed rows: 20 of 31.
+Refreshed rows: 26 of 31.
 
 ## Presidio overlap order
 
@@ -337,3 +337,72 @@ Capture commit: `1eaff62e7a45dfe3665e2a337ec1764d3496b145`. Previous capture com
 | `row.product_coverage.typed_entities.precision` | 0.26435862458252973 | 0.2643115856813585 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
 | `row.product_coverage.typed_entities.recall` | 0.3309971140821014 | 0.3309382177984569 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
 | `row.product_coverage.typed_entities.tp` | 5620 | 5619 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
+
+## presidio-research: datafog-gliner
+
+Prediction SHA-256: `90b25861a0bef99b855327cd0bf1613b4eb780861d0d0105fc33406fa3cc3f35`. Dataset SHA-256: `ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012`.
+
+Capture commit: `5a25074ab4256da4be39ed81ff169a69646c4d5a`. Previous capture commit: `a8293dc0bc3de251063848cfd3f7596e620ecb8b`.
+
+| Metric | Published (superseded) | Regenerated | Why |
+| --- | ---: | ---: | --- |
+| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 62.62 | 69.603 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 82.448 | 170.238 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+
+## piibench-commercial: datafog-gliner
+
+Prediction SHA-256: `8b0859c8df67eedb78d0d1783557535e3aa457c1d2e9b258499a32203e66f879`. Dataset SHA-256: `631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad`.
+
+Capture commit: `5a25074ab4256da4be39ed81ff169a69646c4d5a`. Previous capture commit: `a8293dc0bc3de251063848cfd3f7596e620ecb8b`.
+
+| Metric | Published (superseded) | Regenerated | Why |
+| --- | ---: | ---: | --- |
+| `row.latency.p50_ms` | 74.895 | 101.176 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 343.161 | 507.595 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+
+## presidio-research: gliner
+
+Prediction SHA-256: `62cc4e3652b11df5f4e1c8a3a9412a12146d2d1deee0073788e0585fdd44e2d2`. Dataset SHA-256: `ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012`.
+
+Capture commit: `5a25074ab4256da4be39ed81ff169a69646c4d5a`. Previous capture commit: `a8293dc0bc3de251063848cfd3f7596e620ecb8b`.
+
+| Metric | Published (superseded) | Regenerated | Why |
+| --- | ---: | ---: | --- |
+| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 119.853 | 132.947 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 268.137 | 220.431 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+
+## piibench-commercial: gliner
+
+Prediction SHA-256: `94155e4f35d915f59730db434d75d0bd0ce804dc1c77a88e0affaf4b67633297`. Dataset SHA-256: `631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad`.
+
+Capture commit: `5a25074ab4256da4be39ed81ff169a69646c4d5a`. Previous capture commit: `a8293dc0bc3de251063848cfd3f7596e620ecb8b`.
+
+| Metric | Published (superseded) | Regenerated | Why |
+| --- | ---: | ---: | --- |
+| `row.latency.p50_ms` | 132.258 | 187.91 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 447.331 | 723.676 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+
+## presidio-research: gliner-high-recall
+
+Prediction SHA-256: `f36f41f9b5d28e06176a2292ac874a90693b430aa22b1fe5258bc0e1473d2159`. Dataset SHA-256: `ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012`.
+
+Capture commit: `5a25074ab4256da4be39ed81ff169a69646c4d5a`. Previous capture commit: `a8293dc0bc3de251063848cfd3f7596e620ecb8b`.
+
+| Metric | Published (superseded) | Regenerated | Why |
+| --- | ---: | ---: | --- |
+| `own_metric.predict_seconds` | 0.2 | 0.0 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 132.081 | 134.226 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 267.622 | 229.048 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+
+## piibench-commercial: gliner-high-recall
+
+Prediction SHA-256: `b870a486d224f9226111db58f355bf115ca034e67ff0c3f6e42437d76344061d`. Dataset SHA-256: `631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad`.
+
+Capture commit: `5a25074ab4256da4be39ed81ff169a69646c4d5a`. Previous capture commit: `a8293dc0bc3de251063848cfd3f7596e620ecb8b`.
+
+| Metric | Published (superseded) | Regenerated | Why |
+| --- | ---: | ---: | --- |
+| `row.latency.p50_ms` | 131.793 | 186.631 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 447.995 | 698.038 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
