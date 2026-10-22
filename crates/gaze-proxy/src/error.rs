@@ -96,6 +96,17 @@ pub enum ProxyError {
         code: Option<i32>,
         stderr_file: PathBuf,
     },
+    /// The detached daemon child neither bound its port nor exited within the
+    /// readiness cap. `start` stops the child and removes its pidfile, so a
+    /// daemon that never became reachable is not left running unseen.
+    #[error(
+        "daemon did not become ready within {timeout:?} and was stopped; see {stderr_file}",
+        stderr_file = stderr_file.display()
+    )]
+    DaemonStartTimeout {
+        timeout: Duration,
+        stderr_file: PathBuf,
+    },
 }
 
 /// Closed failure codes used by the direct proxy profile.

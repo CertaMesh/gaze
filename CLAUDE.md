@@ -21,18 +21,8 @@ Use those definitions for every decision.
 
 ## Local gates
 
-The repo no longer ships a tracked pre-push hook. Run gates manually before
-pushing if you want defense in depth:
-
-```
-cargo fmt --all -- --check
-cargo clippy --workspace --all-features --all-targets -- -D warnings
-cargo test --workspace --all-features
-cargo run -p xtask -- ci-feature-matrix
-```
-
-PR-triggered CI catches doc-test and rustdoc warnings, workspace tests, MSRV
-checks, cargo-deny, and the active xtask gate roster on every relevant PR.
+Use [Working in worktrees (Anvil)](AGENTS.md#working-in-worktrees-anvil) for
+prepared worktrees, pinned review copies, and local checks.
 
 ## v0.9 architecture primer
 

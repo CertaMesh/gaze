@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "tag": "v0.16.0",
+  "revision": "5a7dac0fa198f20a628ed6b7fa2b5c9d41a91eb0",
+  "dataset": "presidio-research",
+  "contract": "all-gold",
+  "method": "retained-byte-counts",
+  "sets": {
+    "test": {
+      "documents": 1500,
+      "processed": 1500,
+      "refused": 0,
+      "gold_bytes": 39531,
+      "leaked_bytes": 7984,
+      "false_positive_bytes": 1364
+    }
+  },
+  "totals": {
+    "documents": 1500,
+    "processed": 1500,
+    "refused": 0,
+    "gold_bytes": 39531,
+    "leaked_bytes": 7984,
+    "false_positive_bytes": 1364,
+    "byte_micro_f2": 0.8256863925458685
+  },
+  "inputs_sha256": {
+    "dataset": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012"
+  },
+  "source": {
+    "file": "their-benchmarks.json",
+    "sha256": "3e1219a24e04393290e3775a0b8e618efd441cced9083e9fc20ba65590c0c893"
+  },
+  "original_provenance": {
+    "build": {
+      "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
+      "cargo": "cargo 1.95.0 (f2d3ce0bd 2026-03-21) (Homebrew)",
+      "cargo_lock_sha256": "d96bc6b40837ef9382a29f52a2f17152b363165150aced47097a4958c153b0c7",
+      "command": "cargo build --locked -q -p gaze-recognizers --example clean_for_bench --features safety-net-nym --release",
+      "profile": "release",
+      "rust_toolchain_sha256": "e59c5da37d1f9f4e0f815bc188cb6056fc7410c9cdaa9673c2d44da557c75d12",
+      "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (Homebrew)\nbinary: rustc\ncommit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860\ncommit-date: 2026-04-14\nhost: aarch64-apple-darwin\nrelease: 1.95.0\nLLVM version: 22.1.3"
+    },
+    "commit": "5a7dac0fa198f20a628ed6b7fa2b5c9d41a91eb0",
+    "crates_tree": "276a8b2d7fcf3e5ef43d624307e175987131f9c7",
+    "measured_with": {
+      "harness_dirty": false,
+      "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8"
+    },
+    "ner_model_tree_sha256": "1196662dfcf78d3ef4a9fbbd474d5dd4ce9e656d5fdc38ec38eff3d3249ba1fe",
+    "nym_model_tree_sha256": "1878b4af812a531f5710692287e529106951d78e0e270820b05fa8e6ae082a2d",
+    "policy_home_normalized_sha256": "71eae750bb1e9f7292666eaca33710c2abf7a34928ee1c822272123ab179b5e3",
+    "policy_sha256": "65cd6aa588ce6923f9e2156699893fcffb9a870967d9a0db5018deaa0c22c8cc",
+    "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077",
+    "reproduces": {
+      "binary_sha256": "6369464aa1be96af532da804c6c5aef8c5a42e2482c58143abd2a02eb7abdbcd",
+      "harness_dirty": false,
+      "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8",
+      "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077"
+    },
+    "tag": "v0.16.0"
+  },
+  "command": [
+    "python",
+    "scripts/bench/readme_byte_panels.py",
+    "--reuse-v016",
+    "--capture-dir",
+    "<private-capture-directory>"
+  ]
+}

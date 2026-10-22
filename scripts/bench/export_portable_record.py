@@ -10,7 +10,8 @@ import argparse
 import copy
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+import re
 import shutil
 
 import agentic_layers
@@ -21,15 +22,46 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+# Any user's home directory, not only the exporting machine's own.
+HOME_PREFIX = re.compile(
+    r'^(?:/Users/[^/]+|/home/[^/]+|'
+    r'(?:[A-Za-z]:|//(?:(?i:\?/UNC)/)?[^/]+)/(?i:Users)/[^/]+)(?=/|$)'
+)
+# An Anvil worktree is a repository checkout: `~/anvil/workspaces/<project>/<worktree>/<repo path>`.
+ANVIL_WORKTREE = re.compile(r'^~/anvil/workspaces/[^/]+/[^/]+/(?P<repo_path>.+)$')
+
+
+def portable_path(value: str) -> str:
+    """Return a repo-relative or `~`-prefixed path; other values pass through unchanged."""
+    normalized = agentic_layers.normalize_home_path(value)
+    windows = PureWindowsPath(normalized)
+    candidate = windows.as_posix() if windows.is_absolute() else normalized
+    match = HOME_PREFIX.match(candidate)
+    if match:
+        normalized = '~' + candidate[match.end():]
+    worktree = ANVIL_WORKTREE.match(normalized)
+    if worktree:
+        # Matches run_no_opf_benchmark.portable_repo_path for a policy inside the checkout.
+        return worktree.group('repo_path')
+    return normalized
+
+
 def portable_header(header: dict) -> dict:
     result = copy.deepcopy(header)
     policy = result['scorecard'].get('runner_provenance', {}).get('policy')
     if policy is not None:
         value = policy['path']
-        policy['path'] = agentic_layers.normalize_home_path(value)
-        if Path(policy['path']).is_absolute():
+        policy['path'] = portable_path(value)
+        if Path(policy['path']).is_absolute() or PureWindowsPath(policy['path']).is_absolute():
             raise ValueError('policy provenance is not portable')
     return result
+
+
+def normalization_kind(header: dict, normalized: dict) -> str:
+    if normalized == header:
+        return 'none'
+    path = normalized['scorecard']['runner_provenance']['policy']['path']
+    return 'policy-path-home-prefix' if path.startswith('~') else 'policy-path-repo-relative'
 
 
 def export_record(source: Path, output: Path) -> dict:
@@ -48,7 +80,7 @@ def export_record(source: Path, output: Path) -> dict:
         'schema_version': 1,
         'source_sha256': sha256(source),
         'exported_sha256': sha256(output),
-        'metadata_normalization': 'policy-path-home-prefix' if normalized != header else 'none',
+        'metadata_normalization': normalization_kind(header, normalized),
         'observation_rows_unchanged': True,
     }
 

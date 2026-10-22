@@ -25,6 +25,10 @@ use gaze_audit::{
 mod token_assertions;
 use token_assertions::without_tokens;
 
+#[cfg(target_os = "macos")]
+#[path = "support/session_acl.rs"]
+mod session_acl;
+
 fn all_audit_columns() -> PresentColumns {
     PresentColumns::new(
         AUDIT_RESTRICTED_COLUMNS
@@ -5904,5 +5908,381 @@ fn policy_regex_collision_family_tie_is_protected_through_the_cli() {
             .unwrap_or_else(|| panic!("loser row for {recognizer_id}"));
         assert_eq!(loser.class, PiiClass::from_policy_name(class).unwrap());
         assert_eq!(loser.collision_family.as_deref(), Some("tenant-document"));
+    }
+}
+
+// -----------------------------------------------------------------------
+// Plain-shell session file: `clean --session-out` / `restore --session-file`
+// -----------------------------------------------------------------------
+
+fn gaze_with_stdin(args: &[&str], stdin: &[u8]) -> std::process::Output {
+    Command::cargo_bin("gaze")
+        .unwrap()
+        .args(args)
+        .write_stdin(stdin.to_vec())
+        .output()
+        .unwrap()
+}
+
+fn assert_session_file_error(out: &std::process::Output, needle: &str) {
+    assert_eq!(
+        out.status.code(),
+        Some(4),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.stdout.is_empty(), "nothing may reach stdout on failure");
+    let value = parse_stderr_variant(&out.stderr);
+    assert_eq!(value["error"], "SessionFile", "stderr={value}");
+    assert_eq!(value["exit"], 4, "stderr={value}");
+    let detail = value["detail"]
+        .as_str()
+        .expect("SessionFile carries detail");
+    assert!(
+        detail.contains(needle),
+        "detail={detail:?} needle={needle:?}"
+    );
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn file_mode(path: &std::path::Path) -> u32 {
+    use std::os::unix::fs::PermissionsExt;
+    fs::metadata(path).unwrap().permissions().mode() & 0o777
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[test]
+fn session_out_refuses_unsupported_platform_but_existing_sessions_restore() {
+    let dir = tempdir().unwrap();
+    let session = dir.path().join("owner.json");
+    for overwrite in [false, true] {
+        let mut args = vec!["clean", "--session-out", session.to_str().unwrap()];
+        if overwrite {
+            fs::write(&session, b"keep me").unwrap();
+            args.push("--overwrite-session-out");
+        }
+        let out = gaze_with_stdin(&args, b"alice@example.invalid");
+        assert_session_file_error(&out, "supported only on macOS and Linux");
+        if overwrite {
+            assert_eq!(fs::read(&session).unwrap(), b"keep me");
+        } else {
+            assert!(!session.exists());
+        }
+    }
+    let (clean_text, blob, _) = clean_ok("alice@example.invalid");
+    fs::write(
+        &session,
+        serde_json::to_vec(&json!({"session_blob": blob})).unwrap(),
+    )
+    .unwrap();
+    let restored = gaze_with_stdin(
+        &["restore", "--session-file", session.to_str().unwrap()],
+        clean_text.as_bytes(),
+    );
+    assert!(restored.status.success());
+    assert_eq!(restored.stdout, b"alice@example.invalid");
+}
+
+#[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn session_file_clean_and_restore_round_trip_as_plain_text() {
+    let dir = tempdir().unwrap();
+    let session = dir.path().join("owner.json");
+    let session_arg = session.to_str().unwrap();
+    let input = "Contact alice@example.invalid today.\n";
+
+    let clean = gaze_with_stdin(&["clean", "--session-out", session_arg], input.as_bytes());
+    assert!(
+        clean.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+    let clean_text = String::from_utf8(clean.stdout).unwrap();
+    // stdout is the clean text only: no JSON envelope, no session, no raw value.
+    assert!(
+        !clean_text.contains("alice@example.invalid"),
+        "raw email leaked"
+    );
+    assert!(
+        !clean_text.contains("session_blob"),
+        "session reached stdout"
+    );
+    assert!(
+        clean_text.starts_with("Contact <"),
+        "clean_text={clean_text:?}"
+    );
+    assert!(
+        clean_text.contains(":Email_1>"),
+        "clean_text={clean_text:?}"
+    );
+    assert!(
+        clean_text.ends_with(" today.\n"),
+        "bytes around the token are kept"
+    );
+
+    let stored: Value = serde_json::from_slice(&fs::read(&session).unwrap()).unwrap();
+    let blob = stored["session_blob"]
+        .as_str()
+        .expect("session file holds session_blob");
+    assert!(!clean_text.contains(blob));
+    #[cfg(unix)]
+    assert_eq!(
+        file_mode(&session),
+        0o600,
+        "session file must be owner-only"
+    );
+
+    let restore = gaze_with_stdin(
+        &["restore", "--session-file", session_arg],
+        clean_text.as_bytes(),
+    );
+    assert!(
+        restore.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&restore.stderr)
+    );
+    assert!(restore.stderr.is_empty());
+    assert_eq!(
+        restore.stdout,
+        input.as_bytes(),
+        "byte-exact plain-text restore"
+    );
+
+    let reply = clean_text.replace("Contact", "Thanks,");
+    let restore_reply = gaze_with_stdin(
+        &["restore", "--session-file", session_arg],
+        reply.as_bytes(),
+    );
+    assert!(restore_reply.status.success());
+    assert_eq!(
+        String::from_utf8(restore_reply.stdout).unwrap(),
+        "Thanks, alice@example.invalid today.\n"
+    );
+
+    // The JSON contract still accepts the same session for programs.
+    let (code, stdout, _) = restore_json(blob, &clean_text);
+    assert_eq!(code, Some(0));
+    let response: Value = serde_json::from_slice(&stdout).unwrap();
+    assert_eq!(response["text"], input);
+}
+
+#[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn session_out_refuses_to_overwrite_without_explicit_flag() {
+    let dir = tempdir().unwrap();
+    let session = dir.path().join("owner.json");
+    let session_arg = session.to_str().unwrap();
+    fs::write(&session, b"keep me").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&session, fs::Permissions::from_mode(0o644)).unwrap();
+    }
+
+    let refused = gaze_with_stdin(
+        &["clean", "--session-out", session_arg],
+        b"Mail alice@example.invalid",
+    );
+    assert_session_file_error(&refused, "already exists");
+    assert_eq!(
+        fs::read(&session).unwrap(),
+        b"keep me",
+        "existing file untouched"
+    );
+
+    let replaced = gaze_with_stdin(
+        &[
+            "clean",
+            "--session-out",
+            session_arg,
+            "--overwrite-session-out",
+        ],
+        b"Mail alice@example.invalid",
+    );
+    assert!(
+        replaced.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&replaced.stderr)
+    );
+    let stored: Value = serde_json::from_slice(&fs::read(&session).unwrap()).unwrap();
+    assert!(stored["session_blob"].is_string());
+    #[cfg(unix)]
+    assert_eq!(file_mode(&session), 0o600, "replacement must be owner-only");
+
+    let restore = gaze_with_stdin(
+        &["restore", "--session-file", session_arg],
+        &replaced.stdout,
+    );
+    assert_eq!(restore.stdout, b"Mail alice@example.invalid");
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn session_out_does_not_follow_a_dangling_symlink() {
+    let dir = tempdir().unwrap();
+    let target = dir.path().join("elsewhere.json");
+    let link = dir.path().join("owner.json");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+
+    let out = gaze_with_stdin(
+        &["clean", "--session-out", link.to_str().unwrap()],
+        b"Mail alice@example.invalid",
+    );
+    assert_session_file_error(&out, "already exists");
+    assert!(
+        !target.exists(),
+        "session must not be written through a symlink"
+    );
+}
+
+#[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn session_file_restore_fails_closed_on_missing_corrupt_tampered_and_foreign() {
+    let dir = tempdir().unwrap();
+    let session = dir.path().join("owner.json");
+    let session_arg = session.to_str().unwrap();
+    let clean = gaze_with_stdin(
+        &["clean", "--session-out", session_arg],
+        b"Mail alice@example.invalid",
+    );
+    assert!(clean.status.success());
+    let clean_text = clean.stdout;
+
+    // Missing.
+    let missing = dir.path().join("absent.json");
+    let out = gaze_with_stdin(
+        &["restore", "--session-file", missing.to_str().unwrap()],
+        &clean_text,
+    );
+    assert_session_file_error(&out, "does not exist");
+
+    // Wrong file (not a session file at all).
+    let wrong = dir.path().join("wrong.json");
+    fs::write(&wrong, b"{\"text\":\"not a session\"}").unwrap();
+    let out = gaze_with_stdin(
+        &["restore", "--session-file", wrong.to_str().unwrap()],
+        &clean_text,
+    );
+    assert_session_file_error(&out, "not a gaze session file");
+
+    // Corrupted base64.
+    let corrupt = dir.path().join("corrupt.json");
+    fs::write(&corrupt, b"{\"session_blob\":\"!!not-base64!!\"}").unwrap();
+    let out = gaze_with_stdin(
+        &["restore", "--session-file", corrupt.to_str().unwrap()],
+        &clean_text,
+    );
+    assert_session_file_error(&out, "not a gaze session file");
+
+    // Tampered signature: same typed error as the JSON stdin path.
+    let stored: Value = serde_json::from_slice(&fs::read(&session).unwrap()).unwrap();
+    let mut raw = BASE64
+        .decode(stored["session_blob"].as_str().unwrap())
+        .unwrap();
+    let flip = raw.len() - 5;
+    raw[flip] ^= 0x01;
+    let tampered = dir.path().join("tampered.json");
+    fs::write(
+        &tampered,
+        json!({ "session_blob": BASE64.encode(&raw) }).to_string(),
+    )
+    .unwrap();
+    let out = gaze_with_stdin(
+        &["restore", "--session-file", tampered.to_str().unwrap()],
+        &clean_text,
+    );
+    assert_eq!(out.status.code(), Some(3));
+    assert!(out.stdout.is_empty());
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "InvalidSignature", "exit": 3 })
+    );
+
+    // Foreign session: a valid session that never issued these tokens.
+    let foreign = dir.path().join("foreign.json");
+    let other = gaze_with_stdin(
+        &["clean", "--session-out", foreign.to_str().unwrap()],
+        b"Mail bob@example.invalid",
+    );
+    assert!(other.status.success());
+    let out = gaze_with_stdin(
+        &["restore", "--session-file", foreign.to_str().unwrap()],
+        &clean_text,
+    );
+    assert_eq!(out.status.code(), Some(3));
+    assert!(out.stdout.is_empty(), "no partial restore on stdout");
+    assert_eq!(parse_stderr_variant(&out.stderr)["error"], "UnknownToken");
+}
+
+#[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn session_file_tolerant_restore_reports_unknown_tokens_on_stderr() {
+    let dir = tempdir().unwrap();
+    let session = dir.path().join("owner.json");
+    let session_arg = session.to_str().unwrap();
+    let clean = gaze_with_stdin(
+        &["clean", "--session-out", session_arg],
+        b"Mail alice@example.invalid",
+    );
+    assert!(clean.status.success());
+
+    let reply = format!(
+        "{} and <deadbeef:Email_999>",
+        String::from_utf8(clean.stdout).unwrap()
+    );
+    let out = gaze_with_stdin(
+        &[
+            "restore",
+            "--session-file",
+            session_arg,
+            "--restore-mode",
+            "tolerant",
+        ],
+        reply.as_bytes(),
+    );
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(
+        String::from_utf8(out.stdout).unwrap(),
+        "Mail alice@example.invalid and <deadbeef:Email_999>"
+    );
+    let warning: Value = serde_json::from_slice(&out.stderr).unwrap();
+    assert_eq!(
+        warning,
+        json!({ "warning": "UnknownToken", "token": "<deadbeef:Email_999>" })
+    );
+}
+
+#[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn session_file_flags_reject_ambiguous_format_combinations() {
+    let dir = tempdir().unwrap();
+    let session = dir.path().join("owner.json");
+    let session_arg = session.to_str().unwrap();
+
+    for args in [
+        vec!["clean", "--format", "text"],
+        vec!["clean", "--format", "json", "--session-out", session_arg],
+    ] {
+        let out = gaze_with_stdin(&args, b"Mail alice@example.invalid");
+        assert_eq!(out.status.code(), Some(2), "args={args:?}");
+        assert!(out.stdout.is_empty(), "args={args:?}");
+        assert_eq!(parse_stderr_variant(&out.stderr)["error"], "PolicyConfig");
+        assert!(!session.exists(), "no session file on a refused run");
+    }
+
+    let clean = gaze_with_stdin(
+        &["clean", "--session-out", session_arg],
+        b"Mail alice@example.invalid",
+    );
+    assert!(clean.status.success());
+    for args in [
+        vec!["restore", "--format", "text"],
+        vec!["restore", "--format", "json", "--session-file", session_arg],
+        vec!["restore", "--telemetry", "--session-file", session_arg],
+    ] {
+        let out = gaze_with_stdin(&args, &clean.stdout);
+        assert_eq!(out.status.code(), Some(2), "args={args:?}");
+        assert!(out.stdout.is_empty(), "args={args:?}");
+        assert_eq!(parse_stderr_variant(&out.stderr)["error"], "PolicyConfig");
     }
 }
