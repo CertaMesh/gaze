@@ -541,22 +541,24 @@ class TransportTests(unittest.TestCase):
         result = subprocess.CompletedProcess([], 7, CANARY.encode() * 1000,
                                              b"deadline:exchange " + CANARY.encode() * 1000)
         summary = boundary_summary(result)
-        self.assertIn("returncode=7", summary)
-        self.assertIn(f"stdout_bytes={len(result.stdout)}", summary)
-        self.assertIn(f"stderr_bytes={len(result.stderr)}", summary)
-        self.assertIn("failures=deadline:exchange", summary)
-        self.assertNotIn(CANARY, summary)
+        self.assertTrue("returncode=7" in summary, "summary-status")
+        self.assertTrue(f"stdout_bytes={len(result.stdout)}" in summary, "summary-stdout-size")
+        self.assertTrue(f"stderr_bytes={len(result.stderr)}" in summary, "summary-stderr-size")
+        self.assertTrue("failures=deadline:exchange" in summary, "summary-closed-label")
+        self.assertTrue(CANARY not in summary, "summary-canary")
         self.assertLess(len(summary), 200)
 
     def test_boundary_watchdog_fails_without_child_bytes_or_context(self):
         timeout = subprocess.TimeoutExpired([CANARY], 30,
                                             output=CANARY.encode(), stderr=CANARY.encode())
         with mock.patch.object(subprocess, "run", side_effect=timeout):
-            with self.assertRaisesRegex(AssertionError, "boundary-watchdog: timeout_seconds=30") as caught:
+            with self.assertRaises(AssertionError) as caught:
                 run_boundary("score", "synthetic")
-        self.assertIn(f"stdout_bytes={len(CANARY)} stderr_bytes={len(CANARY)}", str(caught.exception))
-        self.assertNotIn(CANARY, str(caught.exception))
-        self.assertIsNone(caught.exception.__context__)
+        message = str(caught.exception)
+        self.assertTrue("boundary-watchdog: timeout_seconds=30" in message, "watchdog-status")
+        self.assertTrue(f"stdout_bytes={len(CANARY)} stderr_bytes={len(CANARY)}" in message, "watchdog-sizes")
+        self.assertTrue(CANARY not in message, "watchdog-canary")
+        self.assertTrue(caught.exception.__context__ is None, "watchdog-context")
 
     def test_boundary_success_and_failure_sinks(self):
         for mode in ("score", "score-refusal", "probe", "early", "bad-handshake",
