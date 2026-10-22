@@ -422,10 +422,9 @@ fn proxy_restart_keeps_running_daemon_when_policy_nym_bundle_is_missing() {
         .output()
         .unwrap();
     assert!(started.status.success());
-    // `proxy start` returns before the daemon binds; wait for it so the final
+    // `proxy start` returns only once the daemon has bound, so the final
     // connect proves the restart kept it serving.
-    let pid = started_daemon_pid(&started);
-    wait_until_serving(bind, || daemon_exited(pid, home.path()));
+    assert!(TcpStream::connect(bind).is_ok());
     fs::OpenOptions::new()
         .append(true)
         .open(&policy)
@@ -804,33 +803,6 @@ fn daemon_pid(home: &Path) -> Option<u32> {
     text.lines().next()?.trim().parse().ok()
 }
 
-/// The daemon pid a successful `gaze proxy start` printed
-/// (`gaze-proxy started (pid=N, …)`). `start` knows it at spawn, so it is never
-/// missing. The pidfile is not: `start` creates it empty and the daemon fills
-/// it only once it runs, so reading that for liveness would put back a startup
-/// deadline (`start` returns after its 250 ms `confirm_started` window).
-fn started_daemon_pid(start: &Output) -> u32 {
-    let stdout = String::from_utf8_lossy(&start.stdout);
-    stdout
-        .split_once("gaze-proxy started (pid=")
-        .and_then(|(_, rest)| rest.split_once(','))
-        .and_then(|(pid, _)| pid.parse().ok())
-        .unwrap_or_else(|| panic!("`proxy start` printed no daemon pid: {stdout}"))
-}
-
-/// Liveness probe for [`wait_until_serving`]: the detached daemon is not our
-/// child, so probe the pid `proxy start` reported ([`started_daemon_pid`]) with
-/// `kill -0`. `start` has exited, so a dead daemon is reaped rather than left a
-/// zombie that `kill -0` would still count as alive.
-fn daemon_exited(pid: u32, home: &Path) -> Option<String> {
-    let alive = Command::new("kill")
-        .args(["-0", &pid.to_string()])
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success());
-    (!alive).then(|| format!("daemon pid {pid} is not running{}", daemon_log_tail(home)))
-}
-
 /// Stops the detached daemon however the test ended, so a failed assertion
 /// cannot leave a proxy running on the developer's machine.
 struct DaemonGuard {
@@ -902,9 +874,12 @@ fn daemonized_proxy_body(policy: &Path) -> String {
         find_under(home.path(), "proxy.pid").is_some(),
         "daemon state escaped the redirected HOME"
     );
-
-    let pid = started_daemon_pid(&start);
-    wait_until_serving(proxy_addr, || daemon_exited(pid, home.path()));
+    assert!(
+        find_under(home.path(), "proxy.ready").is_some(),
+        "`proxy start` succeeded without the daemon's readiness marker"
+    );
+    // No polling: a successful `start` means the daemon has bound, so the first
+    // request below must connect.
 
     let request_body = json!({
         "model": "claude-test",
@@ -1047,6 +1022,10 @@ fn daemonized_proxy_start_fails_closed_when_the_policy_cannot_be_loaded() {
         find_under(home.path(), "proxy.pid").is_none(),
         "a failed start must not leave the pidfile that bricks the next one"
     );
+    assert!(
+        find_under(home.path(), "proxy.ready").is_none(),
+        "a failed start must not leave a readiness marker"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1063,6 +1042,7 @@ fn daemonized_proxy_start_fails_closed_when_the_policy_cannot_be_loaded() {
 // ---------------------------------------------------------------------------
 
 /// The Pass-3 safety-net subprocess budget, mirroring `safety_net_cli.rs`.
+#[cfg(feature = "safety-net-openai")]
 fn safety_net_timeout_ms() -> String {
     let seconds = std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS")
         .map(|value| {
@@ -1075,6 +1055,7 @@ fn safety_net_timeout_ms() -> String {
     seconds.saturating_mul(1_000).to_string()
 }
 
+#[cfg(feature = "safety-net-openai")]
 fn write_executable(path: &Path, body: &str) {
     fs::write(path, body).unwrap();
     #[cfg(unix)]
@@ -1087,6 +1068,7 @@ fn write_executable(path: &Path, body: &str) {
 /// A policy that tokenizes nothing in the fixtures below, so the daemon's
 /// `clean_text` is byte-identical to the request text and any difference is
 /// attributable to the Pass-3 safety net rather than to Pass-1 detection.
+#[cfg(feature = "safety-net-openai")]
 fn write_preserve_default_policy() -> (tempfile::TempDir, PathBuf) {
     let dir = tempdir().unwrap();
     let path = dir.path().join("policy.toml");
@@ -1142,6 +1124,7 @@ fn daemon_request(policy: &Path, extra_args: &[String], text: &str) -> (Value, O
 
 /// An `opf` stand-in that reports nothing: a backend with no coverage for the
 /// text it is handed.
+#[cfg(feature = "safety-net-openai")]
 fn write_blind_opf(dir: &Path) -> PathBuf {
     let path = dir.join("blind-opf");
     write_executable(&path, &echoing_opf_script("[]"));
@@ -1150,12 +1133,14 @@ fn write_blind_opf(dir: &Path) -> PathBuf {
 
 /// An `opf` stand-in reporting `spans`. The OPF adapter only accepts output that echoes the
 /// exact text it analysed.
+#[cfg(feature = "safety-net-openai")]
 fn echoing_opf_script(spans: &str) -> String {
     format!(
         "#!/bin/sh\nexec python3 -c 'import json,sys; print(json.dumps({{\"text\": open(\"/dev/stdin\", encoding=\"utf-8\").read(), \"detected_spans\": json.loads(sys.argv[1])}}))' '{spans}'\n"
     )
 }
 
+#[cfg(feature = "safety-net-openai")]
 fn opf_checkpoint(dir: &Path) -> PathBuf {
     let path = dir.join("opf-checkpoint");
     fs::create_dir(&path).unwrap();
@@ -2298,6 +2283,7 @@ fn proxy_restart_starts_when_not_running() {
         .0
         .parse()
         .unwrap();
-    wait_until_serving(config.bind, || daemon_exited(pid, home.path()));
+    // `restart` returns only once the new daemon has bound.
+    assert!(TcpStream::connect(config.bind).is_ok());
     assert_eq!(daemon_pid(home.path()), Some(pid));
 }

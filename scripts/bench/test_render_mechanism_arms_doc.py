@@ -14,6 +14,7 @@ import json
 import os
 import shutil
 import tempfile
+import tarfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -94,7 +95,7 @@ def _released(ledger):
 
 
 class SyntheticMechanism:
-    """Four runner output directories plus policies, under one temp root."""
+    """Two runner output directories plus policies, under one temp root."""
 
     def __init__(self, root: Path) -> None:
         root.mkdir(parents=True)
@@ -114,16 +115,17 @@ class SyntheticMechanism:
             # The rescore returns the header's scorecard provenance, so the
             # policy binding goes into the record, as a runner would write it.
             rows = _rows(source)
+            rows[0]["binary_sha256"] = mech.sha256(self.binary)
+            rows[0]["scorecard"].get("runner_provenance", {}).pop("binary_sha256", None)
             self._bind_policy(rows[0]["scorecard"], self.policies[arm])
             _write_rows(source, rows)
-            for version in (2, 1):
-                directory = root / f"{arm}-v{version}"
-                directory.mkdir()
-                target = directory / "observations-v1.jsonl.gz"
-                shutil.copyfile(source, target)
-                card = record.rescore(target, mech._contract(version))
-                (directory / "scorecard-v4.json").write_text(json.dumps(card), encoding="utf-8")
-                self.runs[f"{arm}-v{version}"] = directory
+            directory = root / arm
+            directory.mkdir()
+            target = directory / "observations-v1.jsonl.gz"
+            shutil.copyfile(source, target)
+            card = record.rescore(target, mech._contract(2))
+            (directory / "scorecard-v4.json").write_text(json.dumps(card), encoding="utf-8")
+            self.runs[arm] = directory
 
     def clone(self, root: Path) -> "SyntheticMechanism":
         """A copy under `root`; policy paths inside the records still name the originals."""
@@ -179,6 +181,29 @@ class MechanismArmsTest(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         return self.pristine.clone(Path(tmp.name).resolve())
 
+    def test_swapped_executable_is_rejected_before_publication(self):
+        fixture = self.fresh()
+        fixture.binary.write_bytes(b"unrelated replacement executable")
+        with self.assertRaisesRegex(mech.MechanismError, "binary SHA-256 differs"):
+            fixture.record(mech.empty_ledger())
+        self.assertFalse((fixture.root / "evidence").exists())
+
+    def test_unbound_and_mismatched_arm_records_are_rejected(self):
+        for digest in (None, "f" * 64):
+            with self.subTest(digest=digest):
+                fixture = self.fresh()
+                path = fixture.runs["candidate"] / "observations-v1.jsonl.gz"
+                rows = _rows(path)
+                rows[0].pop("binary_sha256")
+                if digest is not None:
+                    rows[0]["binary_sha256"] = digest
+                _write_rows(path, rows)
+                fixture.edit("candidate", lambda card: card["observation_record"].update(
+                    sha256=mech.sha256(path)))
+                with self.assertRaisesRegex(mech.MechanismError, "binary SHA-256"):
+                    fixture.record(mech.empty_ledger())
+                self.assertFalse((fixture.root / "evidence").exists())
+
     def rewrite_runs(self, fixture, revision=None):
         """Valid runner receipts with a new revision or different gzip bytes."""
         for name, directory in fixture.runs.items():
@@ -189,7 +214,7 @@ class MechanismArmsTest(unittest.TestCase):
                 rows = _rows(path)
                 rows[0]["scorecard"]["gaze"]["revision"] = revision
                 _write_rows(path, rows)
-            version = 2 if name.endswith("v2") else 1
+            version = 2
             card = record.rescore(path, mech._contract(version))
             (directory / "scorecard-v4.json").write_text(json.dumps(card), encoding="utf-8")
 
@@ -343,6 +368,20 @@ class MechanismArmsTest(unittest.TestCase):
         with self.assertRaises(mech.MechanismError):
             mech.release_cell(entry, "v0.16.0")
 
+    def test_new_record_paths_fit_ustar_without_losing_full_hash(self):
+        fixture = self.fresh()
+        for mechanism in ("x", "nym-person-name-labels"):
+            measurement = fixture.record(mech.empty_ledger(), mechanism=mechanism)
+            for row in measurement["records"].values():
+                path = Path(row["file"])
+                self.assertLessEqual(len(path.name.encode("utf-8")), 100)
+                self.assertIn(row["sha256"], path.name)
+                if mechanism == "x":
+                    self.assertEqual(path.parent, Path("evidence"))
+                # The private producer snapshot permits USTAR, never PAX path extensions.
+                tarfile.TarInfo(path.as_posix()).tobuf(format=tarfile.USTAR_FORMAT)
+                self.assertEqual(mech.sha256(fixture.root / path), row["sha256"])
+
     def test_two_untagged_revisions_remain_distinct(self):
         fixture = self.fresh()
         ledger = mech.empty_ledger()
@@ -428,38 +467,42 @@ class MechanismArmsTest(unittest.TestCase):
         fixture.policies["candidate"].write_text(
             BASE_POLICY.replace("0.3", "0.4") + "\n" + DELTA, encoding="utf-8"
         )
-        for name in ("candidate-v2", "candidate-v1"):
-            fixture.edit(name, lambda card: SyntheticMechanism._bind_policy(card, fixture.policies["candidate"]))
+        path = fixture.runs["candidate"] / "observations-v1.jsonl.gz"
+        rows = _rows(path)
+        SyntheticMechanism._bind_policy(rows[0]["scorecard"], fixture.policies["candidate"])
+        _write_rows(path, rows)
+        card = record.rescore(path, mech._contract(2))
+        (fixture.runs["candidate"] / "scorecard-v4.json").write_text(json.dumps(card))
         with self.assertRaisesRegex(mech.MechanismError, "not comparable"):
             fixture.record(mech.empty_ledger())
 
-    def test_contract_must_match_the_slot(self) -> None:
+    def test_contract_specific_captures_are_refused(self) -> None:
         fixture = self.fresh()
-        fixture.runs["base-v2"], fixture.runs["base-v1"] = fixture.runs["base-v1"], fixture.runs["base-v2"]
-        with self.assertRaisesRegex(mech.MechanismError, "measured under v1, not v2"):
+        fixture.runs["base-v1"] = fixture.runs["base"]
+        with self.assertRaisesRegex(mech.MechanismError, "exactly one"):
             fixture.record(mech.empty_ledger())
 
     def test_dirty_tree_and_other_revision_are_refused(self) -> None:
         fixture = self.fresh()
-        fixture.edit("candidate-v1", lambda card: card["gaze"].update(dirty=True))
+        fixture.edit("candidate", lambda card: card["gaze"].update(dirty=True))
         with self.assertRaisesRegex(mech.MechanismError, "dirty tree"):
             fixture.record(mech.empty_ledger())
         fixture = self.fresh()
-        fixture.edit("candidate-v2", lambda card: card["gaze"].update(revision="0" * 40))
-        with self.assertRaisesRegex(mech.MechanismError, "differs from base-v2 in \\['revision'\\]"):
+        fixture.edit("candidate", lambda card: card["gaze"].update(revision="0" * 40))
+        with self.assertRaisesRegex(mech.MechanismError, "observation replay"):
             fixture.record(mech.empty_ledger())
 
-    def test_v1_run_must_equal_the_v1_rescore_of_the_v2_record(self) -> None:
+    def test_scorecard_must_equal_its_record_replay(self) -> None:
         fixture = self.fresh()
         def bump(card: dict) -> None:
             card["runs"][0]["metrics"]["utf8_bytes"]["leaked"] += 1
-        fixture.edit("base-v1", bump)
-        with self.assertRaisesRegex(mech.MechanismError, "differs from the v1 rescore"):
+        fixture.edit("base", bump)
+        with self.assertRaisesRegex(mech.MechanismError, "observation replay"):
             fixture.record(mech.empty_ledger())
 
     def test_record_that_does_not_match_its_scorecard_is_refused(self) -> None:
         fixture = self.fresh()
-        path = fixture.runs["candidate-v2"] / "observations-v1.jsonl.gz"
+        path = fixture.runs["candidate"] / "observations-v1.jsonl.gz"
         path.write_bytes(path.read_bytes() + b"\0")
         with self.assertRaisesRegex(mech.MechanismError, "pinned SHA-256"):
             fixture.record(mech.empty_ledger())
@@ -598,7 +641,7 @@ _REAL_DERIVE = mech.derive
 
 
 def _derive_once(base: Path, candidate: Path, versions) -> dict:
-    """Re-scoring a full record takes seconds; each mutation needs the same result."""
+    """Reuse immutable committed records; give each check a fresh derived result."""
     return json.loads(_cached_derive(base, candidate, tuple(versions)))
 
 
@@ -640,15 +683,16 @@ class CommittedLedgerTest(unittest.TestCase):
 
     def test_committed_ledger_matches_its_records_and_document(self) -> None:
         mech.validate(LEDGER)
-        mech.check_evidence(LEDGER)
+        with mock.patch.object(mech, "derive", _derive_once):
+            mech.check_evidence(LEDGER)
         document = mech.DOC.read_text(encoding="utf-8")
         releases = mech._released_versions(mech.RELEASE_HISTORY)
         self.assertEqual(mech.apply(document, mech.render(LEDGER, releases)), document)
 
-    def test_gliner_is_recorded_as_opt_in_until_shrunk_with_its_cost(self) -> None:
+    def test_gliner_records_the_public_opt_in_command_and_pinned_cost(self) -> None:
         entry = next(item for item in LEDGER["mechanisms"] if item["id"] == "gliner-dob-judge")
         self.assertIn("opt-in", entry["shipped"])
-        self.assertIn("3905", entry["shipped"])
+        self.assertIn("`gaze setup --dob-judge`", entry["shipped"])
         body = mech.render(_released(LEDGER), [])
         self.assertIn("peak RSS +664 MiB", body)
         self.assertIn("p95 +22.5 ms", body)

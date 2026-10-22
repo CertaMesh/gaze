@@ -19,6 +19,9 @@ use sha2::{Digest, Sha256};
 #[path = "support/dictionary_sequence.rs"]
 mod dictionary_sequence;
 
+#[path = "support/stage_profile.rs"]
+mod stage_profile;
+
 const BENCHMARK_ACTIVE_LOCALES: &[LocaleTag] = &[
     LocaleTag::EnUs,
     LocaleTag::DeDe,
@@ -249,6 +252,7 @@ enum Outcome {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let startup_profile = stage_profile::start()?;
     let config = parse_config()?;
     let stdin = io::stdin();
     let mut stdout = io::BufWriter::new(io::stdout().lock());
@@ -281,6 +285,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .or(benchmark_pipeline.as_ref())
         .expect("one pipeline is built");
 
+    stage_profile::finish(stage_profile::Stage::StartupModelLoad, startup_profile)?;
     for line in stdin.lock().lines() {
         let line = line?;
         if line.trim().is_empty() {
@@ -319,6 +324,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    stage_profile::emit()?;
     Ok(())
 }
 
@@ -406,6 +412,7 @@ fn handle_request_with_policy(
     } else {
         Session::new_with_session_hex_for_tests(Scope::Ephemeral, session_hex)?
     };
+    let clean_profile = stage_profile::start()?;
     let clean_start = Instant::now();
     let clean_result = full
         .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
@@ -416,6 +423,7 @@ fn handle_request_with_policy(
             safety_net_policy(config),
         );
     let clean_ms = clean_start.elapsed().as_secs_f64() * 1000.0;
+    stage_profile::finish(stage_profile::Stage::Detection, clean_profile)?;
     let (clean_doc, manifest, report, final_protection_trace, candidate_events) = match clean_result
     {
         Ok(result) => result,
@@ -437,9 +445,11 @@ fn handle_request_with_policy(
     };
 
     let integrity = manifest_integrity(&session, &raw_text, &clean_text, &manifest);
+    let restore_profile = stage_profile::start()?;
     let restore_start = Instant::now();
     let (restored, restore_telemetry) = full.restore_with_telemetry(&session, &clean_text)?;
     let restore_ms = restore_start.elapsed().as_secs_f64() * 1000.0;
+    stage_profile::finish(stage_profile::Stage::Restore, restore_profile)?;
     let restore = RestoreResult {
         exact: restored.text == raw_text,
         decision: restore_telemetry.restore_decision_str().to_string(),

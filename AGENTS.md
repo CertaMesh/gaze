@@ -58,8 +58,8 @@ The workspace now has 15 published crates plus `xtask`; see the canonical
 ## Universal rules (ALL agents)
 
 1. Justify any weakened axis in the PR body. Correctness axes 1–4 beat performance.
-2. Never leak PII in examples, tests, or fixtures. Use `alice@example.invalid` / `Dr. Schmidt` /
-   `<Email_1>` — never real PII, even in docs. Phone numbers MUST come from documented fictional
+2. Never leak PII in examples, tests, or fixtures. Use reserved `example.invalid` email addresses and
+   synthetic names such as `Dr. Schmidt`, never real PII, even in docs. Phone numbers MUST come from documented fictional
    ranges: NANPA `555-0100` to `555-0199` behind any area code for US, Ofcom `+44-7700-900xxx` for
    UK, and the BNetzA drama numbers for DE (for example `+49 171 39200xx`; `+49 1555` is an
    allocated block, not a fictional one). See
@@ -73,6 +73,73 @@ The workspace now has 15 published crates plus `xtask`; see the canonical
 6. Never put private tracker ids in public text. Exclude private todo, scratchpad, process and audit
    ids from PR titles/bodies, commits, CHANGELOG, docs, code/test comments and scripts. Describe
    behavior ("tracked as a follow-up"). Public GitHub numbers (`#723`) stay.
+
+## Working in worktrees (Anvil)
+
+Use Anvil 1.13 or newer for implementation, review copies, and local gates.
+Run these commands from a linked Gaze checkout:
+
+```sh
+anvil ensure <branch> --json --lease-owner <agent> --task-id <id>
+anvil ensure --review <sha> --json
+```
+
+Save the returned lease token privately as `ANVIL_LEASE_TOKEN`. Use the returned
+worktree path for edits. Review copies are detached at the exact SHA. Review
+commands omit registry and publish tokens, while retaining GitHub authentication.
+Preparation runs the locked CI Python install with the `comparison-test` group.
+It does not build Rust or copy model bundles, environment files, or `target/`.
+
+Inside the prepared worktree, run:
+
+```sh
+anvil context --json
+anvil run -- rustc -V
+anvil check fast --json
+anvil check --list --json
+anvil check --reuse fast --json
+anvil check test --allow-expensive --json
+anvil check feature-matrix --allow-expensive --json
+anvil check bench-py --allow-expensive --json
+```
+
+`fast` runs fmt and clippy. Individual `fmt` and `clippy` checks also exist.
+Accept a result only when `assessment.passing_and_current` is true. Reuse is
+per worktree in Anvil 1.13 and requires an identical environment. A different
+Solo process or shell environment can invalidate reuse. Delegates may inspect
+the original commit and provenance, but a review copy cannot import that pass.
+Tests and feature checks are not reusable because optional shared models can
+change outside Git. The Python suite also consults external release builds.
+
+The environment binds Cargo, trybuild, and rustdoc to Rust 1.96.0 through rustup
+proxies, with four build jobs. Install rustup under `~/.cargo` and the pinned
+rustfmt and clippy components. Never export `CARGO_TARGET_DIR`, including to the
+worktree's own `target/`. Nested mutation gates require cwd-relative targets.
+
+Full workspace builds share the exclusive `workspace-build` Anvil lock. Use
+`--lock-wait 30m` when another check owns it. This conservatively allows one
+Anvil workspace build at a time on the shared machine. The model-free Python
+suite also holds `bench-machine` because it reports durations. Before any real
+benchmark capture, acquire the Solo `bench-machine` lease as well. Solo remains
+the cross-tool authority; an Anvil lock alone does not reserve the machine.
+
+Shared bundles use the standard `~/.local/share/gaze/models/` directories and
+`~/.opf/privacy_filter`. They are optional and used read-only in place. Missing
+bundles do not block preparation. Anvil reports their existence in `context`;
+model-dependent commands still fail closed on missing or invalid bundles.
+GLiNER has no model-directory environment variable in Gaze; use
+`ANVIL_SHARED_GLINER_DOB` when explicitly configuring that opt-in bundle.
+Anvil 1.13 exports optional resource paths even when absent and does not expand
+shell default-value expressions. For a custom XDG model location, use explicit
+model paths in the policy or command.
+
+After the work is harvested, release your lease and preview cleanup:
+
+```sh
+anvil lease release <worktree> --json
+anvil remove <worktree> --dry-run
+anvil remove <worktree>
+```
 
 ## Benchmark gain gate
 
@@ -94,24 +161,29 @@ Within the caller-known-record oracle only, exact matches to declared phone or p
 are also exempt; report their layer D false-positive bytes and require a positive net under both
 contracts. This exception does not apply to ordinary phone or card recognizer rules.
 
-1. Measure both sides fresh. Base is the `main` commit the branch starts from, scored now, not an
-   old scorecard. Candidate is the branch head. Each side runs in its own worktree on the policy its
-   own `gaze setup` writes, with the same corpus, seed and machine. Score it twice, once per
-   contract, and skip the release-only copy and render steps:
+1. Capture each side once. Base is the `main` commit the branch starts from. Candidate is the
+   exact integrated branch head. Each side uses its own worktree and the policy its own
+   `gaze setup` writes, with the same corpus, seed and machine. Re-score that one observation
+   record for v2, v1 and every later contract. Never launch a capture per contract. Verified
+   cache reuse requires an exact match of every effective execution input and record integrity.
+   Skip the release-only copy and render steps:
 
    ```bash
    cargo run -p gaze-cli -- setup --non-interactive --force --policy-out target/gate/policy.toml
    uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
      --seed 20260710 --no-download --release --policy target/gate/policy.toml \
-     --output-dir target/bench-data/gate-<side>-v1
-   # repeat with --scored-labels docs/reference/benchmarks/scored-labels-v2.json \
-   #   --output-dir target/bench-data/gate-<side>-v2
+     --output-dir target/bench-data/gate-<side>
+   uv run --project scripts/bench python scripts/bench/rescore.py \
+     target/bench-data/gate-<side>/full/observations-v1.jsonl.gz \
+     --scored-labels docs/reference/benchmarks/scored-labels-v2.json \
+     --output target/bench-data/gate-<side>/full/scorecard-v2.json
+   # The original scorecard is v1; rescore the same record for any other contract.
    ```
 
    Compare the two sides per contract with `agentic_layers.py gate`, as shown in [Agentic layers and the rule gate](docs/reference/benchmarks/README.md#agentic-layers-and-the-rule-gate).
 2. Report both gated scored-label contracts. Report v2 and v1 separately. The benchmark document
-   leads with contract v3, whose leaked bytes equal v2's and whose false positives exclude the
-   audited gold-gap credit; switching the gate to v3 is a separate decision.
+   leads with the latest headline contract; switching the gated contracts requires a separate
+   decision.
 3. Merge rule. Checked separately under each scored-label contract. No layer's leaked bytes rise, on
    gated gold or on headline (all-gold) bytes. No layer's refusals rise, no layer's exact-restore or
    valid-manifest document count falls, and no layer's restore-failure or invalid-manifest count
@@ -134,16 +206,21 @@ contracts. This exception does not apply to ordinary phone or card recognizer ru
    and refusals. A PR skips the block only by ticking "not a detection change and not a benchmark
    change".
 
-The headline is always the latest. The benchmark headline uses the latest scored-label contract and
-benchmark data, and every past version the document displays is re-measured under it. Contract v3
-becomes the headline once its gold-gap audit passes.
+Main stays certified. No detection change reaches main without full-corpus-equivalent evidence
+for the exact integrated candidate. Certification requires a full evaluation, a verified
+incremental evaluation with a sound affected-unit selector validated in shadow first, or a
+full-gated combined merge train. A targeted subset can inform a PR, but never certifies main.
+Both gated contracts, mechanism policy deltas and the full release benchmark remain required.
 
-Benchmark changes re-measure past releases. Any change to the benchmark itself (a layer, a
-scored-label contract, corpus or generated data, the scorer, or the benchmark document) re-measures
-every past release the document displays: the current harness drives each release tag's own
-detection code. A row that cannot be re-measured says why in the document. Local-only harness
-evidence does not count; the harness and its inputs must be committed to the repo or pinned there by
-hash.
+Benchmark specifications have immutable version IDs. Never compare results across specifications.
+Integrity checks remain mandatory. Historical remeasurement is off the PR critical path:
+backfills are automated and non-blocking. Before release, measure the current and previous
+release under the same specification. Displayed rows retain their specification and provenance;
+a row unavailable under the current specification says why. Local-only harness evidence does
+not count; commit the harness and its inputs or pin them by hash in the repository.
+
+The headline uses the latest scored-label contract and benchmark specification. Historical rows
+from another specification cannot support a gain comparison.
 
 ## Source of truth
 

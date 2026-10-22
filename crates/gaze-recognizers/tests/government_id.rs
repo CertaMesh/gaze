@@ -21,7 +21,9 @@
 //!
 //! Fixture values are synthetic.
 
-use gaze::Context;
+mod support;
+use support::empty_context;
+
 use gaze::{
     Action, CleanDocument, DictionaryBundle, LocaleBasis, LocaleChain, LocaleTag, PiiClass,
     Pipeline, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec, Rulepack,
@@ -32,16 +34,6 @@ use gaze_types::{LabelledValueScanReason, ValidatorFailReason, LABELLED_FIELD_CO
 use regex::Regex;
 use std::sync::OnceLock;
 use std::sync::{Arc, Mutex};
-
-fn empty_context() -> Context {
-    Context {
-        dictionaries: std::collections::HashMap::new(),
-        class_map: std::collections::HashMap::new(),
-        fields: serde_json::Map::new(),
-        record_match_kinds: Default::default(),
-        record_value_rejections: Default::default(),
-    }
-}
 
 const CLASSES: [&str; 7] = [
     "ssn",
@@ -62,26 +54,21 @@ const CLASSES: [&str; 7] = [
 /// `locale_gated` to `en-US` and consequently matched only 38 of 217 gold SSN spans, because 113
 /// of them sit in German documents.
 fn pipeline_for(chain: &[LocaleTag]) -> Pipeline {
-    let rulepack = Rulepack::load(RulepackSource::Embedded(
-        embedded("core").expect("core rulepack"),
-    ))
-    .expect("core loads");
-    let mut policy = gaze::Policy::default();
-    policy.rules = CLASSES
-        .iter()
-        .map(|class| RuleSpec::Class {
-            class: PiiClass::custom(class).expect("valid custom class"),
-            action: Action::Tokenize,
-        })
-        .chain(std::iter::once(RuleSpec::Default {
-            action: Action::Preserve,
-        }))
-        .collect();
-    policy.rulepacks.bundled = vec!["core".to_string()];
-    policy.rulepacks.auto_activate_locale_gated = false;
-    let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(chain));
-    gaze_assembly::build_pipeline(&policy, &empty_context(), &[rulepack], &locale_chain, None)
-        .expect("pipeline")
+    support::pipeline_for(
+        chain,
+        &["core"],
+        CLASSES
+            .iter()
+            .map(|class| RuleSpec::Class {
+                class: PiiClass::custom(class).expect("valid custom class"),
+                action: Action::Tokenize,
+            })
+            .chain(std::iter::once(RuleSpec::Default {
+                action: Action::Preserve,
+            }))
+            .collect(),
+        false,
+    )
 }
 
 struct CapturingLogger {
@@ -191,20 +178,8 @@ fn all_zero_ids_and_vehicle_identification_cue_stay_raw() {
 }
 
 fn clean_under(chain: &[LocaleTag], text: &str) -> String {
-    let pipeline = pipeline_for(chain);
     let session = Session::new(Scope::Ephemeral).expect("session");
-    let (clean, _, _) = pipeline
-        .clean_with_safety_net_detect_context(
-            &session,
-            RawDocument::Text(text.to_string()),
-            chain,
-            &DictionaryBundle::default(),
-        )
-        .expect("clean");
-    match clean {
-        CleanDocument::Text(text) => text,
-        _ => panic!("expected text"),
-    }
+    support::clean(&pipeline_for(chain), &session, text, chain)
 }
 
 fn clean(text: &str) -> String {

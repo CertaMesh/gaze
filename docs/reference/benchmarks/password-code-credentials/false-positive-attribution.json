@@ -1,0 +1,284 @@
+{
+  "schema_version": 1,
+  "method": "Non-gold portions of retained final protection traces in every cell with changed raw FP; byte intervals joined to committed synthetic generator inputs.",
+  "changed_cell_totals": {
+    "A": {
+      "delta": 1596,
+      "cells": [
+        {
+          "cell": "A|bcrypt|credentials_hash_sql|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|django_argon2|credentials_hash_sql|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|django_pbkdf2_sha1|credentials_hash_sql|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|django_pbkdf2_sha1|credentials_review_salt_sql_32|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|django_pbkdf2_sha1|credentials_review_salt_sql_43|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|django_pbkdf2_sha1|credentials_review_salt_sql_58|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|django_pbkdf2_sha1|credentials_review_salt_sql_64|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|django_pbkdf2_sha256|credentials_hash_sql|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|django_pbkdf2_sha256|credentials_review_salt_sql_43|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|django_pbkdf2_sha256|credentials_review_salt_sql_64|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|md5crypt|credentials_hash_sql|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|md5crypt|credentials_review_salt_sql_45|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|md5crypt|credentials_review_salt_sql_95|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|phpass_h|credentials_hash_sql|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|phpass_p|credentials_hash_sql|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|scrypt_crypt|credentials_hash_sql|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|scrypt_phc|credentials_hash_sql|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|sha256crypt|credentials_hash_sql|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|sha256crypt|credentials_review_salt_sql_45|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|sha256crypt|credentials_review_salt_sql_95|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|yescrypt|credentials_hash_sql|unchecked",
+          "base": 0,
+          "candidate": 60,
+          "delta": 60
+        },
+        {
+          "cell": "A|django_pbkdf2_sha256|credentials_review_salt_sql_32|unchecked",
+          "base": 6,
+          "candidate": 60,
+          "delta": 54
+        },
+        {
+          "cell": "A|django_pbkdf2_sha256|credentials_review_salt_sql_58|unchecked",
+          "base": 6,
+          "candidate": 60,
+          "delta": 54
+        },
+        {
+          "cell": "A|django_bcrypt_sha256|credentials_hash_sql|unchecked",
+          "base": 12,
+          "candidate": 60,
+          "delta": 48
+        },
+        {
+          "cell": "A|django_scrypt|credentials_review_salt_sql_64|unchecked",
+          "base": 30,
+          "candidate": 60,
+          "delta": 30
+        },
+        {
+          "cell": "A|argon2d|credentials_hash_sql|unchecked",
+          "base": 36,
+          "candidate": 60,
+          "delta": 24
+        },
+        {
+          "cell": "A|django_scrypt|credentials_review_salt_sql_43|unchecked",
+          "base": 36,
+          "candidate": 60,
+          "delta": 24
+        },
+        {
+          "cell": "A|sha512crypt|credentials_hash_sql|unchecked",
+          "base": 36,
+          "candidate": 60,
+          "delta": 24
+        },
+        {
+          "cell": "A|argon2i|credentials_hash_sql|unchecked",
+          "base": 42,
+          "candidate": 60,
+          "delta": 18
+        },
+        {
+          "cell": "A|django_scrypt|credentials_review_salt_sql_58|unchecked",
+          "base": 42,
+          "candidate": 60,
+          "delta": 18
+        },
+        {
+          "cell": "A|django_scrypt|credentials_review_salt_sql_32|unchecked",
+          "base": 48,
+          "candidate": 60,
+          "delta": 12
+        },
+        {
+          "cell": "A|sha512crypt|credentials_review_salt_sql_45|unchecked",
+          "base": 48,
+          "candidate": 60,
+          "delta": 12
+        },
+        {
+          "cell": "A|sha512crypt|credentials_review_salt_sql_95|unchecked",
+          "base": 48,
+          "candidate": 60,
+          "delta": 12
+        },
+        {
+          "cell": "A|argon2id|credentials_hash_sql|unchecked",
+          "base": 54,
+          "candidate": 60,
+          "delta": 6
+        }
+      ]
+    },
+    "D": {
+      "delta": 930,
+      "cells": [
+        {
+          "cell": "D|language|credentials_review_metadata_language|benign",
+          "base": 0,
+          "candidate": 416,
+          "delta": 416
+        },
+        {
+          "cell": "D|validation|credentials_review_metadata_validation|benign",
+          "base": 0,
+          "candidate": 320,
+          "delta": 320
+        },
+        {
+          "cell": "D|masked|credentials_review_metadata_masked|benign",
+          "base": 0,
+          "candidate": 130,
+          "delta": 130
+        },
+        {
+          "cell": "D|password_schema|credentials_review_metadata_password_schema|benign",
+          "base": 0,
+          "candidate": 64,
+          "delta": 64
+        }
+      ]
+    },
+    "R": {
+      "delta": -6,
+      "cells": [
+        {
+          "cell": "R|django_pbkdf2_sha256|credentials_review_salt_sql_32|unchecked",
+          "base": 6,
+          "candidate": 0,
+          "delta": -6
+        }
+      ]
+    }
+  },
+  "source_context_deltas": [
+    {
+      "layer": "A",
+      "source": "nym-small-int8",
+      "predicted_class": "name",
+      "context": "SQL keyword VALUES",
+      "base": 444,
+      "candidate": 2040,
+      "delta": 1596
+    },
+    {
+      "layer": "D",
+      "source": "password.code",
+      "predicted_class": "custom:password",
+      "context": "other synthetic context",
+      "base": 0,
+      "candidate": 930,
+      "delta": 930
+    },
+    {
+      "layer": "R",
+      "source": "nym-small-int8",
+      "predicted_class": "name",
+      "context": "SQL keyword VALUES",
+      "base": 6,
+      "candidate": 0,
+      "delta": -6
+    }
+  ]
+}

@@ -228,19 +228,8 @@ mod pascal_reason {
     where
         S: Serializer,
     {
-        serializer.serialize_str(match value {
-            ProjectionOmissionReasonV1::NotCapturedByPolicy => "NotCapturedByPolicy",
-            ProjectionOmissionReasonV1::NotApplicable => "NotApplicable",
-            ProjectionOmissionReasonV1::UnsupportedFormat => "UnsupportedFormat",
-            ProjectionOmissionReasonV1::MalformedFailClosed => "MalformedFailClosed",
-            ProjectionOmissionReasonV1::LimitExceeded => "LimitExceeded",
-            ProjectionOmissionReasonV1::SignedOrEncryptedSurface => "SignedOrEncryptedSurface",
-            ProjectionOmissionReasonV1::Purging => "Purging",
-            ProjectionOmissionReasonV1::Disabled => "Disabled",
-            ProjectionOmissionReasonV1::QueueClosed => "QueueClosed",
-            ProjectionOmissionReasonV1::ProjectionFailedClosed => "ProjectionFailedClosed",
-            ProjectionOmissionReasonV1::UnknownFuture => "UnknownFuture",
-        })
+        // The single omission-reason table shared with the live snapshot encoder.
+        serializer.serialize_str(crate::snapshot::omission_reason_key(*value))
     }
 }
 

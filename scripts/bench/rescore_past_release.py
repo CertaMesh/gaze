@@ -28,8 +28,10 @@ row stays reproducible) and the harness commit, driver and binary digest under
       --model-env GAZE_KIJI_DISTILBERT_MODEL_DIR=<model-cache>/kiji-distilbert \\
       --model-bundle kiji-distilbert=<model-cache>/kiji-distilbert=<SHA256SUMS digest> \\
       --manifest-actions tokenize \\
-      --scored-labels docs/reference/benchmarks/scored-labels-v2.json \\
       --output target/bench-data/past-release/scorecard-v4.json
+
+Capture each release once; use `rescore.py` on its observation record for every
+contract. Independent contract captures require `--cross-check`.
 """
 
 from __future__ import annotations
@@ -60,6 +62,18 @@ class PastReleaseError(Exception):
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def policy_provenance(policy: Path | None, harness_root: Path) -> dict[str, str] | None:
+    if policy is None:
+        return None
+    digest = _sha256(policy)
+    resolved = policy.resolve()
+    if resolved.is_relative_to(harness_root.resolve()) or resolved.is_relative_to(Path.home().resolve()):
+        portable = runner.portable_repo_path(harness_root, resolved)
+    else:
+        portable = f"policy-sha256:{digest}"
+    return {"path": portable, "sha256": digest}
 
 
 def policy_dependencies(policy: Path | None, release_root: Path) -> dict[str, object] | None:
@@ -138,7 +152,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=int,
         help="smoke check only: a sampled run is never recorded as a release row",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--cross-check", action="store_true",
+        help="explicit independent contract capture for replay-equivalence checks only",
+    )
+    args = parser.parse_args(argv)
+    if (args.scored_labels is not None or args.agentic_scored_labels is not None) and not args.cross_check:
+        parser.error("capture once, then use rescore.py; independent capture requires --cross-check")
+    return args
 
 
 def run(args: argparse.Namespace) -> Path:
@@ -207,7 +228,7 @@ def run(args: argparse.Namespace) -> Path:
     )
     record_writer = records.RecordWriter(
         original_available, complete_measurements,
-        corpus_sha256=dataset_report["integrity"]["sha256"],
+        corpus_sha256=dataset_report["integrity"]["sha256"], binary=binary,
         extra_documents=(
             [record.to_document() for record in agentic.generate(agentic.PUBLISHED_PARTITION)]
             if prepared is not None else []
@@ -273,8 +294,8 @@ def run(args: argparse.Namespace) -> Path:
         ),
         "harness_revision": harness,
         "manifest_replacing_actions": sorted(args.manifest_actions.split(",")),
-        "binary_sha256": _sha256(binary),
-        "policy": {"path": str(policy), "sha256": _sha256(policy)} if policy is not None else None,
+        "binary_sha256": record_writer.binary_sha256,
+        "policy": policy_provenance(policy, HARNESS_ROOT),
         "profile": card["parameters"]["profile"],
         "model_bundles": bundles,
         "policy_dependencies": dependency_provenance,

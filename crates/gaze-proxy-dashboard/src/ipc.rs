@@ -5,24 +5,20 @@ use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::os::unix::net::UnixStream;
 
-use gaze_inspection::{
-    InspectionEventV1, InspectionEventViewV1, OwnerRawProjectionV1, OwnerRestoredProjectionV1,
-    ProviderVisibleProjectionV1,
-};
+use gaze_inspection::{InspectionEventV1, InspectionEventViewV1};
 use gaze_types::inspection::{
-    AttestationTraceV1, DecisionTraceV1, InspectionEmissionIdV1, InspectionEpochV1,
-    InspectionMeasurementV1, InspectionSequenceV1, InspectionStageDomainV1, JsonShapeSummaryV1,
-    LogicalInspectionIdV1, PiiSummaryV1, ProjectionAvailabilityV1, SseTimelineMetaV1,
+    DashboardCaptureDescriptorV1, InspectionEmissionIdV1, InspectionEpochV1, InspectionSequenceV1,
+    InspectionStageDomainV1, LogicalInspectionIdV1, ProjectionAvailabilityV1,
 };
-use serde::ser::SerializeStruct as _;
-use serde::{Serialize, Serializer};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::auth::PairingSecret;
+use crate::snapshot::{CaptureTierV1, MetaModelV1, PayloadAvailabilityV1, StageModelV1};
 use crate::{DashboardError, DashboardErrorCode};
 
 const PAIR_MAGIC: &[u8; 4] = b"GZDB";
 const IPC_MAGIC: &[u8; 4] = b"GZDI";
+const STATUS_MAGIC: &[u8; 4] = b"GZDS";
 const VERSION: u8 = 1;
 const IPC_HEADER_LEN: usize = 54;
 
@@ -285,73 +281,25 @@ pub(crate) fn reject_immediate_trailing(control: &mut UnixStream) -> Result<(), 
     }
 }
 
-#[derive(Serialize)]
-struct SafeProjection<'a> {
-    domain_state: BrowserDomainState,
-    measurement: BrowserAvailability<'a, InspectionMeasurementV1>,
-    json_shape: BrowserAvailability<'a, JsonShapeSummaryV1>,
-    sse_timeline: BrowserAvailability<'a, SseTimelineMetaV1>,
-    pii_summary: BrowserAvailability<'a, PiiSummaryV1>,
-    decision_trace: BrowserAvailability<'a, DecisionTraceV1>,
-    attestation: BrowserAvailability<'a, AttestationTraceV1>,
-}
-
-#[derive(Serialize)]
-#[serde(tag = "kind")]
-enum BrowserDomainState {
-    Available,
-    Omitted { reason: &'static str },
-}
-
-struct BrowserAvailability<'a, T>(&'a ProjectionAvailabilityV1<T>);
-
-impl<T> Serialize for BrowserAvailability<'_, T>
-where
-    T: Serialize,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self.0 {
-            ProjectionAvailabilityV1::Present(value) => {
-                let mut wire = serializer.serialize_struct("ProjectionAvailability", 2)?;
-                wire.serialize_field("state", "Present")?;
-                wire.serialize_field("value", value)?;
-                wire.end()
-            }
-            ProjectionAvailabilityV1::Omitted(reason) => {
-                let mut wire = serializer.serialize_struct("ProjectionAvailability", 2)?;
-                wire.serialize_field("state", "Omitted")?;
-                wire.serialize_field("reason", projection_reason_wire(*reason))?;
-                wire.end()
-            }
-        }
-    }
-}
-
-const fn projection_reason_wire(
-    reason: gaze_types::inspection::ProjectionOmissionReasonV1,
-) -> &'static str {
-    use gaze_types::inspection::ProjectionOmissionReasonV1 as Reason;
-    match reason {
-        Reason::NotCapturedByPolicy => "NotCapturedByPolicy",
-        Reason::NotApplicable => "NotApplicable",
-        Reason::UnsupportedFormat => "UnsupportedFormat",
-        Reason::MalformedFailClosed => "MalformedFailClosed",
-        Reason::LimitExceeded => "LimitExceeded",
-        Reason::SignedOrEncryptedSurface => "SignedOrEncryptedSurface",
-        Reason::Purging => "Purging",
-        Reason::Disabled => "Disabled",
-        Reason::QueueClosed => "QueueClosed",
-        Reason::ProjectionFailedClosed => "ProjectionFailedClosed",
-        Reason::UnknownFuture => "UnknownFuture",
-    }
-}
-
 /// Zeroizing, globally capped typed IPC frame.
 pub(crate) struct EncodedInspectionFrame {
     bytes: Zeroizing<Vec<u8>>,
+}
+
+macro_rules! encode_domain_projection {
+    ($event:expr, $meta:expr, $projection:expr, $model:expr, $max_bytes:expr) => {{
+        let safe = serialize_stage_model(&$model)?;
+        match $projection.payload() {
+            ProjectionAvailabilityV1::Present(payload) => {
+                payload.with_declassified_bytes(|bytes| {
+                    Self::finish($event, $meta, &safe, bytes, $max_bytes)
+                })
+            }
+            ProjectionAvailabilityV1::Omitted(_) => {
+                Self::finish($event, $meta, &safe, &[], $max_bytes)
+            }
+        }
+    }};
 }
 
 impl EncodedInspectionFrame {
@@ -362,78 +310,33 @@ impl EncodedInspectionFrame {
         let meta = serde_json::to_vec(event.meta())
             .map_err(|_| DashboardError::new(DashboardErrorCode::IpcRejected))?;
         match event.view() {
-            InspectionEventViewV1::OwnerRequest(projection) => {
-                Self::encode_owner_raw(event, projection, &meta, max_bytes)
-            }
-            InspectionEventViewV1::ProviderRequest(projection) => {
-                Self::encode_provider_visible(event, projection, &meta, max_bytes)
-            }
-            InspectionEventViewV1::ProviderResponse(projection) => {
-                Self::encode_provider_visible(event, projection, &meta, max_bytes)
-            }
+            InspectionEventViewV1::OwnerRequest(projection) => encode_domain_projection!(
+                event,
+                &meta,
+                projection,
+                StageModelV1::from_owner_raw(projection),
+                max_bytes
+            ),
+            InspectionEventViewV1::ProviderRequest(projection)
+            | InspectionEventViewV1::ProviderResponse(projection) => encode_domain_projection!(
+                event,
+                &meta,
+                projection,
+                StageModelV1::from_provider_visible(projection),
+                max_bytes
+            ),
             InspectionEventViewV1::OwnerRestoredResponse(projection) => {
-                Self::encode_owner_restored(event, projection, &meta, max_bytes)
+                encode_domain_projection!(
+                    event,
+                    &meta,
+                    projection,
+                    StageModelV1::from_owner_restored(projection),
+                    max_bytes
+                )
             }
             InspectionEventViewV1::Omitted { reason, .. } => {
-                let safe = serialize_omitted_projection(reason)?;
+                let safe = serialize_stage_model(&StageModelV1::omitted(reason))?;
                 Self::finish(event, &meta, &safe, &[], max_bytes)
-            }
-        }
-    }
-
-    fn encode_owner_raw(
-        event: &InspectionEventV1,
-        projection: &OwnerRawProjectionV1,
-        meta: &[u8],
-        max_bytes: usize,
-    ) -> Result<Self, DashboardError> {
-        let safe = serialize_projection(projection)?;
-        match projection.payload() {
-            ProjectionAvailabilityV1::Present(payload) => {
-                payload.with_declassified_bytes(|bytes| {
-                    Self::finish(event, meta, &safe, bytes, max_bytes)
-                })
-            }
-            ProjectionAvailabilityV1::Omitted(_) => {
-                Self::finish(event, meta, &safe, &[], max_bytes)
-            }
-        }
-    }
-
-    fn encode_provider_visible(
-        event: &InspectionEventV1,
-        projection: &ProviderVisibleProjectionV1,
-        meta: &[u8],
-        max_bytes: usize,
-    ) -> Result<Self, DashboardError> {
-        let safe = serialize_projection(projection)?;
-        match projection.payload() {
-            ProjectionAvailabilityV1::Present(payload) => {
-                payload.with_declassified_bytes(|bytes| {
-                    Self::finish(event, meta, &safe, bytes, max_bytes)
-                })
-            }
-            ProjectionAvailabilityV1::Omitted(_) => {
-                Self::finish(event, meta, &safe, &[], max_bytes)
-            }
-        }
-    }
-
-    fn encode_owner_restored(
-        event: &InspectionEventV1,
-        projection: &OwnerRestoredProjectionV1,
-        meta: &[u8],
-        max_bytes: usize,
-    ) -> Result<Self, DashboardError> {
-        let safe = serialize_projection(projection)?;
-        match projection.payload() {
-            ProjectionAvailabilityV1::Present(payload) => {
-                payload.with_declassified_bytes(|bytes| {
-                    Self::finish(event, meta, &safe, bytes, max_bytes)
-                })
-            }
-            ProjectionAvailabilityV1::Omitted(_) => {
-                Self::finish(event, meta, &safe, &[], max_bytes)
             }
         }
     }
@@ -478,110 +381,105 @@ impl EncodedInspectionFrame {
     }
 }
 
-fn serialize_projection<T>(projection: &T) -> Result<Vec<u8>, DashboardError>
-where
-    T: ProjectionAccess,
-{
-    let safe = SafeProjection {
-        domain_state: match projection.payload_omission() {
-            None => BrowserDomainState::Available,
-            Some(reason) => BrowserDomainState::Omitted {
-                reason: projection_reason_wire(reason),
-            },
-        },
-        measurement: BrowserAvailability(projection.measurement()),
-        json_shape: BrowserAvailability(projection.json_shape()),
-        sse_timeline: BrowserAvailability(projection.sse_timeline()),
-        pii_summary: BrowserAvailability(projection.pii_summary()),
-        decision_trace: BrowserAvailability(projection.decision_trace()),
-        attestation: BrowserAvailability(projection.attestation()),
-    };
-    serde_json::to_vec(&safe).map_err(|_| DashboardError::new(DashboardErrorCode::IpcRejected))
+fn serialize_stage_model(model: &StageModelV1) -> Result<Vec<u8>, DashboardError> {
+    serde_json::to_vec(model).map_err(|_| DashboardError::new(DashboardErrorCode::IpcRejected))
 }
 
-fn serialize_omitted_projection(
-    reason: gaze_types::inspection::ProjectionOmissionReasonV1,
-) -> Result<Vec<u8>, DashboardError> {
-    let reason = projection_reason_wire(reason);
-    serde_json::to_vec(&serde_json::json!({
-        "domain_state": { "kind": "Omitted", "reason": reason },
-        "measurement": { "state": "Omitted", "reason": reason },
-        "json_shape": { "state": "Omitted", "reason": reason },
-        "sse_timeline": { "state": "Omitted", "reason": reason },
-        "pii_summary": { "state": "Omitted", "reason": reason },
-        "decision_trace": { "state": "Omitted", "reason": reason },
-        "attestation": { "state": "Omitted", "reason": reason }
-    }))
-    .map_err(|_| DashboardError::new(DashboardErrorCode::IpcRejected))
+/// Exact 22-byte parent-to-child runtime status frame: the immutable startup capture
+/// descriptor plus saturating parent ingress drop counters.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct RuntimeStatusFrameV1 {
+    pub(crate) capture: CaptureTierV1,
+    pub(crate) ingress_full: u64,
+    pub(crate) ingress_closed: u64,
 }
 
-trait ProjectionAccess {
-    fn payload_omission(&self) -> Option<gaze_types::inspection::ProjectionOmissionReasonV1>;
-    fn measurement(&self) -> &ProjectionAvailabilityV1<InspectionMeasurementV1>;
-    fn json_shape(&self) -> &ProjectionAvailabilityV1<JsonShapeSummaryV1>;
-    fn sse_timeline(&self) -> &ProjectionAvailabilityV1<SseTimelineMetaV1>;
-    fn pii_summary(&self) -> &ProjectionAvailabilityV1<PiiSummaryV1>;
-    fn decision_trace(&self) -> &ProjectionAvailabilityV1<DecisionTraceV1>;
-    fn attestation(&self) -> &ProjectionAvailabilityV1<AttestationTraceV1>;
-}
+impl RuntimeStatusFrameV1 {
+    pub(crate) const LEN: usize = 22;
 
-macro_rules! projection_access {
-    ($type:ty) => {
-        impl ProjectionAccess for $type {
-            fn payload_omission(
-                &self,
-            ) -> Option<gaze_types::inspection::ProjectionOmissionReasonV1> {
-                match self.payload() {
-                    ProjectionAvailabilityV1::Present(_) => None,
-                    ProjectionAvailabilityV1::Omitted(reason) => Some(*reason),
-                }
+    /// Encodes one status frame. Only the four dashboard acceptance descriptors exist.
+    pub(crate) fn encode(
+        descriptor: DashboardCaptureDescriptorV1,
+        ingress_full: u64,
+        ingress_closed: u64,
+    ) -> Result<[u8; Self::LEN], DashboardError> {
+        let code = match CaptureTierV1::from_domains(descriptor.domains()) {
+            Some(CaptureTierV1::ProviderVisible) => 1,
+            Some(CaptureTierV1::OwnerRaw) => 2,
+            Some(CaptureTierV1::OwnerRestored) => 3,
+            Some(CaptureTierV1::Both) => 4,
+            Some(CaptureTierV1::NotReported) | None => {
+                return Err(DashboardError::new(DashboardErrorCode::IpcRejected))
             }
-            fn measurement(&self) -> &ProjectionAvailabilityV1<InspectionMeasurementV1> {
-                self.measurement()
-            }
-            fn json_shape(&self) -> &ProjectionAvailabilityV1<JsonShapeSummaryV1> {
-                self.json_shape()
-            }
-            fn sse_timeline(&self) -> &ProjectionAvailabilityV1<SseTimelineMetaV1> {
-                self.sse_timeline()
-            }
-            fn pii_summary(&self) -> &ProjectionAvailabilityV1<PiiSummaryV1> {
-                self.pii_summary()
-            }
-            fn decision_trace(&self) -> &ProjectionAvailabilityV1<DecisionTraceV1> {
-                self.decision_trace()
-            }
-            fn attestation(&self) -> &ProjectionAvailabilityV1<AttestationTraceV1> {
-                self.attestation()
-            }
+        };
+        let mut bytes = [0_u8; Self::LEN];
+        bytes[..4].copy_from_slice(STATUS_MAGIC);
+        bytes[4] = VERSION;
+        bytes[5] = code;
+        bytes[6..14].copy_from_slice(&ingress_full.to_be_bytes());
+        bytes[14..22].copy_from_slice(&ingress_closed.to_be_bytes());
+        Ok(bytes)
+    }
+
+    fn decode(bytes: &[u8]) -> Result<Self, DashboardError> {
+        if bytes.len() != Self::LEN || &bytes[..4] != STATUS_MAGIC || bytes[4] != VERSION {
+            return Err(DashboardError::new(DashboardErrorCode::IpcRejected));
         }
-    };
+        let capture = match bytes[5] {
+            1 => CaptureTierV1::ProviderVisible,
+            2 => CaptureTierV1::OwnerRaw,
+            3 => CaptureTierV1::OwnerRestored,
+            4 => CaptureTierV1::Both,
+            _ => return Err(DashboardError::new(DashboardErrorCode::IpcRejected)),
+        };
+        Ok(Self {
+            capture,
+            ingress_full: read_u64(bytes, 6)?,
+            ingress_closed: read_u64(bytes, 14)?,
+        })
+    }
 }
 
-projection_access!(OwnerRawProjectionV1);
-projection_access!(ProviderVisibleProjectionV1);
-projection_access!(OwnerRestoredProjectionV1);
+/// One decoded inbound frame on the child inspection channel.
+pub(crate) enum InboundFrameV1 {
+    Event(Box<DecodedInspectionFrame>),
+    Status(RuntimeStatusFrameV1),
+}
 
-/// Decoded child-owned IPC event.
+impl InboundFrameV1 {
+    pub(crate) fn decode(bytes: &[u8], max_bytes: usize) -> Result<Self, DashboardError> {
+        if bytes.starts_with(STATUS_MAGIC) {
+            RuntimeStatusFrameV1::decode(bytes).map(Self::Status)
+        } else {
+            DecodedInspectionFrame::decode(bytes, max_bytes)
+                .map(|frame| Self::Event(Box::new(frame)))
+        }
+    }
+}
+
+/// Decoded child-owned IPC event. Metadata and projection are typed; payload availability
+/// is the projection's typed field, never the payload length.
 pub(crate) struct DecodedInspectionFrame {
     pub(crate) logical_id: LogicalInspectionIdV1,
     pub(crate) emission_id: InspectionEmissionIdV1,
     pub(crate) sequence: InspectionSequenceV1,
     pub(crate) epoch: InspectionEpochV1,
     pub(crate) stage_domain: InspectionStageDomainV1,
-    pub(crate) safe_meta: Vec<u8>,
-    pub(crate) projection: Vec<u8>,
+    pub(crate) meta: MetaModelV1,
+    pub(crate) projection: StageModelV1,
+    pub(crate) safe_wire_bytes: usize,
     pub(crate) payload: Zeroizing<Vec<u8>>,
 }
 
 impl DecodedInspectionFrame {
     pub(crate) fn decode(bytes: &[u8], max_bytes: usize) -> Result<Self, DashboardError> {
+        let rejected = || DashboardError::new(DashboardErrorCode::IpcRejected);
         if bytes.len() < IPC_HEADER_LEN
             || bytes.len() > max_bytes
             || &bytes[0..4] != IPC_MAGIC
             || bytes[4] != VERSION
         {
-            return Err(DashboardError::new(DashboardErrorCode::IpcRejected));
+            return Err(rejected());
         }
         let total = read_u32(bytes, 5)? as usize;
         let meta_len = read_u32(bytes, 42)? as usize;
@@ -591,26 +489,46 @@ impl DecodedInspectionFrame {
             .checked_add(meta_len)
             .and_then(|value| value.checked_add(projection_len))
             .and_then(|value| value.checked_add(payload_len))
-            .ok_or_else(|| DashboardError::new(DashboardErrorCode::IpcRejected))?;
+            .ok_or_else(rejected)?;
         if total != bytes.len() || expected != total {
-            return Err(DashboardError::new(DashboardErrorCode::IpcRejected));
+            return Err(rejected());
         }
         let meta_end = IPC_HEADER_LEN + meta_len;
         let projection_end = meta_end + projection_len;
-        Ok(Self {
+        let meta: MetaModelV1 =
+            serde_json::from_slice(&bytes[IPC_HEADER_LEN..meta_end]).map_err(|_| rejected())?;
+        let projection: StageModelV1 =
+            serde_json::from_slice(&bytes[meta_end..projection_end]).map_err(|_| rejected())?;
+        let frame = Self {
             logical_id: LogicalInspectionIdV1::new(read_u64(bytes, 9)?),
             emission_id: InspectionEmissionIdV1::new(read_u64(bytes, 17)?),
             sequence: InspectionSequenceV1::new(read_u64(bytes, 25)?),
             epoch: InspectionEpochV1::new(read_u64(bytes, 33)?),
             stage_domain: decode_stage(bytes[41])?,
-            safe_meta: bytes[IPC_HEADER_LEN..meta_end].to_vec(),
-            projection: bytes[meta_end..projection_end].to_vec(),
+            meta,
+            projection,
+            safe_wire_bytes: meta_len + projection_len,
             payload: Zeroizing::new(bytes[projection_end..].to_vec()),
-        })
+        };
+        // The typed metadata must name the exact header identity, and an omitted payload
+        // can never smuggle bytes.
+        if frame.meta.logical_id != frame.logical_id
+            || frame.meta.emission_id != frame.emission_id
+            || frame.meta.sequence != frame.sequence
+            || frame.meta.epoch != frame.epoch
+            || frame.meta.stage_domain != frame.stage_domain
+            || (matches!(
+                frame.projection.payload(),
+                PayloadAvailabilityV1::Omitted(_)
+            ) && !frame.payload.is_empty())
+        {
+            return Err(rejected());
+        }
+        Ok(frame)
     }
 
     pub(crate) fn retained_bytes(&self) -> usize {
-        IPC_HEADER_LEN + self.safe_meta.len() + self.projection.len() + self.payload.len()
+        IPC_HEADER_LEN + self.safe_wire_bytes + self.payload.len()
     }
 
     pub(crate) fn identical_to(&self, other: &Self) -> bool {
@@ -619,9 +537,52 @@ impl DecodedInspectionFrame {
             && self.sequence == other.sequence
             && self.epoch == other.epoch
             && self.stage_domain == other.stage_domain
-            && self.safe_meta == other.safe_meta
+            && self.meta == other.meta
             && self.projection == other.projection
             && self.payload.as_slice() == other.payload.as_slice()
+    }
+
+    /// Test constructor with consistent typed metadata.
+    #[cfg(test)]
+    pub(crate) fn for_test(
+        logical: u64,
+        emission: u64,
+        sequence: u64,
+        epoch: u64,
+        stage_domain: InspectionStageDomainV1,
+        payload: &[u8],
+    ) -> Self {
+        let meta = gaze_types::inspection::InspectionEventMetaV1::new(
+            LogicalInspectionIdV1::new(logical),
+            InspectionEmissionIdV1::new(emission),
+            InspectionSequenceV1::new(sequence),
+            InspectionEpochV1::new(epoch),
+            stage_domain,
+            crate::test_support::safe_fields(),
+        );
+        let meta: MetaModelV1 =
+            serde_json::from_value(serde_json::to_value(meta).unwrap()).unwrap();
+        let projection: StageModelV1 = serde_json::from_value(serde_json::json!({
+            "payload": "present",
+            "measurement": { "omitted": "not_applicable" },
+            "json_shape": { "omitted": "not_applicable" },
+            "sse_timeline": { "omitted": "not_applicable" },
+            "pii_summary": { "omitted": "not_applicable" },
+            "decision_trace": { "omitted": "not_applicable" },
+            "attestation": { "omitted": "not_applicable" }
+        }))
+        .unwrap();
+        Self {
+            logical_id: LogicalInspectionIdV1::new(logical),
+            emission_id: InspectionEmissionIdV1::new(emission),
+            sequence: InspectionSequenceV1::new(sequence),
+            epoch: InspectionEpochV1::new(epoch),
+            stage_domain,
+            meta,
+            projection,
+            safe_wire_bytes: 64,
+            payload: Zeroizing::new(payload.to_vec()),
+        }
     }
 }
 
@@ -692,27 +653,107 @@ mod tests {
         assert!(reject_immediate_trailing(&mut receiver).is_err());
     }
 
+    fn reencode(frame_bytes: &[u8], projection: &[u8], payload: &[u8]) -> Vec<u8> {
+        let meta_len = read_u32(frame_bytes, 42).unwrap() as usize;
+        let meta = &frame_bytes[IPC_HEADER_LEN..IPC_HEADER_LEN + meta_len];
+        let total = IPC_HEADER_LEN + meta.len() + projection.len() + payload.len();
+        let mut bytes = frame_bytes[..IPC_HEADER_LEN].to_vec();
+        bytes[5..9].copy_from_slice(&(total as u32).to_be_bytes());
+        bytes[46..50].copy_from_slice(&(projection.len() as u32).to_be_bytes());
+        bytes[50..54].copy_from_slice(&(payload.len() as u32).to_be_bytes());
+        bytes.extend_from_slice(meta);
+        bytes.extend_from_slice(projection);
+        bytes.extend_from_slice(payload);
+        bytes
+    }
+
     #[test]
-    fn browser_availability_omits_the_value_container_for_every_closed_reason() {
-        use gaze_types::inspection::ProjectionOmissionReasonV1 as Reason;
-        for reason in [
-            Reason::NotCapturedByPolicy,
-            Reason::NotApplicable,
-            Reason::UnsupportedFormat,
-            Reason::MalformedFailClosed,
-            Reason::LimitExceeded,
-            Reason::SignedOrEncryptedSurface,
-            Reason::Purging,
-            Reason::Disabled,
-            Reason::QueueClosed,
-            Reason::ProjectionFailedClosed,
-            Reason::UnknownFuture,
+    fn omitted_payload_frames_cannot_carry_payload_bytes() {
+        use crate::test_support::{emit_logical, StageShape};
+        use gaze_types::inspection::{CaptureDomainsV1, ProjectionOmissionReasonV1};
+        let events = emit_logical(
+            CaptureDomainsV1::All,
+            &[(
+                InspectionStageDomainV1::ProviderRequest,
+                StageShape::PayloadOmitted(ProjectionOmissionReasonV1::LimitExceeded),
+            )],
+        );
+        let encoded = EncodedInspectionFrame::from_event(&events[0], 1 << 20).unwrap();
+        let decoded = DecodedInspectionFrame::decode(encoded.as_bytes(), 1 << 20).unwrap();
+        assert!(decoded.payload.is_empty());
+        let projection = serde_json::to_vec(&decoded.projection).unwrap();
+        let smuggled = reencode(encoded.as_bytes(), &projection, b"<Email_1>");
+        assert!(DecodedInspectionFrame::decode(&smuggled, 1 << 20).is_err());
+        let unchanged = reencode(encoded.as_bytes(), &projection, b"");
+        assert!(DecodedInspectionFrame::decode(&unchanged, 1 << 20).is_ok());
+        let malformed = reencode(encoded.as_bytes(), br#"{"payload":"present"}"#, b"");
+        assert!(DecodedInspectionFrame::decode(&malformed, 1 << 20).is_err());
+    }
+
+    #[test]
+    fn typed_metadata_must_match_the_header_identity() {
+        use crate::test_support::{emit_logical, StageShape};
+        use gaze_types::inspection::CaptureDomainsV1;
+        let events = emit_logical(
+            CaptureDomainsV1::All,
+            &[(
+                InspectionStageDomainV1::ProviderResponse,
+                StageShape::Present,
+            )],
+        );
+        let encoded = EncodedInspectionFrame::from_event(&events[0], 1 << 20).unwrap();
+        let mut bytes = encoded.as_bytes().to_vec();
+        assert!(DecodedInspectionFrame::decode(&bytes, 1 << 20).is_ok());
+        bytes[41] = stage_code(InspectionStageDomainV1::ProviderRequest);
+        assert!(DecodedInspectionFrame::decode(&bytes, 1 << 20).is_err());
+    }
+
+    #[test]
+    fn status_frames_round_trip_only_dashboard_descriptors() {
+        use gaze_types::inspection::CaptureDomainsV1;
+        for (domains, tier) in [
+            (
+                CaptureDomainsV1::ProviderVisible,
+                CaptureTierV1::ProviderVisible,
+            ),
+            (
+                CaptureDomainsV1::OwnerRawAndProviderVisible,
+                CaptureTierV1::OwnerRaw,
+            ),
+            (
+                CaptureDomainsV1::ProviderVisibleAndOwnerRestored,
+                CaptureTierV1::OwnerRestored,
+            ),
+            (CaptureDomainsV1::All, CaptureTierV1::Both),
         ] {
-            let availability = ProjectionAvailabilityV1::<InspectionMeasurementV1>::Omitted(reason);
-            let value = serde_json::to_value(BrowserAvailability(&availability)).unwrap();
-            assert_eq!(value["state"], "Omitted");
-            assert_eq!(value["reason"], projection_reason_wire(reason));
-            assert!(value.get("value").is_none());
+            let bytes =
+                RuntimeStatusFrameV1::encode(DashboardCaptureDescriptorV1::new(domains), 7, 2)
+                    .unwrap();
+            let Ok(InboundFrameV1::Status(status)) = InboundFrameV1::decode(&bytes, 1 << 20) else {
+                panic!("status frame decodes");
+            };
+            assert_eq!(
+                status,
+                RuntimeStatusFrameV1 {
+                    capture: tier,
+                    ingress_full: 7,
+                    ingress_closed: 2
+                }
+            );
+            let mut bad = bytes;
+            bad[5] = 9;
+            assert!(InboundFrameV1::decode(&bad, 1 << 20).is_err());
+        }
+        for domains in [
+            CaptureDomainsV1::MetadataOnly,
+            CaptureDomainsV1::OwnerRaw,
+            CaptureDomainsV1::OwnerRestored,
+            CaptureDomainsV1::OwnerRawAndOwnerRestored,
+        ] {
+            assert!(
+                RuntimeStatusFrameV1::encode(DashboardCaptureDescriptorV1::new(domains), 0, 0)
+                    .is_err()
+            );
         }
     }
 }

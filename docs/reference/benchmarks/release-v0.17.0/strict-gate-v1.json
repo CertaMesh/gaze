@@ -1,0 +1,8 @@
+{
+  "verdict": "not_comparable",
+  "differing": [
+    "model bundle nym-small-int8",
+    "policy_sha256"
+  ],
+  "layers": {}
+}

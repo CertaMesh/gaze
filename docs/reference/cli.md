@@ -10,10 +10,10 @@ Every verb below is defined by the clap `Subcommand` enum in
 
 | Subcommand | One-line summary | Feature gate |
 |------------|------------------|--------------|
-| [`gaze clean`](../../crates/gaze-cli/README.md#clean) | Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON. | always |
+| [`gaze clean`](../../crates/gaze-cli/README.md#clean) | Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON, or only the clean text with `--session-out`. See [plain-text round trip](#plain-text-round-trip). | always |
 | `gaze setup` | Install the pinned NER and Nym bundles, write a policy, and run a doctor check. See [guide](#gaze-setup). | `setup` (default build) |
 | `gaze daemon` | Run a long-lived JSONL stdio cleaner with one process-level pipeline and per-`session_id` manifests. See [guide](#gaze-daemon). | always |
-| [`gaze restore`](../../crates/gaze-cli/README.md#restore) | Read `{session_blob, text}` JSON from stdin; emit restored `{text}` JSON. | always |
+| [`gaze restore`](../../crates/gaze-cli/README.md#restore) | Read `{session_blob, text}` JSON from stdin; emit restored `{text}` JSON, or restore plain text with `--session-file`. See [plain-text round trip](#plain-text-round-trip). | always |
 | [`gaze audit query`](../../crates/gaze-cli/README.md#audit-query) | Print filtered redaction-log metadata rows as TSV from a read-only SQLite DB. | always |
 | [`gaze audit export`](../../crates/gaze-cli/README.md#audit-export) | Export filtered redaction-log metadata rows as JSONL for downstream processing. | always |
 | `gaze audit purge` | Manually delete redaction-log metadata rows older than an ISO 8601 UTC timestamp. See [guide](#gaze-audit-purge). | always |
@@ -37,6 +37,54 @@ the classes and a repair path. `gaze proxy start` and `restart` write the child
 process warning to the proxy stderr log. Gaze also warns when a reachable
 per-class `generalize` rule creates a one-way value. Errors still use one JSON
 value on stderr.
+
+## Plain-text round trip
+
+Shell pipelines can clean and restore without parsing JSON:
+
+```sh
+gaze clean --session-out owner-session.json < input.txt > clean.txt
+gaze restore --session-file owner-session.json < reply.txt > restored.txt
+```
+
+`gaze clean --session-out <PATH>` writes `{"session_blob":"<base64>"}` to a
+new file and prints only the clean text, byte for byte, with no added newline.
+The session and the raw `entries` values never reach stdout. The file is
+created with mode `0600` inside a fresh staging directory beside the target on
+macOS or Linux. Gaze creates the directory with mode `0700`, clears and verifies
+its ACL on the directory descriptor, and verifies ownership and the absence of
+symlinks before creating the session file. Linux also clears the directory's
+default ACL so it cannot pass grants to the file. Gaze clears and verifies the
+file's ACL before writing any session bytes, then writes, syncs, and atomically
+renames the file into place. Creation refuses an existing destination even if it
+appears during processing. `--overwrite-session-out` atomically replaces it.
+The directory prevents another user from opening the empty file and retaining a
+reader across ACL removal. Gaze removes staging files and the directory on
+success and failure. A failed permission check returns `SessionFile` (exit `4`)
+without replacing the old session. Filesystems that cannot verify permissions or
+perform the requested atomic rename fail closed.
+`--session-out` is refused with `SessionFile` on Windows and other unsupported
+platforms; owner-only creation is not implemented there. Reading existing
+sessions with `--session-file` remains available.
+
+An existing path, including a symlink, fails with `SessionFile` (exit `4`)
+before any work runs.
+`--overwrite-session-out` replaces it with a fresh owner-only file.
+
+`gaze restore --session-file <PATH>` reads UTF-8 text on stdin and prints the
+restored text exactly. Restore semantics match the JSON form: strict mode
+rejects a token the session did not issue with `UnknownToken`, a tampered
+session fails with `InvalidSignature`, and an expired one with `BlobExpired`,
+all exit `3` with nothing on stdout. A missing file, or one that is not a
+session file, fails with `SessionFile` (exit `4`). With `--restore-mode tolerant`,
+each kept unknown token is reported on stderr as
+`{"warning":"UnknownToken","token":"<token>"}`. Restore telemetry is
+JSON-only, so `--telemetry` is refused here; `--audit-db` still records it.
+
+A session-file flag implies `--format text`. `--format text` without it, or
+`--format json` with it, fails with `PolicyConfig` (exit `2`). The JSON stdin
+and stdout contracts are unchanged. `gaze audit --session` is unrelated: it
+filters by an opaque audit session id.
 
 ## `gaze setup`
 

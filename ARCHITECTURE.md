@@ -30,7 +30,7 @@ Sources: [pipeline](crates/gaze/src/pipeline.rs),
 
 ## Crate map
 
-The workspace has 15 published crates plus internal `xtask`.
+The workspace has 15 published crates plus internal `xtask` and the CI-only `feature-graph-probe`.
 [CONTRIBUTING.md](CONTRIBUTING.md#workspace-shape) lists their roles;
 [crate boundaries](docs/reference/crates.md) maps dependencies.
 

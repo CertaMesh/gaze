@@ -5,14 +5,41 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # release_char_level.py check resolves release tags and their commits' crates trees.
           fetch-depth: 0
+
+      - name: Select full evidence scan for changed publication inputs
+        id: evidence
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import sys
+          sys.path.insert(0, 'scripts/ci')
+          from ci_gate import changed_paths
+
+          inputs = {
+              'scripts/bench/evidence_home_paths.py',
+              'scripts/bench/export_portable_record.py',
+              'docs/reference/benchmarks/portable-evidence-receipts.json',
+          }
+          paths = changed_paths(os.environ['BASE_SHA'], os.environ['HEAD_SHA'])
+          changed = any(path.endswith('.gz') or path in inputs for path in paths)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'changed={str(changed).lower()}\n')
+          PY
 
       # Stdlib-only, no external corpus and no model: fails if the benchmark document
       # drifts from the release scorecards it reports.
@@ -42,19 +69,20 @@ jobs:
       - name: leak ledger matches its committed observation record
         run: python3 scripts/bench/leak_ledger.py check
 
+      - name: tracked gzip evidence carries no absolute home path
+        if: ${{ github.event_name == 'push' || steps.evidence.outputs.changed == 'true' }}
+        run: python3 scripts/bench/evidence_home_paths.py check
+
+      - name: scrubbed evidence archives equal their originals except path fields
+        run: python3 scripts/bench/evidence_home_paths.py verify-receipts
+
       - name: release character-level scores match the release history
         run: python3 scripts/bench/compare/release_char_level.py check
 
-      - name: benchmark renderer contract tests
-        run: python3 -m unittest discover -s scripts/bench -p 'test_render_*doc.py'
-
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1 (existing commit pin)
 
       - name: cargo doc (warnings as errors)
         env:
           RUSTDOCFLAGS: "-D warnings"
         run: cargo doc --workspace --all-features --no-deps --exclude gaze-cli
-
-      - name: cargo test --doc
-        run: cargo test --doc --workspace --all-features

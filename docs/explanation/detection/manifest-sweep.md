@@ -140,8 +140,9 @@ matcher rebuilds when sweepability or repeat-seed metadata changes; it uses the 
 without another raw-value store.
 
 Ordinary `session_blob` snapshots remain v6 and carry evidence. A snapshot with
-deterministic repeat metadata uses v7. A reader supporting only v6 or earlier
-rejects v7 with `InvalidSnapshotVersion(7)`; the new reader imports v2–v7.
+deterministic repeat metadata uses v8; JSON source spelling alone uses v7. A reader
+supporting only v7 or earlier rejects v8 with `InvalidSnapshotVersion(8)`; the new
+reader imports v2–v8.
 Signatures bind the envelope version, and import rejects invalid seed offsets,
 missing deterministic evidence, or seed metadata under an older envelope.
 Blobs v5 and older still import/restore but cannot seed sweeps because their

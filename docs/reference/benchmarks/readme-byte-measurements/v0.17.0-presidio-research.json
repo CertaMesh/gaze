@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "tag": "v0.17.0",
+  "revision": "8a19d8c64a007a990ab5efc8a22d33f08bbe9f11",
+  "dataset": "presidio-research",
+  "contract": "all-gold",
+  "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
+  "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+  "harness_revision": "97f7f026483457a2b54f7d8d3de15038c30012e5",
+  "driver_sha256": "577a10ac24948bd1a6dba498f85569dd481f3563e91a8a7bc4af6455e3811733",
+  "inputs_sha256": {
+    "dataset": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012"
+  },
+  "hardware": {
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "cpu": "arm",
+    "cores": 18
+  },
+  "model_manifests_sha256": {
+    "ner": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+    "nym": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767"
+  },
+  "command": [
+    "uv",
+    "run",
+    "--project",
+    "scripts/bench",
+    "--python",
+    "3.13",
+    "python",
+    "scripts/bench/readme_byte_measurements.py",
+    "--tag",
+    "v0.17.0",
+    "--dataset",
+    "presidio-research",
+    "--runtime-root",
+    "<tag-checkout>",
+    "--binary",
+    "<tag-checkout>/target/release/examples/clean_for_bench",
+    "--policy",
+    "<setup-policy>",
+    "--input",
+    "<pinned-dataset>",
+    "--output",
+    "<private-record-directory>",
+    "--build-receipts",
+    "<build-receipts>"
+  ],
+  "build_commands": [
+    [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "-p",
+      "gaze-cli"
+    ],
+    [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "-p",
+      "gaze-recognizers",
+      "--example",
+      "clean_for_bench",
+      "--features",
+      "safety-net-nym"
+    ],
+    [
+      "/tmp/readme-v017/runtime-v017/target/release/gaze",
+      "setup",
+      "--non-interactive",
+      "--force",
+      "--policy-out",
+      "<setup-policy>"
+    ]
+  ],
+  "toolchain": "1.96.0",
+  "cargo_build_jobs": 4,
+  "records": {
+    "test": {
+      "file": "test.jsonl.gz",
+      "sha256": "b8678cd01521d98f53d5063fc957286dcc315de84a7092dec04fcf8aee2eefd1",
+      "format": "gzip-jsonl",
+      "schema_version": 2,
+      "corpus_sha256": "241ca987c67af4cd7a70ef5e132446f38ad39b78bf877fb148635964c34a94c5",
+      "observations": 1500,
+      "bytes": 202497
+    }
+  },
+  "sets": {
+    "test": {
+      "documents": 1500,
+      "processed": 1500,
+      "refused": 0,
+      "gold_bytes": 39531,
+      "leaked_bytes": 7463,
+      "false_positive_bytes": 1436,
+      "restore_exact": 1500,
+      "manifest_valid": 1500
+    }
+  },
+  "totals": {
+    "documents": 1500,
+    "processed": 1500,
+    "refused": 0,
+    "gold_bytes": 39531,
+    "leaked_bytes": 7463,
+    "false_positive_bytes": 1436,
+    "restore_exact": 1500,
+    "manifest_valid": 1500,
+    "byte_micro_f2": 0.8367253219779991
+  }
+}

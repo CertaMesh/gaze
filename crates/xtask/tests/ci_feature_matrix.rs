@@ -1,39 +1,76 @@
-use std::path::PathBuf;
+use std::collections::BTreeMap;
 
-const REQUIRED_XTASK_GATES: &[&str] = &[
-    "symmetric-potemkin",
-    "class-map-override-safety",
-    "recognizer-composition-validator",
-    "no-tenant-knowledge",
-    "bundle-tokenization-drift --verify-ack",
-    "family-policy-table-coherence",
-    "locale-cue-bundle-coherence",
-    "fixture-citation-lint",
-    "trybuild-fixture-hygiene",
-    "cargo-metadata-audit-isolation",
-    "readme-version-check",
-    "safety-net-sanity",
-    "dashboard-isolation",
-    "mcp-tier-isolation",
-    "ci-feature-matrix --partition ci-gates",
-];
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct Workflow {
+    jobs: BTreeMap<String, Job>,
+}
+
+#[derive(Deserialize)]
+struct Job {
+    #[serde(default)]
+    steps: Vec<Step>,
+}
+
+#[derive(Deserialize)]
+struct Step {
+    run: Option<String>,
+}
+
+fn check_matrix_ownership(workflow: &str) -> Result<(), String> {
+    let workflow: Workflow = serde_saphyr::from_str(workflow).map_err(|error| error.to_string())?;
+    let mut commands = Vec::new();
+    for (job, body) in workflow.jobs {
+        for step in body.steps {
+            if let Some(run) = step.run {
+                for line in run.lines().map(str::trim) {
+                    if line.starts_with("cargo run -p xtask -- ") {
+                        commands.push((job.clone(), line.to_owned()));
+                    }
+                }
+            }
+        }
+    }
+    let expected = [
+        (
+            "workspace-default".to_owned(),
+            "cargo run -p xtask -- ci-feature-matrix --partition ci-default".to_owned(),
+        ),
+        (
+            "xtask-feature-gates".to_owned(),
+            "cargo run -p xtask -- ci-feature-matrix --partition ci-gates".to_owned(),
+        ),
+    ];
+    if commands == expected {
+        Ok(())
+    } else {
+        Err(format!("standalone or missing xtask gates: {commands:?}"))
+    }
+}
 
 #[test]
-fn test_workflow_runs_every_required_xtask_gate() {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let repo_root = manifest_dir
-        .parent()
-        .and_then(std::path::Path::parent)
-        .unwrap();
-    let workflow = std::fs::read_to_string(repo_root.join(".github/workflows/test.yml")).unwrap();
-    let gates = job_section(&workflow, "xtask-feature-gates");
+fn test_workflow_runs_xtask_gates_only_through_the_matrix() {
+    check_matrix_ownership(include_str!("../../../.github/workflows/test.yml")).unwrap();
+}
 
-    for gate in REQUIRED_XTASK_GATES {
-        let command = format!("run: cargo run -p xtask -- {gate}");
-        assert!(
-            gates.lines().any(|line| line.trim() == command),
-            "test.yml must run `{command}`"
+#[test]
+fn matrix_ownership_checks_plain_and_block_run_strings() {
+    for matrix in [
+        "run: cargo run -p xtask -- ci-feature-matrix --partition ci-gates",
+        "run: |\n          cargo run -p xtask -- ci-feature-matrix --partition ci-gates",
+    ] {
+        let workflow = format!(
+            "jobs:\n  workspace-default:\n    steps:\n      - run: cargo run -p xtask -- ci-feature-matrix --partition ci-default\n  xtask-feature-gates:\n    steps:\n      - {matrix}\n"
         );
+        check_matrix_ownership(&workflow).unwrap();
+        for duplicate in [
+            "run: cargo run -p xtask -- safety-net-sanity",
+            "run: |\n          echo checking\n          cargo run -p xtask -- safety-net-sanity",
+        ] {
+            let changed = format!("{workflow}      - {duplicate}\n");
+            assert!(check_matrix_ownership(&changed).is_err(), "{duplicate}");
+        }
     }
 }
 
@@ -68,15 +105,10 @@ fn ci_workflow_keeps_all_coverage_owners_and_required_contexts() {
     assert!(!required_test
         .lines()
         .any(|line| line.starts_with("    name:")));
-    assert!(required_test.contains("    needs: [test-support, workspace-shards, test-coverage]\n"));
+    assert!(required_test
+        .contains("    needs: [plan, fast, test-support, workspace-shards, test-coverage]\n"));
     assert!(required_test.contains("    if: ${{ always() }}\n"));
-    for (variable, job) in [
-        ("SUPPORT_RESULT", "test-support"),
-        ("SHARDS_RESULT", "workspace-shards"),
-        ("COVERAGE_RESULT", "test-coverage"),
-    ] {
-        assert!(required_test.contains(&format!("{variable}: ${{{{ needs.{job}.result }}}}")));
-    }
+    assert!(required_test.contains("python3 scripts/ci/ci_gate.py check --context test"));
     let shards = job_section(workflow, "workspace-shards");
     assert!(shards.contains("fail-fast: false"));
     assert!(shards.contains("shard: [cli, runtime, gates]"));
@@ -84,70 +116,61 @@ fn ci_workflow_keeps_all_coverage_owners_and_required_contexts() {
     assert!(
         shards.contains("cargo nextest run --workspace --all-features --profile ci --no-fail-fast")
     );
+    for command in [
+        "if: ${{ matrix.shard == 'gates' }}",
+        "python3 scripts/ci/test_shards.py covered-package --evidence target/shard-evidence/gates --package gaze-proxy-dashboard",
+        "python3 scripts/ci/test_shards.py covered-package --evidence target/shard-evidence/gates --package gaze-inspection",
+    ] {
+        assert!(shards.contains(command), "shards must retain {command}");
+    }
     let proof = job_section(workflow, "test-coverage");
-    assert!(proof.contains("needs: [workspace-shards]"));
+    assert!(proof.contains("needs: [plan, workspace-shards]"));
     assert!(proof.contains("python3 scripts/ci/test_shards.py prove"));
     let defaults = job_section(workflow, "workspace-default");
     assert!(
         defaults.contains("run: cargo run -p xtask -- ci-feature-matrix --partition ci-default")
     );
-    assert!(!defaults.contains("    needs:"));
-    assert!(!job_section(workflow, "xtask-feature-gates").contains("    needs:"));
+    assert!(defaults.contains("    needs: [plan]"));
+    assert!(job_section(workflow, "xtask-feature-gates").contains("    needs: [plan]"));
     let aggregate = job_section(workflow, "xtask-gates");
     assert!(aggregate.contains("    name: xtask gates\n"));
-    assert!(aggregate.contains("    needs: [test, xtask-feature-gates, workspace-default]\n"));
+    assert!(aggregate
+        .contains("    needs: [plan, fast, test, xtask-feature-gates, workspace-default]\n"));
     assert!(aggregate.contains("    if: ${{ always() }}\n"));
-    for (variable, job) in [
-        ("TEST_RESULT", "test"),
-        ("FEATURE_GATES_RESULT", "xtask-feature-gates"),
-        ("DEFAULT_RESULT", "workspace-default"),
-    ] {
-        assert!(aggregate.contains(&format!("{variable}: ${{{{ needs.{job}.result }}}}")));
-    }
+    assert!(aggregate.contains("python3 scripts/ci/ci_gate.py check --context xtask"));
     assert!(!workflow.contains("continue-on-error"));
 }
 
 #[test]
-fn required_aggregator_rejects_failure_skip_cancel_and_missing_results() {
+fn integration_context_depends_on_every_full_suite_owner() {
     let workflow = include_str!("../../../.github/workflows/test.yml");
-    for (job, variables) in [
-        (
-            "xtask-gates",
-            ["TEST_RESULT", "FEATURE_GATES_RESULT", "DEFAULT_RESULT"],
-        ),
-        (
-            "test",
-            ["SUPPORT_RESULT", "SHARDS_RESULT", "COVERAGE_RESULT"],
-        ),
+    let aggregate = job_section(workflow, "integration");
+    assert!(aggregate.contains("    name: ci/integration\n"));
+    assert!(aggregate.contains("    if: ${{ always() }}\n"));
+    assert!(aggregate.contains("    needs: [plan, fast, msrv, test-support, workspace-shards, test-coverage, test, benchmark-model-free, xtask-feature-gates, workspace-default, xtask-gates, dylint]\n"));
+    assert!(aggregate.contains("NEEDS_JSON: ${{ toJSON(needs) }}"));
+    assert!(aggregate.contains("python3 scripts/ci/ci_gate.py check --context integration"));
+    assert!(workflow.contains("  merge_group:\n    types: [checks_requested]"));
+    assert!(workflow.contains("  workflow_dispatch:"));
+    for job in [
+        "test-support",
+        "workspace-shards",
+        "xtask-feature-gates",
+        "workspace-default",
     ] {
-        let aggregate = job_section(workflow, job);
-        let script: String = aggregate
-            .split_once("        run: |\n")
-            .expect("aggregator has a shell check")
-            .1
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(|line| format!("{}\n", line.strip_prefix("          ").unwrap()))
-            .collect();
-        for test in ["success", "failure", "skipped", "cancelled", ""] {
-            for gates in ["success", "failure", "skipped", "cancelled", ""] {
-                for defaults in ["success", "failure", "skipped", "cancelled", ""] {
-                    let output = std::process::Command::new("bash")
-                        .args(["-e", "-c", &script])
-                        .env(variables[0], test)
-                        .env(variables[1], gates)
-                        .env(variables[2], defaults)
-                        .output()
-                        .unwrap();
-                    assert_eq!(
-                        output.status.success(),
-                        [test, gates, defaults]
-                            .iter()
-                            .all(|result| *result == "success"),
-                        "aggregator result for {test:?}/{gates:?}/{defaults:?}"
-                    );
-                }
-            }
-        }
+        assert!(job_section(workflow, job)
+            .contains("if: ${{ needs.plan.outputs.integration == 'true' }}"));
     }
+    for (job, flag) in [
+        ("msrv", "msrv"),
+        ("benchmark-model-free", "bench"),
+        ("dylint", "dylint"),
+    ] {
+        assert!(job_section(workflow, job).contains(&format!(
+            "if: ${{{{ needs.plan.outputs.{flag} == 'true' }}}}"
+        )));
+    }
+    let dylint = include_str!("../../../.github/workflows/dylint.yml");
+    assert!(dylint.contains("  workflow_call:"));
+    assert!(dylint.contains("GAZE_DYLINT_REQUIRED: \"1\""));
 }

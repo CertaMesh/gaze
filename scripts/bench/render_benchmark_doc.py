@@ -7,17 +7,20 @@ when rendering the committed history.
 Two jobs, deliberately split so CI never needs the benchmark corpus:
 
 ``--append-history``
-    Reads one ``scorecard-vX.Y.Z.json`` (schema v4), extracts the headline
+    Reads one ``scorecard-vX.Y.Z.json.gz`` (schema v4), extracts the headline
     fields into ``release-history.json``, then re-renders the document. This is
     the per-release step and runs on the machine that produced the scorecard.
 
 ``--check``
     Re-renders from committed release history and comparison aggregates and
-    fails if either generated document has drifted. Stdlib-only and corpus-free.
+    fails if either generated document has drifted or a committed scorecard no
+    longer hashes to its recorded ``scorecard_sha256``. Stdlib-only and
+    corpus-free.
 
 ``release-history.json`` is the source of truth for release results, while
 ``comparison.json`` supplies the same-run Gaze and competitor results. The
-scorecard JSON stays committed as the machine-readable release evidence.
+scorecard JSON stays committed as the machine-readable release evidence,
+gzipped by ``bench_json.py``; its pinned digest covers the decompressed bytes.
 """
 
 from __future__ import annotations
@@ -32,7 +35,9 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+import bench_json
 import benchmark_charts as charts
+import readme_byte_panels
 from tagged_gaze import check_public, require_release_tag
 from layer_display import layer_display_name
 from markdown_table import table_header
@@ -317,7 +322,7 @@ def empty_history() -> dict[str, Any]:
         "comment": (
             "Release-keyed benchmark history. One entry per released version, "
             "appended by scripts/bench/render_benchmark_doc.py --append-history "
-            "from that release's committed scorecard-vX.Y.Z.json."
+            "from that release's committed scorecard-vX.Y.Z.json.gz."
         ),
         "shipped_default_arm": SHIPPED_DEFAULT_ARM,
         "releases": [],
@@ -456,8 +461,12 @@ def _validate_observation_record(
         raise RenderError(f"{where}: observation record corpus digest mismatch")
 
 
+def release_scorecard_name(version: str) -> str:
+    return f"scorecard-{version}.json.gz"
+
+
 def contract_scorecard_name(version: str, contract_version: int) -> str:
-    return f"scorecard-{version}-scored-labels-v{contract_version}.json"
+    return f"scorecard-{version}-scored-labels-v{contract_version}.json.gz"
 
 
 def contract_result_from_scorecard(
@@ -951,6 +960,8 @@ def history_entry_from_scorecard(
     """Project one schema-v4 scorecard onto the fields the document prints."""
     if scorecard.get("cache_replay") is True:
         raise RenderError("release scorecards must be fresh: cache_replay is true")
+    if "capture_cache" in scorecard:
+        raise RenderError("reusable base captures require run evidence; use --no-cache for release admission")
     if not VERSION_RE.match(version):
         raise RenderError(f"--version must look like v1.2.3, got {version!r}")
     if scorecard.get("schema_version") != SCORECARD_SCHEMA_VERSION:
@@ -1107,6 +1118,8 @@ def layer_history_aggregates(scorecard: Mapping[str, Any]) -> dict[str, Any]:
         "binary_commit": copy.deepcopy(scorecard.get("binary_commit", scorecard.get("gaze"))),
         "binary_sha256": scorecard.get("binary_sha256"),
         "harness_commit": copy.deepcopy(scorecard.get("gaze")),
+        **({"observation_record": copy.deepcopy(scorecard["observation_record"])}
+           if "observation_record" in scorecard else {}),
         "arms": arms,
     }
 
@@ -1582,8 +1595,13 @@ def chart_panels(
     declared = json.loads(config_bytes)
     if len(set(declared.values())) != len(declared):
         raise RenderError("a README chart configuration was declared twice")
+    from comparison_availability import unavailable_tools
+    try:
+        unavailable = unavailable_tools(comparison)
+    except ValueError as error:
+        raise RenderError(str(error)) from error
     for name in declared.values():
-        if name not in comparison["tools"]:
+        if name not in comparison["tools"] and name not in unavailable:
             raise RenderError(f"declared README chart configuration is missing: {name}")
     try:
         return charts.panels(
@@ -1597,15 +1615,26 @@ def chart_panels(
 def attach_presidio_tuned(comparison: Mapping[str, Any], comparison_path: Path) -> Mapping[str, Any]:
     """The comparison plus `presidio-tuned.json` when it sits beside it and is sound.
 
-    The tuned report must name these exact comparison bytes, reproduce the
-    comparison's presidio-all row from its own records, and have run each chosen
-    configuration live on its fixed sample covering the same bytes as the replay.
+    The tuned report must name the original comparison snapshot, reproduce its
+    presidio-all row, and have run each chosen configuration live on its fixed
+    sample covering the same bytes as the replay. Composed reports retain that
+    anchor only after validation against both snapshots and the native receipt.
     """
     path = comparison_path.parent / TUNED_PRESIDIO_NAME
     if not path.exists():
         return comparison
     tuned = json.loads(path.read_text(encoding="utf-8"))
-    if tuned["comparison_sha256"] != _sha256(comparison_path):
+    anchor_path = comparison_path
+    if "row_sources" in comparison:
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "compare"))
+        import row_sources
+
+        try:
+            row_sources.validate(comparison, comparison_path)
+        except (ValueError, OSError, KeyError, TypeError) as error:
+            raise RenderError(f"invalid comparison row sources: {error}") from error
+        anchor_path = comparison_path.parent / comparison["row_sources"]["base"]["path"]
+    if tuned["comparison_sha256"] != _sha256(anchor_path):
         raise RenderError(f"{TUNED_PRESIDIO_NAME} was measured beside a different comparison.json")
     if tuned.get("harness_dirty") is not False or not tuned["anchor"]["equal"]:
         raise RenderError(f"{TUNED_PRESIDIO_NAME} needs a clean harness and a reproduced presidio-all anchor")
@@ -1685,6 +1714,17 @@ def render_readme_chart(
         "Methods, competitor setups and how to "
         "reproduce: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels)."
         + _pending_note(panel_set)
+    )
+    scopes = [
+        f"{panel.title}: " + ", ".join(
+            bar.name if bar.f2 is not None else "no tagged Gaze measurement"
+            for bar in panel.bars if bar.gaze
+        )
+        for panel in panel_set[1:]
+    ]
+    caption += (
+        " External character panels keep their measured scope (" + "; ".join(scopes) + "). "
+        "The fresh external receipts above contain byte-micro scores, not character scores."
     )
     return "\n\n".join([_picture("", _PANEL_ALT), caption])
 
@@ -2165,6 +2205,25 @@ def _display(path: Path) -> str:
         return path.name
 
 
+def check_committed_scorecards(entry: Mapping[str, Any], directory: Path) -> None:
+    """Every scorecard a row names is committed and still hashes to its pin."""
+    pins = [(entry["scorecard"], entry["scorecard_sha256"])] + [
+        (result["scorecard"], result["scorecard_sha256"])
+        for result in entry.get("contract_results", ())
+    ]
+    for name, pinned in pins:
+        path = directory / name
+        if not path.exists():
+            raise RenderError(
+                f"{entry['version']} names {name}, which is not "
+                "committed; the machine-readable evidence must stay in the tree"
+            )
+        if bench_json.content_sha256(path) != pinned:
+            raise RenderError(
+                f"{entry['version']}: {name} does not match its recorded scorecard_sha256"
+            )
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -2246,7 +2305,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             rows = [e for e in history["releases"] if e["version"] == args.release_version]
             if not rows:
                 raise RenderError(f"no history row for {args.release_version}")
-            scorecard = json.loads(args.scorecard.read_text(encoding="utf-8"))
+            scorecard = bench_json.load(args.scorecard)
             contract = _scored_label_contract(scorecard)
             if contract is None:
                 raise RenderError("the scorecard is scored under contract v1")
@@ -2260,7 +2319,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     scorecard,
                     rows[0],
                     scorecard_filename=expected,
-                    scorecard_sha256=_sha256(args.scorecard),
+                    scorecard_sha256=bench_json.content_sha256(args.scorecard),
                 )
             )
             validate_history(history)
@@ -2283,18 +2342,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             scorecard_path = args.scorecard
             if not scorecard_path.exists():
                 raise RenderError(f"scorecard not found: {scorecard_path}")
-            expected = f"scorecard-{args.release_version}.json"
+            expected = release_scorecard_name(args.release_version)
             if scorecard_path.name != expected:
                 raise RenderError(
                     f"scorecard must be named {expected} for {args.release_version}, "
                     f"got {scorecard_path.name}"
                 )
             entry = history_entry_from_scorecard(
-                json.loads(scorecard_path.read_text(encoding="utf-8")),
+                bench_json.load(scorecard_path),
                 version=args.release_version,
                 machine=args.machine,
                 scorecard_filename=scorecard_path.name,
-                scorecard_sha256=_sha256(scorecard_path),
+                scorecard_sha256=bench_json.content_sha256(scorecard_path),
                 provisional=args.provisional,
                 note=args.note,
                 shipped_arm=args.shipped_default_arm,
@@ -2305,15 +2364,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             write_history(args.history, history)
 
         for entry in history["releases"]:
-            names = [entry["scorecard"]] + [
-                result["scorecard"] for result in entry.get("contract_results", ())
-            ]
-            for name in names:
-                if not (args.history.parent / name).exists():
-                    raise RenderError(
-                        f"{entry['version']} names {name}, which is not "
-                        "committed; the machine-readable evidence must stay in the tree"
-                    )
+            check_committed_scorecards(entry, args.history.parent)
 
         readme = args.readme
         if readme is None and args.history.resolve() == DEFAULT_HISTORY.resolve():
@@ -2349,6 +2400,40 @@ def main(argv: Sequence[str] | None = None) -> int:
                 outputs.append(
                     (target, target.read_text(encoding="utf-8") if target.exists() else None, svg)
                 )
+
+        if args.history.resolve() == DEFAULT_HISTORY.resolve():
+            try:
+                measured = readme_byte_panels.load(args.history.parent)
+                declared = json.loads(CHART_CONFIGS.read_text())
+                panel_set = readme_byte_panels.panels(measured, comparison, their, declared)
+            except (ValueError, KeyError, OSError) as error:
+                raise RenderError(f"README byte panels: {error}") from error
+            for path, root in ((args.doc, False), (readme, True)):
+                if path is not None:
+                    index = next(i for i, item in enumerate(outputs) if item[0] == path)
+                    target, original, rendered = outputs[index]
+                    bodies = {
+                        "external-release": "" if root else
+                        "Historical release acceptance remains in the [external F2 review](release-v0.17.0/external-f2-release-review.json). "
+                        "TRACE's original net-byte gate failed; strict own-policy identity was `not_comparable`. "
+                        "The unified [dataset panels](#benchmark-panels) below use tagged-binary measurements. Zero-leak readiness remains unmet.",
+                        "readme-chart" if root else "panels":
+                        readme_byte_panels.readme(measured) if root else
+                        readme_byte_panels.markdown(measured, comparison, their, declared),
+                    }
+                    for name, body in bodies.items():
+                        start, end = begin_marker(name), end_marker(name)
+                        begin, stop = rendered.find(start), rendered.find(end)
+                        if begin < 0 or stop < begin:
+                            raise RenderError(f"document is missing ordered {name!r} generated markers")
+                        rendered = rendered[:begin + len(start)] + "\n\n" + check_public(body, name) + "\n\n" + rendered[stop:]
+                    outputs[index] = (target, original, rendered)
+            if readme is not None:
+                replacements = readme_byte_panels.files(panel_set)
+                outputs = [item for item in outputs if item[0].name not in replacements]
+                for name, svg in replacements.items():
+                    target = readme.parent / CHART_ASSETS / name
+                    outputs.append((target, target.read_text() if target.exists() else None, svg))
 
         if args.check:
             drifted = [path for path, original, rendered in outputs if rendered != original]

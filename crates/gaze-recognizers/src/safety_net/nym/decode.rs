@@ -24,6 +24,8 @@ pub(crate) struct NymSpan {
     pub(crate) start: usize,
     pub(crate) end: usize,
     pub(crate) label: NymLabel,
+    /// Other labels contributing to a joined personal name, without duplicating `label`.
+    pub(crate) additional_labels: Vec<NymLabel>,
     pub(crate) score: f32,
 }
 
@@ -273,6 +275,7 @@ pub(crate) fn decode_pieces(
             start: pieces[word[0]].start,
             end: pieces[word[word.len() - 1]].end,
             label: best.label,
+            additional_labels: Vec::new(),
             score: counted
                 .iter()
                 .filter(|score| score.label == best.label)
@@ -280,7 +283,14 @@ pub(crate) fn decode_pieces(
                 .fold(f32::INFINITY, f32::min),
         };
         match open.as_mut() {
-            Some(span) if !first.is_begin && span.label == current.label => {
+            Some(span)
+                if !first.is_begin
+                    && span.label == current.label
+                    && (!is_person_name(span.label)
+                        || text
+                            .get(span.end..current.start)
+                            .is_some_and(|gap| !gap.chars().any(is_record_separator))) =>
+            {
                 span.end = current.end;
                 span.score = span.score.min(current.score);
             }
@@ -288,10 +298,52 @@ pub(crate) fn decode_pieces(
         }
     }
     out.extend(open);
-    Ok(out
-        .into_iter()
-        .filter_map(|span| trim_structural_edges(text, span))
-        .collect())
+    Ok(join_person_name_parts(
+        text,
+        out.into_iter()
+            .filter_map(|span| trim_structural_edges(text, span))
+            .collect(),
+    ))
+}
+
+fn is_person_name(label: NymLabel) -> bool {
+    matches!(label, NymLabel::GivenName | NymLabel::Surname)
+}
+
+fn is_record_separator(ch: char) -> bool {
+    matches!(
+        ch,
+        '\n' | '\r' | '\u{b}' | '\u{c}' | '\u{85}' | '\u{2028}' | '\u{2029}'
+    )
+}
+
+/// A model marks given names and surnames separately. Adjacent parts separated only by inline
+/// whitespace form one restorable value, including multi-part given names and family names.
+/// Punctuation, record boundaries and unlabelled words prevent a join. Other labels are untouched.
+fn join_person_name_parts(text: &str, spans: Vec<NymSpan>) -> Vec<NymSpan> {
+    let mut joined: Vec<NymSpan> = Vec::with_capacity(spans.len());
+    for span in spans {
+        if let Some(previous) = joined.last_mut() {
+            let inline_gap = text.get(previous.end..span.start).is_some_and(|gap| {
+                !gap.is_empty()
+                    && gap
+                        .chars()
+                        .all(|ch| ch.is_whitespace() && !is_record_separator(ch))
+            });
+            if is_person_name(previous.label) && is_person_name(span.label) && inline_gap {
+                previous.end = span.end;
+                previous.score = previous.score.min(span.score);
+                for label in std::iter::once(span.label).chain(span.additional_labels) {
+                    if label != previous.label && !previous.additional_labels.contains(&label) {
+                        previous.additional_labels.push(label);
+                    }
+                }
+                continue;
+            }
+        }
+        joined.push(span);
+    }
+    joined
 }
 
 /// Characters that are never part of a value at a span edge: JSON quotes, colons, commas,
@@ -483,7 +535,7 @@ mod tests {
             .unwrap()
             .is_empty());
 
-        // GIVEN_NAME outweighs USERNAME on the piece: disabled label wins the argmax, no suspect.
+        // CITY outweighs USERNAME on the piece: disabled label wins the argmax, no suspect.
         let mut rows = labelled(
             &offsets,
             char_range(text, "anna84"),
@@ -493,7 +545,7 @@ mod tests {
         let target = offsets.iter().position(|&(s, e)| s < 13 && 7 < e).unwrap();
         let index = NymLabel::ALL
             .iter()
-            .position(|l| *l == NymLabel::GivenName)
+            .position(|l| *l == NymLabel::City)
             .unwrap();
         rows[target][2 * index + 1] = 0.6;
         rows[target][0] = 0.1;
@@ -501,7 +553,7 @@ mod tests {
             .unwrap()
             .is_empty());
 
-        // Same shape with USERNAME enabled at 0.3: its 0.35 clears the threshold, but GIVEN_NAME
+        // Same shape with USERNAME enabled at 0.3: its 0.35 clears the threshold, but CITY
         // (0.55) is the piece's label, so it still produces nothing. Picking the argmax among
         // enabled labels only would emit a USERNAME suspect here.
         let low = NymOperatingPoint::new([(NymLabel::Username, 0.3)]).unwrap();
@@ -539,17 +591,11 @@ mod tests {
     }
 
     #[test]
-    fn op_b_never_enables_a_name_label() {
+    fn op_b_keeps_unselected_labels_disabled() {
         let text = "Hallo Anna Schmidt";
         let offsets = pieces(text);
         let op = NymOperatingPoint::default();
-        for label in [
-            NymLabel::GivenName,
-            NymLabel::Surname,
-            NymLabel::City,
-            NymLabel::ZipCode,
-            NymLabel::TaxId,
-        ] {
+        for label in [NymLabel::City, NymLabel::ZipCode, NymLabel::TaxId] {
             let rows = labelled(&offsets, char_range(text, "Anna"), label, 0.99);
             assert!(
                 decode_pieces(text, &offsets, &scores(&rows), &op)
@@ -714,7 +760,7 @@ mod tests {
 
     /// Tool-call JSON: a piece that carries the quote, colon, comma or brace next to a value must
     /// not drag that syntax into the suspect. The label is irrelevant to trimming; `Username` is
-    /// used because op-B enables no name label.
+    /// used to keep the punctuation contract independent of personal-name joining.
     #[test]
     fn structural_punctuation_is_trimmed_from_span_edges() {
         let op = NymOperatingPoint::op_b();
@@ -766,6 +812,7 @@ mod tests {
             start,
             end,
             label: NymLabel::Username,
+            additional_labels: Vec::new(),
             score: 0.9,
         };
         let text = r#" "[a, b]": "#;
@@ -818,6 +865,7 @@ mod tests {
                 start,
                 end: start + raw.len(),
                 label: NymLabel::Username,
+                additional_labels: Vec::new(),
                 score: 0.9,
             };
             let got = trim_structural_edges(text, span);
@@ -854,6 +902,7 @@ mod tests {
                         start,
                         end,
                         label: NymLabel::Username,
+                        additional_labels: Vec::new(),
                         score: 0.9,
                     };
                     let Some(out) = trim_structural_edges(&text, span) else {

@@ -33,12 +33,15 @@ impl AssemblyBuilder {
         self.registered_recognizers += 1;
     }
 
-    pub(crate) fn register_collision(
+    pub(crate) fn recognizer_with_membership<R>(
         &mut self,
-        recognizer_id: impl Into<String>,
-        membership: CollisionMembership,
-    ) {
-        self.map(|builder| builder.register_collision(recognizer_id, membership));
+        recognizer: R,
+        membership: Option<CollisionMembership>,
+    ) where
+        R: Recognizer + 'static,
+    {
+        self.map(|builder| builder.recognizer_with_membership(recognizer, membership));
+        self.registered_recognizers += 1;
     }
 
     pub(crate) fn register_anchor_cue_bundle(

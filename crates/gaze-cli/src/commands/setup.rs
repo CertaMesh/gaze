@@ -940,6 +940,55 @@ mod tests {
     include!("../../tests/support/card_shapes.rs");
 
     #[test]
+    fn generated_policy_protects_password_hashes_and_code_literals() {
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("__gaze_test_fixed_ner");
+        let policy_out = dir.path().join("policy.toml");
+        write_synthetic_ner_dir(&model_dir);
+        write_policy(&policy_out, &model_dir, None, false)
+            .unwrap()
+            .persist(&policy_out)
+            .unwrap();
+        let resolved = resolve_pipeline(
+            Some(&policy_out),
+            &CleanOverrides::default(),
+            &[],
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let session = Session::from_policy(&resolved.policy).unwrap();
+        for value in [
+            "$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi",
+            "synthetic!literal",
+        ] {
+            let raw = format!("{{\"password\":\"{value}\"}}");
+            let clean = resolved
+                .pipeline
+                .pseudonymize_with_detect_context(
+                    &session,
+                    RawDocument::Text(raw.clone()),
+                    resolved.locale_chain.as_slice(),
+                    &resolved.dictionaries,
+                )
+                .unwrap();
+            let CleanDocument::Text(clean) = clean else {
+                panic!("text in, text out");
+            };
+            assert!(!clean.contains(value));
+            assert!(clean.contains(":password_"));
+            assert_eq!(
+                resolved
+                    .pipeline
+                    .restore_strict_text(&session, &clean)
+                    .unwrap(),
+                raw
+            );
+        }
+    }
+
+    #[test]
     fn generated_policy_tokenizes_a_card_with_touching_digits() {
         // The forward path under the `gaze setup` policy. The no-policy run of
         // the same shapes is `tests/card_forward_path.rs`.

@@ -20,6 +20,7 @@ pub mod rulepack;
 mod safety_net_scan;
 mod sandbox;
 mod session;
+mod spelling;
 mod sweep;
 pub mod token_shape;
 mod types;
@@ -69,14 +70,15 @@ pub use pipeline::{
 };
 pub use policy::{
     validate_ner_locale, DetectorKind, DetectorSpec, DobJudgePolicy, NerPolicy, Policy,
-    PolicyError, RuleSpec, RulepackPolicy, SafetyNetBackendsPolicy, SafetyNetPolicyBackend,
-    SessionPolicy, SessionScope, DEFAULT_NER_THRESHOLD, DEFAULT_POLICY_SCHEMA_VERSION,
-    SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR,
+    PolicyError, ProxyPolicy, RuleSpec, RulepackPolicy, SafetyNetBackendsPolicy,
+    SafetyNetPolicyBackend, SessionPolicy, SessionScope, DEFAULT_NER_THRESHOLD,
+    DEFAULT_POLICY_SCHEMA_VERSION, SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR,
 };
 pub use redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
 pub use registry::{
     Candidate, Canonicalizer, DetectContext, DetectError, EvidenceKind, FamilyPolicyTable,
-    Recognizer, RecognizerRegistry, RecognizerRegistryBuilder, ValidationResult, Validator,
+    Recognizer, RecognizerRegistry, RecognizerRegistryBuilder, RegistryBuildError,
+    ValidationResult, Validator,
 };
 pub use resolver::{resolve_candidates, resolve_candidates_with_policy};
 pub use rule::{
@@ -95,5 +97,6 @@ pub use session::{
     RestoreEventKind, RestoredTextWithProvenance, Scope, SensitiveSnapshot, Session,
     SessionSnapshotEntry, SessionTransaction, SessionTransactionError,
 };
+pub use spelling::SourceSpelling;
 pub use sweep::ManifestSweepError;
 pub use types::{CleanDocument, RawDocument, Value};

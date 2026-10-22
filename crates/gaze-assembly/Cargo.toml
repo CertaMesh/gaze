@@ -1,6 +1,6 @@
 [package]
 name = "gaze-assembly"
-version = "0.16.0"
+version = "0.17.0"
 edition = "2021"
 rust-version = "1.89"
 license.workspace = true
@@ -19,9 +19,13 @@ rustdoc-args = ["--cfg", "docsrs"]
 safety-net-nym = ["gaze-recognizers/safety-net-nym"]
 
 [dependencies]
-gaze = { path = "../gaze", version = "0.16.0", package = "gaze-pii" }
-gaze-recognizers = { path = "../gaze-recognizers", version = "0.16.0" }
+gaze = { path = "../gaze", version = "0.17.0", package = "gaze-pii" }
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.17.0" }
 regex = "1"
 serde_json = "1"
 thiserror = "1"
 tracing = "0.1"
+
+[[example]]
+name = "registry_contract"
+test = false

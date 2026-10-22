@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "comparison": "fresh main pair versus same-candidate-binary mechanism pair",
+  "equality": {
+    "base": {
+      "C": {
+        "metrics": true,
+        "pipeline_contract": true,
+        "pipeline_availability": true,
+        "per_label_recall": true
+      },
+      "A": {
+        "metrics": true,
+        "pipeline_contract": true,
+        "pipeline_availability": true,
+        "per_label_recall": true
+      },
+      "D": {
+        "metrics": true,
+        "pipeline_contract": true,
+        "pipeline_availability": true,
+        "per_label_recall": true
+      },
+      "R": {
+        "metrics": true,
+        "pipeline_contract": true,
+        "pipeline_availability": true,
+        "per_label_recall": true
+      }
+    },
+    "candidate": {
+      "C": {
+        "metrics": true,
+        "pipeline_contract": true,
+        "pipeline_availability": true,
+        "per_label_recall": true
+      },
+      "A": {
+        "metrics": true,
+        "pipeline_contract": true,
+        "pipeline_availability": true,
+        "per_label_recall": true
+      },
+      "D": {
+        "metrics": true,
+        "pipeline_contract": true,
+        "pipeline_availability": true,
+        "per_label_recall": true
+      },
+      "R": {
+        "metrics": true,
+        "pipeline_contract": true,
+        "pipeline_availability": true,
+        "per_label_recall": true
+      }
+    }
+  }
+}

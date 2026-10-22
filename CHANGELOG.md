@@ -10,9 +10,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Signed session snapshots with deterministic repeat-seed metadata use envelope
-  v7; ordinary snapshots remain v6. New readers restore v2–v7. Older readers
-  reject v7 rather than silently dropping repeat protection; upgrade all readers
-  before exchanging these snapshots.
+  v8. JSON source spelling alone retains v7; ordinary snapshots remain v6. New
+  readers restore v2–v8. Older readers reject v8 rather than silently dropping
+  repeat protection; upgrade all readers before exchanging these snapshots.
+
+### Security
+
+- Protect explicitly labelled customer, employee and person/member record identifiers
+  in English/German prose, JSON and logs with exact reversible value capture.
+  Generic record, order, invoice, issue, build and tracking IDs remain outside these rules.
+
+- **Password hashes and code credentials.** The setup-default `secrets` bundle
+  protects whole bcrypt, Argon2, scrypt/yescrypt, crypt, phpass and Django
+  encodings, including broader crypt/Django salts and hashes in SQL dumps.
+  SQL-escaped quotes count toward the decoded salt limit, and JSON-escaped
+  slashes stay inside the complete restorable hash. Complete JSON separator
+  escapes establish both hash boundaries. Malformed escapes and identifier-glued
+  prefixes and tails remain rejected.
+  Complete quoted password and credential-token fields in PHP arrays and JSON
+  retain their keys and punctuation. Generic `token` keys remain outside the
+  code-field rule; ambiguous password metadata stays fail-closed. Whole Argon2
+  encodings no longer split at an inner postal-code candidate (#824).
+- Plain-text session files on macOS/Linux clear and verify their extended ACL
+  before any restore-key bytes are written, including overwrite replacements.
+  ACL failures and unsupported platforms (including Windows) refuse
+  `--session-out` with `SessionFile` (exit 4).
+- rustls-webpki 0.103.16 and webpki-roots 1.0.10 fix RUSTSEC-2026-0382 and
+  RUSTSEC-2026-0381: certificate paths through distrusted emSign intermediates
+  were accepted.
+
+### Added
+
+- `gaze clean --session-out <path>` writes the session to a new owner-only file
+  and prints only the clean text; `gaze restore --session-file <path>` restores
+  plain text from stdin. A shell round trip no longer needs JSON glue. Existing
+  files are refused unless `--overwrite-session-out` is passed. A missing or
+  non-session file fails with the new `SessionFile` error (exit 4). The JSON
+  stdin and stdout contracts are unchanged.
 
 ### Fixed
 
@@ -32,146 +66,218 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Private and unknown tails retain conservative ownership until an independent
   recognizer supplies existing boundary proof. Unicode groups and complete
   licence connectors retain their original bytes.
-- Inspection JSON-shape, SSE-timeline, PII-summary and decision-trace projections
-  now enforce their entry caps during deserialization as well as construction.
-  Oversized projections fail without truncation; valid wire shapes are unchanged.
-  The first excess value is rejected before traversing its contents, including
-  deeply nested values.
-
-- Benchmark generator v18 scores explicitly labelled checksum-invalid Aadhaar
-  and NIR values as personal data. The v17 corpus and contract stay frozen;
-  every displayed release is freshly measured with the stricter gold labels.
-  Company/wallet decoys and public-reference controls remain benign.
-- Collision-family tie detection now uses each variant's effective minimum
-  precedence, matching winner selection. Adopter policies with mixed precedence
-  within a variant no longer create false family tokens or miss effective ties;
-  declared membership values and legacy recovery behavior remain consistent.
-
-- Family-level tokens retain their ambiguity reason and original participant
-  identities after later overlap decisions. Primary and recovered audit entries
-  no longer infer family provenance from the last conflict tier or source labels;
-  detection, token emission and restore behavior are unchanged.
-
-- `SqliteLogger::entries()` now retains all eleven stored provenance fields
-  through the same metadata row decoder as `query()`. Typed reads reject negative
-  restore counters and phase masks outside `u32`; raw queries retain their signed
-  values and unknown enum/JSON spellings. The private backend routing sidecar
-  remains excluded from audit query and export output.
-
-- Proxy daemon graceful-stop timeouts now return `DaemonStopTimeout { pid, timeout }`
-  instead of `DaemonAlreadyRunning`. Restart preserves stop failures and starts
-  only after a successful stop or a not-running result; timeout keeps the live
-  daemon and its pidfile intact.
-
-- Supplemental OPF and NER benchmark scorers now match strict spans within
-  each fixture before aggregating locale counts. Wrong-document predictions
-  can no longer earn true positives. Future runs retain value-free per-fixture
-  evidence for re-scoring; historical quality values retain their provenance
-  and are marked as pre-fix, with re-measurement pending. Latency metrics and
-  canonical schema-v4 scorecards are unaffected.
-
-- Third-party benchmark assembly now checks prediction and dataset receipts,
-  system identity, document counts and published scores through the same row
-  admission path as incremental publication. Untagged Gaze runs record their
-  prediction digest. Existing pre-receipt rows retain their numbers and are
-  explicitly marked as not receipt-verified, with regeneration pending.
-
-- Mechanism benchmark recording now rejects conflicting release revisions and
-  evidence filename aliases before publication. Failed validation or copying
-  preserves the ledger and its pinned observation records; summary and detail
-  tables use the same unambiguous measurement target. New evidence filenames
-  include their content hash, and the ledger is atomically replaced after
-  evidence is fsynced. Crashes before ledger publication and ledger-write
-  failures preserve all prior pins; existing committed filenames stay valid.
-
-- Enumeration proof scripts now reject failed daemon batches before scoring:
-  bounded transport, checked child exit, exact session IDs, LF framing and
-  validated successful response shapes. Matching refusals can no longer
-  prove unchanged behavior, and reordered phone responses are joined by ID.
+- `gaze-proxy` no longer restores a value captured from a JSON document with its
+  JSON escapes. A name captured as `Robert \"Bob\" Smith` from a JSON text block
+  or JSON tool result now reaches Anthropic `tool_use.input` as
+  `Robert "Bob" Smith`. Each token keeps the spelling it was first minted with,
+  so a value first seen in plain text never gains a JSON reading later.
+  Plain-text destinations still restore the bytes the client sent.
+- The legacy OpenAI and Gemini proxy paths restore a pseudonym token that a
+  stream splits across SSE events. Each event was restored alone, so a token
+  streamed in pieces, the common case, reached the client unrestored. Each
+  choice's text, each tool call's arguments and each Gemini candidate's text
+  is now restored once across the buffered response. OpenAI Responses API
+  streaming events are now restored too; they were not surfaced at all. Adapters
+  key streams with the new `ProviderAdapter::sse_event_stream_surfaces`, whose
+  default keeps the previous per-event behavior. Missing or invalid required
+  indices disable joining for every compatible stream, preserving fragment
+  order and leaving ambiguous split tokens pseudonymized. Streams separated by
+  a known index or a different field kind still restore across events.
+- `gaze proxy start` and `restart` now return only after the daemon has bound
+  its port. Before, they reported success after a 250 ms liveness window, so an
+  immediate request could be refused, and a daemon that died later in startup
+  (for example while loading a model) still returned exit 0. The daemon writes a
+  `proxy.ready` marker after binding; start fails with `DaemonExitedEarly` if
+  the daemon exits first, or stops it and fails with `DaemonStartTimeout` after
+  120 seconds.
+- Anthropic proxy accepts the literal `?beta=true` query, individually allowlisted
+  comma-separated beta headers (policy or repeatable `--anthropic-beta`), and
+  inspected `count_tokens` requests. Adaptive thinking, output configuration and
+  documented context edits use closed schemas; plain HTTP(S) URLs are inspected
+  as text. Unsupported fields and disallowed queries on admitted routes return
+  Anthropic-shaped `400` errors. Unknown paths retain `404`. Unverified
+  `safeguards`, message-level system roles and opaque media remain refused (#814).
 
 ### Changed
 
-- Benchmark generator v19 adds labelled CRM/HR value-boundary positives,
-  repeat cases and public controls for punctuation, adjacent cues, serialized
-  payloads, opening line breaks and tab groups. Earlier v17/v18 inputs stay
-  frozen, and every displayed release is freshly measured on the extended corpus.
-
-- Added an opt-in custom-policy benchmark arm for mixed collision-family
-  precedence, with generated identifier positives and benign no-tie,
-  same-variant and missing-membership controls. The shipped-default benchmark
-  population and headline remain unchanged.
-
-- `CorePipelineConfig` now resolves custom rulepack dictionaries through the
-  policy input loader, and `CorePipeline::pseudonymize_text` passes their terms
-  on every call. Unreadable `terms_file` inputs fail with a typed
-  `BuildError::Policy(PolicyError::BadDictionary)` error. `dictionaries()` and
-  `into_parts()` retain all inputs for low-level callers. Enabled context-backed
-  dictionaries fail with `BuildError::Policy(PolicyError::BadDictionary)` because
-  CorePipeline cannot accept context. Shared rulepack loading rejects context
-  combined with inline/file terms as `RulepackError::DictionarySourceConflict`.
-  The getting-started tutorial uses the dictionary-preserving wrapper.
-
-- [bundle-tokenization-drift] `core`: directly labelled phone values now remain
-  protected when parsing fails; record their typed validation reason.
-
-### Security
-
-- Protect explicitly labelled customer, employee and person/member record identifiers
-  in English/German prose, JSON and logs with exact reversible value capture.
-  Generic record, order, invoice, issue, build and tracking IDs remain outside these rules.
-
-- Dictionary caches now distinguish compilation modes and exact ordered terms.
-  Enabling Unicode matching after warming a record dictionary no longer misses
-  configured values; term-order changes retain correct provenance.
-
-- Direct Anthropic proxy readiness now requires the original adapter allocation.
-  Replacing or removing it from `ProxyConfig::adapters`, including a same-origin
-  replacement, returns `ProxyError::DirectAdapterMismatch` before serving.
-  Runtime settings and the codec come from one resolved adapter; compatibility
-  constructors retain their frozen defaults.
-
-- Custom recognizers returning NaN or infinite confidence scores now fail closed
-  with a sanitized `DetectError::Backend` (`invalid_score`) before score filtering.
-  Finite negative scores still fall below the existing 0.0 admission floor.
-
-- Tax and government identifiers cover additional cue connectors and grouped
-  layouts, including slash Steuernummer, separated SSN, Swiss AHV and national
-  identity values. Full English tax-identification fields preserve trusted
-  repeated-value protection. Generic national-ID cues reject short grouped
-  order/invoice references, dates and triangle dimensions, and preserve IP ownership.
-- `gaze setup` now includes `secrets` by default: supported API keys, access
-  and session tokens, JWTs and passwords. Library callers and hand-written
-  policies still select rulepacks explicitly.
-
-- Cued NHS numbers remain protected whole when MOD-11 fails, with a typed audit
-  reason and no repeat-value sweep. Tax-identification key abbreviations also
-  protect the full Steuer-ID value in tool-call JSON and logs.
-- Split rejected adjacent phone runs when both values independently pass the
-  recognizer and parser. Vetoed candidates no longer block valid locale fallbacks.
-- Protect international dialing prefixes, optional trunk-zero markers, French
-  dotted phones and directly labelled national values. IPv4 matches refuse tails
-  inside complete French dotted phone shapes. Parser failures remain auditable and cannot
-  seed repeat-value protection.
-- Enforce the international E.164 digit limit before trusting expanded phone
-  forms, so long numeric prefixes cannot change a valid card's class to phone.
-- Keep whitespace outside phone tokens after an overlap with a validated card or IP,
-  including residual fragments; restore remains exact.
-
-### Known limitations
-
-- Direct phone labels intentionally record failed parses. An 8–15 digit date,
-  grouped calendar date, year range, or SSN-shaped value following such a label
-  can therefore become a phone token. A newline continuation can also protect
-  a parser-valid date. This is known over-protection: refusing those numeric
-  shapes would also risk refusing genuine phone values.
+- **Snapshot contract.** `Session` records each token's source spelling and
+  adds `source_spelling` and `restore_strict_decoded_text_with_provenance`. A
+  manifest holding a JSON-escaped value exports as `session_blob` envelope v7
+  unless repeat metadata requires v8. Readers on v0.17 and older refuse both
+  versions. Manifests without either metadata path still export as v6.
 
 ### Benchmark
 
-- Headline contract v4 adds `PASSWORD` and `SECURITYTOKEN` while preserving v1–v3 as historical
-  views. On the unchanged v0.16.0 observation record, this scope change raises
-  the layer C headline from 7,348 leaked bytes under v2 to 13,291 under v4; this changes scoring scope, not detection. The isolated `secrets` arm protects 2,879
-  previously leaked `SECURITYTOKEN` bytes; the complete candidate reduces
-  layer C's v4 total to 10,405 leaked bytes.
+- Benchmark captures can reuse exact content-addressed observation records and
+  report stage wall/CPU times separately. Reuse binds native dictionary paths,
+  Python and extension-library dependencies, and the full capture key. Gain
+  admission rejects incomplete execution evidence or scorecard/record hash
+  mismatches; unresolved inputs disable reuse.
+
+- Release scorecards are committed gzipped as `scorecard-*.json.gz` (about 70 MB
+  and 1.7 million lines of JSON become 3 MB). Recorded `scorecard_sha256` values
+  are unchanged: they hash the decompressed JSON, and
+  `render_benchmark_doc.py --check` now verifies every one. Publish a new
+  scorecard with `scripts/bench/bench_json.py compress`.
+
+## [0.17.0] - 2026-10-19
+
+v0.17.0 expands credential and personal-name protection, tightens fail-closed
+boundaries, and preserves reversible manifests. Fresh merged-source measurements
+pass the accepted own-policy numeric and external F2 criteria. Strict own-policy
+identity remains `not_comparable`; TRACE's original net-byte gate fails.
+[Evidence and limits](docs/reference/benchmarks/README.md#v017-final-candidate-evidence)
+remain provisional until actual tag and package checks.
+
+### Security
+
+- **Personal names with Nym.** The setup policy maps eligible `GIVEN_NAME` and
+  `SURNAME` predictions to reversible `Name` tokens, joining adjacent parts over
+  inline whitespace. Both thresholds are 0.5; rule and NER winners keep
+  precedence. Record boundaries stop joins and BIO continuation. Audit records
+  retain contributing labels and thresholds; policy overrides remain supported
+  (#813).
+- **Credentials in setup policies.** `gaze setup` now includes `secrets` by
+  default, protecting supported API keys, access and session tokens, JWTs and
+  passwords. Library callers and hand-written policies still select rulepacks
+  explicitly (#770).
+- **Complete phone values.** International dialing prefixes, optional trunk-zero
+  markers, French dotted phones and directly labelled national values remain
+  protected. Rejected adjacent runs split only when both values independently
+  pass the recognizer and parser; vetoed candidates no longer block valid locale
+  fallbacks. IPv4 matches refuse tails inside complete French dotted phones,
+  and E.164 length checks preserve validated card ownership. Separator whitespace
+  stays outside tokens. Recorded parser failures cannot seed repeat-value
+  protection (#766).
+- **Tax and government identifiers.** Additional cue connectors and grouped
+  layouts cover slash Steuernummer, separated SSN, Swiss AHV and national-ID
+  values. Full English tax-identification fields retain trusted repeat-value
+  protection. Generic national-ID cues reject short grouped order/invoice
+  references, dates and triangle dimensions, and preserve IP ownership (#769).
+- **Cued NHS and Steuer-ID fields.** NHS numbers remain protected whole when
+  MOD-11 fails, with a typed audit reason and no repeat-value sweep.
+  Tax-identification key abbreviations protect the full Steuer-ID value in
+  tool-call JSON and logs (#768).
+- **Dictionary cache identity.** Caches distinguish compilation modes and exact
+  ordered terms. Enabling Unicode matching after warming a record dictionary
+  no longer misses configured values; term-order changes retain correct
+  provenance (#786).
+- **Recognizer scores fail closed.** NaN and infinite confidence scores return a
+  sanitized `DetectError::Backend` (`invalid_score`) before score filtering.
+  Finite negative scores remain below the existing 0.0 admission floor (#785).
+- **Direct Anthropic readiness.** Removing or replacing the original adapter
+  allocation in `ProxyConfig::adapters`, including a same-origin replacement,
+  returns `ProxyError::DirectAdapterMismatch` before serving. Runtime settings
+  and the codec come from one resolved adapter (#787).
+- **TLS dependency update.** Locked rustls 0.23.46 fixes session-secret exposure
+  in Debug output, application-data disclosure after ECH rejection, excessive
+  Brotli certificate allocation and unauthenticated key-exchange prediction
+  downgrades (RUSTSEC-2026-0346 through RUSTSEC-2026-0349; #809).
+
+### Fixed
+
+- **MCP doctor probes.** Concurrent writable-directory checks use separate
+  temporary files, preserve existing files, and report cleanup failures.
+- **Custom rulepack dictionaries in `CorePipeline`.** Policy-loaded inline and
+  file terms reach every `pseudonymize_text` call and remain available through
+  `dictionaries()` and `into_parts()`. Unreadable files and unsupported enabled
+  context-backed dictionaries fail with typed `BadDictionary` errors; shared
+  loading rejects mixed context and inline/file sources (#784).
+- **Collision-family precedence and audit provenance.** Ties use each variant's
+  effective minimum precedence, matching winner selection. Family tokens retain
+  their original participants and ambiguity reason after later overlap decisions
+  (#801, #797).
+- **Typed audit reads.** `SqliteLogger::entries()` retains all eleven stored
+  provenance fields through the decoder shared with `query()`. Typed reads reject
+  negative restore counters and phase masks outside `u32`; raw queries retain
+  their signed values and unknown enum/JSON spellings. The private backend
+  routing sidecar remains excluded from exports (#795).
+- **Owner-index response translation.** Raw-value substrings inside current-session
+  tokens inserted by alias replacement retain their token provenance and restore
+  mappings. Raw prose, pre-existing token literals containing raw values and
+  cross-boundary matches still fail closed; empty or overlapping aliases deny
+  (#807).
+- **Recognizer registration.** Registry construction rejects orphan collision
+  memberships and duplicate recognizer IDs before scanning. `try_build()` returns
+  a typed error; compatibility `build()` panics on invalid registration. Legacy
+  detector adapters retain distinct internal IDs and detection provenance (#806).
+- **Inspection boundaries and shutdown.** JSON-shape, SSE-timeline, PII-summary
+  and decision-trace projections enforce entry caps during deserialization,
+  rejecting the first excess value before traversing it. A poisoned lock disables
+  capture, drains queued events and wakes the dispatcher (#805, #811).
+- **Daemon stop and restart errors.** Graceful-stop timeouts return
+  `DaemonStopTimeout { pid, timeout }`. Restart preserves stop failures; a timeout
+  leaves the live daemon and pidfile intact (#798).
+- **CLI feature builds.** `gaze-cli` builds without warnings when optional
+  features are disabled (#762).
+- **Benchmark evidence checks.** Supplemental OPF and NER scorers match strict
+  spans within each fixture before aggregation; historical quality values remain
+  marked as pre-fix pending re-measurement. Third-party publication paths require
+  matching prediction/dataset receipts and scores. Failed mechanism recording
+  preserves the ledger and pinned observations. Enumeration proofs reject failed
+  daemon batches instead of treating matching refusals as equivalent behavior
+  (#794, #791, #789, #788).
+
+### Changed
+
+- **Benchmark coverage.** Generated layers cover every shipped class, labelled
+  customer/employee/record IDs, JSON scalars, value ownership, checksum-invalid
+  personal national IDs, CRM/HR value boundaries and mixed-family precedence.
+  Generator v20 adds invented lowercase and UPPERCASE full names across EN/DE/FR
+  surfaces, first occurrences and seeded repeats, with benign phrase and common
+  noun controls. Earlier generator inputs stay frozen (#771, #781, #783, #799,
+  #792, #802, #803, #800, #810).
+- **Benchmark execution and proof.** Exact-key base-observation caching and
+  bounded parallel layer scoring reduce repeated gate work; release evidence
+  requires fresh `--no-cache` measurements. Dictionary API-sequence evidence
+  measures warmed mutations under its primary scoring contract, and tier-four
+  gating requires positive semantic proof (#765, #790, #793, #804).
+- **Source snapshot bound.** Private benchmark source archives allow up to
+  256 MiB to accommodate the full source evidence inventory at a higher bounded
+  memory cost; Cargo, bridge and request stream limits remain 64 MiB, with archive
+  integrity checks unchanged (#796).
+- **Documentation.** Root guides, tutorials, how-to pages, explanations and
+  references were shortened, runtime boundaries gained diagrams, and the crate
+  map lists all fifteen published crates (#764, #772, #774, #775, #776, #777,
+  #778, #779).
+
+### Known limitations
+
+- The existing Nym weights are unchanged. The retained safety-net ablation fails
+  the benign BSN counterweight guard at 0 → 18 false-positive bytes under both
+  v2 and v1. The retained v0.16.0 → v0.17.0 release comparison has 18 → 18 bytes
+  on that counterweight. [Fresh release evidence](docs/reference/benchmarks/README.md#v017-final-candidate-evidence)
+  passes the own-policy numeric criteria while retaining the component failure,
+  strict identity mismatch and unmet zero-leak readiness.
+- The generated name benchmark reuses six full names per split across surfaces;
+  it does not establish broad personal-name recall. Independent calibration
+  recovered eligible pieces in only four of 18 lowercase cases, with no full
+  lowercase pair meeting both thresholds. Neural name recovery adds false
+  positives and is less explainable than rules. See the [calibration and joining
+  notes](docs/explanation/safety-net/nym-person-names.md) (#813).
+- Direct phone labels intentionally record failed parses. Date-shaped numeric
+  values, year ranges and SSN-shaped values after a phone label can therefore
+  become phone tokens; parser-valid newline continuations can also be protected.
+  See the [validator contract](docs/explanation/detection/validator-veto.md#recorded-failures) (#766).
+- Presidio Research native-harness and PB_DATA third-party measurement work
+  (F1) is deferred past v0.17. Fresh external release comparisons use byte-micro
+  F2 on sealed OpenPII/Gretel, PIIBench-commercial and PII-TRACE. These results
+  do not establish a fresh vendor-evaluator reproduction of the deferred work.
+
+### Benchmark
+
+- Tagged v0.17.0 retains measured source `86195a8f`, whose raw crates tree
+  matches the signed release tag. Headline contract v4 reports 9,717 leaked
+  bytes and 15,224 false-positive bytes on layer C. Independent v1/v2 captures
+  and v3/v4 observation replays remain distinct. All 17,780 documents restore
+  exactly with valid manifests and zero refusals.
+- All three fresh external byte-micro F2 comparisons pass the accepted criterion.
+  TRACE's original net-byte gate fails. Strict own-policy identity remains
+  `not_comparable`, and zero-leak readiness remains unmet. The generated
+  [external release panels and per-layer evidence](docs/reference/benchmarks/README.md#v017-final-candidate-evidence)
+  retain the original measurement identities, receipts and historical rows.
+  See the [benchmark methodology and hardware](docs/reference/benchmarks/README.md#how-to-reproduce)
+  and [`run_no_opf_benchmark.py`](scripts/bench/run_no_opf_benchmark.py).
 
 ## [0.16.0] - 2026-10-08
 
@@ -4096,7 +4202,8 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/CertaMesh/gaze/compare/v0.16.0...v0.17.0
 [0.14.0]: https://github.com/CertaMesh/gaze/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/CertaMesh/gaze/compare/v0.12.0...v0.13.0
 [0.6.4]: https://github.com/EmpireTwo/gaze/compare/v0.6.3...v0.6.4

@@ -19,7 +19,8 @@
     "gaze-cli::record_ids",
     "gaze-cli::safety_net_cli",
     "gaze-cli::secrets_rulepack",
-    "gaze-cli::setup_policy"
+    "gaze-cli::setup_policy",
+    "gaze-cli::wire_token_order"
   ],
   "runtime": [
     "gaze-assembly",
@@ -43,10 +44,12 @@
     "gaze-pii::canary_e2e",
     "gaze-pii::contracts",
     "gaze-pii::custom_class_validation",
+    "gaze-pii::docs_policy_blocks",
     "gaze-pii::evidence_containment",
     "gaze-pii::family_emission",
     "gaze-pii::final_safety_admission",
     "gaze-pii::house_number_corroboration",
+    "gaze-pii::json_escape_boundaries",
     "gaze-pii::manifest_sweep",
     "gaze-pii::net_admission",
     "gaze-pii::policy_example",
@@ -107,6 +110,7 @@
     "gaze-proxy::inspection_contract",
     "gaze-proxy::legacy_adapter_leak_proof",
     "gaze-proxy::legacy_response_header_forward",
+    "gaze-proxy::legacy_sse_split_tokens",
     "gaze-proxy::manifest_sweep",
     "gaze-proxy::openai_non_stream",
     "gaze-proxy::openai_sse",
@@ -122,6 +126,7 @@
     "gaze-recognizers::birth_date_cues",
     "gaze-recognizers::bundled_guard_adjacency",
     "gaze-recognizers::checksum_failed_iban_card",
+    "gaze-recognizers::code_credentials",
     "gaze-recognizers::context_sensitivity_v0_6",
     "gaze-recognizers::core_extended",
     "gaze-recognizers::coverage_loop",
@@ -192,6 +197,7 @@
     "gaze-model-setup",
     "gaze-token-bridge",
     "gaze-token-bridge::local_demo_assertions",
+    "gaze-token-bridge::output_safety_net_backstop",
     "gaze-token-bridge::residual_fragment_ingest",
     "gaze-token-bridge::token_class_roundtrip",
     "gaze-token-bridge::track_a_policy",
@@ -213,6 +219,7 @@
     "xtask::scrub_public_text",
     "xtask::snapshot_ack",
     "xtask::tokenbridge_encrypted_index",
-    "xtask::tokenbridge_no_raw_index"
+    "xtask::tokenbridge_no_raw_index",
+    "feature-graph-probe::bin/feature-graph-probe"
   ]
 }

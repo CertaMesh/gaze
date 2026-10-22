@@ -1,0 +1,22 @@
+[
+  {
+    "fix": "B3",
+    "head": "3188916e61972b651f1de7e3f99ed421c2320098",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--all-features",
+      "--test",
+      "code_credentials",
+      "json_separators_after_complete_hashes_preserve_source_spans",
+      "--",
+      "--exact"
+    ],
+    "exit_code": 101,
+    "source_sha256": "be92f420b34c1f8b72df3402988d1e54b293fcaa0b8c3c6f8a10c5e7dae60ea7",
+    "mutant_sha256": "3d1e202b5d2c713104cf289180a4685d7a157e546c961a3887c3b65f0fc10ba8",
+    "log_sha256": "69723036441378f88f3132577f755a84b5c7a0df190d6956ff09bf92cb503f3c"
+  }
+]

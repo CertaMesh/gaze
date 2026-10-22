@@ -27,6 +27,46 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ---
 
+## v0.17.x → unreleased
+
+### Breaking: `session_blob` envelope version 7 for JSON-escaped values
+
+Upgrade every process that restores a blob before, or together with, every
+process that writes one.
+
+A session now records whether each value was captured inside a JSON string
+literal in its escaped spelling. A manifest that holds such a value exports as
+envelope version 7 unless it also carries repeat metadata (version 8).
+Manifests without either metadata path still export as version 6.
+
+- A v0.17 or older reader refuses a v7 blob with `InvalidSnapshotVersion(7)`.
+  It fails closed; nothing is restored.
+- This release imports v2 to v8 blobs. Older blobs restore exactly as before;
+  values without spelling metadata read as plain text.
+
+`gaze-proxy` restores such a value into Anthropic `tool_use.input` as the value
+its escapes spell, not with literal backslashes. Text blocks and other
+plain-text destinations still receive the bytes the client sent.
+
+### Action required: conditional `session_blob` version 8
+
+Field-owned record identifiers now retain exact scalar whitespace and conservative
+repeat prefixes for malformed quotes, ambiguous tab groups and complete cues
+inside conservative legacy owners. Legacy prefixes never shorten the original
+capture or declare the next field public. Their ordinary length floor is unchanged.
+A signed snapshot with this metadata uses envelope v8. JSON source spelling alone
+retains v7. Ordinary snapshots remain v6. Readers supporting only v7 and earlier
+reject v8 with `InvalidSnapshotVersion(8)`.
+
+Upgrade every reader before importing newly written v8 snapshots. The new reader
+imports and restores v2–v8 without re-tokenizing old manifests. Seed offsets bind
+to the existing owner value. Import rejects invalid geometry, missing deterministic
+evidence, and seed metadata in an older envelope. Whole-value ownership and
+strict restore remain intact. Conservative prefix matches can protect public
+bytes and retain the existing repeat-length floors.
+
+---
+
 ## v0.16.x → v0.17.0
 
 ### TL;DR
@@ -35,21 +75,40 @@ Run `gaze setup --force` to regenerate an existing policy with credential
 protection, or add `"secrets"` to `[policy.rulepacks].bundled` in your policy.
 Existing policies keep their selected rulepacks until you update them.
 
-### Action required: conditional `session_blob` version 7
+The default Nym operating point now maps eligible `GIVEN_NAME` and `SURNAME`
+predictions to reversible `Name` tokens at thresholds of 0.5. This also applies
+to existing Nym policies without an explicit label override. Explicit label and
+threshold overrides stay in effect. Review these overrides to adopt name
+protection. The pinned model weights and stored restore manifests need no
+migration.
 
-Field-owned record identifiers now retain exact scalar whitespace and conservative
-repeat prefixes for malformed quotes, ambiguous tab groups and complete cues
-inside conservative legacy owners. Legacy prefixes never shorten the original
-capture or declare the next field public; their ordinary length floor is unchanged. A signed snapshot
-with this metadata uses envelope v7; ordinary snapshots remain v6. Readers that
-support only v6 and earlier reject v7 with `InvalidSnapshotVersion(7)`.
+### Action required: valid recognizer registration
 
-Upgrade every reader before importing newly written v7 snapshots. The new reader
-imports and restores v2–v7 without re-tokenizing old manifests. Seed offsets bind
-to the existing owner value; invalid geometry, missing deterministic evidence,
-and seed metadata in an older envelope are rejected. Whole-value ownership and
-strict restore remain intact. Conservative prefix matches can protect public
-bytes, and retain the existing repeat-length floors.
+Every recognizer ID must be unique, and each collision membership must name an
+admitted recognizer. `RecognizerRegistryBuilder::try_build()` returns
+`RegistryBuildError::DuplicateRecognizerId` or
+`RegistryBuildError::OrphanCollisionMembership` for an invalid batch.
+`RecognizerRegistryBuilder::build()` keeps its signature but now panics with
+`invalid recognizer registration` instead of admitting that batch.
+`PipelineBuilder::build()` returns `Error::RegistryBuild`; assembly preserves
+that error as `BuildError::Pipeline`. No registry or document is returned.
+
+Prefer `register_with_membership(recognizer, membership)` (or its Arc
+counterpart) and `PipelineBuilder::recognizer_with_membership` to attach optional
+metadata in the same call. Existing separate setters still work before or after
+registration, and the last declaration wins. Standalone resolver callers can
+compile metadata with `FamilyPolicyTable::from_memberships` without constructing
+a runtime registry.
+
+Multiple `RegexDetector::new` recognizers share the ID `regex`. Give each an
+explicit unique ID with `RegexDetector::with_source` when registering them as
+recognizers.
+
+Legacy `PipelineBuilder::detector()` adapters now have builder-local IDs:
+`legacy-detector`, `legacy-detector/1`, `legacy-detector/2`, and so on.
+Detection sources and public candidate provenance stay unchanged. A collision
+declaration for `legacy-detector` binds only the first adapter; declare the
+specific later ID when needed, or migrate to named recognizers.
 
 ### Additive: typed proxy daemon stop timeout
 

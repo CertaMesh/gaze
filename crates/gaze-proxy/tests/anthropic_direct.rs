@@ -1,4 +1,5 @@
-use std::net::SocketAddr;
+mod support;
+
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -202,6 +203,9 @@ async fn capture_anthropic_request(
         body,
     });
 
+    if parts.uri.path() == "/v1/messages/count_tokens" {
+        return Json(json!({"input_tokens": 7})).into_response();
+    }
     if state.split_carrier {
         let protected = state.provider_text.as_deref().unwrap_or_else(|| {
             request_json["messages"][0]["content"]
@@ -326,6 +330,7 @@ async fn spawn_upstream_with_mode(
     let captures = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()
         .route("/v1/messages", post(capture_anthropic_request))
+        .route("/v1/messages/count_tokens", post(capture_anthropic_request))
         .with_state(UpstreamState {
             captures: Arc::clone(&captures),
             rate_limited,
@@ -334,11 +339,7 @@ async fn spawn_upstream_with_mode(
             split_carrier,
             provider_text,
         });
-    let backend_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let backend_addr = backend_listener.local_addr().unwrap();
-    let backend_handle = tokio::spawn(async move {
-        axum::serve(backend_listener, app).await.unwrap();
-    });
+    let (backend_addr, backend_handle) = support::spawn_upstream(app).await;
     let forwarding_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let forwarding_addr = forwarding_listener.local_addr().unwrap();
     let connections = Arc::new(AtomicUsize::new(0));
@@ -403,35 +404,19 @@ async fn spawn_proxy_with_observability(
         Some((producer, consumer)) => (config.with_inspection(producer), Some(consumer)),
         None => (config, None),
     };
-    let handle = tokio::spawn(async move {
-        gaze_proxy::serve_with_listener(config, Arc::new(pipeline), listener)
-            .await
-            .unwrap();
-    });
-    wait_for_proxy(bind).await;
+    let handle = support::spawn_proxy(
+        config,
+        move || Arc::new(pipeline),
+        listener,
+        support::Readiness::Poll {
+            interval: Duration::from_millis(20),
+        },
+    )
+    .await;
     RunningServer {
         base_url: format!("http://{bind}"),
         handle,
         _inspection_consumer: inspection_consumer,
-    }
-}
-
-async fn wait_for_proxy(bind: SocketAddr) {
-    let client = Client::new();
-    let health_url = format!("http://{bind}/_gaze_proxy/healthz");
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
-    loop {
-        if client
-            .get(&health_url)
-            .timeout(Duration::from_secs(60))
-            .send()
-            .await
-            .is_ok_and(|response| response.status().is_success())
-        {
-            return;
-        }
-        assert!(tokio::time::Instant::now() < deadline);
-        tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }
 
@@ -560,7 +545,13 @@ async fn compatibility_constructor_keeps_default_deny_and_serves_ordinary_reques
         handle,
         _inspection_consumer: None,
     };
-    wait_for_proxy(bind).await;
+    support::wait_for_proxy(
+        bind,
+        support::Readiness::Poll {
+            interval: Duration::from_millis(20),
+        },
+    )
+    .await;
     let denied = sdk_client_request(&Client::new(), &proxy, false)
         .header("anthropic-beta", "tools-2025-01-01")
         .send()
@@ -1173,8 +1164,8 @@ async fn split_opaque_carriers_reject_across_complete_request_views_without_side
         json!({
             "model": "claude-test",
             "max_tokens": 32,
-            "system": "ht",
-            "messages": [{"role": "user", "content": "tps://agent.example.invalid"}]
+            "system": "da",
+            "messages": [{"role": "user", "content": "ta:text/plain,synthetic"}]
         }),
         json!({
             "model": "claude-test",
@@ -1216,9 +1207,9 @@ async fn split_opaque_carriers_reject_across_complete_request_views_without_side
             "messages": [{
                 "role": "assistant",
                 "content": [
-                    {"type": "text", "text": "ht"},
+                    {"type": "text", "text": "da"},
                     {"type": "redacted_thinking", "data": "opaque-synthetic-data"},
-                    {"type": "text", "text": "tps://agent.example.invalid"}
+                    {"type": "text", "text": "ta:text/plain,synthetic"}
                 ]
             }]
         }),
@@ -2141,4 +2132,283 @@ async fn regression_3847_direct_late_net_finding_is_refused() {
         })
     );
     assert_eq!(upstream.captures.lock().await.len(), 0);
+}
+
+fn claude_code_request() -> Value {
+    json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [{"role": "user", "content": EMAIL}],
+        "system": [{"type": "text", "text": "Owner alice@example.invalid; see https://example.invalid/alice@example.invalid"}],
+        "tools": [{
+            "name": "lookup",
+            "description": "Contact tool@example.invalid; docs http://example.invalid/tools",
+            "input_schema": {"type": "object", "properties": {"email": {"type": "string"}}}
+        }],
+        "thinking": {"type": "adaptive", "display": "summarized"},
+        "output_config": {"effort": "medium", "format": {
+            "type": "json_schema",
+            "schema": {"type": "object", "properties": {
+                "schema@example.invalid": {"type": "string", "description": "format@example.invalid"}
+            }, "required": ["schema@example.invalid"]}
+        }},
+        "context_management": {"edits": [
+            {"type": "clear_thinking_20251015", "keep": {"type": "thinking_turns", "value": 2}},
+            {"type": "clear_tool_uses_20250919", "trigger": {"type": "input_tokens", "value": 8000},
+             "keep": {"type": "tool_uses", "value": 3}, "exclude_tools": ["lookup"], "clear_tool_inputs": true},
+            {"type": "compact_20260112", "instructions": "Retain context@example.invalid", "pause_after_compaction": false,
+             "trigger": {"type": "input_tokens", "value": 16000}}
+        ]}
+    })
+}
+
+#[tokio::test]
+async fn claude_code_messages_and_count_tokens_inspect_all_new_text_and_restore() {
+    let upstream = spawn_upstream().await;
+    let adapter = AnthropicAdapter::builder(upstream.origin.clone())
+        .ephemeral_sessions()
+        .allow_beta("claude-code-20250219")
+        .unwrap()
+        .allow_beta("interleaved-thinking-2025-05-14")
+        .unwrap()
+        .build()
+        .unwrap();
+    let proxy = spawn_proxy(adapter).await;
+    for count_tokens in [false, true] {
+        let mut body = claude_code_request();
+        let path = if count_tokens {
+            body.as_object_mut().unwrap().remove("max_tokens");
+            "/v1/messages/count_tokens?beta=true"
+        } else {
+            "/v1/messages?beta=true"
+        };
+        let response = Client::new()
+            .post(format!("{}{path}", proxy.base_url))
+            .header("x-api-key", "synthetic-key")
+            .header("anthropic-version", "2023-06-01")
+            .header(
+                "anthropic-beta",
+                "claude-code-20250219, interleaved-thinking-2025-05-14",
+            )
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let restored: Value = response.json().await.unwrap();
+        assert_eq!(status, StatusCode::OK, "{restored}");
+        if count_tokens {
+            assert_eq!(restored, json!({"input_tokens": 7}));
+        } else {
+            assert_eq!(restored["content"][0]["text"], EMAIL);
+        }
+        let captures = upstream.captures.lock().await;
+        let capture = captures.last().unwrap();
+        assert_eq!(capture.path_and_query, path);
+        assert_eq!(
+            capture.headers["anthropic-beta"],
+            "claude-code-20250219, interleaved-thinking-2025-05-14"
+        );
+        let wire = std::str::from_utf8(&capture.body).unwrap();
+        for email in [
+            EMAIL,
+            "tool@example.invalid",
+            "schema@example.invalid",
+            "format@example.invalid",
+            "context@example.invalid",
+        ] {
+            assert!(!wire.contains(email), "uninspected field reached upstream");
+        }
+        let protected: Value = serde_json::from_slice(&capture.body).unwrap();
+        for text in [
+            &protected["system"][0]["text"],
+            &protected["tools"][0]["description"],
+            &protected["messages"][0]["content"],
+            &protected["context_management"]["edits"][2]["instructions"],
+        ] {
+            assert!(text.as_str().unwrap().contains("Email_"));
+        }
+        let schema = &protected["output_config"]["format"]["schema"];
+        let (key, value) = schema["properties"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .next()
+            .unwrap();
+        assert!(key.contains("Email_"));
+        assert!(value["description"].as_str().unwrap().contains("Email_"));
+        assert_eq!(schema["required"][0], key.as_str());
+    }
+    assert_eq!(upstream.captures.lock().await.len(), 2);
+}
+
+#[tokio::test]
+async fn claude_code_unknown_beta_and_surfaces_fail_closed() {
+    let upstream = spawn_upstream().await;
+    let adapter = AnthropicAdapter::builder(upstream.origin.clone())
+        .ephemeral_sessions()
+        .allow_beta("claude-code-20250219")
+        .unwrap()
+        .build()
+        .unwrap();
+    let proxy = spawn_proxy(adapter).await;
+    for beta in [
+        "claude-code-20250219,unlisted",
+        "unlisted,claude-code-20250219",
+        "claude-code-20250219,",
+        ",claude-code-20250219",
+    ] {
+        let response = sdk_client_request(&Client::new(), &proxy, false)
+            .header("anthropic-beta", beta)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let error: Value = response.json().await.unwrap();
+        assert_eq!(error["type"], "error");
+        assert_eq!(error["error"]["type"], "invalid_request_error");
+        assert_eq!(error["error"]["code"], "HeaderRejected");
+    }
+    for path in ["/v1/messages/unknown", "/v1/messages/unknown?beta=false"] {
+        let response = Client::new()
+            .post(format!("{}{path}", proxy.base_url))
+            .header("x-api-key", "synthetic-key")
+            .header("anthropic-version", "2023-06-01")
+            .json(&sdk_request(false))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let error: Value = response.json().await.unwrap();
+        assert_eq!(error["type"], "error");
+        assert_eq!(error["error"]["code"], "RouteRejected");
+    }
+    let mut bodies = Vec::new();
+    for (field, value) in [
+        ("unknown", json!(EMAIL)),
+        ("safeguards", json!({"text": EMAIL})),
+        (
+            "thinking",
+            json!({"type": "adaptive", "instructions": EMAIL}),
+        ),
+        (
+            "output_config",
+            json!({"effort": "medium", "unknown": EMAIL}),
+        ),
+        (
+            "context_management",
+            json!({"edits": [{"type": "compact_20260112", "unknown": EMAIL}]}),
+        ),
+    ] {
+        let mut body = sdk_request(false);
+        body[field] = value;
+        bodies.push(body);
+    }
+    let mut system_role = sdk_request(false);
+    system_role["messages"][0]["role"] = json!("system");
+    bodies.push(system_role);
+    for body in bodies {
+        let response = sdk_client_request(&Client::new(), &proxy, false)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let error: Value = response.json().await.unwrap();
+        assert_eq!(error["error"]["code"], "InvalidRequestFormat");
+        assert_eq!(error["error"]["type"], "invalid_request_error");
+        assert!(!error.to_string().contains(EMAIL));
+    }
+    assert!(upstream.captures.lock().await.is_empty());
+    assert_eq!(upstream.connections.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn claude_code_admitted_routes_reject_queries_before_upstream_connection() {
+    let upstream = spawn_upstream().await;
+    let proxy = spawn_proxy(AnthropicAdapter::new(upstream.origin.clone())).await;
+    let client = Client::new();
+    for route in ["/v1/messages", "/v1/messages/count_tokens"] {
+        let mut body = sdk_request(false);
+        if route.ends_with("count_tokens") {
+            body.as_object_mut().unwrap().remove("max_tokens");
+        }
+        for query in [
+            "beta=%74rue",
+            "%62eta=true",
+            "beta=true&beta=true",
+            "unknown=true",
+            "beta=true&alice@example.invalid=1",
+            "beta=false",
+            "beta=TRUE",
+            "beta=",
+            "beta",
+            "",
+        ] {
+            let response = client
+                .post(format!("{}{route}?{query}", proxy.base_url))
+                .header("x-api-key", "synthetic-key")
+                .header("anthropic-version", "2023-06-01")
+                .json(&body)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "{route}?{query}"
+            );
+            let error: Value = response.json().await.unwrap();
+            assert_eq!(
+                error,
+                json!({
+                    "type": "error",
+                    "error": {
+                        "type": "invalid_request_error",
+                        "message": "unsupported_or_invalid_request_surface; see the Anthropic proxy contract",
+                        "code": "InvalidRequestFormat",
+                        "phase": "Ingress",
+                    },
+                })
+            );
+            assert!(upstream.captures.lock().await.is_empty());
+            assert_eq!(upstream.connections.load(Ordering::SeqCst), 0);
+        }
+    }
+}
+
+#[tokio::test]
+async fn claude_code_duplicate_beta_headers_fail_before_upstream_connection() {
+    let upstream = spawn_upstream().await;
+    let adapter = AnthropicAdapter::builder(upstream.origin.clone())
+        .ephemeral_sessions()
+        .allow_beta("claude-code-20250219")
+        .unwrap()
+        .build()
+        .unwrap();
+    let proxy = spawn_proxy(adapter).await;
+    let client = Client::new();
+    for route in ["/v1/messages", "/v1/messages/count_tokens"] {
+        let mut body = sdk_request(false);
+        if route.ends_with("count_tokens") {
+            body.as_object_mut().unwrap().remove("max_tokens");
+        }
+        let response = client
+            .post(format!("{}{route}", proxy.base_url))
+            .header("x-api-key", "synthetic-key")
+            .header("anthropic-version", "2023-06-01")
+            .header("anthropic-beta", "claude-code-20250219")
+            .header("anthropic-beta", "claude-code-20250219")
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{route}");
+        let error: Value = response.json().await.unwrap();
+        assert_eq!(error["type"], "error");
+        assert_eq!(error["error"]["type"], "invalid_request_error");
+        assert_eq!(error["error"]["code"], "HeaderRejected");
+        assert!(upstream.captures.lock().await.is_empty());
+        assert_eq!(upstream.connections.load(Ordering::SeqCst), 0);
+    }
 }

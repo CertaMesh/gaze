@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "kind": "historical-producer-unavailable",
+  "version": "v0.14.0",
+  "binary_revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
+  "binary_sha256": "c2de4dd80b59d3df3c12913af7d2e4b037d62194fc54554aeac542a3f6b6473f",
+  "harness_revision": "d13df8eec8b2b5deb63c7fd7958811e6822ab176",
+  "driver_sha256": "9702232c0afad630c0933de6a7b87754f8380c79b897b9044f676268749e3785",
+  "generator_version": 20,
+  "corpus_sha256": "ca29328268932f4ffa4613a4470e2b0c47871ccbcb1377f2ee82ccfb751739c3",
+  "contract_sha256": "b56c0ba07a1c328374e8eac58c54b0d04b617d8c5ba15a27d9987ac945980be0",
+  "configs": [
+    "rule-floor-extended",
+    "pass2-ner",
+    "full-stack-kiji-resolve"
+  ],
+  "manifest_replacing_actions": [
+    "tokenize"
+  ],
+  "attempts": [
+    {
+      "scored_label_contract": 1,
+      "exit_code": 1,
+      "error_phase": "payload_processing",
+      "error_code": "payload",
+      "log_sha256": "b54cadd19b6d6d37c867dc299769e4ce8febc5faf3e52a843d9bf72c9f23809a"
+    },
+    {
+      "scored_label_contract": 2,
+      "exit_code": 1,
+      "error_phase": "payload_processing",
+      "error_code": "payload",
+      "log_sha256": "655eb7fd0f05f41e06c35074fe5c102d53edf26ad54f0af516d7620b89030020"
+    }
+  ]
+}

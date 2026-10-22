@@ -31,10 +31,7 @@ pub(crate) fn register_policy_detectors(
     registered_dictionaries: &mut BTreeSet<String>,
 ) -> Result<(), BuildError> {
     for detector in &policy.detectors {
-        let recognizer_id = match detector.kind {
-            DetectorKind::Dictionary => format!("dict/{}", detector.name),
-            _ => detector.name.clone(),
-        };
+        let collision = detector.collision.clone();
         match &detector.kind {
             DetectorKind::Regex => {
                 let pattern =
@@ -46,8 +43,8 @@ pub(crate) fn register_policy_detectors(
                             reason: "regex recognizer missing pattern".to_string(),
                         })?;
                 // Registered as a `Recognizer` under the policy `name`, not
-                // through `PipelineBuilder::detector`: that wrapper reports a
-                // constant id and a placeholder class, so the registry could
+                // through `PipelineBuilder::detector`: that wrapper historically
+                // shared an id and still has a placeholder class, so the registry could
                 // not find this rule by the id its collision membership is
                 // filed under, `family_member_classes` saw no member, and a
                 // family token over policy regex rules derived its action from
@@ -55,10 +52,11 @@ pub(crate) fn register_policy_detectors(
                 // candidate at score 1.0 and outside the per-locale claiming
                 // step; the same score and the format basis keep the conflict
                 // ladder and the candidate pool as they were.
-                builder.recognizer(
+                builder.recognizer_with_membership(
                     RegexDetector::with_source(pattern, detector.class.clone(), &detector.name)?
                         .with_base_score(POLICY_REGEX_SCORE)
                         .with_locale_basis(LocaleBasis::Format),
+                    collision.clone(),
                 );
             }
             DetectorKind::Dictionary => {
@@ -71,13 +69,16 @@ pub(crate) fn register_policy_detectors(
                 registered_dictionaries.insert(dictionary_name.to_string());
                 let class =
                     class_for_dictionary(policy, context, dictionary_name, detector.class.clone())?;
-                builder.recognizer(DictionaryRecognizer::new(
-                    format!("dict/{}", detector.name),
-                    class,
-                    dictionary_name,
-                    detector.case_sensitive,
-                    detector.token_family.clone(),
-                ));
+                builder.recognizer_with_membership(
+                    DictionaryRecognizer::new(
+                        format!("dict/{}", detector.name),
+                        class,
+                        dictionary_name,
+                        detector.case_sensitive,
+                        detector.token_family.clone(),
+                    ),
+                    collision.clone(),
+                );
             }
             DetectorKind::Unknown(kind) => {
                 return Err(PolicyError::BadTtl(format!("unknown detector.kind '{kind}'")).into())
@@ -88,9 +89,6 @@ pub(crate) fn register_policy_detectors(
                 )
             }
         };
-        if let Some(collision) = detector.collision.clone() {
-            builder.register_collision(recognizer_id, collision);
-        }
     }
 
     Ok(())
@@ -136,7 +134,6 @@ pub(crate) fn register_rulepack_recognizers(
             );
             continue;
         }
-        let recognizer_id = recognizer.id.clone();
         let collision = recognizer.collision.clone();
         match recognizer.matcher {
             RawMatch::Regex {
@@ -166,7 +163,7 @@ pub(crate) fn register_rulepack_recognizers(
                     .as_ref()
                     .map(|normalizer| NormalizerKind::parse(&normalizer.kind))
                     .transpose()?;
-                builder.recognizer(
+                builder.recognizer_with_membership(
                     RegexDetector::with_rulepack_fields(
                         &pattern,
                         recognizer.class,
@@ -201,6 +198,7 @@ pub(crate) fn register_rulepack_recognizers(
                             .as_ref()
                             .map_or(ValidatorOnFail::Veto, |validator| validator.on_fail),
                     )?,
+                    collision.clone(),
                 );
             }
             RawMatch::Dictionary {
@@ -234,7 +232,7 @@ pub(crate) fn register_rulepack_recognizers(
                 registered_dictionaries.insert(dictionary_name.clone());
                 let class =
                     class_for_dictionary(policy, context, &dictionary_name, recognizer.class)?;
-                builder.recognizer(
+                builder.recognizer_with_membership(
                     DictionaryRecognizer::with_rulepack_fields(
                         id,
                         class,
@@ -246,6 +244,7 @@ pub(crate) fn register_rulepack_recognizers(
                         priority,
                     )
                     .with_locale_basis(recognizer.locale_basis),
+                    collision.clone(),
                 );
             }
             RawMatch::Ner { .. } => {
@@ -289,7 +288,7 @@ pub(crate) fn register_rulepack_recognizers(
                 } else {
                     recognizer.locales
                 };
-                builder.recognizer(
+                builder.recognizer_with_membership(
                     AnchoredMatchRecognizer::new(
                         recognizer.id,
                         cues.clone(),
@@ -303,12 +302,10 @@ pub(crate) fn register_rulepack_recognizers(
                         recognizer.scoring.priority,
                     )
                     .with_locale_metadata(runtime_locales, recognizer.locale_basis),
+                    collision.clone(),
                 );
             }
             _ => return Err(RulepackError::UnsupportedMatcher("unknown".to_string()).into()),
-        }
-        if let Some(collision) = collision {
-            builder.register_collision(recognizer_id, collision);
         }
     }
 

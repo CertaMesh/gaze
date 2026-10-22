@@ -1,4 +1,5 @@
-use std::net::SocketAddr;
+mod support;
+
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
@@ -106,7 +107,7 @@ impl InspectionSink for RecordingSink {
     fn try_emit(&self, event: InspectionEventV1) -> Result<(), InspectionSinkErrorV1> {
         let logical_id = event.meta().logical_id();
         if let Some(gate) = &self.gate {
-            let class = gate.classify(logical_id);
+            let class = gate.classify(&event);
             if let Some(control) = &self.test_control {
                 control.before_event(class, event.meta().stage_domain());
             }
@@ -355,7 +356,6 @@ impl SinkGate {
     }
 
     fn prepare_completion(&self, real_request_count: usize) {
-        assert!(real_request_count > 0);
         self.real_request_count
             .set(real_request_count)
             .unwrap_or_else(|_| {
@@ -363,7 +363,8 @@ impl SinkGate {
             });
     }
 
-    fn classify(&self, logical_id: LogicalInspectionIdV1) -> SinkEventClass {
+    fn classify(&self, event: &InspectionEventV1) -> SinkEventClass {
+        let logical_id = event.meta().logical_id();
         if !self.armed.load(Ordering::Acquire) {
             return SinkEventClass::Real;
         }
@@ -386,6 +387,27 @@ impl SinkGate {
         let expected_real = *self.real_request_count.get().unwrap_or_else(|| {
             panic!("real inspection event reached the sink before completion preparation")
         });
+        // Zero-event checks cannot identify the sentinel by counting expected requests:
+        // the first unexpected event would otherwise be mistaken for completion.
+        if expected_real == 0 {
+            if let InspectionEventViewV1::OwnerRequest(projection) = event.view() {
+                if let ProjectionAvailabilityV1::Present(payload) = projection.payload() {
+                    let is_completion = payload.with_declassified_bytes(|bytes| {
+                        serde_json::from_slice::<Value>(bytes).is_ok_and(|request| {
+                            request["messages"][0]["content"] == COMPLETION_PLACEHOLDER
+                        })
+                    });
+                    if is_completion {
+                        self.completion_id.set(logical_id).unwrap();
+                    }
+                }
+            }
+            return if self.completion_id.get() == Some(&logical_id) {
+                SinkEventClass::Completion
+            } else {
+                SinkEventClass::Real
+            };
+        }
         {
             let mut real_ids = self
                 .real_ids
@@ -1036,12 +1058,8 @@ async fn echo_anthropic_request(request: Request<Body>) -> axum::response::Respo
 }
 
 async fn spawn_upstream() -> RunningServer {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
     let app = Router::new().route("/v1/messages", post(echo_anthropic_request));
-    let handle = tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let (address, handle) = support::spawn_upstream(app).await;
     RunningServer {
         base_url: format!("http://{address}"),
         handle,
@@ -1058,6 +1076,64 @@ fn install(
     install_proxy_inspection_v1(descriptor, consumer).unwrap()
 }
 
+struct CompletionAcknowledgingSink {
+    sink: Arc<RecordingSink>,
+    finished: Option<tokio::sync::oneshot::Sender<()>>,
+}
+
+impl InspectionSink for CompletionAcknowledgingSink {
+    fn try_emit(&self, event: InspectionEventV1) -> Result<(), InspectionSinkErrorV1> {
+        self.sink.try_emit(event)
+    }
+}
+
+impl Drop for CompletionAcknowledgingSink {
+    fn drop(&mut self) {
+        if let Some(finished) = self.finished.take() {
+            let _ = finished.send(());
+        }
+    }
+}
+
+fn install_with_completion_ack(
+    domains: CaptureDomainsV1,
+    sink: Arc<RecordingSink>,
+) -> (
+    (ProxyInspectionProducerV1, ActivatedInspectionConsumerV1),
+    tokio::sync::oneshot::Receiver<()>,
+) {
+    let (finished, receiver) = tokio::sync::oneshot::channel();
+    let descriptor = DashboardCaptureDescriptorV1::new(domains);
+    let limits = InspectionQueueLimitsV1::new(64, 4 * 1024 * 1024).unwrap();
+    let sink = Arc::new(CompletionAcknowledgingSink {
+        sink,
+        finished: Some(finished),
+    });
+    let consumer = PendingInspectionConsumerV1::new(descriptor, sink, limits);
+    (
+        install_proxy_inspection_v1(descriptor, consumer).unwrap(),
+        receiver,
+    )
+}
+
+async fn stop_and_join_inspection(
+    mut proxy: RunningProxy,
+    finished: tokio::sync::oneshot::Receiver<()>,
+) {
+    proxy.server.handle.abort();
+    assert!(
+        (&mut proxy.server.handle).await.unwrap_err().is_cancelled(),
+        "owned proxy task must stop before checking the inspection snapshot"
+    );
+    proxy.consumer.as_mut().unwrap().disable();
+    // Disabling seals admission and discards queued events. An already dispatched sink
+    // callback can still write; sink drop acknowledges that every such callback finished.
+    tokio::time::timeout(SINK_GATE_TIMEOUT, finished)
+        .await
+        .expect("inspection dispatcher did not stop after proxy shutdown")
+        .expect("inspection dispatcher dropped its completion acknowledgement");
+}
+
 async fn spawn_proxy(
     upstream: &RunningServer,
     inspection: Option<(ProxyInspectionProducerV1, ActivatedInspectionConsumerV1)>,
@@ -1070,12 +1146,15 @@ async fn spawn_proxy(
         Some((producer, consumer)) => (config.with_inspection(producer), Some(consumer)),
         None => (config, None),
     };
-    let handle = tokio::spawn(async move {
-        gaze_proxy::serve_with_listener(config, Arc::new(inspection_pipeline()), listener)
-            .await
-            .unwrap();
-    });
-    wait_for_proxy(bind).await;
+    let handle = support::spawn_proxy(
+        config,
+        || Arc::new(inspection_pipeline()),
+        listener,
+        support::Readiness::HealthJson {
+            adapter: "anthropic",
+        },
+    )
+    .await;
     RunningProxy {
         server: RunningServer {
             base_url: format!("http://{bind}"),
@@ -1083,26 +1162,6 @@ async fn spawn_proxy(
         },
         consumer,
     }
-}
-
-async fn wait_for_proxy(bind: SocketAddr) {
-    // The owned listener queues this request until our server is accepting.
-    let response = tokio::time::timeout(Duration::from_secs(60), async {
-        Client::new()
-            .get(format!("http://{bind}/_gaze_proxy/healthz"))
-            .send()
-            .await
-            .unwrap()
-            .error_for_status()
-            .unwrap()
-            .json::<Value>()
-            .await
-            .unwrap()
-    })
-    .await
-    .expect("owned proxy listener did not become ready");
-    assert_eq!(response["bind"], bind.to_string());
-    assert_eq!(response["adapters"][0]["name"], "anthropic");
 }
 
 async fn wait_for_events(sink: &RecordingSink, count: usize) {
@@ -1498,7 +1557,21 @@ async fn signed_request_non_stream_and_sse_surfaces_are_omitted_whole() {
 
 #[tokio::test]
 async fn panicking_sink_never_changes_proxy_enforcement() {
-    let upstream = spawn_upstream().await;
+    let app = Router::new().route(
+        "/v1/messages",
+        post(|request: Request<Body>| async {
+            let body = to_bytes(request.into_body(), 2 * 1024 * 1024)
+                .await
+                .unwrap();
+            assert!(!String::from_utf8_lossy(&body).contains(SYNTHETIC_EMAIL));
+            echo_anthropic_request(Request::new(Body::from(body))).await
+        }),
+    );
+    let (address, handle) = support::spawn_upstream(app).await;
+    let upstream = RunningServer {
+        base_url: format!("http://{address}"),
+        handle,
+    };
     let sink = Arc::new(RecordingSink::new(SinkBehavior::Panic));
     let proxy = spawn_proxy(
         &upstream,
@@ -1506,27 +1579,59 @@ async fn panicking_sink_never_changes_proxy_enforcement() {
     )
     .await;
 
-    assert_eq!(
-        request(&proxy, SYNTHETIC_EMAIL, "/v1/messages")
-            .await
-            .status(),
-        StatusCode::OK
-    );
-    wait_for_events(&sink, 4).await;
+    tokio::time::timeout(SINK_GATE_TIMEOUT, async {
+        let mut expected = 0;
+        loop {
+            let response = request(&proxy, SYNTHETIC_EMAIL, "/v1/messages").await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let body: Value = response.json().await.unwrap();
+            assert_eq!(body["content"][0]["text"], SYNTHETIC_EMAIL);
+            expected += 4;
+
+            let snapshot = loop {
+                let snapshot = proxy.consumer.as_ref().unwrap().queue_snapshot();
+                if snapshot.delivered() + snapshot.dropped() == expected {
+                    break snapshot;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            };
+            assert_eq!(snapshot.admitted(), snapshot.delivered());
+            assert_eq!(sink.len() as u64, snapshot.delivered());
+            if snapshot.delivered() > 0 {
+                break;
+            }
+            // All four attempts can legitimately lose admission. Try another
+            // enforced request so this test also witnesses an actual sink panic.
+        }
+    })
+    .await
+    .expect("inspection emissions did not finish or reach the panicking sink");
+
+    let rejected = request_json(
+        &proxy,
+        "/v1/messages",
+        json!({
+            "model": "claude-test",
+            "max_tokens": 32,
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "text": "alice@"},
+                {"type": "text", "text": "example.invalid"}
+            ]}]
+        }),
+    )
+    .await;
+    assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[tokio::test]
 async fn split_logical_domain_rejection_emits_no_inspection_event() {
     let upstream = spawn_upstream().await;
-    let sink = Arc::new(RecordingSink::new(SinkBehavior::Capture));
-    let proxy = spawn_proxy(
-        &upstream,
-        Some(install(CaptureDomainsV1::MetadataOnly, Arc::clone(&sink))),
-    )
-    .await;
+    // Full capture lets the sink identify the completion request independently of
+    // the expected event count, including any forbidden events from the rejection.
+    let harness = PrimedInspectionHarness::new(&upstream, CaptureDomainsV1::All).await;
 
     let response = request_json(
-        &proxy,
+        &harness.proxy,
         "/v1/messages",
         json!({
             "model": "claude-test",
@@ -1544,19 +1649,17 @@ async fn split_logical_domain_rejection_emits_no_inspection_event() {
 
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let _: Value = response.json().await.unwrap();
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    assert_eq!(sink.len(), 0);
+    let events = harness.release_and_collect(0).await;
+    assert!(events.is_empty());
 }
 
 #[tokio::test]
 async fn purge_disable_and_hostile_sink_never_change_proxy_enforcement() {
     let upstream = spawn_upstream().await;
     let sink = Arc::new(RecordingSink::new(SinkBehavior::Reject));
-    let mut proxy = spawn_proxy(
-        &upstream,
-        Some(install(CaptureDomainsV1::MetadataOnly, Arc::clone(&sink))),
-    )
-    .await;
+    let (inspection, finished) =
+        install_with_completion_ack(CaptureDomainsV1::MetadataOnly, Arc::clone(&sink));
+    let mut proxy = spawn_proxy(&upstream, Some(inspection)).await;
 
     let purge = proxy.consumer.as_mut().unwrap().begin_purge().unwrap();
     assert_eq!(
@@ -1581,23 +1684,19 @@ async fn purge_disable_and_hostile_sink_never_change_proxy_enforcement() {
             .status(),
         StatusCode::OK
     );
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    stop_and_join_inspection(proxy, finished).await;
     assert_eq!(sink.len(), 4);
 }
 
 #[tokio::test]
 async fn route_code_is_stamped_only_after_exact_direct_route_validation() {
     let upstream = spawn_upstream().await;
-    let harness =
-        PrimedInspectionHarness::unprimed(&upstream, CaptureDomainsV1::MetadataOnly).await;
+    let harness = PrimedInspectionHarness::new(&upstream, CaptureDomainsV1::MetadataOnly).await;
 
     let response = request(&harness.proxy, SYNTHETIC_EMAIL, "/v1/messages/").await;
     assert_ne!(response.status(), StatusCode::OK);
     let _ = response.bytes().await.unwrap();
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    assert_eq!(harness.sink.len(), 0);
 
-    harness.arm_and_prime().await;
     let response = request(&harness.proxy, SYNTHETIC_EMAIL, "/v1/messages").await;
     assert_eq!(response.status(), StatusCode::OK);
     let _ = response.bytes().await.unwrap();

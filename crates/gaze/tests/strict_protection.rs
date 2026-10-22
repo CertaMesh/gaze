@@ -212,6 +212,71 @@ fn mandatory_scans_ignore_both_skip_flags_and_cover_complete_owned_leaf() {
     );
 }
 #[test]
+fn required_output_scan_counts_completed_checks_and_ignores_observer_flags() {
+    for input in [String::new(), format!("{} residual", "7".repeat(512))] {
+        let seen = Arc::new(Mutex::new(vec![]));
+        let net = Net {
+            seen: seen.clone(),
+            whole: false,
+            locale: LocaleTag::Global,
+        };
+        let pipeline = Pipeline::builder()
+            .register_safety_net(net.clone())
+            .register_safety_net(net)
+            .enable_capitals_heuristic_gate()
+            .enable_skip_class_gating()
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let observer = pipeline
+            .scan_safety_nets(&session, &input, &[LocaleTag::Global])
+            .unwrap();
+        assert_eq!(observer.nets_run, 2);
+        assert!(observer.report.suspects.is_empty());
+        assert!(seen.lock().unwrap().is_empty());
+
+        let scan = pipeline
+            .scan_required_safety_nets(&session, &input, &[LocaleTag::Global])
+            .unwrap();
+        assert_eq!(scan.nets_run, 2);
+        assert_eq!(
+            scan.report.stats.suspect_count,
+            if input.is_empty() { 0 } else { 2 }
+        );
+        assert_eq!(*seen.lock().unwrap(), vec![(input.clone(), 0), (input, 0)]);
+        assert!(session.tokens().is_empty());
+    }
+}
+
+#[test]
+fn required_output_scan_distinguishes_no_nets_from_uncovered_nets() {
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let empty = Pipeline::builder().build().unwrap();
+    let scan = empty
+        .scan_required_safety_nets(&session, "benign", &[LocaleTag::Global])
+        .unwrap();
+    assert_eq!(scan.nets_run, 0);
+    let pipeline = Pipeline::builder()
+        .register_safety_net(Net {
+            seen: Default::default(),
+            whole: false,
+            locale: LocaleTag::Global,
+        })
+        .register_safety_net(Net {
+            seen: Default::default(),
+            whole: false,
+            locale: LocaleTag::DeDe,
+        })
+        .enable_capitals_heuristic_gate()
+        .build()
+        .unwrap();
+    assert!(matches!(
+        pipeline.scan_required_safety_nets(&session, "benign", &[LocaleTag::Global]),
+        Err(Error::Protection(ProtectionError::UnsupportedCoverage))
+    ));
+}
+
+#[test]
 fn coverage_must_not_cross_raw_gap_and_incompatible_custom_locale_fails() {
     let p = Pipeline::builder()
         .detector(Primary)
@@ -304,6 +369,19 @@ fn mandatory_registry_runs_every_selected_backend_and_rejects_uncovered_locale()
     let mut names = seen.lock().unwrap().clone();
     names.sort();
     assert_eq!(names, ["a", "b"]);
+    seen.lock().unwrap().clear();
+    let scan = p
+        .scan_required_safety_nets(&session, "benign", &[LocaleTag::EnUs])
+        .unwrap();
+    assert_eq!(p.safety_net_count(), 1, "the registry is one installed net");
+    assert_eq!(scan.nets_run, 2, "both registry backends actually checked");
+    let mut names = seen.lock().unwrap().clone();
+    names.sort();
+    assert_eq!(names, ["a", "b"]);
+    assert!(matches!(
+        p.scan_required_safety_nets(&session, "benign", &[LocaleTag::DeDe]),
+        Err(Error::Protection(ProtectionError::UnsupportedCoverage))
+    ));
     assert!(p
         .protect_text_transaction(
             &mut session.begin_transaction(),

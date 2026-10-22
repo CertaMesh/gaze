@@ -22,12 +22,12 @@ that list.
 | `SymmetricPotemkin` | `symmetric-potemkin` | Checks that every named behavioral test in `SYMMETRIC_POTEMKIN_TESTS` exists, then runs each exact test. |
 | `ClassMapOverrideSafety` | `class-map-override-safety` | Checks that every named behavioral test in `CLASS_MAP_OVERRIDE_SAFETY_TESTS` exists, then runs each exact test. |
 | `RecognizerCompositionValidator` | `recognizer-composition-validator` | Checks that every named behavioral test in `RECOGNIZER_COMPOSITION_VALIDATOR_TESTS` exists, then runs each exact test. |
-| `NoTenantKnowledge` | `no-tenant-knowledge` | Production-code lint scanner that rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. `// allow(tenant-fixture)` markers hard-fail in production scope. |
+| `NoTenantKnowledge` | `no-tenant-knowledge` | Rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in workspace production `src/` directories, with explicit exemptions in `src/repo.rs`. `// allow(tenant-fixture)` markers hard-fail in production scope. |
 | `BundleTokenizationDrift` | `bundle-tokenization-drift` | Runs bundled rulepacks through the real CLI clean/audit path and compares metadata-only snapshots. `--verify-ack` requires source/test and changelog acknowledgement for drift. |
 | `FamilyPolicyTableCoherence` | `family-policy-table-coherence` | Parses embedded rulepacks and checks collision-family declarations compile into the expected family precedence table, including IBAN-over-PAN and same-variant phone non-arbitration. |
 | `LocaleCueBundleCoherence` | `locale-cue-bundle-coherence` | Checks every mandatory-anchor declaration in core bundles has a matching cue key in embedded locale bundles. |
 | `FixtureCitationLint` | `fixture-citation-lint` | Production-code lint scanner for fixture-shaped PII literals. Each production fixture literal must cite a test that exists in `cargo test --workspace -- --list`. |
-| `CiFeatureMatrix` | `ci-feature-matrix` | Runs the local feature matrix, including document-ingestion, MCP, safety-net, no-phone-parser, and gate wrapper checks. |
+| `CiFeatureMatrix` | `ci-feature-matrix` | Runs the local feature matrix, including library-graph checks without dev-dependencies, document-ingestion, MCP, safety-net, no-phone-parser, and gate wrapper checks. |
 | `CargoMetadataAuditIsolation` | `cargo-metadata-audit-isolation` | Parses `cargo metadata` and rejects normal dependency paths from non-audit-responsible packages to `gaze-audit` across default, no-default-features, and safety-net graphs. |
 | `ReadmeVersionCheck` | `readme-version-check` | Parses workspace package versions via `cargo metadata`, scans published crate READMEs for pinned Cargo/container versions, and fails when README pins drift from `Cargo.toml`. |
 | `DylintGate` | `dylint-gate` | Canonical audit-sink protected-path isolation gate. Verifies the Dylint UI fixture corpus and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. |
@@ -73,27 +73,18 @@ CI calls the same commands. Behavioral gates fail when a protected test is missi
 Every gate must invoke behavioral tests. Do not add a gate that only checks for
 symbols, files, or strings.
 
-The current helper type is:
+`BehavioralTest` specifies `package`, `target`, and the exact test `name`.
+Its `target` is `BehavioralTarget::Lib`, `BehavioralTarget::Bin("binary_name")`,
+or `BehavioralTarget::Integration("target_name")`. Both types live in
+[`src/main.rs`](src/main.rs).
 
-```rust
-#[derive(Debug, Clone, Copy)]
-struct BehavioralTest {
-    package: &'static str,
-    test_target: Option<&'static str>,
-    name: &'static str,
-}
-```
+To add a gate:
 
-A new gate should:
-
-1. add a `Command` enum variant
-2. add a `const` slice of `BehavioralTest`
-3. call `ensure_test_exists` for every entry
-4. call `run_behavioral_test` for every entry
-5. print a clear passed line only after all tests pass
-
-For integration tests, set `test_target: Some("target_name")`; for unit tests,
-set `test_target: None`.
+1. Add a `Command` enum variant and its dispatch arm.
+2. Add a `const` slice of `BehavioralTest` entries.
+3. Call `ensure_test_exists` for every entry.
+4. Call `run_behavioral_test` for every entry.
+5. Print a passed line only after all tests pass.
 
 ## Failure rehearsal
 

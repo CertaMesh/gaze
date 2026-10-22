@@ -5,6 +5,57 @@ use crate::{ConflictTier, PiiClass};
 #[path = "legacy.rs"]
 mod legacy;
 
+// Recovery consumes collision metadata without scanning these fixture members.
+struct PolicyMember(String);
+impl crate::Recognizer for PolicyMember {
+    fn id(&self) -> &str {
+        &self.0
+    }
+    fn supported_class(&self) -> &PiiClass {
+        &PiiClass::Name
+    }
+    fn token_family(&self) -> &str {
+        "counter"
+    }
+    fn detect(
+        &self,
+        _input: &str,
+        _ctx: &crate::DetectContext<'_>,
+    ) -> std::result::Result<Vec<Candidate>, crate::DetectError> {
+        Ok(Vec::new())
+    }
+}
+
+#[derive(Default)]
+struct PolicyRegistryBuilder(crate::RecognizerRegistryBuilder);
+impl PolicyRegistryBuilder {
+    fn register_collision(
+        mut self,
+        id: impl Into<String>,
+        membership: crate::CollisionMembership,
+    ) -> Self {
+        self.0 = self
+            .0
+            .register_with_membership(PolicyMember(id.into()), Some(membership));
+        self
+    }
+    fn register_anchor_cue_bundle(
+        mut self,
+        locale: LocaleTag,
+        key: impl Into<String>,
+        names: Vec<String>,
+        window: Option<u16>,
+    ) -> Self {
+        self.0 = self
+            .0
+            .register_anchor_cue_bundle(locale, key, names, window);
+        self
+    }
+    fn build(self) -> RecognizerRegistry {
+        self.0.build()
+    }
+}
+
 fn candidate(span: Range<usize>, class: PiiClass, id: &str) -> Candidate {
     Candidate::new(
         span,
@@ -45,7 +96,7 @@ fn spans(nodes: &[Candidate]) -> Vec<Range<usize>> {
 
 #[test]
 fn a_later_partial_winner_does_not_discard_the_enclosed_original() {
-    let registry = RecognizerRegistry::builder().build();
+    let registry = PolicyRegistryBuilder::default().build();
     let mut rival = candidate(8..15, PiiClass::Email, "rival");
     rival.priority = 1;
     let originals = [
@@ -98,7 +149,7 @@ fn a_later_partial_winner_does_not_discard_the_enclosed_original() {
 
 #[test]
 fn containment_does_not_reduce_coverage_with_interleaved_priorities() {
-    let registry = RecognizerRegistry::builder().build();
+    let registry = PolicyRegistryBuilder::default().build();
     let mut inner = candidate(0..5, PiiClass::Email, "inner");
     inner.priority = 2;
     let outer = candidate(0..10, PiiClass::Email, "outer");
@@ -145,7 +196,7 @@ fn containment_does_not_reduce_coverage_with_interleaved_priorities() {
 
 #[test]
 fn six_permutations_recover_original_payload_and_keep_primary() {
-    let registry = RecognizerRegistry::builder().build();
+    let registry = PolicyRegistryBuilder::default().build();
     for order in [
         [0, 1, 2],
         [0, 2, 1],
@@ -175,7 +226,7 @@ fn six_permutations_recover_original_payload_and_keep_primary() {
 
 #[test]
 fn reverse_geometry_and_two_productive_recovery_rounds() {
-    let registry = RecognizerRegistry::builder().build();
+    let registry = PolicyRegistryBuilder::default().build();
     let reverse = [
         candidate(10..20, custom(), "f"),
         candidate(0..12, PiiClass::Name, "a"),
@@ -228,7 +279,7 @@ fn reverse_geometry_and_two_productive_recovery_rounds() {
 #[test]
 fn pending_pool_uses_containment_and_legacy_rules_elsewhere() {
     for mode in 0..6 {
-        let mut builder = RecognizerRegistry::builder();
+        let mut builder = PolicyRegistryBuilder::default();
         if mode >= 3 {
             builder = builder
                 .register_collision(
@@ -309,7 +360,7 @@ fn pending_pool_uses_containment_and_legacy_rules_elsewhere() {
 
 #[test]
 fn stable_ties_preserve_canonical_confidence_multiplicity_and_primary_order() {
-    let registry = RecognizerRegistry::builder().build();
+    let registry = PolicyRegistryBuilder::default().build();
     let mut a = candidate(0..5, PiiClass::Name, "same");
     a.canonical_form = Some("first".into());
     let mut b = a.clone();
@@ -343,7 +394,7 @@ fn structural_members_do_not_include_source_label_losers() {
     let order = pool.order.clone();
     let selected = pool.resolve(&order, &crate::FamilyPolicyTable::EMPTY, None);
     assert_eq!(selected[0].members, vec![0, 1]);
-    let registry = RecognizerRegistry::builder()
+    let registry = PolicyRegistryBuilder::default()
         .register_collision(
             "a",
             crate::CollisionMembership::new("document", "a", 10, None),
@@ -365,7 +416,7 @@ fn structural_members_do_not_include_source_label_losers() {
 
 #[test]
 fn raw_scalar_expansion_fails_closed_and_joiners_use_original_geometry() {
-    let registry = RecognizerRegistry::builder().build();
+    let registry = PolicyRegistryBuilder::default().build();
     let raw = "\u{0344}";
     let normalized = crate::normalize::normalize(raw);
     assert_eq!(normalized.text, "\u{0308}\u{0301}");
@@ -394,7 +445,7 @@ fn raw_scalar_expansion_fails_closed_and_joiners_use_original_geometry() {
 
 #[test]
 fn indexed_primary_matches_frozen_legacy_and_recovery_terminates() {
-    let registry = RecognizerRegistry::builder().build();
+    let registry = PolicyRegistryBuilder::default().build();
     let mut seed = 17u64;
     for _ in 0..2000 {
         let mut input = Vec::new();
@@ -445,7 +496,7 @@ fn indexed_primary_matches_frozen_legacy_and_recovery_terminates() {
 
 #[test]
 fn invalid_boundaries_are_rejected_before_anchor_lookup() {
-    let registry = RecognizerRegistry::builder()
+    let registry = PolicyRegistryBuilder::default()
         .register_collision(
             "a",
             crate::CollisionMembership::new("document", "a", 10, Some("cue".into())),
@@ -466,7 +517,7 @@ fn invalid_boundaries_are_rejected_before_anchor_lookup() {
 #[test]
 fn recovered_anchor_fallback_uses_original_context_and_collision_bypasses_it() {
     for found in [false, true] {
-        let mut builder = RecognizerRegistry::builder().register_collision(
+        let mut builder = PolicyRegistryBuilder::default().register_collision(
             "a",
             crate::CollisionMembership::new("document", "a", 10, Some("cue".into())),
         );
@@ -501,7 +552,7 @@ fn recovered_anchor_fallback_uses_original_context_and_collision_bypasses_it() {
         );
         assert_eq!(result.recovered[0].span, 0..4);
     }
-    let registry = RecognizerRegistry::builder()
+    let registry = PolicyRegistryBuilder::default()
         .register_collision(
             "a",
             crate::CollisionMembership::new("document", "a", 10, Some("cue".into())),
@@ -525,7 +576,7 @@ fn recovered_anchor_fallback_uses_original_context_and_collision_bypasses_it() {
 
 #[test]
 fn vanished_family_hull_does_not_consume_its_original_members() {
-    let registry = RecognizerRegistry::builder()
+    let registry = PolicyRegistryBuilder::default()
         .register_collision(
             "a",
             crate::CollisionMembership::new("document", "a", 10, None),
@@ -552,7 +603,7 @@ fn vanished_family_hull_does_not_consume_its_original_members() {
 
 #[test]
 fn work_counts_show_disjoint_gaps_are_not_replayed() {
-    let registry = RecognizerRegistry::builder().build();
+    let registry = PolicyRegistryBuilder::default().build();
     for count in [10, 100, 500] {
         let disjoint = (0..count)
             .map(|i| candidate(40 + 2 * i..41 + 2 * i, PiiClass::Name, &format!("d{i}")))
@@ -575,7 +626,7 @@ fn work_counts_show_disjoint_gaps_are_not_replayed() {
 
 #[test]
 fn equal_legacy_keys_across_custom_classes_keep_input_order() {
-    let registry = RecognizerRegistry::builder().build();
+    let registry = PolicyRegistryBuilder::default().build();
     let a = candidate(0..4, PiiClass::custom("alpha").unwrap(), "same");
     let b = candidate(0..4, PiiClass::custom("beta").unwrap(), "same");
     for input in [vec![a.clone(), b.clone()], vec![b, a]] {
@@ -589,7 +640,7 @@ fn equal_legacy_keys_across_custom_classes_keep_input_order() {
 
 #[test]
 fn recovered_pool_raw_collision_is_rejected_even_with_valid_primary() {
-    let registry = RecognizerRegistry::builder().build();
+    let registry = PolicyRegistryBuilder::default().build();
     let raw = format!("\u{0344}{}", "x".repeat(38));
     let input = vec![
         candidate(0..30, custom(), "outer"),
@@ -619,7 +670,7 @@ fn recovered_pool_raw_collision_is_rejected_even_with_valid_primary() {
 fn evidence_retains_original_ids_and_recovered_geometry_without_relabeling_members() {
     let result = run(
         triple(),
-        &RecognizerRegistry::builder().build(),
+        &PolicyRegistryBuilder::default().build(),
         "password: \"left right\"\nmarker",
     );
     assert_eq!(result.evidence.originals.len(), 3);
@@ -650,7 +701,7 @@ fn evidence_retains_original_ids_and_recovered_geometry_without_relabeling_membe
 /// last `decided_by` stamp and turned the IBAN into the family token.
 #[test]
 fn collision_settled_family_survives_later_foreign_overlap_in_both_resolvers() {
-    let registry = RecognizerRegistry::builder()
+    let registry = PolicyRegistryBuilder::default()
         .register_collision(
             "iban.structural",
             crate::CollisionMembership::new(
@@ -694,7 +745,7 @@ fn collision_settled_family_survives_later_foreign_overlap_in_both_resolvers() {
 #[test]
 fn effective_family_precedence_legacy_agrees_on_mixed_variant_declarations() {
     for (beta_precedence, expected) in [(10, "a"), (5, "collision-family:tenant-document")] {
-        let registry = RecognizerRegistry::builder()
+        let registry = PolicyRegistryBuilder::default()
             .register_collision(
                 "a",
                 crate::CollisionMembership::new("tenant-document", "alpha", 10, None),

@@ -1,0 +1,680 @@
+{
+  "arms": {
+    "candidate-v1": {
+      "crossing_name_spans": 21,
+      "crossing_nym_name_spans": 0,
+      "documents": 17780,
+      "name_spans": 4335,
+      "nym_name_spans": 129,
+      "record_sha256": "bd212b39a72a13f665f7dc2061ff2bc7b026500a0b1f38e12a1bbbf95efb3407"
+    },
+    "candidate-v2": {
+      "crossing_name_spans": 21,
+      "crossing_nym_name_spans": 0,
+      "documents": 17780,
+      "name_spans": 4335,
+      "nym_name_spans": 129,
+      "record_sha256": "5eb986c52a0c69d6eed7815b2ebf13bf4e540fe188d3d8862c88944bcb8c48cd"
+    },
+    "committed-own-base": {
+      "crossing_name_spans": 21,
+      "crossing_nym_name_spans": 0,
+      "documents": 17780,
+      "name_spans": 4206,
+      "nym_name_spans": 0,
+      "record_sha256": "64ce02e75eaa32ca0536b8af1e06eeee627d576f1e80b0670257fdc3c185fcb8"
+    },
+    "committed-own-candidate": {
+      "crossing_name_spans": 21,
+      "crossing_nym_name_spans": 0,
+      "documents": 17780,
+      "name_spans": 4335,
+      "nym_name_spans": 129,
+      "record_sha256": "179dc2156749f5d541c3fdb39e8c324486a59ff7bf5629135febd86a314c8119"
+    },
+    "main-v1": {
+      "crossing_name_spans": 21,
+      "crossing_nym_name_spans": 0,
+      "documents": 17780,
+      "name_spans": 4206,
+      "nym_name_spans": 0,
+      "record_sha256": "8e3179c628b98b707837b5c34f27815b657f84012df8c8065d2383c5084ea80f"
+    },
+    "main-v2": {
+      "crossing_name_spans": 21,
+      "crossing_nym_name_spans": 0,
+      "documents": 17780,
+      "name_spans": 4206,
+      "nym_name_spans": 0,
+      "record_sha256": "78354a5e3da305c95d6112b6f20bb27a35997b077839fc64e3012e8e7f9c5448"
+    },
+    "own-base-v1": {
+      "crossing_name_spans": 21,
+      "crossing_nym_name_spans": 0,
+      "documents": 17780,
+      "name_spans": 4206,
+      "nym_name_spans": 0,
+      "record_sha256": "348ce609d8fc7ad4c18fbf9222ba186321a4fd9d257ce2144548b28a6a62ec30"
+    },
+    "own-base-v2": {
+      "crossing_name_spans": 21,
+      "crossing_nym_name_spans": 0,
+      "documents": 17780,
+      "name_spans": 4206,
+      "nym_name_spans": 0,
+      "record_sha256": "64ce02e75eaa32ca0536b8af1e06eeee627d576f1e80b0670257fdc3c185fcb8"
+    },
+    "own-candidate-v1": {
+      "crossing_name_spans": 21,
+      "crossing_nym_name_spans": 0,
+      "documents": 17780,
+      "name_spans": 4335,
+      "nym_name_spans": 129,
+      "record_sha256": "bc388ed48c676781bbf3b62dc437e93649cceeec2aae43b10bf4091445b590ec"
+    },
+    "own-candidate-v2": {
+      "crossing_name_spans": 21,
+      "crossing_nym_name_spans": 0,
+      "documents": 17780,
+      "name_spans": 4335,
+      "nym_name_spans": 129,
+      "record_sha256": "179dc2156749f5d541c3fdb39e8c324486a59ff7bf5629135febd86a314c8119"
+    }
+  },
+  "audit_script_sha256": "b980fd2677274af33e5bbf398d07568152d44927f564158b74ee296878a0c0c6",
+  "crossing_name_spans": 210,
+  "crossing_nym_name_spans": 0,
+  "crossings_identical_across_arms": true,
+  "generated_corpus_sha256": "ca29328268932f4ffa4613a4470e2b0c47871ccbcb1377f2ee82ccfb751739c3",
+  "primary_corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+  "unique_crossings": [
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "dataiku-test-292",
+      "layer": "C",
+      "nym": false,
+      "raw_span": [
+        9,
+        23
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "dataiku-test-831",
+      "layer": "C",
+      "nym": false,
+      "raw_span": [
+        0,
+        23
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "dataiku-test-38",
+      "layer": "C",
+      "nym": false,
+      "raw_span": [
+        39,
+        50
+      ],
+      "separators": [
+        "U+000B"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "dataiku-test-38",
+      "layer": "C",
+      "nym": false,
+      "raw_span": [
+        431,
+        442
+      ],
+      "separators": [
+        "U+000B"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "dataiku-test-1049",
+      "layer": "C",
+      "nym": false,
+      "raw_span": [
+        3,
+        25
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "dataiku-test-3893",
+      "layer": "C",
+      "nym": false,
+      "raw_span": [
+        364,
+        383
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "dataiku-test-790",
+      "layer": "C",
+      "nym": false,
+      "raw_span": [
+        9,
+        21
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "dataiku-test-918",
+      "layer": "C",
+      "nym": false,
+      "raw_span": [
+        9,
+        37
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "dataiku-test-1642",
+      "layer": "C",
+      "nym": false,
+      "raw_span": [
+        212,
+        224
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "dataiku-test-660",
+      "layer": "C",
+      "nym": false,
+      "raw_span": [
+        390,
+        409
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "dataiku-test-3598",
+      "layer": "C",
+      "nym": false,
+      "raw_span": [
+        293,
+        301
+      ],
+      "separators": [
+        "U+000B"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "agentic-test-R-case_variants-000-linebreak-repeat",
+      "layer": "R",
+      "nym": false,
+      "raw_span": [
+        81,
+        92
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "agentic-test-R-case_variants-001-linebreak-repeat",
+      "layer": "R",
+      "nym": false,
+      "raw_span": [
+        106,
+        127
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "agentic-test-R-case_variants-002-linebreak-repeat",
+      "layer": "R",
+      "nym": false,
+      "raw_span": [
+        98,
+        115
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "agentic-test-R-case_variants-003-linebreak-repeat",
+      "layer": "R",
+      "nym": false,
+      "raw_span": [
+        83,
+        95
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "agentic-test-R-case_variants-004-linebreak-repeat",
+      "layer": "R",
+      "nym": false,
+      "raw_span": [
+        84,
+        95
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "agentic-test-R-case_variants-005-linebreak-repeat",
+      "layer": "R",
+      "nym": false,
+      "raw_span": [
+        86,
+        98
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "agentic-test-R-case_variants-006-linebreak-repeat",
+      "layer": "R",
+      "nym": false,
+      "raw_span": [
+        88,
+        100
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "agentic-test-R-case_variants-007-linebreak-repeat",
+      "layer": "R",
+      "nym": false,
+      "raw_span": [
+        83,
+        95
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "agentic-test-R-case_variants-008-linebreak-repeat",
+      "layer": "R",
+      "nym": false,
+      "raw_span": [
+        83,
+        95
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    },
+    {
+      "arms": [
+        "main-v2",
+        "candidate-v2",
+        "own-base-v2",
+        "own-candidate-v2",
+        "main-v1",
+        "candidate-v1",
+        "own-base-v1",
+        "own-candidate-v1",
+        "committed-own-base",
+        "committed-own-candidate"
+      ],
+      "document_id": "agentic-test-R-case_variants-009-linebreak-repeat",
+      "layer": "R",
+      "nym": false,
+      "raw_span": [
+        83,
+        95
+      ],
+      "separators": [
+        "U+000A"
+      ],
+      "source_ids": [
+        "ner"
+      ],
+      "stage": "primary_pipeline"
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 
 Load the `gaze setup` policy with `gaze-assembly`'s Nym feature:
 
+<!-- not-a-policy: cargo-dependencies -->
 ```toml
 [dependencies]
 gaze-pii = { git = "https://github.com/CertaMesh/gaze.git" }

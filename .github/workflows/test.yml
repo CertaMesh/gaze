@@ -1,126 +1,197 @@
 name: test
+run-name: "CI (${{ github.sha }})"
 
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+    inputs:
+      sample_paths:
+        description: 'Optional synthetic PR samples as JSON objects, e.g. [{"name":"docs","paths":["README.md"]}]'
+        type: string
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
+env:
+  CARGO_BUILD_JOBS: '4'
+  # Full PR integration until the queue and required checks are activated.
+  # Python compares this value exactly; only 'enabled' selects the fast PR lane.
+  GAZE_CI_FAST_LANE: ${{ vars.GAZE_CI_FAST_LANE }}
+
 jobs:
+  plan:
+    name: Select PR checks or full integration
+    runs-on: ubuntu-latest
+    outputs:
+      integration: ${{ steps.plan.outputs.integration }}
+      wide: ${{ steps.plan.outputs.wide }}
+      packages: ${{ steps.plan.outputs.packages }}
+      msrv: ${{ steps.plan.outputs.msrv }}
+      bench: ${{ steps.plan.outputs.bench }}
+      dylint: ${{ steps.plan.outputs.dylint }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+      - name: Select affected packages and mandatory owners
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/ci/ci_gate.py plan --event "$EVENT_NAME" --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  fast:
+    name: PR fmt, affected clippy and tests (not integration)
+    needs: [plan]
+    if: ${{ needs.plan.outputs.integration == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
+        with:
+          toolchain: 1.96.0
+      - name: Set up OCR and sample disk space
+        if: ${{ needs.plan.outputs.packages != '[]' }}
+        uses: ./.github/actions/setup-ocr
+      - name: Run conservative PR checks
+        env:
+          PACKAGES_JSON: ${{ needs.plan.outputs.packages }}
+        run: python3 scripts/ci/ci_gate.py fast
+
+  fast-sample:
+    name: Synthetic PR path sample (${{ matrix.name }})
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.sample_paths != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.sample_paths || '[{"name":"disabled","paths":[]}]') }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
+        with:
+          toolchain: 1.96.0
+      - name: Select synthetic paths with the real PR selector
+        id: sample
+        env:
+          SAMPLE_PATHS: ${{ toJSON(matrix.paths) }}
+          # Synthetic samples cannot change the actual full dispatch plan.
+          GAZE_CI_FAST_LANE: enabled
+        run: python3 scripts/ci/ci_gate.py plan --event pull_request --paths-json "$SAMPLE_PATHS"
+      - name: Set up OCR and sample disk space
+        if: ${{ steps.sample.outputs.packages != '[]' }}
+        uses: ./.github/actions/setup-ocr
+      - name: Run the real PR lane on the synthetic path sample
+        env:
+          PACKAGES_JSON: ${{ steps.sample.outputs.packages }}
+        run: python3 scripts/ci/ci_gate.py fast
+
+  dylint:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.dylint == 'true' }}
+    uses: ./.github/workflows/dylint.yml
+
   msrv:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.msrv == 'true' }}
     name: MSRV (Rust 1.89)
     runs-on: ubuntu-latest
     steps:
-      - name: Free disk space (ubuntu-latest preinstalled bloat removal)
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: false
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.89.0
         with:
           toolchain: 1.89.0
-      - name: Install Tesseract + English language pack (gaze-document)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
-      - name: Install pdfium dynamic library (gaze-document PDF input)
-        run: |
-          set -eu
-          # Pinned release: https://github.com/bblanchon/pdfium-binaries/releases/tag/chromium%2F7920
-          # Update by resolving the latest tag, downloading pdfium-linux-x64.tgz, and refreshing PDFIUM_SHA256.
-          PDFIUM_RELEASE="chromium/7920"
-          PDFIUM_SHA256="49ab3afbd4e6c1e284b5f2898129c8bb8a10fd785c1c5392c8c1fc70242f9ced"
-          curl -sSL -o /tmp/pdfium.tgz \
-            "https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_RELEASE}/pdfium-linux-x64.tgz"
-          echo "${PDFIUM_SHA256}  /tmp/pdfium.tgz" | sha256sum -c -
-          mkdir -p /tmp/pdfium-extract
-          tar -xzf /tmp/pdfium.tgz -C /tmp/pdfium-extract
-          sudo install -m 0755 /tmp/pdfium-extract/lib/libpdfium.so /usr/local/lib/libpdfium.so
-          sudo ldconfig
+      - name: Set up OCR and sample disk space
+        uses: ./.github/actions/setup-ocr
+        with:
+          install-ocr: 'false'
       - name: Cache cargo registry + target
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-msrv-1.89-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-dependencies-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-msrv-1.89-
+            ${{ runner.os }}-cargo-test-dependencies-v2-
+      - name: Require a fresh ORT distribution after cache restore
+        shell: bash
+        run: |
+          test ! -e "$HOME/.cache/ort.pyke.io/dfbin"
+          echo 'ORT distribution absent after cache restore; ort-sys must download and verify its pinned archive.'
       - name: cargo check workspace (MSRV)
         env:
           RUSTUP_TOOLCHAIN: 1.89.0
         # All-features MSRV is intentionally not gated.
         run: cargo check --workspace --all-targets --locked
+      - name: Report disk space after build and sampled peak use
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          native="$HOME/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671"
+          if [[ -f "$native/lib/libonnxruntime.a" || -f "$native/libonnxruntime.a" ]]; then
+            echo 'ORT pinned distribution installed in this job; ort-sys checks the downloaded archive SHA-256 before installing this directory.'
+          else
+            echo 'ORT pinned distribution was not installed in this job.'
+          fi
+          df -h "$GITHUB_WORKSPACE"
+          if [[ -f "$RUNNER_TEMP/gaze-disk-sampler.pid" ]]; then
+            kill "$(cat "$RUNNER_TEMP/gaze-disk-sampler.pid")"
+            df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }' >> "$RUNNER_TEMP/gaze-disk-free-kib.txt"
+            awk 'NR == 1 || $1 < min { min = $1 } END { printf "Minimum sampled free disk: %.2f GiB (%d KiB), %d samples, 5s interval\n", min / 1048576, min, NR }' "$RUNNER_TEMP/gaze-disk-free-kib.txt"
+          fi
 
   test-support:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.integration == 'true' }}
     name: test support and doctests
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
       NYM_SMALL_INT8_BUNDLE_SHA256: 71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767
     steps:
-      - name: Free disk space (ubuntu-latest preinstalled bloat removal)
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: false
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
         with:
           toolchain: 1.96.0
-      - name: Install Tesseract + English language pack (gaze-document)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
-      - name: Install pdfium dynamic library (gaze-document PDF input)
-        run: |
-          set -eu
-          # Pinned release: https://github.com/bblanchon/pdfium-binaries/releases/tag/chromium%2F7920
-          # Update by resolving the latest tag, downloading pdfium-linux-x64.tgz, and refreshing PDFIUM_SHA256.
-          PDFIUM_RELEASE="chromium/7920"
-          PDFIUM_SHA256="49ab3afbd4e6c1e284b5f2898129c8bb8a10fd785c1c5392c8c1fc70242f9ced"
-          curl -sSL -o /tmp/pdfium.tgz \
-            "https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_RELEASE}/pdfium-linux-x64.tgz"
-          echo "${PDFIUM_SHA256}  /tmp/pdfium.tgz" | sha256sum -c -
-          mkdir -p /tmp/pdfium-extract
-          tar -xzf /tmp/pdfium.tgz -C /tmp/pdfium-extract
-          sudo install -m 0755 /tmp/pdfium-extract/lib/libpdfium.so /usr/local/lib/libpdfium.so
-          sudo ldconfig
+      - name: Set up OCR and sample disk space
+        uses: ./.github/actions/setup-ocr
+      # Keep the name and dependency-only key parsed by the producer-binding regression test.
       - name: Cache cargo registry + target
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ~/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671
-          key: ${{ runner.os }}-cargo-test-dependencies-v1-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-dependencies-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-dependencies-v1-
+            ${{ runner.os }}-cargo-test-dependencies-v2-
+      - name: Require a fresh ORT distribution after cache restore
+        shell: bash
+        run: |
+          test ! -e "$HOME/.cache/ort.pyke.io/dfbin"
+          echo 'ORT distribution absent after cache restore; ort-sys must download and verify its pinned archive.'
       - name: Test shard ownership and evidence contracts
         run: python3 -m unittest discover -s scripts/ci
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
-      - name: README version check
-        run: cargo run -p xtask -- readme-version-check
       # Linux-only: the canonical harness uses a POSIX producer transport.
       # Call its build function so flags/features cannot diverge from bench runs.
       - name: Cache detached validator probe target
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: target/validator-recall-probe
           key: ${{ runner.os }}-validator-probe-1.96-${{ hashFiles('**/Cargo.lock') }}
@@ -137,7 +208,7 @@ jobs:
       - name: Workspace all-feature doctests
         run: cargo test --workspace --all-features --doc --no-fail-fast
       - name: Cache pinned Nym bundle
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/gaze/models/nym-small-int8
           key: ${{ runner.os }}-nym-small-int8-${{ env.NYM_SMALL_INT8_BUNDLE_SHA256 }}
@@ -165,18 +236,25 @@ jobs:
           printf '%s  %s\n' "$NYM_SMALL_INT8_BUNDLE_SHA256" "$bundle/SHA256SUMS" | sha256sum -c -
           (cd "$bundle" && sha256sum -c SHA256SUMS)
           chmod 600 "$bundle"/*
-      - name: Test live Nym policy attachment
+      - name: Test live Nym leak detection and restore
         shell: bash
         env:
           GAZE_NYM_MODEL_DIR: ${{ runner.temp }}/gaze/models/nym-small-int8
         run: |
           set -euo pipefail
-          for name in live_nym_net_tokenizes_a_plate_the_rules_miss policy_nym_model_dir_activates_live_bundle live_nym_suspects_ignore_random_session_hex; do
+          for name in live_plate_in_prose_is_a_suspect live_salutation_protects_surname_but_not_unsupported_secret live_long_document_is_scanned_to_the_end live_capture_matches_the_committed_fixture; do
+            cargo test -p gaze-recognizers --features safety-net-nym,test-support --test nym_safety_net "$name" -- --ignored --exact --nocapture 2>&1 | tee "$RUNNER_TEMP/$name.log"
+            grep -Fq "test $name ... ok" "$RUNNER_TEMP/$name.log"
+          done
+          for name in live_nym_net_tokenizes_a_plate_the_rules_miss policy_nym_model_dir_activates_live_bundle live_nym_suspects_ignore_random_session_hex live_person_name_is_one_restorable_token_with_thresholds_in_audit live_nym_fallback_never_replaces_an_owned_placeholder; do
             cargo test -p gaze-cli --all-features --test nym_cli "$name" -- --ignored --exact --nocapture 2>&1 | tee "$RUNNER_TEMP/$name.log"
             grep -Fq "test $name ... ok" "$RUNNER_TEMP/$name.log"
           done
+          name=eval_and_clean_protect_the_same_nym_policy_bytes
+          cargo test -p gaze-cli --all-features --test eval_cli "$name" -- --ignored --exact --nocapture 2>&1 | tee "$RUNNER_TEMP/$name.log"
+          grep -Fq "test $name ... ok" "$RUNNER_TEMP/$name.log"
       - name: Cache pinned Davlan NER bundle
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/gaze/models/davlan-mbert-ner-hrl
           key: ${{ runner.os }}-davlan-ner-7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16
@@ -238,8 +316,26 @@ jobs:
             --repo "$GITHUB_WORKSPACE" --source-revision "$binding_revision" \
             --registry "$HOME/.cargo/registry" --native "$binding_native" \
             --toolchain "$binding_toolchain" --scratch-parent "$RUNNER_TEMP"
+      - name: Report disk space after build and sampled peak use
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          native="$HOME/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671"
+          if [[ -f "$native/lib/libonnxruntime.a" || -f "$native/libonnxruntime.a" ]]; then
+            echo 'ORT pinned distribution installed in this job; ort-sys checks the downloaded archive SHA-256 before installing this directory.'
+          else
+            echo 'ORT pinned distribution was not installed in this job.'
+          fi
+          df -h "$GITHUB_WORKSPACE"
+          if [[ -f "$RUNNER_TEMP/gaze-disk-sampler.pid" ]]; then
+            kill "$(cat "$RUNNER_TEMP/gaze-disk-sampler.pid")"
+            df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }' >> "$RUNNER_TEMP/gaze-disk-free-kib.txt"
+            awk 'NR == 1 || $1 < min { min = $1 } END { printf "Minimum sampled free disk: %.2f GiB (%d KiB), %d samples, 5s interval\n", min / 1048576, min, NR }' "$RUNNER_TEMP/gaze-disk-free-kib.txt"
+          fi
 
   workspace-shards:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.integration == 'true' }}
     name: workspace tests (${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -248,48 +344,26 @@ jobs:
       matrix:
         shard: [cli, runtime, gates]
     steps:
-      - name: Free disk space (ubuntu-latest preinstalled bloat removal)
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: false
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
         with:
           toolchain: 1.96.0
-      - name: Install Tesseract + English language pack (gaze-document)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
-      - name: Install pdfium dynamic library (gaze-document PDF input)
-        run: |
-          set -eu
-          # Pinned release: https://github.com/bblanchon/pdfium-binaries/releases/tag/chromium%2F7920
-          # Update by resolving the latest tag, downloading pdfium-linux-x64.tgz, and refreshing PDFIUM_SHA256.
-          PDFIUM_RELEASE="chromium/7920"
-          PDFIUM_SHA256="49ab3afbd4e6c1e284b5f2898129c8bb8a10fd785c1c5392c8c1fc70242f9ced"
-          curl -sSL -o /tmp/pdfium.tgz \
-            "https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_RELEASE}/pdfium-linux-x64.tgz"
-          echo "${PDFIUM_SHA256}  /tmp/pdfium.tgz" | sha256sum -c -
-          mkdir -p /tmp/pdfium-extract
-          tar -xzf /tmp/pdfium.tgz -C /tmp/pdfium-extract
-          sudo install -m 0755 /tmp/pdfium-extract/lib/libpdfium.so /usr/local/lib/libpdfium.so
-          sudo ldconfig
+      - name: Set up OCR and sample disk space
+        uses: ./.github/actions/setup-ocr
       - name: Cache cargo registry + target
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ~/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671
-          key: ${{ runner.os }}-cargo-test-dependencies-v1-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-dependencies-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-dependencies-v1-
+            ${{ runner.os }}-cargo-test-dependencies-v2-
+      - name: Require a fresh ORT distribution after cache restore
+        shell: bash
+        run: |
+          test ! -e "$HOME/.cache/ort.pyke.io/dfbin"
+          echo 'ORT distribution absent after cache restore; ort-sys must download and verify its pinned archive.'
       - name: Install pinned nextest
         shell: bash
         run: |
@@ -301,6 +375,11 @@ jobs:
           cargo nextest --version
       - name: Verify binary ownership and Cargo test-name equivalence
         run: python3 scripts/ci/test_shards.py collect --output target/shard-evidence/${{ matrix.shard }}
+      - name: Verify removed dashboard workflow test coverage
+        if: ${{ matrix.shard == 'gates' }}
+        run: |
+          python3 scripts/ci/test_shards.py covered-package --evidence target/shard-evidence/gates --package gaze-proxy-dashboard
+          python3 scripts/ci/test_shards.py covered-package --evidence target/shard-evidence/gates --package gaze-inspection
       - name: Run workspace shard with per-test timing
         shell: bash
         run: |
@@ -323,12 +402,28 @@ jobs:
           path: target/shard-evidence/${{ matrix.shard }}/
           if-no-files-found: error
           retention-days: 14
+      - name: Report disk space after build and sampled peak use
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          native="$HOME/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671"
+          if [[ -f "$native/lib/libonnxruntime.a" || -f "$native/libonnxruntime.a" ]]; then
+            echo 'ORT pinned distribution installed in this job; ort-sys checks the downloaded archive SHA-256 before installing this directory.'
+          else
+            echo 'ORT pinned distribution was not installed in this job.'
+          fi
+          df -h "$GITHUB_WORKSPACE"
+          if [[ -f "$RUNNER_TEMP/gaze-disk-sampler.pid" ]]; then
+            kill "$(cat "$RUNNER_TEMP/gaze-disk-sampler.pid")"
+            df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }' >> "$RUNNER_TEMP/gaze-disk-free-kib.txt"
+            awk 'NR == 1 || $1 < min { min = $1 } END { printf "Minimum sampled free disk: %.2f GiB (%d KiB), %d samples, 5s interval\n", min / 1048576, min, NR }' "$RUNNER_TEMP/gaze-disk-free-kib.txt"
+          fi
 
   test-coverage:
     name: workspace test coverage proof
     runs-on: ubuntu-latest
-    needs: [workspace-shards]
-    if: ${{ always() }}
+    needs: [plan, workspace-shards]
+    if: ${{ always() && needs.plan.outputs.integration == 'true' }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -352,27 +447,26 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Preserve the existing required context while ruleset changes are reviewed.
   test:
     runs-on: ubuntu-latest
-    needs: [test-support, workspace-shards, test-coverage]
+    needs: [plan, fast, test-support, workspace-shards, test-coverage]
     if: ${{ always() }}
     steps:
-      - name: Require every test owner and the coverage proof to succeed
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Require test owners for this lane
         env:
-          SUPPORT_RESULT: ${{ needs.test-support.result }}
-          SHARDS_RESULT: ${{ needs.workspace-shards.result }}
-          COVERAGE_RESULT: ${{ needs.test-coverage.result }}
-        run: |
-          for result in "$SUPPORT_RESULT" "$SHARDS_RESULT" "$COVERAGE_RESULT"; do
-            if [ "$result" != success ]; then
-              printf 'Required test coverage did not succeed: %s\n' "$result"
-              exit 1
-            fi
-          done
+          EVENT_NAME: ${{ github.event_name }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/ci_gate.py check --context test
 
   benchmark-model-free:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.bench == 'true' }}
     name: benchmark model-free Python tests
     runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -387,36 +481,30 @@ jobs:
           enable-cache: true
           cache-dependency-glob: scripts/bench/uv.lock
       - name: Sync locked benchmark environment
-        run: uv sync --project scripts/bench --locked --group comparison-test
+        run: uv sync --project scripts/bench --python 3.13 --locked --group comparison-test
       - name: Run benchmark scorer and comparator tests
-        run: uv run --project scripts/bench --group comparison-test python -m unittest discover -s scripts/bench
-      - name: Run competitor adapter and known-record tests
-        run: uv run --project scripts/bench --group comparison-test python -m pytest -q scripts/bench/compare/ scripts/bench/test_known_record_*.py scripts/bench/test_family_precedence_*.py
+        run: uv run --project scripts/bench --python 3.13 --group comparison-test python -m pytest -q scripts/bench --durations=30
       - name: Build model-free equivalence binaries
         run: |
           cargo build --locked -p gaze-cli --bin gaze
           cargo build --locked -p gaze-recognizers --example clean_for_bench
+      - name: Prove exact native capture reuse on the committed fixture
+        env:
+          GAZE_CAPTURE_FIXTURE_BINARY: target/debug/examples/clean_for_bench
+        run: uv run --project scripts/bench --python 3.13 --group comparison-test python -m pytest -q scripts/bench/test_capture_reuse.py
       # `cargo test --workspace` builds examples but never runs their unit tests; the
       # leak ledger's pool-dump pins (normalizer copy vs the pipeline trace) live here.
       - name: Run bench producer example tests
         run: cargo test --locked -p gaze-recognizers --all-features --example clean_for_bench
       - name: Check policy and CLI equivalence on committed sample
-        run: uv run --project scripts/bench --group comparison-test python scripts/bench/check_policy_equivalence.py --self-check
+        run: uv run --project scripts/bench --python 3.13 --group comparison-test python scripts/bench/check_policy_equivalence.py --self-check
 
   xtask-feature-gates:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.integration == 'true' }}
     name: xtask feature gates
     runs-on: ubuntu-latest
     steps:
-      - name: Free disk space (ubuntu-latest preinstalled bloat removal)
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: false
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           # bundle-tokenization-drift --verify-ack diffs snapshots against
@@ -425,83 +513,47 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
         with:
           toolchain: 1.96.0
-      - name: Install Tesseract + English language pack (gaze-document)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
-      - name: Install pdfium dynamic library (gaze-document PDF input)
-        run: |
-          set -eu
-          # Pinned release: https://github.com/bblanchon/pdfium-binaries/releases/tag/chromium%2F7920
-          # Update by resolving the latest tag, downloading pdfium-linux-x64.tgz, and refreshing PDFIUM_SHA256.
-          PDFIUM_RELEASE="chromium/7920"
-          PDFIUM_SHA256="49ab3afbd4e6c1e284b5f2898129c8bb8a10fd785c1c5392c8c1fc70242f9ced"
-          curl -sSL -o /tmp/pdfium.tgz \
-            "https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_RELEASE}/pdfium-linux-x64.tgz"
-          echo "${PDFIUM_SHA256}  /tmp/pdfium.tgz" | sha256sum -c -
-          mkdir -p /tmp/pdfium-extract
-          tar -xzf /tmp/pdfium.tgz -C /tmp/pdfium-extract
-          sudo install -m 0755 /tmp/pdfium-extract/lib/libpdfium.so /usr/local/lib/libpdfium.so
-          sudo ldconfig
+      - name: Set up OCR and sample disk space
+        uses: ./.github/actions/setup-ocr
       - name: Cache cargo registry + target
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-xtask-gates-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-dependencies-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-xtask-gates-
-      - name: xtask symmetric-potemkin
-        run: cargo run -p xtask -- symmetric-potemkin
-      - name: xtask class-map-override-safety
-        run: cargo run -p xtask -- class-map-override-safety
-      - name: xtask recognizer-composition-validator
-        run: cargo run -p xtask -- recognizer-composition-validator
-      - name: xtask no-tenant-knowledge
-        run: cargo run -p xtask -- no-tenant-knowledge
-      - name: xtask bundle-tokenization-drift
-        # --verify-ack: any committed snapshot change (e.g. an emitted class
-        # rename) must carry a `// drift-ack:` comment and a CHANGELOG line —
-        # the v0.8 `custom:iban` -> `custom:family:payment-card-or-iban` change
-        # merged silently without this and leaked downstream (issue #360).
-        run: cargo run -p xtask -- bundle-tokenization-drift --verify-ack
-      - name: xtask family-policy-table-coherence
-        run: cargo run -p xtask -- family-policy-table-coherence
-      - name: xtask locale-cue-bundle-coherence
-        run: cargo run -p xtask -- locale-cue-bundle-coherence
-      - name: xtask fixture-citation-lint
-        run: cargo run -p xtask -- fixture-citation-lint
-      - name: xtask trybuild-fixture-hygiene
-        run: cargo run -p xtask -- trybuild-fixture-hygiene
-      - name: xtask cargo-metadata-audit-isolation
-        run: cargo run -p xtask -- cargo-metadata-audit-isolation
-      - name: xtask readme-version-check
-        run: cargo run -p xtask -- readme-version-check
-      - name: xtask safety-net-sanity
-        run: cargo run -p xtask -- safety-net-sanity
-      - name: xtask dashboard-isolation
-        run: cargo run -p xtask -- dashboard-isolation
-      - name: xtask mcp-tier-isolation
-        run: cargo run -p xtask -- mcp-tier-isolation
+            ${{ runner.os }}-cargo-test-dependencies-v2-
+      - name: Require a fresh ORT distribution after cache restore
+        shell: bash
+        run: |
+          test ! -e "$HOME/.cache/ort.pyke.io/dfbin"
+          echo 'ORT distribution absent after cache restore; ort-sys must download and verify its pinned archive.'
       - name: xtask ci-feature-matrix
         run: cargo run -p xtask -- ci-feature-matrix --partition ci-gates
+      - name: Report disk space after build and sampled peak use
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          native="$HOME/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671"
+          if [[ -f "$native/lib/libonnxruntime.a" || -f "$native/libonnxruntime.a" ]]; then
+            echo 'ORT pinned distribution installed in this job; ort-sys checks the downloaded archive SHA-256 before installing this directory.'
+          else
+            echo 'ORT pinned distribution was not installed in this job.'
+          fi
+          df -h "$GITHUB_WORKSPACE"
+          if [[ -f "$RUNNER_TEMP/gaze-disk-sampler.pid" ]]; then
+            kill "$(cat "$RUNNER_TEMP/gaze-disk-sampler.pid")"
+            df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }' >> "$RUNNER_TEMP/gaze-disk-free-kib.txt"
+            awk 'NR == 1 || $1 < min { min = $1 } END { printf "Minimum sampled free disk: %.2f GiB (%d KiB), %d samples, 5s interval\n", min / 1048576, min, NR }' "$RUNNER_TEMP/gaze-disk-free-kib.txt"
+          fi
 
   workspace-default:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.integration == 'true' }}
     name: workspace default features
     runs-on: ubuntu-latest
     steps:
-      - name: Free disk space (ubuntu-latest preinstalled bloat removal)
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: false
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           # bundle-tokenization-drift --verify-ack diffs snapshots against
@@ -510,52 +562,66 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
         with:
           toolchain: 1.96.0
-      - name: Install Tesseract + English language pack (gaze-document)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
-      - name: Install pdfium dynamic library (gaze-document PDF input)
-        run: |
-          set -eu
-          # Pinned release: https://github.com/bblanchon/pdfium-binaries/releases/tag/chromium%2F7920
-          # Update by resolving the latest tag, downloading pdfium-linux-x64.tgz, and refreshing PDFIUM_SHA256.
-          PDFIUM_RELEASE="chromium/7920"
-          PDFIUM_SHA256="49ab3afbd4e6c1e284b5f2898129c8bb8a10fd785c1c5392c8c1fc70242f9ced"
-          curl -sSL -o /tmp/pdfium.tgz \
-            "https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_RELEASE}/pdfium-linux-x64.tgz"
-          echo "${PDFIUM_SHA256}  /tmp/pdfium.tgz" | sha256sum -c -
-          mkdir -p /tmp/pdfium-extract
-          tar -xzf /tmp/pdfium.tgz -C /tmp/pdfium-extract
-          sudo install -m 0755 /tmp/pdfium-extract/lib/libpdfium.so /usr/local/lib/libpdfium.so
-          sudo ldconfig
+      - name: Set up OCR and sample disk space
+        uses: ./.github/actions/setup-ocr
       - name: Cache cargo registry + target
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-workspace-default-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-dependencies-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-workspace-default-
+            ${{ runner.os }}-cargo-test-dependencies-v2-
+      - name: Require a fresh ORT distribution after cache restore
+        shell: bash
+        run: |
+          test ! -e "$HOME/.cache/ort.pyke.io/dfbin"
+          echo 'ORT distribution absent after cache restore; ort-sys must download and verify its pinned archive.'
       - name: Default-feature workspace suite
         run: cargo run -p xtask -- ci-feature-matrix --partition ci-default
+      - name: Report disk space after build and sampled peak use
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          native="$HOME/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671"
+          if [[ -f "$native/lib/libonnxruntime.a" || -f "$native/libonnxruntime.a" ]]; then
+            echo 'ORT pinned distribution installed in this job; ort-sys checks the downloaded archive SHA-256 before installing this directory.'
+          else
+            echo 'ORT pinned distribution was not installed in this job.'
+          fi
+          df -h "$GITHUB_WORKSPACE"
+          if [[ -f "$RUNNER_TEMP/gaze-disk-sampler.pid" ]]; then
+            kill "$(cat "$RUNNER_TEMP/gaze-disk-sampler.pid")"
+            df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }' >> "$RUNNER_TEMP/gaze-disk-free-kib.txt"
+            awk 'NR == 1 || $1 < min { min = $1 } END { printf "Minimum sampled free disk: %.2f GiB (%d KiB), %d samples, 5s interval\n", min / 1048576, min, NR }' "$RUNNER_TEMP/gaze-disk-free-kib.txt"
+          fi
 
+  # Preserve the existing required context while ruleset changes are reviewed.
   xtask-gates:
     name: xtask gates
     runs-on: ubuntu-latest
-    needs: [test, xtask-feature-gates, workspace-default]
+    needs: [plan, fast, test, xtask-feature-gates, workspace-default]
     if: ${{ always() }}
     steps:
-      - name: Require every coverage owner to succeed
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Require coverage owners for this lane
         env:
-          TEST_RESULT: ${{ needs.test.result }}
-          FEATURE_GATES_RESULT: ${{ needs.xtask-feature-gates.result }}
-          DEFAULT_RESULT: ${{ needs.workspace-default.result }}
-        run: |
-          for result in "$TEST_RESULT" "$FEATURE_GATES_RESULT" "$DEFAULT_RESULT"; do
-            if [ "$result" != success ]; then
-              printf 'Required CI coverage did not succeed: %s\n' "$result"
-              exit 1
-            fi
-          done
+          EVENT_NAME: ${{ github.event_name }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/ci_gate.py check --context xtask
+
+  integration:
+    # The stable required name must report on PRs AND merge_group. The run name
+    # and job summary explicitly distinguish PR feedback from full integration.
+    name: ci/integration
+    runs-on: ubuntu-latest
+    needs: [plan, fast, msrv, test-support, workspace-shards, test-coverage, test, benchmark-model-free, xtask-feature-gates, workspace-default, xtask-gates, dylint]
+    if: ${{ always() }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Require every mandatory owner, including cancelled and missing results
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/ci_gate.py check --context integration

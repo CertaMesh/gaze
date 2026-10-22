@@ -251,3 +251,71 @@ fn mixed_locale_document_matches_per_step_detection() {
     assert!(!visible.contains("10115"), "{visible}");
     assert!(!visible.contains("Alice"), "{visible}");
 }
+
+#[path = "support/ner_preparation_fixtures.rs"]
+mod ner_preparation_fixtures;
+
+/// Run this test in separate baseline and candidate checkouts and compare the
+/// canonical receipts. The model bundle verifies against Gaze's pinned hashes.
+#[test]
+#[ignore = "requires the pinned Davlan bundle and GAZE_NER_PROOF_DIR"]
+fn pinned_ner_pipeline_parity_receipt() {
+    use gaze::{DefaultRule, Pipeline};
+    use serde_json::json;
+    use sha2::{Digest, Sha256};
+    use std::path::PathBuf;
+
+    let model_dir =
+        PathBuf::from(std::env::var_os("GAZE_NER_MODEL_DIR").expect("NER model directory"));
+    let output_dir =
+        PathBuf::from(std::env::var_os("GAZE_NER_PROOF_DIR").expect("proof directory"));
+    let pipeline = Pipeline::builder()
+        .recognizer(NerRecognizer::load_pinned_davlan(&model_dir, NerOptions::default()).unwrap())
+        .rule(DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap();
+    let mut rows = Vec::new();
+    let mut total_tokens = 0;
+    for (name, input) in ner_preparation_fixtures::fixtures() {
+        let session =
+            Session::new_with_session_hex_for_tests(Scope::Ephemeral, [0x5e, 0x55, 0x10, 0x4e])
+                .unwrap();
+        let (clean, spans, report) = pipeline
+            .clean_with_safety_net(
+                &session,
+                RawDocument::Text(input.clone()),
+                &[LocaleTag::Global],
+            )
+            .unwrap();
+        let CleanDocument::Text(clean) = clean else {
+            panic!("expected text")
+        };
+        let restored = pipeline
+            .restore_with_telemetry(&session, &clean)
+            .unwrap()
+            .0
+            .text;
+        assert_eq!(restored, input, "exact restore: {name}");
+        let mut entries = session.snapshot_entries();
+        entries.sort_by(|left, right| left.token.cmp(&right.token));
+        let manifest: Vec<_> = entries.into_iter().map(|entry| json!({
+            "class": entry.class, "raw":entry.raw, "token":entry.token, "family":entry.family
+        })).collect();
+        let mut tokens = session.tokens();
+        tokens.sort();
+        total_tokens += tokens.len();
+        let canonical = json!({"clean":clean, "selected_spans":spans, "tokens":tokens,
+            "manifest":manifest, "restored":restored, "safety_net_count":pipeline.safety_net_count(),
+            "safety_net_report":format!("{report:?}"), "disposition":"success"});
+        let bytes = serde_json::to_vec(&canonical).unwrap();
+        rows.push(json!({"fixture":name,"sha256":format!("{:x}",Sha256::digest(&bytes)),"canonical":canonical}));
+    }
+    assert!(total_tokens > 0, "parity must exercise pseudonym emission");
+    std::fs::create_dir_all(&output_dir).unwrap();
+    std::fs::write(
+        output_dir.join("pipeline-parity.json"),
+        serde_json::to_vec_pretty(&rows).unwrap(),
+    )
+    .unwrap();
+    println!("pipeline parity receipt: {} documents, {total_tokens} tokens, exact restores, zero errors/refusals",rows.len());
+}

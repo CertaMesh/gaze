@@ -159,12 +159,26 @@ mod tests {
             .iter()
             .map(|recognizer| recognizer.id.as_str())
             .collect::<Vec<_>>();
-        assert_eq!(ids, ["security_token.anchored", "password.field"]);
+        assert_eq!(
+            ids,
+            [
+                "security_token.anchored",
+                "password.field",
+                "password.hash",
+                "password.code",
+                "security_token.code",
+            ]
+        );
         let core = Rulepack::load(RulepackSource::Embedded(embedded("core").expect("core")))
             .expect("valid core");
         assert!(core.recognizers.iter().all(|recognizer| !matches!(
             recognizer.id.as_str(),
-            "security_token.anchored" | "password.field" | "username.field"
+            "security_token.anchored"
+                | "security_token.code"
+                | "password.field"
+                | "password.hash"
+                | "password.code"
+                | "username.field"
         )));
     }
 

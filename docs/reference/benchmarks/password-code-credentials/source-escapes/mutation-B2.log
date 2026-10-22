@@ -1,0 +1,26 @@
+   Compiling gaze-recognizers v0.17.0 ({mutation-copy}/crates/gaze-recognizers)
+   Compiling gaze-pii v0.17.0 ({mutation-copy}/crates/gaze)
+   Compiling gaze-assembly v0.17.0 ({mutation-copy}/crates/gaze-assembly)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.68s
+     Running tests/code_credentials.rs ({mutation-target}/debug/deps/code_credentials-03d42cdd6cbbb021)
+
+running 1 test
+test escaped_json_slashes_are_complete_hash_alphabet_units ... FAILED
+
+failures:
+
+---- escaped_json_slashes_are_complete_hash_alphabet_units stdout ----
+
+thread 'escaped_json_slashes_are_complete_hash_alphabet_units' ({thread-id}) panicked at crates/gaze-recognizers/tests/code_credentials.rs:421:9:
+assertion `left == right` failed: {"stored_digest":"$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC\/.og\/at2.uheWG\/igi"}
+  left: []
+ right: ["$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC\\/.og\\/at2.uheWG\\/igi"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    escaped_json_slashes_are_complete_hash_alphabet_units
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 1.76s
+
+error: test failed, to rerun pass `-p gaze-recognizers --test code_credentials`

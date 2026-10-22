@@ -700,7 +700,7 @@ fn field_owned_repeat_seeds_survive_later_turns_and_signed_snapshots() {
             public_clean(&pipeline, &session, &declaration);
             let snapshot = session.export().unwrap().into_bytes();
             assert_eq!(
-                snapshot[0], 7,
+                snapshot[0], 8,
                 "new seed metadata requires a fail-closed envelope"
             );
             let mut downgraded = snapshot.clone();

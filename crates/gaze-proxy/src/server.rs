@@ -14,7 +14,7 @@ use futures_util::StreamExt;
 use gaze::{
     token_shape, BoundaryRefusal, CleanDocument, CommittedSessionSnapshot, DictionaryBundle,
     EmittedTokenSpan, LocaleTag, Pipeline, PrefixCacheWriteMode, RawDocument, Scope, Session,
-    SessionTransaction, SessionTransactionError,
+    SessionTransaction, SessionTransactionError, SourceSpelling,
 };
 use reqwest::{Client, ClientBuilder};
 use serde::de::{MapAccess, SeqAccess, Visitor};
@@ -25,7 +25,8 @@ use tokio::sync::RwLock;
 use url::{Host, Url};
 
 use crate::adapter::{
-    CoveragePolicy, ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent, SurfaceSyntax,
+    CoveragePolicy, ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent, SseStreamKey,
+    SurfaceSyntax,
 };
 use crate::adapters::anthropic::{AnthropicAdapter, DEFAULT_ANTHROPIC_VERSION};
 use crate::codec::{
@@ -283,6 +284,7 @@ enum DirectIngressSession {
 }
 
 struct PreparedDirectIngress {
+    endpoint: Url,
     outbound_headers: HeaderMap,
     session: DirectIngressSession,
 }
@@ -801,7 +803,9 @@ async fn discard_error_body(response: reqwest::Response, limit: usize) {
 fn validate_direct_url(url: &Url) -> Result<(), DirectProxyError> {
     let safe_authority = url.username().is_empty()
         && url.password().is_none()
-        && url.query().is_none()
+        && (url.query().is_none()
+            || (matches!(url.path(), "/v1/messages" | "/v1/messages/count_tokens")
+                && url.query() == Some("beta=true")))
         && url.fragment().is_none()
         && url.host().is_some();
     let safe_scheme = match (url.scheme(), url.host()) {
@@ -818,7 +822,7 @@ fn validate_direct_url(url: &Url) -> Result<(), DirectProxyError> {
 }
 
 fn validate_direct_origin(url: &Url) -> Result<(), DirectProxyError> {
-    if url.path() != "/" {
+    if url.path() != "/" || url.query().is_some() {
         return Err(
             ProxyErrorCode::InvalidUpstreamUrl.error(ProxyErrorPhase::UpstreamConfiguration)
         );
@@ -1774,35 +1778,11 @@ struct AppState {
     started_at: Instant,
 }
 
+/// A legacy-adapter conversation. Its manifest records each token's source spelling, which
+/// restore reads to write a value in the syntax of its destination.
 struct SessionEntry {
-    session: Arc<LegacySession>,
+    session: Arc<Session>,
     expires_at: Instant,
-}
-
-/// A legacy-adapter conversation: its manifest plus the restore provenance the manifest does not
-/// record.
-struct LegacySession {
-    session: Session,
-    /// Tokens minted for a value captured inside a JSON string literal of a request surface, such
-    /// as a JSON tool result or tool-call `arguments`. The manifest holds such a value in its
-    /// JSON-escaped spelling (`\"`, `\u00fc`), which is already valid JSON string content.
-    json_spelled_tokens: std::sync::Mutex<HashSet<String>>,
-}
-
-impl LegacySession {
-    fn new(session: Session) -> Self {
-        Self {
-            session,
-            json_spelled_tokens: std::sync::Mutex::new(HashSet::new()),
-        }
-    }
-
-    /// The set only ever grows, so a panic while it was locked cannot leave it inconsistent.
-    fn json_spelled_tokens(&self) -> std::sync::MutexGuard<'_, HashSet<String>> {
-        self.json_spelled_tokens
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
 }
 
 #[cfg(test)]
@@ -1836,12 +1816,32 @@ pub async fn serve_with_ready(
     pipeline: Arc<Pipeline>,
     ready: impl FnOnce(),
 ) -> Result<(), ProxyError> {
+    serve_with_bound_ready(config, pipeline, |_| {
+        ready();
+        Ok(())
+    })
+    .await
+}
+
+/// Invoke `ready` with the bound address after configuration validation and a
+/// successful bind, before any connection is served.
+///
+/// An error from `ready` stops the server without serving, so a caller that
+/// cannot publish its readiness signal fails closed instead of running unseen.
+pub async fn serve_with_bound_ready(
+    config: ProxyConfig,
+    pipeline: Arc<Pipeline>,
+    ready: impl FnOnce(SocketAddr) -> Result<(), ProxyError>,
+) -> Result<(), ProxyError> {
     let bind = config.bind;
     let app = build_app(config, pipeline)?;
     let listener = TcpListener::bind(bind)
         .await
         .map_err(|source| ProxyError::Server { source })?;
-    ready();
+    let bound = listener
+        .local_addr()
+        .map_err(|source| ProxyError::Server { source })?;
+    ready(bound)?;
     serve_app(listener, app).await
 }
 
@@ -1926,8 +1926,8 @@ async fn proxy(
     request: Request<Body>,
 ) -> Response {
     let (parts, body) = request.into_parts();
-    let direct_route_candidate =
-        state.direct.is_some() && matches!(parts.uri.path(), "/v1/messages" | "/v1/messages/");
+    let direct_route_candidate = state.direct.is_some()
+        && (parts.uri.path() == "/v1/messages" || parts.uri.path().starts_with("/v1/messages/"));
     let direct_ingress = if direct_route_candidate {
         match prepare_direct_ingress(&state, peer, &parts.method, &parts.uri, &parts.headers) {
             Ok(ingress) => Some(ingress),
@@ -2070,14 +2070,11 @@ async fn proxy_inner(
     let dictionaries = state.config.dictionaries();
     let redacted = redact_surfaces(
         &state.pipeline,
-        &session.session,
+        &session,
         adapter.request_pii_surfaces(&mut json),
         locale_chain,
         dictionaries,
     )?;
-    session
-        .json_spelled_tokens()
-        .extend(redacted.json_spelled_tokens);
     // The declared coverage policy SELECTS the mechanism that establishes coverage. Reading it
     // here is what keeps the declaration honest: a contract cannot claim a coverage posture the
     // request path never acts on.
@@ -2168,8 +2165,12 @@ fn prepare_direct_ingress(
         .direct
         .as_ref()
         .ok_or_else(|| ProxyErrorCode::ProxyConfiguration.error(ProxyErrorPhase::Framework))?;
-    if method != Method::POST || uri.path() != "/v1/messages" || uri.query().is_some() {
+    if method != Method::POST || !matches!(uri.path(), "/v1/messages" | "/v1/messages/count_tokens")
+    {
         return Err(ProxyErrorCode::RouteRejected.error(ProxyErrorPhase::Ingress));
+    }
+    if !matches!(uri.query(), None | Some("beta=true")) {
+        return Err(ProxyErrorCode::InvalidRequestFormat.error(ProxyErrorPhase::Ingress));
     }
     let outbound_headers = validate_direct_request_headers(headers, runtime)?;
     let session = match runtime.session_policy {
@@ -2200,7 +2201,11 @@ fn prepare_direct_ingress(
             DirectIngressSession::Continuity(lease)
         }
     };
+    let mut endpoint = runtime.endpoint.clone();
+    endpoint.set_path(uri.path());
+    endpoint.set_query(uri.query());
     Ok(PreparedDirectIngress {
+        endpoint,
         outbound_headers,
         session,
     })
@@ -2221,6 +2226,12 @@ async fn direct_proxy_inner(
             ProxyErrorCode::RequestBodyLimitExceeded.error(ProxyErrorPhase::RequestValidation)
         );
     }
+    let count_codec = crate::codecs::anthropic::AnthropicCountTokensCodec;
+    let codec = if ingress.endpoint.path() == "/v1/messages/count_tokens" {
+        &count_codec as &dyn BodyCodec
+    } else {
+        codec
+    };
     let expected_response = parse_request_stream_format(body)?;
     let mut inspection = state
         .config
@@ -2240,7 +2251,7 @@ async fn direct_proxy_inner(
                 &session,
                 codec,
                 body,
-                &runtime.endpoint,
+                &ingress.endpoint,
                 &ingress.outbound_headers,
                 expected_response,
                 runtime.codec_limits,
@@ -2259,7 +2270,7 @@ async fn direct_proxy_inner(
                 lease.session(),
                 codec,
                 body,
-                &runtime.endpoint,
+                &ingress.endpoint,
                 &ingress.outbound_headers,
                 expected_response,
                 runtime.codec_limits,
@@ -2483,11 +2494,10 @@ fn validate_direct_request_headers(
         let beta_text = std::str::from_utf8(beta.as_bytes()).map_err(|_| {
             ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation)
         })?;
-        if !runtime
-            .allowed_betas
-            .iter()
-            .any(|allowed| allowed == beta_text)
-        {
+        if !beta_text.split(',').all(|item| {
+            let item = item.trim_matches([' ', '\t']);
+            !item.is_empty() && runtime.allowed_betas.iter().any(|allowed| allowed == item)
+        }) {
             return Err(ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation));
         }
     }
@@ -2625,6 +2635,13 @@ fn map_codec_error(error: CodecError) -> DirectProxyError {
         CodecPhase::RequestParse | CodecPhase::RequestProtection | CodecPhase::RequestProof
     );
     let code = match error.code() {
+        CodecErrorCode::UnsupportedRequestSurface
+        | CodecErrorCode::InvalidJson
+        | CodecErrorCode::InvalidUtf8
+            if request_direction =>
+        {
+            ProxyErrorCode::InvalidRequestFormat
+        }
         CodecErrorCode::DuplicateObjectKey => ProxyErrorCode::DuplicateObjectKey,
         CodecErrorCode::InternalCoverageFailure => ProxyErrorCode::InternalCoverageFailure,
         CodecErrorCode::ControlWouldMutate => ProxyErrorCode::ControlWouldMutate,
@@ -2711,8 +2728,10 @@ fn log_refusal(refusal: &BoundaryRefusal) {
 
 fn direct_error_response(error: DirectProxyError) -> Response {
     let mut error_body = serde_json::json!({
-        "type": "api_error",
-        "message": "proxy_validation_failed",
+        "type": if error.http_status().is_client_error() { "invalid_request_error" } else { "api_error" },
+        "message": if error.code() == ProxyErrorCode::InvalidRequestFormat {
+            "unsupported_or_invalid_request_surface; see the Anthropic proxy contract"
+        } else { "proxy_validation_failed" },
         "code": format!("{:?}", error.code()),
         "phase": format!("{:?}", error.phase()),
     });
@@ -2751,10 +2770,7 @@ fn direct_error_response(error: DirectProxyError) -> Response {
         .unwrap_or_else(|_| Response::new(Body::empty()))
 }
 
-async fn session_for(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<Arc<LegacySession>, ProxyError> {
+async fn session_for(state: &AppState, headers: &HeaderMap) -> Result<Arc<Session>, ProxyError> {
     let now = Instant::now();
     let id = headers
         .get(SESSION_HEADER)
@@ -2776,10 +2792,10 @@ async fn session_for(
     match sessions.entry(id) {
         std::collections::hash_map::Entry::Occupied(entry) => Ok(entry.get().session.clone()),
         std::collections::hash_map::Entry::Vacant(entry) => {
-            let session = Arc::new(LegacySession::new(
+            let session = Arc::new(
                 Session::new(Scope::Conversation(entry.key().clone()))
                     .map_err(|source| ProxyError::Pipeline { source })?,
-            ));
+            );
             entry.insert(SessionEntry {
                 session: session.clone(),
                 expires_at: now + state.config.session_ttl,
@@ -2877,7 +2893,6 @@ fn redact_surfaces(
         pipeline
             .admit_boundary_text(session, &text, locale_chain, dictionaries)
             .map_err(|refusal| ProxyError::Refused { refusal })?;
-        collect_json_spelled_tokens(surface.text, &text, &mut redacted.json_spelled_tokens);
         *surface.text = text;
         redacted.field_paths.insert(surface.field_path);
     }
@@ -2888,43 +2903,6 @@ fn redact_surfaces(
 struct RedactedSurfaces {
     /// Every redacted surface's field path, which the residual re-scan skips.
     field_paths: HashSet<String>,
-    /// See [`LegacySession::json_spelled_tokens`].
-    json_spelled_tokens: HashSet<String>,
-}
-
-/// Records the tokens that `clean` gained inside a JSON string literal.
-///
-/// When the protected text is a JSON object or array, a token inside one of its string literals
-/// replaced a value in its JSON-escaped spelling. A token already present in `original` was not
-/// minted here and keeps whatever spelling it has.
-fn collect_json_spelled_tokens(original: &str, clean: &str, tokens: &mut HashSet<String>) {
-    if !matches!(clean.trim_start().as_bytes().first(), Some(b'{' | b'[')) {
-        return;
-    }
-    let Ok(document) = serde_json::from_str::<Value>(clean) else {
-        return;
-    };
-    let mut stack = vec![&document];
-    while let Some(value) = stack.pop() {
-        let mut record = |text: &str| {
-            for token in token_shape::find_tokens(text) {
-                if !original.contains(token) {
-                    tokens.insert(token.to_owned());
-                }
-            }
-        };
-        match value {
-            Value::String(text) => record(text),
-            Value::Array(items) => stack.extend(items),
-            Value::Object(members) => {
-                for (key, member) in members {
-                    record(key);
-                    stack.push(member);
-                }
-            }
-            Value::Null | Value::Bool(_) | Value::Number(_) => {}
-        }
-    }
 }
 
 /// Fails closed when the outbound legacy request body carries PII outside every adapter surface.
@@ -3066,23 +3044,26 @@ impl RequestResidualScan<'_> {
 /// [`ProviderAdapter::requests_json_output`] answer, which resolves
 /// [`SurfaceSyntax::ModelOutput`].
 fn restore_surfaces(
-    session: &LegacySession,
+    session: &Session,
     surfaces: Vec<crate::adapter::PiiSurface<'_>>,
     json_output: bool,
 ) {
-    let json_spelled_tokens = session.json_spelled_tokens();
     for surface in surfaces {
-        let into_json_string = match surface.syntax {
-            SurfaceSyntax::Text => false,
-            SurfaceSyntax::Json => true,
-            SurfaceSyntax::ModelOutput => json_output,
-        };
         *surface.text = restore_text(
-            &session.session,
-            &json_spelled_tokens,
+            session,
             surface.text,
-            into_json_string,
+            restores_into_json_string(surface.syntax, json_output),
         );
+    }
+}
+
+/// Whether a surface of `syntax` holds serialized JSON, given the request's
+/// [`ProviderAdapter::requests_json_output`] answer.
+fn restores_into_json_string(syntax: SurfaceSyntax, json_output: bool) -> bool {
+    match syntax {
+        SurfaceSyntax::Text => false,
+        SurfaceSyntax::Json => true,
+        SurfaceSyntax::ModelOutput => json_output,
     }
 }
 
@@ -3094,14 +3075,11 @@ fn restore_surfaces(
 /// the value the agent parses. The escape does not depend on where the literal's quotes are,
 /// which keeps a streamed fragment correct when they arrive in a different SSE event.
 ///
-/// A value captured inside a JSON string literal (`json_spelled_tokens`) is already escaped, so
-/// it is written verbatim; escaping it again would add a backslash that was never in the data.
-fn restore_text(
-    session: &Session,
-    json_spelled_tokens: &HashSet<String>,
-    clean: &str,
-    into_json_string: bool,
-) -> String {
+/// A value minted inside a JSON string literal ([`SourceSpelling::JsonEscaped`]) is already
+/// escaped, so it is written verbatim; escaping it again would add a backslash that was never in
+/// the data. Without `into_json_string` every value is written in its source spelling, the bytes
+/// the client sent.
+fn restore_text(session: &Session, clean: &str, into_json_string: bool) -> String {
     let mut restored = String::new();
     let mut last = 0;
     for matched in token_shape::pattern().find_iter(clean) {
@@ -3110,7 +3088,7 @@ fn restore_text(
         match session.restore(token) {
             Some(raw)
                 if into_json_string
-                    && !(json_spelled_tokens.contains(token) && is_json_string_content(&raw)) =>
+                    && session.source_spelling(token) != Some(SourceSpelling::JsonEscaped) =>
             {
                 push_json_string_contents(&mut restored, &raw);
             }
@@ -3129,25 +3107,40 @@ fn push_json_string_contents(out: &mut String, raw: &str) {
     out.push_str(&literal[1..literal.len() - 1]);
 }
 
-/// Whether `text` can stand between the quotes of a JSON string literal as it is.
-fn is_json_string_content(text: &str) -> bool {
-    serde_json::from_str::<String>(&format!("\"{text}\"")).is_ok()
+/// One frame of a buffered legacy SSE response.
+struct LegacySseFrame {
+    /// Lines other than `event:` and `data:`, replayed verbatim before the event.
+    passthrough: String,
+    event_name: Option<String>,
+    /// `None` for the `[DONE]` sentinel.
+    event: Option<SseEvent>,
 }
 
+/// Restores a buffered SSE response.
+///
+/// Providers stream a value in fragments of about one model token per event, so a pseudonym
+/// token is usually split across events and restoring each event alone never sees it whole.
+/// Every fragment of one logical stream ([`crate::adapter::SseStreamSurface::stream`]) is
+/// therefore concatenated across the whole response, restored once, and replayed in the
+/// stream's first fragment; its later fragments are emptied. The response is already buffered
+/// in full. A token the session never minted stays as it is, split or
+/// whole: the client sees the pseudonym, never a raw value. Missing required identity fields
+/// disable joining for every compatible stream; their fragments restore only within each event.
 fn transform_sse(
     adapter: &Arc<dyn ProviderAdapter>,
-    session: &LegacySession,
+    session: &Session,
     bytes: &[u8],
     json_output: bool,
 ) -> Result<Vec<u8>, ProxyError> {
     let text = std::str::from_utf8(bytes).map_err(|err| ProxyError::SsePartialFrame {
         reason: err.to_string(),
     })?;
-    let mut out = String::new();
+    let mut frames = Vec::new();
     for frame in text.split("\n\n") {
         if frame.trim().is_empty() {
             continue;
         }
+        let mut passthrough = String::new();
         let mut event_name = None;
         let mut data_lines = Vec::new();
         for line in frame.lines() {
@@ -3156,41 +3149,96 @@ fn transform_sse(
             } else if let Some(rest) = line.strip_prefix("data:") {
                 data_lines.push(rest.trim_start());
             } else {
-                out.push_str(line);
-                out.push('\n');
+                passthrough.push_str(line);
+                passthrough.push('\n');
             }
         }
         let data = data_lines.join("\n");
-        if data == "[DONE]" {
-            if let Some(name) = event_name {
-                out.push_str("event: ");
-                out.push_str(&name);
-                out.push('\n');
-            }
-            out.push_str("data: [DONE]\n\n");
-            continue;
-        }
-        let mut event = SseEvent {
-            event: event_name.clone(),
-            data: serde_json::from_str(&data)
-                .map_err(|source| ProxyError::InvalidJson { source })?,
+        let event = if data == "[DONE]" {
+            None
+        } else {
+            Some(SseEvent {
+                event: event_name.clone(),
+                data: serde_json::from_str(&data)
+                    .map_err(|source| ProxyError::InvalidJson { source })?,
+            })
         };
-        restore_surfaces(
-            session,
-            adapter.sse_event_pii_surfaces(&mut event),
-            json_output,
-        );
-        if let Some(name) = event_name {
+        frames.push(LegacySseFrame {
+            passthrough,
+            event_name,
+            event,
+        });
+    }
+
+    // Pass 1: the logical text of every stream, in event order.
+    let mut streams = HashMap::<SseStreamKey, String>::new();
+    let mut ambiguous = HashSet::new();
+    for event in frames.iter_mut().filter_map(|frame| frame.event.as_mut()) {
+        for fragment in adapter.sse_event_stream_surfaces(event) {
+            if let Some(stream) = fragment.stream {
+                if stream.is_ambiguous() {
+                    ambiguous.insert(stream);
+                } else {
+                    streams
+                        .entry(stream)
+                        .or_default()
+                        .push_str(fragment.surface.text);
+                }
+            }
+        }
+    }
+
+    // An unidentified fragment may belong to any compatible stream, including streams not
+    // seen until later. Fall back for the whole affected stream, never bridge across it.
+    let ambiguous_streams: HashSet<_> = streams
+        .keys()
+        .filter(|stream| {
+            ambiguous
+                .iter()
+                .any(|unknown| unknown.could_continue(stream))
+        })
+        .cloned()
+        .collect();
+    streams.retain(|stream, _| !ambiguous_streams.contains(stream));
+
+    // Pass 2: restore complete/ambiguous surfaces in place, and trusted streams once.
+    for event in frames.iter_mut().filter_map(|frame| frame.event.as_mut()) {
+        for fragment in adapter.sse_event_stream_surfaces(event) {
+            let surface = fragment.surface;
+            let into_json_string = restores_into_json_string(surface.syntax, json_output);
+            let logical = match fragment.stream {
+                Some(stream) if !stream.is_ambiguous() && !ambiguous_streams.contains(&stream) => {
+                    streams.remove(&stream)
+                }
+                _ => Some(std::mem::take(surface.text)),
+            };
+            *surface.text = match logical {
+                Some(logical) => restore_text(session, &logical, into_json_string),
+                // An earlier fragment already carries the whole restored stream.
+                None => String::new(),
+            };
+        }
+    }
+
+    let mut out = String::new();
+    for frame in frames {
+        out.push_str(&frame.passthrough);
+        if let Some(name) = frame.event_name {
             out.push_str("event: ");
             out.push_str(&name);
             out.push('\n');
         }
-        out.push_str("data: ");
-        out.push_str(
-            &serde_json::to_string(&event.data)
-                .map_err(|source| ProxyError::InvalidJson { source })?,
-        );
-        out.push_str("\n\n");
+        match frame.event {
+            None => out.push_str("data: [DONE]\n\n"),
+            Some(event) => {
+                out.push_str("data: ");
+                out.push_str(
+                    &serde_json::to_string(&event.data)
+                        .map_err(|source| ProxyError::InvalidJson { source })?,
+                );
+                out.push_str("\n\n");
+            }
+        }
     }
     Ok(out.into_bytes())
 }
@@ -3273,6 +3321,7 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::DaemonIo { .. } => "DaemonIo",
         ProxyError::DaemonConfig { .. } => "DaemonConfig",
         ProxyError::DaemonExitedEarly { .. } => "DaemonExitedEarly",
+        ProxyError::DaemonStartTimeout { .. } => "DaemonStartTimeout",
     }
 }
 
@@ -3624,6 +3673,7 @@ mod tests {
     ) -> PreparedDirectIngress {
         let request = direct_request(endpoint, expected, body).unwrap();
         PreparedDirectIngress {
+            endpoint: request.url,
             outbound_headers: request.headers,
             session,
         }
@@ -4759,6 +4809,7 @@ mod tests {
             started_at: Instant::now(),
         };
         let ingress = PreparedDirectIngress {
+            endpoint: probe_request.url.clone(),
             outbound_headers: probe_request.headers.clone(),
             session: DirectIngressSession::Continuity(request_lease),
         };
@@ -5159,7 +5210,7 @@ mod tests {
             serde_json::json!({
                 "type": "error",
                 "error": {
-                    "type": "api_error",
+                    "type": "invalid_request_error",
                     "message": "proxy_validation_failed",
                     "code": "RequestBodyLimitExceeded",
                     "phase": "RequestValidation"
@@ -5429,61 +5480,24 @@ mod tests {
             .unwrap();
         transaction.commit().unwrap();
 
-        let none = HashSet::new();
-        let restored = restore_text(&session, &none, &format!("{{\"v\":\"x{token}y\"}}"), true);
+        let restored = restore_text(&session, &format!("{{\"v\":\"x{token}y\"}}"), true);
         let parsed: Value = serde_json::from_str(&restored).unwrap();
         assert_eq!(parsed["v"].as_str(), Some(format!("x{raw}y").as_str()));
         assert_eq!(
-            restore_text(&session, &none, &format!("x{token}y"), false),
+            restore_text(&session, &format!("x{token}y"), false),
             format!("x{raw}y")
         );
-        // A JSON-spelled manifest value that is not valid string content is escaped regardless.
-        let json_spelled = HashSet::from([token.clone()]);
-        let restored = restore_text(
-            &session,
-            &json_spelled,
-            &format!("{{\"v\":\"{token}\"}}"),
-            true,
-        );
-        assert_eq!(
-            serde_json::from_str::<Value>(&restored).unwrap()["v"].as_str(),
-            Some(raw)
-        );
-    }
-
-    #[test]
-    fn json_spelled_tokens_are_the_ones_minted_inside_json_string_literals() {
-        let mut tokens = HashSet::new();
-        collect_json_spelled_tokens(
-            r#"{"a":"Robert \"Bob\" Smith","b":"<Email_9>"}"#,
-            r#"{"a":"<Custom:name_1>","<Custom:key_1>":["<Custom:name_2>"],"b":"<Email_9>"}"#,
-            &mut tokens,
-        );
-        assert_eq!(
-            tokens,
-            HashSet::from([
-                "<Custom:name_1>".to_string(),
-                "<Custom:key_1>".to_string(),
-                "<Custom:name_2>".to_string(),
-            ])
-        );
-
-        let mut none = HashSet::new();
-        collect_json_spelled_tokens("prose", "prose <Custom:name_1>", &mut none);
-        collect_json_spelled_tokens("{broken", "{broken <Custom:name_1>", &mut none);
-        assert!(none.is_empty());
     }
 
     #[test]
     fn restore_text_leaves_unknown_tokens() {
         let session = Session::new(Scope::Conversation("test".to_string())).unwrap();
-        let none = HashSet::new();
         assert_eq!(
-            restore_text(&session, &none, "hello <Email_1>", false),
+            restore_text(&session, "hello <Email_1>", false),
             "hello <Email_1>"
         );
         assert_eq!(
-            restore_text(&session, &none, "{\"to\":\"<Email_1>\"}", true),
+            restore_text(&session, "{\"to\":\"<Email_1>\"}", true),
             "{\"to\":\"<Email_1>\"}"
         );
     }

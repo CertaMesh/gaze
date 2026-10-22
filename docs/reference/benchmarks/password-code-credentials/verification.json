@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "method": "scorecard_record.rescore(max_workers=1); exact_except_timing; agentic_layers.py gate",
+  "checks": [
+    {
+      "file": "base-v1.json.gz",
+      "file_sha256": "90b2021586dfbdffbb2709b176d077082c1839b7b59a3e3b0331e7ebdbe204e6",
+      "content_sha256": "42e210a6b6e0609fb6b42cc346424343f6222757c886d27b4fb78f238996ed78",
+      "record_sha256": "7012ce772cee48c574396b3db489ae0c4b3d81b26aff944410b4d5aa3bcfac84",
+      "exact_except_timing": true
+    },
+    {
+      "file": "base-v2.json.gz",
+      "file_sha256": "c15eaba8971e814231bf3fe0e4d1d3555def465802f98e5a14500349ebb022e2",
+      "content_sha256": "c0ad65a6e6eb3d5d81dc1a11e59d1b441fd03e8483492c492e7050a3a50683b7",
+      "record_sha256": "7012ce772cee48c574396b3db489ae0c4b3d81b26aff944410b4d5aa3bcfac84",
+      "exact_except_timing": true
+    },
+    {
+      "file": "base-v3.json.gz",
+      "file_sha256": "37ef9d16ff6547eed1742423be01b2568c3a6f6c576f4de76b483b0a7e0631ad",
+      "content_sha256": "4784d218f04f6bb517c9ca3df11872dae35dd1295f077b2b45b22fe2d911ff9c",
+      "record_sha256": "7012ce772cee48c574396b3db489ae0c4b3d81b26aff944410b4d5aa3bcfac84",
+      "exact_except_timing": true
+    },
+    {
+      "file": "base-v4.json.gz",
+      "file_sha256": "40420211ef6d565254b431918cbf07df14cf972ebfbbfd0d63f759def93e5f24",
+      "content_sha256": "66261ac821989edcbb81ab4a8545fed14353a18f9221b5fb1885355cb50f30e8",
+      "record_sha256": "7012ce772cee48c574396b3db489ae0c4b3d81b26aff944410b4d5aa3bcfac84",
+      "exact_except_timing": true
+    },
+    {
+      "file": "base-native-v1.json.gz",
+      "file_sha256": "5ced81f336321dd8f7c55bd6dfc7ca18dd87d85cde753b615ce8fc09d37e3069",
+      "content_sha256": "091744775c9a5735413d77c21c6501f91d9a5b6a31d48b3052a8c9a45b06a1a3",
+      "record_sha256": "e65f39415a6277f44357d073b2f140605ad53601eb667b77cb9b607f02118d45",
+      "exact_except_timing": true
+    },
+    {
+      "file": "candidate-v1.json.gz",
+      "file_sha256": "87d9acc9f6152689ad68c6cd10645b5afeb614f228c75b0e944279fda9537e55",
+      "content_sha256": "eab29dfb7f620d6d4d9070f0e2727918ebd7393c586fabc5e7c2a15499aba1e7",
+      "record_sha256": "18335ee15d297324fe48a8f4863fd55bbc9f413a8c187398895d3acf47ad3fbd",
+      "exact_except_timing": true
+    },
+    {
+      "file": "candidate-v2.json.gz",
+      "file_sha256": "d12d5bb54dadd3b641d6012464fc21e827340c7897a72412efb7902b490ee47f",
+      "content_sha256": "247582d2c21d4f4c1215be649b27ef11de09af5a07755e0de37c866cd419df5f",
+      "record_sha256": "18335ee15d297324fe48a8f4863fd55bbc9f413a8c187398895d3acf47ad3fbd",
+      "exact_except_timing": true
+    },
+    {
+      "file": "candidate-v3.json.gz",
+      "file_sha256": "521122d3c36446a07a39aaa98e9d8a3f7591f6b19dfe3124fab408aaa5cc7d43",
+      "content_sha256": "48f576e06becc9e22d94e6f69d9f679c5af74e818a9d92bae0761654f7b1684f",
+      "record_sha256": "18335ee15d297324fe48a8f4863fd55bbc9f413a8c187398895d3acf47ad3fbd",
+      "exact_except_timing": true
+    },
+    {
+      "file": "candidate-v4.json.gz",
+      "file_sha256": "1245cdee13b596cc86a6501eefce3eb52930ac020238bca2f5e12ec2a81deaf0",
+      "content_sha256": "7ca779d12a73e9826cb5f0a7ca5208bd8aa3183d5025269f4d601f6c5ce4115e",
+      "record_sha256": "18335ee15d297324fe48a8f4863fd55bbc9f413a8c187398895d3acf47ad3fbd",
+      "exact_except_timing": true
+    },
+    {
+      "file": "candidate-native-v1.json.gz",
+      "file_sha256": "af0644bec98591de66886b20665ca39bf84dc546e8cdc878853e1db85568fbe0",
+      "content_sha256": "9e236997e0d0f397692144968c08a89e6b033bcbea7928ec4f05d8417fda6662",
+      "record_sha256": "be390d418ccb4cb33305eaf3abfd4eaadd234b0d93cedaa4207755299f09f220",
+      "exact_except_timing": true
+    },
+    {
+      "file": "gate-v1.json",
+      "sha256": "274a7942bc52cb7f67c91215a007900c43379ea7ee40a4ebef14cc66afc55728",
+      "gate_reproduces": true,
+      "verdict": "pass"
+    },
+    {
+      "file": "gate-v2.json",
+      "sha256": "f1322eb13f3c4611f83c808622b11440b588d82d1010856b646bd24568f6a6e5",
+      "gate_reproduces": true,
+      "verdict": "pass"
+    },
+    {
+      "file": "gate-v3.json",
+      "sha256": "f1322eb13f3c4611f83c808622b11440b588d82d1010856b646bd24568f6a6e5",
+      "gate_reproduces": true,
+      "verdict": "pass"
+    },
+    {
+      "file": "gate-v4.json",
+      "sha256": "274a7942bc52cb7f67c91215a007900c43379ea7ee40a4ebef14cc66afc55728",
+      "gate_reproduces": true,
+      "verdict": "pass"
+    },
+    {
+      "file": "gate-native-v1.json",
+      "sha256": "274a7942bc52cb7f67c91215a007900c43379ea7ee40a4ebef14cc66afc55728",
+      "gate_reproduces": true,
+      "verdict": "pass"
+    },
+    {
+      "file": "false-positive-attribution.json",
+      "sha256": "63f83f7b00e608f29fb7e9c614342847552a9b78819ef0fa2156de343e22c462",
+      "exact_trace_attribution": true
+    }
+  ]
+}

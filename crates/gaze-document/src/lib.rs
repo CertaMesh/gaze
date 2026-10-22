@@ -40,6 +40,11 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+// Without `ocr-tesseract` the crate exposes only its bundle, layout and report
+// types; the OCR, preprocessing and redaction helpers have no caller. Keep that
+// `--no-default-features` graph compiling warning-free instead of gating each
+// helper individually.
+#![cfg_attr(not(feature = "ocr-tesseract"), allow(dead_code, unused_imports))]
 
 pub mod bundle;
 pub mod extract;

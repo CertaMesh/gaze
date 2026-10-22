@@ -1163,11 +1163,8 @@ mod tests {
         assert!(failed.checksum_validated());
         failed.validator_fail_reason = Some(gaze_types::ValidatorFailReason::IbanMod97Failed);
         assert!(!failed.checksum_validated());
-        let policy = crate::RecognizerRegistry::builder().build();
-        assert_eq!(
-            evidence_tier(&failed, policy.family_policy(), None),
-            EvidenceTier::Pattern
-        );
+        let policy = FamilyPolicyTable::from_memberships(std::collections::HashMap::from([]));
+        assert_eq!(evidence_tier(&failed, &policy, None), EvidenceTier::Pattern);
     }
 
     #[test]
@@ -1193,17 +1190,17 @@ mod tests {
 
     /// Two variants of one collision family at equal precedence: the shape
     /// `family_tie_candidate` recognises as a precedence tie.
-    fn tenant_document_registry() -> crate::RecognizerRegistry {
-        crate::RecognizerRegistry::builder()
-            .register_collision(
-                "doc.alpha",
+    fn tenant_document_registry() -> FamilyPolicyTable {
+        FamilyPolicyTable::from_memberships(std::collections::HashMap::from([
+            (
+                "doc.alpha".into(),
                 crate::CollisionMembership::new("tenant-document", "alpha", 10, None),
-            )
-            .register_collision(
-                "doc.beta",
+            ),
+            (
+                "doc.beta".into(),
                 crate::CollisionMembership::new("tenant-document", "beta", 10, None),
-            )
-            .build()
+            ),
+        ]))
     }
 
     /// Resolves and reports how many times the resolver entered
@@ -1243,16 +1240,16 @@ mod tests {
 
     #[test]
     fn collision_policy_precedes_class_priority() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "pan",
+        let registry = FamilyPolicyTable::from_memberships(std::collections::HashMap::from([
+            (
+                "pan".into(),
                 crate::CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
-            )
-            .register_collision(
-                "iban",
+            ),
+            (
+                "iban".into(),
                 crate::CollisionMembership::new("payment-card-or-iban", "iban", 10, None),
-            )
-            .build();
+            ),
+        ]));
 
         let resolved = resolve_candidates_with_policy(
             vec![
@@ -1264,7 +1261,7 @@ mod tests {
                     "iban",
                 ),
             ],
-            registry.family_policy(),
+            &registry,
         );
 
         assert_eq!(resolved.len(), 1);
@@ -1274,21 +1271,21 @@ mod tests {
 
     #[test]
     fn family_policy_arbitrates_before_mandatory_anchor_resolution() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "pan.structural",
+        let registry = FamilyPolicyTable::from_memberships(std::collections::HashMap::from([
+            (
+                "pan.structural".into(),
                 crate::CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
-            )
-            .register_collision(
-                "iban.structural",
+            ),
+            (
+                "iban.structural".into(),
                 crate::CollisionMembership::new(
                     "payment-card-or-iban",
                     "iban",
                     10,
                     Some("iban".to_string()),
                 ),
-            )
-            .build();
+            ),
+        ]));
 
         let resolved = resolve_candidates_with_policy_and_anchors(
             vec![
@@ -1300,7 +1297,7 @@ mod tests {
                     "iban.structural",
                 ),
             ],
-            registry.family_policy(),
+            &registry,
             &AnchorResolver::default(),
             "DE893",
             &[LocaleTag::DeDe],
@@ -1331,7 +1328,7 @@ mod tests {
                     "doc.beta",
                 ),
             ],
-            registry.family_policy(),
+            &registry,
         );
 
         assert_eq!(resolved.len(), 1);
@@ -1352,24 +1349,24 @@ mod tests {
 
     #[test]
     fn effective_family_precedence_exact_span_does_not_emit_a_false_family_token() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "a",
+        let registry = FamilyPolicyTable::from_memberships(std::collections::HashMap::from([
+            (
+                "a".into(),
                 crate::CollisionMembership::new("tenant-document", "alpha", 10, None),
-            )
-            .register_collision(
-                "a2",
+            ),
+            (
+                "a2".into(),
                 crate::CollisionMembership::new("tenant-document", "alpha", 5, None),
-            )
-            .register_collision(
-                "b",
+            ),
+            (
+                "b".into(),
                 crate::CollisionMembership::new("tenant-document", "beta", 10, None),
-            )
-            .build();
+            ),
+        ]));
         let a = candidate(0..5, PiiClass::custom("alpha").unwrap(), 0.7, "a");
         let b = candidate(0..5, PiiClass::custom("beta").unwrap(), 0.7, "b");
         for originals in [vec![a.clone(), b.clone()], vec![b, a]] {
-            let resolved = resolve_candidates_with_policy(originals, registry.family_policy());
+            let resolved = resolve_candidates_with_policy(originals, &registry);
             assert_eq!(resolved.len(), 1);
             assert_eq!(resolved[0].recognizer_id, "a");
             assert_eq!(resolved[0].class, PiiClass::custom("alpha").unwrap());
@@ -1379,24 +1376,24 @@ mod tests {
 
     #[test]
     fn effective_family_precedence_exact_span_emits_a_real_effective_tie() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "a",
+        let registry = FamilyPolicyTable::from_memberships(std::collections::HashMap::from([
+            (
+                "a".into(),
                 crate::CollisionMembership::new("tenant-document", "alpha", 10, None),
-            )
-            .register_collision(
-                "a2",
+            ),
+            (
+                "a2".into(),
                 crate::CollisionMembership::new("tenant-document", "alpha", 5, None),
-            )
-            .register_collision(
-                "b",
+            ),
+            (
+                "b".into(),
                 crate::CollisionMembership::new("tenant-document", "beta", 5, None),
-            )
-            .build();
+            ),
+        ]));
         let a = candidate(0..5, PiiClass::custom("alpha").unwrap(), 0.7, "a");
         let b = candidate(0..5, PiiClass::custom("beta").unwrap(), 0.7, "b");
         for originals in [vec![a.clone(), b.clone()], vec![b, a]] {
-            let resolved = resolve_candidates_with_policy(originals, registry.family_policy());
+            let resolved = resolve_candidates_with_policy(originals, &registry);
             assert_eq!(resolved.len(), 1);
             assert_eq!(
                 resolved[0].recognizer_id,
@@ -1434,7 +1431,7 @@ mod tests {
                     "doc.beta",
                 ),
             ],
-            registry.family_policy(),
+            &registry,
         );
 
         assert_eq!(resolved.len(), 1);
@@ -1485,7 +1482,7 @@ mod tests {
                     "doc.beta",
                 ),
             ],
-            registry.family_policy(),
+            &registry,
         );
 
         assert_eq!(resolved.len(), 1);
@@ -1566,7 +1563,7 @@ mod tests {
                         "doc.beta",
                     ),
                 ],
-                registry.family_policy(),
+                &registry,
             )
         });
 
@@ -1583,16 +1580,16 @@ mod tests {
     /// either.
     #[test]
     fn exact_span_candidate_win_skips_overlap_removal() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "pan",
+        let registry = FamilyPolicyTable::from_memberships(std::collections::HashMap::from([
+            (
+                "pan".into(),
                 crate::CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
-            )
-            .register_collision(
-                "iban",
+            ),
+            (
+                "iban".into(),
                 crate::CollisionMembership::new("payment-card-or-iban", "iban", 10, None),
-            )
-            .build();
+            ),
+        ]));
 
         let (resolved, removal_calls) = counting_removals(|| {
             resolve_candidates_with_policy(
@@ -1605,7 +1602,7 @@ mod tests {
                         "iban",
                     ),
                 ],
-                registry.family_policy(),
+                &registry,
             )
         });
 
@@ -1798,17 +1795,15 @@ mod tests {
     /// say Score, not AnchoredContext.
     #[test]
     fn anchored_incumbent_that_wins_on_score_is_labelled_score() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "iban.structural",
-                crate::CollisionMembership::new(
-                    "payment-card-or-iban",
-                    "iban",
-                    10,
-                    Some("iban".to_string()),
-                ),
-            )
-            .build();
+        let registry = FamilyPolicyTable::from_memberships(std::collections::HashMap::from([(
+            "iban.structural".into(),
+            crate::CollisionMembership::new(
+                "payment-card-or-iban",
+                "iban",
+                10,
+                Some("iban".to_string()),
+            ),
+        )]));
         let mut anchors = AnchorResolver::default();
         anchors.register(LocaleTag::DeDe, "iban", vec!["IBAN".to_string()], None);
 
@@ -1827,7 +1822,7 @@ mod tests {
                     "digits.generic",
                 ),
             ],
-            registry.family_policy(),
+            &registry,
             &anchors,
             "IBAN: DE89",
             &[LocaleTag::DeDe],
@@ -1849,17 +1844,15 @@ mod tests {
     /// Same mislabel through the partial-overlap path.
     #[test]
     fn anchored_incumbent_that_wins_partial_overlap_on_score_is_labelled_score() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "iban.structural",
-                crate::CollisionMembership::new(
-                    "payment-card-or-iban",
-                    "iban",
-                    10,
-                    Some("iban".to_string()),
-                ),
-            )
-            .build();
+        let registry = FamilyPolicyTable::from_memberships(std::collections::HashMap::from([(
+            "iban.structural".into(),
+            crate::CollisionMembership::new(
+                "payment-card-or-iban",
+                "iban",
+                10,
+                Some("iban".to_string()),
+            ),
+        )]));
         let mut anchors = AnchorResolver::default();
         anchors.register(LocaleTag::DeDe, "iban", vec!["IBAN".to_string()], None);
 
@@ -1878,7 +1871,7 @@ mod tests {
                     "digits.generic",
                 ),
             ],
-            registry.family_policy(),
+            &registry,
             &anchors,
             "IBAN: DE8912",
             &[LocaleTag::DeDe],
@@ -1899,17 +1892,15 @@ mod tests {
     /// and mis-attribute the loser slot to the original winner's recognizer id.
     #[test]
     fn missing_anchor_fallback_preserves_prior_loser_in_merged_sources() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "iban.structural",
-                crate::CollisionMembership::new(
-                    "payment-card-or-iban",
-                    "iban",
-                    10,
-                    Some("iban".to_string()),
-                ),
-            )
-            .build();
+        let registry = FamilyPolicyTable::from_memberships(std::collections::HashMap::from([(
+            "iban.structural".into(),
+            crate::CollisionMembership::new(
+                "payment-card-or-iban",
+                "iban",
+                10,
+                Some("iban".to_string()),
+            ),
+        )]));
         // No anchor cue bundle registered → anchor resolves to `Missing`.
         let resolved = resolve_candidates_with_policy_and_anchors(
             vec![
@@ -1926,7 +1917,7 @@ mod tests {
                     "digits.generic",
                 ),
             ],
-            registry.family_policy(),
+            &registry,
             &AnchorResolver::default(),
             "field DE89",
             &[LocaleTag::DeDe],
@@ -2319,17 +2310,15 @@ mod tests {
     /// rule priority.
     #[test]
     fn a_found_mandatory_anchor_ranks_a_container_as_anchored() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "contract.anchored",
-                crate::CollisionMembership::new(
-                    "tenant-document",
-                    "contract",
-                    10,
-                    Some("contract".to_string()),
-                ),
-            )
-            .build();
+        let registry = FamilyPolicyTable::from_memberships(std::collections::HashMap::from([(
+            "contract.anchored".into(),
+            crate::CollisionMembership::new(
+                "tenant-document",
+                "contract",
+                10,
+                Some("contract".to_string()),
+            ),
+        )]));
         let mut anchors = AnchorResolver::default();
         anchors.register(
             LocaleTag::DeDe,
@@ -2371,7 +2360,7 @@ mod tests {
 
             let resolved = resolve_candidates_with_policy_and_anchors(
                 vec![container, inner],
-                registry.family_policy(),
+                &registry,
                 &anchors,
                 input,
                 &[LocaleTag::DeDe],
@@ -2390,16 +2379,16 @@ mod tests {
     /// container would win and the family label would change.
     #[test]
     fn family_policy_decides_before_containment_precedence() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "pan.structural",
+        let registry = FamilyPolicyTable::from_memberships(std::collections::HashMap::from([
+            (
+                "pan.structural".into(),
                 crate::CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
-            )
-            .register_collision(
-                "iban.structural",
+            ),
+            (
+                "iban.structural".into(),
                 crate::CollisionMembership::new("payment-card-or-iban", "iban", 10, None),
-            )
-            .build();
+            ),
+        ]));
 
         let resolved = resolve_candidates_with_policy(
             vec![
@@ -2416,7 +2405,7 @@ mod tests {
                     "iban.structural",
                 ),
             ],
-            registry.family_policy(),
+            &registry,
         );
 
         assert_eq!(resolved.len(), 1);
@@ -2430,17 +2419,15 @@ mod tests {
     /// pair, so the container cannot swallow an anchored identifier.
     #[test]
     fn anchor_rung_decides_before_containment_precedence() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "iban.structural",
-                crate::CollisionMembership::new(
-                    "payment-card-or-iban",
-                    "iban",
-                    10,
-                    Some("iban".to_string()),
-                ),
-            )
-            .build();
+        let registry = FamilyPolicyTable::from_memberships(std::collections::HashMap::from([(
+            "iban.structural".into(),
+            crate::CollisionMembership::new(
+                "payment-card-or-iban",
+                "iban",
+                10,
+                Some("iban".to_string()),
+            ),
+        )]));
         let mut anchors = AnchorResolver::default();
         anchors.register(LocaleTag::DeDe, "iban", vec!["IBAN".to_string()], None);
         let input = "IBAN: DE89 3704 0044 0532 0130 00 end";
@@ -2463,7 +2450,7 @@ mod tests {
                     "iban.structural",
                 ),
             ],
-            registry.family_policy(),
+            &registry,
             &anchors,
             input,
             &[LocaleTag::DeDe],
@@ -2503,22 +2490,22 @@ mod tests {
 
     /// The shipped IBAN / card rivalry: IBAN outranks the card variant and
     /// requires the `iban` anchor, the card variant has none.
-    fn payment_family_registry() -> crate::RecognizerRegistry {
-        crate::RecognizerRegistry::builder()
-            .register_collision(
-                "iban.structural",
+    fn payment_family_registry() -> FamilyPolicyTable {
+        FamilyPolicyTable::from_memberships(std::collections::HashMap::from([
+            (
+                "iban.structural".into(),
                 crate::CollisionMembership::new(
                     "payment-card-or-iban",
                     "iban",
                     10,
                     Some("iban".to_string()),
                 ),
-            )
-            .register_collision(
-                "card.structural",
+            ),
+            (
+                "card.structural".into(),
                 crate::CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
-            )
-            .build()
+            ),
+        ]))
     }
 
     const SETTLED_IBAN_INPUT: &str = "AT61 1904 3002 3457 3201 Kontoinhaber";
@@ -2571,7 +2558,7 @@ mod tests {
         let registry = payment_family_registry();
         let resolved = resolve_candidates_with_policy_and_anchors(
             vec![iban_at(0..24), card_at(5..24), foreign_postal_at(20..37)],
-            registry.family_policy(),
+            &registry,
             &AnchorResolver::default(),
             SETTLED_IBAN_INPUT,
             &[LocaleTag::DeAt],
@@ -2597,7 +2584,7 @@ mod tests {
         let resolve = |candidates| {
             resolve_candidates_with_policy_and_anchors(
                 candidates,
-                registry.family_policy(),
+                &registry,
                 &AnchorResolver::default(),
                 SETTLED_IBAN_INPUT,
                 &[LocaleTag::DeAt],
@@ -2623,20 +2610,20 @@ mod tests {
     /// the token back through the missing-anchor fallback.
     #[test]
     fn precedence_tie_token_never_reenters_anchor_fallback() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "doc.alpha",
+        let registry = FamilyPolicyTable::from_memberships(std::collections::HashMap::from([
+            (
+                "doc.alpha".into(),
                 crate::CollisionMembership::new("tenant-document", "alpha", 10, None),
-            )
-            .register_collision(
-                "doc.beta",
+            ),
+            (
+                "doc.beta".into(),
                 crate::CollisionMembership::new("tenant-document", "beta", 10, None),
-            )
-            .register_collision(
-                "collision-family:tenant-document",
+            ),
+            (
+                "collision-family:tenant-document".into(),
                 crate::CollisionMembership::new("shadow", "token", 10, Some("shadow".to_string())),
-            )
-            .build();
+            ),
+        ]));
         let resolved = resolve_candidates_with_policy_and_anchors(
             vec![
                 prioritized(
@@ -2649,7 +2636,7 @@ mod tests {
                 ),
                 foreign_postal_at(3..10),
             ],
-            registry.family_policy(),
+            &registry,
             &AnchorResolver::default(),
             "AB123 Wiener",
             &[LocaleTag::DeAt],
@@ -2684,7 +2671,7 @@ mod tests {
             CandidatePool::new(originals.clone())
                 .resolve(
                     &ids,
-                    registry.family_policy(),
+                    &registry,
                     Some((&resolver, SETTLED_IBAN_INPUT, &[LocaleTag::DeAt])),
                 )
                 .into_iter()
@@ -2710,7 +2697,7 @@ mod tests {
         let registry = payment_family_registry();
         let resolved = resolve_candidates_with_policy_and_anchors(
             vec![card_at(0..10), iban_at(5..24), foreign_postal_at(20..37)],
-            registry.family_policy(),
+            &registry,
             &AnchorResolver::default(),
             SETTLED_IBAN_INPUT,
             &[LocaleTag::DeAt],
@@ -2734,7 +2721,7 @@ mod tests {
         ] {
             let resolved = resolve_candidates_with_policy_and_anchors(
                 candidates,
-                registry.family_policy(),
+                &registry,
                 &AnchorResolver::default(),
                 SETTLED_IBAN_INPUT,
                 &[LocaleTag::DeAt],

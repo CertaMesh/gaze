@@ -346,6 +346,26 @@ pub mod test_support {
     pub fn capture(net: &NymSafetyNet, text: &str) -> Result<ScoredPieces, SafetyNetError> {
         net.backend()?.score_pieces(text)
     }
+
+    /// Replays captured model pieces through the production decoder and manifest correlation.
+    /// Unlike `decode_captured`, this retains every joined label and threshold in `raw_label`.
+    pub fn check_captured(
+        text: &str,
+        char_offsets: &[(usize, usize)],
+        scores: &[PieceScore],
+        operating_point: &NymOperatingPoint,
+        context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        let mut suspects = Vec::new();
+        for span in decode::decode_pieces(text, char_offsets, scores, operating_point)? {
+            if let SpanDisposition::Suspect(suspect) =
+                span_to_disposition(span, text, operating_point, context)?
+            {
+                suspects.push(suspect);
+            }
+        }
+        Ok(suspects)
+    }
 }
 
 enum SpanDisposition {
@@ -376,6 +396,16 @@ fn span_to_disposition(
     let threshold = operating_point
         .threshold(span.label)
         .ok_or_else(|| invalid("nym returned a label that is not enabled"))?;
+    let mut labels = vec![raw_label(span.label, threshold)];
+    for &label in &span.additional_labels {
+        if nym_label_to_pii_class(label).ok().as_ref() != Some(&class) {
+            return Err(invalid("nym joined labels with different classes"));
+        }
+        let threshold = operating_point
+            .threshold(label)
+            .ok_or_else(|| invalid("nym returned a label that is not enabled"))?;
+        labels.push(raw_label(label, threshold));
+    }
     if is_pagination_number(clean_text, &span, context.field_path) {
         return Ok(SpanDisposition::Refused(
             SafetyNetRefusalReason::NymPaginationKeyV1,
@@ -391,7 +421,7 @@ fn span_to_disposition(
         NYM_SAFETY_NET_ID,
         Some(span.score),
         kind,
-        raw_label(span.label, threshold),
+        labels.join(";"),
         context.field_path.map(str::to_string),
     )))
 }
@@ -524,6 +554,7 @@ mod tests {
                 start,
                 end: start + value.len(),
                 label,
+                additional_labels: Vec::new(),
                 score: 0.99,
             },
             text,
@@ -966,6 +997,7 @@ mod tests {
             start,
             end: start + "M-AB 1234".len(),
             label: NymLabel::LicensePlate,
+            additional_labels: Vec::new(),
             score: 0.97,
         };
         let SpanDisposition::Suspect(suspect) =
@@ -1081,6 +1113,7 @@ mod tests {
                 start,
                 end: start + value.len(),
                 label: NymLabel::BuildingNumber,
+                additional_labels: Vec::new(),
                 score: 0.99,
             };
             assert!(
@@ -1120,6 +1153,7 @@ mod tests {
             start: 0,
             end: 4,
             label: NymLabel::ZipCode,
+            additional_labels: Vec::new(),
             score: 0.99,
         };
         assert!(matches!(
@@ -1135,6 +1169,7 @@ mod tests {
             start: 1,
             end: 2,
             label: NymLabel::Username,
+            additional_labels: Vec::new(),
             score: 0.99,
         };
         assert!(

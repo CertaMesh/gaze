@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+import subprocess
 
 import pytest
 
@@ -98,3 +99,23 @@ def test_history_replay_rejects_tampering(tmp_path, monkeypatch, tamper):
     (tmp_path / "capture.json").write_text(json.dumps(capture))
     with pytest.raises(ValueError):
         history.check(tmp_path)
+
+
+def test_original_history_driver_is_verified_against_its_immutable_source():
+    original = subprocess.check_output([
+        "git", "show", f"{history.LEGACY_HARNESS_REVISION}:scripts/bench/family_precedence_history.py",
+    ], cwd=history.ROOT)
+    original_digest = hashlib.sha256(original).hexdigest()
+    capture = json.loads((history.HISTORY_ROOT / "v0.16.0/capture.json").read_text())
+    assert original_digest == capture["history_harness_sha256"]
+    history.validate_harness_digest(original_digest)
+    with pytest.raises(ValueError, match="source pin"):
+        history.validate_harness_digest(hashlib.sha256(original + b"changed").hexdigest())
+
+
+def test_missing_original_history_driver_is_rejected(monkeypatch):
+    def missing(*args, **kwargs):
+        raise subprocess.CalledProcessError(128, args[0])
+    monkeypatch.setattr(history.subprocess, "check_output", missing)
+    with pytest.raises(ValueError, match="fetch its source commit"):
+        history.validate_harness_digest("0" * 64)

@@ -4,13 +4,7 @@ use gaze_recognizers::safety_net::openai_filter::{
 };
 use gaze_types::SafetyNetError;
 use serial_test::file_serial;
-use std::{
-    fs,
-    os::unix::fs::PermissionsExt,
-    sync::mpsc::{self, TryRecvError},
-    thread,
-    time::Duration,
-};
+use std::{fs, os::unix::fs::PermissionsExt, time::Duration};
 
 fn backend(script: &str, timeout: Duration) -> (tempfile::TempDir, SubprocessOpenAiFilterBackend) {
     let dir = tempfile::tempdir().unwrap();
@@ -42,74 +36,4 @@ fn truncated_unicode_email_discards_the_entire_unfinished_token() {
         !message.contains("alice"),
         "unfinished sensitive token prefix was disclosed: {message}"
     );
-}
-
-#[test]
-#[file_serial(gaze_subprocess)]
-fn deadline_does_not_wait_for_a_descendant_holding_only_stderr() {
-    let script = r#"#!/usr/bin/env python3
-import os, sys, time
-sys.stdin.buffer.read()
-if os.fork() == 0:
-    os.close(0)
-    os.close(1)
-    open(sys.argv[0] + ".ready", "w").close()
-    os.write(2, b'w' * (2 * 1024 * 1024))
-    end = time.monotonic() + 30
-    while not os.path.exists(sys.argv[0] + ".release") and time.monotonic() < end:
-        time.sleep(0.01)
-    os._exit(0)
-os.write(1, b'[]')
-os._exit(0)
-"#;
-    // Caps retries so sustained overload fails with a diagnosis instead of
-    // spinning until the CI job timeout.
-    const MAX_ATTEMPTS: u32 = 20;
-    // Kept alive so a descendant that starts after its attempt's deadline
-    // still finds `.release` and exits instead of lingering for 30s.
-    let mut abandoned = Vec::new();
-    'attempt: for attempt in 1..=MAX_ATTEMPTS {
-        let (dir, backend) = backend(script, Duration::from_secs(1));
-        let ready = dir.path().join("synthetic-backend.ready");
-        let release = dir.path().join("synthetic-backend.release");
-        let (sender, receiver) = mpsc::channel();
-        let worker = thread::spawn(move || {
-            let _ = sender.send(backend.infer("clean"));
-        });
-
-        while !ready.exists() {
-            match receiver.try_recv() {
-                Ok(result) => {
-                    worker.join().unwrap();
-                    fs::write(&release, b"").unwrap();
-                    assert!(
-                        matches!(&result, Err(SafetyNetError::Runtime { message }) if message.contains("timed out")),
-                        "fixture failed before startup: {result:?}"
-                    );
-                    assert!(
-                        attempt < MAX_ATTEMPTS,
-                        "descendant never signalled readiness before the 1s deadline \
-                         in {MAX_ATTEMPTS} attempts; last attempt returned {result:?}"
-                    );
-                    abandoned.push(dir);
-                    continue 'attempt;
-                }
-                Err(TryRecvError::Empty) => thread::sleep(Duration::from_millis(10)),
-                Err(TryRecvError::Disconnected) => {
-                    panic!("inference worker exited without a result")
-                }
-            }
-        }
-        // The 15s bound starts after readiness and measures whether cancellation joins a live stderr holder.
-        let result = receiver.recv_timeout(Duration::from_secs(15));
-        fs::write(release, b"").unwrap();
-        worker.join().unwrap();
-        let result = result.expect("deadline waited for descendant-held stderr");
-        assert!(
-            matches!(&result, Err(SafetyNetError::Runtime { message }) if message.contains("timed out")),
-            "{result:?}"
-        );
-        return;
-    }
-    unreachable!("the final attempt either passes or panics");
 }

@@ -1165,7 +1165,7 @@ def prove(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--jsonl", type=Path, help="write the cells as JSON lines")
     sub = parser.add_subparsers(dest="command")
@@ -1176,7 +1176,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     proof.add_argument("--model-dir", required=True, type=Path)
     proof.add_argument("--contract", required=True, choices=("v1", "v2"))
     proof.add_argument("--output", required=True, type=Path)
+    proof.add_argument("--cross-check", action="store_true",
+                       help="explicit legacy contract-specific oracle capture; not record-once evidence")
     args = parser.parse_args(argv)
+    if args.command == "prove" and not args.cross_check:
+        parser.error("legacy contract-specific capture requires --cross-check; gain evidence must capture once and replay")
+    return args
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
     if args.command == "prove":
         report = prove(args)
         args.output.parent.mkdir(parents=True, exist_ok=True)

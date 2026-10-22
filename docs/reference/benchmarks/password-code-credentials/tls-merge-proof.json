@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "before": "0a25d8458465cfd4cf529b90f3eb1aca8fe2d296",
+  "main": "03b95dd0ed01706e322a85dba3e11f31d2e5bb27",
+  "after": "3578ccf18a1adf9e3830cfbda480c20632bf3825",
+  "changed_files": [
+    "CHANGELOG.md",
+    "Cargo.lock"
+  ],
+  "dependency_updates": [
+    {
+      "package": "rustls-webpki",
+      "before": "0.103.15",
+      "after": "0.103.16"
+    },
+    {
+      "package": "webpki-roots",
+      "before": "1.0.7",
+      "after": "1.0.10"
+    }
+  ],
+  "runtime_and_benchmark_source_blobs_identical": true,
+  "protected_blob_manifest_sha256": "f0f34f989fda2e07d2dd0a396c016ed2928db23d8eb431d8fd0f81abcf1d9353",
+  "lockfile_matches_main": true,
+  "before_lockfile_sha256": "7152f6f8c6279767cd1f42ca688781d384f3fcfca00827054e8379e1e913b988",
+  "after_lockfile_sha256": "6db01c67aeb34ef95a7e90644134cb956c855097feafc1130e8302ec23def2cd",
+  "signature_and_author_dco_verified": true,
+  "measurement_limit": "The retained binaries and captures predate these TLS dependency patches. Detection and benchmark source blobs are unchanged; no post-TLS capture or binary-identity equality is claimed."
+}

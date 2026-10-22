@@ -1,6 +1,6 @@
 [package]
 name = "gaze-recognizers"
-version = "0.16.0"
+version = "0.17.0"
 edition = "2021"
 rust-version = "1.89"
 license.workspace = true
@@ -97,4 +97,8 @@ harness = false
 
 [[bench]]
 name = "safety_net_matrix"
+harness = false
+
+[[bench]]
+name = "ner_prepare"
 harness = false

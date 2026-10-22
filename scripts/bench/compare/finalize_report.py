@@ -9,20 +9,18 @@ import json
 from pathlib import Path
 
 from compare import TOOLS
+import row_sources
 
 
 CHART_CONFIGS = Path(__file__).with_name("chart-configs.json")
 
 
 def finalize(report: dict) -> dict:
-    if report["schema_version"] != 2 or set(report["tools"]) != set(TOOLS) or report["skipped"]:
-        raise ValueError("only a complete, unskipped schema-v2 comparison can be finalized")
+    row_sources.complete(report)
     declared = json.loads(CHART_CONFIGS.read_text(encoding="utf-8"))
     if len(set(declared.values())) != len(declared) or not set(declared.values()) <= set(TOOLS):
         raise ValueError("README chart configurations must be distinct measured tools")
-    samples = report.get("contention_samples", {})
-    if set(samples) != set(TOOLS) | {"gaze-full", "gaze-rules-only", "gaze-rules-ner"}:
-        raise ValueError("foreign CPU samples are missing for a measured configuration")
+    samples = report["contention_samples"]
     report["chart_config_sha256"] = hashlib.sha256(CHART_CONFIGS.read_bytes()).hexdigest()
     report["finalizer_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     report["latency_validity"] = {
@@ -51,8 +49,35 @@ def finalize(report: dict) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
+    parser.add_argument("--opf-unavailable-receipt", type=Path)
+    parser.add_argument("--compose-base", type=Path)
+    parser.add_argument("--base-sha256")
+    parser.add_argument("--supplement", type=Path)
+    parser.add_argument("--supplement-sha256")
+    parser.add_argument("--base-predictions-dir", type=Path)
+    parser.add_argument("--supplement-predictions-dir", type=Path)
     args = parser.parse_args()
-    report = finalize(json.loads(args.report.read_text(encoding="utf-8")))
+    composition = (args.compose_base, args.base_sha256, args.supplement,
+                   args.supplement_sha256, args.base_predictions_dir, args.supplement_predictions_dir)
+    if any(value is not None for value in composition):
+        if not all(value is not None for value in composition) or args.opf_unavailable_receipt:
+            parser.error("composition requires both pinned snapshots and private prediction directories; OPF stays inherited")
+        report = row_sources.compose(args.compose_base, args.base_sha256, args.supplement,
+                                     args.supplement_sha256, args.report,
+                                     args.base_predictions_dir, args.supplement_predictions_dir)
+    else:
+        report = json.loads(args.report.read_text(encoding="utf-8"))
+        if "row_sources" in report:
+            if args.opf_unavailable_receipt:
+                parser.error("composed OPF receipt must remain inherited")
+            row_sources.validate(report, args.report)
+        else:
+            if args.opf_unavailable_receipt is not None:
+                report["unavailable"] = {"opf": json.loads(args.opf_unavailable_receipt.read_text(encoding="utf-8"))}
+            report = finalize(report)
+    if "row_sources" in report:
+        from render import validate_current
+        validate_current(report, args.report)
     temporary = args.report.with_suffix(args.report.suffix + ".tmp")
     temporary.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(args.report)

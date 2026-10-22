@@ -7,14 +7,10 @@
 //! `tests/fixtures/cli-help/`, so a reviewer can see the surface without a
 //! two-revision build and an accidental change gets a name.
 //!
-//! It is a golden comparison, so it is `#[ignore]`d — refreshing the fixture
-//! makes it pass again, and that is exactly what a before/after harness must
-//! never allow. Run it with:
-//!
-//!     cargo test -p gaze-cli --all-features --test cli_help_surface -- --ignored
-//!
-//! Refresh the fixture with `scripts/verify/cli-help-surface.sh --write-fixtures`,
-//! which only writes when the before/after diff is empty.
+//! This test runs in the normal all-features suite. Refresh the fixture only with
+//! `scripts/verify/cli-help-surface.sh --write-fixtures`, which writes when the
+//! before/after diff is empty. Intentional CLI changes must update the capture
+//! in the change that introduces them.
 //!
 //! The fixture records the `--all-features` surface, so the whole file compiles
 //! away unless every subcommand-bearing feature is on.
@@ -94,7 +90,6 @@ fn collect(path: &[&str], out: &mut Vec<(String, String)>) {
 }
 
 #[test]
-#[ignore = "golden comparison against a committed capture; the two-revision script is the real gate"]
 fn help_output_matches_the_committed_capture() {
     let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cli-help");
 

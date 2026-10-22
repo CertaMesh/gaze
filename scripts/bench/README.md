@@ -53,8 +53,10 @@ The `clean_for_bench` producer derives a repeatable session prefix from each
 fixture ID by default. Set `GAZE_BENCH_RANDOM_SESSION=1` when measuring the
 effect of fresh random prefixes; record that setting with the scorecard.
 
-When the generated adjacency layers change, measure the displayed past releases
-with `agentic_layers.py measure`, then pass their scorecard files to
+Before release, measure the current and previous release on the same immutable
+benchmark specification. Additional history backfills are non-blocking and off
+the PR critical path. Never compare across specifications. Capture each release
+once with `rescore_past_release.py --agentic-layers`, then pass its scorecard to
 `render_agentic_adjacency_doc.py --record <file>` (repeat `--record` for each
 release). That command writes the committed measurement ledger and its table
 in `docs/reference/benchmarks/README.md`; `--check` verifies both in CI.
@@ -70,10 +72,15 @@ A scored-label contract says which corpus labels count as gold PII. Without
 `--scored-labels` the runner uses contract **v1**, which scores every corpus
 label, so every row measured before contracts existed stays reproducible.
 
+Capture once without `--scored-labels`; every contract uses the same record.
+The runner rejects contract-specific captures unless `--cross-check` explicitly
+requests an independent equivalence check.
+
 ```bash
-uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py \
-  full --seed 20260710 --no-download \
-  --scored-labels docs/reference/benchmarks/scored-labels-v2.json
+uv run --project scripts/bench python scripts/bench/rescore.py \
+  target/bench-data/no-opf/full/observations-v1.jsonl.gz \
+  --scored-labels docs/reference/benchmarks/scored-labels-v2.json \
+  --output target/bench-data/no-opf/full/scorecard-v2.json
 ```
 
 [`scored-labels-v2.json`](../../docs/reference/benchmarks/scored-labels-v2.json)
@@ -136,24 +143,63 @@ whether the word boundary passes. Neither header nor rows contain document or
 protected values. Rows omit run-dependent timing; the header keeps the original
 scorecard timing. A re-score needs no corpus, binary or model:
 
-The runner caches this value-free record under the shared checkout's
-`target/bench-data/cache/`, so linked worktrees can reuse the same base. An
-exact key binds the measured revision and crates tree, record schema, Cargo
-lockfile and repository/Cargo-home configuration contents, benchmark-harness tree, policy path and referenced dependencies,
-corpus and generated-layer identities, sampling seed, both scored-label
-contracts, model bundle manifests, observation-affecting environment, threshold,
-hardware, profile, build mode, repetitions, and sampled document IDs. A later
-run with the same key prints the cache key, verifies a private copy, marks its
-cache provenance, and re-scores it with the current harness without
-building or running the detector. Any changed field, malformed metadata,
-missing record, or record SHA-256 mismatch prints the miss reason and measures
-afresh. Dirty or untracked measured sources and `--skip-build` bypass the cache.
-Use `--no-cache` for release evidence or a deliberately fresh measurement, or `--cache-dir` to
-choose another local cache root.
+### Capture reuse and timing
 
-Release evidence must be measured with `--no-cache`. Cache replay records and
-scorecards carry `cache_replay: true` and `cache_key_sha256`; the release-history
-renderer refuses these scorecards. Fresh measurements carry `cache_replay: false`.
+The runner stores the value-free header and separate C/A/D/R observation files
+under an exact content key in the shared checkout's `target/bench-data/cache/`.
+The key binds actual detector and validator binary hashes, policy bytes and
+referenced files, complete model trees (including hidden files), corpus and
+generator identity, layer specification, seed, sampled IDs, contracts, harness
+and record schema, Cargo inputs, declared build/runtime environment (including locale),
+Python runtime and package contents, OS build, hardware and native libraries.
+Environment values are hashed rather than copied into evidence.
+
+The key's `binary_sha256` must equal the capture-time digest in the record.
+Unbound historical records and records bound to another executable cannot enter
+this cache or produce a hit.
+
+A hit verifies the complete key, every part hash, the header's key and binary
+bindings, and the reconstructed record hash before re-scoring. A missing or invalid part
+causes a fresh capture; the runner never substitutes a nearby key or combines
+partial hits. It builds or checks both native binaries before lookup so the
+key identifies actual artifacts. A hit skips model loading, validator execution
+and detection. Inputs are checked again before accepting a replay or publishing
+a fresh capture. Inputs that change during capture cause refusal.
+
+`scorecard.capture_cache` pins the key and links to `run-evidence.json`. That
+sidecar records this execution's hit/miss, key, reason and wall/CPU stage times.
+The original scorecard, timestamp, source provenance and observation bytes stay
+unchanged, so a hit reproduces the fresh scorecard byte for byte. The original
+`cache_replay: false` describes the captured measurement; it does not describe
+the current execution. Use the linked evidence to distinguish fresh execution
+from reuse. Older cache entries without the complete bound key remain ineligible.
+
+Dirty sources, `--skip-build`, performance gating, random-session mode and
+unresolved native inputs bypass reuse. External safety-net execution, loader
+injection, external Python import roots and external ORT overrides also bypass it. Hashing the complete
+build/runtime environment and runtime deliberately permits conservative misses. Use
+`--no-cache` for fresh measurements or `--cache-dir` for another cache root.
+Release admission still requires `--no-cache`: its existing renderer cannot
+validate the linked local run evidence and refuses reusable base scorecards.
+This change does not expand historical or competitor cache admission.
+
+Each runner execution writes `run-evidence.json`, including on failure. It
+reports build wall/CPU, native startup/model-load, detection and restore by
+layer/config/repetition, parent scoring time, replay scoring by contract, and
+artifact writing/compression. Native CPU uses the producer process clock;
+parent scoring excludes transport waits. Mechanism recording writes
+`mechanism-evidence.json` beside its candidate run with total arm-processing
+and per-contract replay timings. Spans are inclusive; do not sum nested spans.
+Native phase measurements include warmups and all attempted documents. Cache
+hits have no detection or model-load samples because those stages did not run.
+Missing native telemetry is reported as unavailable, never as zero CPU.
+
+The small committed fixture can prove all four layers without models:
+
+```bash
+cargo build --locked -p gaze-recognizers --example clean_for_bench
+PYTHONDONTWRITEBYTECODE=1 uv run --project scripts/bench --python 3.13 python -m pytest -q scripts/bench/test_capture_reuse.py
+```
 
 Observation replay uses at most four workers by default while retaining the
 recorded layer/config order, so serialized scorecards remain byte-identical.
@@ -171,6 +217,13 @@ uv run --project scripts/bench python scripts/bench/rescore.py \
 Omit `--scored-labels` for v1. Use `--agentic-scored-labels` to change the
 generated layer contract too; otherwise replay uses the layer contract pinned
 inside the record. The same scoring accumulators compute the new scorecard.
+`mechanism_arms.py record` accepts only `--base` and `--candidate` runner
+directories, one capture each. It re-scores both records under every contract
+and validates both gated contracts with the mechanism policy delta.
+New captures bind the executable SHA-256 before measurement and refuse to write
+if the executable changes during capture. New mechanism gain evidence requires
+both records to bind the same digest as `--binary`. Historical records without
+this binding remain replayable; their binary identity is attested, not verified.
 The v0.15.1 records remain committed as replay proof. Starting with v0.16.0,
 upload release records as assets on the matching GitHub release, using
 `observations-vX.Y.Z.jsonl.gz` and, when generated layers are measured,
@@ -184,8 +237,8 @@ valid v3 scoring. `observations-v0.15.1-agentic.jsonl.gz` also replays A/D/R:
 ```bash
 uv run --project scripts/bench python scripts/bench/verify_record_scorecards.py \
   docs/reference/benchmarks/observations-v0.15.1.jsonl.gz \
-  --v1 docs/reference/benchmarks/scorecard-v0.15.1.json \
-  --v2 docs/reference/benchmarks/scorecard-v0.15.1-scored-labels-v2.json \
+  --v1 docs/reference/benchmarks/scorecard-v0.15.1.json.gz \
+  --v2 docs/reference/benchmarks/scorecard-v0.15.1-scored-labels-v2.json.gz \
   --v2-contract docs/reference/benchmarks/scored-labels-v2.json \
   --v3-contract docs/reference/benchmarks/scored-labels-v3.json
 ```
@@ -199,8 +252,8 @@ by name, and the result reports whether it differed:
 ```bash
 uv run --project scripts/bench python scripts/bench/verify_record_scorecards.py \
   docs/reference/benchmarks/observations-v0.15.0.jsonl.gz \
-  --v1 docs/reference/benchmarks/scorecard-v0.15.0.json \
-  --v2 docs/reference/benchmarks/scorecard-v0.15.0-scored-labels-v2.json \
+  --v1 docs/reference/benchmarks/scorecard-v0.15.0.json.gz \
+  --v2 docs/reference/benchmarks/scorecard-v0.15.0-scored-labels-v2.json.gz \
   --v2-contract docs/reference/benchmarks/scored-labels-v2.json \
   --v3-contract docs/reference/benchmarks/scored-labels-v3.json \
   --capture --ignore-run-field validator_recall_by_label
@@ -291,7 +344,7 @@ NBSP-class separators into spaces before detection, so an NBSP copy is an exact
 match. Such pairs, and the other pairs that exercise no probe kind, are typed
 controls in their own buckets. `python3 scripts/bench/known_record_cells.py`
 prints the pinned manifest. `... known_record_cells.py prove --binary <clean_for_bench>
---policy <policy> --model-dir <ner> --contract v2 --output <json>` scores layer K
+--policy <policy> --model-dir <ner> --contract v2 --cross-check --output <json>` scores layer K
 three ways (no record, record with the default kinds, record with the probe kinds
 on) and reports bytes per bucket. Its `kind_switch_effective` is false when the
 binary ignores the per-request `record_match_kinds`.
@@ -311,11 +364,14 @@ The hash depends on the checkout path and toolchain; a rustup 1.96 build
 differs. Compare the proof's `binary_sha256` field rather than expecting a
 byte-identical build elsewhere.
 
-For a shipping decision, `known_record_arm.py --shipping-defaults` scores the
-product's default match kinds without per-request overrides. Run it under v2
-and v1, and use `--baseline-only --binary-source-commit <main-sha>` with main's
-own producer and setup policy to score the same documents without a record.
-`known_record_shipping_gate.py` requires all five layers, compares the full
+The aggregate-only oracle drivers `known_record_arm.py` and
+`known_record_cells.py prove` require `--cross-check`. They retain their legacy
+contract-specific experiment paths and cannot supply record-once gain evidence.
+`known_record_arm.py --shipping-defaults --cross-check` scores the product's
+default match kinds without per-request overrides. Its
+`--baseline-only --binary-source-commit <main-sha>` mode uses main's own producer
+and setup policy without a record. `known_record_shipping_gate.py` checks
+retained five-layer reports, compares the full
 no-record baseline scorecards to main, and reports per-class, per-match-kind
 attribution. The committed [shipping result](../../docs/reference/benchmarks/known-record-oracle.md#shipping-default-gate)
 shows the exact commands' aggregate outputs.
@@ -396,10 +452,11 @@ Every release measures its own tree and updates the single benchmark document.
 After a full run on the release commit:
 
 ```bash
-cp target/bench-data/no-opf/full/scorecard-v4.json \
-   docs/reference/benchmarks/scorecard-vX.Y.Z.json
+python3 scripts/bench/bench_json.py compress \
+  target/bench-data/no-opf/full/scorecard-v4.json \
+  docs/reference/benchmarks/scorecard-vX.Y.Z.json.gz
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
-  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z.json \
+  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z.json.gz \
   --version vX.Y.Z \
   --machine "<CPU, cores, RAM, OS and build>" \
   --append-history
@@ -429,18 +486,23 @@ runs on every pull request in `.github/workflows/docs.yml`:
 python3 scripts/bench/render_benchmark_doc.py --check
 ```
 
-The same run writes the benchmark panels: `benchmark_charts.py` turns the
-release history, `comparison.json` and `their-benchmarks.json` into a light and
-a dark SVG under `docs/assets/benchmarks/` (README `<picture>`) and the
-model-card tables in the benchmark reference. `--check` fails when either SVG
-drifts. Only tagged Gaze releases are drawn: the comparison report's main-branch
-run and the third-party files' `gaze-full` row are never read, `GazeRow`
-refuses a version that is not `vX.Y.Z`, and a tagged third-party run enters
-through `gaze_releases` in `their-benchmarks.json` (until then its slot reads
-"pending"). The panels' headline is character-level F2; `compare/release_char_level.py
-record` scores each tagged release from its committed observation record (needs the
-corpus) into `release-char-level.json`, and `check` (in `docs.yml`) verifies it against
-the release history and the metrics implementation without a corpus.
+The same run writes five dataset panels through `readme_byte_panels.py`.
+`readme-byte-panels.json` pins tagged Gaze receipts; `comparison.json` and
+`their-benchmarks.json` retain competitor byte counts. Each panel uses byte-micro
+F2, `5*TP/(5*TP+4*FN+FP)`, with leaked bytes beneath each bar. The renderer writes
+light and dark SVGs under `docs/assets/benchmarks/` and an evidence table with
+refusals and leaked-on-all-processed bytes. `--check` fails on drift or when the
+panel set omits the latest measured release from any dataset.
+
+`readme_byte_measurements.py` captures each signed tag's binary once per dataset,
+using its own setup policy, then replays the private record for scoring. Its
+aggregate receipt records commands, hardware, binary and policy digests, model
+manifests, input hashes, and record hashes. External document text and prediction
+spans stay private. The current panel refresh covers only v0.16.0 and v0.17.0.
+The v0.16 baseline reuses its retained byte counts with their original provenance.
+`readme_byte_panels.py --reuse-v016` derives those receipts without inference.
+Pre-receipt competitors keep †; unmeasured tools have no bar or N/A slot.
+Historical character scores remain in `release-char-level.json` and its evidence.
 
 ## Policy-matrix enumerations (base binary vs head binary)
 

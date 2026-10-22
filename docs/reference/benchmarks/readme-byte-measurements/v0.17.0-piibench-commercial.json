@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "tag": "v0.17.0",
+  "revision": "8a19d8c64a007a990ab5efc8a22d33f08bbe9f11",
+  "dataset": "piibench-commercial",
+  "contract": "all-gold",
+  "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
+  "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+  "harness_revision": "97f7f026483457a2b54f7d8d3de15038c30012e5",
+  "driver_sha256": "577a10ac24948bd1a6dba498f85569dd481f3563e91a8a7bc4af6455e3811733",
+  "inputs_sha256": {
+    "dataset": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+    "manifest": "d1dccb3b92ac8473ebc5ee032eb5cad6181498a4c310020a2628e10a43233812"
+  },
+  "hardware": {
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "cpu": "arm",
+    "cores": 18
+  },
+  "model_manifests_sha256": {
+    "ner": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+    "nym": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767"
+  },
+  "command": [
+    "uv",
+    "run",
+    "--project",
+    "scripts/bench",
+    "--python",
+    "3.13",
+    "python",
+    "scripts/bench/readme_byte_measurements.py",
+    "--tag",
+    "v0.17.0",
+    "--dataset",
+    "piibench-commercial",
+    "--runtime-root",
+    "<tag-checkout>",
+    "--binary",
+    "<tag-checkout>/target/release/examples/clean_for_bench",
+    "--policy",
+    "<setup-policy>",
+    "--input",
+    "<pinned-dataset>",
+    "--output",
+    "<private-record-directory>",
+    "--build-receipts",
+    "<build-receipts>"
+  ],
+  "build_commands": [
+    [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "-p",
+      "gaze-cli"
+    ],
+    [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "-p",
+      "gaze-recognizers",
+      "--example",
+      "clean_for_bench",
+      "--features",
+      "safety-net-nym"
+    ],
+    [
+      "/tmp/readme-v017/runtime-v017/target/release/gaze",
+      "setup",
+      "--non-interactive",
+      "--force",
+      "--policy-out",
+      "<setup-policy>"
+    ]
+  ],
+  "toolchain": "1.96.0",
+  "cargo_build_jobs": 4,
+  "records": {
+    "test": {
+      "file": "test.jsonl.gz",
+      "sha256": "608fd109ab5b72a98e723a5a2ef0e3d70f5b90069bae07e0501a3e09e900c050",
+      "format": "gzip-jsonl",
+      "schema_version": 2,
+      "corpus_sha256": "9bbd3ed00754d203663a7be2412a9f2c7d8310feb08f05d9521c8b309d614f04",
+      "observations": 5000,
+      "bytes": 964974
+    }
+  },
+  "sets": {
+    "test": {
+      "documents": 5000,
+      "processed": 5000,
+      "refused": 0,
+      "gold_bytes": 262703,
+      "leaked_bytes": 100557,
+      "false_positive_bytes": 49124,
+      "restore_exact": 5000,
+      "manifest_valid": 5000
+    }
+  },
+  "totals": {
+    "documents": 5000,
+    "processed": 5000,
+    "refused": 0,
+    "gold_bytes": 262703,
+    "leaked_bytes": 100557,
+    "false_positive_bytes": 49124,
+    "restore_exact": 5000,
+    "manifest_valid": 5000,
+    "byte_micro_f2": 0.6423750596237011
+  }
+}

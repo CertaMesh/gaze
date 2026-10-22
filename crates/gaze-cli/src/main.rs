@@ -13,6 +13,7 @@ mod io;
 mod logger;
 mod pipeline;
 mod restore;
+mod session_file;
 #[cfg(feature = "mcp")]
 mod style;
 

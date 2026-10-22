@@ -1,0 +1,26 @@
+[
+  {
+    "fix": "B6",
+    "head": "7cf1e9ae9bd8dd537d82c5e05f08f306cf9d266f",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--all-features",
+      "--test",
+      "code_credentials",
+      "serialized",
+      "--",
+      "--nocapture"
+    ],
+    "exit_code": 101,
+    "source_sha256": "c5edab21616c5125d75105f5c87888edb794c67878e58318d9a5c26d9faa5c66",
+    "mutant_sha256": "861222d4ecdbf2dc1330818841596c9ea2e719264ef8d1b06a5352c5d247709e",
+    "replacement": {
+      "from": "pattern = '''(?x)(?:\\A|[^A-Za-z0-9_./+$\\\\-]|\\\\(?:[ntrbf\"\\\\]|u[0-9A-Fa-f]{4}))(",
+      "to": "pattern = '''(?x)(?:\\A|[^A-Za-z0-9_./+$-])("
+    },
+    "log_sha256": "f39706d269512f73eaaab7126d1f69c4080e5a8d78fc8b9587df91750c29712e"
+  }
+]

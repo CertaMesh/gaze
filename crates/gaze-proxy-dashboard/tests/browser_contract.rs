@@ -114,7 +114,6 @@ fn app_js_carries_exact_closed_label_vocabulary() {
         "OS ASSIGNED",
         "DYNAMICALLY DISCOVERED",
         "CHANGED AND REVALIDATED",
-        "SELECTION CHANGE",
         // decision engines/outcomes
         "DETERMINISTIC RECOGNIZER",
         "NEURAL SAFETY NET",

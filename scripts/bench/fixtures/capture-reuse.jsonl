@@ -1,0 +1,4 @@
+{"id":"cache-c","layer":"C","text":"Contact alice@example.invalid","gold":[[8,29,"EMAIL"]]}
+{"id":"cache-a","layer":"A","text":"Email: alice@example.invalid","gold":[[7,28,"EMAIL"]]}
+{"id":"cache-d","layer":"D","text":"The example domain is reserved for tests.","gold":[]}
+{"id":"cache-r","layer":"R","text":"alice@example.invalid and alice@example.invalid","gold":[[0,21,"EMAIL"],[26,47,"EMAIL"]]}

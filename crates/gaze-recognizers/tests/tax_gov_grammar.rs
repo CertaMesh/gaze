@@ -1,8 +1,10 @@
 //! Synthetic identifier shapes under explicit cues and benign lookalikes.
 
+mod support;
+
 use gaze::{
-    Action, CleanDocument, Context, DictionaryBundle, LocaleChain, LocaleTag, Pipeline,
-    RawDocument, RuleSpec, Rulepack, RulepackSource, Scope, Session,
+    Action, Context, LocaleChain, LocaleTag, Pipeline, RuleSpec, Rulepack, RulepackSource, Scope,
+    Session,
 };
 use gaze_recognizers::embedded;
 
@@ -30,17 +32,7 @@ fn pipeline() -> Pipeline {
 
 fn clean(pipeline: &Pipeline, input: &str) -> String {
     let session = Session::new(Scope::Ephemeral).unwrap();
-    let (clean, _, _) = pipeline
-        .clean_with_safety_net_detect_context(
-            &session,
-            RawDocument::Text(input.into()),
-            &[LocaleTag::Global],
-            &DictionaryBundle::default(),
-        )
-        .unwrap();
-    let CleanDocument::Text(clean) = clean else {
-        panic!("text expected")
-    };
+    let clean = support::clean(pipeline, &session, input, &[LocaleTag::Global]);
     assert_eq!(
         pipeline.restore_strict_text(&session, &clean).unwrap(),
         input

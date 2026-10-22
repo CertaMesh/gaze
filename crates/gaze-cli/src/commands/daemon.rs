@@ -24,7 +24,8 @@ use crate::pipeline::build::{
 use crate::pipeline::run::{
     clean_overrides_from_options, enforce_safety_net_mode, entry_class_to_string,
     map_safety_net_pipeline_error, maybe_register_safety_net, policy_nym_was_overridden,
-    safety_net_policy, validate_safety_net_tolerant_gate, CleanOptions, CORE_EXTENDED_DEPRECATION,
+    safety_net_policy, validate_safety_net_tolerant_gate, wire_ordered_entries, CleanOptions,
+    CORE_EXTENDED_DEPRECATION,
 };
 use gaze::{
     Action, ConflictTier, DictionaryBundle, DocumentKind, EmittedTokenSpan, LeakReport, LocaleTag,
@@ -291,8 +292,7 @@ impl Daemon {
             gaze::CleanDocument::Text(text) => text,
             _ => return Err((request.session_id, DaemonError::Invariant)),
         };
-        let tokens = session
-            .snapshot_entries()
+        let tokens = wire_ordered_entries(session.snapshot_entries(), &clean_text, &manifest)
             .into_iter()
             .map(TokenJson::from)
             .collect();
@@ -335,12 +335,15 @@ impl Daemon {
 
     fn evict_idle_sessions(&mut self) {
         let now = Instant::now();
-        let expired = self
+        let mut expired = self
             .sessions
             .iter()
             .filter(|(_, entry)| now.duration_since(entry.last_seen) >= self.session_idle_timeout)
             .map(|(id, _)| id.clone())
             .collect::<Vec<_>>();
+        // `sessions` is a `HashMap`: sort so eviction audit rows and stderr lines come out
+        // in the same order on every run.
+        expired.sort();
         for evicted in expired {
             if let Some(entry) = self.sessions.remove(&evicted) {
                 self.lru.retain(|existing| existing != &evicted);
@@ -435,6 +438,9 @@ fn clean_options(args: &Args) -> CleanOptions<'_> {
         safety_net_input_limit_bytes: args.safety_net_limits.safety_net_input_limit_bytes,
         safety_net_mode: args.safety_net_limits.safety_net_mode,
         safety_net_fallback: args.safety_net_limits.safety_net_fallback,
+        // Sessions stay in the daemon's per-`session_id` registry; only one-shot
+        // `gaze clean` writes a session file.
+        session_out: None,
     }
 }
 

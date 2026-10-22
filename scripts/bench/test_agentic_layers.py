@@ -20,6 +20,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import agentic_layers as agentic
+import bench_json
 import gaze_bench_score as score
 
 
@@ -29,8 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "1bef59f4bff3a1660600407d70ed3132228d07d6c5edefb0609d9b648acbead1",
-    "test": "4f096686fdea809eb6089060e468de99147770160a208219aac1b4406f058813"
+    "dev": "a88025bd7c995e3633738debf8b8bab45c8c7232bf222a4d72a9af36fc67ca59",
+    "test": "133f8452d01fd517c77087e539ba9dc253e30a1886668bfab3e1631cc9ff6c32",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -468,7 +469,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_", "fullnames_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -2537,6 +2538,7 @@ class PolicyDeltaGateTests(unittest.TestCase):
         remove_delta: bool = False,
         wrong_digest: tuple[str, str] | None = None,
         ner_thresholds: tuple[float | None, float | None] = (0.3, 0.3),
+        nym_model_digests: tuple[str, str] | None = None,
     ) -> dict:
         with tempfile.TemporaryDirectory() as directory:
             paths = {name: Path(directory) / f"{name}.toml" for name in ("base", "candidate", "delta")}
@@ -2546,6 +2548,11 @@ class PolicyDeltaGateTests(unittest.TestCase):
             candidate = _scorecard({**self.BASE_LEAKS, "R": 10})
             base["parameters"]["ner_threshold"], candidate["parameters"]["ner_threshold"] = ner_thresholds
             for label, card in (("base", base), ("candidate", candidate)):
+                if nym_model_digests:
+                    card["runner_provenance"]["model_bundles"] = [{
+                        "model_id": "nym-small-int8",
+                        "observed_sha256": nym_model_digests[0 if label == "base" else 1],
+                    }]
                 digest = hashlib.sha256(paths[label].read_bytes()).hexdigest()
                 card["parameters"]["policy_sha256"] = digest
                 card["runner_provenance"]["policy"] = {"path": str(paths[label]), "sha256": digest}
@@ -2683,6 +2690,41 @@ class PolicyDeltaGateTests(unittest.TestCase):
         )
         self.assertEqual(result["verdict"], "not_comparable")
 
+    def test_declared_nym_name_append_changes_only_explicit_labels_and_thresholds(self) -> None:
+        base = ('[safety_net]\nbackend="nym"\n[safety_net.nym]\n'
+                'model_dir="~/models/nym"\nlabels=["USERNAME"]\n'
+                'threshold={USERNAME=0.5}\n')
+        candidate = base.replace('labels=["USERNAME"]',
+                                 'labels=["USERNAME", "GIVEN_NAME", "SURNAME"]')
+        candidate = candidate.replace('threshold={USERNAME=0.5}',
+                                      'threshold={USERNAME=0.5, GIVEN_NAME=0.5, SURNAME=0.5}')
+        delta = '[mechanism_delta]\nappend_nym_labels={GIVEN_NAME=0.5, SURNAME=0.5}\n'
+        result = self.compare(base, candidate, delta)
+        self.assertEqual(result["verdict"], "pass")
+        changed_model = self.compare(base, candidate, delta, nym_model_digests=("a" * 64, "b" * 64))
+        self.assertEqual(changed_model["verdict"], "not_comparable")
+        self.assertIn("model bundle nym-small-int8", changed_model["differing"])
+        for bad in ('{}', '{CITY=0.5}', '{GIVEN_NAME=true}', '{GIVEN_NAME=0}',
+                    '{GIVEN_NAME=1.1}', '{GIVEN_NAME=nan}', '{GIVEN_NAME=inf}',
+                    '{USERNAME=0.5}'):
+            with self.subTest(delta=bad):
+                rejected = self.compare(base, candidate, '[mechanism_delta]\nappend_nym_labels=' + bad)
+                self.assertEqual(rejected["verdict"], "not_comparable")
+        for implicit in (base.replace('threshold={', 'thresholds={'),
+                         base.replace('threshold={', 'thresholds={}\nthreshold={'),
+                         base.replace('labels=["USERNAME"]\n', ''),
+                         base.replace('threshold={USERNAME=0.5}\n', ''),
+                         base.replace('backend="nym"', 'backend="none"')):
+            with self.subTest(base=implicit):
+                self.assertEqual(self.compare(implicit, candidate, delta)["verdict"], "not_comparable")
+        for changed in (
+            candidate.replace('USERNAME=0.5', 'USERNAME=0.7'),
+            candidate.replace('~/models/nym', '~/models/other'),
+            candidate + '[ner]\nthreshold=0.7\n',
+        ):
+            with self.subTest(changed=changed):
+                self.assertEqual(self.compare(base, changed, delta)["verdict"], "not_comparable")
+
     def test_missing_policy_identity_on_both_sides_is_refused(self) -> None:
         for field in (
             "scorecard_sha256", "scorecard_sha256_none",
@@ -2761,44 +2803,101 @@ class PolicyDeltaGateTests(unittest.TestCase):
 
 
 class ReleaseGateCreditTests(unittest.TestCase):
-    """The displayed releases re-scored from their committed records under the
-    cued-class credit (user ruling 2026-09-28): newly credited invalid bytes move
-    from the twin column into gated leaks; the headline never changes."""
+    """Known credit transfers use synthetic aggregates; release rows conserve bytes."""
 
     BENCH = REPO_ROOT / "docs/reference/benchmarks"
-    # release: (C gated before, C gated after, A gated before, A gated after), contract v2.
-    EXPECTED = {
-        "v0.14.0": (19_832, 22_144, 19_409, 22_132),
-        "v0.15.0": (11_043, 13_319, 12_835, 15_280),
-        "v0.15.1": (11_043, 13_319, 12_662, 15_107),
-    }
 
-    def totals(self, release: str, scopes: dict[str, agentic.CreditScope]) -> dict:
-        import gzip
-        layers = json.loads(gzip.open(self.BENCH / f"agentic-layers-{release}.json.gz").read())["layers"]
-        scorecard = json.loads((self.BENCH / f"scorecard-{release}-scored-labels-v2.json").read_text())
+    @staticmethod
+    def fixture() -> dict:
+        card = _scorecard({"A": 101, "C": 103, "D": 0, "R": 107},
+                          {"A": 7, "C": 11, "D": 13, "R": 17},
+                          refused={"A": 1, "C": 2, "D": 3, "R": 4},
+                          twin_leak=19, c_invalid_leak=29, guard_fp=3)
+        run_a, run_c = card["layers"]["A"]["runs"][0], card["runs"][0]
+        for family, label, cued, uncued in (
+            ("iban_de", "IBAN", 2, 3), ("card", "CREDITCARDNUMBER", 5, 7),
+            ("steuer_id", "TAXNUM", 11, 13), ("cpf", "CPF", 17, 19),
+            ("bsn", "BSN", 23, 29), ("nhs", "NHSNUMBER", 31, 37),
+        ):
+            for surface, leaked in (("prose_cue", cued), ("prose_nocue", uncued)):
+                run_a["per_cell"][f"A|{family}|{surface}|invalid"] = {
+                    "utf8_bytes": {"leaked": leaked}}
+                run_a["metrics"]["utf8_bytes"]["leaked"] += leaked
+            run_c["validator_recall_by_label"][label] = {
+                "production_recall_by_gold_validity": {
+                    "validator_failed_gold": {"leaked_utf8_bytes": cued + uncued}}}
+            run_c["metrics"]["utf8_bytes"]["leaked"] += cued + uncued
+        # C has no cue metadata and credits all failed phone gold; A has no phone family.
+        run_c["validator_recall_by_label"]["PHONENUMBER"] = {
+            "production_recall_by_gold_validity": {
+                "validator_failed_gold": {"leaked_utf8_bytes": 41}}}
+        run_c["metrics"]["utf8_bytes"]["leaked"] += 41
+        return card
+
+    @staticmethod
+    def totals(card: dict, scopes: dict[str, agentic.CreditScope]) -> dict:
         with mock.patch.object(agentic, "CREDIT_SCOPE_BY_LABEL", scopes):
-            # Each release is gated on the arm it shipped, recorded on its layer runs.
-            config = layers["A"]["runs"][0]["config"]
-            return agentic.layer_totals({**scorecard, "layers": layers}, config)
+            config = card["layers"]["A"]["runs"][0]["config"]
+            return agentic.layer_totals(card, config)
 
-    def test_release_totals_before_and_after_the_credit(self) -> None:
-        for release, (c_before, c_after, a_before, a_after) in self.EXPECTED.items():
-            with self.subTest(release=release):
-                before = self.totals(release, {
-                    "IBAN": agentic.CreditScope.ALL,
-                    "CREDITCARDNUMBER": agentic.CreditScope.ALL,
-                })
-                after = self.totals(release, agentic.CREDIT_SCOPE_BY_LABEL)
-                self.assertEqual((before["C"]["leaked"], after["C"]["leaked"]), (c_before, c_after))
-                self.assertEqual((before["A"]["leaked"], after["A"]["leaked"]), (a_before, a_after))
-                for layer in agentic.GATE_LAYERS:
-                    self.assertEqual(before[layer]["headline_leaked"], after[layer]["headline_leaked"])
-                    self.assertEqual(before[layer]["false_positive"], after[layer]["false_positive"])
-                    self.assertEqual(
-                        before[layer]["leaked"] + before[layer]["twin_leaked"],
-                        after[layer]["leaked"] + after[layer]["twin_leaked"],
-                    )
+    def assert_current_credit(self, totals: dict) -> None:
+        self.assertEqual((totals["A"]["leaked"], totals["A"]["twin_leaked"]), (200, 117))
+        self.assertEqual((totals["C"]["leaked"], totals["C"]["twin_leaked"]), (341, 29))
+
+    def assert_conserved(self, before: dict, after: dict) -> None:
+        for layer in agentic.GATE_LAYERS:
+            with self.subTest(layer=layer):
+                for row in (before[layer], after[layer]):
+                    self.assertEqual(row["leaked"] + row["twin_leaked"], row["headline_leaked"])
+                self.assertEqual(
+                    {k: v for k, v in before[layer].items() if k not in ("leaked", "twin_leaked")},
+                    {k: v for k, v in after[layer].items() if k not in ("leaked", "twin_leaked")},
+                )
+
+    def test_known_credit_transfers_leave_headline_fp_and_restore_unchanged(self) -> None:
+        card = self.fixture()
+        original = copy.deepcopy(card)
+        before = self.totals(card, {"IBAN": agentic.CreditScope.ALL,
+                                    "CREDITCARDNUMBER": agentic.CreditScope.ALL})
+        after = self.totals(card, agentic.CREDIT_SCOPE_BY_LABEL)
+        self.assertEqual((before["A"]["leaked"], before["C"]["leaked"]), (118, 120))
+        self.assert_current_credit(after)
+        self.assertEqual(after["A"]["leaked"] - before["A"]["leaked"], 11 + 17 + 23 + 31)
+        self.assertEqual(after["C"]["leaked"] - before["C"]["leaked"],
+                         11 + 13 + 17 + 19 + 23 + 29 + 31 + 37 + 41)
+        self.assert_conserved(before, after)
+        self.assertEqual(card, original)
+
+    def test_credit_assertions_reject_missing_phone_and_uncued_class_credit(self) -> None:
+        for label, scope in (("PHONENUMBER", None), ("TAXNUM", agentic.CreditScope.ALL)):
+            with self.subTest(label=label):
+                changed = dict(agentic.CREDIT_SCOPE_BY_LABEL)
+                if scope is None:
+                    del changed[label]
+                else:
+                    changed[label] = scope
+                with self.assertRaises(AssertionError):
+                    self.assert_current_credit(self.totals(self.fixture(), changed))
+
+    def test_committed_release_credit_conserves_each_layers_measurements(self) -> None:
+        import gzip
+        history = json.loads((self.BENCH / "release-history.json").read_text())
+        for release in history["releases"]:
+            version = release["version"]
+            with self.subTest(version=version):
+                with gzip.open(self.BENCH / f"agentic-layers-{version}.json.gz") as stream:
+                    layers = json.load(stream)["layers"]
+                card = bench_json.load(self.BENCH / f"scorecard-{version}-scored-labels-v2.json.gz")
+                card["layers"] = layers
+                before = self.totals(card, {"IBAN": agentic.CreditScope.ALL,
+                                           "CREDITCARDNUMBER": agentic.CreditScope.ALL})
+                after = self.totals(card, agentic.CREDIT_SCOPE_BY_LABEL)
+                self.assert_conserved(before, after)
+                config = layers["A"]["runs"][0]["config"]
+                for layer, totals in after.items():
+                    run = agentic._layer_run(card, layer, config)
+                    self.assertEqual(totals["headline_leaked"], run["metrics"]["utf8_bytes"]["leaked"])
+                    self.assertEqual(totals["false_positive"], run["metrics"]["utf8_bytes"]["false_positive"])
 
 
 class MutantGatePinTests(unittest.TestCase):

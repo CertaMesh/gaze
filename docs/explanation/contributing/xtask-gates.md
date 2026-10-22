@@ -13,9 +13,18 @@ Unqualified `ci-feature-matrix` runs the full local matrix. CI splits ownership:
 
 | Owner | Work |
 | --- | --- |
-| `test` | Formatting, all-feature Clippy, document/CLI MCP tests, all-feature workspace suite |
+| `test` | Requires `test-support`, `workspace-shards`, and `test-coverage` to pass. These own feature-specific tests and doctests, the all-feature workspace suite, and execution coverage. |
 | `xtask feature gates` | `ci-feature-matrix --partition ci-gates`: remaining features and gates |
 | `workspace default features` | `ci-feature-matrix --partition ci-default`: default-feature suite with sanitized build environment |
+
+The `ci-gates` partition (and the full local matrix) starts with library-graph
+checks. Every published crate gets `RUSTFLAGS='-D warnings' cargo check --locked
+-p <crate>` under its default features and under `--no-default-features`, and
+the unpublished `feature-graph-probe` binary runs the bundled `core` rulepack in
+the `gaze-pii` default and no-default graphs and builds the bundled core
+pipeline in the `gaze-assembly` graph. Neither command builds a test, example
+or bench target, so dev-dependencies cannot re-enable library features (for
+example `gaze-types/phone-parser`) and hide a broken adopter graph.
 
 Required `xtask gates` waits for all three. Failure, skip, or cancellation fails
 it. Required `test` and `Check DCO sign-off` names are unchanged.
@@ -25,18 +34,18 @@ it. Required `test` and `Check DCO sign-off` names are unchanged.
 | Gate | Command | Current behavior |
 |------|---------|------------------|
 | `SymmetricPotemkin` | `cargo run -p xtask -- symmetric-potemkin` | Runs tests in `SYMMETRIC_POTEMKIN_TESTS`. Missing/failing tests fail the gate. |
-| `ClassMapOverrideSafety` | `cargo run -p xtask -- class-map-override-safety` | Lists and runs `t20_context_class_map_overrides_policy_dict_class` and `t20a_class_map_override_fails_closed_when_action_rule_uncovered`. |
+| `ClassMapOverrideSafety` | `cargo run -p xtask -- class-map-override-safety` | Lists and runs `CLASS_MAP_OVERRIDE_SAFETY_TESTS` and checks the safety-net class allowlist against the OpenAI label and class maps. |
 | `RecognizerCompositionValidator` | `cargo run -p xtask -- recognizer-composition-validator` | Runs tests in `RECOGNIZER_COMPOSITION_VALIDATOR_TESTS`. The gate fails if the rulepack composition validator tests are missing or failing. |
-| `NoTenantKnowledge` | `cargo run -p xtask -- no-tenant-knowledge` | Rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. Allow markers (`// allow(tenant-fixture)`) hard-fail in production scope and remain valid only in tests, benches, docs, and `CONTRIBUTING.md`. |
+| `NoTenantKnowledge` | `cargo run -p xtask -- no-tenant-knowledge` | Rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in workspace production `src/` directories, with explicit exemptions in `crates/xtask/src/repo.rs`. Allow markers (`// allow(tenant-fixture)`) hard-fail in production scope and remain valid only in tests, benches, docs, and `CONTRIBUTING.md`. |
 | `BundleTokenizationDrift` | `cargo run -p xtask -- bundle-tokenization-drift` | Discovers recognizer-bearing bundled rulepacks from `crates/gaze-recognizers/embedded/*.toml`, runs the real `gaze clean --rulepack-bundled <bundle> --audit-db <tmp>` path against `crates/xtask/fixtures/drift-corpus.txt`, restores emitted tokens to infer byte spans, and compares canonical no-policy tokenization metadata to `crates/xtask/snapshots/<bundle>-no-policy.json`. Snapshots exclude raw values, `session_blob`, and audit `created_at`. `--verify-ack` fails closed when snapshot changes lack both a `// drift-ack:` source/test comment and a `[bundle-tokenization-drift]` line in the `[Unreleased]` `### Changed` section of `CHANGELOG.md`. |
 | `FamilyPolicyTableCoherence` | `cargo run -p xtask -- family-policy-table-coherence` | Parses embedded rulepacks and checks collision-family declarations compile into the expected family precedence table, including IBAN-over-PAN and same-variant phone non-arbitration. |
 | `LocaleCueBundleCoherence` | `cargo run -p xtask -- locale-cue-bundle-coherence` | Checks every mandatory-anchor declaration in core bundles has a matching cue key in embedded locale bundles. |
-| `FixtureCitationLint` | `cargo run -p xtask -- fixture-citation-lint` | Production-code lint scanner for fixture-shaped PII literals in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. Each production fixture literal must carry `// fixture-cited(<test-path>:<fully-qualified-test-name>)`, and the fully qualified test name must appear exactly in `cargo test --workspace -- --list`. |
-| `CiFeatureMatrix` | `cargo run -p xtask -- ci-feature-matrix` | Runs the CI feature matrix, including the no-phone-parser fail-closed configuration. |
+| `FixtureCitationLint` | `cargo run -p xtask -- fixture-citation-lint` | Scans fixture-shaped PII literals in workspace production `src/` directories, with explicit exemptions in `crates/xtask/src/repo.rs`. Each production fixture literal must carry `// fixture-cited(<test-path>:<fully-qualified-test-name>)`, and the fully qualified test name must appear exactly in `cargo test --workspace -- --list`. |
+| `CiFeatureMatrix` | `cargo run -p xtask -- ci-feature-matrix` | Runs the CI feature matrix, including the no-phone-parser fail-closed configuration and the library-graph checks and probes that run without dev-dependency unification. |
 | `CargoMetadataAuditIsolation` | `cargo run -p xtask -- cargo-metadata-audit-isolation` | Parses `cargo metadata --format-version=1` and fails if any non-audit-responsible workspace package has a normal dependency path to `gaze-audit` in default, `--no-default-features`, or safety-net graphs. The explicit audit-responsible allowlist is documented in source; currently `gaze-cli` is allowed because its audit command consumes the passive sink directly. |
 | `ReadmeVersionCheck` | `cargo run -p xtask -- readme-version-check` | Parses effective workspace package versions via `cargo metadata`, verifies fixture pass/fail tests, then rejects stale crate README install pins before publish. |
 | `DylintGate` | `cargo run -p xtask -- dylint-gate` | Verifies the `lint/dylint/ui` fixture corpus has exactly 18 enabled fixtures, rejects `*_disabled.rs`, and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. The lint is `GAZE_MODULE_ISOLATION`, the canonical rustc-resolver-based gate for audit-sink protected-path isolation. |
-| `SafetyNetSanity` | `cargo run -p xtask -- safety-net-sanity` | Behavioral gate over the OpenAI-filter SafetyNet path: lists and runs the `mock_safety_net`, `openai_filter_subprocess`, and `context_sensitivity_v0_6` recognizer-suite tests. |
+| `SafetyNetSanity` | `cargo run -p xtask -- safety-net-sanity` | Lists and runs model-free safety-net suites across core, CLI, recognizers, and audit. CI’s `test-support` job installs the pinned Nym bundle, runs the live recognizer, CLI, and eval tests, and requires each named test to pass. |
 | `TokenbridgeNoRawIndex` | `cargo run -p xtask -- tokenbridge-no-raw-index` | Pins the TokenBridge library invariant for emitted spans. It builds its own email detector and checks that synthetic fixture PII cannot appear raw or as current-session tokens in stored or searched snippets. CLI detector coverage belongs to `index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw` in `crates/gaze-cli/tests/index_cli.rs`. |
 | `TokenbridgeEncryptedIndex` | `cargo run -p xtask -- tokenbridge-encrypted-index` | Runs the TokenBridge persistent-index behavioral test that saves a synthetic owner-side index, asserts the file is AEAD-sealed, and fails if raw PII or projection key material appears on disk. |
 
@@ -44,7 +53,7 @@ it. Required `test` and `Check DCO sign-off` names are unchanged.
 
 A gate must execute a behavioral test that fails when its contract breaks.
 Symbol/file/string presence alone is insufficient. Add `BehavioralTest` entries
-(package, optional integration target, exact name), call `ensure_test_exists`,
+with a package, a `BehavioralTarget`, and an exact test name. Call `ensure_test_exists`,
 then `run_behavioral_test`. Missing/renamed tests fail listing; broken behavior
 fails execution.
 
@@ -119,7 +128,7 @@ Reviewers must check the latter.
 ## Adding a gate
 
 1. Add a `Command` enum variant and dispatch arm in `main.rs`.
-2. Define a `BehavioralTest` list with package, optional target, and exact names.
+2. Define a `BehavioralTest` list with a package, a `BehavioralTarget`, and exact test names.
 3. In the runner, call `ensure_test_exists` for all entries, then
    `run_behavioral_test` for all entries.
 4. Run `cargo run -p xtask -- new-behavior-gate`.

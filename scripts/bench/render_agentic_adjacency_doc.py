@@ -8,6 +8,7 @@ import gzip
 import hashlib
 import json
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs/reference/benchmarks/README.md"
 # Pin the measured version so a later generator cannot relabel these rows.
 # Earlier v4, v8, v9, v10 and v11 ledgers remain committed as historical measurements.
-GENERATOR_VERSION = 19
+GENERATOR_VERSION = 20
 HISTORY = ROOT / f"docs/reference/benchmarks/agentic-adjacency-v{GENERATOR_VERSION}-history.json"
 CORPUS_SHA256, CONTRACT_SHA256 = agentic_layers.corpus_identity(ROOT, GENERATOR_VERSION)
 
@@ -81,6 +82,86 @@ def sha256(path: Path) -> str:
 def _hex64(value: object, field: str) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
         raise HistoryError(f"{field} must be a SHA-256 digest")
+    return value
+
+
+def unavailable_receipt(path: Path, inputs: HistoryInputs) -> dict:
+    """Admit only a pinned, value-free failure receipt for the legacy producer."""
+    folder = ROOT / 'docs/reference/benchmarks'
+    expected_name = f'unavailable-v0.14.0-generated-v{inputs.version}.json'
+    if inputs.version < 20 or path.name != expected_name or path.is_symlink() or path.resolve().parent != folder.resolve():
+        raise HistoryError('unavailability receipt must be a regular committed benchmark file')
+    value = json.loads(path.read_text(encoding='utf-8'))
+    fields = {'schema_version', 'kind', 'version', 'binary_revision', 'binary_sha256',
+              'harness_revision', 'driver_sha256', 'generator_version', 'corpus_sha256',
+              'contract_sha256', 'configs', 'manifest_replacing_actions', 'attempts'}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise HistoryError('unavailability receipt has unknown or missing fields')
+    if (type(value['schema_version']) is not int or type(value['generator_version']) is not int
+            or value['schema_version'] != 1 or value['kind'] != 'historical-producer-unavailable'
+            or value['version'] != 'v0.14.0'
+            or value['binary_revision'] != '616e8a10b957961f9f7dcb745610afa978783c3a'
+            or value['generator_version'] != inputs.version
+            or value['corpus_sha256'] != inputs.corpus_sha256
+            or value['contract_sha256'] != inputs.contract_sha256):
+        raise HistoryError('unavailability receipt source or corpus differs')
+    if not isinstance(value['harness_revision'], str) or not re.fullmatch(r'[0-9a-f]{40}', value['harness_revision']):
+        raise HistoryError('unavailability receipt needs a harness revision')
+    _hex64(value['binary_sha256'], 'binary_sha256')
+    _hex64(value['driver_sha256'], 'driver_sha256')
+    if value['driver_sha256'] != sha256(ROOT / 'scripts/bench/rescore_past_release.py'):
+        try:
+            measured_driver = subprocess.check_output(
+                ['git', 'show', f"{value['harness_revision']}:scripts/bench/rescore_past_release.py"],
+                cwd=ROOT, stderr=subprocess.PIPE,
+            )
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise HistoryError('cannot verify the original measurement driver; fetch its harness commit') from error
+        if hashlib.sha256(measured_driver).hexdigest() != value['driver_sha256']:
+            raise HistoryError('unavailability receipt differs from its original measurement driver')
+    if (value['configs'] != ['rule-floor-extended', 'pass2-ner', 'full-stack-kiji-resolve']
+            or value['manifest_replacing_actions'] != ['tokenize']):
+        raise HistoryError('unavailability receipt does not describe the legacy release arms')
+    attempts = value['attempts']
+    if not isinstance(attempts, list) or len(attempts) != 2:
+        raise HistoryError('unavailability receipt needs fresh v1 and v2 attempts')
+    contracts = []
+    for attempt in attempts:
+        if not isinstance(attempt, dict) or set(attempt) != {'scored_label_contract', 'exit_code', 'error_phase', 'error_code', 'log_sha256'}:
+            raise HistoryError('unavailability attempt has unknown or missing fields')
+        if (type(attempt['scored_label_contract']) is not int or type(attempt['exit_code']) is not int
+                or attempt['exit_code'] != 1 or attempt['error_phase'] != 'payload_processing'
+                or attempt['error_code'] != 'payload'):
+            raise HistoryError('unavailability requires a recorded producer protocol failure')
+        contracts.append(attempt['scored_label_contract'])
+        _hex64(attempt['log_sha256'], 'log_sha256')
+    if sorted(contracts) != [1, 2]:
+        raise HistoryError('unavailability receipt needs fresh v1 and v2 attempts')
+    return value
+
+
+def rows_from_unavailable_receipt(path: Path, inputs: HistoryInputs) -> list[dict]:
+    value = unavailable_receipt(path, inputs)
+    return [{'version': version, 'arm': arm, 'unavailable': True,
+             'binary_revision': value['binary_revision'], 'binary_sha256': value['binary_sha256'],
+             'evidence_file': path.name, 'evidence_sha256': sha256(path)}
+            for version, arm in expected_rows(inputs) if version == value['version']]
+
+
+def validate_unavailable_row(row: dict, inputs: HistoryInputs) -> dict:
+    fields = {'version', 'arm', 'unavailable', 'binary_revision', 'binary_sha256', 'evidence_file', 'evidence_sha256'}
+    if set(row) != fields or row['unavailable'] is not True:
+        raise HistoryError('unavailable rows cannot contain measured metrics')
+    name = row['evidence_file']
+    if not isinstance(name, str) or Path(name).name != name:
+        raise HistoryError('unavailability evidence must be a basename')
+    path = ROOT / 'docs/reference/benchmarks' / name
+    value = unavailable_receipt(path, inputs)
+    if _hex64(row['evidence_sha256'], 'evidence_sha256') != sha256(path):
+        raise HistoryError('unavailability evidence digest differs')
+    if (row['version'] != value['version'] or row['arm'] not in value['configs']
+            or row['binary_revision'] != value['binary_revision'] or row['binary_sha256'] != value['binary_sha256']):
+        raise HistoryError('unavailable row differs from its failure receipt')
     return value
 
 
@@ -185,6 +266,9 @@ def validate_history(value: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> di
     if not isinstance(rows, list) or len(rows) != len(expected_rows(inputs)) or {(row.get("version"), row.get("arm")) for row in rows} != set(expected_rows(inputs)):
         raise HistoryError("adjacency history needs exactly the displayed release arms")
     for row in rows:
+        if 'unavailable' in row:
+            validate_unavailable_row(row, inputs)
+            continue
         _hex64(row.get("binary_sha256"), "binary_sha256")
         _hex64(row.get("scorecard_sha256"), "scorecard_sha256")
         if inputs.version >= 13:
@@ -204,12 +288,17 @@ def validate_history(value: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> di
 
 def render(history: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> str:
     by_key = {(row["version"], row["arm"]): row for row in history["rows"]}
+    unavailable = {key: validate_unavailable_row(row, inputs)
+                   for key, row in by_key.items() if 'unavailable' in row}
     lines = [
         "| Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for key in expected_rows(inputs):
         row = by_key[key]
+        if key in unavailable:
+            lines.append(f"| `{row['version']}` `{row['arm']}` | N/A | N/A | N/A | N/A | N/A |")
+            continue
         a, d, r = (row["layers"][layer] for layer in ("A", "D", "R"))
         lines.append(
             f"| `{row['version']}` `{row['arm']}` | "
@@ -221,6 +310,9 @@ def render(history: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> str:
                   '| --- | ---: | ---: |']
         for key in expected_rows(inputs):
             row = by_key[key]
+            if key in unavailable:
+                lines.append(f"| `{row['version']}` `{row['arm']}` | N/A | N/A |")
+                continue
             refusals = ' / '.join(str(row['refused'][layer]) for layer in ('A', 'D', 'R'))
             leaks = ' / '.join(f"{row['layers'][layer]['leaked']:,}" for layer in ('A', 'D', 'R'))
             lines.append(f"| `{row['version']}` `{row['arm']}` | {refusals} | {leaks} |")
@@ -229,21 +321,28 @@ def render(history: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> str:
                   "| --- | ---: | ---: | ---: | ---: |"]
         for key in expected_rows(inputs):
             row = by_key[key]
+            if key in unavailable:
+                lines.append(f"| `{row['version']}` `{row['arm']}` | N/A | N/A | N/A | N/A |")
+                continue
             counts = [" / ".join(f"{row['layers'][layer][field]:,}" for layer in ("A", "D", "R"))
                       for field in ("restore_exact", "valid_manifests", "restore_failures", "invalid_manifests")]
             lines.append(f"| `{row['version']}` `{row['arm']}` | " + " | ".join(counts) + " |")
     lines += [
         "",
         "These are layers A, D and R only, measured by the current harness against each "
-        "release's own binary. Layer C release headlines above are unchanged. The "
+        "release's own binary. Layer C release headlines are listed above. The "
         f"[committed measurement ledger]({inputs.path.name}) records "
         "binary and scorecard SHA-256 digests, arm and manifest semantics. "
         f"Generator v{inputs.version}, test corpus `{inputs.corpus_sha256[:12]}…`"
         + (", " if inputs.version < 13 else ". ")
         + (f"setup policy `{inputs.policy_sha256[:12]}…`." if inputs.version < 13 else
-         f"Each release uses its own setup policy; v0.15.x `{inputs.policy_sha256[:12]}…`, "
-         f"v0.16.0 `{V16_POLICY_SHA256[:12]}…`; v0.14.0 retains the v0.15.x model settings."),
+         f"Setup policies: v0.15.x `{inputs.policy_sha256[:12]}…`, "
+         f"v0.16.0 `{V16_POLICY_SHA256[:12]}…`. v0.14.0 uses its legacy Kiji configurations."),
     ]
+    for name in sorted({by_key[key]['evidence_file'] for key in unavailable}):
+        lines += ['', 'v0.14.0 generated layers are unavailable: both fresh contract attempts '
+                  'stopped at `payload_processing:payload`. No byte, refusal or restore counts '
+                  f'are inferred. Layer C was measured separately. [Failure receipt]({name}).']
     return "\n".join(lines)
 
 
@@ -258,13 +357,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--record", type=Path, action="append", default=[])
+    parser.add_argument('--unavailable-receipt', type=Path, action='append', default=[],
+                        help='record a pinned legacy producer failure instead of numeric rows')
     parser.add_argument('--generator-version', type=int, default=GENERATOR_VERSION,
-                        choices=sorted({12, 13, 15, 16, 17, 18, GENERATOR_VERSION, agentic_layers.GENERATOR_VERSION}),
+                        choices=sorted({12, 13, 15, 16, 17, 18, 19, GENERATOR_VERSION, agentic_layers.GENERATOR_VERSION}),
                         help='keep measured history frozen by default; select the current corpus for new measurements')
     args = parser.parse_args()
     try:
         inputs = HistoryInputs.for_version(args.generator_version)
-        if args.record:
+        if args.record or args.unavailable_receipt:
             if args.check:
                 raise HistoryError("--record and --check are mutually exclusive")
             history = {
@@ -274,6 +375,8 @@ def main() -> int:
             }
             for path in args.record:
                 history["rows"].extend(rows_from_scorecard(path, inputs))
+            for path in args.unavailable_receipt:
+                history['rows'].extend(rows_from_unavailable_receipt(path, inputs))
             validate_history(history, inputs)
             temporary = inputs.path.with_suffix('.json.tmp')
             temporary.write_text(json.dumps(history, indent=2) + "\n", encoding="utf-8")

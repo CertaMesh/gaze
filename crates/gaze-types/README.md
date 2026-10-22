@@ -14,7 +14,7 @@ Use for restore adapters, audit sinks implementing `RedactionLogger`, or consume
 
 ```toml
 [dependencies]
-gaze-types = "0.16.0"
+gaze-types = "0.17.0"
 ```
 
 ## Key types

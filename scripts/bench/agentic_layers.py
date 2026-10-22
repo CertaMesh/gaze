@@ -30,6 +30,7 @@ import base64
 import copy
 import hashlib
 import json
+import os
 import re
 import sys
 import tomllib
@@ -46,9 +47,11 @@ import record_id_cells as record_ids
 import record_id_syntax_cells as record_id_syntax
 import record_id_ownership_cells as record_id_ownership
 import record_id_boundary_cells as record_id_boundary
+import full_name_case_cells as full_name_case
+import credential_code_cells as credential_code
 
 
-GENERATOR_VERSION = 19
+GENERATOR_VERSION = 25
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -4475,6 +4478,12 @@ GENERATOR_ADDITIONS = {
     15: "recordids_syntax_",
     17: "recordids_ownership_",
     19: "recordids_boundary_",
+    20: "fullnames_",
+    21: "credentials_",
+    22: "credentials_review_",
+    23: "credentials_escapes_",
+    24: "credentials_separators_",
+    25: "credentials_prefixes_",
 }
 
 
@@ -4508,6 +4517,12 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    24: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v24.json"),
+    23: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v23.json"),
+    22: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v22.json"),
+    21: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v21.json"),
+    20: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v20.json"),
+    19: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v19.json"),
     18: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v18.json"),
     17: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v17.json"),
     16: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v16.json"),
@@ -4773,6 +4788,12 @@ def generate(partition: str) -> list[Record]:
         + record_id_syntax.records(sys.modules[__name__], partition)
         + record_id_ownership.records(sys.modules[__name__], partition)
         + record_id_boundary.records(sys.modules[__name__], partition)
+        + full_name_case.records(sys.modules[__name__], partition)
+        + credential_code.records(sys.modules[__name__], partition)
+        + credential_code.review_records(sys.modules[__name__], partition)
+        + credential_code.source_escape_records(sys.modules[__name__], partition)
+        + credential_code.json_separator_records(sys.modules[__name__], partition)
+        + credential_code.json_prefix_records(sys.modules[__name__], partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)
@@ -5065,16 +5086,24 @@ def policy_dependency_files(policy: Mapping[str, object], working_dir: Path) -> 
     """Hash external policy inputs by logical reference, independent of worktree path."""
     files: dict[str, str] = {}
 
-    def resolved(value: object, reference: str) -> Path:
+    def resolved(value: object, reference: str, *, literal: bool = False) -> Path:
         if not isinstance(value, str) or not value:
             raise LayerError(f"invalid {reference} path in policy")
-        path = Path(value).expanduser()
+        # Rulepack dictionaries use std::fs::read_to_string on the literal string.
+        # Policy-level paths expand only "~/", exactly as Rust's expand_home does.
+        if not literal and value.startswith("~/"):
+            home = os.environ.get("HOME")
+            if home is None:
+                raise LayerError(f"HOME is unset for {reference}")
+            path = Path(home) / value[2:]
+        else:
+            path = Path(value)
         return path if path.is_absolute() else working_dir / path
 
-    def add_file(value: object, reference: str) -> Path:
+    def add_file(value: object, reference: str, *, literal: bool = False) -> Path:
         if _dependency_owner(reference) is None:
             raise LayerError(f"unknown policy dependency reference {reference}")
-        path = resolved(value, reference)
+        path = resolved(value, reference, literal=literal)
         try:
             if not path.is_file():
                 raise OSError("not a regular file")
@@ -5114,7 +5143,7 @@ def policy_dependency_files(policy: Mapping[str, object], working_dir: Path) -> 
                     match = recognizer.get("match") if isinstance(recognizer, dict) else None
                     if isinstance(match, dict) and "terms_file" in match:
                         add_file(match["terms_file"],
-                                 f"{reference}.recognizers[{recognizer_index}].terms_file")
+                                 f"{reference}.recognizers[{recognizer_index}].terms_file", literal=True)
         for index, recognizer in enumerate(rules.get("custom_recognizers", [])):
             if isinstance(recognizer, dict) and "terms_file" in recognizer:
                 add_file(recognizer["terms_file"], f"policy.custom_recognizers[{index}].terms_file")
@@ -5527,6 +5556,37 @@ def normalize_home_path(value: str) -> str:
     return str(Path("~") / relative)
 
 
+def append_nym_labels_policy(base: dict[str, object], appended: object) -> dict[str, object]:
+    """Materialize an explicit Name-only ablation without relaxing model identity."""
+    if (not isinstance(appended, dict) or not appended
+            or not set(appended) <= {"GIVEN_NAME", "SURNAME"}):
+        raise LayerError("append_nym_labels must declare GIVEN_NAME and/or SURNAME thresholds")
+    if any(type(value) not in (int, float) or not 0 < value <= 1 for value in appended.values()):
+        raise LayerError("appended Nym thresholds must be finite numbers in (0, 1]")
+    expected = copy.deepcopy(base)
+    try:
+        safety_net = expected["safety_net"]
+        if safety_net["backend"] != "nym":
+            raise LayerError("base safety-net backend must be nym")
+        nym = safety_net["nym"]
+        # The policy TOML field is singular, unlike the internal operating-point map.
+        labels, thresholds = nym["labels"], nym["threshold"]
+    except (KeyError, TypeError) as error:
+        raise LayerError("base Nym labels and thresholds must be explicit") from error
+    if set(nym) - {"labels", "threshold", "model_dir"}:
+        raise LayerError("base Nym table has unsupported fields; use the TOML threshold field")
+    if (not isinstance(labels, list) or not labels
+            or any(not isinstance(label, str) for label in labels)
+            or len(set(labels)) != len(labels)
+            or not isinstance(thresholds, dict) or set(thresholds) != set(labels)):
+        raise LayerError("base Nym labels must be unique with one explicit threshold per label")
+    if any(label in labels for label in appended):
+        raise LayerError("appended Nym labels must be absent from the base")
+    labels.extend(appended)
+    thresholds.update(appended)
+    return expected
+
+
 def _policy_delta_comparison(
     base: Mapping[str, object], candidate: Mapping[str, object], delta_path: Path
 ) -> tuple[bool, str, dict[str, str], set[str]]:
@@ -5549,6 +5609,15 @@ def _policy_delta_comparison(
         return False, "policy delta must declare at least one TOML section", digests, set()
     if set(delta) == {"mechanism_delta"}:
         descriptor = delta["mechanism_delta"]
+        if set(descriptor) == {"append_nym_labels"}:
+            try:
+                expected = append_nym_labels_policy(base_policy, descriptor["append_nym_labels"])
+            except LayerError as error:
+                return False, str(error), digests, set()
+            if not _toml_equal(candidate_policy, expected):
+                return False, "candidate policy differs beyond the declared Nym-label append", digests, set()
+            # No new model inputs: every dependency hash remains strictly equal.
+            return True, "candidate policy equals base plus appended Nym labels", digests, set()
         if set(descriptor) == {"append_rulepack_paths"}:
             appended = descriptor["append_rulepack_paths"]
             if (not isinstance(appended, list) or not appended
@@ -5626,8 +5695,24 @@ def gate(
     base: Mapping[str, object], candidate: Mapping[str, object], config: str | None = None,
     policy_delta: Path | None = None,
     allow_legacy_policy_inputs: bool = False,
+    *, scorecard_paths: tuple[Path, Path] | None = None,
 ) -> dict[str, object]:
-    """Identity check, then `decide` on the production arm's layer totals."""
+    """Admit capture artifacts before comparing their scored layer totals."""
+    import stage_timing as stages
+    for card, path in zip((base, candidate), scorecard_paths or (None, None), strict=True):
+        try:
+            stages.validate_execution(card, path)
+        except ValueError as error:
+            raise LayerError(str(error)) from error
+    return compare_layers(base, candidate, config, policy_delta, allow_legacy_policy_inputs)
+
+
+def compare_layers(
+    base: Mapping[str, object], candidate: Mapping[str, object], config: str | None = None,
+    policy_delta: Path | None = None,
+    allow_legacy_policy_inputs: bool = False,
+) -> dict[str, object]:
+    """Compare admitted captures or verified record replays; this is not artifact admission."""
     base_identity = _layer_identity(base)
     candidate_identity = _layer_identity(candidate)
     delta_result: dict[str, object] = {}
@@ -5663,12 +5748,13 @@ def gate_frozen_records(
     base_record: Path, candidate_record: Path, contract: score.ScoredLabelContract,
     config: str | None = None, policy_delta: Path | None = None,
     allow_legacy_policy_inputs: bool = False,
+    *, scorecard_paths: tuple[Path, Path] | None = None,
 ) -> dict[str, object]:
     """Explicit base oracle plus candidate-oracle sensitivity; ordinary gate stays strict."""
     import scorecard_record as record
     kwargs = {"config": config, "policy_delta": policy_delta,
               "allow_legacy_policy_inputs": allow_legacy_policy_inputs}
-    raw = gate(base, candidate, **kwargs)
+    raw = gate(base, candidate, scorecard_paths=scorecard_paths, **kwargs)
     if raw["verdict"] == "not_comparable" and raw["differing"] != ["layer_c_gold_validity"]:
         return raw
     try:
@@ -5690,7 +5776,7 @@ def gate_frozen_records(
             cards = [record.rescore(path, contract, max_workers=1,
                                     gold_verdict_reference=reference)
                      for path in (base_record, candidate_record)]
-            views[oracle] = gate(*cards, **kwargs)
+            views[oracle] = compare_layers(*cards, **kwargs)
             changed[oracle] = {side: card["frozen_gold_verdicts"]["changed_verdicts"]
                                for side, card in zip(("base", "candidate"), cards, strict=True)}
     except record.RecordError as error:
@@ -5785,7 +5871,7 @@ def _measure(args: argparse.Namespace) -> None:
     prepared = prepare(repo_root)
     writer = records.RecordWriter(
         [], {"documents": {}},
-        corpus_sha256=prepared.manifest["corpus_sha256"],
+        corpus_sha256=prepared.manifest["corpus_sha256"], binary=args.binary.resolve(),
         extra_documents=[record.to_document() for record in generate(PUBLISHED_PARTITION)],
         layer_contract=prepared.contract,
     )
@@ -5809,7 +5895,7 @@ def _measure(args: argparse.Namespace) -> None:
         "schema_version": score.SCORECARD_SCHEMA_VERSION,
         "measured": args.label,
         "gaze": score.git_metadata(repo_root),
-        "binary_sha256": score.sha256_file(args.binary),
+        "binary_sha256": writer.binary_sha256,
         "binary_commit": score.git_metadata(vocabulary_root),
         "parameters": {
             "configs": list(args.config),
@@ -5912,11 +5998,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                             if args.scored_labels else score.SCORED_LABEL_CONTRACT_V1)
                 result = gate_frozen_records(base, candidate, args.base_record, args.candidate_record,
                                              contract, args.config, args.policy_delta,
-                                             args.allow_legacy_policy_inputs)
+                                             args.allow_legacy_policy_inputs,
+                                             scorecard_paths=(args.base, args.candidate))
             else:
                 if args.base_record or args.candidate_record or args.scored_labels:
                     raise LayerError("record replay arguments require --freeze-gold-verdicts base")
-                result = gate(base, candidate, args.config, args.policy_delta, args.allow_legacy_policy_inputs)
+                result = gate(base, candidate, args.config, args.policy_delta, args.allow_legacy_policy_inputs,
+                              scorecard_paths=(args.base, args.candidate))
             if args.output:
                 args.output.parent.mkdir(parents=True, exist_ok=True)
                 args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

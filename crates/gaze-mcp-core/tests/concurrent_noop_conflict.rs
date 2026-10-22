@@ -93,10 +93,12 @@ impl ManifestStore for Store {
 /// barrier yields, letting both dispatches capture the generation in
 /// `begin_transaction` and run `protect_json` before either is allowed to
 /// reach the commit/drop decision.
+#[cfg(feature = "operator-tier")]
 struct BarrierStore {
     begin: tokio::sync::Barrier,
 }
 
+#[cfg(feature = "operator-tier")]
 impl BarrierStore {
     fn new(n: usize) -> Self {
         Self {
@@ -105,6 +107,7 @@ impl BarrierStore {
     }
 }
 
+#[cfg(feature = "operator-tier")]
 #[async_trait]
 impl ManifestStore for BarrierStore {
     async fn begin_call(&self, ctx: BeginCallContext<'_>) -> Result<CallHandle, ManifestError> {

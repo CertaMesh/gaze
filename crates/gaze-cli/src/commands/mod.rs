@@ -41,7 +41,7 @@ pub(crate) struct Cli {
 #[derive(Subcommand, Debug)]
 #[allow(clippy::large_enum_variant)]
 enum Cmd {
-    /// Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON to stdout.
+    /// Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON, or only the clean text with --session-out.
     Clean {
         #[command(flatten)]
         args: clean::Args,
@@ -56,11 +56,11 @@ enum Cmd {
         #[command(flatten)]
         args: daemon::Args,
     },
-    /// Read `{session_blob, text}` JSON from stdin; emit `{text}` JSON to stdout.
+    /// Read `{session_blob, text}` JSON from stdin; emit `{text}` JSON, or plain text with --session-file.
     Restore {
-        /// Output format. Only `json` is supported today.
-        #[arg(long, default_value = "json")]
-        format: String,
+        /// Output format: `json` (default) or `text`. `text` reads and prints plain text and requires --session-file.
+        #[arg(long)]
+        format: Option<String>,
         /// Unknown-token handling during restore.
         #[arg(long, value_enum, default_value_t = RestoreMode::Strict)]
         restore_mode: RestoreMode,
@@ -76,6 +76,9 @@ enum Cmd {
         /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
+        /// Session file from `gaze clean --session-out`; stdin and stdout are then plain text.
+        #[arg(long, value_name = "PATH")]
+        session_file: Option<PathBuf>,
     },
     /// Query, export, or maintain redaction-log metadata without reading raw PII payloads.
     Audit {
@@ -285,6 +288,9 @@ enum ProxyCmd {
         upstream_openai: url::Url,
         #[arg(long, default_value = "https://api.anthropic.com")]
         upstream_anthropic: url::Url,
+        /// Allow one Anthropic beta value; repeat for each required beta.
+        #[arg(long = "anthropic-beta")]
+        anthropic_betas: Vec<String>,
         #[arg(long, default_value = "https://generativelanguage.googleapis.com")]
         upstream_gemini: url::Url,
         #[arg(long)]
@@ -594,12 +600,14 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             telemetry,
             audit_db,
             max_bytes,
+            session_file,
         } => restore::run(restore::Args {
             format,
             restore_mode: restore_policy.unwrap_or(restore_mode),
             telemetry,
             audit_db,
             max_bytes,
+            session_file,
         }),
         Cmd::Daemon { args } => daemon::run(args),
         Cmd::Audit { command } => match command {
@@ -820,6 +828,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 bind,
                 upstream_openai,
                 upstream_anthropic,
+                anthropic_betas,
                 upstream_gemini,
                 policy,
                 rulepack,
@@ -833,6 +842,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 bind,
                 upstream_openai,
                 upstream_anthropic,
+                anthropic_betas,
                 upstream_gemini,
                 policy,
                 rulepack,
@@ -1157,7 +1167,9 @@ mod tests {
     /// configure `run_clean`'s stdio, which the daemon never uses;
     /// `--context-json` is per-document and the daemon serves many documents per
     /// process; `--session-scope` and `--session-ttl` are reachable through the
-    /// policy file, which is mandatory on `daemon`.
+    /// policy file, which is mandatory on `daemon`; `--session-out` and
+    /// `--overwrite-session-out` write one run's session to a file, while the
+    /// daemon keeps sessions in its per-`session_id` registry.
     #[test]
     fn clean_and_daemon_flag_divergence_is_exactly_the_reviewed_set() {
         let clean = long_flags(&["clean"]);
@@ -1170,6 +1182,8 @@ mod tests {
             "context-json",
             "format",
             "max-bytes",
+            "overwrite-session-out",
+            "session-out",
             "session-scope",
             "session-ttl",
         ]

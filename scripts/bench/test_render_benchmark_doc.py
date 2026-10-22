@@ -11,6 +11,7 @@ document must move. Adding a column without wiring it fails here.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import re
 import subprocess
@@ -18,7 +19,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import bench_json
 import benchmark_charts as charts
 import subprocess as _subprocess
 from tagged_gaze import check_public
@@ -35,6 +38,16 @@ MODULE = Path(__file__).resolve().parent / "render_benchmark_doc.py"
 #: Distinguishes "this key is absent" from "this key holds None" in the tamper
 #: matrices below; both must be refused, for different reasons.
 _MISSING = object()
+
+#: The committed stand-in for a scorecard whose content a test does not read;
+#: rows that name one record its digest, which `--check` verifies.
+PLACEHOLDER_SCORECARD: dict = {}
+PLACEHOLDER_SHA256 = hashlib.sha256(json.dumps(PLACEHOLDER_SCORECARD).encode("utf-8")).hexdigest()
+
+
+def write_scorecard(path: Path, card: dict = PLACEHOLDER_SCORECARD) -> None:
+    """Commit ``card`` the way release evidence is stored: gzipped JSON."""
+    path.write_bytes(bench_json.gzip_bytes(json.dumps(card).encode("utf-8")))
 
 
 def _label(path) -> str:
@@ -113,8 +126,8 @@ def entry(version: str = "v0.14.0", **kwargs) -> dict:
         scorecard(**kwargs),
         version=version,
         machine="Test host, 1 core, 1 GB",
-        scorecard_filename=f"scorecard-{version}.json",
-        scorecard_sha256="0" * 64,
+        scorecard_filename=f"scorecard-{version}.json.gz",
+        scorecard_sha256=PLACEHOLDER_SHA256,
     )
 
 
@@ -194,8 +207,8 @@ class ScorecardMappingTest(unittest.TestCase):
                     mutated,
                     version="v0.14.0",
                     machine="Test host, 1 core, 1 GB",
-                    scorecard_filename="scorecard-v0.14.0.json",
-                    scorecard_sha256="0" * 64,
+                    scorecard_filename="scorecard-v0.14.0.json.gz",
+                    scorecard_sha256=PLACEHOLDER_SHA256,
                 )
                 arm = "rule-floor-extended"
                 self.assertNotEqual(
@@ -212,8 +225,8 @@ class ScorecardMappingTest(unittest.TestCase):
                 broken,
                 version="v0.14.0",
                 machine="m",
-                scorecard_filename="scorecard-v0.14.0.json",
-                scorecard_sha256="0" * 64,
+                scorecard_filename="scorecard-v0.14.0.json.gz",
+                scorecard_sha256=PLACEHOLDER_SHA256,
             )
 
     def test_dirty_tree_scorecard_is_refused(self):
@@ -228,8 +241,8 @@ class ScorecardMappingTest(unittest.TestCase):
                 stale,
                 version="v0.14.0",
                 machine="m",
-                scorecard_filename="scorecard-v0.14.0.json",
-                scorecard_sha256="0" * 64,
+                scorecard_filename="scorecard-v0.14.0.json.gz",
+                scorecard_sha256=PLACEHOLDER_SHA256,
             )
 
     def test_every_extracted_field_is_rendered(self):
@@ -421,7 +434,7 @@ class CliTest(unittest.TestCase):
         self._write_history(render.empty_history())
         self.assertEqual(render.main(self._argv()), 0)
         value = history("v0.14.0")
-        (self.root / "scorecard-v0.14.0.json").write_text("{}", encoding="utf-8")
+        write_scorecard(self.root / "scorecard-v0.14.0.json.gz")
         self._write_history(value)
         self.assertEqual(render.main(self._argv("--check")), 1)
 
@@ -429,10 +442,19 @@ class CliTest(unittest.TestCase):
         self._write_history(history("v0.14.0"))
         self.assertEqual(render.main(self._argv("--check")), 2)
 
+    def test_check_fails_when_the_scorecard_content_drifts_from_its_pin(self):
+        committed = self.root / "scorecard-v0.14.0.json.gz"
+        write_scorecard(committed)
+        self._write_history(history("v0.14.0"))
+        self.assertEqual(render.main(self._argv()), 0)
+        self.assertEqual(render.main(self._argv("--check")), 0)
+        write_scorecard(committed, {"edited": True})
+        self.assertEqual(render.main(self._argv("--check")), 2)
+
     def test_append_history_rejects_a_mismatched_filename(self):
         self._write_history(render.empty_history())
-        path = self.root / "scorecard-v9.9.9.json"
-        path.write_text(json.dumps(scorecard()), encoding="utf-8")
+        path = self.root / "scorecard-v9.9.9.json.gz"
+        write_scorecard(path, scorecard())
         self.assertEqual(
             render.main(
                 self._argv(
@@ -450,8 +472,8 @@ class CliTest(unittest.TestCase):
 
     def test_append_history_requires_machine(self):
         self._write_history(render.empty_history())
-        path = self.root / "scorecard-v0.14.0.json"
-        path.write_text(json.dumps(scorecard()), encoding="utf-8")
+        path = self.root / "scorecard-v0.14.0.json.gz"
+        write_scorecard(path, scorecard())
         self.assertEqual(
             render.main(
                 self._argv(
@@ -467,8 +489,8 @@ class CliTest(unittest.TestCase):
 
     def test_append_history_writes_a_row_and_renders(self):
         self._write_history(render.empty_history())
-        path = self.root / "scorecard-v0.14.0.json"
-        path.write_text(json.dumps(scorecard()), encoding="utf-8")
+        path = self.root / "scorecard-v0.14.0.json.gz"
+        write_scorecard(path, scorecard())
         self.assertEqual(
             render.main(
                 self._argv(
@@ -491,8 +513,8 @@ class CliTest(unittest.TestCase):
     def test_appended_rows_sort_by_version_not_insertion_order(self):
         self._write_history(render.empty_history())
         for version in ("v0.14.0", "v0.12.0", "v0.13.0"):
-            path = self.root / f"scorecard-{version}.json"
-            path.write_text(json.dumps(scorecard()), encoding="utf-8")
+            path = self.root / f"scorecard-{version}.json.gz"
+            write_scorecard(path, scorecard())
             self.assertEqual(
                 render.main(
                     self._argv(
@@ -588,8 +610,8 @@ class ShippedDefaultArmTest(unittest.TestCase):
                 card,
                 version="v0.15.0",
                 machine="m",
-                scorecard_filename="scorecard-v0.15.0.json",
-                scorecard_sha256="0" * 64,
+                scorecard_filename="scorecard-v0.15.0.json.gz",
+                scorecard_sha256=PLACEHOLDER_SHA256,
             )
 
 
@@ -617,8 +639,8 @@ class RefusalAwareHistoryTest(unittest.TestCase):
             self.policy_scorecard(refused),
             version="v0.15.0",
             machine="Test host, 1 core, 1 GB",
-            scorecard_filename="scorecard-v0.15.0.json",
-            scorecard_sha256="0" * 64,
+            scorecard_filename="scorecard-v0.15.0.json.gz",
+            scorecard_sha256=PLACEHOLDER_SHA256,
             shipped_arm="policy-file",
         )
 
@@ -640,8 +662,8 @@ class RefusalAwareHistoryTest(unittest.TestCase):
                 scorecard(),
                 version="v0.15.0",
                 machine="Test host, 1 core, 1 GB",
-                scorecard_filename="scorecard-v0.15.0.json",
-                scorecard_sha256="0" * 64,
+                scorecard_filename="scorecard-v0.15.0.json.gz",
+                scorecard_sha256=PLACEHOLDER_SHA256,
                 shipped_arm="policy-file",
             )
 
@@ -692,15 +714,12 @@ class RefusalAwareHistoryTest(unittest.TestCase):
             render.render_history(value)
 
     def test_legacy_rows_alone_keep_the_original_table(self):
-        committed = render.load_history(render.DEFAULT_HISTORY)
-        committed["releases"] = [
-            r for r in committed["releases"] if "shipped_default_arm" not in r
-        ]
-        self.assertEqual([r["version"] for r in committed["releases"]], ["v0.14.0"])
-        # One contract only: a v2 re-score would switch to the per-contract table.
-        for row in committed["releases"]:
-            row.pop("contract_results", None)
-        block = render.render_history(committed)
+        legacy = ShippedDefaultArmTest.legacy_kiji_row(self)
+        self.assertNotIn("shipped_default_arm", legacy)
+        self.assertNotIn("contract_results", legacy)
+        value = history_of(legacy)
+        render.validate_history(value)
+        block = render.render_history(value)
         self.assertTrue(block.startswith(
             "| Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |\n"
         ))
@@ -712,8 +731,8 @@ class RefusalAwareHistoryTest(unittest.TestCase):
             doc, hist = root / "README.md", root / "release-history.json"
             doc.write_text(DOC, encoding="utf-8")
             render.write_history(hist, render.empty_history())
-            card = root / "scorecard-v0.15.0.json"
-            card.write_text(json.dumps(self.policy_scorecard()), encoding="utf-8")
+            card = root / "scorecard-v0.15.0.json.gz"
+            write_scorecard(card, self.policy_scorecard())
             argv = [
                 "--doc", str(doc), "--history", str(hist), "--append-history",
                 "--scorecard", str(card), "--version", "v0.15.0",
@@ -785,8 +804,15 @@ class ShippedDefaultChartsTest(unittest.TestCase):
             for group in render.displayed_groups(committed)
         }
 
-    def test_committed_history_trend_has_every_distinct_result(self):
+    def test_historical_trend_keeps_both_defaults_and_coalesces_duplicate_results(self):
         committed = render.load_history(render.DEFAULT_HISTORY)
+        committed = {
+            **committed,
+            "releases": [
+                row for row in committed["releases"]
+                if row["version"] in ("v0.14.0", "v0.15.0", "v0.15.1")
+            ],
+        }
         expected = [
             (label, arm["surviving_pii_utf8_bytes"])
             for label, arm in self.committed_group_defaults(committed).items()
@@ -801,6 +827,27 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         )
         charts = render.render_charts(committed)
         self.assertIn(f"line [{', '.join(str(value) for _, value in expected)}]", charts)
+
+    def test_committed_history_trend_has_every_distinct_result(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        defaults = self.committed_default_arms(committed)
+        # Independent of displayed_groups and group_label: the current window
+        # has three results, with the two v0.15 releases sharing one point.
+        expected = [
+            ("v0.15.0 – v0.15.1", defaults["v0.15.1"]["surviving_pii_utf8_bytes"]),
+            ("v0.16.0", defaults["v0.16.0"]["surviving_pii_utf8_bytes"]),
+            ("v0.17.0", defaults["v0.17.0"]["surviving_pii_utf8_bytes"]),
+        ]
+        self.assertEqual(
+            render.shipped_default_trend(committed, "surviving_pii_utf8_bytes"), expected
+        )
+        charts = render.render_charts(committed)
+        self.assertIn(f"line [{', '.join(str(value) for _, value in expected)}]", charts)
+        self.assertNotIn("v0.14.0", charts)
+        self.assertEqual(
+            [row["version"] for row in committed["releases"]],
+            ["v0.14.0", "v0.15.0", "v0.15.1", "v0.16.0", "v0.17.0"],
+        )
 
     def test_comparison_bars_on_committed_history(self):
         committed = render.load_history(render.DEFAULT_HISTORY)
@@ -947,7 +994,7 @@ class ShippedDefaultChartsTest(unittest.TestCase):
             value = self.mixed()
             render.write_history(hist, value)
             for row in value["releases"]:
-                (root / row["scorecard"]).write_text("{}", encoding="utf-8")
+                write_scorecard(root / row["scorecard"])
             argv = ["--doc", str(doc), "--history", str(hist), "--readme", str(readme)]
             self.assertEqual(render.main(argv), 0)
             # The v0.14.0 Kiji default is the second bar, after v0.15.0's.
@@ -977,7 +1024,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
     def test_panels_hold_tagged_gaze_and_declared_competitors(self):
         own, *third = self.panels()
         gaze = [bar.name for bar in own.bars if bar.gaze]
-        self.assertEqual(gaze, ["Gaze 0.15", "Gaze 0.16"])
+        self.assertEqual(gaze, ["Gaze 0.16", "Gaze 0.17"])
         competitors = [bar.name for bar in own.bars if not bar.gaze]
         self.assertEqual(
             competitors, [charts.SHORT_NAMES[key] for key in self.declared]
@@ -997,7 +1044,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         )
         # Gaze's F2 is the released row's own recorded measurement, not the main run's.
         release = json.loads(render.RELEASE_CHAR_LEVEL.read_text(encoding="utf-8"))["releases"]
-        for bar, version in zip((b for b in own.bars if b.gaze), ("v0.15.1", "v0.16.0")):
+        for bar, version in zip((b for b in own.bars if b.gaze), ("v0.16.0", "v0.17.0")):
             self.assertEqual(bar.f2, release[version]["char_level"]["f2"])
             self.assertEqual(bar.leaked, release[version]["leaked_bytes"])
 
@@ -1025,7 +1072,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         history["releases"] = [row for row in history["releases"] if not row.get("provisional")]
         history["releases"][-1]["provisional"] = True
         self.assertEqual(
-            [r.version for r in render.chart_gaze_rows(history)], ["v0.14.0", "v0.15.1"]
+            [r.version for r in render.chart_gaze_rows(history)], ["v0.15.1", "v0.16.0"]
         )
 
     def test_provisional_candidate_keeps_the_released_comparison_panels(self):
@@ -1044,13 +1091,59 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             render.chart_panels(history, changed, self.their)
 
     def test_comparison_keeps_its_original_release_when_a_new_release_shares_the_corpus(self):
-        self.assertEqual(self.comparison["latest_release_at_measurement"]["version"], "v0.15.1")
-        self.assertEqual(self.history["releases"][-1]["version"], "v0.16.0")
+        older = with_v4(release("v0.15.1", leaked=120))
+        newer = with_v4(release("v0.16.0", leaked=80))
+        older["scorecard_sha256"], newer["scorecard_sha256"] = "1" * 64, "2" * 64
+        value = releases(older, newer)
+        metrics = {"char_level": {"f2": 0.5}, "leaked_bytes": 20,
+                   "false_positive_bytes": 10, "total_bytes": 2000}
+        comparison = {
+            "schema_version": 2,
+            "latest_release_at_measurement": {
+                "version": older["version"], "scorecard_sha256": older["scorecard_sha256"],
+            },
+            "corpus": {"main_dataset": {"sha256": "a" * 64},
+                       "negative_corpus_sha256": "b" * 64,
+                       "layers": {"C": {"documents": 2910}}},
+            "heldout_split": {"layers": {"C": ["test"]}},
+            "tools": {"gliner": {"contracts": {"v4": {"C": {
+                "false_positive_bytes_after_gold_gap": 0, "skipped_documents": 0,
+                "metrics": {"product_coverage": {"full": metrics}},
+            }}}}},
+        }
+        their = {key: {"rows": {"gliner": {"product_coverage": metrics}},
+                       "splits": {"test": {"documents": 5}}}
+                 for key, _, _ in charts.THIRD_PARTY}
+        measured = {row["version"]: {"char_level": {"f2": f2},
+                    "leaked_bytes": leaked, "total_bytes": 2000}
+                    for row, f2, leaked in ((older, 0.7, 120), (newer, 0.8, 80))}
+        with tempfile.TemporaryDirectory() as tmp:
+            configs, chars = Path(tmp) / "configs.json", Path(tmp) / "chars.json"
+            configs.write_text(json.dumps({"gliner": "gliner"}), encoding="utf-8")
+            chars.write_text(json.dumps({"releases": measured}), encoding="utf-8")
+            comparison["chart_config_sha256"] = hashlib.sha256(configs.read_bytes()).hexdigest()
+            original = copy.deepcopy(comparison)
+            with mock.patch.object(render, "CHART_CONFIGS", configs), \
+                    mock.patch.object(render, "RELEASE_CHAR_LEVEL", chars):
+                own = render.chart_panels(value, comparison, their)[0]
+                self.assertEqual([(b.name, b.f2, b.leaked) for b in own.bars if b.gaze],
+                                 [("Gaze 0.15", 0.7, 120), ("Gaze 0.16", 0.8, 80)])
+                self.assertEqual(comparison, original)
+                changed = copy.deepcopy(comparison)
+                changed["latest_release_at_measurement"]["scorecard_sha256"] = "3" * 64
+                with self.assertRaisesRegex(render.RenderError, "does not match"):
+                    render.chart_panels(value, changed, their)
+                changed_history = copy.deepcopy(value)
+                changed_history["releases"][-1]["dataset"]["integrity"]["component_sha256"]["dataiku"] = "c" * 64
+                with self.assertRaisesRegex(render.RenderError, "different layer C corpora"):
+                    render.chart_panels(changed_history, comparison, their)
+
+    def test_committed_comparison_names_its_measured_history_row(self):
+        measured = self.comparison["latest_release_at_measurement"]
+        [row] = [r for r in self.history["releases"] if r["version"] == measured["version"]]
+        self.assertFalse(row.get("provisional", False))
+        self.assertEqual(row["scorecard_sha256"], measured["scorecard_sha256"])
         self.assertTrue(self.panels())
-        changed = copy.deepcopy(self.comparison)
-        changed["latest_release_at_measurement"]["scorecard_sha256"] = "a" * 64
-        with self.assertRaisesRegex(render.RenderError, "does not match"):
-            self.panels(changed)
 
     def test_comparison_panels_require_a_released_history_row(self):
         history = copy.deepcopy(self.history)
@@ -1086,6 +1179,22 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             bar = next(b for b in panel.bars if b.gaze)
             self.assertIsNone(bar.f2)
             self.assertEqual(gaze_cells(panel), ["pending"] * 3)
+
+    def test_external_panels_keep_the_latest_measured_release_without_relabelling(self):
+        their = copy.deepcopy(self.their)
+        baseline = their["presidio-research"]["rows"]["gaze-v0.16.0"]
+        their["presidio-research"]["rows"]["gaze-v0.99.0"] = baseline
+        own, external, _ = self.panels(their=their)
+        self.assertEqual([bar.name for bar in own.bars if bar.gaze], ["Gaze 0.16", "Gaze 0.17"])
+        [retained] = [bar for bar in external.bars if bar.gaze]
+        self.assertEqual((retained.name, retained.f2, retained.leaked),
+                         ("Gaze 0.16", baseline["product_coverage"]["char_level"]["f2"],
+                          baseline["product_coverage"]["leaked_bytes"]))
+        current = copy.deepcopy(baseline)
+        current["product_coverage"]["leaked_bytes"] = 1
+        their["presidio-research"]["rows"]["gaze-v0.17.0"] = current
+        [admitted] = [bar for bar in self.panels(their=their)[1].bars if bar.gaze]
+        self.assertEqual((admitted.name, admitted.leaked), ("Gaze 0.17", 1))
 
     def test_presidio_research_charts_presidios_own_tuned_setup_only(self):
         _, presidio, piibench = self.panels()
@@ -1145,38 +1254,60 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         tables = charts.model_card_tables([own, presidio, piibench])
         self.assertIn("skipped 0 of the own corpus's 2,910 documents", tables)
         self.assertIn("Refused documents", tables)
-        self.assertIn("Gaze 0.15 0", tables)
+        self.assertIn("Gaze 0.17 0", tables)
 
     def test_false_positive_rate_uses_one_metrics_block(self):
         """Numerator and denominator come from the same block of the same tool."""
-        _, presidio, piibench = self.panels()
-        self.assertEqual([round(b.fp_per_1k, 1) for b in presidio.bars[1:]],
-                         [38.6, 0.0, 31.5, 14.6, 38.3, 5.2])  # first bar: Presidio tuned (was declared strong, 25.4)
-        self.assertEqual([round(b.fp_per_1k, 1) for b in piibench.bars[1:]],
-                         [38.0, 1.9, 94.1, 71.2, 36.6, 5.2])
-        # The common-intersection block's total (a different, smaller byte count) is never used.
-        moved = copy.deepcopy(self.their)
-        for bench in moved.values():
-            for row in bench["rows"].values():
-                row["common_intersection"]["total_bytes"] = 1
-        self.assertEqual(self.panels(their=moved), self.panels())
-        # The product-coverage block's own total is what divides its false positives.
-        changed = copy.deepcopy(self.their)
-        row = changed["presidio-research"]["rows"]["presidio-tuned-presidio-research"]["product_coverage"]
-        row["total_bytes"] *= 2
-        bar = self.panels(their=changed)[1].bars[1]
-        self.assertAlmostEqual(bar.fp_per_1k, 38.6 / 2, places=1)
-        # Own corpus: each competitor divides by its own block's total.
-        cell = self.comparison["tools"]["opf"]["contracts"]["v4"]["C"]
-        block = cell["metrics"]["product_coverage"]["full"]
-        fp = cell["false_positive_bytes_after_gold_gap"] or cell["false_positive_bytes"]
-        opf = next(b for b in self.panels()[0].bars if b.name == "OPF")
-        self.assertAlmostEqual(opf.fp_per_1k, 1000 * fp / block["total_bytes"])
+        block = {"char_level": {"f2": 0.5}, "leaked_bytes": 10,
+                 "false_positive_bytes": 50, "total_bytes": 2000}
+        cell = {"false_positive_bytes": 50, "false_positive_bytes_after_gold_gap": 20,
+                "skipped_documents": 0, "metrics": {
+                    "product_coverage": {"full": block},
+                    "common_intersection": {"full": {**block, "total_bytes": 1000}},
+                }}
+        comparison = {"corpus": {"layers": {"C": {"documents": 2}}},
+                      "heldout_split": {"layers": {"C": ["test"]}},
+                      "tools": {"opf": {"contracts": {"v4": {"C": cell}}}}}
+        gaze = [charts.GazeRow("v0.16.0", 0.8, 5, 4, 2000)]
+        def own():
+            return charts.own_panel(gaze, comparison, {"opf": "opf"}, "Synthetic corpus").bars[-1]
+        self.assertEqual(own().fp_per_1k, 10)
+        cell["metrics"]["common_intersection"]["full"]["total_bytes"] = 1
+        self.assertEqual(own().fp_per_1k, 10)
+        block["total_bytes"] *= 2
+        self.assertEqual(own().fp_per_1k, 5)
+        for adjusted, expected in ((0, 0), (None, 12.5)):
+            with self.subTest(adjusted=adjusted):
+                cell["false_positive_bytes_after_gold_gap"] = adjusted
+                self.assertEqual(own().fp_per_1k, expected)
+
+        third = {"rows": {"opf": {"product_coverage": copy.deepcopy(block),
+                                  "common_intersection": {**block, "total_bytes": 1}}},
+                 "splits": {"test": {"documents": 2}}}
+        def competitor():
+            return charts.third_party_panel(third, "Synthetic", "F2", {"opf": "opf"}, "v0.16.0").bars[-1]
+        self.assertEqual(competitor().fp_per_1k, 12.5)
+        third["rows"]["opf"]["common_intersection"]["total_bytes"] = 9000
+        self.assertEqual(competitor().fp_per_1k, 12.5)
+        third["rows"]["opf"]["product_coverage"]["total_bytes"] *= 2
+        self.assertEqual(competitor().fp_per_1k, 6.25)
+
+    def test_committed_unavailable_opf_has_no_numeric_metrics_and_renders_na(self):
+        self.assertNotIn("opf", self.comparison["tools"])
+        own = self.panels()[0]
+        opf = next(b for b in own.bars if b.name == "OPF")
+        self.assertTrue(opf.unavailable)
+        self.assertEqual((opf.f2, opf.leaked, opf.fp_per_1k), (None, None, None))
+        tables = charts.model_card_tables([own]).splitlines()
+        header = next(line for line in tables if line.startswith("| Benchmark |"))
+        column = [cell.strip() for cell in header.split("|")].index("OPF")
+        for row in (line for line in tables if line.startswith("| Own corpus |")):
+            self.assertEqual(row.split("|")[column].strip(), "N/A")
 
     def test_the_benchmark_page_discloses_the_limit_of_the_offline_check(self):
         text = render.DEFAULT_DOC.read_text(encoding="utf-8")
-        for phrase in ("only `record` (the corpus replay) proves the character counts",
-                       "must include the replay command's output"):
+        for phrase in ("Offline checks verify receipt integrity and recompute aggregates",
+                       "only capture/replay on the pinned inputs proves the underlying byte counts"):
             self.assertIn(phrase, text)
 
     def test_a_charted_version_must_be_a_real_git_tag(self):
@@ -1206,20 +1337,36 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
     def test_metric_definition_is_stated_in_the_benchmark_readme(self):
         for path in (render.DEFAULT_DOC,):
             text = path.read_text(encoding="utf-8")
-            for phrase in ("Unicode code points (not grapheme clusters)", "ignores labels",
-                           "micro", "0/0 = 0", "skipped document's gold characters as missed",
-                           "counts every false-positive character for every tool",
-                           "also credits a protected repeat"):
+            for phrase in ("Byte-micro F2 pools UTF-8 bytes across documents",
+                           "5*TP/(5*TP+4*FN+FP)", "Labels do not affect overlap",
+                           "False positives in F2 are raw, without gold-gap credit",
+                           "Competitor skips count their gold as leaked",
+                           "Refused documents are reported separately",
+                           "including partial protection"):
                 self.assertIn(phrase, text, (path.name, phrase))
 
     def test_model_card_bolds_the_best_value_per_row(self):
-        tables = charts.model_card_tables(self.panels())
-        rows = [line for line in tables.splitlines() if line.startswith("| Own corpus")]
-        self.assertEqual(len(rows), 3)
-        self.assertEqual(rows[0].count("**"), 2)  # F2: one best, the highest
-        self.assertIn("**0.879**", rows[0])
-        self.assertIn("**13,291**", rows[1])  # leaked bytes: lowest wins
-        self.assertIn("**6.2**", rows[2])  # false positives: lowest wins
+        bars = (charts.Bar("A", 0.90144, 120, 2.04),
+                charts.Bar("B", 0.90145, 90, 2.03),
+                charts.Bar("C", 0.88, 90, 2.03),
+                charts.Bar("Pending", None, None, None),
+                charts.Bar("Unavailable", None, None, None, unavailable=True))
+        def cells(bars):
+            panel = charts.Panel("Synthetic", "Synthetic corpus", "All labels", bars)
+            return [[cell.strip() for cell in line.split("|")[2:-1]]
+                    for line in charts.model_card_tables([panel]).splitlines()
+                    if line.startswith("| Synthetic |")]
+        self.assertEqual(cells(bars), [
+            ["0.901", "**0.901**", "0.880", "pending", "N/A"],
+            ["120", "**90**", "**90**", "pending", "N/A"],
+            ["2.0", "**2.0**", "**2.0**", "pending", "N/A"],
+        ])
+        changed = (charts.Bar("A", 0.95, 80, 1.0), *bars[1:])
+        self.assertEqual(cells(changed), [
+            ["**0.950**", "0.901", "0.880", "pending", "N/A"],
+            ["**80**", "90", "90", "pending", "N/A"],
+            ["**1.0**", "2.0", "2.0", "pending", "N/A"],
+        ])
 
     def test_comparison_mutation_fails_check(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1240,8 +1387,16 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             self.assertEqual(render.main(args + ["--check"]), 1)
             report.write_text(json.dumps(self.comparison), encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 0)
+            # Every external dataset now shares the byte-micro figure.
+            external = svgs[-1]
+            saved = external.read_text(encoding="utf-8")
+            self.assertIn("0.642", saved)
+            external.write_text(saved.replace("0.642", "0.999"), encoding="utf-8")
+            self.assertEqual(render.main(args + ["--check"]), 1)
+            external.write_text(saved, encoding="utf-8")
             # A hand-edited value on an SVG bar is drift too.
-            svgs[0].write_text(svgs[0].read_text(encoding="utf-8").replace("0.836", "0.936"),
+            self.assertIn("0.901", svgs[0].read_text(encoding="utf-8"))
+            svgs[0].write_text(svgs[0].read_text(encoding="utf-8").replace("0.901", "0.999"),
                                encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 1)
             svgs[0].unlink()
@@ -1328,8 +1483,8 @@ class RealScorecardShapeTest(unittest.TestCase):
                     self.real,
                     version="v0.14.0",
                     machine="Test host, 1 core, 1 GB",
-                    scorecard_filename="scorecard-v0.14.0.json",
-                    scorecard_sha256="0" * 64,
+                    scorecard_filename="scorecard-v0.14.0.json.gz",
+                    scorecard_sha256=PLACEHOLDER_SHA256,
                 )
             )
         )
@@ -1346,8 +1501,8 @@ class RealScorecardShapeTest(unittest.TestCase):
                     self.real,
                     version="v0.14.0",
                     machine="m",
-                    scorecard_filename="scorecard-v0.14.0.json",
-                    scorecard_sha256="0" * 64,
+                    scorecard_filename="scorecard-v0.14.0.json.gz",
+                    scorecard_sha256=PLACEHOLDER_SHA256,
                 )
             )
         )
@@ -1362,8 +1517,8 @@ class RealScorecardShapeTest(unittest.TestCase):
         """End to end: append the real scorecard, render, then `--check`."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            scorecard_path = root / "scorecard-v0.14.0.json"
-            scorecard_path.write_text(json.dumps(self.real), encoding="utf-8")
+            scorecard_path = root / "scorecard-v0.14.0.json.gz"
+            write_scorecard(scorecard_path, self.real)
             history_path = root / "release-history.json"
             history_path.write_text(
                 json.dumps(render.empty_history()), encoding="utf-8"
@@ -1408,8 +1563,8 @@ class RequiredProvenanceGuardTest(unittest.TestCase):
                 broken,
                 version="v0.14.0",
                 machine="m",
-                scorecard_filename="scorecard-v0.14.0.json",
-                scorecard_sha256="0" * 64,
+                scorecard_filename="scorecard-v0.14.0.json.gz",
+                scorecard_sha256=PLACEHOLDER_SHA256,
             )
 
     def test_missing_integrity_block_is_refused(self):
@@ -1478,8 +1633,8 @@ class RequiredProvenanceGuardTest(unittest.TestCase):
                     card,
                     version="v0.14.0",
                     machine="m",
-                    scorecard_filename="scorecard-v0.14.0.json",
-                    scorecard_sha256="0" * 64,
+                    scorecard_filename="scorecard-v0.14.0.json.gz",
+                    scorecard_sha256=PLACEHOLDER_SHA256,
                 )
             )
         )
@@ -1651,7 +1806,7 @@ class RenderSiteRefusesNonDigestsTest(unittest.TestCase):
     def test_a_well_formed_entry_still_renders_every_provenance_row(self):
         rendered = render.render_current_release(history_of(entry()))
         self.assertIn(f"| Corpus sha256 | `{'f' * 64}` |", rendered)
-        self.assertIn(f"| Scorecard sha256 | `{'0' * 64}` |", rendered)
+        self.assertIn(f"| Scorecard sha256 | `{PLACEHOLDER_SHA256}` |", rendered)
         self.assertIn("2,910 documents / 14,719 entities", rendered)
         self.assertNotIn("n/a", rendered)
 
@@ -1689,7 +1844,7 @@ class CheckDoorTest(unittest.TestCase):
             with self.subTest(path=_label(path)):
                 with tempfile.TemporaryDirectory() as tmp:
                     root = Path(tmp)
-                    (root / "scorecard-v0.14.0.json").write_text("{}", encoding="utf-8")
+                    write_scorecard(root / "scorecard-v0.14.0.json.gz")
                     doc_path = root / "README.md"
                     doc_path.write_text(DOC, encoding="utf-8")
                     broken = copy.deepcopy(history())
@@ -1716,7 +1871,7 @@ class CheckDoorTest(unittest.TestCase):
     def test_check_still_passes_on_a_well_formed_history(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "scorecard-v0.14.0.json").write_text("{}", encoding="utf-8")
+            write_scorecard(root / "scorecard-v0.14.0.json.gz")
             (root / "release-history.json").write_text(
                 json.dumps(history()), encoding="utf-8"
             )
@@ -1734,7 +1889,7 @@ def release(version: str, leaked: int = 19556, *, p95: float = 124.0, **fields) 
     row = RefusalAwareHistoryTest.policy_entry(RefusalAwareHistoryTest())
     row.update(
         version=version,
-        scorecard=f"scorecard-{version}.json",
+        scorecard=f"scorecard-{version}.json.gz",
         commit=(version.replace(".", "")[1:] * 40)[:40],
     )
     arm = row["arms"]["policy-file"]
@@ -1844,7 +1999,7 @@ class DistinctResultGroupTest(unittest.TestCase):
         self.assertNotIn(f"`{'0150' * 10}"[:8], line)
         self.assertIn("| 138.72 |", line)
         for version in ("v0.15.0", "v0.15.1"):
-            self.assertIn(f"[`scorecard-{version}.json`](scorecard-{version}.json)", line)
+            self.assertIn(f"[`scorecard-{version}.json.gz`](scorecard-{version}.json.gz)", line)
 
     def test_only_the_last_three_groups_are_displayed(self):
         value = releases(
@@ -2142,7 +2297,7 @@ class HeadlineContractTest(unittest.TestCase):
         self.assertNotIn("Gold-gap credited", current[v2:])
         self.assertIn("| 19,556 |", current[v1:])
         for version in (2, 3, 4):
-            name = f"scorecard-v0.15.1-scored-labels-v{version}.json"
+            name = f"scorecard-v0.15.1-scored-labels-v{version}.json.gz"
             self.assertIn(f"| Scorecard, scored labels v{version} | [`{name}`]({name}) |", current)
 
     def test_charts_lead_with_v4_and_name_the_contract(self):
@@ -2216,7 +2371,7 @@ class HeadlineContractTest(unittest.TestCase):
             new,
         )
         for version in ("v0.15.0", "v0.15.1"):
-            name = f"scorecard-{version}-scored-labels-v2.json"
+            name = f"scorecard-{version}-scored-labels-v2.json.gz"
             self.assertIn(f"[`{name}`]({name})", new)
 
     def test_a_v2_only_difference_splits_the_group(self):
@@ -2261,7 +2416,7 @@ class HeadlineContractTest(unittest.TestCase):
         with self.assertRaisesRegex(render.RenderError, "recorded twice"):
             releases(twice)
         misnamed = copy.deepcopy(row)
-        misnamed["contract_results"][0]["scorecard"] = "scorecard-v0.15.1.json"
+        misnamed["contract_results"][0]["scorecard"] = "scorecard-v0.15.1.json.gz"
         with self.assertRaisesRegex(render.RenderError, "must be named"):
             releases(misnamed)
 
@@ -2310,9 +2465,9 @@ class HeadlineContractTest(unittest.TestCase):
             doc.write_text(DOC, encoding="utf-8")
             row = release("v0.15.1")
             render.write_history(history_path, releases(row))
-            (root / "scorecard-v0.15.1.json").write_text("{}", encoding="utf-8")
-            card = root / "scorecard-v0.15.1-scored-labels-v2.json"
-            card.write_text(json.dumps(v2_scorecard(row)), encoding="utf-8")
+            write_scorecard(root / "scorecard-v0.15.1.json.gz")
+            card = root / "scorecard-v0.15.1-scored-labels-v2.json.gz"
+            write_scorecard(card, v2_scorecard(row))
             argv = ["--doc", str(doc), "--history", str(history_path)]
             self.assertEqual(
                 render.main(argv + ["--append-contract-result", "--scorecard", str(card), "--version", "v0.15.1"]),
@@ -2370,8 +2525,8 @@ class ValidatorRecallTableTest(unittest.TestCase):
             value,
             version="v0.15.0",
             machine="Test host, 1 core, 1 GB",
-            scorecard_filename="scorecard-v0.15.0.json",
-            scorecard_sha256="0" * 64,
+            scorecard_filename="scorecard-v0.15.0.json.gz",
+            scorecard_sha256=PLACEHOLDER_SHA256,
         )
 
     def test_pre_split_scorecard_records_and_renders_no_table(self):

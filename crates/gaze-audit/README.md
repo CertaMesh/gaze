@@ -14,8 +14,8 @@ Restore requires the owner-held `SensitiveSnapshot`; audit rows cannot restore P
 
 ```toml
 [dependencies]
-gaze-pii = "0.16.0"
-gaze-audit = "0.16.0"
+gaze-pii = "0.17.0"
+gaze-audit = "0.17.0"
 ```
 
 Wire the logger when building the pipeline. Note: `SqliteLogger` is not `Clone`;

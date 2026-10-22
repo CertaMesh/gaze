@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "checks": [
+    {
+      "report": "source-escapes",
+      "source_revision": "e84595c032f1c9ca0a0651e3efbeb9fc90cbd3f9",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "docs/reference/benchmarks/password-code-credentials/source-escapes/verify.py"
+      ],
+      "empty_checkout": true,
+      "target_absent_before": true,
+      "exit_code": 0,
+      "scorecards_replayed": 16,
+      "completion_marker": "SOURCE_ESCAPE_EVIDENCE_VERIFIED",
+      "retained_log_sha256": "a317f4c2f9622b469c654423d9a9914b9e52f75834b4fd318e9234ac3f936c46",
+      "materialized_policy_sha256": {
+        "target/gate/source-escapes/mechanism/base.toml": "1b4b44d2b53d224594cbdbc1cc16486e29523eadead03d256ddc5ff6a5206c27",
+        "target/gate/source-escapes/mechanism/candidate.toml": "b808dc4f07a005c2ac2466532fba7341e878b27f1f5c79505f28a090e3594d45"
+      }
+    },
+    {
+      "report": "json-separators",
+      "source_revision": "e84595c032f1c9ca0a0651e3efbeb9fc90cbd3f9",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "docs/reference/benchmarks/password-code-credentials/json-separators/verify.py"
+      ],
+      "empty_checkout": true,
+      "target_absent_before": true,
+      "exit_code": 0,
+      "scorecards_replayed": 16,
+      "completion_marker": "SOURCE_ESCAPE_EVIDENCE_VERIFIED",
+      "retained_log_sha256": "2322c92af7451efc54ed8a37e10dfd8789da77bcec96659fc90e7ae4512e3f59",
+      "materialized_policy_sha256": {
+        "target/gate/source-escapes/mechanism/base.toml": "1b4b44d2b53d224594cbdbc1cc16486e29523eadead03d256ddc5ff6a5206c27",
+        "target/gate/source-escapes/mechanism/candidate.toml": "b808dc4f07a005c2ac2466532fba7341e878b27f1f5c79505f28a090e3594d45"
+      }
+    }
+  ]
+}

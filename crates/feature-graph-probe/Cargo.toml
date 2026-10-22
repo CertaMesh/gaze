@@ -1,0 +1,23 @@
+[package]
+name = "feature-graph-probe"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.89"
+publish = false
+description = "CI probe that runs published library feature graphs without dev-dependency unification"
+
+# Each feature selects one published-library feature graph. `cargo run -p
+# feature-graph-probe --no-default-features --features <graph>` builds only this
+# bin and its normal dependencies, so no test, example or bench target can pull a
+# dev-dependency into the graph and re-enable library features
+# (`cargo run -p xtask -- ci-feature-matrix`, library-graph stage).
+[features]
+default = []
+gaze-pii-no-default = ["dep:gaze"]
+gaze-pii-default = ["dep:gaze", "gaze/default"]
+gaze-assembly-default = ["dep:gaze-assembly", "dep:gaze"]
+
+[dependencies]
+gaze = { path = "../gaze", package = "gaze-pii", default-features = false, optional = true }
+gaze-assembly = { path = "../gaze-assembly", optional = true }
+gaze-types = { workspace = true }

@@ -283,6 +283,9 @@ def live_analyzers(config: Mapping[str, object], paths: ModelPaths) -> dict[str,
 
 
 def live_analyze(analyzers: Mapping[str, object], config: Mapping[str, object], text: str, language: str) -> list:
+    # Pool captures retain unsupported languages as empty rows; live checks do too.
+    if language not in space.LANGUAGES:
+        return []
     return analyzers[language].analyze(
         text=text, language=language, score_threshold=None,
         allow_list=list(config["allow_list"]) or None, allow_list_match="exact",

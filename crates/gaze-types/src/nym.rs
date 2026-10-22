@@ -102,8 +102,10 @@ impl fmt::Display for NymLabel {
 
 /// Maps a Nym label into the closed safety-net class set.
 ///
-/// Six labels carry a class. Every other label is `Unsupported`: it can never be enabled, and it
-/// is never folded into a generic class such as `Name`.
+/// Eight labels carry a class. `GIVEN_NAME` and `SURNAME` explicitly map to `Name` so the
+/// backstop can protect person names regardless of capitalization. This is a deliberate
+/// extension of the former six-label map, not a generic fallback: every other unsupported
+/// label still fails policy loading rather than being folded into `Name`.
 pub fn nym_label_to_safety_net_class(label: NymLabel) -> Result<SafetyNetPiiClass, NymConfigError> {
     match label {
         NymLabel::BuildingNumber => Ok(SafetyNetPiiClass::BuildingNumber),
@@ -112,6 +114,7 @@ pub fn nym_label_to_safety_net_class(label: NymLabel) -> Result<SafetyNetPiiClas
         NymLabel::DateOfBirth => Ok(SafetyNetPiiClass::Date),
         NymLabel::ZipCode => Ok(SafetyNetPiiClass::PostalCode),
         NymLabel::TaxId => Ok(SafetyNetPiiClass::TaxId),
+        NymLabel::GivenName | NymLabel::Surname => Ok(SafetyNetPiiClass::Name),
         unsupported => Err(NymConfigError::UnsupportedLabel {
             label: unsupported.as_str().to_string(),
         }),
@@ -180,15 +183,18 @@ pub struct NymOperatingPoint {
 }
 
 impl NymOperatingPoint {
-    /// The shipped default, measured as op-B on the 2,910-document benchmark: building number,
-    /// licence plate and username at 0.5, date of birth at 0.9. Tax ID and ZIP code stay off
-    /// (tax ID precision was 0.23 to 0.26; ZIP code flagged the invalid-identifier decoys).
+    /// Op-B with personal-name support: the original building number, licence plate and username
+    /// thresholds stay at 0.5 and date of birth stays at 0.9. GIVEN_NAME and SURNAME use 0.5,
+    /// selected on an offline synthetic sweep, independently of the benchmark test corpus.
+    /// Tax ID and ZIP code stay off (tax ID precision was 0.23 to 0.26; ZIP code flagged decoys).
     pub fn op_b() -> Self {
         Self {
             thresholds: BTreeMap::from([
                 (NymLabel::BuildingNumber, 0.5),
                 (NymLabel::DateOfBirth, 0.9),
+                (NymLabel::GivenName, 0.5),
                 (NymLabel::LicensePlate, 0.5),
+                (NymLabel::Surname, 0.5),
                 (NymLabel::Username, 0.5),
             ]),
         }
@@ -272,6 +278,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn personal_name_labels_can_be_configured_as_name() {
+        let op = NymOperatingPoint::new([(NymLabel::GivenName, 0.7), (NymLabel::Surname, 0.9)])
+            .expect("personal-name labels carry the Name class");
+        assert_eq!(
+            nym_label_to_pii_class(NymLabel::GivenName),
+            Ok(PiiClass::Name)
+        );
+        assert_eq!(
+            nym_label_to_pii_class(NymLabel::Surname),
+            Ok(PiiClass::Name)
+        );
+        assert_eq!(op.threshold(NymLabel::GivenName), Some(0.7));
+        assert_eq!(op.threshold(NymLabel::Surname), Some(0.9));
+    }
+
+    #[test]
     fn label_order_matches_the_pinned_id2label() {
         assert_eq!(NymLabel::ALL.len(), 40);
         let mut sorted = NymLabel::ALL.iter().map(|l| l.as_str()).collect::<Vec<_>>();
@@ -285,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn class_map_is_closed_and_never_generic() {
+    fn class_map_is_closed_with_explicit_person_name_labels() {
         let mapped = NymLabel::ALL
             .iter()
             .filter_map(|label| {
@@ -299,16 +321,18 @@ mod tests {
             vec![
                 ("BUILDING_NUMBER", "custom:building_number".to_string()),
                 ("DATE_OF_BIRTH", "custom:date".to_string()),
+                ("GIVEN_NAME", "name".to_string()),
                 ("LICENSE_PLATE", "custom:license_plate".to_string()),
+                ("SURNAME", "name".to_string()),
                 ("TAX_ID", "custom:tax_id".to_string()),
                 ("USERNAME", "custom:username".to_string()),
                 ("ZIP_CODE", "custom:postal_code".to_string()),
             ]
         );
         assert_eq!(
-            nym_label_to_safety_net_class(NymLabel::GivenName),
+            nym_label_to_safety_net_class(NymLabel::City),
             Err(NymConfigError::UnsupportedLabel {
-                label: "GIVEN_NAME".to_string()
+                label: "CITY".to_string()
             })
         );
     }
@@ -321,13 +345,16 @@ mod tests {
             vec![
                 (NymLabel::BuildingNumber, 0.5),
                 (NymLabel::DateOfBirth, 0.9),
+                (NymLabel::GivenName, 0.5),
                 (NymLabel::LicensePlate, 0.5),
+                (NymLabel::Surname, 0.5),
                 (NymLabel::Username, 0.5),
             ]
         );
         assert_eq!(op_b.threshold(NymLabel::TaxId), None);
         assert_eq!(op_b.threshold(NymLabel::ZipCode), None);
-        assert_eq!(op_b.threshold(NymLabel::GivenName), None);
+        assert_eq!(op_b.threshold(NymLabel::GivenName), Some(0.5));
+        assert_eq!(op_b.threshold(NymLabel::Surname), Some(0.5));
     }
 
     fn policy(
@@ -360,7 +387,7 @@ mod tests {
             Err(NymConfigError::UnknownLabel { .. })
         ));
         assert!(matches!(
-            policy(&["GIVEN_NAME"], &[("GIVEN_NAME", 0.5)]),
+            policy(&["CITY"], &[("CITY", 0.5)]),
             Err(NymConfigError::UnsupportedLabel { .. })
         ));
         assert!(matches!(

@@ -1,0 +1,41 @@
+{
+  "documents_sha256": {
+    "main-base": "32e3aa8ab46d4446dee30e5e7a50be3658c4296a9db0c2283574c96d06bccbc7",
+    "main-candidate": "32e3aa8ab46d4446dee30e5e7a50be3658c4296a9db0c2283574c96d06bccbc7",
+    "mechanism-base": "32e3aa8ab46d4446dee30e5e7a50be3658c4296a9db0c2283574c96d06bccbc7",
+    "mechanism-candidate": "32e3aa8ab46d4446dee30e5e7a50be3658c4296a9db0c2283574c96d06bccbc7"
+  },
+  "identical_documents": true,
+  "separator_cell_metrics_equal": true,
+  "leaked_bytes_removed_by_family": {
+    "other": 120,
+    "credentials_": 192872,
+    "credentials_review_": 210183,
+    "credentials_escapes_": 38960,
+    "credentials_separators_": 155040,
+    "primary_C": 0
+  },
+  "generated_layers": {
+    "A": {
+      "other": 120,
+      "credentials_": 64080,
+      "credentials_review_": 70025,
+      "credentials_escapes_": 13004,
+      "credentials_separators_": 51680
+    },
+    "D": {
+      "other": 0,
+      "credentials_": 0,
+      "credentials_escapes_": 0,
+      "credentials_separators_": 0,
+      "credentials_review_": 0
+    },
+    "R": {
+      "credentials_": 128792,
+      "credentials_review_": 140158,
+      "credentials_escapes_": 25956,
+      "credentials_separators_": 103360,
+      "other": 0
+    }
+  }
+}

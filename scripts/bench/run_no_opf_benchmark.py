@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import stage_timing as stages
+
 import argparse
 import copy
 import hashlib
@@ -20,6 +22,7 @@ from typing import Any, Mapping, Sequence
 
 import agentic_layers as agentic
 import benchmark_cache
+import capture_identity
 import dataiku_en_de_gaze_bench as dataiku
 import gaze_bench_score as score
 import scorecard_record as records
@@ -45,19 +48,8 @@ DAVLAN_RUNTIME_ARTIFACTS = frozenset(
     }
 )
 DAVLAN_BUNDLE_SURFACE = DAVLAN_RUNTIME_ARTIFACTS | {"SHA256SUMS"}
-OBSERVATION_ENVIRONMENT_KEYS = frozenset(
-    {
-        "CARGO_ENCODED_RUSTFLAGS", "CARGO_HOME", "CC", "CFLAGS", "CPPFLAGS",
-        "CXX", "CXXFLAGS", "HOME", "LDFLAGS", "MACOSX_DEPLOYMENT_TARGET",
-        "PATH", "RUSTC", "RUSTC_WRAPPER", "RUSTFLAGS", "RUSTUP_HOME",
-        "RUSTUP_TOOLCHAIN", "SDKROOT",
-    }
-)
-OBSERVATION_ENVIRONMENT_PREFIXES = (
-    "CARGO_BUILD_", "CARGO_PROFILE_", "CARGO_TARGET_", "DYLD_", "GAZE_",
-    "JEMALLOC_", "LD_", "MALLOC_", "MIMALLOC_", "MKL_", "OMP_", "ORT_",
-    "RAYON_", "TOKENIZERS_",
-)
+OBSERVATION_ENVIRONMENT_KEYS = capture_identity.ENVIRONMENT_KEYS
+OBSERVATION_ENVIRONMENT_PREFIXES = capture_identity.ENVIRONMENT_PREFIXES
 
 
 class RunnerError(RuntimeError):
@@ -90,6 +82,7 @@ def validator_probe_binary(repo_root: Path, *, release: bool) -> Path:
     return repo_root / score.VALIDATOR_PROBE_TARGET / "release" / "validator-recall-probe"
 
 
+@stages.timed("build", role="validator")
 def build_validator_probe(repo_root: Path, *, release: bool) -> Path:
     if not release:
         return score.build_validator_probe(repo_root)
@@ -203,7 +196,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--no-cache", action="store_true", help="measure without reading or writing the observation cache")
     parser.add_argument("--score-jobs", type=int, default=None, help="bounded observation replay workers (default: 4)")
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--cross-check", action="store_true",
+        help="explicit independent contract capture for replay-equivalence checks only",
+    )
+    args = parser.parse_args(argv)
+    if (args.scored_labels is not None or args.agentic_scored_labels is not None) and not args.cross_check:
+        parser.error(
+            "capture once without scoring-contract flags, then use rescore.py for every contract; "
+            "independent capture requires --cross-check"
+        )
+    return args
 
 
 def repo_path(repo_root: Path, path: Path) -> Path:
@@ -628,29 +631,30 @@ def execute_measurements(
     for repetition in range(1, measured_repetitions + 1):
         current: list[dict[str, object]] = []
         for config in configs:
-            run = score.run_config(
-                repo_root,
-                binary,
-                config,
-                documents,
-                davlan_model,
-                None,
-                None,
-                None,
-                threshold,
-                diagnostics_dir / f"repetition-{repetition}",
-                base_environment=environment,
-                warmup_count=warmup_count,
-                validator_measurements=validator_measurements,
-                policy_path=policy_path,
-                replacing_actions=replacing_actions,
-                split_composite_source_ids=split_composite_source_ids,
-                record_document=(
-                    (lambda config, document, response, measurements:
-                        record_writer.add(record_layer, config, document, response, measurements))
-                    if record_writer is not None and repetition == 1 else None
-                ),
-            )
+            with stages.labels(layer=record_layer, config=config, repetition=repetition), stages.measure("layer_capture"), stages.scoring():
+                run = score.run_config(
+                    repo_root,
+                    binary,
+                    config,
+                    documents,
+                    davlan_model,
+                    None,
+                    None,
+                    None,
+                    threshold,
+                    diagnostics_dir / f"repetition-{repetition}",
+                    base_environment=environment,
+                    warmup_count=warmup_count,
+                    validator_measurements=validator_measurements,
+                    policy_path=policy_path,
+                    replacing_actions=replacing_actions,
+                    split_composite_source_ids=split_composite_source_ids,
+                    record_document=(
+                        (lambda config, document, response, measurements:
+                            record_writer.add(record_layer, config, document, response, measurements))
+                        if record_writer is not None and repetition == 1 else None
+                    ),
+                )
             current.append(run)
         repetition_runs.append(current)
         provenance.append(
@@ -729,14 +733,15 @@ def measure_agentic_layers(
             record.to_document() for record in agentic.generate(agentic.PUBLISHED_PARTITION)
         )
     }
-    full_identifier_measurements, full_repeat_measurements = (
-        score.collect_validator_measurements(
-            validator_probe,
-            [raw_by_id[document.uid] for document in documents],
-            (document.uid for document in documents),
-        )
-        for documents in (prepared.identifiers, prepared.repeats)
-    )
+    full_measurements = []
+    for layer, documents in (("A", prepared.identifiers), ("R", prepared.repeats)):
+        with stages.labels(layer=layer), stages.measure("validator_measurements"):
+            full_measurements.append(score.collect_validator_measurements(
+                validator_probe,
+                [raw_by_id[document.uid] for document in documents],
+                (document.uid for document in documents),
+            ))
+    full_identifier_measurements, full_repeat_measurements = full_measurements
     identifier_measurements = records.filter_measurements(
         full_identifier_measurements, prepared.identifiers
     )
@@ -827,6 +832,7 @@ def load_scorecard(path: Path, label: str) -> dict[str, object]:
     return value
 
 
+@stages.timed("artifact_write")
 def write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -872,17 +878,14 @@ def optional_file_sha256(path: Path) -> str | None:
     return score.sha256_file(path) if path.is_file() else None
 
 
-def store_observations_if_unchanged(repo_root: Path, cache_dir: Path,
-                                    key: Mapping[str, object], record: Path) -> bool:
-    identity, reason = source_tree_identity(repo_root)
-    if identity is None or any(key.get(name) != value for name, value in identity.items()):
-        print(f"observation cache not stored: {reason or 'source identity changed during measurement'}")
-        return False
-    cached = benchmark_cache.store(cache_dir, key, record)
-    print(f"observation cache stored {benchmark_cache.key_digest(key)} at {cached}")
-    return True
+def store_observations_if_unchanged(cache_dir: Path, key: Mapping[str, object],
+                                    record: Path, read_key) -> None:
+    if read_key()[0] != key:
+        raise CandidateError("effective inputs changed during capture; refusing cache publication")
+    benchmark_cache.store_layers(cache_dir, key, record)
 
 
+@stages.timed("input_inventory")
 def observation_cache_key(
     *,
     repo_root: Path,
@@ -897,6 +900,9 @@ def observation_cache_key(
     document_ids: Sequence[str],
     threshold: float,
     source_environment: Mapping[str, str],
+    binary: Path,
+    validator_probe: Path,
+    davlan_model: Path,
 ) -> tuple[dict[str, object] | None, str | None]:
     source_identity, reason = source_tree_identity(repo_root)
     if source_identity is None:
@@ -906,8 +912,46 @@ def observation_cache_key(
         for item in model_provenance
     }
     agentic_contract = agentic_prepared.contract.sha256 if agentic_prepared else None
+    try:
+        files = {"detector_binary": binary, "validator_binary": validator_probe,
+                 "dataset": repo_path(repo_root, args.dataset),
+                 "negative_corpus": repo_path(repo_root, args.negative_corpus),
+                 "benchmark_spec": repo_root / "docs/reference/benchmarks/README.md"}
+        models = {}
+        policy = None
+        if policy_path:
+            files["policy"] = policy_path
+            policy = tomllib.loads(policy_path.read_text(encoding="utf-8"))
+            if policy.get("safety_net", {}).get("backend") not in (None, "nym"):
+                return None, "external safety-net execution is not reusable"
+            # The native policy loader resolves external paths from the working directory.
+            for section in ("ner", "dob_judge"):
+                config = policy.get(section, {})
+                if config.get("model_dir") and (section != "dob_judge" or config.get("enabled") is True):
+                    path = Path(config["model_dir"]).expanduser()
+                    models[section] = path if path.is_absolute() else repo_root / path
+            nym = policy.get("safety_net", {}).get("nym", {})
+            if policy.get("safety_net", {}).get("backend") == "nym":
+                path = Path(nym["model_dir"]).expanduser()
+                models["nym"] = path if path.is_absolute() else repo_root / path
+            policy_dependencies = agentic.policy_dependency_provenance(policy_path, repo_root, policy)
+            if score.sha256_file(policy_path) != policy_sha256:
+                return None, "policy changed after loading"
+        else:
+            models["davlan"] = davlan_model
+        if args.scored_labels:
+            files["scored_labels"] = repo_path(repo_root, args.scored_labels)
+        if args.agentic_scored_labels:
+            files["agentic_scored_labels"] = repo_path(repo_root, args.agentic_scored_labels)
+        runtime = capture_identity.native_runtime({"detector": binary, "validator": validator_probe})
+        inputs = capture_identity.snapshot(files=files, models=models,
+                                          environment=build_no_opf_environment(source_environment), runtime=runtime)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, agentic.LayerError):
+        return None, "effective input inventory is unresolved"
     return {
-        "schema_version": 1,
+        "schema_version": capture_identity.SCHEMA_VERSION,
+        "effective_inputs": inputs,
+        "binary_sha256": inputs["files"]["detector_binary"],
         "record_schema_version": records.SCHEMA_VERSION,
         **source_identity,
         "cargo_lock_sha256": score.sha256_file(repo_root / "Cargo.lock"),
@@ -925,10 +969,12 @@ def observation_cache_key(
         "scored_labels_sha256": contract.sha256 or contract.contract_id,
         "agentic_scored_labels_sha256": agentic_contract,
         "agentic_corpus_sha256": agentic_prepared.manifest["corpus_sha256"] if agentic_prepared else None,
+        "layer_spec": copy.deepcopy(agentic_prepared.manifest) if agentic_prepared else None,
         "model_bundle_sha256": model_shas,
         "environment": observation_environment_identity(source_environment),
         "ner_threshold": threshold,
         "profile": args.profile,
+        "max_documents": args.quick_documents if args.profile == "quick" else None,
         "release": args.release,
         "warmups": args.warmups,
         "measured_repetitions": args.measured_repetitions,
@@ -1273,6 +1319,14 @@ def finish_run(
 
 
 def run(args: argparse.Namespace) -> int:
+    root = Path(__file__).resolve().parents[2]
+    output = repo_path(root, args.output_dir) / args.profile / "run-evidence.json"
+    with stages.session(output, scorecard=output.parent / "scorecard-v4.json",
+                        record=output.parent / "observations-v1.jsonl.gz"):
+        return _run(args)
+
+
+def _run(args: argparse.Namespace) -> int:
     repo_root = Path(__file__).resolve().parents[2]
     source_environment = dict(os.environ)
     if args.compare_baseline is not None:
@@ -1334,6 +1388,8 @@ def run(args: argparse.Namespace) -> int:
             repo_root, policy_path, policy_data
         )
     scored_label_contract = load_scored_label_contract(repo_root, args.scored_labels)
+    if stages.CURRENT.get() is not None:
+        stages.LABELS.set({"contract": getattr(scored_label_contract, "contract_id", "unavailable")})
     try:
         agentic_prepared = (
             None
@@ -1371,6 +1427,8 @@ def run(args: argparse.Namespace) -> int:
         raise CandidateError(f"Dataiku dataset is missing: {dataset_path}")
     else:
         dataiku.fetch_dataset(dataset_path)
+    loaded_input_hashes = {"dataset": score.sha256_file(dataset_path),
+                           "negative": score.sha256_file(negative_path)}
     positive_documents, dataiku_report = dataiku.load_documents(dataset_path)
     negative_documents, negative_report = load_negative_documents(negative_path)
     available_documents = positive_documents + negative_documents
@@ -1394,60 +1452,18 @@ def run(args: argparse.Namespace) -> int:
         raise CandidateError(str(error)) from error
 
     metadata, dataset_report = composite_dataset_report(dataiku_report, negative_report)
-    cache_dir = observation_cache_dir(repo_root, args.cache_dir)
-    cache_key = None
-    if args.no_cache:
-        print("observation cache bypassed: --no-cache")
-    elif args.skip_build:
-        print("observation cache bypassed: --skip-build does not bind a measured binary")
-    else:
-        cache_key, cache_bypass = observation_cache_key(
-            repo_root=repo_root,
-            args=args,
-            policy_path=policy_path,
-            policy_sha256=policy_sha,
-            corpus_sha256=dataset_report["integrity"]["sha256"],
-            contract=scored_label_contract,
-            model_provenance=model_provenance,
-            policy_dependencies=policy_dependencies,
-            agentic_prepared=agentic_prepared,
-            document_ids=[document.uid for document in documents],
-            threshold=effective_threshold,
-            source_environment=source_environment,
-        )
-        if cache_key is None:
-            print(f"observation cache bypassed: {cache_bypass}")
-        else:
-            cached_record, cache_status = benchmark_cache.lookup(cache_dir, cache_key)
-            print(f"observation {cache_status}")
-            if cached_record is not None:
-                output_dir.mkdir(parents=True, exist_ok=True)
-                output_record = output_dir / "observations-v1.jsonl.gz"
-                try:
-                    benchmark_cache.copy_verified(cached_record, output_record, cache_key)
-                    records.mark_cache_replay(output_record, benchmark_cache.key_digest(cache_key))
-                    candidate = records.rescore(
-                        output_record,
-                        scored_label_contract,
-                        agentic_prepared.contract if agentic_prepared else None,
-                        max_workers=args.score_jobs,
-                    )
-                except (records.RecordError, OSError, ValueError) as error:
-                    print(f"observation cache replay failed; measuring fresh: {error}")
-                else:
-                    return finish_run(args, output_dir, candidate)
-
     profile = "release" if args.release else "debug"
-    binary = (
-        Path(os.environ.get("CARGO_TARGET_DIR", str(repo_root / "target")))
-        / profile / "examples/clean_for_bench"
-        if args.skip_build
-        else dataiku.build_binary(
-            repo_root,
-            ("policy-file",) if policy_path else tuple(score.DEFAULT_CONFIGS),
-            release=args.release,
+    with stages.measure("build", role="detector", executed=not args.skip_build):
+        binary = (
+            Path(os.environ.get("CARGO_TARGET_DIR", str(repo_root / "target")))
+            / profile / "examples/clean_for_bench"
+            if args.skip_build
+            else dataiku.build_binary(
+                repo_root,
+                ("policy-file",) if policy_path else tuple(score.DEFAULT_CONFIGS),
+                release=args.release,
+            )
         )
-    )
     if not binary.is_file():
         raise CandidateError(f"benchmark binary is missing: {binary}")
     validator_probe = (
@@ -1457,11 +1473,59 @@ def run(args: argparse.Namespace) -> int:
     )
     if not validator_probe.is_file():
         raise CandidateError(f"validator recall probe is missing: {validator_probe}")
-    complete_validator_measurements = score.collect_validator_measurements(
-        validator_probe,
-        original_available_documents,
-        (document.uid for document in documents),
-    )
+    cache_dir = observation_cache_dir(repo_root, args.cache_dir)
+    cache_key = None
+    evidence = stages.CURRENT.get()
+
+    def read_key():
+        return observation_cache_key(
+            repo_root=repo_root, args=args, policy_path=policy_path, policy_sha256=policy_sha,
+            corpus_sha256=dataset_report["integrity"]["sha256"], contract=scored_label_contract,
+            model_provenance=model_provenance, policy_dependencies=policy_dependencies,
+            agentic_prepared=agentic_prepared, document_ids=[document.uid for document in documents],
+            threshold=effective_threshold, source_environment=source_environment,
+            binary=binary, validator_probe=validator_probe, davlan_model=davlan_model,
+        )
+
+    bypass = ("explicit_no_cache" if args.no_cache else "unbound_skip_build" if args.skip_build
+              else "fresh_performance_required" if args.performance_gating else None)
+    if bypass is None:
+        cache_key, bypass = read_key()
+    if evidence is not None:
+        evidence.cache = {"status": "disabled" if cache_key is None else "miss",
+                          "key_sha256": benchmark_cache.key_digest(cache_key) if cache_key else None,
+                          "reason": bypass}
+    output_record = output_dir / "observations-v1.jsonl.gz"
+    if cache_key is not None:
+        if loaded_input_hashes != {"dataset": score.sha256_file(dataset_path),
+                                   "negative": score.sha256_file(negative_path)}:
+            raise CandidateError("corpus inputs changed after loading")
+        cache_status = benchmark_cache.restore_layers(cache_dir, cache_key, output_record)
+        if evidence is not None:
+            evidence.cache.update(status="hit" if cache_status == "hit" else "miss", reason=cache_status)
+        print(f"observation cache: {cache_status}")
+        if cache_status == "hit":
+            try:
+                candidate = records.rescore(
+                    output_record, scored_label_contract,
+                    agentic_prepared.contract if agentic_prepared else None,
+                    max_workers=args.score_jobs,
+                )
+                if read_key()[0] != cache_key:
+                    raise records.RecordError("effective inputs changed during cache verification")
+            except (records.RecordError, OSError, ValueError):
+                if evidence is not None:
+                    evidence.cache.update(status="miss", reason="miss_replay")
+                output_record.unlink(missing_ok=True)
+            else:
+                return finish_run(args, output_dir, candidate)
+
+    with stages.labels(layer="C"), stages.measure("validator_measurements"):
+        complete_validator_measurements = score.collect_validator_measurements(
+            validator_probe,
+            original_available_documents,
+            (document.uid for document in documents),
+        )
     validator_measurements = records.filter_measurements(
         complete_validator_measurements, available_documents
     )
@@ -1471,10 +1535,12 @@ def run(args: argparse.Namespace) -> int:
     )
     record_writer = records.RecordWriter(
         original_available_documents, complete_validator_measurements,
-        corpus_sha256=dataset_report["integrity"]["sha256"],
+        corpus_sha256=dataset_report["integrity"]["sha256"], binary=binary,
         extra_documents=extra_documents,
         layer_contract=agentic_prepared.contract if agentic_prepared is not None else None,
     )
+    if cache_key is not None and record_writer.binary_sha256 != cache_key["binary_sha256"]:
+        raise CandidateError("executable changed after cache input inventory")
     runs, repetition_provenance = execute_measurements(
         repo_root=repo_root,
         binary=binary,
@@ -1535,31 +1601,34 @@ def run(args: argparse.Namespace) -> int:
     }
 
     if agentic_prepared is not None:
-        candidate["layers"] = measure_agentic_layers(
-            prepared=agentic_prepared,
-            repo_root=repo_root,
-            binary=binary,
-            validator_probe=validator_probe,
-            davlan_model=davlan_model,
-            threshold=effective_threshold,
-            diagnostics_dir=output_dir / "logs",
-            warmup_count=args.warmups,
-            measured_repetitions=args.measured_repetitions,
-            policy_path=policy_path,
-            source_environment=source_environment,
-            record_writer=record_writer,
-        )
+        with stages.labels(contract=agentic_prepared.contract.contract_id):
+            candidate["layers"] = measure_agentic_layers(
+                prepared=agentic_prepared,
+                repo_root=repo_root,
+                binary=binary,
+                validator_probe=validator_probe,
+                davlan_model=davlan_model,
+                threshold=effective_threshold,
+                diagnostics_dir=output_dir / "logs",
+                warmup_count=args.warmups,
+                measured_repetitions=args.measured_repetitions,
+                policy_path=policy_path,
+                source_environment=source_environment,
+                record_writer=record_writer,
+            )
         candidate["layers"]["gold_validity"] = {
             "C": agentic.gold_validity_digest(documents, validator_measurements)
         }
 
     candidate["cache_replay"] = False
+    if cache_key is not None:
+        candidate["capture_cache"] = benchmark_cache.provenance(cache_key)
     output_record = output_dir / "observations-v1.jsonl.gz"
     candidate["observation_record"] = record_writer.write(
         output_record, candidate, add_reference=True
     )
     if not args.no_cache and cache_key is not None:
-        store_observations_if_unchanged(repo_root, cache_dir, cache_key, output_record)
+        store_observations_if_unchanged(cache_dir, cache_key, output_record, read_key)
     return finish_run(args, output_dir, candidate)
 
 

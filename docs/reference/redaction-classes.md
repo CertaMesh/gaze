@@ -9,9 +9,9 @@ rustup run 1.96.0 cargo test -p xtask --test redaction_classes_doc
 ```
 
 `core` contains exactly 57 recognizer specs. `core-extended` loads the same bytes but widens
-[activation](#shipped-default-activation). `secrets` has `security_token.anchored`
-and `password.field`; setup includes it, while library callers and hand-written
-policies must select it: `bundled = ["core", "secrets"]` or
+[activation](#shipped-default-activation). `secrets` protects password records, hashes, and credential
+code fields. Setup includes it, while library callers and hand-written policies
+must select it: `bundled = ["core", "secrets"]` or
 `--rulepack-bundled core,secrets`.
 
 No rulepack emits `custom:username`. Optional Nym can report username, licence
@@ -116,6 +116,9 @@ Definitions: `crates/gaze-recognizers/embedded/core.toml` and `secrets.toml`.
 | `core, core-extended` | `customer_id.labelled` | `regex` | Explicit English/German person-linked customer identifier labels in serialized JSON, logs or same-line prose; capture only the complete adjacent value | `custom:customer_id` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 | `core, core-extended` | `employee_id.labelled` | `regex` | Explicit English/German person-linked employee identifier labels in serialized JSON, logs or same-line prose; capture only the complete adjacent value | `custom:employee_id` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 | `core, core-extended` | `record_id.labelled` | `regex` | Explicit English/German person-linked record identifier labels in serialized JSON, logs or same-line prose; capture only the complete adjacent value | `custom:record_id` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
+| `secrets` | `password.hash` | `regex` | Whole bcrypt, PHC Argon2 v19, scrypt/yescrypt, SHA-crypt, MD5-crypt, phpass and Django password encodings, without a field cue | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.95 | 100 |
+| `secrets` | `password.code` | `regex` | Complete nonempty single-line quoted literals after EN/DE password keys; PHP arrays supported; bare keys require code punctuation, preserving line-record ownership; source escapes stay literal | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
+| `secrets` | `security_token.code` | `regex` | Complete quoted credential literals after `api_token`, `remember_token`, `security_token`, `access_token`, `auth_token`, `authorization_token`, or `api_key` | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 <!-- redaction-classes-gate:recognizers:end -->
 
 The three government-ID `*.labelled` rows are safe-default `core` rules. Their

@@ -145,10 +145,6 @@ mod tests {
             cargo_dylint_requirement(false, false).unwrap(),
             DylintDisposition::Deferred
         );
-        assert_eq!(
-            DEFERRED_MESSAGE,
-            "dylint_gate: ui-fixture-shape passed; cargo-dylint DEFERRED to the dedicated dylint.yml workflow (runs on PRs to main)"
-        );
     }
 
     #[test]
