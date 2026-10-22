@@ -143,8 +143,9 @@ following complete field cues (`:`, `=`, `is`, `ist`, `lautet`, or same-line
 whitespace). Terminal unquoted periods/colons remain outside the value; internal
 punctuation and quoted punctuation remain restorable value bytes. Raw JSON retains
 scalar boundaries through nested serialization without a fixed wrapper limit.
-Inconsistent or unclosed quote contexts stop at the next scalar delimiter and
-retain their typed audit reason. An initial LF/CRLF is admitted only inside
+Inconsistent or unclosed quote contexts release a suffix only after a delimiter
+proves a following field assignment, a matching container close, or record end.
+Without proof, punctuation and newlines stay owned. The typed audit reason is retained. An initial LF/CRLF is admitted only inside
 quotes. Tabs group coherent identifiers; header-to-cell linkage is not inferred.
 The placeholder guard sees the entire owned value, including schema underscores.
 Exact scalar and conservative tab prefix seeds preserve repeats under unchanged floors;

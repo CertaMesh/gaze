@@ -47,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Cross-class identifier trimming discards repeat seeds that extend beyond the
+  shortened owner, preserving fail-closed validation without refusing valid
+  mixed licence and card inputs.
+
 - Preserve first-value repeats when a complete private or unknown cue remains
   inside a conservative legacy identifier owner, including raw NFC/NFD licence
   labels. One typed prefix seed retains the owned tail and existing length floor;
@@ -55,8 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Labelled customer, employee and member IDs preserve terminal prose punctuation,
   stop at complete next-field cues, and protect raw quoted scalars through nested
   serialization, initial newlines and tab groups. Nested scalars stop at their own
-  closing quote; malformed quotes stop at the next scalar delimiter. Following
-  structure and fields remain outside the capture. Conservative tab prefixes protect repeats
+  closing quote. Malformed quotes release following fields or matching container
+  closes only with boundary proof; ambiguous suffixes stay protected. Conservative tab prefixes protect repeats
   under unchanged length floors, including later session turns; their public-byte
   cost is disclosed in benchmark evidence.
 - Legacy grouped identifier extensions stop at positively recognized complete

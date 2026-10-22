@@ -1068,12 +1068,73 @@ fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> Label
     }
 }
 
+fn quoted_assignment_starts(rest: &str) -> bool {
+    static FIELD: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    FIELD
+        .get_or_init(|| {
+            Regex::new(r#"\A(?:"[\p{L}_][\p{L}\p{N}\p{M}_.-]*"|'[\p{L}_][\p{L}\p{N}\p{M}_.-]*')[ \t]*[:=]"#)
+                .expect("static quoted assignment syntax")
+        })
+        .is_match(rest)
+}
+
 fn unterminated_scalar_end(input: &str, start: usize) -> usize {
+    // Recover only containers opened outside earlier, complete quoted values.
+    // The current scalar's opening quote is excluded from this prefix.
+    let mut containers = Vec::new();
+    let mut quote = None;
+    let mut escaped = false;
+    for ch in input[..start - 1].chars() {
+        if escaped {
+            escaped = false;
+        } else if ch == '\\' {
+            escaped = true;
+        } else if let Some(open) = quote {
+            if ch == open {
+                quote = None;
+            }
+        } else {
+            match ch {
+                '"' | '\'' => quote = Some(ch),
+                '{' => containers.push('}'),
+                '[' => containers.push(']'),
+                '}' | ']' if containers.last() == Some(&ch) => {
+                    containers.pop();
+                }
+                '}' | ']' => containers.clear(),
+                _ => {}
+            }
+        }
+    }
+    let assignment = |rest: &str| assignment_starts(rest) || quoted_assignment_starts(rest);
+    let closes_record = |mut rest: &str| {
+        let mut remaining = containers.as_slice();
+        while let Some(close) = remaining.last() {
+            let Some(tail) = rest.strip_prefix(*close) else {
+                return false;
+            };
+            remaining = &remaining[..remaining.len() - 1];
+            rest = tail.trim_start();
+            if let Some(tail) = rest.strip_prefix([',', ';']) {
+                return assignment(tail.trim_start());
+            }
+        }
+        rest.is_empty()
+    };
     let content = start + input[start..].len() - input[start..].trim_start().len();
     input[content..]
         .char_indices()
         .find_map(|(offset, ch)| {
-            matches!(ch, ';' | ',' | '\n' | '\r' | '}' | ']').then_some(content + offset)
+            let boundary = content + offset;
+            let proven = match ch {
+                ';' | ',' | '\n' | '\r' => {
+                    let rest = input[boundary + ch.len_utf8()..].trim_start();
+                    rest.is_empty() || assignment(rest) || closes_record(rest)
+                }
+                '}' | ']' => closes_record(&input[boundary..]),
+                _ => false,
+            };
+            proven.then_some(boundary)
         })
         .unwrap_or(input.len())
 }
@@ -1087,7 +1148,7 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
         .count();
     // Each JSON wrapper doubles the escape stride. Distinguish closing and
     // content quotes by their residues without decoding or a fixed depth limit.
-    // An unterminated scalar stops at its next delimiter.
+    // An unterminated scalar requires proof before releasing a suffix.
     let width = opening_escapes.checked_add(1);
     let stride = width.and_then(|width| width.checked_mul(2));
     let mut end = input.len();
@@ -1409,6 +1470,22 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn unterminated_scalar_releases_only_matching_container_closes() {
+        for (prefix, suffix) in [("{", "}"), ("[{", "}]"), ("[", "]")] {
+            let value = "Q731284;É842395";
+            let input = format!("{prefix}customerId: \"{value}{suffix}");
+            let start = input.find('"').unwrap() + 1;
+            let scan = scan_field_owned_value(&input, start..start + 2);
+            assert_eq!(&input[scan.span], value);
+        }
+        let value = "Q731284;É842395; \"public_version':7";
+        let input = format!("customerId: \"{value}");
+        let start = input.find('"').unwrap() + 1;
+        let scan = scan_field_owned_value(&input, start..start + 2);
+        assert_eq!(&input[scan.span], value);
     }
 
     #[test]

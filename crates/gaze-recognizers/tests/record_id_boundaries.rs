@@ -1185,3 +1185,70 @@ fn content_wrapper_is_not_a_scanner_prepended_wrapper() {
         input
     );
 }
+
+#[test]
+fn unterminated_private_suffix_requires_a_proven_boundary() {
+    let pipeline = record_pipeline();
+    for (cue, separator) in [
+        ("customer ID", ";"),
+        ("employee ID", ","),
+        ("member ID", "\n"),
+    ] {
+        for tail in [separator, "]", "}"] {
+            let value = format!("Q731284{tail}É842395");
+            let input = format!("{cue}: \"{value}");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let clean = public_clean(&pipeline, &session, &input);
+            assert!(!clean.contains("É842395"), "private suffix exposed");
+            assert!(session
+                .snapshot_entries()
+                .iter()
+                .any(|entry| entry.raw == value));
+        }
+    }
+}
+
+#[test]
+fn unterminated_private_suffix_preserves_proven_public_fields() {
+    let pipeline = record_pipeline();
+    for delimiter in ["; ", ", ", "\n"] {
+        for public in [
+            "public_version=FRAME",
+            "public_version: FRAME",
+            "\"public_version\": 7",
+        ] {
+            let input = format!("customer ID: \"Q731284;É842395{delimiter}{public}");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let clean = public_clean(&pipeline, &session, &input);
+            assert!(!clean.contains("É842395"), "private suffix exposed");
+            assert!(
+                clean.ends_with(&format!("{delimiter}{public}")),
+                "public field consumed"
+            );
+        }
+    }
+}
+
+#[test]
+fn cross_class_trim_keeps_repeat_seeds_inside_the_owner() {
+    let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+    for cue in ["SECRET VERSION", "FÜHRERSCHEIN"] {
+        let input = format!("driver license: Q7312845 4111111111111111 {cue} is EF34 GH5678");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = core
+            .pseudonymize_text(&session, &input)
+            .expect("valid mixed-class ownership")
+        else {
+            panic!("text")
+        };
+        for private in ["Q7312845", "4111111111111111"] {
+            assert!(!clean.contains(private), "recognized private value exposed");
+        }
+        assert_eq!(
+            core.pipeline()
+                .restore_strict_text(&session, &clean)
+                .unwrap(),
+            input
+        );
+    }
+}

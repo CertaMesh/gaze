@@ -54,8 +54,9 @@ The browser-MITM project is separate (formerly in-tree `debug-proxy`).
   [`docs/explanation/detection/validator-veto.md`](docs/explanation/detection/validator-veto.md).
 - Repeat-value sweep: after resolve and before the safety net, uncovered copies of rule-found values
   (this document's winners + session manifest entries with a non-learned evidence tier) join the
-  pool and it is resolved again; NER/safety-net values never propagate. `session_blob` remains v6 for ordinary values and uses v7 when deterministic repeat-seed
-  metadata is present (per-entry evidence plus authenticated seed offsets). Older readers reject v7. Contract:
+  pool and it is resolved again; NER/safety-net values never propagate. `session_blob` uses v6 for ordinary values, v7 for JSON source spelling alone, and v8 when
+  deterministic repeat-seed metadata is present (per-entry evidence plus authenticated seed offsets),
+  including entries that also retain JSON source spelling. Older readers reject unsupported versions. Contract:
   [`docs/explanation/detection/manifest-sweep.md`](docs/explanation/detection/manifest-sweep.md).
 - Collision-family policy: cross-class recognizer rivalries declare `[recognizers.collision]` or
   `[policy.custom_recognizers.collision]` metadata and compile into `FamilyPolicyTable`.

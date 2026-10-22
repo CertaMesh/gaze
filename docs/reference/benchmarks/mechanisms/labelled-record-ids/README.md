@@ -62,8 +62,9 @@ hide an improvement: the gate separately checks availability and restore facts.
 ## Precision costs and scalar boundaries
 
 Quoted scalars end at their own closing delimiter through nested JSON escaping,
-without a fixed wrapper-depth limit. Malformed quotes stop at the next scalar
-delimiter. Independent synthetic tests failed before this repair and now pass;
+without a fixed wrapper-depth limit. Malformed quotes stop only at a delimiter
+with proof of a following assignment, matching container close, or record end.
+Ambiguous punctuation and newlines remain part of the private value. Independent synthetic tests failed before this repair and now pass;
 the existing ownership corpus now requires exact public-byte preservation for
 both shapes. Against the audited pre-repair candidate, all three diagnostic
 gates pass: 78,012 FP bytes disappear with no leaked-byte, refusal, restore or

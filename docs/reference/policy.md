@@ -468,8 +468,10 @@ With `complete_labelled_value = true`, the optional typed
 protects a complete ASCII-quoted scalar, including Unicode and raw JSON escapes,
 and stops unquoted grouped values before an adjacent field assignment. The
 unquoted guard judges that entire bounded value. A rejected placeholder leaves
-the next cue available for matching. An unterminated quote conservatively owns
-the remaining text, which can also protect following public text. The bundled
+the next cue available for matching. An unterminated quote stops only at a
+delimiter followed by a proven field assignment, a matching container close, or
+the end of the record. Without that proof it owns the remaining text, including
+ambiguous delimiters and possible public text. The bundled
 CRM/HR identifier rules opt into this mode; other complete-value rules retain
 the default `"grouped"` mode.
 

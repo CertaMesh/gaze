@@ -1679,6 +1679,12 @@ impl RecognizerRegistry {
                     .len()
                     .max(first_group_end);
                 candidate.span.end = end;
+                // A cross-class cut invalidates any seed that included the next
+                // value. Recovery still rejects invalid geometry at its boundary.
+                candidate.labelled_value_repeat_seed = candidate
+                    .labelled_value_repeat_seed
+                    .take()
+                    .filter(|seed| seed.span.end <= end);
                 candidate.labelled_value_scan_reason =
                     Some(LabelledValueScanReason::OtherClassBoundary);
             }
