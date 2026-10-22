@@ -111,6 +111,7 @@
     "gaze-proxy::legacy_response_header_forward",
     "gaze-proxy::legacy_sse_split_tokens",
     "gaze-proxy::manifest_sweep",
+    "gaze-proxy::model_controls",
     "gaze-proxy::openai_non_stream",
     "gaze-proxy::openai_sse",
     "gaze-proxy::proxy_compat_golden",

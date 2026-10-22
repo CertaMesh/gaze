@@ -508,6 +508,40 @@ impl std::fmt::Debug for Pipeline {
 }
 
 impl Pipeline {
+    /// Tests an immutable routing control using only recognizers that declare rule evidence.
+    ///
+    /// Rules, dictionaries, validators, locale eligibility and policy actions are preserved.
+    /// Learned recognizers and safety nets do not run. The caller must restrict this probe to
+    /// bounded machine identifiers; free text needs the full protection boundary. The probe
+    /// retains rule-backed manifest evidence in an isolated copy of the staged transaction.
+    /// It never publishes caller session state or reuses prefix-cache state.
+    /// Configured loggers still receive metadata-only audit attempts.
+    pub fn deterministic_control_would_mutate(
+        &self,
+        transaction: &SessionTransaction<'_>,
+        input: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<bool> {
+        let mut pipeline = self.clone();
+        pipeline.registry = Arc::new(self.registry.deterministic_only());
+        pipeline.safety_nets.clear();
+        #[cfg(feature = "bundled-recognizers")]
+        {
+            pipeline.safety_net_registry = None;
+        }
+        let mut probe = transaction.fork_for_probe();
+        let clean = pipeline
+            .pseudonymize_transaction_with_detect_context_and_prefix_cache_write_mode(
+                &mut probe,
+                RawDocument::Text(input.to_owned()),
+                locale_chain,
+                dictionaries,
+                PrefixCacheWriteMode::Suppress,
+            )?;
+        Ok(!matches!(clean, CleanDocument::Text(text) if text == input))
+    }
+
     /// The recognizer registry this pipeline detects with: every registered
     /// recognizer by id, the collision-family table, and the member classes a
     /// family token derives its action from.

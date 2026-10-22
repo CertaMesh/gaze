@@ -1377,6 +1377,17 @@ impl<'pipeline, 'context, 'transaction, 'session>
 }
 
 impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
+    fn deterministic_control_would_mutate(&mut self, input: &str) -> Result<bool, CodecErrorCode> {
+        self.pipeline
+            .deterministic_control_would_mutate(
+                self.transaction,
+                input,
+                self.locale_chain,
+                self.dictionaries,
+            )
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)
+    }
+
     fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode> {
         self.protect_with_prefix_cache_write_mode(input, PrefixCacheWriteMode::Allow)
     }
@@ -2057,6 +2068,22 @@ async fn proxy_inner(
             },
         );
     }
+    if adapter.name() == "gemini" {
+        let model = path
+            .strip_prefix("/v1beta/models/")
+            .and_then(|path| path.rsplit_once(':'))
+            .map(|(model, _)| model)
+            .ok_or(ProxyError::ControlWouldMutate)?;
+        let model = percent_encoding::percent_decode_str(model)
+            .decode_utf8()
+            .map_err(|_| ProxyError::ControlWouldMutate)?;
+        residual_scan_model_control(
+            &state.pipeline,
+            &model,
+            state.config.locale_chain(),
+            state.config.dictionaries(),
+        )?;
+    }
     let session = session_for(&state, &headers).await?;
     let mut json: Value =
         serde_json::from_slice(&body).map_err(|source| ProxyError::InvalidJson { source })?;
@@ -2088,6 +2115,7 @@ async fn proxy_inner(
                 &redacted.field_paths,
                 locale_chain,
                 dictionaries,
+                adapter.name() == "openai",
             )?;
         }
         // A codec-proved adapter must have been routed to the codec branch above. Reaching this
@@ -2926,6 +2954,7 @@ fn residual_scan_request(
     surfaced: &HashSet<String>,
     locale_chain: &[LocaleTag],
     dictionaries: &DictionaryBundle,
+    model_is_routing_control: bool,
 ) -> Result<(), ProxyError> {
     let session =
         Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
@@ -2935,8 +2964,42 @@ fn residual_scan_request(
         surfaced,
         locale_chain,
         dictionaries,
+        model_is_routing_control,
     };
     scan.walk("", "", body, false, true)
+}
+
+fn residual_scan_model_control(
+    pipeline: &Pipeline,
+    text: &str,
+    locale_chain: &[LocaleTag],
+    dictionaries: &DictionaryBundle,
+) -> Result<(), ProxyError> {
+    let session =
+        Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
+    if crate::codec::is_model_identifier(text) {
+        if pipeline
+            .deterministic_control_would_mutate(
+                &session.begin_transaction(),
+                text,
+                locale_chain,
+                dictionaries,
+            )
+            .map_err(|source| ProxyError::Pipeline { source })?
+        {
+            return Err(ProxyError::ControlWouldMutate);
+        }
+        return Ok(());
+    }
+    let scan = RequestResidualScan {
+        pipeline,
+        session,
+        surfaced: &HashSet::new(),
+        locale_chain,
+        dictionaries,
+        model_is_routing_control: false,
+    };
+    scan.probe("model", text)
 }
 
 /// Walk state for the outbound request residual re-scan.
@@ -2948,6 +3011,7 @@ struct RequestResidualScan<'a> {
     locale_chain: &'a [LocaleTag],
     /// The exact bundle used by the primary pass.
     dictionaries: &'a DictionaryBundle,
+    model_is_routing_control: bool,
 }
 
 impl RequestResidualScan<'_> {
@@ -2998,7 +3062,14 @@ impl RequestResidualScan<'_> {
     ) -> Result<(), ProxyError> {
         match value {
             Value::String(text) => {
-                if !(unambiguous && self.surfaced.contains(path)) {
+                if self.model_is_routing_control && unambiguous && path == "model" {
+                    residual_scan_model_control(
+                        self.pipeline,
+                        text,
+                        self.locale_chain,
+                        self.dictionaries,
+                    )?;
+                } else if !(unambiguous && self.surfaced.contains(path)) {
                     self.probe(path, text)?;
                 }
             }
@@ -3277,9 +3348,9 @@ fn proxy_error_response(err: ProxyError) -> Response {
         ProxyError::AdapterNotFound { .. } => StatusCode::NOT_FOUND,
         ProxyError::BodyTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
         ProxyError::InvalidJson { .. } => StatusCode::BAD_REQUEST,
-        ProxyError::UnsurfacedPii { .. } | ProxyError::Refused { .. } => {
-            StatusCode::UNPROCESSABLE_ENTITY
-        }
+        ProxyError::UnsurfacedPii { .. }
+        | ProxyError::ControlWouldMutate
+        | ProxyError::Refused { .. } => StatusCode::UNPROCESSABLE_ENTITY,
         ProxyError::UpstreamUnreachable { .. } => StatusCode::BAD_GATEWAY,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
@@ -3309,6 +3380,7 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::InvalidJson { .. } => "InvalidJson",
         ProxyError::SsePartialFrame { .. } => "SsePartialFrame",
         ProxyError::UnsurfacedPii { .. } => "UnsurfacedPii",
+        ProxyError::ControlWouldMutate => "ControlWouldMutate",
         ProxyError::UnprovenCoverage => "UnprovenCoverage",
         ProxyError::DirectAdapterMismatch => "DirectAdapterMismatch",
         ProxyError::Refused { .. } => "Refused",

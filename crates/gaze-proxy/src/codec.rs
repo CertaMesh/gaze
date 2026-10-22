@@ -8,6 +8,14 @@ use gaze_types::inspection::{
     JsonShapeSummaryV1, ProjectionAvailabilityV1, ProjectionOmissionReasonV1, SseTimelineMetaV1,
 };
 
+/// A shape check, never a PII exemption: deterministic recognizers still probe the value.
+pub(crate) fn is_model_identifier(value: &str) -> bool {
+    (1..=128).contains(&value.len())
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'/' | b'@' | b'-')
+        })
+}
+
 /// Transport-independent body representation selected by a reviewed adapter contract.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WireFormat {
@@ -364,6 +372,14 @@ pub trait RequestPseudonymizer {
     /// Protects one complete decoded logical value against the staged transaction.
     fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode>;
 
+    /// Probes a bounded routing identifier without learned detectors or shared cache state.
+    /// Implementations without a separate deterministic pipeline retain the full isolated
+    /// probe, which may refuse more identifiers but never weakens protection.
+    fn deterministic_control_would_mutate(&mut self, input: &str) -> Result<bool, CodecErrorCode> {
+        self.protect_with_prefix_cache_write_mode(input, PrefixCacheWriteMode::Suppress)
+            .map(|output| output != input)
+    }
+
     /// Protects one decoded value with an explicit prefix-cache mode.
     ///
     /// [`PrefixCacheWriteMode::Allow`] preserves the source-compatible delegation to
@@ -483,6 +499,18 @@ impl<'a> RequestTransformContext<'a> {
 
     pub(crate) fn validate_token_shapes(&mut self, input: &str) -> Result<(), CodecErrorCode> {
         self.pseudonymizer.validate_token_shapes(input)
+    }
+
+    pub(crate) fn model_control_would_mutate(
+        &mut self,
+        input: &str,
+    ) -> Result<bool, CodecErrorCode> {
+        if is_model_identifier(input) {
+            self.pseudonymizer.deterministic_control_would_mutate(input)
+        } else {
+            self.probe_without_prefix_cache_write(input)
+                .map(|output| output != input)
+        }
     }
 }
 

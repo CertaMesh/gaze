@@ -42,6 +42,9 @@ pub enum ProxyError {
     /// `Debug`, nor any log line derived from them can egress protected bytes.
     #[error("unsurfaced pii at {field_path}")]
     UnsurfacedPii { field_path: String },
+    /// A routing control would change under the configured protection pipeline.
+    #[error("routing control would mutate")]
+    ControlWouldMutate,
     /// A request reached the legacy path under a contract that claims codec-proved coverage.
     ///
     /// The contract and the router disagree, so no coverage mechanism is known to have run.

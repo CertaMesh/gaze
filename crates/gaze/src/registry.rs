@@ -115,6 +115,7 @@ pub trait Canonicalizer: Send + Sync {
     fn canonicalize(&self, raw: &str) -> Option<String>;
 }
 
+#[derive(Clone)]
 pub struct RecognizerRegistry {
     entries: Vec<Arc<dyn Recognizer>>,
     recognizers_by_id: HashMap<String, Arc<dyn Recognizer>>,
@@ -1316,6 +1317,17 @@ impl ClaimedSpans {
 }
 
 impl RecognizerRegistry {
+    pub(crate) fn deterministic_only(&self) -> Self {
+        let mut registry = self.clone();
+        registry
+            .entries
+            .retain(|recognizer| recognizer.evidence() == EvidenceKind::Rule);
+        registry
+            .recognizers_by_id
+            .retain(|_, recognizer| recognizer.evidence() == EvidenceKind::Rule);
+        registry
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

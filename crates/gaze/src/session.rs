@@ -1036,6 +1036,15 @@ impl Session {
 }
 
 impl<'session> SessionTransaction<'session> {
+    pub(crate) fn fork_for_probe(&self) -> Self {
+        Self {
+            session: self.session,
+            identity: Arc::clone(&self.identity),
+            captured_generation: self.captured_generation,
+            staged: self.staged.clone(),
+        }
+    }
+
     pub(crate) fn restore_token_ranges(&self, text: &str) -> Result<Vec<Range<usize>>> {
         Ok(build_restore_regex(&self.staged)?
             .map(|regex| {
