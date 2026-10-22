@@ -41,6 +41,22 @@ class RecordIdBoundaryTests(unittest.TestCase):
                                 (18, "5a638e5ff857d43c918a8840867c72d6d322f097964b8f946a5f4e310dac2dc6")):
             self.assertEqual(hashlib.sha256((root / api.HISTORICAL_CONTRACTS[version]).read_bytes()).hexdigest(), digest)
 
+    def test_unterminated_suffix_cells_own_delimiters_and_preserve_previous_corpus(self):
+        pins = {"dev": "a88025bd7c995e3633738debf8b8bab45c8c7232bf222a4d72a9af36fc67ca59",
+                "test": "133f8452d01fd517c77087e539ba9dc253e30a1886668bfab3e1631cc9ff6c32"}
+        for partition in api.PARTITIONS:
+            self.assertEqual(hashlib.sha256(api.corpus_bytes(api.records_as_of(25, api.generate(partition)))).hexdigest(), pins[partition])
+            rows = [r for r in cells.records(api, partition) if r.surface.startswith("recordids_boundary_unterminated_")]
+            self.assertEqual(len(rows), 810)
+            for row in rows:
+                value = (row.gold or row.decoys)[0].value
+                self.assertIn("É", value)
+                self.assertTrue(any(d in value for d in (";", ",", "\n")))
+                if row.layer != "D":
+                    self.assertEqual(len(row.gold), 2 if row.layer == "R" else 1)
+                if not row.surface.endswith("_eof"):
+                    self.assertTrue(any(d.label == "public_column" for d in row.decoys))
+
     def test_terminal_internal_and_quoted_punctuation_own_different_bytes(self):
         for partition in api.PARTITIONS:
             rows = cells.records(api, partition)
