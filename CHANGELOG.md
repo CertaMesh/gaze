@@ -34,6 +34,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Robert "Bob" Smith`. Each token keeps the spelling it was first minted with,
   so a value first seen in plain text never gains a JSON reading later.
   Plain-text destinations still restore the bytes the client sent.
+- The legacy OpenAI and Gemini proxy paths restore a pseudonym token that a
+  stream splits across SSE events. Each event was restored alone, so a token
+  streamed in pieces, the common case, reached the client unrestored. Each
+  choice's text, each tool call's arguments and each Gemini candidate's text
+  is now restored once across the buffered response. OpenAI Responses API
+  streaming events are now restored too; they were not surfaced at all. Adapters
+  key streams with the new `ProviderAdapter::sse_event_stream_surfaces`, whose
+  default keeps the previous per-event behavior. Missing or invalid required
+  indices disable joining for every compatible stream, preserving fragment
+  order and leaving ambiguous split tokens pseudonymized. Streams separated by
+  a known index or a different field kind still restore across events.
 - `gaze proxy start` and `restart` now return only after the daemon has bound
   its port. Before, they reported success after a 250 ms liveness window, so an
   immediate request could be refused, and a daemon that died later in startup
