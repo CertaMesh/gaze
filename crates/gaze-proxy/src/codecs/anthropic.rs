@@ -3702,11 +3702,16 @@ fn transform_response_block(
             }
             ("text", "citations") => transform_response_citations(&mut member.value, ctx, ledger)?,
             ("tool_use", "input") => {
-                transform_response_mutable(&mut member.value, ctx, ledger)?;
+                transform_response_mutable(
+                    &mut member.value,
+                    ctx,
+                    ledger,
+                    RestoreReading::Decoded,
+                )?;
                 saw_input = true;
             }
             ("tool_result", "content") => {
-                transform_response_mutable(&mut member.value, ctx, ledger)?;
+                transform_response_mutable(&mut member.value, ctx, ledger, RestoreReading::Source)?;
                 saw_content = true;
             }
             ("tool_result", "tool_use_id") => {
@@ -3715,7 +3720,7 @@ fn transform_response_block(
             }
             ("tool_result", "is_error") => response_bool_or_null(&member.value, ledger)?,
             ("search_result" | "document", "title" | "context" | "text" | "content") => {
-                transform_response_mutable(&mut member.value, ctx, ledger)?;
+                transform_response_mutable(&mut member.value, ctx, ledger, RestoreReading::Source)?;
                 saw_user_payload = true;
             }
             ("search_result" | "document", "source" | "id") => {
@@ -3786,10 +3791,25 @@ fn validate_signed_response_block(
     Ok(())
 }
 
+/// Which reading of a manifest value a response destination receives.
+///
+/// The manifest holds a value in its source spelling. For a value captured inside a JSON string
+/// literal (a JSON tool result or JSON text block) that spelling is JSON-escaped.
+#[derive(Clone, Copy)]
+enum RestoreReading {
+    /// The bytes the client sent. Text has no syntax to decode, and a model that writes JSON
+    /// into its prose answer is echoing the client's own spelling.
+    Source,
+    /// The value a JSON parser reads: `tool_use.input` is a decoded JSON value the agent acts
+    /// on, so `Robert \"Bob\" Smith` becomes `Robert "Bob" Smith`.
+    Decoded,
+}
+
 fn transform_response_mutable(
     node: &mut JsonNode,
     ctx: &mut ResponseTransformContext<'_>,
     ledger: &mut CoverageLedger,
+    reading: RestoreReading,
 ) -> Result<(), CodecErrorCode> {
     match &mut node.kind {
         JsonKind::Object(members) => {
@@ -3797,18 +3817,18 @@ fn transform_response_mutable(
             let mut transformed_keys = HashSet::new();
             for member in members {
                 ledger.mark(member.key_occurrence)?;
-                restore_json_string(&mut member.key, ctx)?;
+                restore_json_string(&mut member.key, ctx, reading)?;
                 if !transformed_keys.insert(member.key.value.clone()) {
                     return Err(CodecErrorCode::TransformedKeyCollision);
                 }
-                transform_response_mutable(&mut member.value, ctx, ledger)?;
+                transform_response_mutable(&mut member.value, ctx, ledger, reading)?;
             }
             Ok(())
         }
         JsonKind::Array(values) => {
             ledger.mark(node.occurrence)?;
             for value in values.iter_mut() {
-                transform_response_mutable(value, ctx, ledger)?;
+                transform_response_mutable(value, ctx, ledger, reading)?;
             }
             let mut logical = String::new();
             let mut authorized = Vec::<Range<usize>>::new();
@@ -3828,7 +3848,10 @@ fn transform_response_mutable(
             ctx.validate(&logical, &authorized)?;
             Ok(())
         }
-        JsonKind::String(_) => transform_response_string(node, ctx, ledger),
+        JsonKind::String(value) => {
+            ledger.mark(node.occurrence)?;
+            restore_json_string(value, ctx, reading)
+        }
         JsonKind::Bool(_) | JsonKind::Null => ledger.mark(node.occurrence),
         JsonKind::Number(_) => {
             ledger.mark(node.occurrence)?;
@@ -3846,15 +3869,19 @@ fn transform_response_string(
     let JsonKind::String(value) = &mut node.kind else {
         return Err(CodecErrorCode::UnsupportedResponseSurface);
     };
-    restore_json_string(value, ctx)
+    restore_json_string(value, ctx, RestoreReading::Source)
 }
 
 fn restore_json_string(
     value: &mut JsonString,
     ctx: &mut ResponseTransformContext<'_>,
+    reading: RestoreReading,
 ) -> Result<(), CodecErrorCode> {
     guard_mutable_text_response(&value.value)?;
-    let restored = ctx.restore(&value.value)?;
+    let restored = match reading {
+        RestoreReading::Source => ctx.restore(&value.value)?,
+        RestoreReading::Decoded => ctx.restore_decoded(&value.value)?,
+    };
     ctx.validate(&restored.text, &restored.authorized_output_ranges)?;
     value.value = restored.text;
     value.authorized = restored.authorized_output_ranges;
@@ -5932,8 +5959,15 @@ fn finish_block(
                 CodecPhase::SseLifecycle,
             )?;
             let mut ledger = CoverageLedger::new(partial.occurrence_count);
-            transform_response_mutable(&mut partial.root, ctx, &mut ledger)
-                .map_err(|code| codec_error(code, CodecPhase::SseLifecycle))?;
+            // The accumulated `partial_json` is the tool's `input`, the same decoded
+            // destination as a non-streamed `tool_use.input`.
+            transform_response_mutable(
+                &mut partial.root,
+                ctx,
+                &mut ledger,
+                RestoreReading::Decoded,
+            )
+            .map_err(|code| codec_error(code, CodecPhase::SseLifecycle))?;
             ledger
                 .finish()
                 .map_err(|code| codec_error(code, CodecPhase::SseLifecycle))?;

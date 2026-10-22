@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `gaze-proxy` no longer restores a value captured from a JSON document with its
+  JSON escapes. A name captured as `Robert \"Bob\" Smith` from a JSON text block
+  or JSON tool result now reaches Anthropic `tool_use.input` as
+  `Robert "Bob" Smith`. Each token keeps the spelling it was first minted with,
+  so a value first seen in plain text never gains a JSON reading later.
+  Plain-text destinations still restore the bytes the client sent.
 - The legacy OpenAI and Gemini proxy paths restore a pseudonym token that a
   stream splits across SSE events. Each event was restored alone, so a token
   streamed in pieces, the common case, reached the client unrestored. Each
@@ -53,6 +59,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as text. Unsupported fields and disallowed queries on admitted routes return
   Anthropic-shaped `400` errors. Unknown paths retain `404`. Unverified
   `safeguards`, message-level system roles and opaque media remain refused (#814).
+
+### Changed
+
+- **Snapshot contract.** `Session` records each token's source spelling and
+  adds `source_spelling` and `restore_strict_decoded_text_with_provenance`. A
+  manifest holding a JSON-escaped value exports as `session_blob` envelope v7,
+  which v0.17 and older refuse with `InvalidSnapshotVersion(7)`. Other
+  manifests still export as v6.
 
 ### Benchmark
 
