@@ -1,5 +1,6 @@
 """Model-free contract tests for attribution, not latency measurements."""
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -150,10 +151,110 @@ class FrozenPolicyTests(unittest.TestCase):
             for content in ['[policy.rulepacks]\npaths=["outside.toml"]\n',
                             '[[detector]]\nterms_file="outside.txt"\n',
                             '[ner]\nthreshold=0.3\n',
-                            '[safety_net]\nbackend="nym"\n']:
+                            '[safety_net]\nbackend="nym"\n',
+                            '[ner]\nmodel_dir="~/models"\n',
+                            '[ner]\nmodel_dir="${GAZE_NER_MODEL_DIR}"\n']:
                 path.write_text(content)
                 with self.assertRaises(ValueError):
                     perf.policy_models(path)
+
+
+class ChildEnvironmentTests(unittest.TestCase):
+    def test_setup_daemon_and_one_shot_use_only_inventoried_models(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            pinned, inherited = root / "pinned", root / "inherited"
+            pinned.mkdir()
+            inherited.mkdir()
+            (pinned / "model.onnx").write_bytes(b"pinned")
+            (inherited / "model.onnx").write_bytes(b"unrecorded model bytes")
+            journal = root / "child-environments.jsonl"
+            policy = root / "policy.toml"
+            policy_text = ('[safety_net]\nbackend="nym"\n[safety_net.nym]\n'
+                           f'model_dir={json.dumps(str(pinned))}\n')
+            policy.write_text(policy_text)
+            script = ('#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\n'
+                      f'with open({str(journal)!r}, "a") as log: log.write(json.dumps(dict(os.environ))+"\\n")\n'
+                      'if sys.argv[1] == "setup":\n'
+                      f' Path(sys.argv[sys.argv.index("--policy-out")+1]).write_text({policy_text!r})\n'
+                      ' sys.exit(0)\n'
+                      f'model=Path(os.environ.get("GAZE_NYM_MODEL_DIR", {str(pinned)!r}))\n'
+                      'trace={"schema":1,"metrics":{},"recognizers":{},"counters":{"ner_windows":len((model/"model.onnx").read_bytes())}}\n'
+                      'def respond():\n'
+                      ' print("GAZE_PERF "+json.dumps(trace),file=sys.stderr,flush=True)\n'
+                      ' print(json.dumps({"clean_text":"safe"}),flush=True)\n'
+                      'if sys.argv[1] == "daemon":\n'
+                      ' for line in sys.stdin: respond()\n'
+                      'else:\n'
+                      ' sys.stdin.read()\n'
+                      ' respond()\n')
+            binaries = [root / side for side in ("a", "b")]
+            for index, binary in enumerate(binaries):
+                binary.write_text(script + f"# side {index}\n")
+                binary.chmod(0o700)
+            docs = [perf.Document(str(i), "synthetic input", "digest") for i in range(400)]
+            overrides = {"GAZE_NYM_MODEL_DIR": str(inherited), "GAZE_NER_MODEL_DIR": str(inherited),
+                         "GAZE_FUTURE_POLICY_DIR": str(inherited), "GAZE_NYM_INTRA_THREADS": "9",
+                         "OPF_CHECKPOINT": str(inherited), "GAZE_OPENAI_FILTER_OPF": "unrecorded",
+                         "ORT_DYLIB_PATH": "unrecorded-runtime", "GAZE_PERF": "0"}
+            with patch.dict(os.environ, overrides), \
+                 patch.object(perf, "commit", return_value="a" * 40), \
+                 patch.object(perf, "documents", return_value=("a" * 40, docs)), \
+                 patch.object(perf, "host", return_value={"load": [0, 0, 0]}):
+                out = root / "receipt.json"
+                perf.main(["--binary-a", str(binaries[0]), "--binary-b", str(binaries[1]),
+                           "--common-policy", str(policy), "--ner-model-dir", str(pinned),
+                           "--dry-run", "--out", str(out)])
+            receipt = json.loads(out.read_text())
+            self.assertFalse(receipt["publishable"])
+            self.assertRegex(receipt["child_environment_sha256"], r"^[0-9a-f]{64}$")
+            self.assertEqual(receipt["model_inventory"], perf.model_inventory([pinned]))
+            for arm in receipt["arms"].values():
+                for rows in arm["runs"][0]["sides"].values():
+                    self.assertTrue(all(row["trace"]["counters"]["ner_windows"] == 6 for row in rows))
+            environments = [json.loads(line) for line in journal.read_text().splitlines()]
+            self.assertGreater(len(environments), 2)
+            for environment in environments:
+                self.assertEqual({k: v for k, v in environment.items() if k.startswith("GAZE_")},
+                                 {"GAZE_PERF": "1"})
+                self.assertNotIn("OPF_CHECKPOINT", environment)
+                self.assertNotIn("ORT_DYLIB_PATH", environment)
+
+    def test_mocked_workload_cannot_publish_an_uninventoried_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            pinned, inherited = root / "pinned", root / "inherited"
+            pinned.mkdir()
+            inherited.mkdir()
+            (pinned / "model.onnx").write_bytes(b"pinned")
+            (inherited / "model.onnx").write_bytes(b"unrecorded")
+            binaries = [root / side for side in ("a", "b")]
+            for index, binary in enumerate(binaries):
+                binary.write_bytes(str(index).encode())
+            policy = root / "policy.toml"
+            policy.write_text('[safety_net]\nbackend="nym"\n[safety_net.nym]\n'
+                              f'model_dir={json.dumps(str(pinned))}\n')
+            docs = [perf.Document(str(i), "synthetic input", "digest") for i in range(400)]
+            effective_models = set()
+            def run(binary, policy, documents, **kwargs):
+                environment = kwargs.get("child_env", os.environ)
+                effective_models.add(Path(environment.get("GAZE_NYM_MODEL_DIR", pinned)))
+                return [{"id": d.id, "input_bytes": len(d.text), "e2e_ns": 100, "trace": None}
+                        for d in documents]
+            with patch.dict(os.environ, {"GAZE_NYM_MODEL_DIR": str(inherited)}), \
+                 patch.object(perf, "commit", return_value="a" * 40), \
+                 patch.object(perf, "documents", return_value=("a" * 40, docs)), \
+                 patch.object(perf, "host", return_value={"load": [0, 0, 0]}), \
+                 patch.object(perf, "run_pass", side_effect=run):
+                out = root / "receipt.json"
+                perf.main(["--binary-a", str(binaries[0]), "--binary-b", str(binaries[1]),
+                           "--common-policy", str(policy), "--shipped-policy-a", str(policy),
+                           "--shipped-policy-b", str(policy), "--ner-model-dir", str(pinned),
+                           "--measure", "--passes", "2", "--out", str(out)])
+            receipt = json.loads(out.read_text())
+            self.assertTrue(receipt["publishable"])
+            self.assertEqual(receipt["model_inventory"], perf.model_inventory(sorted(effective_models)))
+            self.assertNotIn(str(inherited), out.read_text())
 
 
 if __name__ == "__main__":

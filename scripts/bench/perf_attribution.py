@@ -70,8 +70,18 @@ def file_sha(path: Path) -> str:
     return digest.hexdigest()
 
 
-def command(argv: list[str], *, cwd: Path = ROOT) -> str:
-    result = subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+def child_environment() -> dict[str, str]:
+    # Model/policy overrides must never outrank the inventoried policy paths.
+    # Keep OS execution/location variables; setup resolves HOME/XDG model locations
+    # into explicit policy paths which are inventoried before workload execution.
+    allowed = {"PATH", "HOME", "XDG_DATA_HOME", "SYSTEMROOT", "WINDIR",
+               "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL"}
+    return {**{key: value for key, value in os.environ.items() if key in allowed},
+            "GAZE_PERF": "1"}
+
+
+def command(argv: list[str], *, cwd: Path = ROOT, env: dict[str, str] | None = None) -> str:
+    result = subprocess.run(argv, cwd=cwd, env=env, capture_output=True, text=True)
     if result.returncode:
         # Child diagnostics can contain source text, policy paths or recognizer IDs.
         raise RuntimeError(f"{Path(argv[0]).name} failed (exit {result.returncode}); diagnostics suppressed")
@@ -178,7 +188,7 @@ def policy_models(policy: Path) -> list[Path]:
                 if key == "terms_file" or (key == "paths" and item):
                     raise ValueError("external rulepack and terms files are unsupported; use bundled rules and inline terms")
                 if key == "model_dir":
-                    p = Path(os.path.expandvars(item)).expanduser()
+                    p = Path(item)
                     if not p.is_absolute():
                         raise ValueError("model_dir must be absolute to freeze the effective input")
                     found.append(p)
@@ -228,13 +238,13 @@ def build_binary(rev: str, *, timers: bool) -> tuple[Path, str]:
 
 
 class Daemon:
-    def __init__(self, binary: Path, policy: Path, timeout: float):
+    def __init__(self, binary: Path, policy: Path, timeout: float, child_env: dict[str, str]):
         self.timeout = timeout
         self.rows: queue.Queue = queue.Queue()
         self.perf: queue.Queue = queue.Queue()
         self.child = subprocess.Popen([str(binary), "daemon", "--policy", str(policy)], cwd=ROOT,
                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                      text=True, encoding="utf-8", env={**os.environ, "GAZE_PERF": "1"})
+                                      text=True, encoding="utf-8", env=child_env)
         def stdout():
             for line in self.child.stdout:
                 self.rows.put(line)
@@ -289,18 +299,20 @@ class Daemon:
             thread.join(timeout=self.timeout)
 
 
-def run_pass(binary: Path, policy: Path, docs: list[Document], *, warmups: int, dry: bool, timeout: float, per_file: bool) -> list[dict]:
+def run_pass(binary: Path, policy: Path, docs: list[Document], *, warmups: int, dry: bool, timeout: float, per_file: bool, child_env: dict[str, str] | None = None) -> list[dict]:
+    if child_env is None:
+        child_env = child_environment()
     if per_file:
         if warmups:
             run_pass(binary, policy, [docs[i % len(docs)] for i in range(warmups)],
-                     warmups=0, dry=True, timeout=timeout, per_file=True)
+                     warmups=0, dry=True, timeout=timeout, per_file=True, child_env=child_env)
         rows = []
         # This arm includes process/model startup on EVERY file, like one-shot scanners.
         for doc in docs:
             started = time.perf_counter_ns() if not dry else None
             output = subprocess.run([str(binary), "clean", "--policy", str(policy)], input=doc.text,
                                     text=True, capture_output=True, timeout=timeout, cwd=ROOT,
-                                    env={**os.environ, "GAZE_PERF": "1"})
+                                    env=child_env)
             elapsed = time.perf_counter_ns() - started if not dry else None
             if output.returncode or "clean_text" not in json.loads(output.stdout):
                 raise RuntimeError("one-shot document failed; diagnostics suppressed")
@@ -310,7 +322,7 @@ def run_pass(binary: Path, policy: Path, docs: list[Document], *, warmups: int, 
             rows.append({"id": doc.id, "input_bytes": len(doc.text.encode()), "e2e_ns": elapsed,
                          "trace": validate_trace(traces[0]) if traces else None})
         return rows
-    daemon = Daemon(binary, policy, timeout)
+    daemon = Daemon(binary, policy, timeout, child_env)
     try:
         for i in range(warmups):
             daemon.request(docs[i % len(docs)], i, timed=False)
@@ -398,6 +410,7 @@ def main(argv=None) -> int:
     hashes = {side: file_sha(path) for side, path in binaries.items()}
     if hashes["a"] == hashes["b"]:
         raise ValueError("identical binaries refused")
+    child_env = child_environment()
     common = args.common_policy.resolve()
     vernio = vernio_policy(assets / "vernio.toml", args.ner_model_dir.resolve())
     shipped = {}
@@ -405,7 +418,7 @@ def main(argv=None) -> int:
         provided = getattr(args, f"shipped_policy_{side}")
         shipped[side] = provided.resolve() if provided else assets / f"shipped-{side}.toml"
         if provided is None:
-            command([str(binaries[side]), "setup", "--non-interactive", "--force", "--policy-out", str(shipped[side])])
+            command([str(binaries[side]), "setup", "--non-interactive", "--force", "--policy-out", str(shipped[side])], env=child_env)
     arms = {"common": {"a": common, "b": common}, "shipped": shipped,
             "vernio": {"a": vernio, "b": vernio}, "source-tree": {"a": vernio, "b": vernio}}
     corpus_rev, corpus = documents(args.corpus_rev, args.corpus_subdir, args.seed)
@@ -419,6 +432,7 @@ def main(argv=None) -> int:
                "binary_kind": {side: getattr(args, f"binary_kind_{side}") for side in ("a", "b")},
                "timer_patch_sha256": {side: file_sha(getattr(args, f"timer_patch_{side}")) if getattr(args, f"timer_patch_{side}") else None for side in ("a", "b")},
                "model_inventory": models,
+               "child_environment_sha256": sha(json.dumps(child_env, sort_keys=True).encode()),
                "policies": policy_hashes, "seed": args.seed,
                "passes": 1 if args.dry_run else args.passes, "warmups": args.warmups,
                "quiet_load1_threshold": quiet_threshold(), "quiet_threshold_source": "scripts/bench/cli-latency.py",
@@ -440,7 +454,7 @@ def main(argv=None) -> int:
             for side in order:
                 receipt["probes"].append(host())
                 rows[side] = run_pass(binaries[side], policies[side], docs, warmups=args.warmups,
-                                      dry=args.dry_run, timeout=args.timeout, per_file=name == "source-tree")
+                                      dry=args.dry_run, timeout=args.timeout, per_file=name == "source-tree", child_env=child_env)
                 receipt["probes"].append(host())
             runs.append({"order": order, "sides": rows})
         arm = {"process_mode": "one-shot-per-file" if name == "source-tree" else "warm-daemon", "runs": runs}

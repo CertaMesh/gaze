@@ -33,7 +33,18 @@ All four arms use the same two binaries:
 `--shipped-policy-a` and `--shipped-policy-b` accept policies previously generated
 by those versions' setup commands. Otherwise the runner invokes setup. Setup may
 install missing models; prepare bundles before reserving the benchmark machine.
-Active model sections must pin an explicit, absolute model directory.
+Setup, daemon, and one-shot children receive the same scrubbed environment.
+The runner keeps only `PATH`, `HOME`, `XDG_DATA_HOME`, `SYSTEMROOT`, `WINDIR`,
+`TMPDIR`, `TMP`, `TEMP`, `LANG`, and `LC_ALL`, then sets `GAZE_PERF=1`.
+Inherited `GAZE_*` overrides, `OPF_CHECKPOINT`, and other variables cannot select
+unrecorded models or policies. The receipt hashes this resolved environment
+without exposing its values. Setup resolves default model locations into the
+policy before the runner inventories those files.
+
+Active model sections must pin a literal, absolute model directory.
+Home shorthand and environment-variable expansion are unsupported. Select a
+different model by editing an explicit policy path or using `--ner-model-dir`
+for the Vernio and source-tree arms; these inputs are hashed.
 Policies use bundled rulepacks and inline dictionary terms. The runner rejects
 external rulepack paths and terms files because this specification does not pin
 those extra inputs. Every file in every
@@ -103,10 +114,16 @@ does not change protection behavior.
 The record contains fixed metric keys, durations, invocation/candidate/window
 counts, input byte length and SHA3-256 recognizer IDs. It never carries input
 text, matched values, token mappings, session IDs or raw custom IDs. To locate a
-specific recognizer, hash its declared ID locally using SHA3-256. Treat local
-source/policy/model files as trusted inputs; the receipt does not copy their
-contents or paths. The runner consumes then discards CLI responses and suppresses
-child diagnostics on failure because both can contain reversible values.
+specific recognizer, hash its declared ID locally using SHA3-256. These hashes
+are unsalted: guessable custom IDs can be recovered by dictionary matching.
+This remains a privacy limitation of local attribution receipts. Before sharing
+an adopter receipt, remove custom recognizer IDs or replace them with locally
+keyed hashes. Per-receipt keyed IDs are a follow-up, outside this change.
+
+Treat local source, policy, and model files as trusted inputs. The receipt does
+not copy their contents or paths. The runner consumes then discards CLI
+responses and suppresses child diagnostics on failure because both can contain
+reversible values.
 
 `manifest_ns` covers ledger allocation/insertion, projection and integrity
 validation. `audit_ns` covers synchronous primary/safety/restore audit sink calls.
