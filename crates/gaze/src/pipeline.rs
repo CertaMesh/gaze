@@ -1125,6 +1125,7 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
         mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<CleanText> {
+        gaze_types::perf_count!("input_bytes", text.len());
         let normalized = normalize(text);
         // Where each captured value sits decides the spelling its token records.
         let json_literals = JsonStringLiterals::scan(text);
@@ -1133,7 +1134,10 @@ impl Pipeline {
         let (pool, vetoed) = self
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;
-        let mut whole = recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?;
+        let mut whole = {
+            let _perf = gaze_types::perf_span!("resolve1_ns");
+            recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?
+        };
         let sweep_links = self.sweep_repeat_values(
             target,
             &mut whole,
@@ -1156,6 +1160,7 @@ impl Pipeline {
         if !house_numbers.is_empty() {
             let mut originals = whole.evidence.originals;
             originals.extend(house_numbers);
+            let _perf = gaze_types::perf_span!("resolve2_ns");
             whole = recovery::plan(
                 crate::resolver::CandidatePool::new(originals),
                 &self.registry,
@@ -1177,6 +1182,7 @@ impl Pipeline {
         if !address_pieces.is_empty() {
             let mut originals = whole.evidence.originals;
             originals.extend(address_pieces);
+            let _perf = gaze_types::perf_span!("resolve2_ns");
             whole = recovery::plan(
                 crate::resolver::CandidatePool::new(originals),
                 &self.registry,
@@ -1562,6 +1568,7 @@ impl Pipeline {
         field_name: Option<&str>,
         locale_chain: &[crate::LocaleTag],
     ) -> Result<BTreeMap<(usize, usize), SweepLink>> {
+        let _perf = gaze_types::perf_span!("sweep_ns");
         let winners = whole.primary.iter().chain(&whole.recovered);
         let own_values = winners
             .clone()
@@ -1607,11 +1614,13 @@ impl Pipeline {
             links.insert((raw.start, raw.end), hit.link);
             added.push(hit.candidate());
         }
+        gaze_types::perf_count!("sweep_candidates", added.len());
         if added.is_empty() {
             return Ok(links);
         }
         let mut originals = std::mem::take(&mut whole.evidence.originals);
         originals.extend(added);
+        let _perf = gaze_types::perf_span!("resolve2_ns");
         *whole = recovery::plan(
             crate::resolver::CandidatePool::new(originals),
             &self.registry,
@@ -1657,7 +1666,10 @@ impl Pipeline {
         );
         entry.provenance_stage = Some("primary_pipeline.residual".into());
         for logger in &self.redaction_loggers {
-            logger.log(&entry)?;
+            {
+                let _perf = gaze_types::perf_span!("audit_ns");
+                logger.log(&entry)?;
+            }
         }
         Ok(())
     }
@@ -1752,8 +1764,10 @@ impl Pipeline {
                 field_path,
             )
             .with_dictionaries(dictionaries);
-            let (mut reported, mut net_telemetry) =
-                net.check_with_neutral_and_telemetry(scan.text(), scan.neutral_text(), context)?;
+            let (mut reported, mut net_telemetry) = {
+                let _perf = gaze_types::perf_span!("safety_model_ns");
+                net.check_with_neutral_and_telemetry(scan.text(), scan.neutral_text(), context)?
+            };
             nets_run += 1;
             for event in &mut net_telemetry {
                 if let LeakReportTelemetry::ModelSpanRefused {
@@ -1813,6 +1827,7 @@ impl Pipeline {
                         .iter()
                         .take(if mandatory { selected.len() } else { 1 })
                 {
+                    let model_perf = gaze_types::perf_span!("safety_model_ns");
                     let spans = model
                         .infer(
                             ModelInput {
@@ -1837,6 +1852,7 @@ impl Pipeline {
                                 Error::SafetyNet(model_error_to_safety_net_error(error))
                             }
                         })?;
+                    drop(model_perf);
                     nets_run += 1;
                     for span in spans {
                         if span.byte_range.start >= span.byte_range.end
@@ -2959,7 +2975,10 @@ impl Pipeline {
             entry = entry.with_fallback_triggered(reason);
         }
         for logger in &self.redaction_loggers {
-            logger.log(&entry)?;
+            {
+                let _perf = gaze_types::perf_span!("audit_ns");
+                logger.log(&entry)?;
+            }
         }
         Ok(())
     }
@@ -2986,7 +3005,10 @@ impl Pipeline {
         )
         .with_backend_silently_dropped(dropped);
         for logger in &self.redaction_loggers {
-            logger.log(&entry)?;
+            {
+                let _perf = gaze_types::perf_span!("audit_ns");
+                logger.log(&entry)?;
+            }
         }
         Ok(())
     }
@@ -3050,7 +3072,10 @@ impl Pipeline {
         }
 
         for logger in &self.redaction_loggers {
-            logger.log(&entry)?;
+            {
+                let _perf = gaze_types::perf_span!("audit_ns");
+                logger.log(&entry)?;
+            }
         }
 
         Ok(())
@@ -3088,7 +3113,10 @@ impl Pipeline {
             Some(format!("ordinal:{ordinal}")),
         );
         for logger in &self.redaction_loggers {
-            logger.log(&entry)?;
+            {
+                let _perf = gaze_types::perf_span!("audit_ns");
+                logger.log(&entry)?;
+            }
         }
         Ok(())
     }
@@ -3124,7 +3152,10 @@ impl Pipeline {
                 )),
             );
             for logger in &self.redaction_loggers {
-                logger.log(&entry)?;
+                {
+                    let _perf = gaze_types::perf_span!("audit_ns");
+                    logger.log(&entry)?;
+                }
             }
         }
         Ok(())
@@ -3162,7 +3193,10 @@ impl Pipeline {
         .with_validator_fail_reason(vetoed.reason);
 
         for logger in &self.redaction_loggers {
-            logger.log(&entry)?;
+            {
+                let _perf = gaze_types::perf_span!("audit_ns");
+                logger.log(&entry)?;
+            }
         }
 
         Ok(())

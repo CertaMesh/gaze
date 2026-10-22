@@ -17,6 +17,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
+perf-timers = ["gaze-types/perf-timers"]
 # phone-parser feature gates phonenumber dep; default-on for gaze-cli, default-off for raw lib.
 default = ["phone-parser"]
 phone-parser = ["dep:phonenumber", "gaze-types/phone-parser"]
