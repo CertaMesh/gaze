@@ -224,6 +224,8 @@ fn invalid_v1_request_shapes_return_versioned_protocol_errors() {
     let mut daemon = Daemon::start(&policy);
     for request in [
         json!({"version":1,"op":"restore","session_id":"","text":"x"}),
+        json!({"version":1,"op":"restore","session_id":"run-a"}),
+        json!({"version":1,"op":"restore","session_id":"run-a","text":null}),
         json!({"version":1,"op":"restore","session_id":"run-a","text":42}),
         json!({"version":1,"op":42,"session_id":"run-a","text":"x"}),
     ] {
@@ -260,7 +262,12 @@ fn rejected_requests_never_echo_fictional_pii_session_ids() {
             None,
             "JsonMalformed",
         ),
-        (json!({"session_id":legacy_id}), None, "ProtocolInvalid"),
+        (json!({"session_id":legacy_id}), None, "JsonMalformed"),
+        (
+            json!({"session_id":legacy_id,"text":null}),
+            None,
+            "JsonMalformed",
+        ),
         (
             json!({"version":1,"op":"restore","session_id":v1_id,"text":42}),
             Some(1),
@@ -314,7 +321,12 @@ fn rejected_requests_never_echo_fictional_pii_session_ids() {
         assert!(response["session_id"].is_null());
         match version {
             Some(version) => assert_eq!(response["version"], version),
-            None => assert!(response.get("version").is_none()),
+            None => {
+                assert_eq!(
+                    *frame,
+                    "{\"session_id\":null,\"error\":\"JsonMalformed\",\"detail\":\"malformed JSON line\"}"
+                );
+            }
         }
         assert!(!frame.contains(legacy_id) && !frame.contains(v1_id));
         assert!(response.get("text").is_none());

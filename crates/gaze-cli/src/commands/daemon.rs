@@ -271,7 +271,7 @@ impl Daemon {
         let result = match (request.version, request.op.as_deref()) {
             (None, None) => match request.text {
                 Some(text) => self.clean_request(session_id.clone(), text, false),
-                None => Err((session_id.clone(), DaemonError::ProtocolInvalid)),
+                None => return DaemonResponse::error("JsonMalformed", "malformed JSON line"),
             },
             (Some(1), Some("open")) if request.text.is_none() => {
                 self.evict_idle_sessions();
