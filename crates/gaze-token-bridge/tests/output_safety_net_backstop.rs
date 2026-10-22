@@ -414,3 +414,65 @@ fn reviewer_locale_skip_cannot_be_hidden_by_observer_optimization() {
         "locale-skipped output net must not let raw residual through"
     );
 }
+
+#[derive(Debug)]
+struct UnavailableNet;
+impl SafetyNet for UnavailableNet {
+    fn id(&self) -> &str {
+        "reviewer-unavailable"
+    }
+    fn supported_locales(&self) -> &[LocaleTag] {
+        &[LocaleTag::Global]
+    }
+    fn check(&self, _: &str, _: SafetyNetContext<'_>) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        Err(SafetyNetError::Unavailable {
+            reason: "synthetic unavailable".into(),
+        })
+    }
+}
+
+#[test]
+fn rereviewer_matched_net_cannot_be_skipped_at_output_boundary() {
+    for enabled in [false, true] {
+        let mut builder =
+            Pipeline::builder().register_safety_net(LiteralOutputSafetyNet::global(MISSED_RAW));
+        if enabled {
+            builder = builder.enable_capitals_heuristic_gate();
+        }
+        let mut bridge =
+            TokenBridge::from_policy_json_and_store(POLICY_JSON, store_with_numeric_residual())
+                .unwrap()
+                .with_output_safety_net(builder.build().unwrap(), vec![LocaleTag::Global]);
+        let (session, token) = support_session_and_token();
+        let outcome = bridge.search(&session, &support_customer_request(&token));
+        for rendering in agent_visible_renderings(&outcome) {
+            assert!(
+                !rendering.contains(MISSED_RAW),
+                "gate={enabled}: unscanned raw residual reached agent: {rendering}"
+            );
+        }
+        let response = outcome.unwrap_allowed();
+        assert_eq!(response.results.len(), 1, "gate={enabled}");
+        assert_eq!(response.results[0].doc_id, CLEAN_DOC);
+    }
+}
+
+#[test]
+fn rereviewer_unavailable_net_cannot_be_hidden_by_output_optimization() {
+    for enabled in [false, true] {
+        let mut builder = Pipeline::builder().register_safety_net(UnavailableNet);
+        if enabled {
+            builder = builder.enable_capitals_heuristic_gate();
+        }
+        let mut bridge =
+            TokenBridge::from_policy_json_and_store(POLICY_JSON, store_with_numeric_residual())
+                .unwrap()
+                .with_output_safety_net(builder.build().unwrap(), vec![LocaleTag::Global]);
+        let (session, token) = support_session_and_token();
+        assert_eq!(
+            bridge.search(&session, &support_customer_request(&token)),
+            BridgeSearchOutcome::Denied(DenyReason::TranslatorFailed),
+            "gate={enabled}"
+        );
+    }
+}
