@@ -1449,10 +1449,17 @@ fn known_restore_matches<'a>(
     })
 }
 
+#[cfg(test)]
+thread_local! {
+    static RESTORE_MATCHER_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 fn build_restore_matcher(state: &SessionState) -> Result<Option<Arc<aho_corasick::AhoCorasick>>> {
     if state.value_by_token.is_empty() {
         return Ok(None);
     }
+    #[cfg(test)]
+    RESTORE_MATCHER_BUILDS.with(|builds| builds.set(builds.get() + 1));
     let mut tokens = state.value_by_token.keys().collect::<Vec<_>>();
     tokens.sort_unstable();
     aho_corasick::AhoCorasick::new(tokens)
@@ -4206,6 +4213,106 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn restore_matcher_generation_is_shared_by_live_snapshot_and_transaction() {
+        RESTORE_MATCHER_BUILDS.with(|builds| builds.set(0));
+        let builds = || RESTORE_MATCHER_BUILDS.with(std::cell::Cell::get);
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        for index in 0..1000 {
+            transaction
+                .format_preserving_fake(&PiiClass::Name, &format!("Synthetic {index}"))
+                .unwrap();
+        }
+        let token = transaction.tokens().into_iter().next().unwrap();
+        let expected = transaction.restore_strict(&token).unwrap();
+        let snapshot = transaction.commit().unwrap();
+        for _ in 0..20 {
+            assert_eq!(session.restore_strict_text(&token).unwrap(), expected);
+        }
+        let live_builds = builds();
+        assert_eq!(live_builds, 1, "live generation builds once");
+        // The proxy codec uses these exact committed-snapshot entry points.
+        for _ in 0..20 {
+            assert_eq!(
+                snapshot
+                    .restore_strict_decoded_text_with_provenance(&token)
+                    .unwrap()
+                    .text,
+                expected
+            );
+        }
+        let snapshot_builds = builds();
+        let live_next = session
+            .format_preserving_fake(&PiiClass::Name, "Synthetic live next")
+            .unwrap();
+        for _ in 0..20 {
+            assert_eq!(
+                session.restore_strict_text(&live_next).unwrap(),
+                "Synthetic live next"
+            );
+        }
+        let minted_builds = builds();
+        eprintln!(
+            "live/snapshot/mint build deltas: {:?}",
+            [
+                live_builds,
+                snapshot_builds - live_builds,
+                minted_builds - snapshot_builds
+            ]
+        );
+        assert_eq!(
+            [live_builds, snapshot_builds, minted_builds],
+            [1, 1, 2],
+            "snapshot shares the live generation's matcher; mint rebuilds once"
+        );
+        let mut transaction = session.begin_transaction();
+        for _ in 0..20 {
+            transaction.validate_token_shapes(&token).unwrap();
+            assert_eq!(transaction.restore_strict_text(&token).unwrap(), expected);
+        }
+        assert_eq!(builds(), 2, "unchanged transaction shares the matcher");
+        let next = transaction
+            .format_preserving_fake(&PiiClass::Name, "Synthetic next")
+            .unwrap();
+        for _ in 0..20 {
+            transaction.validate_token_shapes(&next).unwrap();
+            assert_eq!(
+                transaction.restore_strict_text(&next).unwrap(),
+                "Synthetic next"
+            );
+        }
+        assert_eq!(builds(), 3, "minting invalidates exactly once");
+        let next_snapshot = transaction.commit().unwrap();
+        for _ in 0..20 {
+            assert_eq!(
+                session.restore_strict_text(&next).unwrap(),
+                "Synthetic next"
+            );
+            assert_eq!(
+                next_snapshot.restore_strict_text(&next).unwrap(),
+                "Synthetic next"
+            );
+            assert_eq!(snapshot.restore_strict_text(&token).unwrap(), expected);
+            assert!(snapshot.restore_strict_text(&next).is_err());
+        }
+        assert_eq!(
+            builds(),
+            3,
+            "commit retains validation's matcher; old snapshot stays cached"
+        );
+        let last = session
+            .format_preserving_fake(&PiiClass::Name, "Synthetic last")
+            .unwrap();
+        for _ in 0..20 {
+            assert_eq!(
+                session.restore_strict_text(&last).unwrap(),
+                "Synthetic last"
+            );
+        }
+        assert_eq!(builds(), 4, "live mint causes one rebuild");
     }
 
     #[test]
