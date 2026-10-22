@@ -1,0 +1,1747 @@
+{
+  "collection_environment": {
+    "HF_HUB_OFFLINE": "1",
+    "PYTHONHASHSEED": "0",
+    "TOKENIZERS_PARALLELISM": "false",
+    "TRANSFORMERS_OFFLINE": "1"
+  },
+  "expected_rows": 31,
+  "order_diagnostic": "presidio-order-diagnostic.json",
+  "published_commit": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+  "rows": [
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 0.003,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.002
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 0.009,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.007
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "72a0589a7a5ec77131919fc33d79e6caf993ffffd9830718f37da640c3d70a92",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+      "rescored_with": {
+        "at": "2026-10-22T04:41:39.761955+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+      },
+      "tool": "datafog-core"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 0.038,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.036
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "f525d8faa382540e4536ea3804edc07600cfda60426d2be71950ca5a5cc0a208",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+      "rescored_with": {
+        "at": "2026-10-22T04:42:00.474530+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+      },
+      "tool": "datafog-core"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 0.047,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.04
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 0.087,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.075
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "79e7c050b6b8dafe5557adc355fc8a88c99b2e3abfd016dab4b11b266c66825e",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+      "rescored_with": {
+        "at": "2026-10-22T04:42:04.597741+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+      },
+      "tool": "datafog-regex"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 0.076,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.07
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 0.441,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.399
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "36c1bf9a89b81740846b854a1a6cc9dbd78e2c7d12827a3256535daa11ef573d",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+      "rescored_with": {
+        "at": "2026-10-22T04:42:22.448731+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+      },
+      "tool": "datafog-regex"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 0.035,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.033
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 0.129,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.122
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "fbbdbccf4660e95c1dab43b7e1c6ba73a1610d965678355dfc8fde4ee319c8f5",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+      "rescored_with": {
+        "at": "2026-10-22T04:42:27.604456+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+      },
+      "tool": "scrubadub-base"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 0.093,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.09
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 0.631,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.597
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "e6052bf8b83049f1e6e03e117dee6366b6f2cb094614ca07284545a17bbe7bbb",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+      "rescored_with": {
+        "at": "2026-10-22T04:42:46.472567+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+      },
+      "tool": "scrubadub-base"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 4.706,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 5.647
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 9.843,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 11.451
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "3b19ca181f46d6aa904c7132f616e81569d8a254ef63de94d00e8c1df863fad3",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:45:48.444360+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "datafog-spacy"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 8.949,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 10.488
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 60.048,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 65.978
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "b4d6276d6a0df03925d11e063049068f5125ecc4992fc8bf211da4a7aac1937a",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:47:50.504366+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "datafog-spacy"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 4.686,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 6.573
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 9.834,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 14.57
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "7ac40c1d76e83a20d228b3e8a910e818e883765ea77a90bb00c27c9edb879386",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:48:12.836102+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "scrubadub-spacy"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 8.999,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 11.101
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 60.37,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 70.967
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "4f70b71154115f99ee0210c6eaefdec99bffac5aa0dfb3361f4f7565f077d63c",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:50:26.536182+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "scrubadub-spacy"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 5.213,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 6.802
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 10.971,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 14.601
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "3dc806b9b8397aadc9e6d76a6f960e90451bfa2fc7bf95607b69125d2bfbd8a4",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:50:49.022905+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "presidio-en"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "own_metric.f1",
+          "published": 0.1569,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1568
+        },
+        {
+          "metric": "own_metric.precision",
+          "published": 0.131,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1309
+        },
+        {
+          "metric": "own_metric.recall",
+          "published": 0.1955,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1954
+        },
+        {
+          "metric": "row.common_intersection.char_level.f1",
+          "published": 0.500296632707336,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.500168730634325
+        },
+        {
+          "metric": "row.common_intersection.char_level.f2",
+          "published": 0.5486752864472908,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.5486137438897725
+        },
+        {
+          "metric": "row.common_intersection.char_level.f5",
+          "published": 0.578813648810044,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.5788004766269812
+        },
+        {
+          "metric": "row.common_intersection.char_level.fp",
+          "published": 63220,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 63270
+        },
+        {
+          "metric": "row.common_intersection.char_level.precision",
+          "published": 0.43619516458428087,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.436000748789902
+        },
+        {
+          "metric": "row.common_intersection.false_positive_bytes",
+          "published": 63387,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 63437
+        },
+        {
+          "metric": "row.common_intersection.predicted_bytes",
+          "published": 112360,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 112410
+        },
+        {
+          "metric": "row.common_intersection.redaction_load",
+          "published": 0.05218500317447932,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.05220822540800303
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f1",
+          "published": 0.2998709307328266,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.299763457816644
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f2",
+          "published": 0.35029819741338875,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.3502395229640548
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.fp",
+          "published": 6555,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 6560
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.precision",
+          "published": 0.24184594031922277,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.24170616113744076
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 9.793,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 11.922
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 64.429,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 73.77
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f1",
+          "published": 0.20767743717205192,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.20763140937126023
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f2",
+          "published": 0.23901090169405337,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.23895792941974173
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fn",
+          "published": 12467,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 12468
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fp",
+          "published": 21961,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 21962
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.precision",
+          "published": 0.17043780455558494,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1704000302194689
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.recall",
+          "published": 0.2657400318039932,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.26568113552034867
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.tp",
+          "published": 4512,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 4511
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "bf3e039c78e4232ea260c6a642c16124448654ec077f6d577e9effeac4860ce5",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:53:06.799808+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "presidio-en"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 5.137,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 5.614
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 10.733,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 11.684
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "3dc806b9b8397aadc9e6d76a6f960e90451bfa2fc7bf95607b69125d2bfbd8a4",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:53:26.487710+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "presidio-en-de"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "own_metric.f1",
+          "published": 0.1569,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1568
+        },
+        {
+          "metric": "own_metric.precision",
+          "published": 0.131,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1309
+        },
+        {
+          "metric": "own_metric.recall",
+          "published": 0.1955,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1954
+        },
+        {
+          "metric": "row.common_intersection.char_level.f1",
+          "published": 0.500296632707336,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.500168730634325
+        },
+        {
+          "metric": "row.common_intersection.char_level.f2",
+          "published": 0.5486752864472908,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.5486137438897725
+        },
+        {
+          "metric": "row.common_intersection.char_level.f5",
+          "published": 0.578813648810044,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.5788004766269812
+        },
+        {
+          "metric": "row.common_intersection.char_level.fp",
+          "published": 63220,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 63270
+        },
+        {
+          "metric": "row.common_intersection.char_level.precision",
+          "published": 0.43619516458428087,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.436000748789902
+        },
+        {
+          "metric": "row.common_intersection.false_positive_bytes",
+          "published": 63387,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 63437
+        },
+        {
+          "metric": "row.common_intersection.predicted_bytes",
+          "published": 112360,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 112410
+        },
+        {
+          "metric": "row.common_intersection.redaction_load",
+          "published": 0.05218500317447932,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.05220822540800303
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f1",
+          "published": 0.2998709307328266,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.299763457816644
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f2",
+          "published": 0.35029819741338875,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.3502395229640548
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.fp",
+          "published": 6555,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 6560
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.precision",
+          "published": 0.24184594031922277,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.24170616113744076
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 9.833,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 12.883
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 64.836,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 76.992
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f1",
+          "published": 0.20767743717205192,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.20763140937126023
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f2",
+          "published": 0.23901090169405337,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.23895792941974173
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fn",
+          "published": 12467,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 12468
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fp",
+          "published": 21961,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 21962
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.precision",
+          "published": 0.17043780455558494,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1704000302194689
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.recall",
+          "published": 0.2657400318039932,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.26568113552034867
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.tp",
+          "published": 4512,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 4511
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "bf3e039c78e4232ea260c6a642c16124448654ec077f6d577e9effeac4860ce5",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:55:50.206042+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "presidio-en-de"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 5.173,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 5.422
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 10.765,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 11.141
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "3dc806b9b8397aadc9e6d76a6f960e90451bfa2fc7bf95607b69125d2bfbd8a4",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:56:14.298325+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "presidio-all"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "own_metric.f1",
+          "published": 0.1569,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1568
+        },
+        {
+          "metric": "own_metric.precision",
+          "published": 0.131,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1309
+        },
+        {
+          "metric": "own_metric.recall",
+          "published": 0.1955,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1954
+        },
+        {
+          "metric": "row.common_intersection.char_level.f1",
+          "published": 0.500296632707336,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.500168730634325
+        },
+        {
+          "metric": "row.common_intersection.char_level.f2",
+          "published": 0.5486752864472908,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.5486137438897725
+        },
+        {
+          "metric": "row.common_intersection.char_level.f5",
+          "published": 0.578813648810044,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.5788004766269812
+        },
+        {
+          "metric": "row.common_intersection.char_level.fp",
+          "published": 63220,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 63270
+        },
+        {
+          "metric": "row.common_intersection.char_level.precision",
+          "published": 0.43619516458428087,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.436000748789902
+        },
+        {
+          "metric": "row.common_intersection.false_positive_bytes",
+          "published": 63387,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 63437
+        },
+        {
+          "metric": "row.common_intersection.predicted_bytes",
+          "published": 112360,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 112410
+        },
+        {
+          "metric": "row.common_intersection.redaction_load",
+          "published": 0.05218500317447932,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.05220822540800303
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f1",
+          "published": 0.2998709307328266,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.299763457816644
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f2",
+          "published": 0.35029819741338875,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.3502395229640548
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.fp",
+          "published": 6555,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 6560
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.precision",
+          "published": 0.24184594031922277,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.24170616113744076
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 9.824,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 10.33
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 64.904,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 66.174
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f1",
+          "published": 0.20767743717205192,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.20763140937126023
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f2",
+          "published": 0.23901090169405337,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.23895792941974173
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fn",
+          "published": 12467,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 12468
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fp",
+          "published": 21961,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 21962
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.precision",
+          "published": 0.17043780455558494,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1704000302194689
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.recall",
+          "published": 0.2657400318039932,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.26568113552034867
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.tp",
+          "published": 4512,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 4511
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "bf3e039c78e4232ea260c6a642c16124448654ec077f6d577e9effeac4860ce5",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:58:22.301974+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "presidio-all"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.0,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.1
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 21.199,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 42.459
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 38.686,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 82.95
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "e175c98b4f1280f682c8c47e738ef5a60ae6ccb2521bfe8726d249dc9dfdae6f",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145",
+      "rescored_with": {
+        "at": "2026-10-22T05:07:18.776394+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145"
+      },
+      "tool": "presidio-strong"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.common_intersection.char_level.f1",
+          "published": 0.6995499599657639,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.699067431850789
+        },
+        {
+          "metric": "row.common_intersection.char_level.f2",
+          "published": 0.6413342546960389,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.641171960209228
+        },
+        {
+          "metric": "row.common_intersection.char_level.f5",
+          "published": 0.613828524359813,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.6137999276963846
+        },
+        {
+          "metric": "row.common_intersection.char_level.fp",
+          "published": 10805,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 10905
+        },
+        {
+          "metric": "row.common_intersection.char_level.precision",
+          "published": 0.8242489305291237,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.8229104077688822
+        },
+        {
+          "metric": "row.common_intersection.false_positive_bytes",
+          "published": 10864,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 10964
+        },
+        {
+          "metric": "row.common_intersection.predicted_bytes",
+          "published": 61652,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 61752
+        },
+        {
+          "metric": "row.common_intersection.redaction_load",
+          "published": 0.028633942824074398,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.028680387291121816
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f1",
+          "published": 0.4604330331481127,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.4599923430321593
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f2",
+          "published": 0.4561849798769838,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.45601184150599666
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.fp",
+          "published": 2735,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 2745
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.precision",
+          "published": 0.467691708836123,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.46678321678321677
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 30.079,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 35.707
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 318.774,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 359.326
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "a5100245f875b9a6586d459330337fe6ba12632aef34ef108407fc2ae43e4dfa",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145",
+      "rescored_with": {
+        "at": "2026-10-22T05:14:40.730032+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145"
+      },
+      "tool": "presidio-strong"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 20.861,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 24.624
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 36.135,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 49.621
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "f315dfad1d5c4b678793ef4aa34fd336852eaeabefc6d14bc82391d7d2ba9503",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145",
+      "rescored_with": {
+        "at": "2026-10-22T05:15:44.654773+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145"
+      },
+      "tool": "presidio-strong-high-recall"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "own_metric.precision",
+          "published": 0.2402,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.2401
+        },
+        {
+          "metric": "own_metric.recall",
+          "published": 0.2438,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.2437
+        },
+        {
+          "metric": "row.common_intersection.char_level.f1",
+          "published": 0.6997702798722397,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.6994807576938193
+        },
+        {
+          "metric": "row.common_intersection.char_level.f2",
+          "published": 0.6417689485005694,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.6416715164089978
+        },
+        {
+          "metric": "row.common_intersection.char_level.f5",
+          "published": 0.6143498656176347,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.6143326933908272
+        },
+        {
+          "metric": "row.common_intersection.char_level.fp",
+          "published": 10843,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 10903
+        },
+        {
+          "metric": "row.common_intersection.char_level.precision",
+          "published": 0.8238686202527533,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.8230664373113499
+        },
+        {
+          "metric": "row.common_intersection.false_positive_bytes",
+          "published": 10902,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 10962
+        },
+        {
+          "metric": "row.common_intersection.predicted_bytes",
+          "published": 61735,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 61795
+        },
+        {
+          "metric": "row.common_intersection.redaction_load",
+          "published": 0.028672491731723752,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.028700358411952204
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f1",
+          "published": 0.46059678653404745,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.4603326323838655
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f2",
+          "published": 0.45682197602064056,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.4567180031864046
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.fp",
+          "published": 2748,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 2754
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.precision",
+          "published": 0.4670287044220326,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.4664858581944983
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 29.875,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 43.072
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 317.759,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 382.545
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f1",
+          "published": 0.2939484282650766,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.2938961242742821
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f2",
+          "published": 0.3151107373142697,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.3150546677880572
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fn",
+          "published": 11359,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 11360
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fp",
+          "published": 15639,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 15640
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.precision",
+          "published": 0.26435862458252973,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.2643115856813585
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.recall",
+          "published": 0.3309971140821014,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 0.3309382177984569
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.tp",
+          "published": 5620,
+          "reason": "Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered.",
+          "regenerated": 5619
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "5e4bf983c4dc203968a0f34030d1dd6b5018ba89578ff6fc10d7f551387dd003",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145",
+      "rescored_with": {
+        "at": "2026-10-22T05:24:49.792181+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "1eaff62e7a45dfe3665e2a337ec1764d3496b145"
+      },
+      "tool": "presidio-strong-high-recall"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 62.62,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 69.603
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 82.448,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 170.238
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "90b25861a0bef99b855327cd0bf1613b4eb780861d0d0105fc33406fa3cc3f35",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "5a25074ab4256da4be39ed81ff169a69646c4d5a",
+      "rescored_with": {
+        "at": "2026-10-22T05:29:34.435729+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "5a25074ab4256da4be39ed81ff169a69646c4d5a"
+      },
+      "tool": "datafog-gliner"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 74.895,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 101.176
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 343.161,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 507.595
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "8b0859c8df67eedb78d0d1783557535e3aa457c1d2e9b258499a32203e66f879",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "5a25074ab4256da4be39ed81ff169a69646c4d5a",
+      "rescored_with": {
+        "at": "2026-10-22T05:44:38.283167+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "5a25074ab4256da4be39ed81ff169a69646c4d5a"
+      },
+      "tool": "datafog-gliner"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 119.853,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 132.947
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 268.137,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 220.431
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "62cc4e3652b11df5f4e1c8a3a9412a12146d2d1deee0073788e0585fdd44e2d2",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "5a25074ab4256da4be39ed81ff169a69646c4d5a",
+      "rescored_with": {
+        "at": "2026-10-22T05:48:30.950767+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "5a25074ab4256da4be39ed81ff169a69646c4d5a"
+      },
+      "tool": "gliner"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 132.258,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 187.91
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 447.331,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 723.676
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "94155e4f35d915f59730db434d75d0bd0ce804dc1c77a88e0affaf4b67633297",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "5a25074ab4256da4be39ed81ff169a69646c4d5a",
+      "rescored_with": {
+        "at": "2026-10-22T06:13:29.510108+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "5a25074ab4256da4be39ed81ff169a69646c4d5a"
+      },
+      "tool": "gliner"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.2,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 132.081,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 134.226
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 267.622,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 229.048
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "f36f41f9b5d28e06176a2292ac874a90693b430aa22b1fe5258bc0e1473d2159",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "5a25074ab4256da4be39ed81ff169a69646c4d5a",
+      "rescored_with": {
+        "at": "2026-10-22T06:17:41.677383+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "5a25074ab4256da4be39ed81ff169a69646c4d5a"
+      },
+      "tool": "gliner-high-recall"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 131.793,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 186.631
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 447.995,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 698.038
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "b870a486d224f9226111db58f355bf115ca034e67ff0c3f6e42437d76344061d",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "5a25074ab4256da4be39ed81ff169a69646c4d5a",
+      "rescored_with": {
+        "at": "2026-10-22T06:42:08.355353+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "5a25074ab4256da4be39ed81ff169a69646c4d5a"
+      },
+      "tool": "gliner-high-recall"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 199.362,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 204.245
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 678.434,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 672.942
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "4c3fdcd3ebde02b5021a80dc64fca55136b03ed573c7621209f2f3ff1c5113ba",
+      "published_harness_revision": "7b09e385229fe21b15ef2d9be0400569c43bb1e4",
+      "regenerated_harness_revision": "870acad7a7a733cd2f7203a2358080a5aae85f1d",
+      "rescored_with": {
+        "at": "2026-10-22T06:51:14.084296+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "870acad7a7a733cd2f7203a2358080a5aae85f1d"
+      },
+      "tool": "pii-tracer"
+    },
+    {
+      "benchmark": "pii-trace",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 374.949,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 318.063
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 1205.339,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 857.613
+        }
+      ],
+      "dataset_sha256": "1f37039ca2a9c7a93d7b755e1603d5192424c61e61fcbf2ce9405f26705fd670",
+      "prediction_sha256": "c5198c15a78a83a009956d59e102e0e78ff93e4c8774b34821a385e400c802c1",
+      "published_harness_revision": "abcfeafc5f62151fc827bb0ce1b84185b718b31a",
+      "regenerated_harness_revision": "870acad7a7a733cd2f7203a2358080a5aae85f1d",
+      "rescored_with": {
+        "at": "2026-10-22T07:20:52.059787+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "870acad7a7a733cd2f7203a2358080a5aae85f1d"
+      },
+      "tool": "pii-tracer"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 456.913,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 848.938
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 6439.749,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 11526.411
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "a5ac13185052ab44aa42fdf0150431852bc5d32fc655c3fef7870ed0b79cc02b",
+      "published_harness_revision": "bfd35ce60e23fc7adcdc51aa8623e97901d9169d",
+      "regenerated_harness_revision": "870acad7a7a733cd2f7203a2358080a5aae85f1d",
+      "rescored_with": {
+        "at": "2026-10-22T11:03:59.065729+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "870acad7a7a733cd2f7203a2358080a5aae85f1d"
+      },
+      "tool": "pii-tracer"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 183.7,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 390.459
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 550.059,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 1188.997
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "bce7fd135b5859b45b59141ebcde4a0c32c2c566a8d2b482bde93b6ef6518c81",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "ed8af33b0652e0e5302d9a1715d9a917c5cc1064",
+      "rescored_with": {
+        "at": "2026-10-22T11:42:29.665460+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "ed8af33b0652e0e5302d9a1715d9a917c5cc1064"
+      },
+      "tool": "opf"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 396.359,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 628.181
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 3268.224,
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
+          "regenerated": 5182.321
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "25101e73c73033399d85a8c240c6d4a75bcb47954130eeb1e0a536da02043ee2",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "ed8af33b0652e0e5302d9a1715d9a917c5cc1064",
+      "rescored_with": {
+        "at": "2026-10-22T13:45:31.961266+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "ed8af33b0652e0e5302d9a1715d9a917c5cc1064"
+      },
+      "tool": "opf"
+    }
+  ],
+  "schema_version": 1
+}

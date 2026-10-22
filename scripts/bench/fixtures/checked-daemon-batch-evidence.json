@@ -177,7 +177,7 @@
       }
     },
     "unchanged_origin_main_equals_checked": true,
-    "disposition": "Predates this fix. Disclosed without rewriting the published number."
+    "disposition": "Published 16,553 is superseded and unreproducible on these pinned inputs and binaries. Both the unchanged scripts and checked transport replay 17,220. The cause of the 667-character difference is unresolved. See docs/reference/benchmarks/family-action-review-history.md."
   },
   "inventory": [
     {

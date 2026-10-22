@@ -551,22 +551,22 @@ Byte-micro F2 pools UTF-8 bytes across documents: `5*TP/(5*TP+4*FN+FP)`. Labels 
 | Presidio Research | Gaze v0.16.0 | 0.825686 | 7,984 | 1,364 | 0 | [Receipt](readme-byte-measurements/v0.16.0-presidio-research.json) |
 | Presidio Research | Gaze v0.17.0 | 0.836725 | 7,463 | 1,436 | 0 | [Receipt](readme-byte-measurements/v0.17.0-presidio-research.json) |
 | Presidio Research | Presidio (tuned) | 0.918154 | 2,857 | 4,918 | — | [Counts](their-benchmarks.json) |
-| Presidio Research | DataFog core† | 0.144954 | 34,810 | 0 | — | [Counts](their-benchmarks.json) |
-| Presidio Research | DataFog spaCy† | 0.639104 | 15,769 | 4,015 | — | [Counts](their-benchmarks.json) |
-| Presidio Research | scrubadub† | 0.538389 | 20,226 | 1,856 | — | [Counts](their-benchmarks.json) |
-| Presidio Research | GLiNER† | 0.692474 | 13,326 | 4,884 | — | [Counts](their-benchmarks.json) |
-| Presidio Research | OPF† | 0.661851 | 15,305 | 667 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | DataFog core | 0.144954 | 34,810 | 0 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | DataFog spaCy | 0.639104 | 15,769 | 4,015 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | scrubadub | 0.538389 | 20,226 | 1,856 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | GLiNER | 0.692474 | 13,326 | 4,884 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | OPF | 0.661851 | 15,305 | 667 | — | [Counts](their-benchmarks.json) |
 | PIIBench-commercial | Gaze v0.16.0 | 0.627119 | 105,077 | 48,309 | 0 | [Receipt](readme-byte-measurements/v0.16.0-piibench-commercial.json) |
 | PIIBench-commercial | Gaze v0.17.0 | 0.642375 | 100,557 | 49,124 | 0 | [Receipt](readme-byte-measurements/v0.17.0-piibench-commercial.json) |
-| PIIBench-commercial | Presidio† | 0.665144 | 87,853 | 88,715 | — | [Counts](their-benchmarks.json) |
-| PIIBench-commercial | DataFog core† | 0.182618 | 222,697 | 4,529 | — | [Counts](their-benchmarks.json) |
-| PIIBench-commercial | DataFog spaCy† | 0.521220 | 114,880 | 219,413 | — | [Counts](their-benchmarks.json) |
-| PIIBench-commercial | scrubadub† | 0.440551 | 145,119 | 166,114 | — | [Counts](their-benchmarks.json) |
-| PIIBench-commercial | GLiNER† | 0.532256 | 127,361 | 85,245 | — | [Counts](their-benchmarks.json) |
-| PIIBench-commercial | OPF† | 0.399735 | 170,336 | 12,174 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | Presidio | 0.665144 | 87,853 | 88,715 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | DataFog core | 0.182618 | 222,697 | 4,529 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | DataFog spaCy | 0.521220 | 114,880 | 219,413 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | scrubadub | 0.440551 | 145,119 | 166,114 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | GLiNER | 0.532256 | 127,361 | 85,245 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | OPF | 0.399735 | 170,336 | 12,174 | — | [Counts](their-benchmarks.json) |
 | PII-TRACE | Gaze v0.16.0 | 0.758824 | 15,739 | 357 | 0 | [Receipt](readme-byte-measurements/v0.16.0-pii-trace.json) |
 | PII-TRACE | Gaze v0.17.0 | 0.762383 | 15,455 | 710 | 0 | [Receipt](readme-byte-measurements/v0.17.0-pii-trace.json) |
-| PII-TRACE | PII-Tracer† | 0.977742 | 1,083 | 1,871 | — | [Counts](their-benchmarks.json) |
+| PII-TRACE | PII-Tracer | 0.977742 | 1,083 | 1,871 | — | [Counts](their-benchmarks.json) |
 
 † Pre-receipt evidence: not receipt-verified; regeneration pending.
 
@@ -951,6 +951,8 @@ row.
 
 ## Competitors' own benchmarks
 
+The [receipt refresh history](third-party-receipt-history.md) preserves every replaced numeric value and its explanation.
+
 The [competitor comparison](competitors.md) runs other tools on Gaze's corpus.
 This section turns that around: Gaze and the same tools, in the same
 configurations, run on the sets that competitors publish their own numbers on.
@@ -961,7 +963,7 @@ in [`scripts/bench/compare/theirbench/`](../../../scripts/bench/compare/theirben
 
 <!-- BEGIN GENERATED: their-benchmarks -->
 
-Report-only: these sets are never used to design or tune Gaze rules. Every gold label counts (no scored-label contract). Leaked and false-positive bytes use the same scorer code as the main comparison; each benchmark's own metric comes from its own evaluator, fed the same spans. Lower leaked bytes is better. The table lists every measured competitor row and every tagged Gaze release; untagged builds are not shown. No latency is published here: the machine was shared during these runs, and per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the main comparison's configurations; Presidio's default rows keep score threshold 0.0, so they differ from the notebook's vanilla configuration (threshold 0.4). Every set here is English only, so Presidio's three language configurations give identical rows.
+Report-only: these sets are never used to design or tune Gaze rules. Every gold label counts (no scored-label contract). Leaked and false-positive bytes use the same scorer code as the main comparison; each benchmark's own metric comes from its own evaluator, fed the same spans. Lower leaked bytes is better. The table lists every measured competitor row and every tagged Gaze release; untagged builds are not shown. Receipt-verified covers quality/count metrics only. The [receipt history](third-party-receipt-history.md) keeps single-run timing aggregates whose per-document samples were not retained. They are machine-dependent and cannot be reproduced from committed data. No latency is published here: the machine was shared during these runs, and per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the main comparison's configurations; Presidio's default rows keep score threshold 0.0, so they differ from the notebook's vanilla configuration (threshold 0.4). Every set here is English only, so Presidio's three language configurations give identical rows.
 
 Tagged v0.16.0/v0.17.0 byte-micro measurements for Presidio Research, PIIBench-commercial and PII-TRACE are shown in the [dataset panels](#benchmark-panels). Those receipts contain neither character counts nor vendor-evaluator results, so the historical v0.16 rows below retain their original scope and identities. The new byte measurements do not add character or vendor-evaluator rows here.
 
@@ -975,9 +977,9 @@ Gold PII bytes: 55,580. Common-intersection labels: account_number, private_addr
 
 | Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | Own metric (character F1, label-agnostic, the paper's metric) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| pii-tracer† | 1,083 | 1,871 | 8.7% | held (typed-metric review) | held (typed-metric review) | 702 | 0.974 |
+| pii-tracer | 1,083 | 1,871 | 8.7% | held (typed-metric review) | held (typed-metric review) | 702 | 0.974 |
 
-† Pre-receipt evidence: not receipt-verified; regeneration pending.
+pii-tracer was measured separately on the same documents, with harness `870acad7` (typed metrics rescored with `870acad7`); it changes neither the other rows nor the common-intersection labels.
 
 Gaze v0.17.0: no tagged character or vendor-evaluator measurement is available for this historical table, so no Gaze row is shown.
 
@@ -997,28 +999,54 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | gaze-v0.15.1 | 107,701 | 47,616 | 79.8% | held (typed-metric review) | held (typed-metric review) | 33,941 | held (typed-metric review) |
 | gaze-v0.16.0 | 105,077 | 48,309 | 79.5% | held (typed-metric review) | held (typed-metric review) | 32,190 | held (typed-metric review) |
-| datafog-core† | 222,697 | 4,529 | 99.9% | 0.128 | 0.092 | 52,232 | 0.099 |
-| datafog-gliner† | 112,941 | 71,574 | 75.6% | 0.315 | 0.308 | 25,463 | 0.200 |
-| datafog-regex† | 223,137 | 4,926 | 99.9% | 0.128 | 0.092 | 51,108 | 0.097 |
-| datafog-spacy† | 114,880 | 219,413 | 82.0% | 0.201 | 0.228 | 29,383 | 0.147 |
-| gliner† | 127,361 | 85,245 | 81.1% | 0.253 | 0.243 | 48,389 | 0.181 |
-| gliner-high-recall† | 113,436 | 118,822 | 77.5% | 0.235 | 0.241 | 45,994 | 0.176 |
-| opf† | 170,336 | 12,174 | 97.0% | held (typed-metric review) | held (typed-metric review) | 44,064 | held (typed-metric review) |
-| pii-tracer† | 128,632 | 22,988 | 95.2% | held (typed-metric review) | held (typed-metric review) | 33,519 | held (typed-metric review) |
-| presidio-all† | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
-| presidio-en† | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
-| presidio-en-de† | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
-| presidio-strong† | 87,853 | 88,715 | 70.2% | 0.301 | 0.318 | 32,815 | 0.247 |
-| presidio-strong-high-recall† | 84,965 | 92,491 | 70.1% | 0.294 | 0.315 | 32,770 | 0.242 |
-| scrubadub-base† | 223,156 | 9,971 | 100.0% | held (typed-metric review) | held (typed-metric review) | 66,342 | held (typed-metric review) |
-| scrubadub-spacy† | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
-
-† Pre-receipt evidence: not receipt-verified; regeneration pending.
+| datafog-core | 222,697 | 4,529 | 99.9% | 0.128 | 0.092 | 52,232 | 0.099 |
+| datafog-gliner | 112,941 | 71,574 | 75.6% | 0.315 | 0.308 | 25,463 | 0.200 |
+| datafog-regex | 223,137 | 4,926 | 99.9% | 0.128 | 0.092 | 51,108 | 0.097 |
+| datafog-spacy | 114,880 | 219,413 | 82.0% | 0.201 | 0.228 | 29,383 | 0.147 |
+| gliner | 127,361 | 85,245 | 81.1% | 0.253 | 0.243 | 48,389 | 0.181 |
+| gliner-high-recall | 113,436 | 118,822 | 77.5% | 0.235 | 0.241 | 45,994 | 0.176 |
+| opf | 170,336 | 12,174 | 97.0% | held (typed-metric review) | held (typed-metric review) | 44,064 | held (typed-metric review) |
+| pii-tracer | 128,632 | 22,988 | 95.2% | held (typed-metric review) | held (typed-metric review) | 33,519 | held (typed-metric review) |
+| presidio-all | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-en | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-en-de | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-strong | 87,853 | 88,715 | 70.2% | 0.301 | 0.318 | 32,815 | 0.247 |
+| presidio-strong-high-recall | 84,965 | 92,491 | 70.1% | 0.294 | 0.315 | 32,770 | 0.242 |
+| scrubadub-base | 223,156 | 9,971 | 100.0% | held (typed-metric review) | held (typed-metric review) | 66,342 | held (typed-metric review) |
+| scrubadub-spacy | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
 
 Top leaked labels for gaze-v0.16.0: `DATE` 15,632 B, `MISC` 15,614 B, `STREET_ADDRESS` 6,155 B, `OCCUPATION` 5,885 B, `NAME` 5,440 B.
 False-positive bytes for gaze-v0.16.0 by emitted label: `organization` 25,627 B, `custom:url` 8,372 B, `location` 7,218 B, `name` 2,054 B, `custom:postal_code` 2,022 B.
 
-pii-tracer was measured separately on the same documents, with harness `bfd35ce6` (typed metrics rescored with `bfd35ce6`); it changes neither the other rows nor the common-intersection labels.
+datafog-core was measured separately on the same documents, with harness `e7e018ce` (typed metrics rescored with `e7e018ce`); it changes neither the other rows nor the common-intersection labels.
+
+datafog-gliner was measured separately on the same documents, with harness `5a25074a` (typed metrics rescored with `5a25074a`); it changes neither the other rows nor the common-intersection labels.
+
+datafog-regex was measured separately on the same documents, with harness `e7e018ce` (typed metrics rescored with `e7e018ce`); it changes neither the other rows nor the common-intersection labels.
+
+datafog-spacy was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+gliner was measured separately on the same documents, with harness `5a25074a` (typed metrics rescored with `5a25074a`); it changes neither the other rows nor the common-intersection labels.
+
+gliner-high-recall was measured separately on the same documents, with harness `5a25074a` (typed metrics rescored with `5a25074a`); it changes neither the other rows nor the common-intersection labels.
+
+opf was measured separately on the same documents, with harness `ed8af33b` (typed metrics rescored with `ed8af33b`); it changes neither the other rows nor the common-intersection labels.
+
+pii-tracer was measured separately on the same documents, with harness `870acad7` (typed metrics rescored with `870acad7`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-all was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-en was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-en-de was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-strong was measured separately on the same documents, with harness `1eaff62e` (typed metrics rescored with `1eaff62e`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-strong-high-recall was measured separately on the same documents, with harness `1eaff62e` (typed metrics rescored with `1eaff62e`); it changes neither the other rows nor the common-intersection labels.
+
+scrubadub-base was measured separately on the same documents, with harness `e7e018ce` (typed metrics rescored with `e7e018ce`); it changes neither the other rows nor the common-intersection labels.
+
+scrubadub-spacy was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
 
 Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `70679f36`, benchmark binary `923d5735`, reproduced by a second run) scored with harness `e66d3360`; no timing is published.
 
@@ -1039,29 +1067,55 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | gaze-v0.15.1 | 9,769 | 1,352 | 48.9% | held (typed-metric review) | held (typed-metric review) | 8,274 | 0.702 |
 | gaze-v0.16.0 | 7,984 | 1,364 | 42.0% | held (typed-metric review) | held (typed-metric review) | 6,762 | 0.779 |
-| datafog-core† | 34,810 | 0 | 90.2% | 0.168 | 0.118 | 15,680 | 0.114 |
-| datafog-gliner† | 9,520 | 5,525 | 34.4% | 0.578 | 0.577 | 5,807 | 0.691 |
-| datafog-regex† | 35,039 | 0 | 90.6% | 0.165 | 0.116 | 15,893 | 0.115 |
-| datafog-spacy† | 15,769 | 4,015 | 53.1% | 0.470 | 0.458 | 13,290 | 0.572 |
-| gliner† | 13,326 | 4,884 | 44.7% | 0.528 | 0.489 | 8,173 | 0.615 |
-| gliner-high-recall† | 8,158 | 7,031 | 34.8% | 0.517 | 0.504 | 4,482 | 0.676 |
-| opf† | 15,305 | 667 | 57.8% | held (typed-metric review) | held (typed-metric review) | 5,905 | 0.551 |
-| pii-tracer† | 6,510 | 5,277 | 38.4% | held (typed-metric review) | held (typed-metric review) | 773 | 0.640 |
-| presidio-all† | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
-| presidio-en† | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
-| presidio-en-de† | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
-| presidio-strong† | 12,383 | 3,243 | 50.5% | 0.534 | 0.519 | 12,300 | 0.603 |
-| presidio-strong-high-recall† | 12,058 | 3,243 | 49.5% | 0.531 | 0.518 | 12,300 | 0.614 |
+| datafog-core | 34,810 | 0 | 90.2% | 0.168 | 0.118 | 15,680 | 0.114 |
+| datafog-gliner | 9,520 | 5,525 | 34.4% | 0.578 | 0.577 | 5,807 | 0.691 |
+| datafog-regex | 35,039 | 0 | 90.6% | 0.165 | 0.116 | 15,893 | 0.115 |
+| datafog-spacy | 15,769 | 4,015 | 53.1% | 0.470 | 0.458 | 13,290 | 0.572 |
+| gliner | 13,326 | 4,884 | 44.7% | 0.528 | 0.489 | 8,173 | 0.615 |
+| gliner-high-recall | 8,158 | 7,031 | 34.8% | 0.517 | 0.504 | 4,482 | 0.676 |
+| opf | 15,305 | 667 | 57.8% | held (typed-metric review) | held (typed-metric review) | 5,905 | 0.551 |
+| pii-tracer | 6,510 | 5,277 | 38.4% | held (typed-metric review) | held (typed-metric review) | 773 | 0.640 |
+| presidio-all | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-en | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-en-de | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-strong | 12,383 | 3,243 | 50.5% | 0.534 | 0.519 | 12,300 | 0.603 |
+| presidio-strong-high-recall | 12,058 | 3,243 | 49.5% | 0.531 | 0.518 | 12,300 | 0.614 |
 | presidio-tuned-presidio-research | 2,857 | 4,918 | 22.3% | 0.068 | 0.072 | 2,469 | 0.857 |
-| scrubadub-base† | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
-| scrubadub-spacy† | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
-
-† Pre-receipt evidence: not receipt-verified; regeneration pending.
+| scrubadub-base | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
+| scrubadub-spacy | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
 
 Top leaked labels for gaze-v0.16.0: `STREET_ADDRESS` 4,032 B, `PHONE_NUMBER` 768 B, `TITLE` 750 B, `DATE_TIME` 601 B, `ORGANIZATION` 483 B.
 False-positive bytes for gaze-v0.16.0 by emitted label: `organization` 643 B, `location` 484 B, `name` 232 B, `custom:building_number` 2 B, `custom:credit_card` 2 B.
 
-pii-tracer was measured separately on the same documents, with harness `7b09e385` (typed metrics rescored with `bfd35ce6`); it changes neither the other rows nor the common-intersection labels.
+datafog-core was measured separately on the same documents, with harness `e7e018ce` (typed metrics rescored with `e7e018ce`); it changes neither the other rows nor the common-intersection labels.
+
+datafog-gliner was measured separately on the same documents, with harness `5a25074a` (typed metrics rescored with `5a25074a`); it changes neither the other rows nor the common-intersection labels.
+
+datafog-regex was measured separately on the same documents, with harness `e7e018ce` (typed metrics rescored with `e7e018ce`); it changes neither the other rows nor the common-intersection labels.
+
+datafog-spacy was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+gliner was measured separately on the same documents, with harness `5a25074a` (typed metrics rescored with `5a25074a`); it changes neither the other rows nor the common-intersection labels.
+
+gliner-high-recall was measured separately on the same documents, with harness `5a25074a` (typed metrics rescored with `5a25074a`); it changes neither the other rows nor the common-intersection labels.
+
+opf was measured separately on the same documents, with harness `ed8af33b` (typed metrics rescored with `ed8af33b`); it changes neither the other rows nor the common-intersection labels.
+
+pii-tracer was measured separately on the same documents, with harness `870acad7` (typed metrics rescored with `870acad7`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-all was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-en was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-en-de was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-strong was measured separately on the same documents, with harness `1eaff62e` (typed metrics rescored with `1eaff62e`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-strong-high-recall was measured separately on the same documents, with harness `1eaff62e` (typed metrics rescored with `1eaff62e`); it changes neither the other rows nor the common-intersection labels.
+
+scrubadub-base was measured separately on the same documents, with harness `e7e018ce` (typed metrics rescored with `e7e018ce`); it changes neither the other rows nor the common-intersection labels.
+
+scrubadub-spacy was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
 
 Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `70679f36`, benchmark binary `0e665110`, reproduced by a second run) scored with harness `e66d3360`; no timing is published.
 

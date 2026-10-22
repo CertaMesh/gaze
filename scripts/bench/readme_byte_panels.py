@@ -24,6 +24,32 @@ POPULATIONS = {"own": {"holdout": 2910}, "sealed": {"openpii/all": 9990, "gretel
                "piibench-commercial": {"test": 5000}, "pii-trace": {"test": 4500}}
 
 
+def presidio_baseline_source(directory: Path, version: str) -> bytes:
+    """Verify the retained aggregate and its unchanged release row against today's source."""
+    current = (directory / "their-benchmarks.json").read_bytes()
+    manifest_path = directory / "readme-byte-panels.json"
+    pin = json.loads(manifest_path.read_text()).get("retained_presidio_source") if manifest_path.exists() else None
+    if pin is None:
+        return current
+    if hashlib.sha256(current).hexdigest() != pin["current_sha256"]:
+        raise ValueError("current third-party aggregate differs from its separate source pin")
+    archive = (directory / pin["archive"]).read_bytes()
+    if hashlib.sha256(archive).hexdigest() != pin["archive_sha256"]:
+        raise ValueError("retained aggregate archive digest differs")
+    original = gzip.decompress(archive)
+    if hashlib.sha256(original).hexdigest() != pin["sha256"]:
+        raise ValueError("retained aggregate source digest differs")
+    blob = b"blob " + str(len(original)).encode("ascii") + b"\0" + original
+    if hashlib.sha1(blob, usedforsecurity=False).hexdigest() != pin["git_blob"]:
+        raise ValueError("retained aggregate Git blob differs")
+    old, new = (json.loads(body)["benchmarks"]["presidio-research"] for body in (original, current))
+    row = "gaze-" + version
+    if (old["identity"] != new["identity"] or old["rows"][row] != new["rows"][row]
+            or old["provenance"][row] != new["provenance"][row]):
+        raise ValueError("retained Gaze baseline changed in the current aggregate")
+    return original
+
+
 def baselines(directory: Path):
     """Reuse v0.16's already-recorded byte counts, preserving their provenance."""
     from readme_byte_measurements import summarize, totals
@@ -34,11 +60,11 @@ def baselines(directory: Path):
     revision = tag_commit(version)
     result = {}
 
-    def row(kind, sets, inputs, source, provenance):
+    def row(kind, sets, inputs, source, provenance, source_sha256=None):
         return {"schema_version": 1, "tag": version, "revision": revision, "dataset": kind,
                 "contract": "v4" if kind == "own" else "all-gold", "method": "retained-byte-counts",
                 "sets": sets, "totals": totals(sets), "inputs_sha256": inputs,
-                "source": {"file": source, "sha256": hashlib.sha256((directory / source).read_bytes()).hexdigest()},
+                "source": {"file": source, "sha256": source_sha256 or hashlib.sha256((directory / source).read_bytes()).hexdigest()},
                 "original_provenance": provenance,
                 "command": ["python", "scripts/bench/readme_byte_panels.py", "--reuse-v016",
                             "--capture-dir", "<private-capture-directory>"]}
@@ -67,7 +93,8 @@ def baselines(directory: Path):
             "dataset": pins["data/test_5k.jsonl"], "manifest": pins["manifest.json"]}
         result[kind] = row(kind, sets, inputs, source, provenance)
     source = "their-benchmarks.json"
-    bench = json.loads((directory / source).read_text())["benchmarks"]["presidio-research"]
+    source_bytes = presidio_baseline_source(directory, version)
+    bench = json.loads(source_bytes)["benchmarks"]["presidio-research"]
     provenance = bench["provenance"]["gaze-v0.16.0"]["release"]
     if provenance["commit"] != revision or provenance["tag"] != version:
         raise ValueError("retained Presidio baseline is not the release tag")
@@ -75,7 +102,8 @@ def baselines(directory: Path):
     sets = {"test": {"documents": block["documents"], "processed": block["documents"], "refused": 0,
                      "gold_bytes": block["true_positive_bytes"] + block["leaked_bytes"],
                      "leaked_bytes": block["leaked_bytes"], "false_positive_bytes": block["false_positive_bytes"]}}
-    result["presidio-research"] = row("presidio-research", sets, {"dataset": bench["identity"]["sha256"]}, source, provenance)
+    result["presidio-research"] = row("presidio-research", sets, {"dataset": bench["identity"]["sha256"]}, source, provenance,
+                                      hashlib.sha256(source_bytes).hexdigest())
     return result
 
 
@@ -280,6 +308,9 @@ def publish(capture_dir: Path, directory: Path, hardware: Path):
                                "files": [f"data/{name}_test-00000-of-00001.parquet" for name in ("English", "German", "France")]},
                                "sha256": SEALED_PINS},
                 }}
+    existing = directory / "readme-byte-panels.json"
+    if existing.exists() and (pin := json.loads(existing.read_text()).get("retained_presidio_source")):
+        manifest["retained_presidio_source"] = pin
     their = json.loads((directory / "their-benchmarks.json").read_text())["benchmarks"]
     manifest["inputs"].update({kind: their[kind]["identity"] for kind in
                                ("presidio-research", "piibench-commercial", "pii-trace")})
