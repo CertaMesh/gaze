@@ -127,8 +127,8 @@ fn pipeline(ner: bool, net: bool) -> Pipeline {
 
 async fn exercise_models(ner: bool, net: bool) {
     for provider in ["anthropic", "openai", "gemini"] {
-        let (upstream, forwarded, upstream_task) = support::spawn_json_upstream(|_| {
-            json!({"id":"msg_test","type":"message","role":"assistant","model":"safe-model",
+        let (upstream, forwarded, upstream_task) = support::spawn_json_upstream(|request| {
+            json!({"id":"msg_test","type":"message","role":"assistant","model":request.get("model").cloned().unwrap_or(json!("safe-model")),
                 "content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn",
                 "stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}})
         })
@@ -348,11 +348,18 @@ async fn exercise_models(ner: bool, net: bool) {
             }
             _ => unreachable!(),
         };
+        let model = known_body.as_object_mut().unwrap().remove("model");
+        let remaining = known_body.to_string();
+        let payload = model.map_or_else(
+            || remaining.clone(),
+            |model| format!("{{\"model\":{model},{}", &remaining[1..]),
+        );
         let response = client
             .post(format!("http://{bind}{known_path}"))
             .header("x-api-key", "synthetic-key")
             .header("anthropic-version", "2023-06-01")
-            .json(&known_body)
+            .header("content-type", "application/json")
+            .body(payload)
             .send()
             .await
             .unwrap();
@@ -376,4 +383,143 @@ async fn model_controls_skip_ner_but_keep_rules() {
 #[tokio::test]
 async fn model_controls_skip_safety_nets_but_keep_rules() {
     exercise_models(false, true).await;
+}
+
+fn response_message(model: &str) -> serde_json::Value {
+    json!({"id":"msg_test","type":"message","role":"assistant","model":model,
+        "content":[],"stop_reason":"end_turn","stop_sequence":null,
+        "usage":{"input_tokens":1,"output_tokens":1}})
+}
+
+#[tokio::test]
+async fn response_models_keep_deterministic_and_full_fallback_checks() {
+    use axum::{routing::post, Router};
+    use std::sync::Mutex;
+
+    for provider in ["anthropic", "openai", "gemini"] {
+        for (stream, nested) in [(false, false), (true, false), (true, true)] {
+            if nested && provider != "openai" {
+                continue;
+            }
+            let reply = Arc::new(Mutex::new(response_message("safe-model")));
+            let upstream_reply = Arc::clone(&reply);
+            let app = Router::new().route("/{*path}", post(move || {
+                let message = upstream_reply.lock().unwrap().clone();
+                async move {
+                    if !stream {
+                        return ([("content-type", "application/json")], message.to_string());
+                    }
+                    let frames = if provider == "anthropic" {
+                        vec![
+                            ("message_start", json!({"type":"message_start","message":message})),
+                            ("message_delta", json!({"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":1}})),
+                            ("message_stop", json!({"type":"message_stop"})),
+                        ]
+                    } else if nested {
+                        // Responses API lifecycle events nest model under response.
+                        vec![("response.completed", json!({"type":"response.completed","response":message}))]
+                    } else {
+                        vec![("", message)]
+                    };
+                    let body = frames.into_iter().map(|(event, data)| {
+                        format!("event: {event}\ndata: {data}\n\n")
+                    }).collect::<String>();
+                    ([("content-type", "text/event-stream")], body)
+                }
+            }));
+            let (address, upstream_task) = support::spawn_upstream(app).await;
+            let upstream = url::Url::parse(&format!("http://{address}")).unwrap();
+            let adapter: Arc<dyn ProviderAdapter> = match provider {
+                "anthropic" => Arc::new(AnthropicAdapter::new(upstream)),
+                "openai" => Arc::new(OpenAiAdapter::new(upstream)),
+                "gemini" => Arc::new(GeminiAdapter::new(upstream)),
+                _ => unreachable!(),
+            };
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let bind = listener.local_addr().unwrap();
+            let pipeline = Arc::new(pipeline(true, true));
+            let proxy = support::spawn_proxy(
+                ProxyConfig::new(bind, vec![adapter]),
+                move || pipeline,
+                listener,
+                support::Readiness::HealthJson { adapter: provider },
+            )
+            .await;
+            for (field, model, accepted) in [
+                ("claude-sonnet-4-5".to_string(), true),
+                ("alice@example.invalid".to_string(), false),
+                ("202-555-0142".to_string(), false), // NANPA fictional range.
+                (NAME.to_string(), false),
+                ("Claudé".to_string(), false),
+                (format!("{}claude-sonnet-5", "x.".repeat(65)), false),
+                ("session-secret".to_string(), false),
+            ]
+            .into_iter()
+            .map(|(model, accepted)| ("model", model, accepted))
+            .chain((provider == "anthropic").then(|| ("id", "claude-sonnet-5".to_string(), false)))
+            {
+                let mut message = response_message("safe-model");
+                message[field] = json!(model);
+                *reply.lock().unwrap() = message;
+                let (path, body) = match provider {
+                    "anthropic" => (
+                        "/v1/messages",
+                        json!({"model":"safe-model","max_tokens":16,"stream":stream,"messages":[{"role":"user","content":"catalog: session-secret"}]}),
+                    ),
+                    "openai" => (
+                        "/v1/responses",
+                        json!({"model":"safe-model","stream":stream,"input":"catalog: session-secret"}),
+                    ),
+                    "gemini" => (
+                        if stream {
+                            "/v1beta/models/safe-model:streamGenerateContent"
+                        } else {
+                            "/v1beta/models/safe-model:generateContent"
+                        },
+                        json!({"contents":[{"parts":[{"text":"catalog: session-secret"}]}]}),
+                    ),
+                    _ => unreachable!(),
+                };
+                let response = Client::new()
+                    .post(format!("http://{bind}{path}"))
+                    .header("x-api-key", "synthetic-key")
+                    .header("anthropic-version", "2023-06-01")
+                    .json(&body)
+                    .send()
+                    .await
+                    .unwrap();
+                let status = response.status();
+                let result = response.text().await.unwrap();
+                if stream && provider == "anthropic" && !accepted {
+                    // Direct streaming has already sent headers; the sanitized error frame closes it.
+                    assert!(
+                        result.contains("proxy_validation_failed"),
+                        "{provider} {model}: {result}"
+                    );
+                    assert!(!result.contains(&model), "rejected bytes escaped: {result}");
+                } else {
+                    assert_eq!(
+                        status,
+                        if accepted {
+                            StatusCode::OK
+                        } else {
+                            StatusCode::BAD_GATEWAY
+                        },
+                        "{provider} stream={stream} {model}: {result}"
+                    );
+                    if accepted {
+                        assert!(result.contains(&model), "echo changed: {result}");
+                    } else {
+                        assert!(
+                            result.contains("ProviderOriginPii"),
+                            "{provider} {model}: {result}"
+                        );
+                        assert!(!result.contains(&model), "rejected bytes escaped: {result}");
+                    }
+                }
+            }
+            proxy.abort();
+            upstream_task.abort();
+        }
+    }
 }

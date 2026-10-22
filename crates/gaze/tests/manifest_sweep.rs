@@ -210,6 +210,28 @@ fn routing_control_probe_keeps_rule_manifest_evidence_without_publishing() {
     assert_eq!(transaction.snapshot_entries(), before);
     assert_eq!(session.snapshot_entries(), live_before);
     assert!(audit.0.lock().unwrap().len() > audit_before);
+
+    let snapshot = transaction.commit().unwrap();
+    let tokens_before = snapshot.tokens();
+    let live_before = session.snapshot_entries();
+    for (value, expected) in [
+        ("CatalogSecret", true),
+        ("StagedSecret", true),
+        ("LearnedOnly", false),
+    ] {
+        assert_eq!(
+            p.deterministic_snapshot_control_would_mutate(
+                &snapshot,
+                value,
+                &[LocaleTag::Global],
+                &dictionaries,
+            )
+            .unwrap(),
+            expected
+        );
+    }
+    assert_eq!(snapshot.tokens(), tokens_before);
+    assert_eq!(session.snapshot_entries(), live_before);
 }
 
 fn tokens(text: &str) -> Vec<String> {

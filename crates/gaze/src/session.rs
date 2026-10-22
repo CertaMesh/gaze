@@ -1290,6 +1290,13 @@ impl<'session> SessionTransaction<'session> {
 }
 
 impl CommittedSessionSnapshot {
+    pub(crate) fn session_for_probe(&self) -> Session {
+        Session {
+            identity: Arc::clone(&self.identity),
+            state: RwLock::new(Arc::clone(&self.state)),
+        }
+    }
+
     pub fn tokens(&self) -> Vec<String> {
         self.state.value_by_token.keys().cloned().collect()
     }

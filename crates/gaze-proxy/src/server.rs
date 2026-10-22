@@ -1488,6 +1488,27 @@ impl<'pipeline, 'context> PipelineResponseResidualValidator<'pipeline, 'context>
 }
 
 impl ResponseResidualValidator for PipelineResponseResidualValidator<'_, '_> {
+    fn validate_deterministic_model(
+        &mut self,
+        value: &str,
+        snapshot: &CommittedSessionSnapshot,
+    ) -> Result<(), CodecErrorCode> {
+        let mutated = self
+            .pipeline
+            .deterministic_snapshot_control_would_mutate(
+                snapshot,
+                value,
+                self.locale_chain,
+                self.dictionaries,
+            )
+            .map_err(|_| CodecErrorCode::ProviderOriginPii)?;
+        if mutated {
+            Err(CodecErrorCode::ProviderOriginPii)
+        } else {
+            Ok(())
+        }
+    }
+
     fn validate(
         &mut self,
         value: &str,
@@ -2156,10 +2177,27 @@ async fn proxy_inner(
 
     let is_sse = content_type.contains("text/event-stream");
     let body = if is_sse {
-        transform_sse(&adapter, &session, &bytes, json_output)?
+        transform_sse(&adapter, &session, &bytes, json_output, &mut |body| {
+            validate_legacy_response_models(
+                &state.pipeline,
+                &session,
+                body,
+                adapter.name(),
+                locale_chain,
+                dictionaries,
+            )
+        })?
     } else {
         let mut response_json: Value =
             serde_json::from_slice(&bytes).map_err(|source| ProxyError::InvalidJson { source })?;
+        validate_legacy_response_models(
+            &state.pipeline,
+            &session,
+            &response_json,
+            adapter.name(),
+            locale_chain,
+            dictionaries,
+        )?;
         restore_surfaces(
             &session,
             adapter.response_pii_surfaces(&mut response_json),
@@ -2675,6 +2713,7 @@ fn map_codec_error(error: CodecError) -> DirectProxyError {
         CodecErrorCode::DuplicateObjectKey => ProxyErrorCode::DuplicateObjectKey,
         CodecErrorCode::InternalCoverageFailure => ProxyErrorCode::InternalCoverageFailure,
         CodecErrorCode::ControlWouldMutate => ProxyErrorCode::ControlWouldMutate,
+        CodecErrorCode::ProviderOriginPii => ProxyErrorCode::ProviderOriginPii,
         CodecErrorCode::OpaqueMediaUninspected => ProxyErrorCode::OpaqueMediaUninspected,
         CodecErrorCode::SignedMutationRequired => ProxyErrorCode::SignedMutationRequired,
         CodecErrorCode::SignedSurfaceMalformed => ProxyErrorCode::SignedSurfaceMalformed,
@@ -2703,7 +2742,6 @@ fn map_codec_error(error: CodecError) -> DirectProxyError {
         }
         CodecErrorCode::ProtectionFailedClosed
         | CodecErrorCode::RestoreFailedClosed
-        | CodecErrorCode::ProviderOriginPii
         | CodecErrorCode::ProviderOriginNumeric
         | CodecErrorCode::TransformedKeyCollision
         | CodecErrorCode::InvalidUtf8
@@ -3119,6 +3157,59 @@ impl RequestResidualScan<'_> {
     }
 }
 
+fn validate_legacy_response_models(
+    pipeline: &Pipeline,
+    session: &Session,
+    body: &Value,
+    provider: &str,
+    locales: &[LocaleTag],
+    dictionaries: &DictionaryBundle,
+) -> Result<(), ProxyError> {
+    let mut models = Vec::new();
+    if let Some(model) = body.get("model") {
+        models.push(model);
+    }
+    // OpenAI Responses lifecycle events carry response metadata in this object.
+    if provider == "openai"
+        && body
+            .get("type")
+            .and_then(Value::as_str)
+            .is_some_and(|kind| kind.starts_with("response."))
+    {
+        if let Some(model) = body
+            .get("response")
+            .and_then(|response| response.get("model"))
+        {
+            models.push(model);
+        }
+    }
+    for model in models {
+        let value = model
+            .as_str()
+            .filter(|value| !value.is_empty())
+            .ok_or(ProxyError::ProviderOriginPii)?;
+        if crate::codec::is_model_identifier(value) {
+            if pipeline
+                .deterministic_control_would_mutate(
+                    &session.begin_transaction(),
+                    value,
+                    locales,
+                    dictionaries,
+                )
+                .map_err(|_| ProxyError::ProviderOriginPii)?
+            {
+                return Err(ProxyError::ProviderOriginPii);
+            }
+        } else {
+            PipelineResponseResidualValidator::new(pipeline, locales, dictionaries)
+                .map_err(|_| ProxyError::ProviderOriginPii)?
+                .validate(value, &[])
+                .map_err(|_| ProxyError::ProviderOriginPii)?;
+        }
+    }
+    Ok(())
+}
+
 /// Restores every surface in its own syntax. `json_output` is the request's
 /// [`ProviderAdapter::requests_json_output`] answer, which resolves
 /// [`SurfaceSyntax::ModelOutput`].
@@ -3210,6 +3301,7 @@ fn transform_sse(
     session: &Session,
     bytes: &[u8],
     json_output: bool,
+    validate_models: &mut impl FnMut(&Value) -> Result<(), ProxyError>,
 ) -> Result<Vec<u8>, ProxyError> {
     let text = std::str::from_utf8(bytes).map_err(|err| ProxyError::SsePartialFrame {
         reason: err.to_string(),
@@ -3247,6 +3339,10 @@ fn transform_sse(
             event_name,
             event,
         });
+    }
+
+    for event in frames.iter().filter_map(|frame| frame.event.as_ref()) {
+        validate_models(&event.data)?;
     }
 
     // Pass 1: the logical text of every stream, in event order.
@@ -3359,7 +3455,9 @@ fn proxy_error_response(err: ProxyError) -> Response {
         ProxyError::UnsurfacedPii { .. }
         | ProxyError::ControlWouldMutate
         | ProxyError::Refused { .. } => StatusCode::UNPROCESSABLE_ENTITY,
-        ProxyError::UpstreamUnreachable { .. } => StatusCode::BAD_GATEWAY,
+        ProxyError::UpstreamUnreachable { .. } | ProxyError::ProviderOriginPii => {
+            StatusCode::BAD_GATEWAY
+        }
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
     let mut body = serde_json::json!({
@@ -3389,6 +3487,7 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::SsePartialFrame { .. } => "SsePartialFrame",
         ProxyError::UnsurfacedPii { .. } => "UnsurfacedPii",
         ProxyError::ControlWouldMutate => "ControlWouldMutate",
+        ProxyError::ProviderOriginPii => "ProviderOriginPii",
         ProxyError::UnprovenCoverage => "UnprovenCoverage",
         ProxyError::DirectAdapterMismatch => "DirectAdapterMismatch",
         ProxyError::Refused { .. } => "Refused",

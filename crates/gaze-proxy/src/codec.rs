@@ -410,6 +410,16 @@ pub trait ResponseResidualValidator {
         value: &str,
         authorized_output_ranges: &[Range<usize>],
     ) -> Result<(), CodecErrorCode>;
+
+    /// Validates an immutable model identifier with deterministic recognizers only.
+    /// The default preserves full validation for implementations without this capability.
+    fn validate_deterministic_model(
+        &mut self,
+        value: &str,
+        _snapshot: &CommittedSessionSnapshot,
+    ) -> Result<(), CodecErrorCode> {
+        self.validate(value, &[])
+    }
 }
 
 /// Private-field request transformation context.
@@ -576,6 +586,15 @@ impl<'a> ResponseTransformContext<'a> {
         self.snapshot
             .restore_strict_decoded_text_with_provenance(input)
             .map_err(map_restore_error)
+    }
+
+    pub(crate) fn validate_model(&mut self, value: &str) -> Result<(), CodecErrorCode> {
+        if is_model_identifier(value) {
+            self.residual
+                .validate_deterministic_model(value, self.snapshot)
+        } else {
+            self.validate(value, &[])
+        }
     }
 
     pub(crate) fn validate(

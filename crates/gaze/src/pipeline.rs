@@ -35,7 +35,7 @@ use crate::registry::{Candidate, DetectContext, Recognizer, RecognizerRegistry};
 use crate::rule::{Action, Rule, RuleContext};
 use crate::rulepack::RulepackError;
 use crate::safety_net_scan::SafetyNetScanText;
-use crate::session::{RestoreEvent, Session, SessionTransaction};
+use crate::session::{CommittedSessionSnapshot, RestoreEvent, Session, SessionTransaction};
 use crate::spelling::{JsonStringLiterals, SourceSpelling};
 use crate::sweep::{ManifestEvidence, SweepLink, SweepMatcher, SweepSource};
 use crate::types::{CleanDocument, RawDocument, Value};
@@ -540,6 +540,24 @@ impl Pipeline {
                 PrefixCacheWriteMode::Suppress,
             )?;
         Ok(!matches!(clean, CleanDocument::Text(text) if text == input))
+    }
+
+    /// The deterministic routing-control probe against immutable committed request evidence.
+    /// The snapshot remains restore-only; all probe mutations are discarded privately.
+    pub fn deterministic_snapshot_control_would_mutate(
+        &self,
+        snapshot: &CommittedSessionSnapshot,
+        input: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<bool> {
+        let session = snapshot.session_for_probe();
+        self.deterministic_control_would_mutate(
+            &session.begin_transaction(),
+            input,
+            locale_chain,
+            dictionaries,
+        )
     }
 
     /// The recognizer registry this pipeline detects with: every registered

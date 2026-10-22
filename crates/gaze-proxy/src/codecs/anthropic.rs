@@ -3593,7 +3593,7 @@ fn transform_response_root(
                 saw_role = true;
             }
             "model" => {
-                response_nonempty_string_control(&mut member.value, ctx, ledger)?;
+                response_model_control(&mut member.value, ctx, ledger)?;
                 saw_model = true;
             }
             "stop_reason" => {
@@ -3967,6 +3967,20 @@ fn response_string_control(
     };
     guard_mutable_text_response(&value.value)?;
     ctx.validate(&value.value, &[])
+}
+
+fn response_model_control(
+    node: &mut JsonNode,
+    ctx: &mut ResponseTransformContext<'_>,
+    ledger: &mut CoverageLedger,
+) -> Result<(), CodecErrorCode> {
+    ledger.mark(node.occurrence)?;
+    let value = string_value(node)?;
+    if value.is_empty() {
+        return Err(CodecErrorCode::UnsupportedResponseSurface);
+    }
+    guard_mutable_text_response(value)?;
+    ctx.validate_model(value)
 }
 
 fn response_nonempty_string_control(

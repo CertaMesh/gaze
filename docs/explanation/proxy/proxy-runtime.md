@@ -123,10 +123,19 @@ publish mappings or reuse prefix-cache state.
 Values outside that grammar run the full pipeline, including NER and safety
 nets, and fail closed on a change. Stop sequences, tool names and IDs,
 `previous_response_id`, message content, and every other field retain the full
-pipeline. A Gemini JSON field named `model` also keeps the full pipeline;
+pipeline. A Gemini request JSON field named `model` also keeps the full pipeline;
 Gemini routes by the model in its URL. The identifier grammar does not prove that a
 value is free of PII. A name that fits the grammar and has no deterministic
 match is outside this routing probe's coverage.
+
+Response `model` fields use the same grammar and deterministic probe, including
+Anthropic's streamed `message_start.message.model` and OpenAI Responses
+lifecycle `response.model`. Rule-backed request manifest values remain
+protected. A finding fails with `502 ProviderOriginPii`; an already opened
+Anthropic stream emits the sanitized error frame and closes. Response model
+values outside the grammar receive full validation. Every other response field
+retains its existing validation; this exception does not cover `modelVersion`,
+IDs, tool names, or other identifier-like fields.
 
 At startup, `gaze proxy serve` prints
 `warning: no NER model configured: person names are not detected`

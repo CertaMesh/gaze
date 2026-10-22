@@ -44,6 +44,7 @@ def main():
     policy = open(args.policy, encoding="utf-8").read()
     assert "[ner]" in policy and 'backend = "nym"' in policy, "needs full setup policy"
     forwarded = []
+    response_model = None
 
     class Upstream(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -52,9 +53,12 @@ def main():
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             forwarded.append((self.path, body))
+            echoed_model = body.get("model")
+            if echoed_model is None:
+                echoed_model = urllib.parse.unquote(self.path).split("/models/", 1)[-1].rsplit(":", 1)[0]
             response = json.dumps({
                 "id": "msg_test", "type": "message", "role": "assistant",
-                "model": "safe-model", "content": [{"type": "text", "text": "ok"}],
+                "model": "safe-model" if args.baseline else response_model or echoed_model, "content": [{"type": "text", "text": "ok"}],
                 "stop_reason": "end_turn", "stop_sequence": None,
                 "usage": {"input_tokens": 1, "output_tokens": 1},
             }).encode()
@@ -118,11 +122,38 @@ def main():
                     assert status == (200 if accepted else 422), result
                     assert len(forwarded) == before + int(accepted)
                     if accepted:
+                        assert json.loads(result)["model"] == model, result
                         path_sent, body_sent = forwarded[-1]
                         if provider == "gemini":
                             assert urllib.parse.unquote(path_sent) == urllib.parse.unquote(path)
                         else:
                             assert body_sent["model"] == model
+        if not args.baseline:
+            for provider in ("anthropic", "openai", "gemini"):
+                for response_model in REFUSED:
+                    if provider == "anthropic":
+                        path = "/v1/messages"
+                        body = {"model": "safe-model", "max_tokens": 16,
+                                "messages": [{"role": "user", "content": "hello"}]}
+                    elif provider == "openai":
+                        path = "/v1/chat/completions"
+                        body = {"model": "safe-model", "messages": [{"role": "user", "content": "hello"}]}
+                    else:
+                        path = "/v1beta/models/safe-model:generateContent"
+                        body = {"contents": [{"parts": [{"text": "hello"}]}]}
+                    request = urllib.request.Request(base + path, json.dumps(body).encode(), headers={
+                        "Content-Type": "application/json", "x-api-key": "synthetic-key",
+                        "anthropic-version": "2023-06-01",
+                    })
+                    try:
+                        response = urllib.request.urlopen(request, timeout=120)
+                    except urllib.error.HTTPError as error:
+                        response = error
+                    with response:
+                        status, result = response.status, response.read().decode()
+                    print(json.dumps({"provider": provider, "response_model": response_model, "status": status}), flush=True)
+                    assert status == 502 and "ProviderOriginPii" in result, result
+                    assert response_model not in result, result
     finally:
         proxy.terminate()
         try:
