@@ -134,8 +134,11 @@ jobs:
           trap 'rm -rf "$smoke_dir"' EXIT
           "$bin" setup --non-interactive --safety-net none \
             --model-dir "$smoke_dir/ner" --policy-out "$smoke_dir/policy.toml"
-          printf 'Ada Example sent a message.' | "$bin" clean \
-            --policy "$smoke_dir/policy.toml" --rulepack-bundled none > "$smoke_dir/clean.json"
+          printf 'Dr. Schmidt wrote the letter.' | "$bin" clean \
+            --rulepack-bundled core > "$smoke_dir/rules-only.json"
+          python3 -c 'import json,sys; assert json.load(sys.stdin)["clean_text"] == "Dr. Schmidt wrote the letter."' < "$smoke_dir/rules-only.json"
+          printf 'Dr. Schmidt wrote the letter.' | "$bin" clean \
+            --policy "$smoke_dir/policy.toml" --rulepack-bundled core > "$smoke_dir/clean.json"
           python3 - "$smoke_dir/clean.json" "$smoke_dir/restore.json" <<'PYTHON'
           import json
           import sys
@@ -143,11 +146,11 @@ jobs:
 
           result = json.loads(Path(sys.argv[1]).read_text())
           assert ':Name_' in result['clean_text'], result['clean_text']
-          assert 'Ada Example' not in result['clean_text'], result['clean_text']
+          assert 'Schmidt' not in result['clean_text'], result['clean_text']
           Path(sys.argv[2]).write_text(json.dumps({
               'session_blob': result['session_blob'], 'text': result['clean_text'],
           }))
           PYTHON
           "$bin" restore < "$smoke_dir/restore.json" > "$smoke_dir/restored.json"
-          python3 -c 'import json,sys; assert json.load(sys.stdin)["text"] == "Ada Example sent a message."' < "$smoke_dir/restored.json"
+          python3 -c 'import json,sys; assert json.load(sys.stdin)["text"] == "Dr. Schmidt wrote the letter."' < "$smoke_dir/restored.json"
 

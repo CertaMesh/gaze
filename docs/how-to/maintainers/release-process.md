@@ -16,7 +16,8 @@ Source: [`.github/workflows/release.yml`](../../../.github/workflows/release.yml
   arm64 PR dry-run share [release-build.yml](../../../.github/workflows/release-build.yml),
   including features, packaging, checksum verification, and artifact smoke tests.
   The arm64 smoke also installs the pinned NER bundle, runs `gaze clean` with
-  NER and no bundled rules, and checks exact restore.
+  NER and the core rulepack, and checks exact restore. The same input must stay
+  unchanged with the core rulepack alone.
 - Before merging changes to either release workflow, require `arm64-dry-run`
   to pass on the PR head. This job runs only on PRs that change those workflows.
   It uploads Actions artifacts without publishing a release. Publication runs
