@@ -52,6 +52,12 @@ pub enum Error {
     Protection(#[from] ProtectionError),
     #[error("invalid regex: {0}")]
     InvalidRegex(#[source] regex::Error),
+    #[error("restore manifest matcher build failed")]
+    RestoreMatcherBuild,
+    /// An exact manifest-owned run has multiple valid token splits.
+    /// Carries no token spelling or mapped owner value.
+    #[error("ambiguous token run: [REDACTED]")]
+    AmbiguousTokenRun,
     #[error("unknown token: [REDACTED]")]
     UnknownToken {
         class: PiiClass,
