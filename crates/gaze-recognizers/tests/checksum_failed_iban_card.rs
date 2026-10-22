@@ -30,12 +30,13 @@
 // drift-ack: the core no-policy snapshot's Luhn-valid card now lists `card.cued+card.structural`
 // as merged sources for the same span and class; the tokenized output is unchanged.
 
+mod support;
+
 use std::sync::{Arc, Mutex, OnceLock};
 
 use gaze::{
-    Action, CleanDocument, Context, DictionaryBundle, LocaleChain, LocaleTag, PiiClass, Pipeline,
-    RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec, Rulepack,
-    RulepackSource, Scope, Session,
+    Action, LocaleTag, PiiClass, Pipeline, RedactionEntry, RedactionLogError, RedactionLogger,
+    RuleSpec, Rulepack, RulepackSource, Scope, Session,
 };
 use gaze_recognizers::{embedded, RegexDetector, ValidatorKind, ValidatorOnFail};
 use gaze_types::{ValidatorFailReason, ValidatorOutcome};
@@ -239,45 +240,25 @@ impl RedactionLogger for MemoryLogger {
 const LOCALES: &[LocaleTag] = &[LocaleTag::EnUs, LocaleTag::DeDe, LocaleTag::Global];
 
 fn pipeline(logger: MemoryLogger) -> Pipeline {
-    let rulepacks: Vec<Rulepack> = ["core", "locale-de", "locale-en"]
-        .into_iter()
-        .map(|name| {
-            Rulepack::load(RulepackSource::Embedded(
-                embedded(name).unwrap_or_else(|| panic!("{name} rulepack")),
-            ))
-            .unwrap_or_else(|error| panic!("{name} loads: {error}"))
-        })
-        .collect();
-    let mut policy = gaze::Policy::default();
-    policy.rules = vec![
-        RuleSpec::Class {
-            class: custom("iban"),
-            action: Action::Tokenize,
-        },
-        RuleSpec::Class {
-            class: custom("credit_card"),
-            action: Action::Tokenize,
-        },
-        RuleSpec::Default {
-            action: Action::Preserve,
-        },
-    ];
-    policy.rulepacks.bundled = vec![
-        "core".to_string(),
-        "locale-de".to_string(),
-        "locale-en".to_string(),
-    ];
-    let context = Context {
-        dictionaries: std::collections::HashMap::new(),
-        class_map: std::collections::HashMap::new(),
-        fields: serde_json::Map::new(),
-        record_match_kinds: Default::default(),
-        record_value_rejections: Default::default(),
-    };
-    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(LOCALES));
-    gaze_assembly::build_pipeline(&policy, &context, &rulepacks, &chain, None)
-        .expect("pipeline")
-        .with_redaction_logger(logger)
+    support::pipeline_for(
+        LOCALES,
+        &["core", "locale-de", "locale-en"],
+        vec![
+            RuleSpec::Class {
+                class: custom("iban"),
+                action: Action::Tokenize,
+            },
+            RuleSpec::Class {
+                class: custom("credit_card"),
+                action: Action::Tokenize,
+            },
+            RuleSpec::Default {
+                action: Action::Preserve,
+            },
+        ],
+        false,
+    )
+    .with_redaction_logger(logger)
 }
 
 fn shared() -> &'static Pipeline {
@@ -286,18 +267,7 @@ fn shared() -> &'static Pipeline {
 }
 
 fn clean_with(pipeline: &Pipeline, session: &Session, text: &str) -> String {
-    let (clean, _, _) = pipeline
-        .clean_with_safety_net_detect_context(
-            session,
-            RawDocument::Text(text.to_string()),
-            LOCALES,
-            &DictionaryBundle::default(),
-        )
-        .expect("clean");
-    match clean {
-        CleanDocument::Text(text) => text,
-        _ => panic!("expected text"),
-    }
+    support::clean(pipeline, session, text, LOCALES)
 }
 
 fn clean(text: &str) -> String {

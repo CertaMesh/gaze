@@ -39,9 +39,11 @@
 //! account. `AT61 1904 3002 3457 3201` and `DE89 3704 0044 0532 0130 00` are the published ISO
 //! 13616 / Wikipedia documentation examples.
 
+mod support;
+
 use gaze::{
-    Action, CleanDocument, Context, DictionaryBundle, LocaleChain, LocaleTag, PiiClass, Pipeline,
-    RawDocument, RawMatch, RuleSpec, Rulepack, RulepackSource, Scope, Session,
+    Action, CleanDocument, DictionaryBundle, LocaleTag, PiiClass, Pipeline, RawDocument, RawMatch,
+    RuleSpec, Rulepack, RulepackSource, Scope, Session,
 };
 use gaze_recognizers::embedded;
 use gaze_types::iban_registry_length;
@@ -49,16 +51,6 @@ use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 // ============================================================================ harness
-
-fn empty_context() -> Context {
-    Context {
-        dictionaries: std::collections::HashMap::new(),
-        class_map: std::collections::HashMap::new(),
-        fields: serde_json::Map::new(),
-        record_match_kinds: Default::default(),
-        record_value_rejections: Default::default(),
-    }
-}
 
 fn custom(class: &str) -> PiiClass {
     PiiClass::custom(class).expect("valid custom class")
@@ -74,71 +66,45 @@ fn pipeline_for(locales: &[LocaleTag]) -> Pipeline {
     // `[locale.cues.iban]` bucket that satisfies it lives in the locale packs. Without them every
     // IBAN fails closed to a family-level token, which would make these fixtures pass for the
     // wrong reason. This is the same `core,locale-de,locale-en` wiring the CLI repro used.
-    let rulepacks: Vec<Rulepack> = ["core", "locale-de", "locale-en"]
-        .into_iter()
-        .map(|name| {
-            Rulepack::load(RulepackSource::Embedded(
-                embedded(name).unwrap_or_else(|| panic!("{name} rulepack")),
-            ))
-            .unwrap_or_else(|error| panic!("{name} loads: {error}"))
-        })
-        .collect();
-    let mut policy = gaze::Policy::default();
-    policy.rules = vec![
-        RuleSpec::Class {
-            class: custom("iban"),
-            action: Action::Tokenize,
-        },
-        RuleSpec::Class {
-            class: custom("credit_card"),
-            action: Action::Tokenize,
-        },
-        RuleSpec::Default {
-            action: Action::Preserve,
-        },
-    ];
-    policy.rulepacks.bundled = vec![
-        "core".to_string(),
-        "locale-de".to_string(),
-        "locale-en".to_string(),
-    ];
-    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(locales));
-    gaze_assembly::build_pipeline(&policy, &empty_context(), &rulepacks, &chain, None)
-        .expect("pipeline")
+    support::pipeline_for(
+        locales,
+        &["core", "locale-de", "locale-en"],
+        vec![
+            RuleSpec::Class {
+                class: custom("iban"),
+                action: Action::Tokenize,
+            },
+            RuleSpec::Class {
+                class: custom("credit_card"),
+                action: Action::Tokenize,
+            },
+            RuleSpec::Default {
+                action: Action::Preserve,
+            },
+        ],
+        false,
+    )
 }
 
 /// The same bundle with `custom:phone` tokenized too, for the shape where `phone.national.de`
 /// claims a sub-run of the IBAN: with phone preserved, a preserve winner would leave those
 /// bytes raw and hide what the fixture is about.
 fn pipeline_tokenizing_phone() -> Pipeline {
-    let rulepacks: Vec<Rulepack> = ["core", "locale-de", "locale-en"]
-        .into_iter()
-        .map(|name| {
-            Rulepack::load(RulepackSource::Embedded(
-                embedded(name).unwrap_or_else(|| panic!("{name} rulepack")),
-            ))
-            .unwrap_or_else(|error| panic!("{name} loads: {error}"))
-        })
-        .collect();
-    let mut policy = gaze::Policy::default();
-    policy.rules = ["iban", "credit_card", "phone"]
-        .into_iter()
-        .map(|class| RuleSpec::Class {
-            class: custom(class),
-            action: Action::Tokenize,
-        })
-        .chain(std::iter::once(RuleSpec::Default {
-            action: Action::Preserve,
-        }))
-        .collect();
-    policy.rulepacks.bundled = vec![
-        "core".to_string(),
-        "locale-de".to_string(),
-        "locale-en".to_string(),
-    ];
-    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(LOCALES));
-    gaze_assembly::build_pipeline(&policy, &empty_context(), &rulepacks, &chain, None)
-        .expect("pipeline")
+    support::pipeline_for(
+        LOCALES,
+        &["core", "locale-de", "locale-en"],
+        ["iban", "credit_card", "phone"]
+            .into_iter()
+            .map(|class| RuleSpec::Class {
+                class: custom(class),
+                action: Action::Tokenize,
+            })
+            .chain(std::iter::once(RuleSpec::Default {
+                action: Action::Preserve,
+            }))
+            .collect(),
+        false,
+    )
 }
 
 /// One pipeline for the whole file. Building it per document dominated the runtime of the
@@ -152,18 +118,7 @@ const LOCALES: &[LocaleTag] = &[LocaleTag::DeDe, LocaleTag::Global];
 
 fn clean(text: &str) -> String {
     let session = Session::new(Scope::Ephemeral).expect("session");
-    let (clean, _, _) = shared_pipeline()
-        .clean_with_safety_net_detect_context(
-            &session,
-            RawDocument::Text(text.to_string()),
-            LOCALES,
-            &DictionaryBundle::default(),
-        )
-        .expect("clean");
-    match clean {
-        CleanDocument::Text(text) => text,
-        _ => panic!("expected text"),
-    }
+    support::clean(shared_pipeline(), &session, text, LOCALES)
 }
 
 /// The cleaned text with every emitted token replaced by a single NUL.
