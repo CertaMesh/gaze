@@ -44,6 +44,12 @@ $ cargo run -p gaze-cli -- clean --policy policy.toml
 
 The installed binary name is `gaze`.
 
+[GitHub releases](https://github.com/CertaMesh/gaze/releases) also provide
+`gaze-aarch64-apple-darwin`, `gaze-x86_64-linux-gnu`, and
+`gaze-aarch64-linux-gnu`, each with a matching `.sha256` file. Both Linux
+binaries require glibc 2.39 or later. Use `gaze-aarch64-linux-gnu` in Linux
+arm64 containers on Apple Silicon.
+
 ## Subcommands
 
 Current subcommands in [`src/commands/mod.rs`](src/commands/mod.rs):
