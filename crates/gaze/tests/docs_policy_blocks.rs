@@ -119,7 +119,12 @@ fn toml_blocks(page: &'static str, text: &str) -> Vec<Block> {
         match event {
             Event::Html(html) => marker = Some((line, parse_marker(Some(&html)))),
             Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(info)))
-                if info.split_whitespace().next() == Some("toml") =>
+                if info
+                    .split(|c: char| c.is_whitespace() || matches!(c, ',' | '{'))
+                    .next()
+                    .map(str::to_ascii_lowercase)
+                    .as_deref()
+                    == Some("toml") =>
             {
                 let marker = marker
                     .take()
