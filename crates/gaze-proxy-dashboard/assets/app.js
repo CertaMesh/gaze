@@ -542,10 +542,11 @@
   }
 
   function recomputeFollowPause() {
-    const reasons = state.follow.pauseReasons;
-    if (state.reveal) { reasons.add("reveal"); } else { reasons.delete("reveal"); }
-    if (state.selectedId !== null) { reasons.add("selection"); } else { reasons.delete("selection"); }
-    updateFollowControls();
+    withFollowScroll(() => {
+      const reasons = state.follow.pauseReasons;
+      if (state.reveal) { reasons.add("reveal"); } else { reasons.delete("reveal"); }
+      if (state.selectedId !== null) { reasons.add("selection"); } else { reasons.delete("selection"); }
+    });
   }
 
   function scheduleFollow() {
@@ -576,11 +577,12 @@
   }
 
   function resumeFollow() {
-    state.follow.pausedManual = false;
-    state.follow.pauseReasons.delete("scroll");
-    state.follow.pauseReasons.delete("focus");
-    applyPendingSnapshot();
-    updateFollowControls();
+    withFollowScroll(() => {
+      state.follow.pausedManual = false;
+      state.follow.pauseReasons.delete("scroll");
+      state.follow.pauseReasons.delete("focus");
+      applyPendingSnapshot();
+    });
     announce("Live follow resumed.");
   }
 
@@ -620,7 +622,7 @@
     }
     // Sample movement before deciding whether this response may replace rows;
     // its native scroll event may still be queued behind these microtasks.
-    if (fromFollow) { onPageScrollPause(); }
+    if (fromFollow) { withFollowScroll(); }
     if (fromFollow && followPaused()) {
       const oldIds = new Set((oldSnap && oldSnap.events || []).map((e) => e.logicalId));
       const fresh = (snap.events || []).filter((e) => !oldIds.has(e.logicalId)).length;
@@ -801,12 +803,11 @@
       list.appendChild(el("li", { attrs: { "aria-setsize": String(events.length), "aria-posinset": String(i + 1) } }, [renderEventRow(ev, i + 1, events.length)]));
     });
     list.addEventListener("focusin", () => {
-      state.follow.pauseReasons.add("focus");
-      updateFollowControls();
+      withFollowScroll(() => { state.follow.pauseReasons.add("focus"); });
     });
     list.addEventListener("keydown", (kev) => {
       if (kev.key !== "ArrowDown" && kev.key !== "ArrowUp") { return; }
-      state.follow.pauseReasons.add("focus");
+      withFollowScroll(() => { state.follow.pauseReasons.add("focus"); });
       const rows = Array.from(list.querySelectorAll(".event-row"));
       const idx = rows.indexOf(document.activeElement);
       if (idx === -1) { return; }
@@ -1378,65 +1379,60 @@
     }
     const snap = state.snapshot;
     if (!snap) { clear(root); return; }
-    clear(root);
-    root.appendChild(renderSafetyBar(snap));
+    withFollowScroll(() => {
+      clear(root);
+      root.appendChild(renderSafetyBar(snap));
 
-    const mode = layoutMode();
-    const panes = el("div", { className: "panes" });
-    if (mode === "single") {
-      if (state.singleView === "detail" && state.selectedId !== null) {
-        panes.appendChild(renderDetail(snap));
+      const mode = layoutMode();
+      const panes = el("div", { className: "panes" });
+      if (mode === "single") {
+        if (state.singleView === "detail" && state.selectedId !== null) {
+          panes.appendChild(renderDetail(snap));
+        } else {
+          panes.appendChild(renderList(snap));
+        }
       } else {
         panes.appendChild(renderList(snap));
+        panes.appendChild(renderDetail(snap));
       }
-    } else {
-      panes.appendChild(renderList(snap));
-      panes.appendChild(renderDetail(snap));
+      root.appendChild(panes);
+      attachScrollPause();
+      syncBarHeight();
+    });
+  }
+
+  const followScrollPositions = new WeakMap();
+
+  // Sample pending movement before any render or pause-state change. Record
+  // positions afterward so only the change's own layout clamp is ignored.
+  function withFollowScroll(change = () => {}) {
+    function positions() {
+      const doc = document.scrollingElement || document.documentElement;
+      const list = document.getElementById("event-list");
+      const pane = list && (list.closest(".pane-list") || list);
+      return [doc, pane].filter(Boolean).map((node) => [node, node.scrollTop]);
     }
-    root.appendChild(panes);
+    for (const [node, top] of positions()) {
+      const last = followScrollPositions.get(node);
+      if (state.screen === "app" && !state.terminal && last !== undefined && top < last) {
+        state.follow.pauseReasons.add("scroll");
+      }
+      followScrollPositions.set(node, top);
+    }
+    change();
     updateFollowControls();
-    attachScrollPause();
-    syncBarHeight();
-    // Follow already sampled pending user movement before committing. Ignore
-    // only the scroll clamp caused by replacing the rows (including Resume).
-    const doc = document.scrollingElement || document.documentElement;
-    pageScrollLastTop = doc ? doc.scrollTop : 0;
-  }
-
-  /* The page/document is the real scroll container at every viewport
-   * (.pane-list declares no overflow), so upward-scroll detection binds once
-   * to window. The per-render element listener below stays for any future
-   * element-level scroller; scroll events do not bubble, so the two paths
-   * never double-fire for the same scroll. */
-  let pageScrollLastTop = null;
-
-  function onPageScrollPause() {
-    const doc = document.scrollingElement || document.documentElement;
-    const top = doc ? doc.scrollTop : 0;
-    const last = pageScrollLastTop;
-    pageScrollLastTop = top;
-    if (state.screen !== "app" || state.terminal) { return; }
-    if (last !== null && top < last) {
-      state.follow.pauseReasons.add("scroll");
-      updateFollowControls();
+    for (const [node, top] of positions()) {
+      followScrollPositions.set(node, top);
     }
   }
 
-  window.addEventListener("scroll", onPageScrollPause, { passive: true });
+  window.addEventListener("scroll", () => withFollowScroll(), { passive: true });
 
   function attachScrollPause() {
     const list = document.getElementById("event-list");
     if (!list) { return; }
     const scroller = list.closest(".pane-list") || list;
-    let lastTop = scroller.scrollTop;
-    scroller.addEventListener("scroll", () => {
-      const top = scroller.scrollTop;
-      if (top < lastTop) {
-        state.follow.pauseReasons.add("scroll");
-        updateFollowControls();
-      }
-      lastTop = top;
-    }, { passive: true });
+    scroller.addEventListener("scroll", () => withFollowScroll(), { passive: true });
   }
 
   let relayoutQueued = false;
@@ -1502,8 +1498,10 @@
     state.selectedId = null;
     state.singleView = "list";
     state.tab = "overview";
-    state.follow.pausedManual = false;
-    state.follow.pauseReasons.clear();
+    withFollowScroll(() => {
+      state.follow.pausedManual = false;
+      state.follow.pauseReasons.clear();
+    });
     state.follow.buffered = 0;
     state.follow.pending = null;
     const pre = document.getElementById("preauth");
