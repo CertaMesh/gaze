@@ -403,6 +403,36 @@ async fn openai_chat_tool_arguments_token_split_across_events_restores_json_esca
 }
 
 #[tokio::test]
+async fn openai_chat_json_spelled_value_split_across_tool_events_restores_semantic_value() {
+    const SEMANTIC_PERSON: &str = "Robert \"Bob\" Smith";
+    let mut request = chat_request();
+    // The person is first minted from a JSON string literal, rather than prose.
+    request["messages"] = json!([
+        {"role": "user", "content": json!({"person": SEMANTIC_PERSON}).to_string()},
+        {"role": "user", "content": format!("Alias: {RAW_ALIAS}\n")},
+    ]);
+    let payloads = stream_through_proxy(
+        |tokens| {
+            let arguments = json!({"to": tokens.person, "alias": tokens.alias}).to_string();
+            chat_sse(tool_call_chunks(0, "send_mail", &arguments))
+        },
+        "/v1/chat/completions",
+        request,
+    )
+    .await;
+    assert!(
+        payloads.len() > 2,
+        "provider must split the arguments across events"
+    );
+    let arguments = chat_tool_arguments(&payloads);
+    let restored = &arguments[&(0, 0)];
+    assert_no_token_left("JSON-spelled chat tool arguments", restored);
+    let parsed: Value = serde_json::from_str(restored)
+        .unwrap_or_else(|error| panic!("restored arguments do not parse ({error}): {restored:?}"));
+    assert_eq!(parsed, json!({"to": SEMANTIC_PERSON, "alias": RAW_ALIAS}));
+}
+
+#[tokio::test]
 async fn openai_chat_parallel_tool_calls_restore_separately() {
     let payloads = stream_through_proxy(
         |tokens| {

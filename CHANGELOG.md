@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Password hashes and code credentials.** The setup-default `secrets` bundle
+  protects whole bcrypt, Argon2, scrypt/yescrypt, crypt, phpass and Django
+  encodings, including broader crypt/Django salts and hashes in SQL dumps.
+  SQL-escaped quotes count toward the decoded salt limit, and JSON-escaped
+  slashes stay inside the complete restorable hash. Complete JSON separator
+  escapes establish both hash boundaries. Malformed escapes and identifier-glued
+  prefixes and tails remain rejected.
+  Complete quoted password and credential-token fields in PHP arrays and JSON
+  retain their keys and punctuation. Generic `token` keys remain outside the
+  code-field rule; ambiguous password metadata stays fail-closed. Whole Argon2
+  encodings no longer split at an inner postal-code candidate (#824).
 - Plain-text session files on macOS/Linux clear and verify their extended ACL
   before any restore-key bytes are written, including overwrite replacements.
   ACL failures and unsupported platforms (including Windows) refuse
@@ -28,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `gaze-proxy` no longer restores a value captured from a JSON document with its
+  JSON escapes. A name captured as `Robert \"Bob\" Smith` from a JSON text block
+  or JSON tool result now reaches Anthropic `tool_use.input` as
+  `Robert "Bob" Smith`. Each token keeps the spelling it was first minted with,
+  so a value first seen in plain text never gains a JSON reading later.
+  Plain-text destinations still restore the bytes the client sent.
 - The legacy OpenAI and Gemini proxy paths restore a pseudonym token that a
   stream splits across SSE events. Each event was restored alone, so a token
   streamed in pieces, the common case, reached the client unrestored. Each
@@ -53,6 +70,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as text. Unsupported fields and disallowed queries on admitted routes return
   Anthropic-shaped `400` errors. Unknown paths retain `404`. Unverified
   `safeguards`, message-level system roles and opaque media remain refused (#814).
+
+### Changed
+
+- **Snapshot contract.** `Session` records each token's source spelling and
+  adds `source_spelling` and `restore_strict_decoded_text_with_provenance`. A
+  manifest holding a JSON-escaped value exports as `session_blob` envelope v7,
+  which v0.17 and older refuse with `InvalidSnapshotVersion(7)`. Other
+  manifests still export as v6.
 
 ### Benchmark
 

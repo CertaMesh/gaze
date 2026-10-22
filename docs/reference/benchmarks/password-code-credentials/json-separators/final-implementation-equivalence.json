@@ -1,0 +1,47 @@
+{
+  "measured_revision": "3188916e61972b651f1de7e3f99ed421c2320098",
+  "verified_source_revision": "0685b516547002dc609bdf8941003a806470d502",
+  "production_inputs": {
+    "crates": {
+      "measured": "36b4be6276768fa2618df6187f96abe171527cb2",
+      "verified": "36b4be6276768fa2618df6187f96abe171527cb2",
+      "identical": true
+    },
+    "scripts/bench/agentic_layers.py": {
+      "measured": "376fee11e3c831b63a256c7b10c422cfc369bece",
+      "verified": "376fee11e3c831b63a256c7b10c422cfc369bece",
+      "identical": true
+    },
+    "scripts/bench/credential_code_cells.py": {
+      "measured": "2fee840572ec8454678e003b6259da53ebf3248c",
+      "verified": "2fee840572ec8454678e003b6259da53ebf3248c",
+      "identical": true
+    },
+    "scripts/bench/credential_code_arm.py": {
+      "measured": "93afb0534a8a69578eec8339d5034812f4d01c7b",
+      "verified": "93afb0534a8a69578eec8339d5034812f4d01c7b",
+      "identical": true
+    },
+    "scripts/bench/gaze_bench_score.py": {
+      "measured": "9d4de7ebcd1bdc672ef8c28e7be8a28e5fa15fc1",
+      "verified": "9d4de7ebcd1bdc672ef8c28e7be8a28e5fa15fc1",
+      "identical": true
+    },
+    "scripts/bench/scorecard_record.py": {
+      "measured": "86d005a8d1bdd513019071e9520d412213510a95",
+      "verified": "86d005a8d1bdd513019071e9520d412213510a95",
+      "identical": true
+    },
+    "scripts/bench/rescore_past_release.py": {
+      "measured": "ff5fdf6591163a8a11d6897d043c9336644769bc",
+      "verified": "ff5fdf6591163a8a11d6897d043c9336644769bc",
+      "identical": true
+    },
+    "scripts/bench/export_portable_record.py": {
+      "measured": "4335bfb107e3ec4e1e4f987ac30721d6781ef6a5",
+      "verified": "4335bfb107e3ec4e1e4f987ac30721d6781ef6a5",
+      "identical": true
+    }
+  },
+  "later_test_change": "Only the dev/test corpus SHA-256 expectations in test_agentic_layers.py changed; generated document bytes and scoring logic are identical."
+}

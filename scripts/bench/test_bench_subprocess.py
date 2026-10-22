@@ -149,7 +149,12 @@ def child(mode):
 def invoke(mode, root, *, late=False, post=False, owners=None):
     created = owners if owners is not None else []
     def factory(*args, **kwargs):
-        owner = transport.BenchSubprocess(command(mode), cwd=root, limits=limits())
+        # Sink checks allow interpreter startup and fixture imports under CI load.
+        # The adversarial deadline tests keep the short limits() defaults.
+        owner = transport.BenchSubprocess(command(mode), cwd=root, limits=limits(
+            handshake_seconds=5, exchange_seconds=5, invocation_seconds=20,
+            finish_seconds=5, terminate_seconds=1, reap_seconds=2,
+        ))
         created.append(owner)
         return owner
     from test_openpii_gaze_bench import ResponseValidationTests
@@ -181,6 +186,26 @@ def invoke(mode, root, *, late=False, post=False, owners=None):
 
 
 SUCCESS_MODES = ("score", "score-refusal", "probe")
+
+
+def boundary_summary(result):
+    # Report only sizes, status and closed transport labels, never child bytes.
+    failures = [f"{code}:{phase}" for code in sorted(transport.CODES)
+                for phase in sorted(transport.PHASES)
+                if f"{code}:{phase}".encode() in result.stderr]
+    return (f"returncode={result.returncode} stdout_bytes={len(result.stdout)} "
+            f"stderr_bytes={len(result.stderr)} failures={','.join(failures) or 'unknown'}")
+
+
+def run_boundary(mode, root):
+    try:
+        return subprocess.run([sys.executable, str(HERE), "--boundary", mode, str(root)],
+                              capture_output=True, timeout=30)
+    except subprocess.TimeoutExpired as error:
+        message = (f"boundary-watchdog: timeout_seconds=30 "
+                   f"stdout_bytes={len(error.stdout or b'')} "
+                   f"stderr_bytes={len(error.stderr or b'')}")
+    raise AssertionError(message)
 
 
 def assert_success_counts(mode, result):
@@ -253,7 +278,7 @@ def _boundary_scenario(mode, root, owners):
             raise AssertionError("caller-reaping")
     assert not list(root.iterdir()), "file-boundary"
     if mode in SUCCESS_MODES:
-        assert error is None, "success-required"
+        assert error is None, f"success-required: {error[0]}:{error[1]}"
         assert_success_counts(mode, result)
     else:
         assert error is not None, "failure-required"
@@ -499,21 +524,58 @@ class TransportTests(unittest.TestCase):
             self.assertTrue(failure.exception.__context__ is None and failure.exception.__cause__ is None, "exception-context")
             self.reaped(owners[0])
 
+    def test_boundary_success_with_slow_producer_start(self):
+        for mode in SUCCESS_MODES:
+            delayed = [sys.executable, "-c",
+                       "import os,sys,time; time.sleep(0.8); "
+                       "os.execv(sys.executable, [sys.executable, *sys.argv[1:]])",
+                       *command(mode)[1:]]
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as root:
+                with mock.patch(__name__ + ".command", return_value=delayed):
+                    result, owners = invoke(mode, Path(root))
+                assert_success_counts(mode, result)
+                for owner in owners:
+                    self.reaped(owner)
+
+    def test_boundary_summary_never_includes_child_bytes(self):
+        result = subprocess.CompletedProcess([], 7, CANARY.encode() * 1000,
+                                             b"deadline:exchange " + CANARY.encode() * 1000)
+        summary = boundary_summary(result)
+        self.assertTrue("returncode=7" in summary, "summary-status")
+        self.assertTrue(f"stdout_bytes={len(result.stdout)}" in summary, "summary-stdout-size")
+        self.assertTrue(f"stderr_bytes={len(result.stderr)}" in summary, "summary-stderr-size")
+        self.assertTrue("failures=deadline:exchange" in summary, "summary-closed-label")
+        self.assertTrue(CANARY not in summary, "summary-canary")
+        self.assertLess(len(summary), 200)
+
+    def test_boundary_watchdog_fails_without_child_bytes_or_context(self):
+        timeout = subprocess.TimeoutExpired([CANARY], 30,
+                                            output=CANARY.encode(), stderr=CANARY.encode())
+        with mock.patch.object(subprocess, "run", side_effect=timeout):
+            with self.assertRaises(AssertionError) as caught:
+                run_boundary("score", "synthetic")
+        message = str(caught.exception)
+        self.assertTrue("boundary-watchdog: timeout_seconds=30" in message, "watchdog-status")
+        self.assertTrue(f"stdout_bytes={len(CANARY)} stderr_bytes={len(CANARY)}" in message, "watchdog-sizes")
+        self.assertTrue(CANARY not in message, "watchdog-canary")
+        self.assertTrue(caught.exception.__context__ is None, "watchdog-context")
+
     def test_boundary_success_and_failure_sinks(self):
         for mode in ("score", "score-refusal", "probe", "early", "bad-handshake",
                      "probe-bad", "score-bad", "score-reason", "late", "post", "uncaught"):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as root:
-                result = subprocess.run([sys.executable, str(HERE), "--boundary", mode, root],
-                                        capture_output=True, timeout=5)
+                result = run_boundary(mode, root)
                 self.assertTrue(CANARY.encode() not in result.stdout + result.stderr, "output-canary")
                 self.assertTrue(not list(Path(root).iterdir()), "file-boundary")
                 if mode == "uncaught":
                     self.assertTrue(result.returncode != 0 and b"ProducerFailure" in result.stderr, "uncaught-error")
                 elif mode in SUCCESS_MODES:
                     # An always-failing transport must die here, not merely elsewhere.
-                    self.assertTrue(result.returncode == 0 and not result.stdout and not result.stderr, "success-required")
+                    self.assertTrue(result.returncode == 0 and not result.stdout and not result.stderr,
+                                    "success-required: " + boundary_summary(result))
                 else:
-                    self.assertTrue(result.returncode == 0 and not result.stdout and not result.stderr, "boundary-result")
+                    self.assertTrue(result.returncode == 0 and not result.stdout and not result.stderr,
+                                    "boundary-result: " + boundary_summary(result))
 
     # ---- review round r1 regressions ------------------------------------------
 

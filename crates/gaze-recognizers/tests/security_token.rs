@@ -585,9 +585,19 @@ fn jwt_manifest_export_import_restores_whole_value_and_following_email() {
             },
         ],
     );
-    for text in [
-        format!("Authorization: Bearer {PERSONAL_JWT};alice@example.invalid. Next."),
-        format!(r#"{{"token":"{PERSONAL_JWT}","email":"alice@example.invalid"}}"#),
+    for (text, token_sources) in [
+        (
+            format!("Authorization: Bearer {PERSONAL_JWT};alice@example.invalid. Next."),
+            vec!["security_token.anchored"],
+        ),
+        (
+            format!(r#"{{"token":"{PERSONAL_JWT}","email":"alice@example.invalid"}}"#),
+            vec!["security_token.anchored"],
+        ),
+        (
+            format!(r#"{{"api_token":"{PERSONAL_JWT}","email":"alice@example.invalid"}}"#),
+            vec!["security_token.anchored", "security_token.code"],
+        ),
     ] {
         let session =
             Session::new(Scope::Conversation("synthetic-jwt-roundtrip".to_string())).unwrap();
@@ -607,7 +617,7 @@ fn jwt_manifest_export_import_restores_whole_value_and_following_email() {
         assert_eq!(trace.len(), 2);
         let values = [PERSONAL_JWT, "alice@example.invalid"];
         let classes = [security_token_class(), PiiClass::Email];
-        let sources = ["security_token.anchored", "email.global"];
+        let sources = [token_sources, vec!["email.global"]];
         let mut expected_clean = text.clone();
         for (((span, value), class), source) in spans.iter().zip(values).zip(classes).zip(sources) {
             assert_eq!(&text[span.raw_span.clone()], value);
@@ -623,7 +633,10 @@ fn jwt_manifest_export_import_restores_whole_value_and_following_email() {
                 })
                 .unwrap();
             assert_eq!(evidence.class(), &class);
-            assert_eq!(evidence.source_ids(), &[source.to_string()]);
+            assert_eq!(
+                evidence.source_ids(),
+                source.iter().map(|id| id.to_string()).collect::<Vec<_>>()
+            );
         }
         assert_eq!(clean, expected_clean, "every non-gold byte must survive");
         let bytes = session.export().unwrap().into_bytes();

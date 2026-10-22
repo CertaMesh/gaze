@@ -36,6 +36,7 @@ use crate::rule::{Action, Rule, RuleContext};
 use crate::rulepack::RulepackError;
 use crate::safety_net_scan::SafetyNetScanText;
 use crate::session::{RestoreEvent, Session, SessionTransaction};
+use crate::spelling::{JsonStringLiterals, SourceSpelling};
 use crate::sweep::{ManifestEvidence, SweepLink, SweepMatcher, SweepSource};
 use crate::types::{CleanDocument, RawDocument, Value};
 use crate::DictionaryBundle;
@@ -320,22 +321,32 @@ enum ProtectionTarget<'target, 'session> {
 }
 
 impl ProtectionTarget<'_, '_> {
+    /// `spelling` is how `raw` is spelled where it was captured; it is recorded only when this
+    /// call mints the token, so a value keeps the reading it was first seen with.
     fn tokenize_with_family(
         &mut self,
         family: &str,
         class: &PiiClass,
         raw: &str,
+        spelling: SourceSpelling,
     ) -> Result<String> {
         match self {
-            Self::Live(session) => session.tokenize_with_family(family, class, raw),
-            Self::Staged(transaction) => transaction.tokenize_with_family(family, class, raw),
+            Self::Live(session) => session.tokenize_spelled(family, class, raw, spelling),
+            Self::Staged(transaction) => transaction.tokenize_spelled(family, class, raw, spelling),
         }
     }
 
-    fn format_preserving_fake(&mut self, class: &PiiClass, raw: &str) -> Result<String> {
+    fn format_preserving_fake(
+        &mut self,
+        class: &PiiClass,
+        raw: &str,
+        spelling: SourceSpelling,
+    ) -> Result<String> {
         match self {
-            Self::Live(session) => session.format_preserving_fake(class, raw),
-            Self::Staged(transaction) => transaction.format_preserving_fake(class, raw),
+            Self::Live(session) => session.format_preserving_fake_spelled(class, raw, spelling),
+            Self::Staged(transaction) => {
+                transaction.format_preserving_fake_spelled(class, raw, spelling)
+            }
         }
     }
 
@@ -1080,6 +1091,8 @@ impl Pipeline {
         mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<CleanText> {
         let normalized = normalize(text);
+        // Where each captured value sits decides the spelling its token records.
+        let json_literals = JsonStringLiterals::scan(text);
         let spans = &normalized.spans;
         let ctx = DetectContext::new(locale_chain, dictionaries).with_source_spans(spans);
         let (pool, vetoed) = self
@@ -1268,6 +1281,7 @@ impl Pipeline {
                         &detection.family,
                         &detection.detection.class,
                         &raw,
+                        json_literals.spelling(&detection.detection.span, &raw),
                     )?;
                     target.record_evidence(
                         Some(&detection.family),
@@ -1279,7 +1293,11 @@ impl Pipeline {
                 }
                 Action::Redact => Some("[REDACTED]".to_string()),
                 Action::FormatPreserve => {
-                    let fake = target.format_preserving_fake(&detection.detection.class, &raw)?;
+                    let fake = target.format_preserving_fake(
+                        &detection.detection.class,
+                        &raw,
+                        json_literals.spelling(&detection.detection.span, &raw),
+                    )?;
                     target.record_evidence(
                         None,
                         &detection.detection.class,
@@ -1364,6 +1382,7 @@ impl Pipeline {
                         &cell.family,
                         &cell.class,
                         &text[cell.raw.clone()],
+                        json_literals.spelling(&cell.raw, &text[cell.raw.clone()]),
                     )?,
                     Action::Redact => crate::redaction_marker(&cell.class),
                     Action::Generalize => generalize_token(&cell.class),
@@ -2479,7 +2498,10 @@ impl Pipeline {
         protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<()> {
         let suspect = plan.suspect;
-        let replacement = target.tokenize_with_family("safety_net", &suspect.class, &plan.raw)?;
+        // The clean text keeps the document's JSON shape: tokens hold no quote or backslash.
+        let spelling = JsonStringLiterals::scan(&clean.text).spelling(&plan.clean_span, &plan.raw);
+        let replacement =
+            target.tokenize_with_family("safety_net", &suspect.class, &plan.raw, spelling)?;
         self.log_safety_net_entry(
             target,
             suspect,

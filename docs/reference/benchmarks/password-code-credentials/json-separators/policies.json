@@ -1,0 +1,22 @@
+{
+  "main-base": {
+    "file": "policies/a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462.toml",
+    "sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+    "recorded_path": "policy-sha256:a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462"
+  },
+  "main-candidate": {
+    "file": "policies/a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462.toml",
+    "sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+    "recorded_path": "target/gate/source-escapes/policy.toml"
+  },
+  "mechanism-base": {
+    "file": "policies/1b4b44d2b53d224594cbdbc1cc16486e29523eadead03d256ddc5ff6a5206c27.toml",
+    "sha256": "1b4b44d2b53d224594cbdbc1cc16486e29523eadead03d256ddc5ff6a5206c27",
+    "recorded_path": "target/gate/source-escapes/mechanism/base.toml"
+  },
+  "mechanism-candidate": {
+    "file": "policies/b808dc4f07a005c2ac2466532fba7341e878b27f1f5c79505f28a090e3594d45.toml",
+    "sha256": "b808dc4f07a005c2ac2466532fba7341e878b27f1f5c79505f28a090e3594d45",
+    "recorded_path": "target/gate/source-escapes/mechanism/candidate.toml"
+  }
+}
