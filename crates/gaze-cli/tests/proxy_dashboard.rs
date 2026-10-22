@@ -186,6 +186,9 @@ fn serve_with_policy_without_ner_warns_once() {
     std::fs::write(
         &policy,
         r#"
+schema_version = "0.1.0"
+[session]
+scope = "ephemeral"
 [policy.rulepacks]
 bundled = ["core"]
 [[rule]]
