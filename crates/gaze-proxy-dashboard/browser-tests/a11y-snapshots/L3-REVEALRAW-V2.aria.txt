@@ -2,7 +2,7 @@
   - /url: "#main"
 - main:
   - group "Safety state":
-    - text: PROVIDER-VISIBLE CAPTURE — confidential pseudonymized payload, not verified clean OWNER RAW CAPTURE ENABLED RING 5/64 · TTL 300 S · CONNECTED · EPOCH 1
+    - text: PROVIDER-VISIBLE CAPTURE — confidential pseudonymized payload, not verified clean OWNER RAW CAPTURE ENABLED RING 2/64 · TTL 300 S · CONNECTED · EPOCH 1
     - button "Purge now"
   - region "EVENTS — NEWEST FIRST":
     - heading "EVENTS — NEWEST FIRST" [level=2]
@@ -11,9 +11,9 @@
     - paragraph: "QUEUE TELEMETRY: UNAVAILABLE — NOT MEASURED"
     - list:
       - listitem:
-        - 'button "LOG #7 ANTHROPIC MESSAGES HTTP 2XX ANTHROPIC MESSAGES DIRECT OS-ASSIGNED LOOPBACK PORT: OS ASSIGNED UNDER 1 S · RETRY 0 PII PERSON NAME 2/2 · EMAIL 1/1 TTL 300 S"'
+        - 'button "LOG #7 ANTHROPIC MESSAGES ACCEPTED ANTHROPIC MESSAGES DIRECT OS-ASSIGNED LOOPBACK PORT: OS ASSIGNED DURATION UNDER 100 MS PII (PROVIDER REQUEST) PERSON NAME 2/2 · EMAIL 1/1 TTL 300 S"'
       - listitem:
-        - 'button "LOG #6 ANTHROPIC MESSAGES HTTP 2XX ANTHROPIC MESSAGES DIRECT OS-ASSIGNED LOOPBACK PORT: OS ASSIGNED UNDER 1 S · RETRY 0 PII PERSON NAME 2/2 · EMAIL 1/1 TTL 300 S"'
+        - 'button "LOG #6 ANTHROPIC MESSAGES ACCEPTED ANTHROPIC MESSAGES DIRECT OS-ASSIGNED LOOPBACK PORT: OS ASSIGNED DURATION UNDER 100 MS PII (PROVIDER REQUEST) PERSON NAME 2/2 · EMAIL 1/1 TTL 300 S"'
   - 'region "LOG #7 — ANTHROPIC MESSAGES"':
     - 'heading "LOG #7 — ANTHROPIC MESSAGES" [level=2]'
     - tablist "Event detail sections":
@@ -37,5 +37,5 @@
         - button "Show pseudonymized payload"
       - region "OWNER RESTORED — re-identified PII may be present":
         - heading "OWNER RESTORED — re-identified PII may be present" [level=4]
-        - paragraph: NOT CAPTURED — this domain was not authorized at startup. No reveal is possible.
+        - paragraph: PAYLOAD OMITTED (NOT CAPTURED BY POLICY)
 - status: Owner payload concealed — concealed manually.

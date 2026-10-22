@@ -14,10 +14,11 @@ use zeroize::Zeroizing;
 
 use crate::auth::{decode_secondary_header, AuthRegistry};
 use crate::ipc::{
-    reject_immediate_trailing, DecodedInspectionFrame, DeliveredAckV2, PairingEnvelopeV2,
-    PairingReadyV2,
+    reject_immediate_trailing, DeliveredAckV2, InboundFrameV1, PairingEnvelopeV2, PairingReadyV2,
+    RuntimeStatusFrameV1,
 };
 use crate::security_headers::SECURITY_HEADERS;
+use crate::snapshot::{CaptureTierV1, CountersV1, SnapshotV1};
 use crate::store::{EventStore, ResponseLease, RevealRegistry, SensitiveResponseBuffer};
 use crate::{
     CanonicalAuthorizationV1, ClientLimits, DashboardError, DashboardErrorCode, DashboardHttp1Gate,
@@ -193,6 +194,7 @@ impl DashboardChildEntrypoint {
             store: EventStore::new(config.retention, InspectionEpochV1::new(0)),
             auth: AuthRegistry::new(&secret, config.clients.page_sessions()),
             reveals: RevealRegistry::new(Duration::from_secs(30)),
+            status: None,
         }));
         let stop = Arc::new(AtomicBool::new(false));
         let active_responses = Arc::new(AtomicUsize::new(0));
@@ -263,6 +265,8 @@ struct ChildState {
     store: EventStore,
     auth: AuthRegistry,
     reveals: RevealRegistry,
+    /// Latest parent-reported capture descriptor and ingress counters.
+    status: Option<RuntimeStatusFrameV1>,
 }
 
 impl ChildState {
@@ -331,15 +335,17 @@ fn inspection_loop(
             fatal_child(&state, &stop, &control);
             return;
         }
-        let Ok(frame) = DecodedInspectionFrame::decode(bytes.as_ref(), frame_cap) else {
+        let Ok(frame) = InboundFrameV1::decode(bytes.as_ref(), frame_cap) else {
             fatal_child(&state, &stop, &control);
             return;
         };
-        let _ = state
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
-            .store
-            .admit(frame, Instant::now());
+        let mut child = state.lock().unwrap_or_else(|poison| poison.into_inner());
+        match frame {
+            InboundFrameV1::Event(frame) => {
+                let _ = child.store.admit(*frame, Instant::now());
+            }
+            InboundFrameV1::Status(status) => child.status = Some(status),
+        }
     }
 }
 
@@ -610,7 +616,7 @@ fn handle_connection(
             match route {
                 ValidatedDashboardRequestV1::Snapshot => {
                     let child = state.lock().unwrap_or_else(|poison| poison.into_inner());
-                    let body = snapshot_body(&child);
+                    let body = snapshot_body(&child, Instant::now());
                     let _ = write_json(&mut stream, 200, &body);
                 }
                 ValidatedDashboardRequestV1::Follow => {
@@ -622,7 +628,7 @@ fn handle_connection(
                         active: budget.active_followers,
                     };
                     let child = state.lock().unwrap_or_else(|poison| poison.into_inner());
-                    let body = snapshot_body(&child);
+                    let body = snapshot_body(&child, Instant::now());
                     let _ = write_json(&mut stream, 200, &body);
                 }
                 ValidatedDashboardRequestV1::Purge => {
@@ -931,19 +937,80 @@ fn read_bounded_request(
     }
 }
 
-fn snapshot_body(child: &ChildState) -> Vec<u8> {
-    serde_json::to_vec(&serde_json::json!({
-        "version": 1,
-        "runtime": {
-            "lifecycle": "Running",
-            "epoch": child.store.epoch().get(),
-            "queueTelemetry": { "state": "Unavailable", "reason": "NotMeasured" }
-        },
-        "capture": { "tier": "ProviderVisible" },
-        "counters": child.store.safe_counters(),
-        "events": child.store.safe_snapshot_events()
-    }))
-    .unwrap_or_else(|_| br#"{"version":1,"runtime":{"lifecycle":"Disabled","disabledCode":"ProjectionFailedClosed"},"events":[]}"#.to_vec())
+/// The one encoder for the snapshot and follow routes.
+fn snapshot_body(child: &ChildState, now: Instant) -> Vec<u8> {
+    let store = child.store.safe_counters();
+    let (capture_tier, ingress_full, ingress_closed) = child
+        .status
+        .map_or((CaptureTierV1::NotReported, 0, 0), |status| {
+            (status.capture, status.ingress_full, status.ingress_closed)
+        });
+    let counters = CountersV1 {
+        expired: store.expired,
+        capacity_evicted: store.capacity_evicted,
+        duplicate_idempotent: store.duplicate_idempotent,
+        duplicate_conflict: store.duplicate_conflict,
+        stale_epoch: store.stale_epoch,
+        oversize: store.oversize,
+        ingress_full,
+        ingress_closed,
+    };
+    SnapshotV1::running(
+        child.store.retention_facts(),
+        capture_tier,
+        counters,
+        child.store.snapshot_events(now),
+    )
+    .encode()
+}
+
+/// Contract-test seam: the exact snapshot and follow bodies the HTTP routes write, plus
+/// the fail-closed body.
+#[cfg(test)]
+pub(crate) fn contract_documents(store: EventStore, now: Instant) -> Vec<serde_json::Value> {
+    let secret = PairingSecret::generate().unwrap();
+    let child = ChildState {
+        store,
+        auth: AuthRegistry::new(&secret, 1),
+        reveals: RevealRegistry::new(Duration::from_secs(30)),
+        status: Some(RuntimeStatusFrameV1 {
+            capture: CaptureTierV1::Both,
+            ingress_full: 2,
+            ingress_closed: 1,
+        }),
+    };
+    let snapshot = snapshot_body(&child, now);
+    let follow = snapshot_body(&child, now);
+    vec![
+        serde_json::from_slice(&snapshot).unwrap(),
+        serde_json::from_slice(&follow).unwrap(),
+        serde_json::from_slice(&SnapshotV1::failed_closed().encode()).unwrap(),
+    ]
+}
+
+/// Browser-fixture seam: the exact snapshot body for one store and parent status.
+#[cfg(test)]
+pub(crate) fn fixture_snapshot(
+    store: EventStore,
+    status: Option<RuntimeStatusFrameV1>,
+    now: Instant,
+) -> serde_json::Value {
+    let secret = PairingSecret::generate().unwrap();
+    let child = ChildState {
+        store,
+        auth: AuthRegistry::new(&secret, 1),
+        reveals: RevealRegistry::new(Duration::from_secs(30)),
+        status,
+    };
+    serde_json::from_slice(&snapshot_body(&child, now)).unwrap()
+}
+
+/// Contract-test seam: the browser key for one closed omission reason.
+#[cfg(test)]
+pub(crate) fn contract_reason_key(
+    reason: gaze_types::inspection::ProjectionOmissionReasonV1,
+) -> &'static str {
+    crate::snapshot::omission_reason_key(reason)
 }
 
 fn write_constant(stream: &mut TcpStream, status: u16, body: &[u8]) -> std::io::Result<()> {
@@ -1030,6 +1097,7 @@ mod tests {
             store,
             auth,
             reveals: RevealRegistry::new(Duration::from_secs(30)),
+            status: None,
         }));
         let stop = Arc::new(AtomicBool::new(false));
         let (control, mut supervisor_control) = UnixStream::pair().unwrap();
@@ -1111,6 +1179,7 @@ mod tests {
             store: EventStore::new(limits, InspectionEpochV1::new(0)),
             auth: AuthRegistry::new(&secret, 4),
             reveals: RevealRegistry::new(Duration::from_secs(30)),
+            status: None,
         }));
         let (mut control, mut parent) = UnixStream::pair().unwrap();
         control
@@ -1153,6 +1222,7 @@ mod tests {
             store: EventStore::new(limits, InspectionEpochV1::new(0)),
             auth: AuthRegistry::new(&secret, 4),
             reveals: RevealRegistry::new(Duration::from_secs(30)),
+            status: None,
         }));
         let stop = Arc::new(AtomicBool::new(false));
         let (inspection, mut sender) = UnixStream::pair().unwrap();
@@ -1219,6 +1289,7 @@ mod tests {
             store,
             auth: AuthRegistry::new(&secret, 4),
             reveals: RevealRegistry::new(Duration::from_secs(30)),
+            status: None,
         }));
         let (entered_tx, entered_rx) = mpsc::sync_channel(1);
         let (release_tx, release_rx) = mpsc::sync_channel(1);
@@ -1317,16 +1388,7 @@ mod tests {
         let limits = RetentionLimits::new(4, 64 * 1024, Duration::from_secs(60)).unwrap();
         let mut store = EventStore::new(limits, InspectionEpochV1::new(0));
         let stage = InspectionStageDomainV1::ProviderResponse;
-        let frame = DecodedInspectionFrame {
-            logical_id: LogicalInspectionIdV1::new(1),
-            emission_id: InspectionEmissionIdV1::new(1),
-            sequence: gaze_types::inspection::InspectionSequenceV1::new(0),
-            epoch: InspectionEpochV1::new(0),
-            stage_domain: stage,
-            safe_meta: br#"{"version":1}"#.to_vec(),
-            projection: br#"{"measurement":{"state":"Omitted","reason":"NotApplicable"}}"#.to_vec(),
-            payload: Zeroizing::new(payload),
-        };
+        let frame = DecodedInspectionFrame::for_test(1, 1, 0, 0, stage, &payload);
         assert!(matches!(
             store.admit(frame, now),
             crate::store::AdmissionOutcome::Inserted

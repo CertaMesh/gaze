@@ -876,6 +876,10 @@
           "result": "PASS"
         },
         {
+          "name": "omitted response gets no show control; the available request keeps one",
+          "result": "PASS"
+        },
+        {
           "name": "capture badge remains selected (capture unchanged)",
           "result": "PASS"
         },
@@ -1001,6 +1005,10 @@
       "assertions": [
         {
           "name": "ProviderVisible response PAYLOAD OMITTED with exact closed code",
+          "result": "PASS"
+        },
+        {
+          "name": "omitted response gets no show control; the available request keeps one",
           "result": "PASS"
         },
         {

@@ -7,6 +7,7 @@ frontend/XSS/accessibility contract. The browser suite regenerates the
 ## How to reproduce
 
 ```console
+cargo test -p gaze-proxy-dashboard browser_fixtures   # writes encoder-fixtures.json
 cd crates/gaze-proxy-dashboard/browser-tests
 npm install
 npx playwright install chromium
@@ -14,6 +15,14 @@ npx playwright test                # 44 states + security/lifecycle suites
 node visual-audit.mjs              # quantitative rendered audit (geometry/contrast)
 node serve.mjs                     # keep the fixture server up for manual review
 ```
+
+Every snapshot/follow body the fixture server returns is the Rust snapshot
+encoder's own output: `cargo test` renders it into the git-ignored
+`encoder-fixtures.json`, and `fixtures.mjs` refuses to serve it unless its
+SHA-256 equals the committed `encoder-fixtures.sha256`. After an intentional
+wire change, re-bless with `GAZE_DASHBOARD_BLESS_FIXTURES=1 cargo test -p
+gaze-proxy-dashboard browser_fixtures`. Only the shutdown and purged terminal
+frames, which the child never emits, are written by hand.
 
 Screenshots are human evidence, never pixel goldens; they are written outside
 the repository (`GAZE_VISUAL_EVIDENCE_DIR`, defaulting to the OS temp dir) and
