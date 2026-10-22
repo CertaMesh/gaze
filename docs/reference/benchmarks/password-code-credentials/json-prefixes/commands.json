@@ -1067,5 +1067,262 @@
     "RUSTC": "{toolchain-bin}/rustc",
     "RUSTDOC": "{toolchain-bin}/rustdoc",
     "toolchain-bin": "dirname of rustup which --toolchain 1.96.0 rustc"
+  },
+  "post_merge_checks": [
+    {
+      "check": "post-merge-fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "retained_log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "check": "post-merge-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "retained_log_sha256": "30afd7085805675026b0263e9309b54aa9c089680e6e422a3a5ff674e23653ed"
+    },
+    {
+      "check": "post-merge-workspace",
+      "command": [
+        "cargo",
+        "test",
+        "--workspace",
+        "--all-features"
+      ],
+      "exit_code": 0,
+      "retained_log_sha256": "10747197a5d7794e24661285091e6e1fbf9974b70f33119d6c1b3096fe2d2fc7"
+    },
+    {
+      "check": "post-merge-ci",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/ci"
+      ],
+      "exit_code": 0,
+      "retained_log_sha256": "0787da3051206c043dffa603643796ddf5ad239f100aab855457bf0d02ec2406"
+    },
+    {
+      "check": "post-merge-export-tests",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/bench",
+        "-p",
+        "test_export_portable_record.py"
+      ],
+      "exit_code": 0,
+      "retained_log_sha256": "3463daaeb254f2287b19acaeed27d52d21b97505e9e8206a52bb58e9dde26777"
+    },
+    {
+      "check": "post-merge-home-path-tests",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/bench",
+        "-p",
+        "test_evidence_home_paths.py"
+      ],
+      "exit_code": 0,
+      "retained_log_sha256": "b7a99e5e5ac7db04d15c7bf75256ffa8ec601fa2b82e2fef33ade0b1fcd70435"
+    },
+    {
+      "check": "post-merge-doc-evidence",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/mechanism_arms.py",
+        "check"
+      ],
+      "exit_code": 0,
+      "retained_log_sha256": "b61589b2c496dd9d5357dec68ecbedee6f8b749836959ea25d4d954d60438fe0"
+    },
+    {
+      "check": "post-merge-home-check",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/evidence_home_paths.py",
+        "check"
+      ],
+      "exit_code": 0,
+      "retained_log_sha256": "d226f5899b8cee969a781e345c47a21f8e0e266db6268156ff84e26464d2a2f4"
+    },
+    {
+      "check": "post-merge-receipts",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/evidence_home_paths.py",
+        "verify-receipts"
+      ],
+      "exit_code": 0,
+      "retained_log_sha256": "eeab048f83f365d3c10485c8332d0edc55fd5567ab2896e5c152cbd86ac492cd"
+    }
+  ],
+  "post_merge_binary_and_policy_proof": {
+    "base": {
+      "measured_revision": "5ac6c0628a62b4d85456e9941117306a0c4b3350",
+      "post_merge_revision": "29ac3b2d2cc4f2b2b1241b8dd0ad97e4d0f51a88",
+      "measured_binary_sha256": "0bf25c29c1161dcf315e88c48296930439239e3ce93f20268d2d890ffca76bd4",
+      "post_merge_binary_sha256": "0bf25c29c1161dcf315e88c48296930439239e3ce93f20268d2d890ffca76bd4",
+      "binary_identical": true,
+      "measured_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+      "post_merge_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+      "setup_policy_identical": true
+    },
+    "candidate": {
+      "measured_revision": "86989b2e2bd16dbf770eb25935159a51e87bc53c",
+      "post_merge_revision": "8544bd349d4cfefaebc98f79ad977f1a01a4a172",
+      "measured_binary_sha256": "b0704d0df7752112067b986547fb913c6a83b824a4790640a71850fc7f36e8a7",
+      "post_merge_binary_sha256": "b0704d0df7752112067b986547fb913c6a83b824a4790640a71850fc7f36e8a7",
+      "binary_identical": true,
+      "measured_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+      "post_merge_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+      "setup_policy_identical": true
+    }
+  },
+  "post_merge_builds": {
+    "base": [
+      {
+        "command": [
+          "cargo",
+          "build",
+          "--release",
+          "-p",
+          "gaze-recognizers",
+          "--example",
+          "clean_for_bench",
+          "--features",
+          "safety-net-nym",
+          "--locked"
+        ],
+        "exit_code": 0,
+        "retained_log_sha256": "dd5cbfd46cbc7d90e44f766619e1dd80f5375b42ec46bf848bf1736968f1969b"
+      },
+      {
+        "command": [
+          "cargo",
+          "build",
+          "--release",
+          "-p",
+          "gaze-cli",
+          "--locked"
+        ],
+        "exit_code": 0,
+        "retained_log_sha256": "bc1d3718a4f59d361ee1ff2c4e9b130cf5ea42773fafeb0ee87c2c7292ea4b6e"
+      },
+      {
+        "command": [
+          "{base-root}/target/release/gaze",
+          "setup",
+          "--non-interactive",
+          "--force",
+          "--policy-out",
+          "{base-root}/target/gate/post-merge-policy.toml"
+        ],
+        "exit_code": 0,
+        "retained_log_sha256": "649ae778af156f85999924c1823e6987baafb68a2e721543be46c8e1b25115b2"
+      }
+    ],
+    "candidate": [
+      {
+        "command": [
+          "cargo",
+          "build",
+          "--release",
+          "-p",
+          "gaze-recognizers",
+          "--example",
+          "clean_for_bench",
+          "--features",
+          "safety-net-nym",
+          "--locked"
+        ],
+        "exit_code": 0,
+        "retained_log_sha256": "90cd17589695a9408e03339923d9c1a773abb66817ada44612b284f0c374fc90"
+      },
+      {
+        "command": [
+          "cargo",
+          "build",
+          "--release",
+          "-p",
+          "gaze-cli",
+          "--locked"
+        ],
+        "exit_code": 0,
+        "retained_log_sha256": "bed6e878aaecff6578edc21d34d92854d1367845e8bfe5abf3c9df18887e7c8b"
+      },
+      {
+        "command": [
+          "{candidate-root}/target/release/gaze",
+          "setup",
+          "--non-interactive",
+          "--force",
+          "--policy-out",
+          "{candidate-root}/target/gate/post-merge-policy.toml"
+        ],
+        "exit_code": 0,
+        "retained_log_sha256": "e50ba2743023debab926a0d7ca0497888a618d0c142b305af4ea66a272858bfe"
+      }
+    ]
   }
 }

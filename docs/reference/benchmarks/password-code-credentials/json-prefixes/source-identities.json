@@ -56,5 +56,69 @@
   "focused_and_workspace_tested_crates": {
     "revision": "7cf1e9ae9bd8dd537d82c5e05f08f306cf9d266f",
     "crates_tree": "871490072fe6a00fe1e1d5000b3746e7de4f8b44"
+  },
+  "pre_merge_input_equivalence_verified_revision": "619af9a3d19dcbfe75c826912bba4624e275cf30",
+  "post_capture_merge": {
+    "main_revision": "29ac3b2d2cc4f2b2b1241b8dd0ad97e4d0f51a88",
+    "merged_candidate_revision": "8544bd349d4cfefaebc98f79ad977f1a01a4a172",
+    "binary_policy_equivalence": {
+      "base": {
+        "measured_revision": "5ac6c0628a62b4d85456e9941117306a0c4b3350",
+        "post_merge_revision": "29ac3b2d2cc4f2b2b1241b8dd0ad97e4d0f51a88",
+        "measured_binary_sha256": "0bf25c29c1161dcf315e88c48296930439239e3ce93f20268d2d890ffca76bd4",
+        "post_merge_binary_sha256": "0bf25c29c1161dcf315e88c48296930439239e3ce93f20268d2d890ffca76bd4",
+        "binary_identical": true,
+        "measured_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+        "post_merge_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+        "setup_policy_identical": true
+      },
+      "candidate": {
+        "measured_revision": "86989b2e2bd16dbf770eb25935159a51e87bc53c",
+        "post_merge_revision": "8544bd349d4cfefaebc98f79ad977f1a01a4a172",
+        "measured_binary_sha256": "b0704d0df7752112067b986547fb913c6a83b824a4790640a71850fc7f36e8a7",
+        "post_merge_binary_sha256": "b0704d0df7752112067b986547fb913c6a83b824a4790640a71850fc7f36e8a7",
+        "binary_identical": true,
+        "measured_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+        "post_merge_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+        "setup_policy_identical": true
+      }
+    },
+    "changed_crate_paths": [
+      "crates/gaze-cli/Cargo.toml",
+      "crates/gaze-cli/README.md",
+      "crates/gaze-cli/src/commands/clean.rs",
+      "crates/gaze-cli/src/commands/daemon.rs",
+      "crates/gaze-cli/src/commands/mod.rs",
+      "crates/gaze-cli/src/commands/proxy.rs",
+      "crates/gaze-cli/src/commands/restore.rs",
+      "crates/gaze-cli/src/commands/shared_args.rs",
+      "crates/gaze-cli/src/error.rs",
+      "crates/gaze-cli/src/io.rs",
+      "crates/gaze-cli/src/main.rs",
+      "crates/gaze-cli/src/pipeline/run.rs",
+      "crates/gaze-cli/src/restore/mod.rs",
+      "crates/gaze-cli/src/session_file.rs",
+      "crates/gaze-cli/src/session_file/acl.rs",
+      "crates/gaze-cli/src/session_file/staging.rs",
+      "crates/gaze-cli/tests/cli_pipe.rs",
+      "crates/gaze-cli/tests/daemon_smoke.rs",
+      "crates/gaze-cli/tests/fixtures/cli-help/clean.txt",
+      "crates/gaze-cli/tests/fixtures/cli-help/restore.txt",
+      "crates/gaze-cli/tests/fixtures/cli-help/root.txt",
+      "crates/gaze-cli/tests/support/session_acl.rs",
+      "crates/gaze-cli/tests/support/session_acl_probe.c",
+      "crates/gaze-proxy/README.md",
+      "crates/gaze-proxy/src/adapter.rs",
+      "crates/gaze-proxy/src/adapters/gemini.rs",
+      "crates/gaze-proxy/src/adapters/openai.rs",
+      "crates/gaze-proxy/src/daemon.rs",
+      "crates/gaze-proxy/src/error.rs",
+      "crates/gaze-proxy/src/lib.rs",
+      "crates/gaze-proxy/src/server.rs",
+      "crates/gaze-proxy/tests/legacy_sse_split_tokens.rs"
+    ],
+    "detector_libraries_unchanged": true,
+    "generator_and_scorer_unchanged": true,
+    "publication_change": "The upstream portable-record helper broadens policy-path home-prefix normalization. It changes no observation rows or scoring behavior; all three committed empty-checkout replays pass after the merge."
   }
 }

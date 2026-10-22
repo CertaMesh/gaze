@@ -2,9 +2,9 @@
   "schema_version": 1,
   "baseline_revision": "236405e2c3129bed1ea788544c4544365062e911",
   "baseline_registry_sha256": "df0fbc5e649439681aeb13782806f3a1a19b1d1d9783a32397b1ddaea74586ce",
-  "registry_sha256": "818f667f4bd2abdf65fcf2ef3f9ef13e08967c4f23cafc0e788f1bad2fd98e91",
-  "declared_paths": 776,
-  "added_paths": 53,
+  "registry_sha256": "fd462ed1426cadd522ea832d306a938b103c2633d7398c6815360f9f3c773974",
+  "declared_paths": 777,
+  "added_paths": 54,
   "patterns_unchanged": true,
   "computed_gate_reader_fingerprints_unchanged": true,
   "review": "Every added path was inspected. Archives contain value-free observations. Exact execution-policy snapshots are bound to runner and parameter hashes. The replay materializes only the mechanism policies needed by the existing gate. No provenance or input-audit guard is bypassed.",
@@ -71,6 +71,9 @@
     ],
     "model-free public verification code": [
       "docs/reference/benchmarks/password-code-credentials/json-prefixes/verify.py"
+    ],
+    "merged upstream path-scrub receipts": [
+      "docs/reference/benchmarks/portable-evidence-receipts.json"
     ]
   },
   "integrated_ci": {
@@ -89,6 +92,11 @@
       "-s",
       "scripts/ci"
     ],
-    "retained_log_sha256": "10b9eae9f1a5f38716e7c8534f3d3a974e7427b28394c834fb9b63bdbf80930d"
-  }
+    "retained_log_sha256": "0787da3051206c043dffa603643796ddf5ad239f100aab855457bf0d02ec2406"
+  },
+  "measurement_registry": {
+    "sha256": "818f667f4bd2abdf65fcf2ef3f9ef13e08967c4f23cafc0e788f1bad2fd98e91",
+    "declared_paths": 776
+  },
+  "post_capture_main_merge": "29ac3b2d2cc4f2b2b1241b8dd0ad97e4d0f51a88"
 }

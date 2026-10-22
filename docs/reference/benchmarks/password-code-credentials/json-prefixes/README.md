@@ -8,6 +8,8 @@ Generator v25, test corpus SHA-256 `133f8452d01fd517c77087e539ba9dc253e30a188666
 
 This comparison measures the whole credential change against current main. The prefix cells isolate the newly added serialized-prefix and within-string cases. Earlier [v24](../json-separators/README.md), [v23](../source-escapes/README.md) and [v22](../README.md) evidence retains its recorded corpus identities. Generator v24 reconstructs byte-for-byte. This page introduces no past-release rows.
 
+After capture, main advanced to `29ac3b2d2cc4f2b2b1241b8dd0ad97e4d0f51a88` and was merged as `8544bd349d4cfefaebc98f79ad977f1a01a4a172`. Rebuilding both benchmark binaries and regenerating both setup policies produces exactly the captured SHA-256 values. Detector libraries, generator and scorer stay unchanged. The [source identities](source-identities.json) record this proof. Merged workspace and publication checks pass, and all three evidence commands replay from separate committed empty checkouts.
+
 The [equivalence receipt](mechanism-main-equivalence.json) records identical per-layer outcomes for main and mechanism under every contract.
 
 ## Main contract v4 and mechanism
