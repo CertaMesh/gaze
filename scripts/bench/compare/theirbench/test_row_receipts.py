@@ -95,3 +95,26 @@ def test_sample_contract_rejects_unordered_invalid_or_extra_fields(tmp_path, sam
     receipt = {'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'prediction_sha256': 'a' * 64}
     with pytest.raises(ValueError, match='indices'):
         check_samples(path, receipt, {}, 'a' * 64)
+
+
+def test_every_published_history_number_matches_its_old_and_new_source():
+    import gzip
+    from refresh_receipts import HISTORY, PAGE, metric_changes, page
+
+    history = json.loads(HISTORY.read_text())
+    archived = json.loads(gzip.decompress(
+        (row_receipts.RECEIPTS.parent / 'their-benchmarks-e7e018ce.json.gz').read_bytes()))
+    receipts = json.loads(row_receipts.RECEIPTS.read_text())['benchmarks']
+    expected = {(name, tool) for name, entry in archived['benchmarks'].items()
+                for tool, status in entry.get('receipt_status', {}).items() if status == 'pre-receipt'}
+    assert len(history['rows']) == len(expected)
+    assert {(item['benchmark'], item['tool']) for item in history['rows']} == expected
+    for item in history['rows']:
+        name, tool = item['benchmark'], item['tool']
+        old, new = archived['benchmarks'][name], receipts[name][tool]
+        changes = metric_changes({'row': old['rows'][tool], 'own_metric': old['own_metric'][tool]},
+                                 {'row': new['row'], 'own_metric': new['own_metric']})
+        assert changes == [{key: value for key, value in change.items() if key != 'reason'}
+                           for change in item['changes']]
+        assert all(change['reason'] for change in item['changes'])
+    assert PAGE.read_text() == page(history)
