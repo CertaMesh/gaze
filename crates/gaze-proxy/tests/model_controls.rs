@@ -2,8 +2,9 @@
 use std::sync::Arc;
 
 use gaze::{
-    Action, DefaultRule, Detection, Detector, DictionaryBundle, LeakKind, LeakSuspect, LocaleTag,
-    PiiClass, Pipeline, RulepackDict, SafetyNet, SafetyNetContext, SafetyNetError,
+    Action, DefaultRule, Detection, Detector, DictionaryBundle, EvidenceKind, LeakKind,
+    LeakSuspect, LocaleTag, PiiClass, Pipeline, RulepackDict, SafetyNet, SafetyNetContext,
+    SafetyNetError,
 };
 use gaze_proxy::adapters::{AnthropicAdapter, GeminiAdapter, OpenAiAdapter};
 use gaze_proxy::{ProviderAdapter, ProxyConfig};
@@ -35,6 +36,26 @@ impl Detector for LearnedNames {
                     Detection::new(at..at + value.len(), PiiClass::Name, "synthetic.learned")
                 })
             })
+            .collect()
+    }
+}
+
+struct CuedRule;
+impl Detector for CuedRule {
+    fn evidence(&self) -> EvidenceKind {
+        EvidenceKind::Rule
+    }
+    fn detect(&self, input: &str) -> Vec<Detection> {
+        input
+            .find("catalog: session-secret")
+            .map(|at| {
+                Detection::new(
+                    at + 9..at + 9 + "session-secret".len(),
+                    PiiClass::Custom("catalog".into()),
+                    "synthetic.cued",
+                )
+            })
+            .into_iter()
             .collect()
     }
 }
@@ -73,6 +94,7 @@ impl SafetyNet for LearnedUsernames {
 
 fn pipeline(ner: bool, net: bool) -> Pipeline {
     let mut builder = Pipeline::builder()
+        .detector(CuedRule)
         .detector(RegexDetector::emails().unwrap())
         .detector(
             RegexDetector::new(r"\b202-555-0142\b", PiiClass::Custom("phone".into())).unwrap(),
@@ -298,6 +320,46 @@ async fn exercise_models(ner: bool, net: bool) {
             response.status(),
             StatusCode::UNPROCESSABLE_ENTITY,
             "{provider}: other controls must retain learned scans: {}",
+            response.text().await.unwrap()
+        );
+        assert_eq!(forwarded.lock().await.len(), before);
+
+        let mut known_body = other_control;
+        let known_path = match provider {
+            "anthropic" => {
+                known_body.as_object_mut().unwrap().remove("stop_sequences");
+                known_body["model"] = json!("session-secret");
+                known_body["messages"][0]["content"] = json!("catalog: session-secret");
+                path
+            }
+            "openai" => {
+                known_body
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("previous_response_id");
+                known_body["model"] = json!("session-secret");
+                known_body["messages"][0]["content"] = json!("catalog: session-secret");
+                path
+            }
+            "gemini" => {
+                known_body.as_object_mut().unwrap().remove("model");
+                known_body["contents"][0]["parts"][0]["text"] = json!("catalog: session-secret");
+                "/v1beta/models/session-secret:generateContent"
+            }
+            _ => unreachable!(),
+        };
+        let response = client
+            .post(format!("http://{bind}{known_path}"))
+            .header("x-api-key", "synthetic-key")
+            .header("anthropic-version", "2023-06-01")
+            .json(&known_body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{provider}: known rule-backed PII in the model must not reach upstream: {}",
             response.text().await.unwrap()
         );
         assert_eq!(forwarded.lock().await.len(), before);

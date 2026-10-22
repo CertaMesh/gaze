@@ -116,7 +116,7 @@ chain still apply. A value that would change returns `422 ControlWouldMutate`;
 the proxy never substitutes a token into a routing identifier. An email address
 fits this grammar and still fails the deterministic probe.
 
-Rule-backed values already established in the Anthropic session manifest stay
+Rule-backed values already established in the session manifest stay
 protected. The probe uses a discarded copy of staged manifest state and cannot
 publish mappings or reuse prefix-cache state.
 

@@ -2068,22 +2068,6 @@ async fn proxy_inner(
             },
         );
     }
-    if adapter.name() == "gemini" {
-        let model = path
-            .strip_prefix("/v1beta/models/")
-            .and_then(|path| path.rsplit_once(':'))
-            .map(|(model, _)| model)
-            .ok_or(ProxyError::ControlWouldMutate)?;
-        let model = percent_encoding::percent_decode_str(model)
-            .decode_utf8()
-            .map_err(|_| ProxyError::ControlWouldMutate)?;
-        residual_scan_model_control(
-            &state.pipeline,
-            &model,
-            state.config.locale_chain(),
-            state.config.dictionaries(),
-        )?;
-    }
     let session = session_for(&state, &headers).await?;
     let mut json: Value =
         serde_json::from_slice(&body).map_err(|source| ProxyError::InvalidJson { source })?;
@@ -2102,6 +2086,23 @@ async fn proxy_inner(
         locale_chain,
         dictionaries,
     )?;
+    if adapter.name() == "gemini" {
+        let model = path
+            .strip_prefix("/v1beta/models/")
+            .and_then(|path| path.rsplit_once(':'))
+            .map(|(model, _)| model)
+            .ok_or(ProxyError::ControlWouldMutate)?;
+        let model = percent_encoding::percent_decode_str(model)
+            .decode_utf8()
+            .map_err(|_| ProxyError::ControlWouldMutate)?;
+        residual_scan_model_control(
+            &state.pipeline,
+            &session,
+            &model,
+            state.config.locale_chain(),
+            state.config.dictionaries(),
+        )?;
+    }
     // The declared coverage policy SELECTS the mechanism that establishes coverage. Reading it
     // here is what keeps the declaration honest: a contract cannot claim a coverage posture the
     // request path never acts on.
@@ -2116,6 +2117,7 @@ async fn proxy_inner(
                 locale_chain,
                 dictionaries,
                 adapter.name() == "openai",
+                &session,
             )?;
         }
         // A codec-proved adapter must have been routed to the codec branch above. Reaching this
@@ -2955,6 +2957,7 @@ fn residual_scan_request(
     locale_chain: &[LocaleTag],
     dictionaries: &DictionaryBundle,
     model_is_routing_control: bool,
+    routing_session: &Session,
 ) -> Result<(), ProxyError> {
     let session =
         Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
@@ -2965,22 +2968,22 @@ fn residual_scan_request(
         locale_chain,
         dictionaries,
         model_is_routing_control,
+        routing_session,
     };
     scan.walk("", "", body, false, true)
 }
 
 fn residual_scan_model_control(
     pipeline: &Pipeline,
+    routing_session: &Session,
     text: &str,
     locale_chain: &[LocaleTag],
     dictionaries: &DictionaryBundle,
 ) -> Result<(), ProxyError> {
-    let session =
-        Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
     if crate::codec::is_model_identifier(text) {
         if pipeline
             .deterministic_control_would_mutate(
-                &session.begin_transaction(),
+                &routing_session.begin_transaction(),
                 text,
                 locale_chain,
                 dictionaries,
@@ -2991,6 +2994,8 @@ fn residual_scan_model_control(
         }
         return Ok(());
     }
+    let session =
+        Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
     let scan = RequestResidualScan {
         pipeline,
         session,
@@ -2998,6 +3003,7 @@ fn residual_scan_model_control(
         locale_chain,
         dictionaries,
         model_is_routing_control: false,
+        routing_session,
     };
     scan.probe("model", text)
 }
@@ -3012,6 +3018,7 @@ struct RequestResidualScan<'a> {
     /// The exact bundle used by the primary pass.
     dictionaries: &'a DictionaryBundle,
     model_is_routing_control: bool,
+    routing_session: &'a Session,
 }
 
 impl RequestResidualScan<'_> {
@@ -3065,6 +3072,7 @@ impl RequestResidualScan<'_> {
                 if self.model_is_routing_control && unambiguous && path == "model" {
                     residual_scan_model_control(
                         self.pipeline,
+                        self.routing_session,
                         text,
                         self.locale_chain,
                         self.dictionaries,
