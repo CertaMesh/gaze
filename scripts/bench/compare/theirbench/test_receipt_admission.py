@@ -155,6 +155,7 @@ class ReceiptAdmissionTest(unittest.TestCase):
             for tool in render.public_rows(entry['rows']):
                 provenance = entry['provenance'][tool]
                 if not provenance.get('own_scorer_input'):
+                    self.assertEqual(entry.get('receipt_status', {}).get(tool), 'pre-receipt')
                     continue
                 report = {'rows': {tool: {'test': entry['rows'][tool]}}, 'provenance': {tool: provenance}}
                 own = {'system': tool, 'input': provenance['own_scorer_input'],
@@ -164,7 +165,11 @@ class ReceiptAdmissionTest(unittest.TestCase):
                 render.install_row_bundle(after, tool, bundle)
                 self.assertEqual(json.dumps(entry, sort_keys=True), json.dumps(after, sort_keys=True))
                 verified += 1
-        self.assertEqual(verified, 5)
+        expected = sum(1 for entry in committed['benchmarks'].values()
+                       for tool in render.public_rows(entry['rows'])
+                       if entry.get('receipt_status', {}).get(tool) != 'pre-receipt')
+        self.assertGreater(verified, 0)
+        self.assertEqual(verified, expected)
 
     def test_receipt_status_marks_only_explicit_legacy_rows(self):
         baseline = render.render(fixtures.synthetic())

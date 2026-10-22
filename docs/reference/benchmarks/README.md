@@ -1002,18 +1002,18 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 | datafog-core | 222,697 | 4,529 | 99.9% | 0.128 | 0.092 | 52,232 | 0.099 |
 | datafog-gliner† | 112,941 | 71,574 | 75.6% | 0.315 | 0.308 | 25,463 | 0.200 |
 | datafog-regex | 223,137 | 4,926 | 99.9% | 0.128 | 0.092 | 51,108 | 0.097 |
-| datafog-spacy† | 114,880 | 219,413 | 82.0% | 0.201 | 0.228 | 29,383 | 0.147 |
+| datafog-spacy | 114,880 | 219,413 | 82.0% | 0.201 | 0.228 | 29,383 | 0.147 |
 | gliner† | 127,361 | 85,245 | 81.1% | 0.253 | 0.243 | 48,389 | 0.181 |
 | gliner-high-recall† | 113,436 | 118,822 | 77.5% | 0.235 | 0.241 | 45,994 | 0.176 |
 | opf† | 170,336 | 12,174 | 97.0% | held (typed-metric review) | held (typed-metric review) | 44,064 | held (typed-metric review) |
 | pii-tracer† | 128,632 | 22,988 | 95.2% | held (typed-metric review) | held (typed-metric review) | 33,519 | held (typed-metric review) |
-| presidio-all† | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
-| presidio-en† | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
-| presidio-en-de† | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-all | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-en | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-en-de | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
 | presidio-strong† | 87,853 | 88,715 | 70.2% | 0.301 | 0.318 | 32,815 | 0.247 |
 | presidio-strong-high-recall† | 84,965 | 92,491 | 70.1% | 0.294 | 0.315 | 32,770 | 0.242 |
 | scrubadub-base | 223,156 | 9,971 | 100.0% | held (typed-metric review) | held (typed-metric review) | 66,342 | held (typed-metric review) |
-| scrubadub-spacy† | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
+| scrubadub-spacy | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
 
 † Pre-receipt evidence: not receipt-verified; regeneration pending.
 
@@ -1024,9 +1024,19 @@ datafog-core was measured separately on the same documents, with harness `e7e018
 
 datafog-regex was measured separately on the same documents, with harness `e7e018ce` (typed metrics rescored with `e7e018ce`); it changes neither the other rows nor the common-intersection labels.
 
+datafog-spacy was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
 pii-tracer was measured separately on the same documents, with harness `bfd35ce6` (typed metrics rescored with `bfd35ce6`); it changes neither the other rows nor the common-intersection labels.
 
+presidio-all was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-en was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-en-de was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
 scrubadub-base was measured separately on the same documents, with harness `e7e018ce` (typed metrics rescored with `e7e018ce`); it changes neither the other rows nor the common-intersection labels.
+
+scrubadub-spacy was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
 
 Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `70679f36`, benchmark binary `923d5735`, reproduced by a second run) scored with harness `e66d3360`; no timing is published.
 
@@ -1050,19 +1060,19 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 | datafog-core | 34,810 | 0 | 90.2% | 0.168 | 0.118 | 15,680 | 0.114 |
 | datafog-gliner† | 9,520 | 5,525 | 34.4% | 0.578 | 0.577 | 5,807 | 0.691 |
 | datafog-regex | 35,039 | 0 | 90.6% | 0.165 | 0.116 | 15,893 | 0.115 |
-| datafog-spacy† | 15,769 | 4,015 | 53.1% | 0.470 | 0.458 | 13,290 | 0.572 |
+| datafog-spacy | 15,769 | 4,015 | 53.1% | 0.470 | 0.458 | 13,290 | 0.572 |
 | gliner† | 13,326 | 4,884 | 44.7% | 0.528 | 0.489 | 8,173 | 0.615 |
 | gliner-high-recall† | 8,158 | 7,031 | 34.8% | 0.517 | 0.504 | 4,482 | 0.676 |
 | opf† | 15,305 | 667 | 57.8% | held (typed-metric review) | held (typed-metric review) | 5,905 | 0.551 |
 | pii-tracer† | 6,510 | 5,277 | 38.4% | held (typed-metric review) | held (typed-metric review) | 773 | 0.640 |
-| presidio-all† | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
-| presidio-en† | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
-| presidio-en-de† | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-all | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-en | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-en-de | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
 | presidio-strong† | 12,383 | 3,243 | 50.5% | 0.534 | 0.519 | 12,300 | 0.603 |
 | presidio-strong-high-recall† | 12,058 | 3,243 | 49.5% | 0.531 | 0.518 | 12,300 | 0.614 |
 | presidio-tuned-presidio-research | 2,857 | 4,918 | 22.3% | 0.068 | 0.072 | 2,469 | 0.857 |
 | scrubadub-base | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
-| scrubadub-spacy† | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
+| scrubadub-spacy | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
 
 † Pre-receipt evidence: not receipt-verified; regeneration pending.
 
@@ -1073,9 +1083,19 @@ datafog-core was measured separately on the same documents, with harness `e7e018
 
 datafog-regex was measured separately on the same documents, with harness `e7e018ce` (typed metrics rescored with `e7e018ce`); it changes neither the other rows nor the common-intersection labels.
 
+datafog-spacy was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
 pii-tracer was measured separately on the same documents, with harness `7b09e385` (typed metrics rescored with `bfd35ce6`); it changes neither the other rows nor the common-intersection labels.
 
+presidio-all was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-en was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
+presidio-en-de was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
+
 scrubadub-base was measured separately on the same documents, with harness `e7e018ce` (typed metrics rescored with `e7e018ce`); it changes neither the other rows nor the common-intersection labels.
+
+scrubadub-spacy was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
 
 Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `70679f36`, benchmark binary `0e665110`, reproduced by a second run) scored with harness `e66d3360`; no timing is published.
 

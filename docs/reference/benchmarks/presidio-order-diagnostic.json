@@ -1,0 +1,107 @@
+{
+  "benchmark": "piibench-commercial",
+  "changed_documents": 31,
+  "coordinate_changes": 0,
+  "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+  "documents": 5000,
+  "equal_score_type_transitions": [
+    {
+      "after": "US_BANK_NUMBER",
+      "before": "PHONE_NUMBER",
+      "count": 6,
+      "score": 0.4
+    },
+    {
+      "after": "US_DRIVER_LICENSE",
+      "before": "PHONE_NUMBER",
+      "count": 1,
+      "score": 0.4
+    },
+    {
+      "after": "US_PASSPORT",
+      "before": "PHONE_NUMBER",
+      "count": 1,
+      "score": 0.4
+    },
+    {
+      "after": "ORGANIZATION",
+      "before": "URL",
+      "count": 1,
+      "score": 0.85
+    },
+    {
+      "after": "PHONE_NUMBER",
+      "before": "US_BANK_NUMBER",
+      "count": 5,
+      "score": 0.4
+    },
+    {
+      "after": "US_PASSPORT",
+      "before": "US_BANK_NUMBER",
+      "count": 6,
+      "score": 0.05
+    },
+    {
+      "after": "US_PASSPORT",
+      "before": "US_BANK_NUMBER",
+      "count": 1,
+      "score": 0.4
+    },
+    {
+      "after": "US_SSN",
+      "before": "US_BANK_NUMBER",
+      "count": 2,
+      "score": 0.05
+    },
+    {
+      "after": "PHONE_NUMBER",
+      "before": "US_DRIVER_LICENSE",
+      "count": 1,
+      "score": 0.4
+    },
+    {
+      "after": "US_BANK_NUMBER",
+      "before": "US_PASSPORT",
+      "count": 4,
+      "score": 0.05
+    },
+    {
+      "after": "US_BANK_NUMBER",
+      "before": "US_PASSPORT",
+      "count": 6,
+      "score": 0.4
+    },
+    {
+      "after": "US_SSN",
+      "before": "US_PASSPORT",
+      "count": 2,
+      "score": 0.05
+    },
+    {
+      "after": "US_BANK_NUMBER",
+      "before": "US_SSN",
+      "count": 3,
+      "score": 0.05
+    },
+    {
+      "after": "US_PASSPORT",
+      "before": "US_SSN",
+      "count": 3,
+      "score": 0.05
+    }
+  ],
+  "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+  "hash_seed_a": "0",
+  "hash_seed_b": "1",
+  "limit": "Verifies the supplied captures only. Historical predictions and hash seed were not retained.",
+  "model": {
+    "license": "MIT",
+    "sha256": "01903811a45522c963428622ef431ee2c7170c4b400f5d1c06642304946323e5",
+    "version": "3.7.1",
+    "wheel_sha256": "ab70aeb6172cde82508f7739f35ebc9918a3d07debeed637403c8f794ba3d3dc",
+    "wheel_source": "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl"
+  },
+  "prediction_a_sha256": "bf3e039c78e4232ea260c6a642c16124448654ec077f6d577e9effeac4860ce5",
+  "prediction_b_sha256": "3afa04d4292699003b817961f4bfc9b1f9c747669b7f719ca67e0c44f4d55726",
+  "schema_version": 1
+}

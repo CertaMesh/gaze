@@ -74,6 +74,20 @@ def page(history: dict) -> str:
              'retain their published values. Timing is recorded for provenance and does not establish a speed gain.', '',
              f"Published aggregate before this campaign: `{history['published_commit']}`.", '',
              f"Refreshed rows: {len(history['rows'])} of {history['expected_rows']}.", '']
+    if history.get('order_diagnostic'):
+        lines += ['## Presidio overlap order', '',
+                  'This campaign records PYTHONHASHSEED=0. Presidio 2.2.364 deduplicates candidates '
+                  'through a Python set, then resolves equal-score overlaps in that order. '
+                  'Changing only the hash seed to 1 changed types in 31 PIIBench documents, '
+                  'with identical span coordinates. The pinned analyzer confirmed that every '
+                  'changed pair had equal scores.', '',
+                  'The [aggregate order diagnostic](presidio-order-diagnostic.json) pins both prediction '
+                  'streams and the dataset. It demonstrates order sensitivity in retained captures. '
+                  'The original seed and predictions were not recorded, so its exact historical '
+                  'type choices cannot be recovered. Product-coverage leaked and false-positive byte '
+                  'totals reproduce for the three plain Presidio configurations. Typed and '
+                  'common-intersection metrics can differ because a tie assigns different types '
+                  'to the same protected bytes.', '']
     for item in history['rows']:
         lines += [f"## {item['benchmark']}: {item['tool']}", '',
                   f"Prediction SHA-256: `{item['prediction_sha256']}`. Dataset SHA-256: `{item['dataset_sha256']}`.", '',

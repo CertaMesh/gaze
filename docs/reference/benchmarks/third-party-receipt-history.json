@@ -1,5 +1,12 @@
 {
+  "collection_environment": {
+    "HF_HUB_OFFLINE": "1",
+    "PYTHONHASHSEED": "0",
+    "TOKENIZERS_PARALLELISM": "false",
+    "TRANSFORMERS_OFFLINE": "1"
+  },
   "expected_rows": 31,
+  "order_diagnostic": "presidio-order-diagnostic.json",
   "published_commit": "e7e018ce8c4fa590a5c28db7031f030712a83103",
   "rows": [
     {
@@ -205,6 +212,776 @@
         "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
       },
       "tool": "scrubadub-base"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 4.706,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 5.647
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 9.843,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 11.451
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "3b19ca181f46d6aa904c7132f616e81569d8a254ef63de94d00e8c1df863fad3",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:45:48.444360+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "datafog-spacy"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 8.949,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 10.488
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 60.048,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 65.978
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "b4d6276d6a0df03925d11e063049068f5125ecc4992fc8bf211da4a7aac1937a",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:47:50.504366+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "datafog-spacy"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 4.686,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 6.573
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 9.834,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 14.57
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "7ac40c1d76e83a20d228b3e8a910e818e883765ea77a90bb00c27c9edb879386",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:48:12.836102+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "scrubadub-spacy"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 8.999,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 11.101
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 60.37,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 70.967
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "4f70b71154115f99ee0210c6eaefdec99bffac5aa0dfb3361f4f7565f077d63c",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:50:26.536182+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "scrubadub-spacy"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 5.213,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 6.802
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 10.971,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 14.601
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "3dc806b9b8397aadc9e6d76a6f960e90451bfa2fc7bf95607b69125d2bfbd8a4",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:50:49.022905+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "presidio-en"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "own_metric.f1",
+          "published": 0.1569,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1568
+        },
+        {
+          "metric": "own_metric.precision",
+          "published": 0.131,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1309
+        },
+        {
+          "metric": "own_metric.recall",
+          "published": 0.1955,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1954
+        },
+        {
+          "metric": "row.common_intersection.char_level.f1",
+          "published": 0.500296632707336,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.500168730634325
+        },
+        {
+          "metric": "row.common_intersection.char_level.f2",
+          "published": 0.5486752864472908,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.5486137438897725
+        },
+        {
+          "metric": "row.common_intersection.char_level.f5",
+          "published": 0.578813648810044,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.5788004766269812
+        },
+        {
+          "metric": "row.common_intersection.char_level.fp",
+          "published": 63220,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 63270
+        },
+        {
+          "metric": "row.common_intersection.char_level.precision",
+          "published": 0.43619516458428087,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.436000748789902
+        },
+        {
+          "metric": "row.common_intersection.false_positive_bytes",
+          "published": 63387,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 63437
+        },
+        {
+          "metric": "row.common_intersection.predicted_bytes",
+          "published": 112360,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 112410
+        },
+        {
+          "metric": "row.common_intersection.redaction_load",
+          "published": 0.05218500317447932,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.05220822540800303
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f1",
+          "published": 0.2998709307328266,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.299763457816644
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f2",
+          "published": 0.35029819741338875,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.3502395229640548
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.fp",
+          "published": 6555,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 6560
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.precision",
+          "published": 0.24184594031922277,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.24170616113744076
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 9.793,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 11.922
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 64.429,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 73.77
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f1",
+          "published": 0.20767743717205192,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.20763140937126023
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f2",
+          "published": 0.23901090169405337,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.23895792941974173
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fn",
+          "published": 12467,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 12468
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fp",
+          "published": 21961,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 21962
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.precision",
+          "published": 0.17043780455558494,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1704000302194689
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.recall",
+          "published": 0.2657400318039932,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.26568113552034867
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.tp",
+          "published": 4512,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 4511
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "bf3e039c78e4232ea260c6a642c16124448654ec077f6d577e9effeac4860ce5",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:53:06.799808+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "presidio-en"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 5.137,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 5.614
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 10.733,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 11.684
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "3dc806b9b8397aadc9e6d76a6f960e90451bfa2fc7bf95607b69125d2bfbd8a4",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:53:26.487710+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "presidio-en-de"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "own_metric.f1",
+          "published": 0.1569,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1568
+        },
+        {
+          "metric": "own_metric.precision",
+          "published": 0.131,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1309
+        },
+        {
+          "metric": "own_metric.recall",
+          "published": 0.1955,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1954
+        },
+        {
+          "metric": "row.common_intersection.char_level.f1",
+          "published": 0.500296632707336,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.500168730634325
+        },
+        {
+          "metric": "row.common_intersection.char_level.f2",
+          "published": 0.5486752864472908,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.5486137438897725
+        },
+        {
+          "metric": "row.common_intersection.char_level.f5",
+          "published": 0.578813648810044,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.5788004766269812
+        },
+        {
+          "metric": "row.common_intersection.char_level.fp",
+          "published": 63220,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 63270
+        },
+        {
+          "metric": "row.common_intersection.char_level.precision",
+          "published": 0.43619516458428087,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.436000748789902
+        },
+        {
+          "metric": "row.common_intersection.false_positive_bytes",
+          "published": 63387,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 63437
+        },
+        {
+          "metric": "row.common_intersection.predicted_bytes",
+          "published": 112360,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 112410
+        },
+        {
+          "metric": "row.common_intersection.redaction_load",
+          "published": 0.05218500317447932,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.05220822540800303
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f1",
+          "published": 0.2998709307328266,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.299763457816644
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f2",
+          "published": 0.35029819741338875,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.3502395229640548
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.fp",
+          "published": 6555,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 6560
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.precision",
+          "published": 0.24184594031922277,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.24170616113744076
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 9.833,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 12.883
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 64.836,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 76.992
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f1",
+          "published": 0.20767743717205192,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.20763140937126023
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f2",
+          "published": 0.23901090169405337,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.23895792941974173
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fn",
+          "published": 12467,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 12468
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fp",
+          "published": 21961,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 21962
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.precision",
+          "published": 0.17043780455558494,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1704000302194689
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.recall",
+          "published": 0.2657400318039932,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.26568113552034867
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.tp",
+          "published": 4512,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 4511
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "bf3e039c78e4232ea260c6a642c16124448654ec077f6d577e9effeac4860ce5",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:55:50.206042+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "presidio-en-de"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 5.173,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 5.422
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 10.765,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 11.141
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "3dc806b9b8397aadc9e6d76a6f960e90451bfa2fc7bf95607b69125d2bfbd8a4",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:56:14.298325+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "presidio-all"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "own_metric.f1",
+          "published": 0.1569,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1568
+        },
+        {
+          "metric": "own_metric.precision",
+          "published": 0.131,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1309
+        },
+        {
+          "metric": "own_metric.recall",
+          "published": 0.1955,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1954
+        },
+        {
+          "metric": "row.common_intersection.char_level.f1",
+          "published": 0.500296632707336,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.500168730634325
+        },
+        {
+          "metric": "row.common_intersection.char_level.f2",
+          "published": 0.5486752864472908,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.5486137438897725
+        },
+        {
+          "metric": "row.common_intersection.char_level.f5",
+          "published": 0.578813648810044,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.5788004766269812
+        },
+        {
+          "metric": "row.common_intersection.char_level.fp",
+          "published": 63220,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 63270
+        },
+        {
+          "metric": "row.common_intersection.char_level.precision",
+          "published": 0.43619516458428087,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.436000748789902
+        },
+        {
+          "metric": "row.common_intersection.false_positive_bytes",
+          "published": 63387,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 63437
+        },
+        {
+          "metric": "row.common_intersection.predicted_bytes",
+          "published": 112360,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 112410
+        },
+        {
+          "metric": "row.common_intersection.redaction_load",
+          "published": 0.05218500317447932,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.05220822540800303
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f1",
+          "published": 0.2998709307328266,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.299763457816644
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.f2",
+          "published": 0.35029819741338875,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.3502395229640548
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.fp",
+          "published": 6555,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 6560
+        },
+        {
+          "metric": "row.common_intersection.typed_entities.precision",
+          "published": 0.24184594031922277,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.24170616113744076
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 9.824,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 10.33
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 64.904,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 66.174
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f1",
+          "published": 0.20767743717205192,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.20763140937126023
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.f2",
+          "published": 0.23901090169405337,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.23895792941974173
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fn",
+          "published": 12467,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 12468
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.fp",
+          "published": 21961,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 21962
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.precision",
+          "published": 0.17043780455558494,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.1704000302194689
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.recall",
+          "published": 0.2657400318039932,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 0.26568113552034867
+        },
+        {
+          "metric": "row.product_coverage.typed_entities.tp",
+          "published": 4512,
+          "reason": "Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained.",
+          "regenerated": 4511
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "bf3e039c78e4232ea260c6a642c16124448654ec077f6d577e9effeac4860ce5",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd",
+      "rescored_with": {
+        "at": "2026-10-22T04:58:22.301974+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "9225644b9fb58b20a4b84aedd558e5d3cdcb78fd"
+      },
+      "tool": "presidio-all"
     }
   ],
   "schema_version": 1
