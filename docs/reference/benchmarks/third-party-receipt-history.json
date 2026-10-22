@@ -1,0 +1,211 @@
+{
+  "expected_rows": 31,
+  "published_commit": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+  "rows": [
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 0.003,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.002
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 0.009,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.007
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "72a0589a7a5ec77131919fc33d79e6caf993ffffd9830718f37da640c3d70a92",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+      "rescored_with": {
+        "at": "2026-10-22T04:41:39.761955+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+      },
+      "tool": "datafog-core"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 0.038,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.036
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "f525d8faa382540e4536ea3804edc07600cfda60426d2be71950ca5a5cc0a208",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+      "rescored_with": {
+        "at": "2026-10-22T04:42:00.474530+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+      },
+      "tool": "datafog-core"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 0.047,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.04
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 0.087,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.075
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "79e7c050b6b8dafe5557adc355fc8a88c99b2e3abfd016dab4b11b266c66825e",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+      "rescored_with": {
+        "at": "2026-10-22T04:42:04.597741+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+      },
+      "tool": "datafog-regex"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 0.076,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.07
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 0.441,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.399
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "36c1bf9a89b81740846b854a1a6cc9dbd78e2c7d12827a3256535daa11ef573d",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+      "rescored_with": {
+        "at": "2026-10-22T04:42:22.448731+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+      },
+      "tool": "datafog-regex"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 0.035,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.033
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 0.129,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.122
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "fbbdbccf4660e95c1dab43b7e1c6ba73a1610d965678355dfc8fde4ee319c8f5",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+      "rescored_with": {
+        "at": "2026-10-22T04:42:27.604456+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+      },
+      "tool": "scrubadub-base"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 0.093,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.09
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 0.631,
+          "reason": "Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed.",
+          "regenerated": 0.597
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "e6052bf8b83049f1e6e03e117dee6366b6f2cb094614ca07284545a17bbe7bbb",
+      "published_harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "regenerated_harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+      "rescored_with": {
+        "at": "2026-10-22T04:42:46.472567+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+      },
+      "tool": "scrubadub-base"
+    }
+  ],
+  "schema_version": 1
+}

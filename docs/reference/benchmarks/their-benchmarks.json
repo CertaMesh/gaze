@@ -2745,6 +2745,9 @@
           }
         }
       },
+      "receipt_status": {
+        "pii-tracer": "pre-receipt"
+      },
       "reproduction": {
         "published": null,
         "vendor_result": {
@@ -2865,10 +2868,7 @@
         "opf",
         "pii-tracer",
         "scrubadub"
-      ],
-      "receipt_status": {
-        "pii-tracer": "pre-receipt"
-      }
+      ]
     },
     "piibench-commercial": {
       "chart_rows": [
@@ -3193,19 +3193,32 @@
             "foreign_cpu_samples": [
               {
                 "elapsed_seconds": 0.0,
-                "foreign_busy_processes": 2,
-                "foreign_cpu_percent": 27.2,
-                "load1": 7.69
+                "foreign_busy_processes": 3,
+                "foreign_cpu_percent": 70.7,
+                "load1": 3.22
               }
             ],
             "load1_before_after": [
-              7.69,
-              7.69
+              3.22,
+              3.22
             ],
             "sample_errors": [],
             "valid": true
           },
           "mode": "built-in text recognizers only",
+          "own_scorer_input": {
+            "beta": 1,
+            "counts": {
+              "annotated": 16979,
+              "predicted": 3314,
+              "true_positives": 999
+            },
+            "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+            "digits": 4,
+            "documents": 5000,
+            "prediction_sha256": "f525d8faa382540e4536ea3804edc07600cfda60426d2be71950ca5a5cc0a208"
+          },
+          "prediction_sha256": "f525d8faa382540e4536ea3804edc07600cfda60426d2be71950ca5a5cc0a208",
           "version": "0.3.0"
         },
         "datafog-gliner": {
@@ -3945,20 +3958,33 @@
             "foreign_cpu_samples": [
               {
                 "elapsed_seconds": 0.0,
-                "foreign_busy_processes": 4,
-                "foreign_cpu_percent": 73.2,
-                "load1": 7.69
+                "foreign_busy_processes": 3,
+                "foreign_cpu_percent": 71.9,
+                "load1": 3.46
               }
             ],
             "load1_before_after": [
-              7.69,
-              7.69
+              3.46,
+              3.26
             ],
             "sample_errors": [],
             "valid": true
           },
           "engine": "regex",
           "model_sha256": null,
+          "own_scorer_input": {
+            "beta": 1,
+            "counts": {
+              "annotated": 16979,
+              "predicted": 3396,
+              "true_positives": 990
+            },
+            "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+            "digits": 4,
+            "documents": 5000,
+            "prediction_sha256": "36c1bf9a89b81740846b854a1a6cc9dbd78e2c7d12827a3256535daa11ef573d"
+          },
+          "prediction_sha256": "36c1bf9a89b81740846b854a1a6cc9dbd78e2c7d12827a3256535daa11ef573d",
           "spacy_model": null,
           "version": "4.8.1"
         },
@@ -25960,17 +25986,30 @@
               {
                 "elapsed_seconds": 0.0,
                 "foreign_busy_processes": 3,
-                "foreign_cpu_percent": 41.8,
-                "load1": 8.16
+                "foreign_cpu_percent": 65.9,
+                "load1": 3.01
               }
             ],
             "load1_before_after": [
-              8.16,
-              8.16
+              3.01,
+              3.01
             ],
             "sample_errors": [],
             "valid": true
           },
+          "own_scorer_input": {
+            "beta": 1,
+            "counts": {
+              "annotated": 16979,
+              "predicted": 1693,
+              "true_positives": 1134
+            },
+            "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+            "digits": 4,
+            "documents": 5000,
+            "prediction_sha256": "e6052bf8b83049f1e6e03e117dee6366b6f2cb094614ca07284545a17bbe7bbb"
+          },
+          "prediction_sha256": "e6052bf8b83049f1e6e03e117dee6366b6f2cb094614ca07284545a17bbe7bbb",
           "spacy_model": null,
           "version": "2.0.0"
         },
@@ -26104,6 +26143,20 @@
           "version": "2.0.0"
         }
       },
+      "receipt_status": {
+        "datafog-gliner": "pre-receipt",
+        "datafog-spacy": "pre-receipt",
+        "gliner": "pre-receipt",
+        "gliner-high-recall": "pre-receipt",
+        "opf": "pre-receipt",
+        "pii-tracer": "pre-receipt",
+        "presidio-all": "pre-receipt",
+        "presidio-en": "pre-receipt",
+        "presidio-en-de": "pre-receipt",
+        "presidio-strong": "pre-receipt",
+        "presidio-strong-high-recall": "pre-receipt",
+        "scrubadub-spacy": "pre-receipt"
+      },
       "reproduction": {
         "published_full_mix": {
           "f1": 0.1385,
@@ -26179,7 +26232,7 @@
           },
           "latency": {
             "p50_ms": 0.005,
-            "p95_ms": 0.038,
+            "p95_ms": 0.036,
             "samples": 5000
           },
           "product_coverage": {
@@ -26202,6 +26255,89 @@
             "leaked_entity_rate": 0.9157783143883621,
             "leaking_documents": 3475,
             "leaking_entities": 15549,
+            "per_label_bytes": {
+              "false_positive_by_prediction_label": {
+                "CREDIT_CARD": 30,
+                "DATE": 1700,
+                "IP_ADDRESS": 59,
+                "PHONE": 1248,
+                "SSN": 701,
+                "ZIP_CODE": 800
+              },
+              "leaked_by_gold_label": {
+                "ACCOUNT_NUMBER": 978,
+                "ACCOUNT_PIN": 559,
+                "AGE": 134,
+                "API_KEY": 2947,
+                "BANK_ROUTING_NUMBER": 455,
+                "BBAN": 152,
+                "BIOMETRIC_IDENTIFIER": 781,
+                "BLOOD_TYPE": 167,
+                "CERTIFICATE_LICENSE_NUMBER": 801,
+                "CITY": 1480,
+                "COMPANY": 13491,
+                "COMPANY_NAME": 14699,
+                "COORDINATE": 1555,
+                "COUNTRY": 1749,
+                "COUNTY": 963,
+                "CREDIT_CARD_NUMBER": 160,
+                "CREDIT_CARD_SECURITY_CODE": 77,
+                "CREDIT_DEBIT_CARD": 1333,
+                "CUSTOMER_ID": 1238,
+                "CVV": 115,
+                "DATE": 9874,
+                "DATE_OF_BIRTH": 127,
+                "DATE_TIME": 2796,
+                "DEVICE_IDENTIFIER": 1445,
+                "DRIVER_LICENSE_NUMBER": 132,
+                "EDUCATION_LEVEL": 1750,
+                "EMAIL": 704,
+                "EMPLOYEE_ID": 1250,
+                "EMPLOYMENT_STATUS": 631,
+                "FAX_NUMBER": 69,
+                "FINANCIAL_ENTITY": 2052,
+                "FIRST_NAME": 3963,
+                "GENDER": 257,
+                "HEALTH_PLAN_BENEFICIARY_NUMBER": 585,
+                "HTTP_COOKIE": 4995,
+                "IBAN": 524,
+                "IPV4": 140,
+                "IPV6": 189,
+                "LANGUAGE": 546,
+                "LAST_NAME": 3361,
+                "LICENSE_PLATE": 539,
+                "LOC": 19012,
+                "LOCAL_LATLNG": 192,
+                "MAC_ADDRESS": 1178,
+                "MEDICAL_RECORD_NUMBER": 464,
+                "MISC": 18359,
+                "NAME": 15825,
+                "NATIONAL_ID": 390,
+                "OCCUPATION": 6146,
+                "ORG": 14911,
+                "PASSPORT_NUMBER": 119,
+                "PASSWORD": 1499,
+                "PERSON": 12009,
+                "PHONE_NUMBER": 925,
+                "PIN": 479,
+                "POLITICAL_VIEW": 549,
+                "POSTCODE": 160,
+                "RACE_ETHNICITY": 494,
+                "RELIGIOUS_BELIEF": 434,
+                "SEXUALITY": 188,
+                "SSN": 325,
+                "STATE": 1238,
+                "STREET_ADDRESS": 17029,
+                "SWIFT_BIC": 508,
+                "SWIFT_BIC_CODE": 536,
+                "TAX_ID": 91,
+                "TIME": 3496,
+                "UNIQUE_ID": 1072,
+                "URL": 22299,
+                "USER_NAME": 1525,
+                "VEHICLE_IDENTIFIER": 1482
+              }
+            },
             "pii_documents": 3479,
             "predicted_bytes": 44535,
             "redaction_load": 0.019095629937111124,
@@ -26332,8 +26468,8 @@
             }
           },
           "latency": {
-            "p50_ms": 0.076,
-            "p95_ms": 0.441,
+            "p50_ms": 0.07,
+            "p95_ms": 0.399,
             "samples": 5000
           },
           "product_coverage": {
@@ -26356,6 +26492,89 @@
             "leaked_entity_rate": 0.9154838329701396,
             "leaking_documents": 3475,
             "leaking_entities": 15544,
+            "per_label_bytes": {
+              "false_positive_by_prediction_label": {
+                "CREDIT_CARD": 19,
+                "DATE": 1839,
+                "IP_ADDRESS": 12,
+                "PHONE": 1412,
+                "SSN": 809,
+                "ZIP_CODE": 835
+              },
+              "leaked_by_gold_label": {
+                "ACCOUNT_NUMBER": 836,
+                "ACCOUNT_PIN": 559,
+                "AGE": 134,
+                "API_KEY": 2947,
+                "BANK_ROUTING_NUMBER": 428,
+                "BBAN": 152,
+                "BIOMETRIC_IDENTIFIER": 781,
+                "BLOOD_TYPE": 167,
+                "CERTIFICATE_LICENSE_NUMBER": 796,
+                "CITY": 1480,
+                "COMPANY": 13491,
+                "COMPANY_NAME": 14699,
+                "COORDINATE": 1555,
+                "COUNTRY": 1749,
+                "COUNTY": 963,
+                "CREDIT_CARD_NUMBER": 192,
+                "CREDIT_CARD_SECURITY_CODE": 77,
+                "CREDIT_DEBIT_CARD": 210,
+                "CUSTOMER_ID": 1179,
+                "CVV": 115,
+                "DATE": 9819,
+                "DATE_OF_BIRTH": 127,
+                "DATE_TIME": 2796,
+                "DEVICE_IDENTIFIER": 1520,
+                "DRIVER_LICENSE_NUMBER": 132,
+                "EDUCATION_LEVEL": 1750,
+                "EMAIL": 704,
+                "EMPLOYEE_ID": 1250,
+                "EMPLOYMENT_STATUS": 631,
+                "FAX_NUMBER": 69,
+                "FINANCIAL_ENTITY": 2052,
+                "FIRST_NAME": 3963,
+                "GENDER": 257,
+                "HEALTH_PLAN_BENEFICIARY_NUMBER": 540,
+                "HTTP_COOKIE": 4935,
+                "IBAN": 524,
+                "IPV4": 140,
+                "IPV6": 2145,
+                "LANGUAGE": 546,
+                "LAST_NAME": 3361,
+                "LICENSE_PLATE": 539,
+                "LOC": 19012,
+                "LOCAL_LATLNG": 192,
+                "MAC_ADDRESS": 1178,
+                "MEDICAL_RECORD_NUMBER": 455,
+                "MISC": 18359,
+                "NAME": 15778,
+                "NATIONAL_ID": 403,
+                "OCCUPATION": 6146,
+                "ORG": 14911,
+                "PASSPORT_NUMBER": 100,
+                "PASSWORD": 1499,
+                "PERSON": 12009,
+                "PHONE_NUMBER": 947,
+                "PIN": 479,
+                "POLITICAL_VIEW": 549,
+                "POSTCODE": 142,
+                "RACE_ETHNICITY": 494,
+                "RELIGIOUS_BELIEF": 434,
+                "SEXUALITY": 188,
+                "SSN": 305,
+                "STATE": 1238,
+                "STREET_ADDRESS": 17041,
+                "SWIFT_BIC": 508,
+                "SWIFT_BIC_CODE": 517,
+                "TAX_ID": 91,
+                "TIME": 3496,
+                "UNIQUE_ID": 1045,
+                "URL": 22304,
+                "USER_NAME": 1525,
+                "VEHICLE_IDENTIFIER": 1482
+              }
+            },
             "pii_documents": 3479,
             "predicted_bytes": 44492,
             "redaction_load": 0.019077192481462852,
@@ -27660,8 +27879,8 @@
             }
           },
           "latency": {
-            "p50_ms": 0.093,
-            "p95_ms": 0.631,
+            "p50_ms": 0.09,
+            "p95_ms": 0.597,
             "samples": 5000
           },
           "product_coverage": {
@@ -27684,6 +27903,88 @@
             "leaked_entity_rate": 0.9502915366040403,
             "leaking_documents": 3478,
             "leaking_entities": 16135,
+            "per_label_bytes": {
+              "false_positive_by_prediction_label": {
+                "email": 929,
+                "phone": 471,
+                "social_security_number": 77,
+                "unknown": 195,
+                "url": 8299
+              },
+              "leaked_by_gold_label": {
+                "ACCOUNT_NUMBER": 1124,
+                "ACCOUNT_PIN": 559,
+                "AGE": 134,
+                "API_KEY": 2947,
+                "BANK_ROUTING_NUMBER": 1081,
+                "BBAN": 152,
+                "BIOMETRIC_IDENTIFIER": 1031,
+                "BLOOD_TYPE": 167,
+                "CERTIFICATE_LICENSE_NUMBER": 893,
+                "CITY": 1480,
+                "COMPANY": 13469,
+                "COMPANY_NAME": 14687,
+                "COORDINATE": 1551,
+                "COUNTRY": 1749,
+                "COUNTY": 963,
+                "CREDIT_CARD_NUMBER": 192,
+                "CREDIT_CARD_SECURITY_CODE": 77,
+                "CREDIT_DEBIT_CARD": 1668,
+                "CUSTOMER_ID": 1822,
+                "CVV": 115,
+                "DATE": 19486,
+                "DATE_OF_BIRTH": 1536,
+                "DATE_TIME": 2826,
+                "DEVICE_IDENTIFIER": 1468,
+                "DRIVER_LICENSE_NUMBER": 132,
+                "EDUCATION_LEVEL": 1750,
+                "EMAIL": 1549,
+                "EMPLOYEE_ID": 1280,
+                "EMPLOYMENT_STATUS": 631,
+                "FAX_NUMBER": 144,
+                "FINANCIAL_ENTITY": 2029,
+                "FIRST_NAME": 3973,
+                "GENDER": 257,
+                "HEALTH_PLAN_BENEFICIARY_NUMBER": 593,
+                "HTTP_COOKIE": 5022,
+                "IBAN": 529,
+                "IPV4": 1513,
+                "IPV6": 2145,
+                "LANGUAGE": 546,
+                "LAST_NAME": 3381,
+                "LICENSE_PLATE": 544,
+                "LOC": 19009,
+                "LOCAL_LATLNG": 192,
+                "MAC_ADDRESS": 1178,
+                "MEDICAL_RECORD_NUMBER": 605,
+                "MISC": 18364,
+                "NAME": 15894,
+                "NATIONAL_ID": 389,
+                "OCCUPATION": 6146,
+                "ORG": 14911,
+                "PASSPORT_NUMBER": 164,
+                "PASSWORD": 1392,
+                "PERSON": 12009,
+                "PHONE_NUMBER": 1475,
+                "PIN": 479,
+                "POLITICAL_VIEW": 549,
+                "POSTCODE": 460,
+                "RACE_ETHNICITY": 494,
+                "RELIGIOUS_BELIEF": 434,
+                "SEXUALITY": 188,
+                "SSN": 330,
+                "STATE": 1238,
+                "STREET_ADDRESS": 17647,
+                "SWIFT_BIC": 508,
+                "SWIFT_BIC_CODE": 570,
+                "TAX_ID": 101,
+                "TIME": 3455,
+                "UNIQUE_ID": 1006,
+                "URL": 3767,
+                "USER_NAME": 1525,
+                "VEHICLE_IDENTIFIER": 1482
+              }
+            },
             "pii_documents": 3479,
             "predicted_bytes": 49518,
             "redaction_load": 0.021232230902118978,
@@ -27779,6 +28080,44 @@
         }
       },
       "rows_measured_separately": {
+        "datafog-core": {
+          "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+          "gaze_crates_tree": "d09a4e9f8271b6ea5446624a070815bb54ea6808",
+          "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+          "label_maps_sha256": "35a30b118c591963bce938f636e6d11504e6286782493e50a6aa0703c82fe6ca",
+          "rescored_with": {
+            "at": "2026-10-22T04:42:00.474530+00:00",
+            "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+            "comparison_sha256": {
+              "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+              "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+              "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+              "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+              "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+            },
+            "harness_dirty": false,
+            "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+          }
+        },
+        "datafog-regex": {
+          "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+          "gaze_crates_tree": "d09a4e9f8271b6ea5446624a070815bb54ea6808",
+          "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+          "label_maps_sha256": "35a30b118c591963bce938f636e6d11504e6286782493e50a6aa0703c82fe6ca",
+          "rescored_with": {
+            "at": "2026-10-22T04:42:22.448731+00:00",
+            "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+            "comparison_sha256": {
+              "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+              "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+              "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+              "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+              "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+            },
+            "harness_dirty": false,
+            "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+          }
+        },
         "pii-tracer": {
           "comparison_revision": "2571ac37",
           "gaze_crates_tree": "f3c9d2ea0d8949bc3457e67de6fad54782084edd",
@@ -27796,6 +28135,25 @@
             },
             "harness_dirty": false,
             "harness_revision": "bfd35ce60e23fc7adcdc51aa8623e97901d9169d"
+          }
+        },
+        "scrubadub-base": {
+          "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+          "gaze_crates_tree": "d09a4e9f8271b6ea5446624a070815bb54ea6808",
+          "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+          "label_maps_sha256": "35a30b118c591963bce938f636e6d11504e6286782493e50a6aa0703c82fe6ca",
+          "rescored_with": {
+            "at": "2026-10-22T04:42:46.472567+00:00",
+            "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+            "comparison_sha256": {
+              "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+              "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+              "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+              "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+              "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+            },
+            "harness_dirty": false,
+            "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
           }
         }
       },
@@ -27838,6 +28196,11 @@
           },
           "generated_at": "2026-10-09T11:21:26.210786+00:00",
           "hardware": "macOS-26.5-arm64-arm-64bit-Mach-O",
+          "harness_archive_branch": "archive/bench-harness",
+          "harness_commits": {
+            "comparison": "6a7f1782f314fefacb5d89fb6148c15bad9adc75",
+            "measured": "9b91f140fb4ec740d618be437c2176542f3c7fd4"
+          },
           "harness_dirty": false,
           "harness_revision": "9b91f140fb4ec740d618be437c2176542f3c7fd4",
           "runs": [
@@ -27851,12 +28214,7 @@
               "harness_revision": "9b91f140fb4ec740d618be437c2176542f3c7fd4",
               "prediction_sha256": "219f6b974706dff07ea57685ff27e20b48d660ee3b766feb4b9ae27e2de75064"
             }
-          ],
-          "harness_archive_branch": "archive/bench-harness",
-          "harness_commits": {
-            "comparison": "6a7f1782f314fefacb5d89fb6148c15bad9adc75",
-            "measured": "9b91f140fb4ec740d618be437c2176542f3c7fd4"
-          }
+          ]
         }
       },
       "typed_hold": [
@@ -27864,24 +28222,7 @@
         "opf",
         "pii-tracer",
         "scrubadub"
-      ],
-      "receipt_status": {
-        "datafog-core": "pre-receipt",
-        "datafog-gliner": "pre-receipt",
-        "datafog-regex": "pre-receipt",
-        "datafog-spacy": "pre-receipt",
-        "gliner": "pre-receipt",
-        "gliner-high-recall": "pre-receipt",
-        "opf": "pre-receipt",
-        "pii-tracer": "pre-receipt",
-        "presidio-all": "pre-receipt",
-        "presidio-en": "pre-receipt",
-        "presidio-en-de": "pre-receipt",
-        "presidio-strong": "pre-receipt",
-        "presidio-strong-high-recall": "pre-receipt",
-        "scrubadub-base": "pre-receipt",
-        "scrubadub-spacy": "pre-receipt"
-      }
+      ]
     },
     "presidio-research": {
       "chart_rows": [
@@ -28204,23 +28545,36 @@
       "provenance": {
         "datafog-core": {
           "cpu": {
-            "contended": true,
+            "contended": false,
             "foreign_cpu_samples": [
               {
                 "elapsed_seconds": 0.0,
-                "foreign_busy_processes": 4,
-                "foreign_cpu_percent": 130.5,
-                "load1": 6.69
+                "foreign_busy_processes": 3,
+                "foreign_cpu_percent": 78.8,
+                "load1": 3.03
               }
             ],
             "load1_before_after": [
-              6.69,
-              6.69
+              3.03,
+              3.03
             ],
             "sample_errors": [],
             "valid": true
           },
           "mode": "built-in text recognizers only",
+          "own_scorer_input": {
+            "beta": 2,
+            "counts": {
+              "annotated": 1850,
+              "predicted": 423,
+              "true_positives": 178
+            },
+            "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+            "digits": 3,
+            "documents": 1500,
+            "prediction_sha256": "72a0589a7a5ec77131919fc33d79e6caf993ffffd9830718f37da640c3d70a92"
+          },
+          "prediction_sha256": "72a0589a7a5ec77131919fc33d79e6caf993ffffd9830718f37da640c3d70a92",
           "version": "0.3.0"
         },
         "datafog-gliner": {
@@ -28356,24 +28710,37 @@
         },
         "datafog-regex": {
           "cpu": {
-            "contended": true,
+            "contended": false,
             "foreign_cpu_samples": [
               {
                 "elapsed_seconds": 0.0,
-                "foreign_busy_processes": 4,
-                "foreign_cpu_percent": 132.1,
-                "load1": 6.69
+                "foreign_busy_processes": 3,
+                "foreign_cpu_percent": 75.6,
+                "load1": 3.2
               }
             ],
             "load1_before_after": [
-              6.69,
-              6.69
+              3.2,
+              3.2
             ],
             "sample_errors": [],
             "valid": true
           },
           "engine": "regex",
           "model_sha256": null,
+          "own_scorer_input": {
+            "beta": 2,
+            "counts": {
+              "annotated": 1850,
+              "predicted": 428,
+              "true_positives": 180
+            },
+            "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+            "digits": 3,
+            "documents": 1500,
+            "prediction_sha256": "79e7c050b6b8dafe5557adc355fc8a88c99b2e3abfd016dab4b11b266c66825e"
+          },
+          "prediction_sha256": "79e7c050b6b8dafe5557adc355fc8a88c99b2e3abfd016dab4b11b266c66825e",
           "spacy_model": null,
           "version": "4.8.1"
         },
@@ -30993,22 +31360,35 @@
         },
         "scrubadub-base": {
           "cpu": {
-            "contended": true,
+            "contended": false,
             "foreign_cpu_samples": [
               {
                 "elapsed_seconds": 0.0,
-                "foreign_busy_processes": 6,
-                "foreign_cpu_percent": 112.4,
-                "load1": 8.73
+                "foreign_busy_processes": 3,
+                "foreign_cpu_percent": 68.2,
+                "load1": 3.32
               }
             ],
             "load1_before_after": [
-              8.73,
-              8.73
+              3.32,
+              3.32
             ],
             "sample_errors": [],
             "valid": true
           },
+          "own_scorer_input": {
+            "beta": 2,
+            "counts": {
+              "annotated": 1850,
+              "predicted": 238,
+              "true_positives": 224
+            },
+            "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+            "digits": 3,
+            "documents": 1500,
+            "prediction_sha256": "fbbdbccf4660e95c1dab43b7e1c6ba73a1610d965678355dfc8fde4ee319c8f5"
+          },
+          "prediction_sha256": "fbbdbccf4660e95c1dab43b7e1c6ba73a1610d965678355dfc8fde4ee319c8f5",
           "spacy_model": null,
           "version": "2.0.0"
         },
@@ -31045,6 +31425,20 @@
           },
           "version": "2.0.0"
         }
+      },
+      "receipt_status": {
+        "datafog-gliner": "pre-receipt",
+        "datafog-spacy": "pre-receipt",
+        "gliner": "pre-receipt",
+        "gliner-high-recall": "pre-receipt",
+        "opf": "pre-receipt",
+        "pii-tracer": "pre-receipt",
+        "presidio-all": "pre-receipt",
+        "presidio-en": "pre-receipt",
+        "presidio-en-de": "pre-receipt",
+        "presidio-strong": "pre-receipt",
+        "presidio-strong-high-recall": "pre-receipt",
+        "scrubadub-spacy": "pre-receipt"
       },
       "reproduction": {
         "historical": {
@@ -31156,8 +31550,8 @@
             }
           },
           "latency": {
-            "p50_ms": 0.003,
-            "p95_ms": 0.009,
+            "p50_ms": 0.002,
+            "p95_ms": 0.007,
             "samples": 1500
           },
           "product_coverage": {
@@ -31180,6 +31574,25 @@
             "leaked_entity_rate": 0.9018512050296892,
             "leaking_documents": 1251,
             "leaking_entities": 2582,
+            "per_label_bytes": {
+              "false_positive_by_prediction_label": {},
+              "leaked_by_gold_label": {
+                "AGE": 148,
+                "CREDIT_CARD": 837,
+                "DATE_TIME": 747,
+                "DOMAIN_NAME": 1024,
+                "GPE": 3675,
+                "IBAN_CODE": 462,
+                "NRP": 413,
+                "ORGANIZATION": 3398,
+                "PERSON": 9164,
+                "PHONE_NUMBER": 973,
+                "STREET_ADDRESS": 12978,
+                "TITLE": 792,
+                "US_DRIVER_LICENSE": 54,
+                "ZIP_CODE": 145
+              }
+            },
             "pii_documents": 1387,
             "predicted_bytes": 4721,
             "redaction_load": 0.03702861266235803,
@@ -31310,8 +31723,8 @@
             }
           },
           "latency": {
-            "p50_ms": 0.047,
-            "p95_ms": 0.087,
+            "p50_ms": 0.04,
+            "p95_ms": 0.075,
             "samples": 1500
           },
           "product_coverage": {
@@ -31334,6 +31747,26 @@
             "leaked_entity_rate": 0.9035976248690185,
             "leaking_documents": 1256,
             "leaking_entities": 2587,
+            "per_label_bytes": {
+              "false_positive_by_prediction_label": {},
+              "leaked_by_gold_label": {
+                "AGE": 148,
+                "CREDIT_CARD": 1299,
+                "DATE_TIME": 518,
+                "DOMAIN_NAME": 1024,
+                "GPE": 3675,
+                "IBAN_CODE": 462,
+                "IP_ADDRESS": 38,
+                "NRP": 413,
+                "ORGANIZATION": 3398,
+                "PERSON": 9164,
+                "PHONE_NUMBER": 941,
+                "STREET_ADDRESS": 12978,
+                "TITLE": 792,
+                "US_DRIVER_LICENSE": 54,
+                "ZIP_CODE": 135
+              }
+            },
             "pii_documents": 1387,
             "predicted_bytes": 4492,
             "redaction_load": 0.035232477881659036,
@@ -32642,8 +33075,8 @@
             }
           },
           "latency": {
-            "p50_ms": 0.035,
-            "p95_ms": 0.129,
+            "p50_ms": 0.033,
+            "p95_ms": 0.122,
             "samples": 1500
           },
           "product_coverage": {
@@ -32666,6 +33099,27 @@
             "leaked_entity_rate": 0.9175689835836535,
             "leaking_documents": 1211,
             "leaking_entities": 2627,
+            "per_label_bytes": {
+              "false_positive_by_prediction_label": {
+                "email": 6
+              },
+              "leaked_by_gold_label": {
+                "AGE": 148,
+                "CREDIT_CARD": 294,
+                "DATE_TIME": 967,
+                "GPE": 3675,
+                "IBAN_CODE": 462,
+                "IP_ADDRESS": 198,
+                "NRP": 413,
+                "ORGANIZATION": 3398,
+                "PERSON": 9164,
+                "PHONE_NUMBER": 940,
+                "STREET_ADDRESS": 14345,
+                "TITLE": 792,
+                "US_DRIVER_LICENSE": 43,
+                "ZIP_CODE": 180
+              }
+            },
             "pii_documents": 1387,
             "predicted_bytes": 4518,
             "redaction_load": 0.035436405848026604,
@@ -32761,6 +33215,44 @@
         }
       },
       "rows_measured_separately": {
+        "datafog-core": {
+          "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+          "gaze_crates_tree": "d09a4e9f8271b6ea5446624a070815bb54ea6808",
+          "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+          "label_maps_sha256": "35a30b118c591963bce938f636e6d11504e6286782493e50a6aa0703c82fe6ca",
+          "rescored_with": {
+            "at": "2026-10-22T04:41:39.761955+00:00",
+            "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+            "comparison_sha256": {
+              "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+              "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+              "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+              "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+              "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+            },
+            "harness_dirty": false,
+            "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+          }
+        },
+        "datafog-regex": {
+          "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+          "gaze_crates_tree": "d09a4e9f8271b6ea5446624a070815bb54ea6808",
+          "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+          "label_maps_sha256": "35a30b118c591963bce938f636e6d11504e6286782493e50a6aa0703c82fe6ca",
+          "rescored_with": {
+            "at": "2026-10-22T04:42:04.597741+00:00",
+            "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+            "comparison_sha256": {
+              "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+              "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+              "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+              "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+              "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+            },
+            "harness_dirty": false,
+            "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
+          }
+        },
         "pii-tracer": {
           "comparison_revision": "2571ac37",
           "gaze_crates_tree": "a0689c78de400d662f0cab46dafa79bebf35eee0",
@@ -32778,6 +33270,25 @@
             },
             "harness_dirty": false,
             "harness_revision": "bfd35ce60e23fc7adcdc51aa8623e97901d9169d"
+          }
+        },
+        "scrubadub-base": {
+          "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+          "gaze_crates_tree": "d09a4e9f8271b6ea5446624a070815bb54ea6808",
+          "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+          "label_maps_sha256": "35a30b118c591963bce938f636e6d11504e6286782493e50a6aa0703c82fe6ca",
+          "rescored_with": {
+            "at": "2026-10-22T04:42:27.604456+00:00",
+            "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+            "comparison_sha256": {
+              "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+              "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+              "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+              "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+              "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+            },
+            "harness_dirty": false,
+            "harness_revision": "e7e018ce8c4fa590a5c28db7031f030712a83103"
           }
         }
       },
@@ -32820,6 +33331,11 @@
           },
           "generated_at": "2026-10-09T10:06:34.195010+00:00",
           "hardware": "macOS-26.5-arm64-arm-64bit-Mach-O",
+          "harness_archive_branch": "archive/bench-harness",
+          "harness_commits": {
+            "comparison": "6a7f1782f314fefacb5d89fb6148c15bad9adc75",
+            "measured": "8e34c8eee0ec91ce54a86148f952168ea0763fb8"
+          },
           "harness_dirty": false,
           "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8",
           "runs": [
@@ -32833,12 +33349,7 @@
               "harness_revision": "8e34c8eee0ec91ce54a86148f952168ea0763fb8",
               "prediction_sha256": "e28bcd81e5255bee157946220c79dd157d89123b14a7ffb17215c3a918d1e077"
             }
-          ],
-          "harness_archive_branch": "archive/bench-harness",
-          "harness_commits": {
-            "comparison": "6a7f1782f314fefacb5d89fb6148c15bad9adc75",
-            "measured": "8e34c8eee0ec91ce54a86148f952168ea0763fb8"
-          }
+          ]
         }
       },
       "tuned_measurement": {
@@ -32862,23 +33373,6 @@
           "setup": "notebook 5, custom analyzer: OpenMed NER recognizer, title/year/age pattern recognizers, lemma context enhancement, 14 predefined recognizers removed, score threshold 0.3",
           "source": "https://github.com/microsoft/presidio-research/blob/6db3769a3388b4075b93ab2229c5e0b9c30137f7/notebooks/5_Evaluate_Custom_Presidio_Analyzer.ipynb"
         }
-      },
-      "receipt_status": {
-        "datafog-core": "pre-receipt",
-        "datafog-gliner": "pre-receipt",
-        "datafog-regex": "pre-receipt",
-        "datafog-spacy": "pre-receipt",
-        "gliner": "pre-receipt",
-        "gliner-high-recall": "pre-receipt",
-        "opf": "pre-receipt",
-        "pii-tracer": "pre-receipt",
-        "presidio-all": "pre-receipt",
-        "presidio-en": "pre-receipt",
-        "presidio-en-de": "pre-receipt",
-        "presidio-strong": "pre-receipt",
-        "presidio-strong-high-recall": "pre-receipt",
-        "scrubadub-base": "pre-receipt",
-        "scrubadub-spacy": "pre-receipt"
       }
     }
   },
@@ -32887,7 +33381,7 @@
     "PIIBench full ten-source mix": "five sources carry non-commercial or custom-academic licences and WikiANN's licence is unknown; not downloaded or run",
     "ai4privacy/pii-masking-300k (OPF's published set)": "custom licence; commercial use requires a licence from ai4privacy; not downloaded or run"
   },
+  "per_label_data": "Report-only label-to-count maps; never fixture input and never used to design or tune Gaze rules.",
   "report_only": "never used to design or tune Gaze rules",
-  "schema_version": 1,
-  "per_label_data": "Report-only label-to-count maps; never fixture input and never used to design or tune Gaze rules."
+  "schema_version": 1
 }
