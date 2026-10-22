@@ -25,8 +25,10 @@ SQL doubled quotes (`''`) and MySQL backslash quotes (`\'`) count as one
 character. JSON escaped slashes (`\/`) count as one alphabet character in
 hash components, including fixed-width checksums. The full serialized source
 is one manifest span; strict restore returns the original escape spelling.
-A trailing backslash cannot terminate a hash match. These are supported source
-escapes, not a general source-language decoder. Other escapes are outside this
+Complete JSON separator escapes establish both hash boundaries. A hash after
+`heading\n` or another hash followed by `\n` keeps its own complete span.
+An incomplete or malformed escape cannot establish a hash boundary. These are
+supported source escapes, not a general source-language decoder. Other escapes are outside this
 shape contract. Libxcrypt truncates at that many bytes. A Unicode salt over the producer's byte limit
 can therefore still match the stored-encoding shape. Salt and checksum
 alphabets are distinct; checksums retain exact crypt-base64 widths. Django salts are nonempty and exclude
@@ -65,7 +67,7 @@ retains these costs: layer D adds 930 false-positive bytes, layer A adds 1,950
 and layer R removes 6. The A/R change is Nym labelling the SQL keyword `VALUES`
 as a name; this can hide SQL syntax from an agent until restoration. The D
 change comes from the new password-code recognizer. Across all layers,
-442,135 leaked bytes are removed for 2,874 additional false-positive bytes
+855,588 leaked bytes are removed for 2,874 additional false-positive bytes
 under both required contracts.
 
 The labelled-identifier scanner is unsuitable here. Its group and next-label
@@ -89,19 +91,22 @@ counterweights while preserving every v22 document. Generator v24 adds complete
 literal and escaped-slash hashes immediately followed by JSON newline, tab, CR,
 quote, backslash and Unicode separator escapes. Exact source spans restore
 without consuming those separators; malformed tails remain benign. It preserves
-every v23 document. The 120 compact and
+every v23 document. Generator v25 adds hashes after serialized line prefixes and
+two distinct consecutive hashes repeated twice inside one JSON string. Complete separator
+escapes work on both sides; malformed prefixes and identifier-glued prefixes
+remain benign. Every v24 document reconstructs byte-for-byte. The 120 compact and
 nested PHP rows per partition share expression shapes, so these measurements
 do not establish generalization to unseen PHP syntax.
 
 Fresh base/candidate and isolated-mechanism measurements pass the v2 and v1
 gain gates and the current v4 headline contract. Each side's single observation
 record supplies every contract by re-scoring. No independent contract capture
-is needed. All 25,270 documents per
+is needed. All 26,950 documents per
 side restore exactly and have valid manifests; none is refused. The
-[evidence report](../../reference/benchmarks/password-code-credentials/json-separators/README.md)
+[evidence report](../../reference/benchmarks/password-code-credentials/json-prefixes/README.md)
 records per-layer leaked and false-positive bytes, source and binary identities,
 commands and limits. Historical release backfill is a separate job: published
-history remains bound to generator v20, while this measurement uses v24.
+history remains bound to generator v20, while this measurement uses v25.
 No latency or throughput result is claimed.
 
 The mechanism preparation command produces two policies for the same binary:
@@ -116,4 +121,4 @@ The candidate appends the new hash and code-field definitions. Use the emitted
 `delta.toml` with `agentic_layers.py gate --policy-delta` and
 `mechanism_arms.py record --policy-delta`. The emitted paths are local artifacts.
 The committed evidence records the policy delta and retains both value-free
-observation archives. Historical release rows are not re-labelled as v24.
+observation archives. Historical release rows are not re-labelled as v25.

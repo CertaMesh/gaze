@@ -1,0 +1,45 @@
+{
+  "documents_sha256": {
+    "main-base": "a583057bf996a0eae556b15d0bfde80832c62df164e006109ec50399644cca7d",
+    "main-candidate": "a583057bf996a0eae556b15d0bfde80832c62df164e006109ec50399644cca7d",
+    "mechanism-base": "a583057bf996a0eae556b15d0bfde80832c62df164e006109ec50399644cca7d",
+    "mechanism-candidate": "a583057bf996a0eae556b15d0bfde80832c62df164e006109ec50399644cca7d"
+  },
+  "identical_documents": true,
+  "prefix_cell_metrics_equal": true,
+  "leaked_bytes_removed_by_family": {
+    "other": 120,
+    "credentials_": 192872,
+    "credentials_review_": 210183,
+    "credentials_escapes_": 38960,
+    "credentials_prefixes_": 258413,
+    "credentials_separators_": 155040,
+    "primary_C": 0
+  },
+  "generated_layers": {
+    "A": {
+      "other": 120,
+      "credentials_": 64080,
+      "credentials_review_": 70025,
+      "credentials_escapes_": 13004,
+      "credentials_prefixes_": 51725,
+      "credentials_separators_": 51680
+    },
+    "D": {
+      "other": 0,
+      "credentials_": 0,
+      "credentials_escapes_": 0,
+      "credentials_prefixes_": 0,
+      "credentials_separators_": 0,
+      "credentials_review_": 0
+    },
+    "R": {
+      "credentials_": 128792,
+      "credentials_review_": 140158,
+      "credentials_escapes_": 25956,
+      "credentials_prefixes_": 206688,
+      "credentials_separators_": 103360,
+      "other": 0
+    }
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "baseline_revision": "236405e2c3129bed1ea788544c4544365062e911",
+  "baseline_registry_sha256": "df0fbc5e649439681aeb13782806f3a1a19b1d1d9783a32397b1ddaea74586ce",
+  "registry_sha256": "818f667f4bd2abdf65fcf2ef3f9ef13e08967c4f23cafc0e788f1bad2fd98e91",
+  "declared_paths": 776,
+  "added_paths": 53,
+  "patterns_unchanged": true,
+  "computed_gate_reader_fingerprints_unchanged": true,
+  "review": "Every added path was inspected. Archives contain value-free observations. Exact execution-policy snapshots are bound to runner and parameter hashes. The replay materializes only the mechanism policies needed by the existing gate. No provenance or input-audit guard is bypassed.",
+  "reviewed_input_groups": {
+    "synthetic mutation assertion log": [
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/B6-mutation.log"
+    ],
+    "published documentation, scored contract and evidence metadata": [
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/README.md",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/ci-input-audit.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/commands.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/empty-checkout-verification.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/false-positive-attribution.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/hardware.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-base-export.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-candidate-export.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-gate-v1.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-gate-v2.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-gate-v3.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-gate-v4.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/measurement-identity-and-gain.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-base-export.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-candidate-export.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-gate-v1.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-gate-v2.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-gate-v3.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-gate-v4.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-main-equivalence.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mutations.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/policies.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/source-escape-cells.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/source-identities.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/source-prefix-cells.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/source-separator-cells.json",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/verification.json",
+      "docs/reference/benchmarks/scored-labels-agentic-generator-v24.json"
+    ],
+    "value-free observation archives and scorecards": [
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-base-observations.jsonl.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-base-v1.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-base-v2.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-base-v3.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-base-v4.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-candidate-observations.jsonl.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-candidate-v1.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-candidate-v2.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-candidate-v3.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/main-candidate-v4.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-base-observations.jsonl.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-base-v1.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-base-v2.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-base-v3.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-base-v4.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-candidate-observations.jsonl.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-candidate-v1.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-candidate-v2.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-candidate-v3.json.gz",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/mechanism-candidate-v4.json.gz"
+    ],
+    "exact execution-policy snapshots": [
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/policies/02773b44c9bdb17a310865df01b1061bf43404d0e67424430bb4fd67a7a11550.toml",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/policies/921449bf00724f84f8da69fc65bc29fa9fb1df343ba72db780f2b9f693b29cdc.toml",
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/policies/a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462.toml"
+    ],
+    "model-free public verification code": [
+      "docs/reference/benchmarks/password-code-credentials/json-prefixes/verify.py"
+    ]
+  },
+  "integrated_ci": {
+    "exit_code": 0,
+    "command": [
+      "uv",
+      "run",
+      "--project",
+      "scripts/bench",
+      "--python",
+      "3.13",
+      "python",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "scripts/ci"
+    ],
+    "retained_log_sha256": "10b9eae9f1a5f38716e7c8534f3d3a974e7427b28394c834fb9b63bdbf80930d"
+  }
+}

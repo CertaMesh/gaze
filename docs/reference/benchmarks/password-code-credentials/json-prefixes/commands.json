@@ -1,0 +1,1071 @@
+{
+  "schema_version": 1,
+  "execution": "One machine lease; four native captures ran serially. Contracts were replayed from each single capture. No history or independent contract captures.",
+  "verification": [
+    {
+      "check": "focused",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "gaze-recognizers",
+        "--all-features",
+        "--test",
+        "code_credentials",
+        "--test",
+        "security_token"
+      ],
+      "retained_log_sha256": "ba28a9fedfd184956b72cdfbe7e695418c6116dfadfe72e78202df257bc9cf69"
+    },
+    {
+      "check": "fmt",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "retained_log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "check": "clippy",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "retained_log_sha256": "6db14c8dad726addf5eb0a82f778b786dddfcdcc8fe8bf98572480ca2d086d93"
+    },
+    {
+      "check": "cli",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "gaze-cli",
+        "--all-features"
+      ],
+      "retained_log_sha256": "f7771c18962f293c7bd7b92a4d2c4877aff7d1cd0f38ee49609922b7e4836ef2"
+    },
+    {
+      "check": "workspace",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "test",
+        "--workspace",
+        "--all-features"
+      ],
+      "retained_log_sha256": "4093e16a80d4ea717e1a31c1860cc8fb145191f1017ebb7d5c7d54494e77278c"
+    },
+    {
+      "check": "deny",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "deny",
+        "check"
+      ],
+      "retained_log_sha256": "17c997ac3a50f795bc5d17f998e6ab5d74fd0f95e09d4f34d4f32f8af7469828"
+    },
+    {
+      "check": "ci-integration",
+      "exit_code": 0,
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/ci"
+      ],
+      "retained_log_sha256": "a3e2c2b211369b62f2cc2f3cae34e35b16088d8db85c140e80deea4b1e791b11"
+    },
+    {
+      "check": "generator",
+      "exit_code": 0,
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/bench",
+        "-p",
+        "test_credential_code_cells.py"
+      ],
+      "retained_log_sha256": "0fa3c4026ee27e1978346f7001fe00088e162b38797d3370ff9ef8ae0080fc8a"
+    },
+    {
+      "check": "agentic",
+      "exit_code": 0,
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/bench",
+        "-p",
+        "test_agentic_layers.py"
+      ],
+      "retained_log_sha256": "fc369e048f1cc649d99cafcbb0b747c98bd4a2ffb74571a5c681f635dbc8556d"
+    },
+    {
+      "check": "symmetric-potemkin",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "symmetric-potemkin"
+      ],
+      "retained_log_sha256": "7b69348c22682fe2a1408c0822a62cacaa65c1c4906196ddec6986f3398796b9"
+    },
+    {
+      "check": "class-map-override-safety",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "class-map-override-safety"
+      ],
+      "retained_log_sha256": "c1c770215daca957767d6d0c3fcb67d30a8cf7a654b8bf06d88c8f5b2877e6b7"
+    },
+    {
+      "check": "recognizer-composition-validator",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "recognizer-composition-validator"
+      ],
+      "retained_log_sha256": "373c6338bf48080dcf7f94ac0c8fdaba61331996f4c832eead51c7f7a3a00f27"
+    },
+    {
+      "check": "no-tenant-knowledge",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "no-tenant-knowledge"
+      ],
+      "retained_log_sha256": "dc62713330df2fee044533d191d09ef9668368b36285f2abbefee63be0a80c5f"
+    },
+    {
+      "check": "bundle-tokenization-drift",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "bundle-tokenization-drift"
+      ],
+      "retained_log_sha256": "4ee10d05066fb0d054de483ca3bb4f0ea62ad0a0332ae2e1284cbd2cdfbf130c"
+    },
+    {
+      "check": "family-policy-table-coherence",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "family-policy-table-coherence"
+      ],
+      "retained_log_sha256": "9dbb2186157c54c2eae6947a1723d2b6c464173b13953c602aa13ba189d63405"
+    },
+    {
+      "check": "locale-cue-bundle-coherence",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "locale-cue-bundle-coherence"
+      ],
+      "retained_log_sha256": "6f81ee3b18598737ee513ed10b1c2bc7c56f08ddc8865ec07fdbca7e6d473985"
+    },
+    {
+      "check": "fixture-citation-lint",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "fixture-citation-lint"
+      ],
+      "retained_log_sha256": "f15f0ca2ca2120779315e4b2e281fe57fd094a37fa16cf2a69caf14300e18052"
+    },
+    {
+      "check": "trybuild-fixture-hygiene",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "trybuild-fixture-hygiene"
+      ],
+      "retained_log_sha256": "6d928eb1512a3c5293a53865726ebc78cd96674d7ae4e684c64c00b7cbf8b880"
+    },
+    {
+      "check": "cargo-metadata-audit-isolation",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "cargo-metadata-audit-isolation"
+      ],
+      "retained_log_sha256": "bcb4c7f5c4c9db2b9ed65068727fe616202d12437ddb7ad174de1af1811440be"
+    },
+    {
+      "check": "readme-version-check",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "run",
+        "-p",
+        "xtask",
+        "--",
+        "readme-version-check"
+      ],
+      "retained_log_sha256": "74b677aa4f4ace298ab28a601dc8e95a80364c7058199223cb50a611c69cabaa"
+    }
+  ],
+  "benchmark": [
+    {
+      "check": "base-build-cli",
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "-p",
+        "gaze-cli",
+        "--locked"
+      ],
+      "cwd": "{base-root}",
+      "exit_code": 0,
+      "seconds": 461.96
+    },
+    {
+      "check": "base-setup",
+      "command": [
+        "{base-root}/target/release/gaze",
+        "setup",
+        "--non-interactive",
+        "--force",
+        "--policy-out",
+        "{base-root}/target/gate/json-prefixes/policy.toml"
+      ],
+      "cwd": "{base-root}",
+      "exit_code": 0,
+      "seconds": 57.65
+    },
+    {
+      "check": "base-build-binary",
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "-p",
+        "gaze-recognizers",
+        "--example",
+        "clean_for_bench",
+        "--features",
+        "safety-net-nym",
+        "--locked"
+      ],
+      "cwd": "{base-root}",
+      "exit_code": 0,
+      "seconds": 187.73
+    },
+    {
+      "check": "candidate-build-cli",
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "-p",
+        "gaze-cli",
+        "--locked"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 104.76
+    },
+    {
+      "check": "candidate-setup",
+      "command": [
+        "{candidate-root}/target/release/gaze",
+        "setup",
+        "--non-interactive",
+        "--force",
+        "--policy-out",
+        "{candidate-root}/target/gate/json-prefixes/policy.toml"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 22.02
+    },
+    {
+      "check": "candidate-build-binary",
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "-p",
+        "gaze-recognizers",
+        "--example",
+        "clean_for_bench",
+        "--features",
+        "safety-net-nym",
+        "--locked"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 85.19
+    },
+    {
+      "check": "prepare-mechanism",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/credential_code_arm.py",
+        "--setup-policy",
+        "{candidate-root}/target/gate/json-prefixes/policy.toml",
+        "--output-dir",
+        "{candidate-root}/target/gate/json-prefixes/mechanism"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 0.17
+    },
+    {
+      "check": "main-base-capture",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore_past_release.py",
+        "--release-root",
+        "{base-root}",
+        "--binary",
+        "{base-root}/target/release/examples/clean_for_bench",
+        "--binary-profile",
+        "release",
+        "--configs",
+        "policy-file",
+        "--policy",
+        "{base-root}/target/gate/json-prefixes/policy.toml",
+        "--agentic-layers",
+        "--seed",
+        "20260710",
+        "--dataset",
+        "{test-parquet}",
+        "--output",
+        "{capture-dir}/main-base-native/scorecard-v4.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 6723.86
+    },
+    {
+      "check": "main-base-v2-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/main-base-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/main-base-v2/scorecard-v4.json",
+        "--scored-labels",
+        "docs/reference/benchmarks/scored-labels-v2.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 20.47
+    },
+    {
+      "check": "main-base-v1-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/main-base-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/main-base-v1/scorecard-v4.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 6.69
+    },
+    {
+      "check": "main-base-v4-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/main-base-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/main-base-v4/scorecard-v4.json",
+        "--scored-labels",
+        "docs/reference/benchmarks/scored-labels-v4.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 7.98
+    },
+    {
+      "check": "main-base-v3-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/main-base-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/main-base-v3/scorecard-v4.json",
+        "--scored-labels",
+        "docs/reference/benchmarks/scored-labels-v3.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 17.98
+    },
+    {
+      "check": "main-candidate-capture",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore_past_release.py",
+        "--release-root",
+        "{candidate-root}",
+        "--binary",
+        "{candidate-root}/target/release/examples/clean_for_bench",
+        "--binary-profile",
+        "release",
+        "--configs",
+        "policy-file",
+        "--policy",
+        "{candidate-root}/target/gate/json-prefixes/policy.toml",
+        "--agentic-layers",
+        "--seed",
+        "20260710",
+        "--dataset",
+        "{test-parquet}",
+        "--output",
+        "{capture-dir}/main-candidate-native/scorecard-v4.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 4950.77
+    },
+    {
+      "check": "main-candidate-v2-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/main-candidate-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/main-candidate-v2/scorecard-v4.json",
+        "--scored-labels",
+        "docs/reference/benchmarks/scored-labels-v2.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 10.01
+    },
+    {
+      "check": "main-candidate-v1-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/main-candidate-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/main-candidate-v1/scorecard-v4.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 8.98
+    },
+    {
+      "check": "main-candidate-v4-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/main-candidate-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/main-candidate-v4/scorecard-v4.json",
+        "--scored-labels",
+        "docs/reference/benchmarks/scored-labels-v4.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 8.85
+    },
+    {
+      "check": "main-candidate-v3-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/main-candidate-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/main-candidate-v3/scorecard-v4.json",
+        "--scored-labels",
+        "docs/reference/benchmarks/scored-labels-v3.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 8.77
+    },
+    {
+      "check": "mechanism-base-capture",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore_past_release.py",
+        "--release-root",
+        "{candidate-root}",
+        "--binary",
+        "{candidate-root}/target/release/examples/clean_for_bench",
+        "--binary-profile",
+        "release",
+        "--configs",
+        "policy-file",
+        "--policy",
+        "{candidate-root}/target/gate/json-prefixes/mechanism/base.toml",
+        "--agentic-layers",
+        "--seed",
+        "20260710",
+        "--dataset",
+        "{test-parquet}",
+        "--output",
+        "{capture-dir}/mechanism-base-native/scorecard-v4.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 6848.5
+    },
+    {
+      "check": "mechanism-base-v2-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/mechanism-base-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/mechanism-base-v2/scorecard-v4.json",
+        "--scored-labels",
+        "docs/reference/benchmarks/scored-labels-v2.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 6.04
+    },
+    {
+      "check": "mechanism-base-v1-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/mechanism-base-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/mechanism-base-v1/scorecard-v4.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 6.43
+    },
+    {
+      "check": "mechanism-base-v4-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/mechanism-base-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/mechanism-base-v4/scorecard-v4.json",
+        "--scored-labels",
+        "docs/reference/benchmarks/scored-labels-v4.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 6.0
+    },
+    {
+      "check": "mechanism-base-v3-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/mechanism-base-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/mechanism-base-v3/scorecard-v4.json",
+        "--scored-labels",
+        "docs/reference/benchmarks/scored-labels-v3.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 5.91
+    },
+    {
+      "check": "mechanism-candidate-capture",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore_past_release.py",
+        "--release-root",
+        "{candidate-root}",
+        "--binary",
+        "{candidate-root}/target/release/examples/clean_for_bench",
+        "--binary-profile",
+        "release",
+        "--configs",
+        "policy-file",
+        "--policy",
+        "{candidate-root}/target/gate/json-prefixes/mechanism/candidate.toml",
+        "--agentic-layers",
+        "--seed",
+        "20260710",
+        "--dataset",
+        "{test-parquet}",
+        "--output",
+        "{capture-dir}/mechanism-candidate-native/scorecard-v4.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 4268.05
+    },
+    {
+      "check": "mechanism-candidate-v2-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/mechanism-candidate-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/mechanism-candidate-v2/scorecard-v4.json",
+        "--scored-labels",
+        "docs/reference/benchmarks/scored-labels-v2.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 5.86
+    },
+    {
+      "check": "mechanism-candidate-v1-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/mechanism-candidate-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/mechanism-candidate-v1/scorecard-v4.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 6.02
+    },
+    {
+      "check": "mechanism-candidate-v4-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/mechanism-candidate-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/mechanism-candidate-v4/scorecard-v4.json",
+        "--scored-labels",
+        "docs/reference/benchmarks/scored-labels-v4.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 6.94
+    },
+    {
+      "check": "mechanism-candidate-v3-replay",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/rescore.py",
+        "{capture-dir}/mechanism-candidate-native/observations-v1.jsonl.gz",
+        "--output",
+        "{capture-dir}/mechanism-candidate-v3/scorecard-v4.json",
+        "--scored-labels",
+        "docs/reference/benchmarks/scored-labels-v3.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 6.31
+    },
+    {
+      "check": "main-gate-v2",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/agentic_layers.py",
+        "gate",
+        "--base",
+        "{capture-dir}/main-base-v2/scorecard-v4.json",
+        "--candidate",
+        "{capture-dir}/main-candidate-v2/scorecard-v4.json",
+        "--output",
+        "{capture-dir}/main-gate-v2.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 0.27
+    },
+    {
+      "check": "main-gate-v1",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/agentic_layers.py",
+        "gate",
+        "--base",
+        "{capture-dir}/main-base-v1/scorecard-v4.json",
+        "--candidate",
+        "{capture-dir}/main-candidate-v1/scorecard-v4.json",
+        "--output",
+        "{capture-dir}/main-gate-v1.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 0.3
+    },
+    {
+      "check": "main-gate-v4",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/agentic_layers.py",
+        "gate",
+        "--base",
+        "{capture-dir}/main-base-v4/scorecard-v4.json",
+        "--candidate",
+        "{capture-dir}/main-candidate-v4/scorecard-v4.json",
+        "--output",
+        "{capture-dir}/main-gate-v4.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 0.32
+    },
+    {
+      "check": "main-gate-v3",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/agentic_layers.py",
+        "gate",
+        "--base",
+        "{capture-dir}/main-base-v3/scorecard-v4.json",
+        "--candidate",
+        "{capture-dir}/main-candidate-v3/scorecard-v4.json",
+        "--output",
+        "{capture-dir}/main-gate-v3.json"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 0.3
+    },
+    {
+      "check": "mechanism-gate-v2",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/agentic_layers.py",
+        "gate",
+        "--base",
+        "{capture-dir}/mechanism-base-v2/scorecard-v4.json",
+        "--candidate",
+        "{capture-dir}/mechanism-candidate-v2/scorecard-v4.json",
+        "--output",
+        "{capture-dir}/mechanism-gate-v2.json",
+        "--policy-delta",
+        "scripts/bench/mechanisms/password-code-credentials.toml"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 0.3
+    },
+    {
+      "check": "mechanism-gate-v1",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/agentic_layers.py",
+        "gate",
+        "--base",
+        "{capture-dir}/mechanism-base-v1/scorecard-v4.json",
+        "--candidate",
+        "{capture-dir}/mechanism-candidate-v1/scorecard-v4.json",
+        "--output",
+        "{capture-dir}/mechanism-gate-v1.json",
+        "--policy-delta",
+        "scripts/bench/mechanisms/password-code-credentials.toml"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 0.3
+    },
+    {
+      "check": "mechanism-gate-v4",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/agentic_layers.py",
+        "gate",
+        "--base",
+        "{capture-dir}/mechanism-base-v4/scorecard-v4.json",
+        "--candidate",
+        "{capture-dir}/mechanism-candidate-v4/scorecard-v4.json",
+        "--output",
+        "{capture-dir}/mechanism-gate-v4.json",
+        "--policy-delta",
+        "scripts/bench/mechanisms/password-code-credentials.toml"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 0.3
+    },
+    {
+      "check": "mechanism-gate-v3",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "scripts/bench/agentic_layers.py",
+        "gate",
+        "--base",
+        "{capture-dir}/mechanism-base-v3/scorecard-v4.json",
+        "--candidate",
+        "{capture-dir}/mechanism-candidate-v3/scorecard-v4.json",
+        "--output",
+        "{capture-dir}/mechanism-gate-v3.json",
+        "--policy-delta",
+        "scripts/bench/mechanisms/password-code-credentials.toml"
+      ],
+      "cwd": "{candidate-root}",
+      "exit_code": 0,
+      "seconds": 0.3
+    }
+  ],
+  "placeholders": {
+    "{base-root}": "separate base checkout",
+    "{candidate-root}": "measured candidate checkout",
+    "{test-parquet}": "checksum-pinned local test corpus",
+    "{capture-dir}": "local evidence output directory",
+    "{home}": "machine home directory"
+  },
+  "verification_driver": {
+    "file": "local checks.py",
+    "checks": "fmt, clippy, CLI, workspace, deny, CI integration, generator, agentic generator and eleven xtask gates"
+  },
+  "cargo_environment": {
+    "rust_toolchain": "1.96.0",
+    "CARGO_BUILD_JOBS": "4",
+    "PATH": "{toolchain-bin}:{inherited-PATH}",
+    "RUSTC": "{toolchain-bin}/rustc",
+    "RUSTDOC": "{toolchain-bin}/rustdoc",
+    "toolchain-bin": "dirname of rustup which --toolchain 1.96.0 rustc"
+  }
+}
