@@ -1,0 +1,587 @@
+{
+  "baseline_commit": "9646a661c9e7e3454f7a5f44eeb0cc9e7cadfad6",
+  "candidate_implementation_commit": "4adfb9bf2f7cba77221d806780d09a1fc34511d3",
+  "tokenizer_sha256": "bf1b59b7b11c95f194f51708d918eea378e09d05f84c0e1656dc5180e8117088",
+  "fixture_source_sha256": "7344316df23149a79754348b18705077b13b5212a2f9953dbd4bd39fa865f636",
+  "hardware": {
+    "cpu": "Apple M5 Max",
+    "physical_cores": 18,
+    "logical_cores": 18,
+    "ram_gib": 64
+  },
+  "tensor_parity": {
+    "documents": 95,
+    "windows": 281,
+    "mismatches": 0,
+    "dump_sha256": "367de458e66c77eddd332e3723b441b4b0b90e9a160234532be8363139fb8601"
+  },
+  "encode_counts": [
+    {
+      "fixture": "short",
+      "windows": 1,
+      "baseline_encodes": 2,
+      "candidate_encodes": 1
+    },
+    {
+      "fixture": "medium",
+      "windows": 1,
+      "baseline_encodes": 2,
+      "candidate_encodes": 1
+    },
+    {
+      "fixture": "multi_chunk",
+      "windows": 4,
+      "baseline_encodes": 5,
+      "candidate_encodes": 5
+    },
+    {
+      "fixture": "multilingual",
+      "windows": 3,
+      "baseline_encodes": 4,
+      "candidate_encodes": 4
+    },
+    {
+      "fixture": "json_tool_call",
+      "windows": 1,
+      "baseline_encodes": 2,
+      "candidate_encodes": 1
+    }
+  ],
+  "mutation": {
+    "change": "Reuse the planning encoding for multi-window documents",
+    "regression": "preparation_preserves_wordpiece_windows_and_truncation",
+    "mutated_exit": 101,
+    "restored_exit": 0
+  },
+  "microbenchmark": {
+    "indicative_only": true,
+    "scope": "Tokenization, window planning and i64 input buffers. Excludes ONNX inference and all other pipeline work.",
+    "mode": "release",
+    "rust": "1.96.0",
+    "rounds": 5,
+    "samples_per_round": 20,
+    "warmup_ms": 200,
+    "measurement_ms": 500,
+    "order": "alternating baseline/candidate by round",
+    "load_before": "12:04  up 8 days,  2:19, 3 users, load averages: 38.16 45.85 46.65",
+    "measurement_round_uptime": [
+      "round 0: 12:10  up 8 days,  2:25, 3 users, load averages: 26.23 39.20 44.02",
+      "round 1: 12:10  up 8 days,  2:25, 3 users, load averages: 26.13 38.97 43.91",
+      "round 2: 12:10  up 8 days,  2:25, 3 users, load averages: 26.04 38.74 43.80",
+      "round 3: 12:10  up 8 days,  2:25, 3 users, load averages: 27.77 38.67 43.72",
+      "round 4: 12:10  up 8 days,  2:25, 3 users, load averages: 26.27 38.18 43.51"
+    ],
+    "load_after": "12:10  up 8 days,  2:25, 3 users, load averages: 27.45 38.22 43.50",
+    "summary_unit": "microseconds; median and range of five Criterion mean point estimates",
+    "results": {
+      "json_tool_call": {
+        "candidate": {
+          "round_mean_us": [
+            31.312118806529917,
+            30.387215899840463,
+            31.487479866133874,
+            32.521212707087535,
+            54.151779186207136
+          ],
+          "median_us": 31.487479866133874,
+          "range_us": [
+            30.387215899840463,
+            54.151779186207136
+          ]
+        },
+        "baseline": {
+          "round_mean_us": [
+            64.71394892731807,
+            60.20091466780331,
+            63.33363058353386,
+            64.03249457287728,
+            66.38586206949884
+          ],
+          "median_us": 64.03249457287728,
+          "range_us": [
+            60.20091466780331,
+            66.38586206949884
+          ]
+        }
+      },
+      "medium": {
+        "baseline": {
+          "round_mean_us": [
+            634.0878757115102,
+            514.6423500366628,
+            546.0481636624368,
+            568.8000925922616,
+            837.1025409079189
+          ],
+          "median_us": 568.8000925922616,
+          "range_us": [
+            514.6423500366628,
+            837.1025409079189
+          ]
+        },
+        "candidate": {
+          "round_mean_us": [
+            268.0821065932263,
+            301.1713962790449,
+            265.4460584090672,
+            413.55837056905443,
+            1360.101184899351
+          ],
+          "median_us": 301.1713962790449,
+          "range_us": [
+            265.4460584090672,
+            1360.101184899351
+          ]
+        }
+      },
+      "short": {
+        "baseline": {
+          "round_mean_us": [
+            26.260570500537764,
+            24.935084951201166,
+            30.632135799573902,
+            25.286272385898783,
+            22.239204374558046
+          ],
+          "median_us": 25.286272385898783,
+          "range_us": [
+            22.239204374558046,
+            30.632135799573902
+          ]
+        },
+        "candidate": {
+          "round_mean_us": [
+            10.590354256979888,
+            10.82778892564787,
+            11.894357627930814,
+            15.634840444587367,
+            11.547192352856642
+          ],
+          "median_us": 11.547192352856642,
+          "range_us": [
+            10.590354256979888,
+            15.634840444587367
+          ]
+        }
+      }
+    },
+    "limitations": "Shared host was busy. Medium candidate has a large contention outlier; every round is retained. These results support no end-to-end latency claim."
+  },
+  "production_source_sha256": {
+    "crates/gaze-recognizers/src/ner/backend/mod.rs": "4c3b629c1e7ac3838133fba33e97cca19906fc58b89ef1ad12fd7be40d47834d",
+    "crates/gaze-recognizers/src/ner/backend/ort.rs": "ae4d534c83f01215e3679a1d0c2a90571f62e7ec9a2bbe3ca29b213815d63244",
+    "crates/gaze-recognizers/src/ner/backend/preparation.rs": "6f16a5cf7f13b324cea366e1cf43d678b44c219e689ae2f91693a5d3a4680f00",
+    "crates/gaze-recognizers/src/ner/detector.rs": "2974edb0d4712d1854c23590b5f9d428546f8c87c7d1d5a9d0e186122c6f13fb"
+  },
+  "reproduce": {
+    "model": "Set GAZE_NER_MODEL_DIR to the pinned Davlan bundle installed by gaze setup.",
+    "tensor_and_counts": "cargo test -p gaze-recognizers --all-features --lib tokenize_once_proof -- --include-ignored --nocapture --test-threads=1",
+    "pipeline_receipt": "Set GAZE_NER_PROOF_DIR separately in baseline and candidate checkouts, then run cargo test -p gaze-recognizers --all-features --test ner_once_per_document pinned_ner_pipeline_parity_receipt -- --ignored --exact --nocapture and compare pipeline-parity.json.",
+    "microbenchmark": "cargo bench -p gaze-recognizers --bench ner_prepare -- --noplot",
+    "baseline_harness": "In an isolated checkout of baseline_commit, copy crates/gaze-recognizers/tests/ner_once_per_document.rs and crates/gaze-recognizers/tests/support/ner_preparation_fixtures.rs from the candidate. Keep baseline production sources and Cargo.lock unchanged."
+  },
+  "model_sha256": "1213fdd405d295768b0d41d8214062f2f278f0e3acff6af67d8fd47360d2be0f",
+  "pipeline_parity": {
+    "documents_per_run": 95,
+    "independent_final_code_processes": 4,
+    "repeats_per_side": 2,
+    "canonical_sha256": "31ff649ed5beb2f9a0b562532fbccb0d3404af3d02c45ae2ee2a7bd96b02427e",
+    "canonical_hash_encoding": "UTF-8 JSON with recursively sorted keys, separators comma/colon, no whitespace",
+    "document_hashes": [
+      {
+        "fixture": "short",
+        "sha256": "f1d47ea2d218b8bd4cead4a139bdc23e16748f4b6751d52da90de9e2bb6b5d01"
+      },
+      {
+        "fixture": "medium",
+        "sha256": "18377e66cd3635c9cc68c5d848fcc4c86312b85ac5152a2e91fa2e85062dc3a0"
+      },
+      {
+        "fixture": "multi_chunk",
+        "sha256": "87644dfbf7ff16bd3bd472216ed2fafb17ea8af3cb5f116626411b5213d039ef"
+      },
+      {
+        "fixture": "multilingual",
+        "sha256": "1d4991553bd9ce9f46f308bd10dec93e89df42dd30856d2ced5b82ac0c91b5aa"
+      },
+      {
+        "fixture": "json_tool_call",
+        "sha256": "3182eaba1b30849546a36eaadf8589fa370bf1de2466d7b3eef9a2cadaf84f7f"
+      },
+      {
+        "fixture": "empty",
+        "sha256": "8e833ae0831117c0921743a53c3ec1bd9ca8085240a5757fb58da6853e50daa2"
+      },
+      {
+        "fixture": "whitespace",
+        "sha256": "b5b4551869fe65d2738ea74217cf99acf2c4366e2090c10234decbc23545550c"
+      },
+      {
+        "fixture": "boundary_448",
+        "sha256": "adf2f81a7412999653dcb761b06ca2aa10f95037f702388358b034f9dd305f52"
+      },
+      {
+        "fixture": "boundary_450",
+        "sha256": "8b66edd0e7beec9270466407e7341a6003fc36c51fbc530c71077ac0f7e9d136"
+      },
+      {
+        "fixture": "boundary_479",
+        "sha256": "4b6dd25f8c892d312dc01e01a48c32f8a46e5930219a1dcb6a5413c67a1002d9"
+      },
+      {
+        "fixture": "boundary_480",
+        "sha256": "8ac8019f0a10e2b82e9232757c5397eece5af90f61b67b801541e5808f1c5b5d"
+      },
+      {
+        "fixture": "boundary_481",
+        "sha256": "fe5dcdac1288a46056c08ddc8cbc081627ba5a35f4941737180a88389fcfc4b9"
+      },
+      {
+        "fixture": "boundary_512",
+        "sha256": "c15c4b004b83c2ae5a7bb7d1f7d826080e57a17bf26eed567c72a8ed28823bc7"
+      },
+      {
+        "fixture": "boundary_930",
+        "sha256": "624716336abb17aa5870ef3a1b1f6b2b8bd4c6148211594cdfb70de0a88d8109"
+      },
+      {
+        "fixture": "boundary_931",
+        "sha256": "5b01e8affbc3297e9f230b9902da91136e8f8a17f0b926cd77821701508f83bf"
+      },
+      {
+        "fixture": "wordpiece_edge_447",
+        "sha256": "91ba08d0befcff7c17c6d64f328a21b160108dedb494d5e086f2a86edfe1c798"
+      },
+      {
+        "fixture": "multibyte_edge_447",
+        "sha256": "122a64c8e5b0911b1eb409560e10a304fdd411f6630b39080d36a47a371eef50"
+      },
+      {
+        "fixture": "wordpiece_edge_448",
+        "sha256": "247a0c1e6828bacab5768785031b497a0b3a372dafef2b2a5be0a084f85a3c17"
+      },
+      {
+        "fixture": "multibyte_edge_448",
+        "sha256": "379de135ccf4da181e37368bf0afdb9e3aa1394a84e482eb6eee3ccda7214571"
+      },
+      {
+        "fixture": "wordpiece_edge_449",
+        "sha256": "95b46de25f7e58e622539c4c031c09f36dbbbe0490d9b9c5243021a4f1a7cda7"
+      },
+      {
+        "fixture": "multibyte_edge_449",
+        "sha256": "9fbf02a7dcdfd6ebfd2cb2aa473c204d00ce837c7d9e9c09b703225442c57436"
+      },
+      {
+        "fixture": "wordpiece_edge_478",
+        "sha256": "0c0b9ceaa5dc8dae7569ad40c1cb7f024a677cbd3cd8a4c7e22e3dc32a5edb12"
+      },
+      {
+        "fixture": "multibyte_edge_478",
+        "sha256": "edbc16222df0355bfa124baf9a9d1f561b3610088e43bd88be091a983a791a3a"
+      },
+      {
+        "fixture": "wordpiece_edge_479",
+        "sha256": "78431d0a9130a79cbcb1cbab955f7e9aae4d3782e3035e8a996395b8f2a90d1e"
+      },
+      {
+        "fixture": "multibyte_edge_479",
+        "sha256": "2d3c80ee0b55e5e0c6b3c2e628b6ab3bf4707065a934d1d3bd7a2a1ec8b80fe5"
+      },
+      {
+        "fixture": "wordpiece_edge_480",
+        "sha256": "4ee3a2c2a969fe75c8b1653d0e66bedeb4e01f4e02b520a5d7971337d7648c3b"
+      },
+      {
+        "fixture": "multibyte_edge_480",
+        "sha256": "492e5f46fc38d0cbbeb6ed706c10526e46543cdba3d94d9eacb704969f4d54b0"
+      },
+      {
+        "fixture": "wordpiece_edge_510",
+        "sha256": "cdc46b14270eabc68351eba0f7c3b9078da5292c4a00533b7bbc4e63c664c7bc"
+      },
+      {
+        "fixture": "multibyte_edge_510",
+        "sha256": "8106f7d161b4660a4fab64dd3a49633826481ed6bcd2da131eaae4a2162c31ee"
+      },
+      {
+        "fixture": "wordpiece_edge_511",
+        "sha256": "6ca65fe29647e4b2beb52ce7a40d383f2622eda26f1c33289a75d9ed94595063"
+      },
+      {
+        "fixture": "multibyte_edge_511",
+        "sha256": "e4a957fd58cc8865e6c0e5a3e7d0d6702cc18bb1aa8002c4f4d3342931942db7"
+      },
+      {
+        "fixture": "random_00",
+        "sha256": "8e833ae0831117c0921743a53c3ec1bd9ca8085240a5757fb58da6853e50daa2"
+      },
+      {
+        "fixture": "random_01",
+        "sha256": "c1eeeaa0beead69689615c3baebc4f84037130dcfd9a139367464fd9a04271a9"
+      },
+      {
+        "fixture": "random_02",
+        "sha256": "7d734361912554fddd1bf22b503819d760d0b013e21c384ed93374b173f96590"
+      },
+      {
+        "fixture": "random_03",
+        "sha256": "ad15f9ae09439117c9dc95de4c0ea7f24928435d57b58d7b15c3b56071e2e8a6"
+      },
+      {
+        "fixture": "random_04",
+        "sha256": "1f2ae1c542d07109b43e5c94dad3cc3d2512d2fc1fe7d3e9353de9962edc68e4"
+      },
+      {
+        "fixture": "random_05",
+        "sha256": "f78dfa0b0d5e29c7597a7e38579ae3d2ea2a8cca69a950d5d49da147518468c0"
+      },
+      {
+        "fixture": "random_06",
+        "sha256": "1883d519860497ce0977510ea975422c5f794b38dbc99faf9230d919eef96a87"
+      },
+      {
+        "fixture": "random_07",
+        "sha256": "aacc4323372d4864800953ab9a905b8bd31f2cb99d0315bb0d24215d4ef802e0"
+      },
+      {
+        "fixture": "random_08",
+        "sha256": "e12990dec798278c41c906ad385d419535c543dc01594ba074ec3818e8384ddb"
+      },
+      {
+        "fixture": "random_09",
+        "sha256": "5183503d4c2902ab5f3c3af9b16729b6d3d06200b4c3cdc672f18a50b264b787"
+      },
+      {
+        "fixture": "random_10",
+        "sha256": "8e7f8d5f46153c772f805c57b6756e8da4faf0f897186b993ba1e1c90fb79c2f"
+      },
+      {
+        "fixture": "random_11",
+        "sha256": "bd11451ecea629f4471adabf9feff107451b0bf3a3a88507de0edf63be6a4450"
+      },
+      {
+        "fixture": "random_12",
+        "sha256": "a33e6f18bd951b5e92a5e6e7bea47c73c819f15a1d2401d53fc969329fc5989e"
+      },
+      {
+        "fixture": "random_13",
+        "sha256": "8e2ecef44e74ad8d873134466d5ab60aff58319652f07798afc61e78382030c4"
+      },
+      {
+        "fixture": "random_14",
+        "sha256": "6b3be7d69b011dc9357d7f76a818f9d6766c752c4298bf3b2ba6c3308f9c6736"
+      },
+      {
+        "fixture": "random_15",
+        "sha256": "4ddb7a885aa6c99dd0349384e44e3d77f3d62b8e0e737be4cbb592de06c70959"
+      },
+      {
+        "fixture": "random_16",
+        "sha256": "4c14acc477673ae217a6f3922d8e20779cc26fb2fbcd55dfd669821372aee085"
+      },
+      {
+        "fixture": "random_17",
+        "sha256": "437ed01bf22046d49d0838b980b92f41698b13411aa0f7d1ff7b599f3a02fe91"
+      },
+      {
+        "fixture": "random_18",
+        "sha256": "5fad9bb98cb3911fc5678b10865ebb91b458c03a993419d82298083412549664"
+      },
+      {
+        "fixture": "random_19",
+        "sha256": "5c894191181d5a25666fe0021d9ab9db9b26404eac0fd0e2e0224f5796c888b1"
+      },
+      {
+        "fixture": "random_20",
+        "sha256": "510b2ff7f4750d5bce8d5e4cf7be51543c317d84658dd8e0329505edd3b10a20"
+      },
+      {
+        "fixture": "random_21",
+        "sha256": "a5e72076070448dc8dfdd8083e9068d27f6c9997059092055aef29215111c113"
+      },
+      {
+        "fixture": "random_22",
+        "sha256": "7170c99e1e9039235ffb6172c96fd3a0250d435dc9fbb765cc9619cd9415d5fc"
+      },
+      {
+        "fixture": "random_23",
+        "sha256": "b0e37948b67f484cc5a98119806deb1e386ac930cc70a50ccfbb2f98368b84fd"
+      },
+      {
+        "fixture": "random_24",
+        "sha256": "66ac0ea423507b3aa578787155a469db9823088b30c435ad26545f56960f60ef"
+      },
+      {
+        "fixture": "random_25",
+        "sha256": "9887c13fdf350ed7cf31b896ca80f608b1ed88947faa06feea82013a6abc8f2f"
+      },
+      {
+        "fixture": "random_26",
+        "sha256": "e0164d556b18d3bd7fd4a85157d67231fb66c7fbac1fdc2bf0757e3721c80298"
+      },
+      {
+        "fixture": "random_27",
+        "sha256": "6b6263838612f68caab3ec9cbb6e3424960965cb1d90113e2df5ec6a091c0eda"
+      },
+      {
+        "fixture": "random_28",
+        "sha256": "75e6dfe043bdc62bca817245422ca805d2c5a64949b3e272e452d26c577c6170"
+      },
+      {
+        "fixture": "random_29",
+        "sha256": "f3a8340060cd4961c05425d814b7897ffeb2934d21251a00d38738060414e901"
+      },
+      {
+        "fixture": "random_30",
+        "sha256": "80cd5739122ce278aca7043ac127cd1a875bede09186bbd6cd085037051be1cc"
+      },
+      {
+        "fixture": "random_31",
+        "sha256": "22ec12d9aec9e445beeb712ad7b6f093ad8b019892c9622986e2945463984ff0"
+      },
+      {
+        "fixture": "random_32",
+        "sha256": "18616c69d00728ab8f1b5f6d634d0af6209c71ab8a37058ced58ddcdc209d070"
+      },
+      {
+        "fixture": "random_33",
+        "sha256": "3e9581eaab6884664cfeda981cf89da4167f4a3d633c73ecaa9273a579c74acf"
+      },
+      {
+        "fixture": "random_34",
+        "sha256": "c1ae28944c3610ceb4e125b13f8ca9c746657291a9064a4f3db020336c168e8a"
+      },
+      {
+        "fixture": "random_35",
+        "sha256": "b68f959ae94762f754130858e5ff9f4616d4fb48761cd76ffc92f920a0905733"
+      },
+      {
+        "fixture": "random_36",
+        "sha256": "67ecc994dfc232453ebe1d3ac172287d8eb2fa52a4f0a76de586217c2e1e1912"
+      },
+      {
+        "fixture": "random_37",
+        "sha256": "6c952b9a01a31133af3e6420d750c37af612b0293f287faf633c8b2de0d9a56b"
+      },
+      {
+        "fixture": "random_38",
+        "sha256": "809d3ed6b9111e815ec023b0252adb09aedb545a70819cb409b19a0232cfc64d"
+      },
+      {
+        "fixture": "random_39",
+        "sha256": "04c6b96c7b36abf9cd8f79a06e84c40ae04683c56a587aac8a2e2b581796fdb8"
+      },
+      {
+        "fixture": "random_40",
+        "sha256": "faf88aa9e93d0eed36348888157deee6c0e5e62ea8c3fe3caa58b93d8f3f86bc"
+      },
+      {
+        "fixture": "random_41",
+        "sha256": "4db1b03dc56cea987bfe43a791abb843a19f6b76b96c564e770fce485462d345"
+      },
+      {
+        "fixture": "random_42",
+        "sha256": "feb2824ad65f7888cca64895aefd7acb6a2c0b4ab4f5c880bdfff21d27b5dff3"
+      },
+      {
+        "fixture": "random_43",
+        "sha256": "4aad27772040ef15e7e961f0a6b6fa29ca876dabdb915e5ab8d73341d23c8cd4"
+      },
+      {
+        "fixture": "random_44",
+        "sha256": "100dcabc27870d87aa0a0a7561bdaf21d7706f27ceb49b4406c79502c2138ebf"
+      },
+      {
+        "fixture": "random_45",
+        "sha256": "0ea031bd260341403d7d8a3ebcd9f9158be88a1f8aca30fb7b2d8626e9a88077"
+      },
+      {
+        "fixture": "random_46",
+        "sha256": "da9c237b299e9ec5d63be6f291dd8b7a8f2b8f2c686d3fbaad31e144307a6e6c"
+      },
+      {
+        "fixture": "random_47",
+        "sha256": "dadc9df187c71685020632875d3c7bfe8c025517b763aed672ef5d86585ff561"
+      },
+      {
+        "fixture": "random_48",
+        "sha256": "017b197f12f426bd114318c5b3e9445558948b1633384da5e58bf9bc8c72342b"
+      },
+      {
+        "fixture": "random_49",
+        "sha256": "2810a0ddda831054b239cd549c7bae0276e43e7df568a327c387bb0d847f0989"
+      },
+      {
+        "fixture": "random_50",
+        "sha256": "c74397d14ee57f1f0484a8f4bb2f98dbfb96d8fdf14ab31b3974547fa337966c"
+      },
+      {
+        "fixture": "random_51",
+        "sha256": "4492e4b44a03a3ded80a48cb3f78dd821bb62617239f3cd69a05cb249d222152"
+      },
+      {
+        "fixture": "random_52",
+        "sha256": "0abf7213d2f31ad10d5a4741314bfea611059bd3176c713bf12fd7176c98237c"
+      },
+      {
+        "fixture": "random_53",
+        "sha256": "f9d9dcd852b9e9a320f35c4cc410a5cb8994c60ab6f3e58cc5c71f1893b40a19"
+      },
+      {
+        "fixture": "random_54",
+        "sha256": "9048b9c5c120d1e264b709e352e81eeaf960cf905cde1ae742ecf3a687e593d8"
+      },
+      {
+        "fixture": "random_55",
+        "sha256": "418b9015ffd10d4a3aa047c64aae8af915914a66e8537226d2dfa4e7bb558f62"
+      },
+      {
+        "fixture": "random_56",
+        "sha256": "74a66c55695a2afbc228758c767bb1c3bc176641b769d51b63b9eccd611fa739"
+      },
+      {
+        "fixture": "random_57",
+        "sha256": "ce25b91f72f67595af9767d6372a08818509abcac9b42f1c0520b56bf152589d"
+      },
+      {
+        "fixture": "random_58",
+        "sha256": "700efa8f027b19acb5fe2361535c45d17e727f7355eeb79fb7739be6519295f6"
+      },
+      {
+        "fixture": "random_59",
+        "sha256": "2e31ebcabd5022d86f9981e44719958368730e374e78e88d4c50afd906eb9811"
+      },
+      {
+        "fixture": "random_60",
+        "sha256": "bf975351734f099e97119597bae6f8482b7b4a953d51f92a4579f35efe1be8be"
+      },
+      {
+        "fixture": "random_61",
+        "sha256": "5c6e9f9b638e0dd6a1305a550987cf98ff304451226c96093dc430d14571e73b"
+      },
+      {
+        "fixture": "random_62",
+        "sha256": "bcbc7b2260f285585f0c3bbc5672762b577677265d3f50a35711f004deb8614a"
+      },
+      {
+        "fixture": "random_63",
+        "sha256": "32e23ece7cd2467f802b608890bdd76896df9ab64b7bbdd55c8a6c085b0dfc61"
+      }
+    ],
+    "components": [
+      "clean UTF-8 bytes",
+      "ordered selected spans/classes",
+      "emitted tokens",
+      "sorted manifest mappings",
+      "restored UTF-8 bytes",
+      "safety-net count/report/disposition"
+    ],
+    "exact_restores_per_run": 95,
+    "emitted_tokens_per_run": 110,
+    "errors": 0,
+    "refusals": 0,
+    "safety_net": "No safety net registered in this NER-only pipeline; disabled count/report/disposition included in the hash.",
+    "additional_preliminary_pair_equal": true
+  }
+}
