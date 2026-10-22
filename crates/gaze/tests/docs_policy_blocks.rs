@@ -221,7 +221,62 @@ fn every_policy_doc_toml_block_is_marked_and_loads() {
         skipped, expected,
         "not-a-policy blocks must match NOT_A_POLICY exactly"
     );
-    assert!(checked >= 25, "only {checked} toml blocks were loaded");
+    assert_eq!(checked, 30, "policy doc block inventory changed");
+}
+
+fn assert_invalid_policy_is_checked(prefix: &str, open: &str, close: &str) {
+    for marker in ["", "<!-- policy-fragment -->\n"] {
+        let page = format!("{prefix}{marker}{open}\n[ner]\ntreshold = 0.3\n{close}\n");
+        let blocks = toml_blocks("fixture.md", &page);
+        assert_eq!(blocks.len(), 1, "policy block must remain visible: {open}");
+        let error = check(&blocks[0]).expect_err("invalid policy must fail");
+        let expected = if marker.is_empty() {
+            "no marker on the line before the fence"
+        } else {
+            "treshold"
+        };
+        assert!(error.contains(expected), "unexpected failure: {error}");
+
+        if !marker.is_empty() {
+            let fixed = page.replace("treshold", "threshold");
+            let blocks = toml_blocks("fixture.md", &fixed);
+            assert_eq!(blocks.len(), 1);
+            assert_eq!(check(&blocks[0]), Ok(None));
+        }
+    }
+}
+
+#[test]
+fn four_backtick_block_does_not_hide_following_policy() {
+    assert_invalid_policy_is_checked("````text\nexample\n````\n\n", "```toml", "```");
+}
+
+#[test]
+fn spaced_toml_info_string_is_checked() {
+    assert_invalid_policy_is_checked("", "``` toml", "```");
+    assert_invalid_policy_is_checked("", "```  toml example", "```");
+}
+
+#[test]
+fn tilde_policy_fences_are_checked() {
+    assert_invalid_policy_is_checked("", "~~~toml", "~~~");
+    assert_invalid_policy_is_checked("", "   ~~~~ toml", "   ~~~~~  ");
+}
+
+#[test]
+fn policy_fences_require_matching_delimiters_and_valid_indentation() {
+    let page = "<!-- policy-fragment -->\n   ````toml\n   [ner]\n   threshold = 0.3\n   ```\n   ~~~~\n   ```` trailing\n   `````  \n";
+    let blocks = toml_blocks("fixture.md", page);
+    assert_eq!(blocks.len(), 1);
+    assert_eq!(blocks[0].line, 2);
+    assert_eq!(
+        blocks[0].body,
+        "[ner]\nthreshold = 0.3\n```\n~~~~\n```` trailing\n"
+    );
+    for open in ["    ```toml", "\t```toml", "```toml`invalid"] {
+        let page = format!("{open}\n[ner]\nthreshold = 0.3\n");
+        assert!(toml_blocks("fixture.md", &page).is_empty(), "{open}");
+    }
 }
 
 /// The fence scanner, marker parser and fragment wrappers reject what they
