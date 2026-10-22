@@ -1,0 +1,33 @@
+   Compiling ring v0.17.14
+   Compiling gaze-types v0.17.0 (/private/tmp/fix825r3/mutation-copy/crates/gaze-types)
+   Compiling rustls v0.23.46
+   Compiling rustls-webpki v0.103.16
+   Compiling ureq v3.3.0
+   Compiling ort-sys v2.0.0-rc.12
+   Compiling ort v2.0.0-rc.12
+   Compiling gaze-recognizers v0.17.0 (/private/tmp/fix825r3/mutation-copy/crates/gaze-recognizers)
+   Compiling gaze-pii v0.17.0 (/private/tmp/fix825r3/mutation-copy/crates/gaze)
+   Compiling gaze-assembly v0.17.0 (/private/tmp/fix825r3/mutation-copy/crates/gaze-assembly)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 22.11s
+     Running tests/code_credentials.rs (/tmp/fix825r3/mutation-target/debug/deps/code_credentials-03d42cdd6cbbb021)
+
+running 1 test
+test json_separators_after_complete_hashes_preserve_source_spans ... FAILED
+
+failures:
+
+---- json_separators_after_complete_hashes_preserve_source_spans stdout ----
+
+thread 'json_separators_after_complete_hashes_preserve_source_spans' (64019470) panicked at crates/gaze-recognizers/tests/code_credentials.rs:394:5:
+assertion `left == right` failed: one complete hash: "{\"stdout\":\"$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi\\n\"}"; []
+  left: 0
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    json_separators_after_complete_hashes_preserve_source_spans
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 1.07s
+
+error: test failed, to rerun pass `-p gaze-recognizers --test code_credentials`

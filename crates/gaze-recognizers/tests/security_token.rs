@@ -26,22 +26,13 @@
 //! base64url strings. The JWT ownership regressions use only alice@example.invalid
 //! and a synthetic signature, and make no holdout coverage claim.
 
-use gaze::Context;
+mod support;
+
 use gaze::{
-    Action, CleanDocument, DictionaryBundle, LocaleChain, LocaleTag, PiiClass, Pipeline,
-    RawDocument, RuleSpec, Rulepack, RulepackSource, Scope, Session,
+    Action, CleanDocument, DictionaryBundle, LocaleTag, PiiClass, Pipeline, RawDocument, RuleSpec,
+    Rulepack, RulepackSource, Scope, Session,
 };
 use gaze_recognizers::embedded;
-
-fn empty_context() -> Context {
-    Context {
-        dictionaries: std::collections::HashMap::new(),
-        class_map: std::collections::HashMap::new(),
-        fields: serde_json::Map::new(),
-        record_match_kinds: Default::default(),
-        record_value_rejections: Default::default(),
-    }
-}
 
 fn security_token_class() -> PiiClass {
     PiiClass::custom("security_token").expect("valid custom class")
@@ -73,36 +64,12 @@ fn pipeline_for(chain: &[LocaleTag]) -> Pipeline {
 }
 
 fn pipeline_with_rules(chain: &[LocaleTag], rules: Vec<RuleSpec>) -> Pipeline {
-    let rulepacks = ["core", "secrets"].map(|bundle| {
-        Rulepack::load(RulepackSource::Embedded(
-            embedded(bundle).expect("bundled rulepack"),
-        ))
-        .expect("bundled rulepack loads")
-    });
-    let mut policy = gaze::Policy::default();
-    policy.rules = rules;
-    policy.rulepacks.bundled = vec!["core".to_string(), "secrets".to_string()];
-    policy.rulepacks.auto_activate_locale_gated = false;
-    let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(chain));
-    gaze_assembly::build_pipeline(&policy, &empty_context(), &rulepacks, &locale_chain, None)
-        .expect("pipeline")
+    support::pipeline_for(chain, &["core", "secrets"], rules, false)
 }
 
 fn clean_under(chain: &[LocaleTag], text: &str) -> String {
-    let pipeline = pipeline_for(chain);
     let session = Session::new(Scope::Ephemeral).expect("session");
-    let (clean, _, _) = pipeline
-        .clean_with_safety_net_detect_context(
-            &session,
-            RawDocument::Text(text.to_string()),
-            chain,
-            &DictionaryBundle::default(),
-        )
-        .expect("clean");
-    match clean {
-        CleanDocument::Text(text) => text,
-        _ => panic!("expected text"),
-    }
+    support::clean(&pipeline_for(chain), &session, text, chain)
 }
 
 fn clean(text: &str) -> String {
@@ -618,9 +585,19 @@ fn jwt_manifest_export_import_restores_whole_value_and_following_email() {
             },
         ],
     );
-    for text in [
-        format!("Authorization: Bearer {PERSONAL_JWT};alice@example.invalid. Next."),
-        format!(r#"{{"token":"{PERSONAL_JWT}","email":"alice@example.invalid"}}"#),
+    for (text, token_sources) in [
+        (
+            format!("Authorization: Bearer {PERSONAL_JWT};alice@example.invalid. Next."),
+            vec!["security_token.anchored"],
+        ),
+        (
+            format!(r#"{{"token":"{PERSONAL_JWT}","email":"alice@example.invalid"}}"#),
+            vec!["security_token.anchored"],
+        ),
+        (
+            format!(r#"{{"api_token":"{PERSONAL_JWT}","email":"alice@example.invalid"}}"#),
+            vec!["security_token.anchored", "security_token.code"],
+        ),
     ] {
         let session =
             Session::new(Scope::Conversation("synthetic-jwt-roundtrip".to_string())).unwrap();
@@ -640,7 +617,7 @@ fn jwt_manifest_export_import_restores_whole_value_and_following_email() {
         assert_eq!(trace.len(), 2);
         let values = [PERSONAL_JWT, "alice@example.invalid"];
         let classes = [security_token_class(), PiiClass::Email];
-        let sources = ["security_token.anchored", "email.global"];
+        let sources = [token_sources, vec!["email.global"]];
         let mut expected_clean = text.clone();
         for (((span, value), class), source) in spans.iter().zip(values).zip(classes).zip(sources) {
             assert_eq!(&text[span.raw_span.clone()], value);
@@ -656,7 +633,10 @@ fn jwt_manifest_export_import_restores_whole_value_and_following_email() {
                 })
                 .unwrap();
             assert_eq!(evidence.class(), &class);
-            assert_eq!(evidence.source_ids(), &[source.to_string()]);
+            assert_eq!(
+                evidence.source_ids(),
+                source.iter().map(|id| id.to_string()).collect::<Vec<_>>()
+            );
         }
         assert_eq!(clean, expected_clean, "every non-gold byte must survive");
         let bytes = session.export().unwrap().into_bytes();

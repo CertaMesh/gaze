@@ -37,7 +37,7 @@ class FullNameCaseTests(unittest.TestCase):
 
     def test_current_contract_accepts_all_new_gold(self):
         prepared = api.prepare(Path(__file__).resolve().parents[2])
-        self.assertEqual(prepared.manifest["generator_version"], 20)
+        self.assertEqual(prepared.manifest["generator_version"], api.GENERATOR_VERSION)
 
     def test_raw_unicode_offsets_and_tool_argument_strings(self):
         for partition in api.PARTITIONS:

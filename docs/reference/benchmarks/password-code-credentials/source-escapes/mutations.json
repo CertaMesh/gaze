@@ -1,0 +1,32 @@
+[
+  {
+    "fix": "B1",
+    "test": "escaped_crypt_salts_count_decoded_units_at_producer_limits",
+    "exit_code": 101,
+    "head": "8c86add684ba58f9294fca4beddee6f663851ea9",
+    "log": "mutation-B1.log",
+    "log_sha256": "eeece8e5a8e1ee3fdf9f8955006ac6e240ef4ef5e3b8615ec7d929f7296b9a22",
+    "source_log_sha256": "ac53206216b7c8c8d41d5bb8b44375410e643d78a9811fd8c67aa4e0c5f5ac71",
+    "normalization": [
+      "source-paths",
+      "home-prefix",
+      "thread-id",
+      "build-target-path"
+    ]
+  },
+  {
+    "fix": "B2",
+    "test": "escaped_json_slashes_are_complete_hash_alphabet_units",
+    "exit_code": 101,
+    "head": "8c86add684ba58f9294fca4beddee6f663851ea9",
+    "log": "mutation-B2.log",
+    "log_sha256": "5f657ff5cdf431bf9fe55029efd08d0d75f5af6b146f8d0fcc8ed5949085e777",
+    "source_log_sha256": "eb52640106b4408c1b311f3e9480bfea9a81b9313fcdad3e89e49d147c429d3d",
+    "normalization": [
+      "source-paths",
+      "home-prefix",
+      "thread-id",
+      "build-target-path"
+    ]
+  }
+]

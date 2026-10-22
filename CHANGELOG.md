@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Password hashes and code credentials.** The setup-default `secrets` bundle
+  protects whole bcrypt, Argon2, scrypt/yescrypt, crypt, phpass and Django
+  encodings, including broader crypt/Django salts and hashes in SQL dumps.
+  SQL-escaped quotes count toward the decoded salt limit, and JSON-escaped
+  slashes stay inside the complete restorable hash. Complete JSON separator
+  escapes establish both hash boundaries. Malformed escapes and identifier-glued
+  prefixes and tails remain rejected.
+  Complete quoted password and credential-token fields in PHP arrays and JSON
+  retain their keys and punctuation. Generic `token` keys remain outside the
+  code-field rule; ambiguous password metadata stays fail-closed. Whole Argon2
+  encodings no longer split at an inner postal-code candidate (#824).
 - Plain-text session files on macOS/Linux clear and verify their extended ACL
   before any restore-key bytes are written, including overwrite replacements.
   ACL failures and unsupported platforms (including Windows) refuse

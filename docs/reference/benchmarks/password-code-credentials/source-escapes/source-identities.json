@@ -1,0 +1,14 @@
+{
+  "base": {
+    "revision": "55c5d32b8e6d5082f65e3d3afebf7a60a442bb62",
+    "binary_sha256": "040fa196f2c78e130a8621ea8fbb118b4b2c60a4ef7f411ff28ff7a2a48f25ac",
+    "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+    "crates_tree": "cafbde5592a08f99afa1a656f92bf987ec355c98"
+  },
+  "candidate": {
+    "revision": "6eb72a93e341962945e5569e0c27cf3e989ad986",
+    "binary_sha256": "577e83afc68189ad92f81af9391d59e1880919ed67b57ca65ac4123495c46348",
+    "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+    "crates_tree": "7885cd27670b96792451836d7310e4124bc5fe8f"
+  }
+}
