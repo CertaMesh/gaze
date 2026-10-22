@@ -48,3 +48,45 @@ pub(crate) fn require_json_format(format: &str) -> std::result::Result<(), CliEr
         )))
     }
 }
+
+/// Stdout shape for `clean` and `restore`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum OutputFormat {
+    /// The JSON contract for programs: session and text travel in JSON.
+    Json,
+    /// Plain text only; the session lives in an owner-side file.
+    Text,
+}
+
+/// Resolve `--format` against the session-file flag. A session file means
+/// plain text, `json` keeps the session in the JSON body, and every mixed
+/// combination is refused so the session never lands somewhere unexpected.
+pub(crate) fn resolve_output_format(
+    format: Option<&str>,
+    has_session_file: bool,
+    session_flag: &str,
+) -> std::result::Result<OutputFormat, CliError> {
+    match (format, has_session_file) {
+        (None | Some("json"), false) => Ok(OutputFormat::Json),
+        (None | Some("text"), true) => Ok(OutputFormat::Text),
+        (Some("text"), false) => Err(CliError::PolicyConfigDetail(format!(
+            "--format text requires {session_flag} <PATH>"
+        ))),
+        (Some("json"), true) => Err(CliError::PolicyConfigDetail(format!(
+            "{session_flag} uses plain text on stdin/stdout; it cannot be combined with --format json"
+        ))),
+        (Some(other), _) => Err(CliError::PolicyConfigDetail(format!(
+            "--format must be 'json' or 'text', got '{other}'"
+        ))),
+    }
+}
+
+/// Write `bytes` to stdout exactly, with no added newline.
+pub(crate) fn write_stdout_exact(bytes: &[u8]) -> std::result::Result<(), CliError> {
+    use std::io::Write;
+    let mut stdout = io::stdout().lock();
+    stdout
+        .write_all(bytes)
+        .and_then(|()| stdout.flush())
+        .map_err(|_| CliError::Io)
+}

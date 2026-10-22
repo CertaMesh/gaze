@@ -106,6 +106,7 @@
     "gaze-proxy::inspection_contract",
     "gaze-proxy::legacy_adapter_leak_proof",
     "gaze-proxy::legacy_response_header_forward",
+    "gaze-proxy::legacy_sse_split_tokens",
     "gaze-proxy::manifest_sweep",
     "gaze-proxy::openai_non_stream",
     "gaze-proxy::openai_sse",
