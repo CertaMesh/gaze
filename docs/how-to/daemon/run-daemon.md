@@ -105,7 +105,7 @@ Each request and response is one JSON line. The adapter chooses a unique
 
 ```json
 {"version":1,"op":"open","session_id":"run-1"}
-{"version":1,"op":"clean","session_id":"run-1","text":"Email alice@example.invalid"}
+{"version":1,"op":"clean","session_id":"run-1","text":"Email alice\u0040example.invalid"}
 {"version":1,"op":"restore","session_id":"run-1","text":"Done for <token from clean_text>"}
 {"version":1,"op":"close","session_id":"run-1"}
 ```
