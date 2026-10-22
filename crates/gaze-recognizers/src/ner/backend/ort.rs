@@ -125,14 +125,19 @@ impl OrtBackend {
             ]
         };
 
+        let wait_perf = gaze_types::perf_span!("ner_mutex_wait_ns");
         let mut session = self
             .session
             .lock()
             .map_err(|err| NerRuntimeError::Poisoned(err.to_string()))?;
+        drop(wait_perf);
+        let ort_perf = gaze_types::perf_span!("ner_ort_ns");
+        gaze_types::perf_count!("ner_windows", 1);
         let outputs = session
             .run(inputs)
             .map_err(|err| NerRuntimeError::Inference(err.to_string()))?;
 
+        drop(ort_perf);
         let Some((_, value)) = outputs.iter().next() else {
             return decode_output(labels, id2label, offsets, None, input);
         };

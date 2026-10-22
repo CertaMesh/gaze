@@ -13,6 +13,8 @@ thread_local! {
 pub(crate) fn encode_input(tokenizer: &Tokenizer, input: &str) -> tokenizers::Result<Encoding> {
     #[cfg(test)]
     ENCODE_CALLS.with(|calls| calls.set(calls.get() + 1));
+    let _perf = gaze_types::perf_span!("ner_tokenize_ns");
+    gaze_types::perf_count!("ner_encodes", 1);
     tokenizer.encode(input, true)
 }
 

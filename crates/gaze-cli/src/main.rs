@@ -11,6 +11,8 @@ mod commands;
 mod error;
 mod io;
 mod logger;
+#[cfg(feature = "perf-timers")]
+mod perf;
 mod pipeline;
 mod restore;
 mod session_file;

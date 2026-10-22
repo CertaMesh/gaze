@@ -1,0 +1,933 @@
+diff --git a/crates/gaze-cli/Cargo.toml b/crates/gaze-cli/Cargo.toml
+index 9c6c30d7..501cc988 100644
+--- a/crates/gaze-cli/Cargo.toml
++++ b/crates/gaze-cli/Cargo.toml
+@@ -16,6 +16,7 @@ all-features = true
+ rustdoc-args = ["--cfg", "docsrs"]
+ 
+ [features]
++perf-timers = ["gaze-types/perf-timers", "gaze/perf-timers", "gaze-recognizers/perf-timers"]
+ default = ["proxy", "setup"]
+ setup = ["dep:gaze-model-setup", "dep:tempfile", "safety-net-nym"]
+ safety-net-openai = ["gaze-recognizers/safety-net-openai"]
+diff --git a/crates/gaze-cli/src/commands/daemon.rs b/crates/gaze-cli/src/commands/daemon.rs
+index e5f36bfb..6f21c282 100644
+--- a/crates/gaze-cli/src/commands/daemon.rs
++++ b/crates/gaze-cli/src/commands/daemon.rs
+@@ -233,6 +233,8 @@ impl Daemon {
+     }
+ 
+     fn handle_line(&mut self, line: &str) -> DaemonResponse {
++        #[cfg(feature = "perf-timers")]
++        let _perf = crate::perf::Document::from_env();
+         let request = match serde_json::from_str::<DaemonRequest>(line) {
+             Ok(request) if !request.session_id.trim().is_empty() => request,
+             Ok(_) => return DaemonResponse::error(None, "ProtocolInvalid", "missing session_id"),
+diff --git a/crates/gaze-cli/src/main.rs b/crates/gaze-cli/src/main.rs
+index b30392f6..9c489107 100644
+--- a/crates/gaze-cli/src/main.rs
++++ b/crates/gaze-cli/src/main.rs
+@@ -11,6 +11,8 @@ mod commands;
+ mod error;
+ mod io;
+ mod logger;
++#[cfg(feature = "perf-timers")]
++mod perf;
+ mod pipeline;
+ mod restore;
+ mod style;
+diff --git a/crates/gaze-cli/src/perf.rs b/crates/gaze-cli/src/perf.rs
+new file mode 100644
+index 00000000..5493c3ac
+--- /dev/null
++++ b/crates/gaze-cli/src/perf.rs
+@@ -0,0 +1,23 @@
++//! Private diagnostic protocol; never changes the CLI's stdout contract.
++use gaze_types::perf::Capture;
++
++pub(crate) struct Document(Option<Capture>);
++impl Document {
++    pub(crate) fn from_env() -> Self {
++        Self(
++            (std::env::var_os("GAZE_PERF").as_deref() == Some(std::ffi::OsStr::new("1")))
++                .then(Capture::new),
++        )
++    }
++}
++impl Drop for Document {
++    fn drop(&mut self) {
++        if let Some(capture) = self.0.take() {
++            // Fixed-schema metadata only. A broken diagnostic sink must not alter protection.
++            if let Ok(json) = serde_json::to_string(&capture.finish()) {
++                use std::io::Write;
++                let _ = writeln!(std::io::stderr().lock(), "GAZE_PERF {json}");
++            }
++        }
++    }
++}
+diff --git a/crates/gaze-cli/src/pipeline/run.rs b/crates/gaze-cli/src/pipeline/run.rs
+index 330f5554..84066c3c 100644
+--- a/crates/gaze-cli/src/pipeline/run.rs
++++ b/crates/gaze-cli/src/pipeline/run.rs
+@@ -140,6 +140,8 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
+     let session = Session::from_policy_with_ttl_override(&effective_policy, options.session_ttl)
+         .map_err(|_| CliError::Pipeline)?;
+ 
++    #[cfg(feature = "perf-timers")]
++    let _perf = crate::perf::Document::from_env();
+     let (clean_doc, leak_report) = if pipeline.safety_net_count() > 0 {
+         let (doc, _manifest, _report) = pipeline
+             .clean_with_safety_net_policy_detect_context(
+diff --git a/crates/gaze-cli/tests/cli_pipe.rs b/crates/gaze-cli/tests/cli_pipe.rs
+index d3da00b8..95afa13c 100644
+--- a/crates/gaze-cli/tests/cli_pipe.rs
++++ b/crates/gaze-cli/tests/cli_pipe.rs
+@@ -5858,3 +5858,92 @@ fn policy_regex_collision_family_tie_is_protected_through_the_cli() {
+         assert_eq!(loser.collision_family.as_deref(), Some("tenant-document"));
+     }
+ }
++
++#[cfg(feature = "perf-timers")]
++#[test]
++fn attribution_capture_preserves_pipe_fixture_bytes_and_restore() {
++    use gaze::{LocaleTag, RawDocument, SensitiveSnapshot};
++    use gaze_types::perf::Capture;
++
++    let core = gaze_assembly::CorePipelineConfig::new()
++        .with_locale(&[LocaleTag::DeDe, LocaleTag::EnUs, LocaleTag::Global])
++        .build()
++        .unwrap();
++    let pipeline = core.pipeline();
++    let original = Session::new(Scope::Conversation("attribution-fixture".into())).unwrap();
++    let snapshot = original.export().unwrap().into_bytes();
++    for input in [
++        "alice@example.invalid",
++        "To: alice@example.invalid\nCc: alice@example.invalid",
++        "Unicode: Grüße — alice@example.invalid\nNo further contact.",
++        "{\"email\":\"alice@example.invalid\"}",
++        "No contact details here.",
++        "Phone +1 202 555 0100; alice@example.invalid",
++        "Card 4111 1111 1111 1111; alice@example.invalid",
++    ] {
++        let run = |capture: bool| {
++            let session = Session::import(SensitiveSnapshot::from(snapshot.clone())).unwrap();
++            let capture = capture.then(Capture::new);
++            let (clean, manifest, report) = pipeline
++                .clean_with_safety_net_detect_context(
++                    &session,
++                    RawDocument::Text(input.into()),
++                    core.locale_chain().as_slice(),
++                    core.dictionaries(),
++                )
++                .unwrap();
++            let gaze::CleanDocument::Text(clean) = clean else {
++                panic!("text")
++            };
++            assert_eq!(session.restore_strict_text(&clean).unwrap(), input);
++            let entries = session
++                .snapshot_entries()
++                .into_iter()
++                .map(|entry| (entry.class, entry.raw, entry.token, entry.family))
++                .collect::<Vec<_>>();
++            let bytes =
++                serde_json::to_vec(&(&clean, &manifest, &entries, format!("{report:?}"))).unwrap();
++            if let Some(capture) = capture {
++                let record = capture.finish();
++                assert_eq!(record.counters["input_bytes"], input.len() as u64);
++                assert!(!record.recognizers.is_empty());
++                assert!(record.metrics["registry_ns"].invocations > 0);
++                let diagnostic = serde_json::to_string(&record).unwrap();
++                assert!(!diagnostic.contains("alice"));
++                assert!(!diagnostic.contains("example.invalid"));
++            }
++            bytes
++        };
++        assert_eq!(
++            run(false),
++            run(true),
++            "fixture output must be byte-identical"
++        );
++    }
++}
++
++#[cfg(feature = "perf-timers")]
++#[test]
++fn attribution_cli_opt_in_emits_only_metadata() {
++    let input = "alice@example.invalid";
++    let out = Command::cargo_bin("gaze")
++        .unwrap()
++        .env("GAZE_PERF", "1")
++        .args(["clean", "--safety-net", "none"])
++        .write_stdin(input)
++        .output()
++        .unwrap();
++    assert!(out.status.success());
++    let response: Value = serde_json::from_slice(&out.stdout).unwrap();
++    assert!(!response["clean_text"].as_str().unwrap().contains(input));
++    let stderr = String::from_utf8(out.stderr).unwrap();
++    let rows: Vec<_> = stderr
++        .lines()
++        .filter_map(|line| line.strip_prefix("GAZE_PERF "))
++        .collect();
++    assert_eq!(rows.len(), 1);
++    let trace: Value = serde_json::from_str(rows[0]).unwrap();
++    assert_eq!(trace["schema"], 1);
++    assert_eq!(trace["counters"]["input_bytes"], input.len());
++    assert!(!rows[0].contains(input));
++}
+diff --git a/crates/gaze-recognizers/Cargo.toml b/crates/gaze-recognizers/Cargo.toml
+index fb214e66..dc23742e 100644
+--- a/crates/gaze-recognizers/Cargo.toml
++++ b/crates/gaze-recognizers/Cargo.toml
+@@ -17,6 +17,7 @@ all-features = true
+ rustdoc-args = ["--cfg", "docsrs"]
+ 
+ [features]
++perf-timers = ["gaze-types/perf-timers"]
+ # phone-parser feature gates phonenumber dep; default-on for gaze-cli, default-off for raw lib.
+ default = ["phone-parser"]
+ phone-parser = ["dep:phonenumber", "gaze-types/phone-parser"]
+diff --git a/crates/gaze-recognizers/src/ner/backend/ort.rs b/crates/gaze-recognizers/src/ner/backend/ort.rs
+index a389654d..17cda151 100644
+--- a/crates/gaze-recognizers/src/ner/backend/ort.rs
++++ b/crates/gaze-recognizers/src/ner/backend/ort.rs
+@@ -57,10 +57,13 @@ impl NerBackend for OrtBackend {
+     fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+         let labels = &self.labels;
+         let id2label: &[String] = &self.id2label;
++        let tokenize_perf = gaze_types::perf_span!("ner_tokenize_ns");
++        gaze_types::perf_count!("ner_encodes", 1);
+         let encoded = self
+             .tokenizer
+             .encode(input, true)
+             .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
++        drop(tokenize_perf);
+         let offsets = encoded.get_offsets();
+         let ids = encoded.get_ids();
+         let attention = encoded.get_attention_mask();
+@@ -92,14 +95,19 @@ impl NerBackend for OrtBackend {
+             ]
+         };
+ 
++        let wait_perf = gaze_types::perf_span!("ner_mutex_wait_ns");
+         let mut session = self
+             .session
+             .lock()
+             .map_err(|err| NerRuntimeError::Poisoned(err.to_string()))?;
++        drop(wait_perf);
++        let ort_perf = gaze_types::perf_span!("ner_ort_ns");
++        gaze_types::perf_count!("ner_windows", 1);
+         let outputs = session
+             .run(inputs)
+             .map_err(|err| NerRuntimeError::Inference(err.to_string()))?;
+ 
++        drop(ort_perf);
+         let Some((_, value)) = outputs.iter().next() else {
+             return decode_output(labels, id2label, offsets, None, input);
+         };
+@@ -216,9 +224,12 @@ fn tokenized_chunk_ranges(
+             .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
+         &untruncated
+     };
++    let tokenize_perf = gaze_types::perf_span!("ner_tokenize_ns");
++    gaze_types::perf_count!("ner_encodes", 1);
+     let encoded = tokenizer
+         .encode(input, true)
+         .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
++    drop(tokenize_perf);
+     let tokens: Vec<Range<usize>> = encoded
+         .get_offsets()
+         .iter()
+diff --git a/crates/gaze-recognizers/src/safety_net/nym/mod.rs b/crates/gaze-recognizers/src/safety_net/nym/mod.rs
+index dc03f272..07c9cee4 100644
+--- a/crates/gaze-recognizers/src/safety_net/nym/mod.rs
++++ b/crates/gaze-recognizers/src/safety_net/nym/mod.rs
+@@ -160,6 +160,7 @@ impl SafetyNet for NymSafetyNet {
+         context: SafetyNetContext<'_>,
+     ) -> Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError> {
+         let Some(neutral_text) = neutral_text else {
++            let _perf = gaze_types::perf_span!("nym_stable_ns");
+             let (stable, telemetry) = self.check_with_telemetry(stable_text, context)?;
+             return Ok((
+                 union_view_suspects(stable_text, context.manifest, stable, Vec::new()),
+@@ -176,8 +177,14 @@ impl SafetyNet for NymSafetyNet {
+                 message: "nym neutral view changed byte offsets".to_string(),
+             });
+         }
+-        let (stable, mut telemetry) = self.check_with_telemetry(stable_text, context)?;
+-        let (neutral, neutral_telemetry) = self.check_with_telemetry(neutral_text, context)?;
++        let (stable, mut telemetry) = {
++            let _perf = gaze_types::perf_span!("nym_stable_ns");
++            self.check_with_telemetry(stable_text, context)?
++        };
++        let (neutral, neutral_telemetry) = {
++            let _perf = gaze_types::perf_span!("nym_neutral_ns");
++            self.check_with_telemetry(neutral_text, context)?
++        };
+         for event in neutral_telemetry {
+             if !telemetry.contains(&event) {
+                 telemetry.push(event);
+diff --git a/crates/gaze-recognizers/src/safety_net/nym/ort.rs b/crates/gaze-recognizers/src/safety_net/nym/ort.rs
+index e0b23550..e721474f 100644
+--- a/crates/gaze-recognizers/src/safety_net/nym/ort.rs
++++ b/crates/gaze-recognizers/src/safety_net/nym/ort.rs
+@@ -185,12 +185,14 @@ impl NymOrtBackend {
+                 actual: clean.len(),
+             });
+         }
++        let tokenize_perf = gaze_types::perf_span!("nym_tokenize_ns");
+         let encoding = self
+             .tokenizer
+             .encode_char_offsets(clean, false)
+             .map_err(|err| SafetyNetError::Runtime {
+                 message: format!("nym tokenizer failed: {}", sanitize_error(&err.to_string())),
+             })?;
++        drop(tokenize_perf);
+         let ids = encoding.get_ids();
+         let offsets = encoding.get_offsets().to_vec();
+         let chars = clean.chars().collect::<Vec<_>>();
+@@ -220,15 +222,20 @@ impl NymOrtBackend {
+         let mask_tensor = ort::value::Tensor::from_array((shape, vec![1i64; seq_len]))
+             .map_err(|err| runtime("attention_mask tensor failed", &err))?;
+ 
++        let wait_perf = gaze_types::perf_span!("nym_mutex_wait_ns");
+         let mut session = self.session.lock().map_err(|_| SafetyNetError::Runtime {
+             message: "nym ort session lock poisoned".to_string(),
+         })?;
++        drop(wait_perf);
++        let ort_perf = gaze_types::perf_span!("nym_ort_ns");
++        gaze_types::perf_count!("nym_windows", 1);
+         let outputs = session
+             .run(ort::inputs![
+                 "input_ids" => ids_tensor,
+                 "attention_mask" => mask_tensor,
+             ])
+             .map_err(|err| runtime("ort inference failed", &err))?;
++        drop(ort_perf);
+         let (_, logits) = outputs
+             .iter()
+             .next()
+diff --git a/crates/gaze-types/Cargo.toml b/crates/gaze-types/Cargo.toml
+index ff788e6c..391e22a9 100644
+--- a/crates/gaze-types/Cargo.toml
++++ b/crates/gaze-types/Cargo.toml
+@@ -30,5 +30,6 @@ regex = "1"
+ serde_json = { workspace = true }
+ 
+ [features]
++perf-timers = []
+ default = []
+ phone-parser = ["dep:phonenumber"]
+diff --git a/crates/gaze-types/src/lib.rs b/crates/gaze-types/src/lib.rs
+index 0415f713..e2b66826 100644
+--- a/crates/gaze-types/src/lib.rs
++++ b/crates/gaze-types/src/lib.rs
+@@ -3,6 +3,7 @@
+ pub mod inspection;
+ pub mod nym;
+ pub mod payment_card;
++pub mod perf;
+ pub mod redaction_marker;
+ 
+ use std::cell::Cell;
+@@ -887,13 +888,34 @@ impl ValidatorKind {
+     /// Returns whether the validator accepts the input.
+     pub fn validates(self, input: &str) -> bool {
+         match self {
+-            Self::AadhaarVerhoeff => aadhaar_verhoeff_check(input),
+-            Self::FrNirMod97 => fr_nir_mod97_check(input),
+-            Self::DeSteuerIdMod1110 => de_steuer_id_mod1110_check(input),
+-            Self::BsnMod11 => bsn_mod11_check(input),
+-            Self::CpfMod11 => cpf_mod11_check(input),
+-            Self::CnpjMod11 => cnpj_mod11_check(input),
+-            Self::UkNhsMod11 => uk_nhs_mod11_check(input),
++            Self::AadhaarVerhoeff => {
++                let _perf = crate::perf_span!("validators_ns");
++                aadhaar_verhoeff_check(input)
++            }
++            Self::FrNirMod97 => {
++                let _perf = crate::perf_span!("validators_ns");
++                fr_nir_mod97_check(input)
++            }
++            Self::DeSteuerIdMod1110 => {
++                let _perf = crate::perf_span!("validators_ns");
++                de_steuer_id_mod1110_check(input)
++            }
++            Self::BsnMod11 => {
++                let _perf = crate::perf_span!("validators_ns");
++                bsn_mod11_check(input)
++            }
++            Self::CpfMod11 => {
++                let _perf = crate::perf_span!("validators_ns");
++                cpf_mod11_check(input)
++            }
++            Self::CnpjMod11 => {
++                let _perf = crate::perf_span!("validators_ns");
++                cnpj_mod11_check(input)
++            }
++            Self::UkNhsMod11 => {
++                let _perf = crate::perf_span!("validators_ns");
++                uk_nhs_mod11_check(input)
++            }
+             _ => self.canonical_form(input).is_some(),
+         }
+     }
+@@ -928,6 +950,7 @@ impl ValidatorKind {
+ 
+     /// Returns the canonical form for accepted input.
+     pub fn canonical_form(self, input: &str) -> Option<String> {
++        let _perf = crate::perf_span!("validators_ns");
+         match self {
+             Self::EmailRfc => is_basic_email(input).then(|| input.to_string()),
+             #[cfg(feature = "phone-parser")]
+diff --git a/crates/gaze-types/src/perf.rs b/crates/gaze-types/src/perf.rs
+new file mode 100644
+index 00000000..541379c8
+--- /dev/null
++++ b/crates/gaze-types/src/perf.rs
+@@ -0,0 +1,286 @@
++//! Opt-in, thread-local attribution. Default builds erase the instrumentation macros.
++//! Records contain fixed metric keys and hashed recognizer identities, never input values.
++
++/// A zero-sized guard in builds without attribution support.
++#[doc(hidden)]
++pub struct Disabled;
++impl Disabled {
++    #[inline(always)]
++    pub fn candidates(&mut self, _count: usize) {}
++}
++impl Drop for Disabled {
++    #[inline(always)]
++    fn drop(&mut self) {}
++}
++
++#[cfg(not(feature = "perf-timers"))]
++#[macro_export]
++macro_rules! perf_span {
++    ($key:expr) => {
++        $crate::perf::Disabled
++    };
++}
++#[cfg(feature = "perf-timers")]
++#[macro_export]
++macro_rules! perf_span {
++    ($key:expr) => {
++        $crate::perf::Span::new($key)
++    };
++}
++#[cfg(not(feature = "perf-timers"))]
++#[macro_export]
++macro_rules! perf_recognizer {
++    ($id:expr, $evidence:expr) => {
++        $crate::perf::Disabled
++    };
++}
++#[cfg(feature = "perf-timers")]
++#[macro_export]
++macro_rules! perf_recognizer {
++    ($id:expr, $evidence:expr) => {
++        $crate::perf::RecognizerSpan::new($id, $evidence == $crate::EvidenceKind::Rule)
++    };
++}
++#[cfg(not(feature = "perf-timers"))]
++#[macro_export]
++macro_rules! perf_count {
++    ($key:expr, $count:expr) => {};
++}
++#[cfg(feature = "perf-timers")]
++#[macro_export]
++macro_rules! perf_count {
++    ($key:expr, $count:expr) => {
++        $crate::perf::count($key, $count as u64)
++    };
++}
++
++#[cfg(feature = "perf-timers")]
++pub use enabled::*;
++
++#[cfg(feature = "perf-timers")]
++mod enabled {
++    use serde::Serialize;
++    use sha3::{Digest, Sha3_256};
++    use std::cell::RefCell;
++    use std::collections::BTreeMap;
++    use std::marker::PhantomData;
++    use std::rc::Rc;
++    use std::time::Instant;
++
++    #[derive(Debug, Default, Serialize)]
++    pub struct Metric {
++        pub ns: u64,
++        pub invocations: u64,
++        pub candidates: u64,
++    }
++
++    #[derive(Debug, Default, Serialize)]
++    pub struct Record {
++        pub schema: u32,
++        #[serde(skip)]
++        view: Option<&'static str>,
++        pub metrics: BTreeMap<&'static str, Metric>,
++        pub counters: BTreeMap<&'static str, u64>,
++        /// SHA3-256 of the declared ID. Custom recognizer IDs may contain private data.
++        pub recognizers: BTreeMap<String, Metric>,
++    }
++
++    thread_local! {
++        static ACTIVE: RefCell<Option<Record>> = const { RefCell::new(None) };
++    }
++
++    /// One synchronous document. Cannot cross threads; nested captures restore their parent.
++    pub struct Capture {
++        previous: Option<Option<Record>>,
++        _thread: PhantomData<Rc<()>>,
++    }
++    impl Default for Capture {
++        fn default() -> Self {
++            Self::new()
++        }
++    }
++    impl Capture {
++        pub fn new() -> Self {
++            let previous = ACTIVE.with(|slot| {
++                slot.replace(Some(Record {
++                    schema: 1,
++                    ..Record::default()
++                }))
++            });
++            Self {
++                previous: Some(previous),
++                _thread: PhantomData,
++            }
++        }
++        pub fn finish(mut self) -> Record {
++            let previous = self.previous.take().expect("capture owns its parent");
++            let record = ACTIVE.with(|slot| slot.replace(previous));
++            let mut record = record.expect("capture owns an active record");
++            for key in [
++                "rules_ns",
++                "registry_ns",
++                "validators_ns",
++                "ner_tokenize_ns",
++                "ner_ort_ns",
++                "ner_mutex_wait_ns",
++                "resolve1_ns",
++                "sweep_ns",
++                "resolve2_ns",
++                "safety_view_build_ns",
++                "safety_model_ns",
++                "nym_tokenize_ns",
++                "nym_ort_ns",
++                "nym_mutex_wait_ns",
++                "nym_stable_ns",
++                "nym_neutral_ns",
++                "manifest_ns",
++                "audit_ns",
++            ] {
++                record.metrics.entry(key).or_default();
++            }
++            for key in [
++                "input_bytes",
++                "ner_encodes",
++                "ner_windows",
++                "sweep_candidates",
++                "nym_windows",
++                "nym_windows_stable",
++                "nym_windows_neutral",
++            ] {
++                record.counters.entry(key).or_default();
++            }
++            record
++        }
++    }
++    impl Drop for Capture {
++        fn drop(&mut self) {
++            if let Some(previous) = self.previous.take() {
++                ACTIVE.with(|slot| {
++                    slot.replace(previous);
++                });
++            }
++        }
++    }
++
++    pub struct Span {
++        key: &'static str,
++        start: Option<Instant>,
++        previous_view: Option<Option<&'static str>>,
++    }
++    impl Span {
++        pub fn new(key: &'static str) -> Self {
++            let start = ACTIVE.with(|slot| slot.borrow().as_ref().map(|_| Instant::now()));
++            let previous_view = ACTIVE.with(|slot| {
++                let mut slot = slot.borrow_mut();
++                let record = slot.as_mut()?;
++                let view = match key {
++                    "nym_stable_ns" => "nym_windows_stable",
++                    "nym_neutral_ns" => "nym_windows_neutral",
++                    _ => return None,
++                };
++                Some(record.view.replace(view))
++            });
++            Self {
++                key,
++                start,
++                previous_view,
++            }
++        }
++    }
++    impl Drop for Span {
++        fn drop(&mut self) {
++            if let Some(start) = self.start {
++                let elapsed = start.elapsed().as_nanos().min(u64::MAX as u128) as u64;
++                ACTIVE.with(|slot| {
++                    if let Some(record) = slot.borrow_mut().as_mut() {
++                        if let Some(view) = self.previous_view {
++                            record.view = view;
++                        }
++                        let metric = record.metrics.entry(self.key).or_default();
++                        metric.ns += elapsed;
++                        metric.invocations += 1;
++                    }
++                });
++            }
++        }
++    }
++
++    pub struct RecognizerSpan {
++        id: Option<String>,
++        start: Option<Instant>,
++        candidates: u64,
++        rule: bool,
++    }
++    impl RecognizerSpan {
++        pub fn new(id: &str, rule: bool) -> Self {
++            let active = ACTIVE.with(|slot| slot.borrow().is_some());
++            let id = active.then(|| format!("{:x}", Sha3_256::digest(id.as_bytes())));
++            Self {
++                id,
++                start: active.then(Instant::now),
++                candidates: 0,
++                rule,
++            }
++        }
++        pub fn candidates(&mut self, count: usize) {
++            self.candidates = count as u64;
++        }
++    }
++    impl Drop for RecognizerSpan {
++        fn drop(&mut self) {
++            if let (Some(id), Some(start)) = (self.id.take(), self.start) {
++                let ns = start.elapsed().as_nanos().min(u64::MAX as u128) as u64;
++                ACTIVE.with(|slot| {
++                    if let Some(record) = slot.borrow_mut().as_mut() {
++                        let metric = record.recognizers.entry(id).or_default();
++                        metric.ns += ns;
++                        metric.invocations += 1;
++                        metric.candidates += self.candidates;
++                        if self.rule {
++                            let rules = record.metrics.entry("rules_ns").or_default();
++                            rules.ns += ns;
++                            rules.invocations += 1;
++                            rules.candidates += self.candidates;
++                        }
++                    }
++                });
++            }
++        }
++    }
++
++    pub fn count(key: &'static str, count: u64) {
++        ACTIVE.with(|slot| {
++            if let Some(record) = slot.borrow_mut().as_mut() {
++                *record.counters.entry(key).or_default() += count;
++                if key == "nym_windows" {
++                    if let Some(view) = record.view {
++                        *record.counters.entry(view).or_default() += count;
++                    }
++                }
++            }
++        });
++    }
++
++    #[cfg(test)]
++    mod tests {
++        use super::*;
++        #[test]
++        fn captures_are_isolated_and_identifiers_never_escape() {
++            let outer = Capture::new();
++            count("input_bytes", 3);
++            let inner = Capture::new();
++            {
++                let _timer = Span::new("registry_ns");
++                let mut rule = RecognizerSpan::new("private recognizer id", true);
++                rule.candidates(2);
++            }
++            let record = inner.finish();
++            assert_eq!(record.metrics["rules_ns"].invocations, 1);
++            let (key, rule) = record.recognizers.first_key_value().unwrap();
++            assert_eq!(key.len(), 64);
++            assert!(!key.contains("private"));
++            assert_eq!(rule.candidates, 2);
++            assert_eq!(outer.finish().counters["input_bytes"], 3);
++        }
++    }
++}
+diff --git a/crates/gaze/Cargo.toml b/crates/gaze/Cargo.toml
+index 08bfc609..13038d6d 100644
+--- a/crates/gaze/Cargo.toml
++++ b/crates/gaze/Cargo.toml
+@@ -20,6 +20,7 @@ name = "gaze"
+ path = "src/lib.rs"
+ 
+ [features]
++perf-timers = ["gaze-types/perf-timers", "gaze-recognizers?/perf-timers"]
+ default = ["bundled-recognizers"]
+ bundled-recognizers = ["dep:gaze-recognizers"]
+ safety-net = ["gaze-recognizers/safety-net"]
+diff --git a/crates/gaze/src/pipeline.rs b/crates/gaze/src/pipeline.rs
+index 02c90f65..eca51254 100644
+--- a/crates/gaze/src/pipeline.rs
++++ b/crates/gaze/src/pipeline.rs
+@@ -1077,13 +1077,17 @@ impl Pipeline {
+         dictionaries: &DictionaryBundle,
+         mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
+     ) -> Result<CleanText> {
++        gaze_types::perf_count!("input_bytes", text.len());
+         let normalized = normalize(text);
+         let spans = &normalized.spans;
+         let ctx = DetectContext::new(locale_chain, dictionaries).with_source_spans(spans);
+         let (pool, vetoed) = self
+             .registry
+             .detect_candidate_pool(&normalized.text, &ctx)?;
+-        let mut whole = recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?;
++        let mut whole = {
++            let _perf = gaze_types::perf_span!("resolve1_ns");
++            recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?
++        };
+         let sweep_links = self.sweep_repeat_values(
+             target,
+             &mut whole,
+@@ -1106,6 +1110,7 @@ impl Pipeline {
+         if !house_numbers.is_empty() {
+             let mut originals = whole.evidence.originals;
+             originals.extend(house_numbers);
++            let _perf = gaze_types::perf_span!("resolve2_ns");
+             whole = recovery::plan(
+                 crate::resolver::CandidatePool::new(originals),
+                 &self.registry,
+@@ -1127,6 +1132,7 @@ impl Pipeline {
+         if !address_pieces.is_empty() {
+             let mut originals = whole.evidence.originals;
+             originals.extend(address_pieces);
++            let _perf = gaze_types::perf_span!("resolve2_ns");
+             whole = recovery::plan(
+                 crate::resolver::CandidatePool::new(originals),
+                 &self.registry,
+@@ -1505,6 +1511,7 @@ impl Pipeline {
+         field_name: Option<&str>,
+         locale_chain: &[crate::LocaleTag],
+     ) -> Result<BTreeMap<(usize, usize), SweepLink>> {
++        let _perf = gaze_types::perf_span!("sweep_ns");
+         let winners = whole.primary.iter().chain(&whole.recovered);
+         let own_values = winners
+             .clone()
+@@ -1550,11 +1557,13 @@ impl Pipeline {
+             links.insert((raw.start, raw.end), hit.link);
+             added.push(hit.candidate());
+         }
++        gaze_types::perf_count!("sweep_candidates", added.len());
+         if added.is_empty() {
+             return Ok(links);
+         }
+         let mut originals = std::mem::take(&mut whole.evidence.originals);
+         originals.extend(added);
++        let _perf = gaze_types::perf_span!("resolve2_ns");
+         *whole = recovery::plan(
+             crate::resolver::CandidatePool::new(originals),
+             &self.registry,
+@@ -1600,7 +1609,10 @@ impl Pipeline {
+         );
+         entry.provenance_stage = Some("primary_pipeline.residual".into());
+         for logger in &self.redaction_loggers {
+-            logger.log(&entry)?;
++            {
++                let _perf = gaze_types::perf_span!("audit_ns");
++                logger.log(&entry)?;
++            }
+         }
+         Ok(())
+     }
+@@ -1678,8 +1690,10 @@ impl Pipeline {
+                 field_path,
+             )
+             .with_dictionaries(dictionaries);
+-            let (mut reported, mut net_telemetry) =
+-                net.check_with_neutral_and_telemetry(scan.text(), scan.neutral_text(), context)?;
++            let (mut reported, mut net_telemetry) = {
++                let _perf = gaze_types::perf_span!("safety_model_ns");
++                net.check_with_neutral_and_telemetry(scan.text(), scan.neutral_text(), context)?
++            };
+             for event in &mut net_telemetry {
+                 if let LeakReportTelemetry::ModelSpanRefused {
+                     span,
+@@ -1738,6 +1752,7 @@ impl Pipeline {
+                         .iter()
+                         .take(if mandatory { selected.len() } else { 1 })
+                 {
++                    let model_perf = gaze_types::perf_span!("safety_model_ns");
+                     let spans = model
+                         .infer(
+                             ModelInput {
+@@ -1762,6 +1777,7 @@ impl Pipeline {
+                                 Error::SafetyNet(model_error_to_safety_net_error(error))
+                             }
+                         })?;
++                    drop(model_perf);
+                     for span in spans {
+                         if span.byte_range.start >= span.byte_range.end
+                             || clean_text.get(span.byte_range.clone()).is_none()
+@@ -2877,7 +2893,10 @@ impl Pipeline {
+             entry = entry.with_fallback_triggered(reason);
+         }
+         for logger in &self.redaction_loggers {
+-            logger.log(&entry)?;
++            {
++                let _perf = gaze_types::perf_span!("audit_ns");
++                logger.log(&entry)?;
++            }
+         }
+         Ok(())
+     }
+@@ -2903,7 +2922,10 @@ impl Pipeline {
+         )
+         .with_backend_silently_dropped(dropped);
+         for logger in &self.redaction_loggers {
+-            logger.log(&entry)?;
++            {
++                let _perf = gaze_types::perf_span!("audit_ns");
++                logger.log(&entry)?;
++            }
+         }
+         Ok(())
+     }
+@@ -2967,7 +2989,10 @@ impl Pipeline {
+         }
+ 
+         for logger in &self.redaction_loggers {
+-            logger.log(&entry)?;
++            {
++                let _perf = gaze_types::perf_span!("audit_ns");
++                logger.log(&entry)?;
++            }
+         }
+ 
+         Ok(())
+@@ -3005,7 +3030,10 @@ impl Pipeline {
+             Some(format!("ordinal:{ordinal}")),
+         );
+         for logger in &self.redaction_loggers {
+-            logger.log(&entry)?;
++            {
++                let _perf = gaze_types::perf_span!("audit_ns");
++                logger.log(&entry)?;
++            }
+         }
+         Ok(())
+     }
+@@ -3041,7 +3069,10 @@ impl Pipeline {
+                 )),
+             );
+             for logger in &self.redaction_loggers {
+-                logger.log(&entry)?;
++                {
++                    let _perf = gaze_types::perf_span!("audit_ns");
++                    logger.log(&entry)?;
++                }
+             }
+         }
+         Ok(())
+@@ -3079,7 +3110,10 @@ impl Pipeline {
+         .with_validator_fail_reason(vetoed.reason);
+ 
+         for logger in &self.redaction_loggers {
+-            logger.log(&entry)?;
++            {
++                let _perf = gaze_types::perf_span!("audit_ns");
++                logger.log(&entry)?;
++            }
+         }
+ 
+         Ok(())
+diff --git a/crates/gaze/src/pipeline/occurrence.rs b/crates/gaze/src/pipeline/occurrence.rs
+index aa69315d..7e8e705e 100644
+--- a/crates/gaze/src/pipeline/occurrence.rs
++++ b/crates/gaze/src/pipeline/occurrence.rs
+@@ -153,6 +153,7 @@ pub(super) struct Ledger {
+ }
+ impl Ledger {
+     pub(super) fn new(segment: Segment) -> Self {
++        let _perf = gaze_types::perf_span!("manifest_ns");
+         Self {
+             segments: vec![segment],
+             ..Self::default()
+@@ -206,6 +207,7 @@ impl Ledger {
+         self.project_arc().as_ref()
+     }
+     fn project_arc(&self) -> &Arc<Manifest> {
++        let _perf = gaze_types::perf_span!("manifest_ns");
+         self.projection.get_or_init(|| {
+             #[cfg(test)]
+             self.projections.set(self.projections.get() + 1);
+@@ -217,6 +219,7 @@ impl Ledger {
+         Ok(self.records.into_iter().map(|r| r.emitted).collect())
+     }
+     pub(super) fn insert(&mut self, mut record: Occurrence) {
++        let _perf = gaze_types::perf_span!("manifest_ns");
+         self.projection.take();
+         record.id = self.next_id;
+         self.next_id += 1;
+@@ -387,6 +390,7 @@ impl Ledger {
+         Ok(())
+     }
+     pub(super) fn validate(&self) -> Result<()> {
++        let _perf = gaze_types::perf_span!("manifest_ns");
+         // The public fragment discriminator is derived from the internal origin,
+         // so a record where they disagree is forged or drifted state. Consumers
+         // decide whether to index a replacement as an entity on the strength of
+diff --git a/crates/gaze/src/registry.rs b/crates/gaze/src/registry.rs
+index 744fa12e..485f9f4b 100644
+--- a/crates/gaze/src/registry.rs
++++ b/crates/gaze/src/registry.rs
+@@ -1101,8 +1101,10 @@ fn detect_declared(
+     ctx: &DetectContext<'_>,
+ ) -> Result<Vec<Candidate>, DetectError> {
+     let evidence = recognizer.evidence();
+-    Ok(recognizer
+-        .detect_for_registry(input, ctx)?
++    let mut perf = gaze_types::perf_recognizer!(recognizer.id(), evidence);
++    let candidates = recognizer.detect_for_registry(input, ctx)?;
++    perf.candidates(candidates.len());
++    Ok(candidates
+         .into_iter()
+         .map(|candidate| candidate.with_evidence(evidence))
+         .collect())
+@@ -1252,6 +1254,7 @@ impl RecognizerRegistry {
+         ),
+         DetectError,
+     > {
++        let _perf = gaze_types::perf_span!("registry_ns");
+         let locale_chain = LocaleChain::from(ctx.locale_chain);
+         let classes = self
+             .entries
+diff --git a/crates/gaze/src/safety_net_scan.rs b/crates/gaze/src/safety_net_scan.rs
+index b65e92d9..e2d6451d 100644
+--- a/crates/gaze/src/safety_net_scan.rs
++++ b/crates/gaze/src/safety_net_scan.rs
+@@ -18,6 +18,7 @@ impl<'a> SafetyNetScanText<'a> {
+         manifest: &Manifest,
+         is_owned: impl Fn(&str) -> bool,
+     ) -> Result<Self> {
++        let _perf = gaze_types::perf_span!("safety_view_build_ns");
+         let mut stable = None::<Vec<u8>>;
+         let mut neutral = None::<Vec<u8>>;
+         for emitted in &manifest.spans {

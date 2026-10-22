@@ -3,6 +3,7 @@
 pub mod inspection;
 pub mod nym;
 pub mod payment_card;
+pub mod perf;
 pub mod redaction_marker;
 
 use std::cell::Cell;
@@ -993,13 +994,34 @@ impl ValidatorKind {
     /// Returns whether the validator accepts the input.
     pub fn validates(self, input: &str) -> bool {
         match self {
-            Self::AadhaarVerhoeff => aadhaar_verhoeff_check(input),
-            Self::FrNirMod97 => fr_nir_mod97_check(input),
-            Self::DeSteuerIdMod1110 => de_steuer_id_mod1110_check(input),
-            Self::BsnMod11 => bsn_mod11_check(input),
-            Self::CpfMod11 => cpf_mod11_check(input),
-            Self::CnpjMod11 => cnpj_mod11_check(input),
-            Self::UkNhsMod11 => uk_nhs_mod11_check(input),
+            Self::AadhaarVerhoeff => {
+                let _perf = crate::perf_span!("validators_ns");
+                aadhaar_verhoeff_check(input)
+            }
+            Self::FrNirMod97 => {
+                let _perf = crate::perf_span!("validators_ns");
+                fr_nir_mod97_check(input)
+            }
+            Self::DeSteuerIdMod1110 => {
+                let _perf = crate::perf_span!("validators_ns");
+                de_steuer_id_mod1110_check(input)
+            }
+            Self::BsnMod11 => {
+                let _perf = crate::perf_span!("validators_ns");
+                bsn_mod11_check(input)
+            }
+            Self::CpfMod11 => {
+                let _perf = crate::perf_span!("validators_ns");
+                cpf_mod11_check(input)
+            }
+            Self::CnpjMod11 => {
+                let _perf = crate::perf_span!("validators_ns");
+                cnpj_mod11_check(input)
+            }
+            Self::UkNhsMod11 => {
+                let _perf = crate::perf_span!("validators_ns");
+                uk_nhs_mod11_check(input)
+            }
             _ => self.canonical_form(input).is_some(),
         }
     }
@@ -1038,6 +1060,7 @@ impl ValidatorKind {
 
     /// Returns the canonical form for accepted input.
     pub fn canonical_form(self, input: &str) -> Option<String> {
+        let _perf = crate::perf_span!("validators_ns");
         match self {
             Self::EmailRfc => is_basic_email(input).then(|| input.to_string()),
             #[cfg(feature = "phone-parser")]

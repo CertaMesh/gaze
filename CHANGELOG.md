@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- GitHub releases include `gaze-aarch64-linux-gnu` and its `.sha256` checksum
+  for native Linux arm64 use, including arm64 containers on Apple Silicon.
+  The binary requires glibc 2.39 or later.
+
 - `gaze clean --session-out <path>` writes the session to a new owner-only file
   and prints only the clean text; `gaze restore --session-file <path>` restores
   plain text from stdin. A shell round trip no longer needs JSON glue. Existing

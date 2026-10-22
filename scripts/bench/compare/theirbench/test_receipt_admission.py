@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 import render_theirbench as render
+import row_receipts
 from test_add_tool import report, own_presidio, trace_report, own_pii_trace, data
 import test_theirbench as fixtures
 
@@ -150,21 +151,32 @@ class ReceiptAdmissionTest(unittest.TestCase):
 
     def test_committed_receipt_backed_rows_reassemble_identically(self):
         committed = json.loads(render.DATA.read_text())
+        receipts = json.loads(row_receipts.RECEIPTS.read_text())['benchmarks']
         verified = 0
         for name, entry in committed['benchmarks'].items():
             for tool in render.public_rows(entry['rows']):
                 provenance = entry['provenance'][tool]
                 if not provenance.get('own_scorer_input'):
+                    self.assertEqual(entry.get('receipt_status', {}).get(tool), 'pre-receipt')
                     continue
-                report = {'rows': {tool: {'test': entry['rows'][tool]}}, 'provenance': {tool: provenance}}
+                receipt = receipts[name][tool]
+                row_receipts.check_row(entry, tool, receipt, row_receipts.RECEIPTS.parent)
+                report = {'rows': {tool: {'test': receipt['row']}}, 'provenance': {tool: provenance}}
                 own = {'system': tool, 'input': provenance['own_scorer_input'],
-                       'scored': entry['own_metric'][tool], 'overall': entry['own_metric'][tool]}
+                       'scored': receipt['own_metric'], 'overall': receipt['own_metric']}
+                if name == 'pii-trace':
+                    own['overall'], _ = render.pii_trace_repro.published(
+                        render.pii_trace_repro.scores_from_counts(own['input']['counts']))
                 bundle = render.checked_row_bundle(name, entry, report, tool, own)
                 after = copy.deepcopy(entry)
                 render.install_row_bundle(after, tool, bundle)
                 self.assertEqual(json.dumps(entry, sort_keys=True), json.dumps(after, sort_keys=True))
                 verified += 1
-        self.assertEqual(verified, 5)
+        expected = sum(1 for entry in committed['benchmarks'].values()
+                       for tool in render.public_rows(entry['rows'])
+                       if entry.get('receipt_status', {}).get(tool) != 'pre-receipt')
+        self.assertGreater(verified, 0)
+        self.assertEqual(verified, expected)
 
     def test_receipt_status_marks_only_explicit_legacy_rows(self):
         baseline = render.render(fixtures.synthetic())

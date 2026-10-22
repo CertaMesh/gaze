@@ -153,6 +153,7 @@ pub(super) struct Ledger {
 }
 impl Ledger {
     pub(super) fn new(segment: Segment) -> Self {
+        let _perf = gaze_types::perf_span!("manifest_ns");
         Self {
             segments: vec![segment],
             ..Self::default()
@@ -206,6 +207,7 @@ impl Ledger {
         self.project_arc().as_ref()
     }
     fn project_arc(&self) -> &Arc<Manifest> {
+        let _perf = gaze_types::perf_span!("manifest_ns");
         self.projection.get_or_init(|| {
             #[cfg(test)]
             self.projections.set(self.projections.get() + 1);
@@ -217,6 +219,7 @@ impl Ledger {
         Ok(self.records.into_iter().map(|r| r.emitted).collect())
     }
     pub(super) fn insert(&mut self, mut record: Occurrence) {
+        let _perf = gaze_types::perf_span!("manifest_ns");
         self.projection.take();
         record.id = self.next_id;
         self.next_id += 1;
@@ -387,6 +390,7 @@ impl Ledger {
         Ok(())
     }
     pub(super) fn validate(&self) -> Result<()> {
+        let _perf = gaze_types::perf_span!("manifest_ns");
         // The public fragment discriminator is derived from the internal origin,
         // so a record where they disagree is forged or drifted state. Consumers
         // decide whether to index a replacement as an entity on the strength of

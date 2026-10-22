@@ -9,6 +9,9 @@ scripts/bench/run_no_opf_benchmark.py
 The other files in this directory are scorer, producer, or specialized research
 components. They are not alternate release-regression entry points.
 
+For pipeline costs across revisions, see [Performance attribution](perf-attribution.md).
+The guide covers frozen and shipped policies, recognizer counters, and the quiet-host gate.
+
 ## Setup and profiles
 
 Create the locked Python environment once:
@@ -555,6 +558,8 @@ loading a hash-verified historical IBAN input generator. Its arguments are
 `SCRIPT INPUT_COMMIT INPUT_SHA256 BASE_BINARY HEAD_BINARY OUTPUT`, followed by
 the script's optional arguments. The receipts retain an independent discrepancy
 in the published PR #624 review result without rewriting its provenance.
+The [historical review annotation](../../docs/reference/benchmarks/family-action-review-history.md)
+keeps the superseded published total beside both replay results.
 
 Collateral random-prefix, corpus-parity, containment and residual-count claims
 cannot be reproduced by these scripts alone: their exact one-off counting
