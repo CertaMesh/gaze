@@ -5696,6 +5696,7 @@ def gate(
     policy_delta: Path | None = None,
     allow_legacy_policy_inputs: bool = False,
     *, scorecard_paths: tuple[Path, Path] | None = None,
+    record_paths: tuple[Path, Path] | None = None,
 ) -> dict[str, object]:
     """Admit capture artifacts before comparing their scored layer totals."""
     import stage_timing as stages
@@ -5704,7 +5705,35 @@ def gate(
             stages.validate_execution(card, path)
         except ValueError as error:
             raise LayerError(str(error)) from error
-    return compare_layers(base, candidate, config, policy_delta, allow_legacy_policy_inputs)
+    result = compare_layers(base, candidate, config, policy_delta, allow_legacy_policy_inputs)
+    return _with_leak_diff(result, base, candidate, scorecard_paths, record_paths)
+
+
+def _with_leak_diff(result, base, candidate, scorecard_paths=None, record_paths=None):
+    if result['verdict'] == 'not_comparable':
+        return result
+    try:
+        import leak_diff
+        import scorecard_record as records
+        if record_paths is None:
+            if scorecard_paths is None or not all(card.get('observation_record') for card in (base, candidate)):
+                return {**result, 'leak_diff_unavailable': 'supply both observation records to report new exposure'}
+            for card in (base, candidate):
+                name = card['observation_record']['file']
+                if not isinstance(name, str) or Path(name).name != name:
+                    raise records.RecordError('invalid observation record filename')
+            record_paths = tuple(path.parent / card['observation_record']['file']
+                                 for card, path in zip((base, candidate), scorecard_paths, strict=True))
+        for card, path in zip((base, candidate), record_paths, strict=True):
+            pointer = card.get('observation_record')
+            if not pointer or pointer['sha256'] != score.sha256_file(path):
+                raise records.RecordError('scorecard observation record SHA-256 mismatch')
+        report = leak_diff.report(*record_paths, config=result.get('config'))
+    except Exception:
+        # Optional enrichment cannot replace the admitted gate result or echo input values.
+        return {**result, 'leak_diff_unavailable':
+                'cannot produce new-exposure report from scorecard-bound records'}
+    return {**result, 'leak_diff': report}
 
 
 def compare_layers(
@@ -5754,7 +5783,8 @@ def gate_frozen_records(
     import scorecard_record as record
     kwargs = {"config": config, "policy_delta": policy_delta,
               "allow_legacy_policy_inputs": allow_legacy_policy_inputs}
-    raw = gate(base, candidate, scorecard_paths=scorecard_paths, **kwargs)
+    raw = gate(base, candidate, scorecard_paths=scorecard_paths,
+               record_paths=(base_record, candidate_record), **kwargs)
     if raw["verdict"] == "not_comparable" and raw["differing"] != ["layer_c_gold_validity"]:
         return raw
     try:
@@ -5789,7 +5819,7 @@ def gate_frozen_records(
     }}
     if views["candidate"]["verdict"] != "pass" and result["verdict"] == "pass":
         result.update(verdict="fail", reason="candidate-verdict sensitivity view did not pass")
-    return result
+    return _with_leak_diff(result, base, candidate, record_paths=(base_record, candidate_record))
 
 
 def gate_markdown(result: Mapping[str, object]) -> str:
@@ -5829,6 +5859,11 @@ def gate_markdown(result: Mapping[str, object]) -> str:
                   "Phone has no layer A family; layer C credits all five newer labels without a cue split; "
                   "the excluded bytes are reported in the twin columns. "
                   "The gate is necessary, not sufficient: review still judges precision."]
+    if result.get('leak_diff'):
+        import leak_diff
+        lines += ['', leak_diff.markdown(result['leak_diff']).rstrip()]
+    elif result.get('leak_diff_unavailable'):
+        lines += ['', 'New exposure report unavailable: ' + result['leak_diff_unavailable']]
     frozen = result.get("frozen_gold_verdicts")
     if frozen:
         lines += ["", "Gold verdicts explicitly frozen to base; observed detections unchanged.",
@@ -6001,10 +6036,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                                              args.allow_legacy_policy_inputs,
                                              scorecard_paths=(args.base, args.candidate))
             else:
-                if args.base_record or args.candidate_record or args.scored_labels:
-                    raise LayerError("record replay arguments require --freeze-gold-verdicts base")
+                if bool(args.base_record) != bool(args.candidate_record):
+                    raise LayerError("new-exposure report requires both --base-record and --candidate-record")
+                if args.scored_labels:
+                    raise LayerError("--scored-labels requires --freeze-gold-verdicts base")
                 result = gate(base, candidate, args.config, args.policy_delta, args.allow_legacy_policy_inputs,
-                              scorecard_paths=(args.base, args.candidate))
+                              scorecard_paths=(args.base, args.candidate),
+                              record_paths=(args.base_record, args.candidate_record) if args.base_record else None)
             if args.output:
                 args.output.parent.mkdir(parents=True, exist_ok=True)
                 args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

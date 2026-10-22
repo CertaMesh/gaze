@@ -1,0 +1,422 @@
+{
+  "config": "policy-file",
+  "layers": {
+    "A": {
+      "classes": {
+        "AADHAAR": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "AGE": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "BSN": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "BUILDINGNUM": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "CITY": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "CNPJ": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "CPF": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "CREDITCARDNUMBER": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "CUSTOMER_ID": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "DATEOFBIRTH": {
+          "net_leaked_bytes": -20,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 20
+        },
+        "EMAIL": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "EMPLOYEE_ID": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "ETHADDRESS": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "GIVENNAME": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "IBAN": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "IDCARDNUM": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "IPADDRESS": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "LICENSEPLATE": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "NATIONALID": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "NHSNUMBER": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "NIR": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "PAN": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "PASSWORD": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "RECORD_ID": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "SECURITYTOKEN": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "SSN": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "STATE": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "STREET": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "SURNAME": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "TAXNUM": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "TELEPHONENUM": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "URL": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "VATID": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "ZIPCODE": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        }
+      },
+      "documents": 6617,
+      "net_leaked_bytes": -20,
+      "new_exposed_bytes": 0,
+      "newly_protected_bytes": 20,
+      "refusals": {
+        "base": 0,
+        "candidate": 0
+      }
+    },
+    "C": {
+      "classes": {
+        "AGE": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "BUILDINGNUM": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "CITY": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "COMPANYNAME": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "COUNTRY": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "CREDITCARDNUMBER": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "DATEOFBIRTH": {
+          "net_leaked_bytes": -81,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 81
+        },
+        "DRIVERLICENSENUM": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "EMAIL": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "FIRSTNAME": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "IBAN": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "IDCARDNUM": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "LICENSEPLATENUM": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "NATIONALID": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "ORGANIZATION": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "PASSPORTID": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "PASSWORD": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "PHONENUMBER": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "REGION": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "SECURITYTOKEN": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "SSN": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "STATE": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "STREET": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "SURNAME": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "TAXNUM": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "TITLE": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "URL": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "USERNAME": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "ZIP": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        }
+      },
+      "documents": 2910,
+      "net_leaked_bytes": -81,
+      "new_exposed_bytes": 0,
+      "newly_protected_bytes": 81,
+      "refusals": {
+        "base": 0,
+        "candidate": 0
+      }
+    },
+    "D": {
+      "classes": {},
+      "documents": 5192,
+      "net_leaked_bytes": 0,
+      "new_exposed_bytes": 0,
+      "newly_protected_bytes": 0,
+      "refusals": {
+        "base": 0,
+        "candidate": 0
+      }
+    },
+    "R": {
+      "classes": {
+        "CUSTOMER_ID": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "EMAIL": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "EMPLOYEE_ID": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "GIVENNAME": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "IBAN": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "RECORD_ID": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "SURNAME": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "TAXNUM": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        },
+        "TELEPHONENUM": {
+          "net_leaked_bytes": 0,
+          "new_exposed_bytes": 0,
+          "newly_protected_bytes": 0
+        }
+      },
+      "documents": 3061,
+      "net_leaked_bytes": 0,
+      "new_exposed_bytes": 0,
+      "newly_protected_bytes": 0,
+      "refusals": {
+        "base": 0,
+        "candidate": 0
+      }
+    }
+  },
+  "new_exposure_span_count": 0,
+  "new_exposure_spans": [],
+  "record_sha256": {
+    "base": "32cdbede14c02ecd07a41103c9892ba88b79b6c970500e816ef97460e05184f1",
+    "candidate": "6e0d206cc7d9cd67b32ddb78df9884b50413f662be8086a49fa9dfd419de699d"
+  },
+  "report_only": true,
+  "schema_version": 1,
+  "scope": "all-ground-truth",
+  "span_limit": 20
+}

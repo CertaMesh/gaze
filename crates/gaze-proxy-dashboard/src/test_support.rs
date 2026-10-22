@@ -245,6 +245,25 @@ impl InspectionSink for ChannelSink {
     }
 }
 
+fn admit_for_fixture(
+    mut emit: impl FnMut() -> InspectionAdmissionOutcomeV1,
+) -> InspectionAdmissionOutcomeV1 {
+    let started = Instant::now();
+    loop {
+        let outcome = emit();
+        // The fixture's dispatcher shares the admission mutex. Production must
+        // drop on contention; fixture construction waits for that mutex instead.
+        if !matches!(
+            outcome,
+            InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::QueueContended)
+        ) || started.elapsed() >= Duration::from_secs(10)
+        {
+            return outcome;
+        }
+        std::thread::yield_now();
+    }
+}
+
 /// Emits one logical inspection with the given stages through a freshly installed runtime
 /// and returns the delivered events in emission order.
 pub(crate) fn emit_logical(
@@ -266,7 +285,7 @@ pub(crate) fn emit_logical(
     for (stage, shape) in stages {
         let shape = *shape;
         let sentinel = sentinel_for(*stage);
-        let outcome = match stage {
+        let outcome = admit_for_fixture(|| match stage {
             InspectionStageDomainV1::OwnerRequest => logical
                 .try_emit_owner_request(safe_fields(), || {
                     build_projection!(OwnerRawProjectionV1, OwnerRawPayloadV1, shape, sentinel)
@@ -300,7 +319,7 @@ pub(crate) fn emit_logical(
                         sentinel
                     )
                 }),
-        };
+        });
         assert!(
             matches!(outcome, InspectionAdmissionOutcomeV1::Accepted { .. }),
             "fixture emission must be admitted: {outcome:?}"

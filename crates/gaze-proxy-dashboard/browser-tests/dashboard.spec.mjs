@@ -1251,11 +1251,104 @@ test("LC-SCROLL-PAUSE upward page scroll pauses follow and blocks silent row rep
     await shot(page, entry);
     await resume.click();
     await expect(page.locator('.event-row[data-logical-id="12"]')).toBeVisible();
+    // Deliver the layout-induced scroll event before checking the resumed state.
+    await page.evaluate(() => new Promise(requestAnimationFrame));
     await expect(page.locator("#follow-state")).toContainText("FOLLOW: LIVE");
   });
   await control("/__fixture", { id: "fx-default" });
   await page.context().close();
 });
+
+for (const scenario of [
+  { id: "LC-SCROLL-PENDING", title: "upward scroll queued before a follow render still pauses and buffers", trigger: "follow" },
+  { id: "LC-SCROLL-RESIZE", title: "pending native scroll survives a viewport resize render", trigger: "resize" },
+  { id: "LC-SCROLL-PANE", title: "pending pane scroll survives a viewport resize render", trigger: "resize", pane: true },
+]) {
+  test(scenario.id + " " + scenario.title, async ({ browser }) => {
+    const entry = ledgerState({ id: scenario.id, layer: "lifecycle", viewport: "V7", tier: "-", content: scenario.trigger + "-pending-scroll", condition: "-", fixture: "fx-default" });
+    await control("/__fixture", { id: "fx-default" });
+    const page = await newPage(browser, "V7");
+    try {
+      await page.addInitScript(() => {
+        // This listener precedes the app's listener, so the upward movement runs
+        // before its queued render and before native scroll delivery.
+        window.addEventListener("resize", () => {
+          if (window.moveOnResize) {
+            requestAnimationFrame(() => {
+              const pane = window.pendingScrollPane && document.querySelector(".pane-list");
+              (pane || window).scrollTo(0, 320);
+              window.pendingScrollTop = pane ? pane.scrollTop : window.scrollY;
+            });
+          }
+        });
+        const originalFetch = window.fetch;
+        window.fetch = async (...args) => {
+          const response = await originalFetch(...args);
+          if (String(args[0]).includes("/events/follow")) {
+            const originalJson = response.json.bind(response);
+            response.json = async () => {
+              const snapshot = await originalJson();
+              return new Promise((resolve) => {
+                window.releaseFollow = () => {
+                  window.releaseFollow = null;
+                  resolve(snapshot);
+                };
+              });
+            };
+          }
+          return response;
+        };
+      });
+      await pair(page);
+      await expect(page.locator(".event-row").first()).toBeVisible();
+      await page.evaluate((paneScroll) => {
+        window.pendingScrollPane = Boolean(paneScroll);
+        const pane = paneScroll && document.querySelector(".pane-list");
+        if (pane) {
+          // Production uses document scrolling today. Constrain the pane to
+          // exercise the existing element-scroller listener with native events.
+          pane.style.height = "320px";
+          pane.style.overflow = "auto";
+        }
+        (pane || window).scrollTo(0, 400);
+      }, scenario.pane);
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      expect(await page.evaluate(() => window.pendingScrollPane ? document.querySelector(".pane-list").scrollTop : window.scrollY)).toBe(400);
+      await expect(page.locator("#follow-state")).toContainText("FOLLOW: LIVE");
+      await page.waitForFunction(() => typeof window.releaseFollow === "function");
+      await control("/__fixture", { id: "fx-owner-both" });
+      await check(entry, "pending upward movement pauses before rows can be replaced", async () => {
+        if (scenario.trigger === "resize") {
+          await page.evaluate(() => { window.moveOnResize = true; });
+          await page.setViewportSize({ width: 360, height: 641 });
+          await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          expect(await page.evaluate(() => window.pendingScrollTop)).toBe(320);
+          await page.evaluate(() => window.releaseFollow());
+        } else {
+          // Response microtasks precede the queued native scroll event.
+          await page.evaluate(() => {
+            window.scrollTo(0, 320);
+            window.releaseFollow();
+          });
+        }
+        await expect(page.locator("#follow-state")).toContainText("FOLLOW PAUSED — 0 BUFFERED");
+      });
+      await check(entry, "subsequent rows buffer until an explicit Resume", async () => {
+        await page.waitForFunction(() => typeof window.releaseFollow === "function");
+        await page.evaluate(() => window.releaseFollow());
+        await expect(page.locator("#follow-state")).toContainText("FOLLOW PAUSED — 2 BUFFERED");
+        await expect(page.locator('.event-row[data-logical-id="12"]')).toHaveCount(0);
+        await page.locator("#resume-follow").click();
+        await expect(page.locator('.event-row[data-logical-id="12"]')).toBeVisible();
+        await page.evaluate(() => new Promise(requestAnimationFrame));
+        await expect(page.locator("#follow-state")).toContainText("FOLLOW: LIVE");
+      });
+    } finally {
+      await page.context().close();
+      await control("/__fixture", { id: "fx-default" });
+    }
+  });
+}
 
 test("LC-BACK single-column back restores prior row focus without history entry", async ({ browser }) => {
   const entry = ledgerState({ id: "LC-BACK", layer: "lifecycle", viewport: "V7", tier: "-", content: "back-navigation", condition: "-", fixture: "fx-default" });

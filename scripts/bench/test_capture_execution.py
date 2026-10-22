@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 import agentic_layers as agentic
 import benchmark_cache as cache
@@ -36,7 +37,11 @@ class CaptureExecutionTests(unittest.TestCase):
             candidate, candidate_path, candidate_record, _ = self.capture(root / "candidate", leaked=9, status="hit")
             self.assertEqual(arms._load_arm(root / "base"), (base, base_record))
             self.assertEqual(arms._load_arm(root / "candidate"), (candidate, candidate_record))
-            result = agentic.gate(base, candidate, scorecard_paths=(base_path, candidate_path))
+            # This fixture binds arbitrary artifact bytes, not a valid observation stream.
+            # Byte-differential parsing has its own real-record coverage.
+            with mock.patch('leak_diff.report', return_value={'report_only': True}) as differential:
+                result = agentic.gate(base, candidate, scorecard_paths=(base_path, candidate_path))
+            differential.assert_called_once_with(base_record, candidate_record, config='policy-file')
             self.assertEqual(result["verdict"], "pass")
             with self.assertRaisesRegex(agentic.LayerError, "execution evidence"):
                 agentic.gate(base, candidate)
