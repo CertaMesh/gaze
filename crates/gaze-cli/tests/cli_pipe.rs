@@ -6292,18 +6292,14 @@ fn session_file_flags_reject_ambiguous_format_combinations() {
 #[cfg(feature = "perf-timers")]
 #[test]
 fn attribution_capture_preserves_pipe_fixture_bytes_and_restore() {
-    use gaze::{
-        Action, ClassRule, DefaultRule, DictionaryBundle, LocaleTag, Pipeline, RawDocument,
-        SensitiveSnapshot,
-    };
+    use gaze::{LocaleTag, RawDocument, SensitiveSnapshot};
     use gaze_types::perf::Capture;
 
-    let pipeline = Pipeline::builder()
-        .detector(gaze_recognizers::RegexDetector::emails().unwrap())
-        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
-        .rule(DefaultRule::new(Action::Preserve))
+    let core = gaze_assembly::CorePipelineConfig::new()
+        .with_locale(&[LocaleTag::DeDe, LocaleTag::EnUs, LocaleTag::Global])
         .build()
         .unwrap();
+    let pipeline = core.pipeline();
     let original = Session::new(Scope::Conversation("attribution-fixture".into())).unwrap();
     let snapshot = original.export().unwrap().into_bytes();
     for input in [
@@ -6312,6 +6308,8 @@ fn attribution_capture_preserves_pipe_fixture_bytes_and_restore() {
         "Unicode: Grüße — alice@example.invalid\nNo further contact.",
         "{\"email\":\"alice@example.invalid\"}",
         "No contact details here.",
+        "Phone +1 202 555 0100; alice@example.invalid",
+        "Card 4111 1111 1111 1111; alice@example.invalid",
     ] {
         let run = |capture: bool| {
             let session = Session::import(SensitiveSnapshot::from(snapshot.clone())).unwrap();
@@ -6320,8 +6318,8 @@ fn attribution_capture_preserves_pipe_fixture_bytes_and_restore() {
                 .clean_with_safety_net_detect_context(
                     &session,
                     RawDocument::Text(input.into()),
-                    &[LocaleTag::Global],
-                    &DictionaryBundle::default(),
+                    core.locale_chain().as_slice(),
+                    core.dictionaries(),
                 )
                 .unwrap();
             let gaze::CleanDocument::Text(clean) = clean else {

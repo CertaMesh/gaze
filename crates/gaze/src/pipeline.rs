@@ -1821,6 +1821,7 @@ impl Pipeline {
                         .iter()
                         .take(if mandatory { selected.len() } else { 1 })
                 {
+                    let model_perf = gaze_types::perf_span!("safety_model_ns");
                     let spans = model
                         .infer(
                             ModelInput {
@@ -1845,6 +1846,7 @@ impl Pipeline {
                                 Error::SafetyNet(model_error_to_safety_net_error(error))
                             }
                         })?;
+                    drop(model_perf);
                     nets_run += 1;
                     for span in spans {
                         if span.byte_range.start >= span.byte_range.end
