@@ -51,7 +51,7 @@ import full_name_case_cells as full_name_case
 import credential_code_cells as credential_code
 
 
-GENERATOR_VERSION = 25
+GENERATOR_VERSION = 26
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -4484,6 +4484,7 @@ GENERATOR_ADDITIONS = {
     23: "credentials_escapes_",
     24: "credentials_separators_",
     25: "credentials_prefixes_",
+    26: "recordids_boundary_unterminated_",
 }
 
 
@@ -4517,6 +4518,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    25: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v25.json"),
     24: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v24.json"),
     23: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v23.json"),
     22: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v22.json"),

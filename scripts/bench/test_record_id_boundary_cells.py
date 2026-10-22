@@ -16,7 +16,7 @@ class RecordIdBoundaryTests(unittest.TestCase):
             self.assertEqual(rows, cells.records(api, partition))
             self.assertEqual(len(rows), len({r.uid for r in rows}))
             for family in cells.LABELS:
-                for shape in ("punctuation", "connectors", "serialized", "opening_lf", "tab_group"):
+                for shape in ("punctuation", "connectors", "serialized", "opening_lf", "tab_group", "unterminated"):
                     selected = [r for r in rows if r.family == family and r.surface.startswith("recordids_boundary_" + shape)]
                     self.assertEqual({r.layer for r in selected}, {"A", "D", "R"}, (partition, family, shape))
             for row in rows:

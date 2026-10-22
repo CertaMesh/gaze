@@ -146,6 +146,19 @@ def records(api, partition):
                     emit("D", family, surface, index, template,
                          {**fields, "C": (public_key, None), "V": (value, "decoy:public_reference")}, language)
 
+            for delimiter_name, delimiter in (("semicolon", ";"), ("comma", ","), ("newline", "\n")):
+                value = first + delimiter + "É" + other
+                for boundary_name, boundary in (("eof", ""), ("public", "; public_version={W}"),
+                                                 ("quoted_public", ', "public_version": {W}')):
+                    fields = {"C": (cue, None), "V": (value, LABELS[family]),
+                              "W": ("5.8." + other, "decoy:public_column")}
+                    surface = f"unterminated_{delimiter_name}_{boundary_name}"
+                    template = '{C}: "{V}' + boundary
+                    emit("A", family, surface, index, template, fields, language)
+                    emit("R", family, surface, index, "Lookup {V} again.\n" + template, fields, language)
+                    emit("D", family, surface, index, template,
+                         {**fields, "C": (public_key, None), "V": (value, "decoy:public_reference")}, language)
+
             for shape, value in (("unicode", first + "\tÉ" + other),
                                  ("combining", first + "\tE\u0301" + other)):
                 single(family, "tab_group_" + shape, index, value,
