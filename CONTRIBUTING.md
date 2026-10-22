@@ -45,7 +45,7 @@ pushing to a PR.
 
 ## Workspace shape
 
-The workspace has 15 published crates plus the internal `xtask` crate and the detached `lint/dylint/` workspace. [docs/reference/crates.md](docs/reference/crates.md) has the full dependency map.
+The workspace has 15 published crates plus the internal `xtask` and `feature-graph-probe` crates and the detached `lint/dylint/` workspace. [docs/reference/crates.md](docs/reference/crates.md) has the full dependency map.
 
 | Crate | Role |
 |---|---|
@@ -65,6 +65,7 @@ The workspace has 15 published crates plus the internal `xtask` crate and the de
 | `crates/gaze-token-bridge` | Experimental owner-side authorization and translation bridge for searching redact-before-index corpora. |
 | `crates/gaze-proxy-dashboard` | Opt-in, memory-only inspection dashboard runtime for `gaze proxy`: a killable child process owns listener/auth/store/rendering while the parent owns bounded ingress and the registration-bound activation. Among Gaze crates it depends on exactly `gaze-types` + `gaze-inspection`; shipped behind the default-off `gaze-cli` `dashboard` feature and enforced by the `dashboard-isolation` xtask gate. |
 | `crates/xtask` | Internal repository gate runner: `bundle-tokenization-drift`, `fixture-citation-lint`, `trybuild-fixture-hygiene`, `ci-feature-matrix`, `class-map-override-safety`, `symmetric-potemkin`, `no-tenant-knowledge`, `cargo-metadata-audit-isolation` (Phase C), `dylint-gate` (Phase D), `dashboard-isolation`. |
+| `crates/feature-graph-probe` | Unpublished CI probe binary. Each feature selects one published library graph (for example `gaze-pii` with `--no-default-features`) and loads the bundled `core` rulepack in it, without dev-dependency feature unification. Run by `ci-feature-matrix`. |
 | `lint/dylint/` | Dylint lint crate hosting `gaze_module_isolation`. Detached workspace pinned to `nightly-2025-09-18`. |
 
 ## Run the PR checks

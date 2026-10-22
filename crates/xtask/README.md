@@ -27,7 +27,7 @@ that list.
 | `FamilyPolicyTableCoherence` | `family-policy-table-coherence` | Parses embedded rulepacks and checks collision-family declarations compile into the expected family precedence table, including IBAN-over-PAN and same-variant phone non-arbitration. |
 | `LocaleCueBundleCoherence` | `locale-cue-bundle-coherence` | Checks every mandatory-anchor declaration in core bundles has a matching cue key in embedded locale bundles. |
 | `FixtureCitationLint` | `fixture-citation-lint` | Production-code lint scanner for fixture-shaped PII literals. Each production fixture literal must cite a test that exists in `cargo test --workspace -- --list`. |
-| `CiFeatureMatrix` | `ci-feature-matrix` | Runs the local feature matrix, including document-ingestion, MCP, safety-net, no-phone-parser, and gate wrapper checks. |
+| `CiFeatureMatrix` | `ci-feature-matrix` | Runs the local feature matrix, including library-graph checks without dev-dependencies, document-ingestion, MCP, safety-net, no-phone-parser, and gate wrapper checks. |
 | `CargoMetadataAuditIsolation` | `cargo-metadata-audit-isolation` | Parses `cargo metadata` and rejects normal dependency paths from non-audit-responsible packages to `gaze-audit` across default, no-default-features, and safety-net graphs. |
 | `ReadmeVersionCheck` | `readme-version-check` | Parses workspace package versions via `cargo metadata`, scans published crate READMEs for pinned Cargo/container versions, and fails when README pins drift from `Cargo.toml`. |
 | `DylintGate` | `dylint-gate` | Canonical audit-sink protected-path isolation gate. Verifies the Dylint UI fixture corpus and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. |

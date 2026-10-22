@@ -46,7 +46,6 @@ use gaze_types::{EmittedTokenSpan, PiiClass};
 
 #[cfg(feature = "ocr-tesseract")]
 use crate::extract::InputKind;
-#[cfg(feature = "ocr-tesseract")]
 use crate::{BundleLayoutInvalidReason, DocumentError};
 
 /// Versioned `report.json` schema tag (bump on breaking shape changes).

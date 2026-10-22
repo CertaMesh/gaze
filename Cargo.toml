@@ -15,6 +15,7 @@ members = [
     "crates/gaze-proxy",
     "crates/gaze-proxy-dashboard",
     "crates/gaze-token-bridge",
+    "crates/feature-graph-probe",
     "crates/xtask",
 ]
 resolver = "2"
