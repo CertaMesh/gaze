@@ -344,14 +344,13 @@ impl<S: CorpusIndexStore> TokenBridge<S> {
         for hit in results {
             let scan = safety_net
                 .pipeline
-                .scan_safety_nets(&scan_session, &hit.snippet, locale_chain)
+                .scan_required_safety_nets(&scan_session, &hit.snippet, locale_chain)
                 .map_err(|_| DenyReason::TranslatorFailed)?;
             if scan.nets_run == 0 {
                 return Err(DenyReason::TranslatorFailed);
             }
-            // `nets_run` counts installed nets, including ones the pipeline skipped
-            // because their locales miss this chain. A skipped net scanned nothing,
-            // so treat it as missing coverage and fail closed.
+            // Require completed checks, and reject any uncovered installed net.
+            // Observer shortcuts cannot establish mandatory output coverage.
             if scan.report.stats.locale_skipped_count > 0 {
                 return Err(DenyReason::TranslatorFailed);
             }
