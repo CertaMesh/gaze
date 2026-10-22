@@ -403,11 +403,13 @@ impl ProtectionTarget<'_, '_> {
     }
 }
 
-/// Observer-only safety-net scan result.
+/// Safety-net scan result.
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct SafetyNetResult {
-    /// Number of safety nets registered for this pipeline.
+    /// Observer scans report the number of registered nets, including skipped nets.
+    /// [`Pipeline::scan_required_safety_nets`] instead counts successful checks,
+    /// including each executed model-registry backend.
     pub nets_run: usize,
     /// Metadata-only leak report aggregated across scanned leaves.
     pub report: LeakReport,
@@ -921,6 +923,31 @@ impl Pipeline {
         ))
     }
 
+    /// Scan a complete output string without observer skip optimizations.
+    ///
+    /// Every installed custom net must cover the active locale chain; registry
+    /// coverage and scanner errors fail closed. `nets_run` counts completed checks,
+    /// not installed nets. Callers must reject zero checks and reported suspects.
+    /// This scan neither cleans text nor proves primary-policy or restore coverage.
+    pub fn scan_required_safety_nets(
+        &self,
+        session: &Session,
+        clean_text: &str,
+        locale_chain: &[crate::LocaleTag],
+    ) -> Result<SafetyNetResult> {
+        self.run_safety_nets_in_context(
+            &mut ProtectionTarget::Live(session),
+            clean_text,
+            &Manifest::default(),
+            DocumentKind::Text,
+            locale_chain,
+            None,
+            SafetyNetDecision::Observe { strict: true },
+            &DictionaryBundle::default(),
+            SafetyNetExecution::Strict,
+        )
+    }
+
     pub fn scan_safety_nets(
         &self,
         session: &Session,
@@ -952,17 +979,19 @@ impl Pipeline {
         }
 
         let mut target = ProtectionTarget::Live(session);
-        let report = self.run_safety_nets_in_context(
-            &mut target,
-            clean_text,
-            &Manifest::default(),
-            DocumentKind::Text,
-            locale_chain,
-            None,
-            SafetyNetDecision::Observe { strict: true },
-            dictionaries,
-            SafetyNetExecution::Legacy,
-        )?;
+        let report = self
+            .run_safety_nets_in_context(
+                &mut target,
+                clean_text,
+                &Manifest::default(),
+                DocumentKind::Text,
+                locale_chain,
+                None,
+                SafetyNetDecision::Observe { strict: true },
+                dictionaries,
+                SafetyNetExecution::Legacy,
+            )?
+            .report;
         Ok(SafetyNetResult { nets_run, report })
     }
 
@@ -1649,6 +1678,7 @@ impl Pipeline {
             &DictionaryBundle::default(),
             SafetyNetExecution::Legacy,
         )
+        .map(|scan| scan.report)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1663,19 +1693,35 @@ impl Pipeline {
         decision: SafetyNetDecision,
         dictionaries: &DictionaryBundle,
         execution: SafetyNetExecution,
-    ) -> Result<LeakReport> {
+    ) -> Result<SafetyNetResult> {
         let mandatory = execution != SafetyNetExecution::Legacy;
         if self.safety_nets_len() == 0 {
-            return Ok(LeakReport::default());
+            return Ok(SafetyNetResult::default());
         }
         if !mandatory
             && self.should_skip_safety_nets(clean_text, manifest, locale_chain, decision)?
         {
-            return Ok(LeakReport::default());
+            // Observer shortcuts must not hide missing locale coverage from callers.
+            let active = gaze_types::LocaleChain::from(locale_chain);
+            let telemetry = self
+                .safety_nets
+                .iter()
+                .filter(|net| !active.intersects(net.supported_locales()))
+                .map(|net| LeakReportTelemetry::LocaleSkipped {
+                    safety_net_id: net.id().to_string(),
+                    document_kind,
+                    field_path: field_path.map(str::to_string),
+                })
+                .collect();
+            return Ok(SafetyNetResult {
+                nets_run: 0,
+                report: LeakReport::from_parts(Vec::new(), telemetry),
+            });
         }
 
         let scan =
             SafetyNetScanText::new(clean_text, manifest, |token| target.contains_token(token))?;
+        let mut nets_run = 0;
         let mut suspects = Vec::<LeakSuspect>::new();
         let mut telemetry = Vec::new();
         let active = gaze_types::LocaleChain::from(locale_chain);
@@ -1702,6 +1748,7 @@ impl Pipeline {
             .with_dictionaries(dictionaries);
             let (mut reported, mut net_telemetry) =
                 net.check_with_neutral_and_telemetry(scan.text(), scan.neutral_text(), context)?;
+            nets_run += 1;
             for event in &mut net_telemetry {
                 if let LeakReportTelemetry::ModelSpanRefused {
                     span,
@@ -1784,6 +1831,7 @@ impl Pipeline {
                                 Error::SafetyNet(model_error_to_safety_net_error(error))
                             }
                         })?;
+                    nets_run += 1;
                     for span in spans {
                         if span.byte_range.start >= span.byte_range.end
                             || clean_text.get(span.byte_range.clone()).is_none()
@@ -1840,7 +1888,10 @@ impl Pipeline {
                     }),
             );
         }
-        Ok(LeakReport::from_parts(suspects, telemetry))
+        Ok(SafetyNetResult {
+            nets_run,
+            report: LeakReport::from_parts(suspects, telemetry),
+        })
     }
 
     fn should_skip_safety_nets(
@@ -5322,7 +5373,7 @@ fn walk_structured_value(
                     dictionaries,
                     SafetyNetExecution::Legacy,
                 )?;
-                report.extend(field_report);
+                report.extend(field_report.report);
                 Ok(Some(Value::String(clean.text)))
             }
             LeafOp::ScanOnly => {
@@ -5338,7 +5389,7 @@ fn walk_structured_value(
                         dictionaries,
                         SafetyNetExecution::Legacy,
                     )?;
-                    report.extend(field_report);
+                    report.extend(field_report.report);
                 }
                 Ok(None)
             }
@@ -5396,7 +5447,7 @@ fn walk_structured_value(
                         dictionaries,
                         SafetyNetExecution::Legacy,
                     )?;
-                    report.extend(field_report);
+                    report.extend(field_report.report);
                 }
             }
             Ok(op.rebuilds().then(|| value.clone()))
@@ -8435,6 +8486,94 @@ mod tests {
             )
             .expect("resolve safety net");
         assert!(calls.load(Ordering::SeqCst) > 0);
+    }
+
+    #[test]
+    fn observer_gate_preserves_clean_output_and_locale_coverage_report() {
+        struct LocaleNet {
+            calls: Arc<AtomicUsize>,
+            locales: Vec<crate::LocaleTag>,
+        }
+        impl SafetyNet for LocaleNet {
+            fn id(&self) -> &str {
+                "locale-counting"
+            }
+            fn supported_locales(&self) -> &[crate::LocaleTag] {
+                &self.locales
+            }
+            fn check(
+                &self,
+                _text: &str,
+                _context: SafetyNetContext<'_>,
+            ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                Ok(Vec::new())
+            }
+        }
+
+        let prefix = "7".repeat(512);
+        let input = format!("{prefix} Reach alice@example.invalid");
+        for locale in [crate::LocaleTag::Global, crate::LocaleTag::DeDe] {
+            for mode in [
+                SafetyNetMode::Strict,
+                SafetyNetMode::Tolerant,
+                SafetyNetMode::Redact,
+                SafetyNetMode::Resolve,
+            ] {
+                let session = Session::new(Scope::Ephemeral).expect("session");
+                let mut baseline = None;
+                for enabled in [false, true] {
+                    let calls = Arc::new(AtomicUsize::new(0));
+                    let pipeline = Pipeline::builder()
+                        .detector(detector_with_detections(
+                            "email.global",
+                            vec![Detection::new(519..540, PiiClass::Email, "email.global")],
+                        ))
+                        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+                        .rule(DefaultRule::new(Action::Preserve))
+                        .register_safety_net(LocaleNet {
+                            calls: Arc::clone(&calls),
+                            locales: vec![locale.clone()],
+                        })
+                        .build()
+                        .expect("pipeline")
+                        .with_pipeline_optimizations(
+                            PipelineOptimizationConfig::new().with_capitals_heuristic_gate(enabled),
+                        );
+                    let (clean, spans, report) = pipeline
+                        .clean_with_safety_net_policy_detect_context(
+                            &session,
+                            RawDocument::Text(input.clone()),
+                            &[crate::LocaleTag::Global],
+                            &DictionaryBundle::default(),
+                            SafetyNetPolicy::new(mode, SafetyNetFallback::Strict),
+                        )
+                        .expect("clean");
+                    let CleanDocument::Text(text) = clean else {
+                        panic!("expected text");
+                    };
+                    assert!(!text.contains("alice@example.invalid"));
+                    assert_eq!(spans.len(), 1);
+                    assert_eq!(
+                        report.stats.locale_skipped_count,
+                        usize::from(locale == crate::LocaleTag::DeDe)
+                    );
+                    let skipped = locale == crate::LocaleTag::DeDe
+                        || (enabled
+                            && matches!(mode, SafetyNetMode::Strict | SafetyNetMode::Tolerant));
+                    assert_eq!(calls.load(Ordering::SeqCst) == 0, skipped);
+                    let actual = (text, spans, report);
+                    if let Some(expected) = &baseline {
+                        assert_eq!(
+                            &actual, expected,
+                            "gate changed output for {locale:?}/{mode:?}"
+                        );
+                    } else {
+                        baseline = Some(actual);
+                    }
+                }
+            }
+        }
     }
 
     #[test]
