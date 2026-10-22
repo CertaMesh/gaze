@@ -51,7 +51,7 @@ plain-text destinations still receive the bytes the client sent.
 ### Action required: conditional `session_blob` version 8
 
 Field-owned record identifiers now retain exact scalar whitespace and conservative
-repeat prefixes for malformed quotes, ambiguous tab groups and complete cues
+repeat prefixes for ambiguous tab groups and complete cues
 inside conservative legacy owners. Legacy prefixes never shorten the original
 capture or declare the next field public. Their ordinary length floor is unchanged.
 A signed snapshot with this metadata uses envelope v8. JSON source spelling alone
@@ -64,6 +64,11 @@ to the existing owner value. Import rejects invalid geometry, missing determinis
 evidence, and seed metadata in an older envelope. Whole-value ownership and
 strict restore remain intact. Conservative prefix matches can protect public
 bytes and retain the existing repeat-length floors.
+
+Nested serialized values stop at their own closing quote at every representable
+depth. Unterminated or inconsistent quotes stop at the next scalar delimiter.
+Following structure and fields remain outside the value. Unquoted tab grouping
+retains its existing conservative public-column cost.
 
 ---
 

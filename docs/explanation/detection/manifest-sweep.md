@@ -107,13 +107,14 @@ initial LF/CRLF and terminal punctuation. Its exact repeat pattern includes raw
 whitespace fringes; ordinary spelling variants retain their previous behavior.
 The existing length floor is evaluated on the value body, never on whitespace.
 
-Uncertain ownership also licenses a typed conservative prefix seed. An unclosed
-quoted tail can use the prefix before an apparent delimiter followed by a
-complete next-field cue. An ambiguous tab group can use numeric-bearing groups
-before its final alphabetic-only group. The whole tail or grouped value stays
-owned. This seed never declares a public boundary or includes following label
-bytes. It can protect extra public prefix copies; benchmark evidence reports
-that cost alongside conservative whole-tail and tab-column costs.
+Nested JSON escaping preserves scalar boundaries at every representable depth.
+An unclosed or inconsistent quote stops at the next scalar delimiter; following
+structure and public fields never become part of that scalar's repeat pattern.
+An ambiguous tab group can retain a typed conservative prefix seed consisting
+of numeric-bearing groups before its final alphabetic-only group. The whole
+grouped value stays owned. This seed never declares a public boundary or
+includes following label bytes. It can protect extra public prefix copies;
+benchmark evidence reports that cost alongside tab-column costs.
 
 A legacy grouped owner can also retain one earliest prefix before a complete
 next-field cue consumed inside its conservative tail. The original capture and

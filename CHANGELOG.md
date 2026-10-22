@@ -7,13 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- Signed session snapshots with deterministic repeat-seed metadata use envelope
-  v8. JSON source spelling alone retains v7; ordinary snapshots remain v6. New
-  readers restore v2–v8. Older readers reject v8 rather than silently dropping
-  repeat protection; upgrade all readers before exchanging these snapshots.
-
 ### Security
 
 - Protect explicitly labelled customer, employee and person/member record identifiers
@@ -56,11 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   conservative protection of public prefix copies remains a measured cost.
 
 - Labelled customer, employee and member IDs preserve terminal prose punctuation,
-  stop at complete next-field cues, and protect raw quoted scalars through eight
-  serialization wrappers, initial newlines and tab groups. Uncertain/deeper tails
-  remain protected with typed audit reasons. Conservative malformed/tab prefixes
-  protect repeats under unchanged length floors, including later session turns;
-  their public-byte cost is disclosed in benchmark evidence.
+  stop at complete next-field cues, and protect raw quoted scalars through nested
+  serialization, initial newlines and tab groups. Nested scalars stop at their own
+  closing quote; malformed quotes stop at the next scalar delimiter. Following
+  structure and fields remain outside the capture. Conservative tab prefixes protect repeats
+  under unchanged length floors, including later session turns; their public-byte
+  cost is disclosed in benchmark evidence.
 - Legacy grouped identifier extensions stop at positively recognized complete
   operational metadata cues without trimming their original regex capture.
   Private and unknown tails retain conservative ownership until an independent
@@ -105,6 +99,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `safeguards`, message-level system roles and opaque media remain refused (#814).
 
 ### Changed
+
+- Signed session snapshots with deterministic repeat-seed metadata use envelope
+  v8. JSON source spelling alone retains v7; ordinary snapshots remain v6. New
+  readers restore v2–v8. Older readers reject v8 rather than silently dropping
+  repeat protection; upgrade all readers before exchanging these snapshots.
 
 - **Snapshot contract.** `Session` records each token's source spelling and
   adds `source_spelling` and `restore_strict_decoded_text_with_provenance`. A

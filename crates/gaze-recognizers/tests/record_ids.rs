@@ -147,10 +147,8 @@ fn quoted_log_values_and_unterminated_values_never_leave_a_partial_suffix() {
             };
             assert_eq!(repeated, clean);
         }
-        // Without a closing delimiter, ownership conservatively reaches the end.
-        // No prefix token may leave the malformed scalar's remaining bytes raw.
-        let raw = "LILAC é984321; ORDER_ID=BENCH976543";
-        let input = format!("{cue}: \"{raw}");
+        let raw = "LILAC é984321";
+        let input = format!("{cue}: \"{raw}; ORDER_ID=BENCH976543");
         let session = Session::new(Scope::Ephemeral).unwrap();
         let CleanDocument::Text(clean) = core.pseudonymize_text(&session, &input).unwrap() else {
             panic!("text")
@@ -158,7 +156,10 @@ fn quoted_log_values_and_unterminated_values_never_leave_a_partial_suffix() {
         let entries = session.snapshot_entries();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].raw, raw);
-        assert_eq!(clean, format!("{cue}: \"{}", entries[0].token));
+        assert_eq!(
+            clean,
+            format!("{cue}: \"{}; ORDER_ID=BENCH976543", entries[0].token)
+        );
         assert_eq!(
             core.pipeline()
                 .restore_strict_text(&session, &clean)

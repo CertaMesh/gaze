@@ -1068,17 +1068,14 @@ fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> Label
     }
 }
 
-// Apparent syntax licenses extra protection, never a smaller owned tail.
-fn uncertain_field_prefix_end(input: &str, span: std::ops::Range<usize>) -> Option<usize> {
-    input[span.clone()].char_indices().find_map(|(offset, ch)| {
-        if !matches!(ch, ';' | ',' | '\n' | '\r') {
-            return None;
-        }
-        let at = span.start + offset;
-        let rest =
-            input[at + ch.len_utf8()..].trim_start_matches([' ', '\t', '\u{00a0}', '\u{202f}']);
-        (at > span.start && assignment_starts(rest)).then_some(at)
-    })
+fn unterminated_scalar_end(input: &str, start: usize) -> usize {
+    let content = start + input[start..].len() - input[start..].trim_start().len();
+    input[content..]
+        .char_indices()
+        .find_map(|(offset, ch)| {
+            matches!(ch, ';' | ',' | '\n' | '\r' | '}' | ']').then_some(content + offset)
+        })
+        .unwrap_or(input.len())
 }
 
 fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
@@ -1088,16 +1085,14 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
         .rev()
         .take_while(|byte| *byte == b'\\')
         .count();
-    // Direct JSON and eight wrappers have delimiter runs 0, 1, 3, ..., 255.
-    // Never decode source bytes: closing quotes and content quotes have distinct
-    // escape residues. Uncertain syntax owns the tail rather than a prefix.
+    // Each JSON wrapper doubles the escape stride. Distinguish closing and
+    // content quotes by their residues without decoding or a fixed depth limit.
+    // An unterminated scalar stops at its next delimiter.
     let width = opening_escapes.checked_add(1);
     let stride = width.and_then(|width| width.checked_mul(2));
     let mut end = input.len();
     let mut reason = Some(LabelledValueScanReason::UncertainQuoteBoundary);
-    if opening_escapes > 255 {
-        reason = Some(LabelledValueScanReason::SerializationDepthExceeded);
-    } else if let Some(stride) = stride.filter(|_| width.is_some_and(usize::is_power_of_two)) {
+    if let Some(stride) = stride.filter(|_| width.is_some_and(usize::is_power_of_two)) {
         let mut escapes = 0usize;
         for (offset, byte) in input[capture.start..].bytes().enumerate() {
             if byte == b'\\' {
@@ -1110,6 +1105,13 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
             if byte == quote {
                 let residue = escapes % stride;
                 if residue == opening_escapes {
+                    if input[capture.start + offset + 1..]
+                        .chars()
+                        .next()
+                        .is_some_and(|ch| ch.is_alphanumeric() || ch == '_')
+                    {
+                        break;
+                    }
                     if let Some(close) = (capture.start + offset).checked_sub(opening_escapes) {
                         end = close;
                         reason = None;
@@ -1123,18 +1125,13 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
             escapes = 0;
         }
     }
+    if reason.is_some() {
+        end = unterminated_scalar_end(input, capture.start);
+    }
     let span = capture.start..end;
-    let uncertain_end = (reason == Some(LabelledValueScanReason::UncertainQuoteBoundary))
-        .then(|| uncertain_field_prefix_end(input, span.clone()))
-        .flatten();
-    let repeat_span = span.start..uncertain_end.unwrap_or(span.end);
-    let repeat_seed = (!repeat_span.is_empty()).then_some(gaze_types::LabelledValueRepeatSeed {
-        span: repeat_span,
-        kind: if uncertain_end.is_some() {
-            gaze_types::LabelledValueRepeatSeedKind::UncertainPrefix
-        } else {
-            gaze_types::LabelledValueRepeatSeedKind::ExactScalar
-        },
+    let repeat_seed = (!span.is_empty()).then_some(gaze_types::LabelledValueRepeatSeed {
+        span: span.clone(),
+        kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
     });
     LabelledValueScan {
         repeat_seed,
@@ -1374,6 +1371,54 @@ fn is_ascii_email_continuation(ch: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn field_owned_nested_scalar_stops_before_structure_at_every_depth() {
+        let value = "ZX731482\"\\É843721";
+        for depth in 0..=12 {
+            let mut input = format!(
+                "{{\"customerId\":{},\"dispatch_reference\":7}}",
+                serde_json::to_string(value).unwrap()
+            );
+            let mut raw = value.to_owned();
+            for wrapper in 0..=depth {
+                let encoded = serde_json::to_string(&raw).unwrap();
+                raw = encoded[1..encoded.len() - 1].to_owned();
+                if wrapper < depth {
+                    input = serde_json::to_string(&input).unwrap();
+                }
+            }
+            let start = input.find(&raw).unwrap();
+            let scan = scan_field_owned_value(&input, start..start + 2);
+            assert_eq!(scan.span, start..start + raw.len(), "depth {depth}");
+            assert_eq!(scan.repeat_seed.unwrap().span, scan.span);
+        }
+    }
+
+    #[test]
+    fn field_owned_unterminated_quote_stops_at_a_complete_next_assignment() {
+        for opening in ["", "\n", "\r\n"] {
+            for delimiter in ["; ", ", ", "\n"] {
+                for suffix in ["dispatch_reference=7", "dispatch_reference={\"kind\":7}"] {
+                    let value = format!("{opening}ZX731482 É843721");
+                    let input = format!("customerId: \"{value}{delimiter}{suffix}");
+                    let start = input.find('"').unwrap() + 1;
+                    let scan = scan_field_owned_value(&input, start..start + 2);
+                    assert_eq!(scan.span, start..start + value.len());
+                    assert_eq!(scan.repeat_seed.unwrap().span, scan.span);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn field_owned_closed_quote_keeps_delimiters_inside_the_scalar() {
+        let value = "ZX731482; dispatch_reference=É843721, batch=9";
+        let input = format!("customerId: \"{value}\"; dispatch_reference=7");
+        let start = input.find('"').unwrap() + 1;
+        let scan = scan_field_owned_value(&input, start..start + 2);
+        assert_eq!(scan.span, start..start + value.len());
+    }
 
     #[test]
     fn numeric_postal_rules_ignore_sku_identifier_suffixes() {

@@ -97,15 +97,9 @@ fn check_selected_cells(family: &str, surface_prefix: &str, benign_only: bool) {
             case.id
         );
         let entries = session.snapshot_entries();
-        // The producer still marks only private bytes as gold. These three
-        // ambiguous surfaces intentionally permit conservative public coverage;
-        // the byte scorer measures its cost separately from protection/restore.
-        let conservative = !case.gold.is_empty()
-            && (case
-                .surface
-                .starts_with("recordids_boundary_serialized_depth9_")
-                || case.surface.ends_with("_malformed")
-                || case.surface.ends_with("tab_group_ambiguous_column"));
+        // Unquoted tab grouping retains its existing conservative public cost.
+        let conservative =
+            !case.gold.is_empty() && case.surface.ends_with("tab_group_ambiguous_column");
         let mut expected = case.text.clone();
         for gold in case.gold.iter().rev() {
             let value = &case.text[gold.start..gold.end];
@@ -573,7 +567,7 @@ impl gaze::RedactionLogger for ScanReasons {
 }
 
 #[test]
-fn over_depth_and_inconsistent_quotes_own_the_tail_with_audit_reasons() {
+fn nested_and_inconsistent_quotes_keep_only_the_bounded_scalar() {
     let fixture: Fixture =
         serde_json::from_str(include_str!("fixtures/record_id_boundaries_v19.json")).unwrap();
     for family in ["customer_id", "employee_id", "record_id"] {
@@ -587,8 +581,7 @@ fn over_depth_and_inconsistent_quotes_own_the_tail_with_audit_reasons() {
             })
             .unwrap();
         let gold = &case.gold[0];
-        let reasons = ScanReasons::default();
-        let pipeline = record_pipeline().with_redaction_logger(reasons.clone());
+        let pipeline = record_pipeline();
         let session = Session::new(Scope::Ephemeral).unwrap();
         let CleanDocument::Text(clean) = pipeline
             .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
@@ -607,14 +600,9 @@ fn over_depth_and_inconsistent_quotes_own_the_tail_with_audit_reasons() {
             session
                 .snapshot_entries()
                 .iter()
-                .any(|entry| entry.raw == case.text[gold.start..]),
-            "over-depth scalar must own the tail"
+                .any(|entry| entry.raw == case.text[gold.start..gold.end]),
+            "nested scalar must exclude the structure tail"
         );
-        assert!(reasons
-            .0
-            .lock()
-            .unwrap()
-            .contains(&serde_json::json!("serialization_depth_exceeded")));
         assert_eq!(
             pipeline.restore_strict_text(&session, &clean).unwrap(),
             case.text
@@ -644,7 +632,8 @@ fn over_depth_and_inconsistent_quotes_own_the_tail_with_audit_reasons() {
         assert!(session
             .snapshot_entries()
             .iter()
-            .any(|entry| entry.raw == "Q731284\\\"; public_version=FRAME"));
+            .any(|entry| entry.raw == "Q731284\\\""));
+        assert!(clean.ends_with("; public_version=FRAME"));
         assert!(reasons
             .0
             .lock()
