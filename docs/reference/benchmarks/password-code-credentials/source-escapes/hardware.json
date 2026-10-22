@@ -1,0 +1,8 @@
+{
+  "machine": "arm64",
+  "macos": "26.5",
+  "cpu": "Apple M5 Max",
+  "physical_cores": 18,
+  "memory_bytes": 68719476736,
+  "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)"
+}

@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::ops::Range;
 use std::sync::{Arc, OnceLock, RwLock};
@@ -14,6 +14,7 @@ use sha2::{Digest, Sha256};
 
 use crate::detector::PiiClass;
 use crate::policy::{Policy, SessionScope};
+use crate::spelling::{decode_json_string_content, is_json_escaped_spelling, SourceSpelling};
 use crate::sweep::{ManifestEvidence, SweepMatcher, SweepSource};
 use crate::{Error, Result};
 use gaze_types::{
@@ -32,6 +33,11 @@ const SNAPSHOT_VERSION_V5: u8 = 5;
 /// readers reject it as an unknown version instead of silently dropping the
 /// field and sweeping nothing.
 const SNAPSHOT_VERSION_V6: u8 = 6;
+/// v7 adds the per-entry source spelling that restore into decoded JSON reads.
+/// Only a manifest holding a JSON-escaped value is written as v7, so a v6
+/// reader refuses exactly the blobs it would restore to the wrong value and
+/// keeps reading every other blob.
+const SNAPSHOT_VERSION_V7: u8 = 7;
 
 pub type RestoreError = Error;
 
@@ -156,6 +162,9 @@ struct SnapshotEntry {
     /// carry none and are never swept: their tier is unknown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     evidence: Option<ManifestEvidence>,
+    /// Spelling the value was minted with (v7+). Absent means plain.
+    #[serde(default, skip_serializing_if = "SourceSpelling::is_plain")]
+    spelling: SourceSpelling,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -194,6 +203,9 @@ struct SessionState {
     token_by_value: HashMap<TokenKey, String>,
     value_by_token: HashMap<String, String>,
     evidence_by_value: HashMap<TokenKey, ManifestEvidence>,
+    /// Tokens minted for a [`SourceSpelling::JsonEscaped`] value. Every other
+    /// token is plain. Written once, when the token is minted.
+    json_spelled: HashSet<String>,
     restore_regex_cache: Option<(u64, Arc<Regex>)>,
     /// Matcher over the sweepable values. Cleared whenever a value's evidence
     /// changes, like the restore regex cache when a token is minted.
@@ -208,6 +220,7 @@ impl SessionState {
             token_by_value: HashMap::new(),
             value_by_token: HashMap::new(),
             evidence_by_value: HashMap::new(),
+            json_spelled: HashSet::new(),
             restore_regex_cache: None,
             sweep_matcher_cache: None,
         }
@@ -539,13 +552,34 @@ impl Session {
         class: &PiiClass,
         raw: &str,
     ) -> Result<String> {
-        self.intern_mapping(Some(family), class, raw, |index| {
+        self.tokenize_spelled(family, class, raw, SourceSpelling::Plain)
+    }
+
+    /// [`Self::tokenize_with_family`] for a value captured in `spelling`. The
+    /// spelling is recorded only when this call mints the token.
+    pub(crate) fn tokenize_spelled(
+        &self,
+        family: &str,
+        class: &PiiClass,
+        raw: &str,
+        spelling: SourceSpelling,
+    ) -> Result<String> {
+        self.intern_mapping(Some(family), class, raw, spelling, |index| {
             format!("<{}:{}_{}>", self.session_hex(), class.class_name(), index)
         })
     }
 
     pub fn format_preserving_fake(&self, class: &PiiClass, raw: &str) -> Result<String> {
-        self.intern_mapping(None, class, raw, |index| match class {
+        self.format_preserving_fake_spelled(class, raw, SourceSpelling::Plain)
+    }
+
+    pub(crate) fn format_preserving_fake_spelled(
+        &self,
+        class: &PiiClass,
+        raw: &str,
+        spelling: SourceSpelling,
+    ) -> Result<String> {
+        self.intern_mapping(None, class, raw, spelling, |index| match class {
             PiiClass::Email => format!("email{index}.{}@gaze-fake.invalid", self.session_hex()),
             PiiClass::Name | PiiClass::Location | PiiClass::Organization => format!(
                 "{}:{}_{}",
@@ -610,6 +644,7 @@ impl Session {
         family: Option<&str>,
         class: &PiiClass,
         raw: &str,
+        spelling: SourceSpelling,
         build: F,
     ) -> Result<String>
     where
@@ -617,11 +652,9 @@ impl Session {
     {
         class.validate_custom_name()?;
         let family_key = family.unwrap_or(DEFAULT_COUNTER_FAMILY);
-        Ok(
-            self.mutate_state(|state| {
-                intern_mapping_in_state(state, family_key, class, raw, build)
-            }),
-        )
+        Ok(self.mutate_state(|state| {
+            intern_mapping_in_state(state, family_key, class, raw, spelling, build)
+        }))
     }
 
     /// Enumerate every live token string emitted by this session.
@@ -742,6 +775,27 @@ impl Session {
         self.state_snapshot().value_by_token.get(token).cloned()
     }
 
+    /// The spelling `token`'s value was minted with, or `None` for an unknown token.
+    pub fn source_spelling(&self, token: &str) -> Option<SourceSpelling> {
+        source_spelling_from_state(&self.state_snapshot(), token)
+    }
+
+    /// [`Self::restore_strict_text_with_provenance`] for a decoded JSON destination, such as a
+    /// string value of a parsed tool-call input.
+    ///
+    /// A token minted from a [`SourceSpelling::JsonEscaped`] value restores to the value its
+    /// escapes spell (`Robert "Bob" Smith`, not `Robert \"Bob\" Smith`). Every other token
+    /// restores its manifest bytes. Fails closed exactly as the source-spelling restore does.
+    pub fn restore_strict_decoded_text_with_provenance(
+        &self,
+        text: &str,
+    ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
+        restore_strict_decoded_text_with_provenance_from_state(
+            self.restore_state_snapshot()?.as_ref(),
+            text,
+        )
+    }
+
     pub fn export(&self) -> Result<SensitiveSnapshot> {
         self.export_payload(None)
     }
@@ -753,8 +807,9 @@ impl Session {
     /// `preview-redacted.png`) plus owner-only `<base>-owner/manifest.bin`. The supplied
     /// [`DocumentExtension`] is serialized inside the signed snapshot payload, so its hashes and
     /// codec audit rows become the integrity root for the agent-facing files. Text-only adopters
-    /// should use [`Session::export`]. Current snapshots emit v6 so older readers fail closed
-    /// before restore while the signature binds the emitted envelope bytes.
+    /// should use [`Session::export`]. Current snapshots emit v6, or v7 when the manifest holds a
+    /// JSON-escaped value, so older readers fail closed before restore while the signature binds
+    /// the emitted envelope bytes.
     ///
     /// ```rust
     /// use gaze::{
@@ -829,8 +884,10 @@ impl Session {
                     raw: key.raw.clone(),
                     token: token.clone(),
                     evidence: state.evidence_by_value.get(key).copied(),
+                    spelling: source_spelling_from_state(&state, token)
+                        .unwrap_or(SourceSpelling::Plain),
                 })
-                .collect(),
+                .collect::<Vec<_>>(),
             next_by_class: state
                 .next_by_class
                 .iter()
@@ -840,7 +897,15 @@ impl Session {
             document,
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(Error::SnapshotDecode)?;
-        let version = SNAPSHOT_VERSION_V6;
+        let version = if payload
+            .entries
+            .iter()
+            .all(|entry| entry.spelling.is_plain())
+        {
+            SNAPSHOT_VERSION_V6
+        } else {
+            SNAPSHOT_VERSION_V7
+        };
         let signing_key = self.identity.signing_key.signing_key();
         let verifying_key = signing_key.verifying_key();
         let verifying_key_bytes = verifying_key.to_bytes();
@@ -867,6 +932,7 @@ impl Session {
             && version != SNAPSHOT_VERSION_V4
             && version != SNAPSHOT_VERSION_V5
             && version != SNAPSHOT_VERSION_V6
+            && version != SNAPSHOT_VERSION_V7
         {
             return Err(Error::InvalidSnapshotVersion(version));
         }
@@ -900,6 +966,7 @@ impl Session {
 
         let payload = decode_snapshot_payload(payload_bytes)?;
         validate_entry_prefixes(&payload)?;
+        validate_entry_spellings(version, &payload)?;
         let session_hex = session_hex_bytes(&payload.session_hex)?;
         let scope = scope_from_snapshot(payload.scope);
         let issued_at = payload.issued_at;
@@ -931,6 +998,9 @@ impl Session {
             };
             if let Some(evidence) = entry.evidence {
                 state.evidence_by_value.insert(key.clone(), evidence);
+            }
+            if !entry.spelling.is_plain() {
+                state.json_spelled.insert(entry.token.clone());
             }
             state.token_by_value.insert(key, entry.token.clone());
             state.value_by_token.insert(entry.token.clone(), entry.raw);
@@ -984,10 +1054,22 @@ impl<'session> SessionTransaction<'session> {
         class: &PiiClass,
         raw: &str,
     ) -> Result<String> {
+        self.tokenize_spelled(family, class, raw, SourceSpelling::Plain)
+    }
+
+    /// [`Self::tokenize_with_family`] for a value captured in `spelling`. The
+    /// spelling is recorded only when this call mints the token.
+    pub(crate) fn tokenize_spelled(
+        &mut self,
+        family: &str,
+        class: &PiiClass,
+        raw: &str,
+        spelling: SourceSpelling,
+    ) -> Result<String> {
         class.validate_custom_name()?;
         let prefix = hex::encode(self.identity.session_hex);
         Ok(
-            intern_mapping_in_state(&mut self.staged, family, class, raw, |index| {
+            intern_mapping_in_state(&mut self.staged, family, class, raw, spelling, |index| {
                 format!("<{prefix}:{}_{}>", class.class_name(), index)
             })
             .0,
@@ -1014,6 +1096,15 @@ impl<'session> SessionTransaction<'session> {
     }
 
     pub fn format_preserving_fake(&mut self, class: &PiiClass, raw: &str) -> Result<String> {
+        self.format_preserving_fake_spelled(class, raw, SourceSpelling::Plain)
+    }
+
+    pub(crate) fn format_preserving_fake_spelled(
+        &mut self,
+        class: &PiiClass,
+        raw: &str,
+        spelling: SourceSpelling,
+    ) -> Result<String> {
         class.validate_custom_name()?;
         let prefix = hex::encode(self.identity.session_hex);
         Ok(intern_mapping_in_state(
@@ -1021,6 +1112,7 @@ impl<'session> SessionTransaction<'session> {
             DEFAULT_COUNTER_FAMILY,
             class,
             raw,
+            spelling,
             |index| match class {
                 PiiClass::Email => format!("email{index}.{prefix}@gaze-fake.invalid"),
                 PiiClass::Name | PiiClass::Location | PiiClass::Organization => {
@@ -1147,6 +1239,11 @@ impl<'session> SessionTransaction<'session> {
         self.staged.value_by_token.get(token).cloned()
     }
 
+    /// See [`Session::source_spelling`].
+    pub fn source_spelling(&self, token: &str) -> Option<SourceSpelling> {
+        source_spelling_from_state(&self.staged, token)
+    }
+
     /// Atomically publish the entire staged state if the captured generation is current.
     pub fn commit(
         mut self,
@@ -1221,6 +1318,19 @@ impl CommittedSessionSnapshot {
     pub fn restore(&self, token: &str) -> Option<String> {
         self.state.value_by_token.get(token).cloned()
     }
+
+    /// See [`Session::source_spelling`].
+    pub fn source_spelling(&self, token: &str) -> Option<SourceSpelling> {
+        source_spelling_from_state(&self.state, token)
+    }
+
+    /// See [`Session::restore_strict_decoded_text_with_provenance`].
+    pub fn restore_strict_decoded_text_with_provenance(
+        &self,
+        text: &str,
+    ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
+        restore_strict_decoded_text_with_provenance_from_state(&self.state, text)
+    }
 }
 
 fn intern_mapping_in_state<F>(
@@ -1228,6 +1338,7 @@ fn intern_mapping_in_state<F>(
     family: &str,
     class: &PiiClass,
     raw: &str,
+    spelling: SourceSpelling,
     build: F,
 ) -> (String, bool)
 where
@@ -1255,8 +1366,22 @@ where
     state.next_by_class.insert(class.clone(), next);
     state.token_by_value.insert(key, token.clone());
     state.value_by_token.insert(token.clone(), raw.to_string());
+    if spelling == SourceSpelling::JsonEscaped && is_json_escaped_spelling(raw) {
+        state.json_spelled.insert(token.clone());
+    }
     state.restore_regex_cache = None;
     (token, true)
+}
+
+fn source_spelling_from_state(state: &SessionState, token: &str) -> Option<SourceSpelling> {
+    if !state.value_by_token.contains_key(token) {
+        return None;
+    }
+    Some(if state.json_spelled.contains(token) {
+        SourceSpelling::JsonEscaped
+    } else {
+        SourceSpelling::Plain
+    })
 }
 
 fn build_restore_regex(state: &SessionState) -> Result<Option<Arc<Regex>>> {
@@ -1373,14 +1498,24 @@ fn restore_strict_text_with_provenance_from_state(
     text: &str,
 ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
     let tokens = validated_restore_tokens(state, text)?;
-    Ok(restore_tokens_with_provenance(state, text, tokens))
+    restore_tokens_with_provenance(state, text, tokens, false)
 }
 
+fn restore_strict_decoded_text_with_provenance_from_state(
+    state: &SessionState,
+    text: &str,
+) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
+    let tokens = validated_restore_tokens(state, text)?;
+    restore_tokens_with_provenance(state, text, tokens, true)
+}
+
+/// With `decoded`, a JSON-spelled value is written as the value its escapes spell.
 fn restore_tokens_with_provenance(
     state: &SessionState,
     text: &str,
     tokens: Vec<StrictRestoreToken>,
-) -> RestoredTextWithProvenance {
+    decoded: bool,
+) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
     let mut restored = String::with_capacity(text.len());
     let mut authorized_output_ranges = Vec::<Range<usize>>::with_capacity(tokens.len());
     let mut cursor = 0usize;
@@ -1391,7 +1526,14 @@ fn restore_tokens_with_provenance(
             .get(token.parsed.raw.as_str())
             .expect("validated immutable manifest token must remain present");
         let start = restored.len();
-        restored.push_str(raw);
+        if decoded && state.json_spelled.contains(token.parsed.raw.as_str()) {
+            // Minting and import both admit only values that decode. Anything else is a
+            // corrupted manifest, and a strict restore refuses it rather than guess.
+            let value = decode_json_string_content(raw).ok_or(Error::InvalidSnapshotPayload)?;
+            restored.push_str(&value);
+        } else {
+            restored.push_str(raw);
+        }
         let end = restored.len();
         if start < end {
             if let Some(previous) = authorized_output_ranges.last_mut() {
@@ -1407,10 +1549,10 @@ fn restore_tokens_with_provenance(
         cursor = token.end;
     }
     restored.push_str(&text[cursor..]);
-    RestoredTextWithProvenance {
+    Ok(RestoredTextWithProvenance {
         text: restored,
         authorized_output_ranges,
-    }
+    })
 }
 
 fn assess_restore_text_from_state(state: &SessionState, text: &str) -> Result<RestoreAssessment> {
@@ -1431,7 +1573,7 @@ fn assess_restore_text_from_state(state: &SessionState, text: &str) -> Result<Re
                 .collect()
         })
         .unwrap_or_default();
-    let restored = restore_tokens_with_provenance(state, text, tokens);
+    let restored = restore_tokens_with_provenance(state, text, tokens, false)?;
     Ok(classify_restore_output(state, restored))
 }
 
@@ -2196,6 +2338,24 @@ fn decode_snapshot_payload(payload_bytes: &[u8]) -> Result<SnapshotPayload> {
     serde_json::from_value(value).map_err(Error::SnapshotDecode)
 }
 
+/// A blob older than v7 cannot carry a spelling, and a JSON-escaped entry must decode to a
+/// different value, exactly as minting requires.
+fn validate_entry_spellings(version: u8, payload: &SnapshotPayload) -> Result<()> {
+    for entry in &payload.entries {
+        match entry.spelling {
+            SourceSpelling::Plain => {}
+            SourceSpelling::JsonEscaped if version < SNAPSHOT_VERSION_V7 => {
+                return Err(Error::InvalidSnapshotVersion(version));
+            }
+            SourceSpelling::JsonEscaped if !is_json_escaped_spelling(&entry.raw) => {
+                return Err(Error::InvalidSnapshotPayload);
+            }
+            SourceSpelling::JsonEscaped => {}
+        }
+    }
+    Ok(())
+}
+
 fn validate_entry_prefixes(payload: &SnapshotPayload) -> Result<()> {
     let mut tokens_by_value = HashMap::<TokenKey, String>::new();
     let mut values_by_token = HashMap::<String, TokenKey>::new();
@@ -2479,6 +2639,7 @@ mod tests {
                 raw: "Dr. Schmidt".to_string(),
                 token: "deadbeef:name_1".to_string(),
                 evidence: None,
+                spelling: SourceSpelling::Plain,
             }],
             issued_at: 0,
             next_by_class: Vec::new(),
@@ -2499,6 +2660,7 @@ mod tests {
             raw: "Dr. Schmidt".to_string(),
             token: "<a7f3b8e2:Name_1>".to_string(),
             evidence: None,
+            spelling: SourceSpelling::Plain,
         };
         let duplicate_token = SnapshotEntry {
             family: "tool".to_string(),
@@ -2506,6 +2668,7 @@ mod tests {
             raw: "Synthetic Colleague".to_string(),
             token: first.token.clone(),
             evidence: None,
+            spelling: SourceSpelling::Plain,
         };
         let duplicate_value = SnapshotEntry {
             token: "<a7f3b8e2:Name_2>".to_string(),
@@ -2623,6 +2786,7 @@ mod tests {
                 raw: "Maria Schneider".to_string(),
                 token: "<a7f3b8e2:Name_1>".to_string(),
                 evidence: None,
+                spelling: SourceSpelling::Plain,
             }],
             issued_at: 0,
             next_by_class: Vec::new(),
@@ -2665,6 +2829,246 @@ mod tests {
         ));
         let imported = Session::import(snapshot).expect("import");
         assert!(imported.sweep_matcher().expect("matcher").is_some());
+    }
+
+    const ESCAPED_NAME: &str = r#"Robert \"Bob\" Smith"#;
+    const DECODED_NAME: &str = "Robert \"Bob\" Smith";
+
+    /// Signs `payload` the way a current exporter does, under `version`.
+    fn signed_snapshot_as(version: u8, payload: &SnapshotPayload) -> SensitiveSnapshot {
+        let payload_bytes = serde_json::to_vec(payload).expect("serialize payload");
+        let key = SessionKey::generate().expect("session key");
+        let signing_key = key.signing_key();
+        let verifying_key_bytes = signing_key.verifying_key().to_bytes();
+        let signature = signing_key.sign(&snapshot_signing_preimage(
+            version,
+            &verifying_key_bytes,
+            &payload_bytes,
+        ));
+        let mut snapshot = vec![version];
+        snapshot.extend_from_slice(&verifying_key_bytes);
+        snapshot.extend_from_slice(&signature.to_bytes());
+        snapshot.extend_from_slice(&payload_bytes);
+        SensitiveSnapshot::from(snapshot)
+    }
+
+    fn json_spelled_payload(raw: &str) -> SnapshotPayload {
+        SnapshotPayload {
+            scope: SnapshotScope::Conversation("spelling".to_string()),
+            session_hex: "a7f3b8e2".to_string(),
+            entries: vec![SnapshotEntry {
+                family: DEFAULT_COUNTER_FAMILY.to_string(),
+                class: PiiClass::Name,
+                raw: raw.to_string(),
+                token: "<a7f3b8e2:Name_1>".to_string(),
+                evidence: None,
+                spelling: SourceSpelling::JsonEscaped,
+            }],
+            issued_at: 0,
+            next_by_class: Vec::new(),
+            document: None,
+        }
+    }
+
+    #[test]
+    fn the_spelling_a_token_is_first_minted_with_never_changes() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let plain = session
+            .tokenize_spelled(
+                "counter",
+                &PiiClass::Name,
+                ESCAPED_NAME,
+                SourceSpelling::Plain,
+            )
+            .expect("plain mint");
+        let again = session
+            .tokenize_spelled(
+                "counter",
+                &PiiClass::Name,
+                ESCAPED_NAME,
+                SourceSpelling::JsonEscaped,
+            )
+            .expect("reuse");
+        assert_eq!(plain, again);
+        assert_eq!(session.source_spelling(&plain), Some(SourceSpelling::Plain));
+
+        let mut transaction = session.begin_transaction();
+        let escaped = transaction
+            .tokenize_spelled(
+                "counter",
+                &PiiClass::Name,
+                r"Robert M\u00fcller Smith",
+                SourceSpelling::JsonEscaped,
+            )
+            .expect("escaped mint");
+        transaction
+            .tokenize_spelled(
+                "counter",
+                &PiiClass::Name,
+                r"Robert M\u00fcller Smith",
+                SourceSpelling::Plain,
+            )
+            .expect("reuse");
+        assert_eq!(
+            transaction.source_spelling(&escaped),
+            Some(SourceSpelling::JsonEscaped)
+        );
+        let snapshot = transaction.commit().expect("commit");
+        assert_eq!(
+            snapshot.source_spelling(&escaped),
+            Some(SourceSpelling::JsonEscaped)
+        );
+        assert_eq!(snapshot.source_spelling("<a7f3b8e2:Name_9>"), None);
+    }
+
+    #[test]
+    fn a_value_whose_escapes_change_nothing_is_recorded_plain() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        for raw in ["Robert Smith", r"half\", r"lone\q"] {
+            let token = session
+                .tokenize_spelled("counter", &PiiClass::Name, raw, SourceSpelling::JsonEscaped)
+                .expect("mint");
+            assert_eq!(
+                session.source_spelling(&token),
+                Some(SourceSpelling::Plain),
+                "{raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn decoded_restore_reads_json_spelled_values_and_source_restore_keeps_the_bytes() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let escaped = session
+            .tokenize_spelled(
+                "counter",
+                &PiiClass::Name,
+                ESCAPED_NAME,
+                SourceSpelling::JsonEscaped,
+            )
+            .expect("escaped");
+        let plain = session
+            .tokenize_spelled(
+                "counter",
+                &PiiClass::Location,
+                r"\\srv\new",
+                SourceSpelling::Plain,
+            )
+            .expect("plain");
+        let text = format!("{escaped}|{plain}");
+
+        let decoded = session
+            .restore_strict_decoded_text_with_provenance(&text)
+            .expect("decoded restore");
+        assert_eq!(decoded.text, format!(r"{DECODED_NAME}|\\srv\new"));
+        // Provenance covers the decoded bytes actually written.
+        let bar = DECODED_NAME.len();
+        assert_eq!(
+            decoded.authorized_output_ranges,
+            vec![0..bar, bar + 1..decoded.text.len()]
+        );
+        assert_eq!(
+            session.restore_strict_text(&text).expect("source restore"),
+            format!(r"{ESCAPED_NAME}|\\srv\new")
+        );
+
+        let mut transaction = session.begin_transaction();
+        transaction
+            .tokenize(&PiiClass::Email, "x@example.invalid")
+            .expect("token");
+        let snapshot = transaction.commit().expect("commit");
+        assert_eq!(
+            snapshot
+                .restore_strict_decoded_text_with_provenance(&escaped)
+                .expect("snapshot decoded")
+                .text,
+            DECODED_NAME
+        );
+        // Strict restore stays fail-closed on an unknown token in either reading.
+        assert!(snapshot
+            .restore_strict_decoded_text_with_provenance("<a7f3b8e2:Name_9>")
+            .is_err());
+    }
+
+    #[test]
+    fn a_json_spelled_manifest_exports_v7_and_round_trips_its_spelling() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let plain = session
+            .tokenize(&PiiClass::Email, "x@example.invalid")
+            .expect("plain");
+        assert_eq!(
+            session.export().expect("plain export").0[0],
+            SNAPSHOT_VERSION_V6
+        );
+
+        let escaped = session
+            .tokenize_spelled(
+                "counter",
+                &PiiClass::Name,
+                ESCAPED_NAME,
+                SourceSpelling::JsonEscaped,
+            )
+            .expect("escaped");
+        let snapshot = session.export().expect("export");
+        assert_eq!(snapshot.0[0], SNAPSHOT_VERSION_V7);
+        // The v0.16 reader's version gate: 2..=6.
+        let v6_reader = |snapshot: &SensitiveSnapshot| match snapshot.0[0] {
+            SNAPSHOT_VERSION_V2..=SNAPSHOT_VERSION_V6 => Ok(()),
+            version => Err(Error::InvalidSnapshotVersion(version)),
+        };
+        assert!(matches!(
+            v6_reader(&snapshot),
+            Err(Error::InvalidSnapshotVersion(SNAPSHOT_VERSION_V7))
+        ));
+
+        let imported = Session::import(snapshot).expect("import");
+        assert_eq!(
+            imported.source_spelling(&escaped),
+            Some(SourceSpelling::JsonEscaped)
+        );
+        assert_eq!(
+            imported.source_spelling(&plain),
+            Some(SourceSpelling::Plain)
+        );
+        assert_eq!(
+            imported
+                .restore_strict_decoded_text_with_provenance(&escaped)
+                .expect("decoded")
+                .text,
+            DECODED_NAME
+        );
+    }
+
+    #[test]
+    fn import_refuses_a_spelling_an_older_envelope_or_a_non_decoding_value_cannot_carry() {
+        assert!(matches!(
+            Session::import(signed_snapshot_as(
+                SNAPSHOT_VERSION_V6,
+                &json_spelled_payload(ESCAPED_NAME)
+            )),
+            Err(Error::InvalidSnapshotVersion(SNAPSHOT_VERSION_V6))
+        ));
+        for raw in ["Robert Smith", r"half\"] {
+            assert!(
+                matches!(
+                    Session::import(signed_snapshot_as(
+                        SNAPSHOT_VERSION_V7,
+                        &json_spelled_payload(raw)
+                    )),
+                    Err(Error::InvalidSnapshotPayload)
+                ),
+                "{raw}"
+            );
+        }
+        let imported = Session::import(signed_snapshot_as(
+            SNAPSHOT_VERSION_V7,
+            &json_spelled_payload(ESCAPED_NAME),
+        ))
+        .expect("valid v7");
+        assert_eq!(
+            imported.source_spelling("<a7f3b8e2:Name_1>"),
+            Some(SourceSpelling::JsonEscaped)
+        );
     }
 
     #[test]

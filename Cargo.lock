@@ -1289,6 +1289,7 @@ dependencies = [
  "gaze-token-bridge",
  "gaze-types",
  "getrandom 0.3.4",
+ "libc",
  "pdfium-render",
  "regex",
  "rusqlite",

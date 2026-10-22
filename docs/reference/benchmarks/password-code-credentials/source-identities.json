@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "base": {
+      "revision": "4c15ca80f85bbd3258eb856ac71ea424b1cc6bb5",
+      "crates_tree": "cdc48c047179ee84e3cad91f271c6f2cc1aa5aba",
+      "Cargo.toml": "c61012f484a0bf9d2da415b72bb4f1eb676fdba85725ff3feead0c5a245293cd",
+      "Cargo.lock": "7152f6f8c6279767cd1f42ca688781d384f3fcfca00827054e8379e1e913b988",
+      "rust-toolchain.toml": "e59c5da37d1f9f4e0f815bc188cb6056fc7410c9cdaa9673c2d44da557c75d12"
+    },
+    "candidate": {
+      "revision": "2068418bb89db000adcf880307974357ff716afe",
+      "crates_tree": "83331f0a72486dd682579f48e87c4e7d908fe827",
+      "Cargo.toml": "c61012f484a0bf9d2da415b72bb4f1eb676fdba85725ff3feead0c5a245293cd",
+      "Cargo.lock": "7152f6f8c6279767cd1f42ca688781d384f3fcfca00827054e8379e1e913b988",
+      "rust-toolchain.toml": "e59c5da37d1f9f4e0f815bc188cb6056fc7410c9cdaa9673c2d44da557c75d12"
+    }
+  },
+  "publication_check": "post-capture-merge-proof.json verifies unchanged runtime/benchmark/dependency blobs through the CI/test merge. tls-merge-proof.json separately records the user-directed TLS lockfile patches and unchanged runtime/benchmark source blobs; retained captures and binary digests remain bound to the measured revisions."
+}

@@ -26,11 +26,12 @@ use crate::commands::{
     DEFAULT_SAFETY_NET_TIMEOUT_MS,
 };
 use crate::error::CliError;
-use crate::io::{read_stdin_text, require_json_format};
+use crate::io::{read_stdin_text, require_json_format, write_stdout_exact};
 use crate::pipeline::build::{
     map_policy_error, policy_warnings, resolve_pipeline, validate_ner_threshold,
     warn_uncovered_collision_families,
 };
+use crate::session_file::SessionOut;
 
 pub(crate) const CORE_EXTENDED_DEPRECATION: &str = "`--rulepack-bundled core-extended` is deprecated since v0.8.0; use `--rulepack-bundled core --locale=<lang>` for explicit activation";
 
@@ -65,6 +66,9 @@ pub(crate) struct CleanOptions<'a> {
     pub(crate) safety_net_input_limit_bytes: usize,
     pub(crate) safety_net_mode: SafetyNetMode,
     pub(crate) safety_net_fallback: SafetyNetFallback,
+    /// `gaze clean --session-out`: write the session to this owner-only file
+    /// and print only the clean text (`format == "text"`).
+    pub(crate) session_out: Option<SessionOut<'a>>,
 }
 
 fn selected_safety_nets(
@@ -120,7 +124,15 @@ pub(crate) fn policy_nym_was_overridden(options: &CleanOptions<'_>, policy: &gaz
 }
 
 pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), CliError> {
-    require_json_format(options.format)?;
+    match &options.session_out {
+        Some(session_out) if options.format == "text" => session_out.preflight()?,
+        Some(_) => {
+            return Err(CliError::PolicyConfigDetail(
+                "--session-out requires --format text".into(),
+            ))
+        }
+        None => require_json_format(options.format)?,
+    }
     let raw = read_stdin_text(options.max_bytes)?;
 
     let counter = Arc::new(CountingLogger::new(options.audit_db).map_err(|_| CliError::Pipeline)?);
@@ -205,7 +217,19 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         },
         leak_report: LeakReportResponse::from(&leak_report),
     };
-    let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
+    // Text mode: the session goes to the owner-only file and stdout carries the
+    // clean text alone, never the session or the raw `entries` values.
+    let stdout = match &options.session_out {
+        Some(session_out) => {
+            session_out.write(&response.session_blob)?;
+            response.clean_text.into_bytes()
+        }
+        None => {
+            let mut json = serde_json::to_vec(&response).map_err(|_| CliError::Pipeline)?;
+            json.push(b'\n');
+            json
+        }
+    };
     // Surface family-class notices only once the clean succeeded: on an error
     // path there is no output, and the notice must not corrupt the single-line
     // JSON error envelope on stderr (issue #360).
@@ -223,8 +247,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     if policy_nym_was_overridden(&options, &effective_policy) {
         eprintln!("notice: command line disabled policy safety net nym");
     }
-    println!("{json}");
-    Ok(())
+    write_stdout_exact(&stdout)
 }
 
 /// Assemble the same policy, context, overrides, and safety nets for both verbs.

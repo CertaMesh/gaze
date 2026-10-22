@@ -539,6 +539,17 @@ impl<'a> ResponseTransformContext<'a> {
             .map_err(map_restore_error)
     }
 
+    /// [`Self::restore`] for a decoded JSON destination: a token minted from a JSON-escaped
+    /// capture restores to the value its escapes spell, not to its escaped source bytes.
+    pub(crate) fn restore_decoded(
+        &mut self,
+        input: &str,
+    ) -> Result<RestoredTextWithProvenance, CodecErrorCode> {
+        self.snapshot
+            .restore_strict_decoded_text_with_provenance(input)
+            .map_err(map_restore_error)
+    }
+
     pub(crate) fn validate(
         &mut self,
         value: &str,
