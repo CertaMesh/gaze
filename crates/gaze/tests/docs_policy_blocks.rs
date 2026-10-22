@@ -278,6 +278,21 @@ fn spaced_toml_info_string_is_checked() {
 }
 
 #[test]
+fn uppercase_toml_info_string_is_checked() {
+    assert_invalid_policy_is_checked("", "```TOML", "```");
+}
+
+#[test]
+fn comma_toml_info_string_is_checked() {
+    assert_invalid_policy_is_checked("", "```toml,ignore", "```");
+}
+
+#[test]
+fn brace_toml_info_string_is_checked() {
+    assert_invalid_policy_is_checked("", "```toml{.example}", "```");
+}
+
+#[test]
 fn tilde_policy_fences_are_checked() {
     assert_invalid_policy_is_checked("", "~~~toml", "~~~");
     assert_invalid_policy_is_checked("", "   ~~~~ toml", "   ~~~~~  ");
