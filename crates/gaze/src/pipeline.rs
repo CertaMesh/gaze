@@ -2958,6 +2958,7 @@ impl Pipeline {
         Ok(())
     }
 
+    #[cfg(feature = "bundled-recognizers")]
     fn log_backend_silently_dropped(
         &self,
         target: &ProtectionTarget<'_, '_>,

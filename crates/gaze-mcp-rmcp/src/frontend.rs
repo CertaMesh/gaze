@@ -7,6 +7,7 @@
 #[cfg(feature = "transport-http")]
 use std::net::SocketAddr;
 use std::sync::Arc;
+#[cfg(any(feature = "transport-stdio", feature = "transport-http"))]
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -19,6 +20,7 @@ use rmcp::model::{
     ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerInfo,
 };
 use rmcp::service::{RequestContext, RoleServer};
+#[cfg(feature = "transport-stdio")]
 use tokio_util::sync::CancellationToken;
 
 use crate::adapter::{
@@ -171,6 +173,12 @@ impl Default for RmcpFrontend {
 
 #[async_trait]
 impl Frontend for RmcpFrontend {
+    // With no transport feature `RmcpTransport` is uninhabited and the match
+    // below has no arms, so the arguments are never read.
+    #[cfg_attr(
+        not(any(feature = "transport-stdio", feature = "transport-http")),
+        allow(unused_variables)
+    )]
     async fn serve(
         self,
         host: Arc<dyn DispatchHost>,
@@ -305,6 +313,7 @@ async fn serve_http(
         .map_err(FrontendError::Io)
 }
 
+#[cfg(feature = "transport-stdio")]
 fn cancellation_token_from_shutdown(shutdown: ShutdownToken) -> CancellationToken {
     let ct = CancellationToken::new();
     let cancel = ct.clone();
@@ -315,6 +324,7 @@ fn cancellation_token_from_shutdown(shutdown: ShutdownToken) -> CancellationToke
     ct
 }
 
+#[cfg(any(feature = "transport-stdio", feature = "transport-http"))]
 async fn wait_for_shutdown(shutdown: ShutdownToken) {
     while !shutdown.is_cancelled() {
         tokio::time::sleep(Duration::from_millis(50)).await;
