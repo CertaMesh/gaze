@@ -206,9 +206,9 @@ struct SessionState {
     /// Tokens minted for a [`SourceSpelling::JsonEscaped`] value. Every other
     /// token is plain. Written once, when the token is minted.
     json_spelled: HashSet<String>,
-    restore_regex_cache: Option<(u64, Arc<Regex>)>,
+    restore_matcher_cache: Option<(u64, Arc<aho_corasick::AhoCorasick>)>,
     /// Matcher over the sweepable values. Cleared whenever a value's evidence
-    /// changes, like the restore regex cache when a token is minted.
+    /// changes, like the restore matcher cache when a token is minted.
     sweep_matcher_cache: Option<Arc<SweepMatcher>>,
 }
 
@@ -221,7 +221,7 @@ impl SessionState {
             value_by_token: HashMap::new(),
             evidence_by_value: HashMap::new(),
             json_spelled: HashSet::new(),
-            restore_regex_cache: None,
+            restore_matcher_cache: None,
             sweep_matcher_cache: None,
         }
     }
@@ -687,17 +687,17 @@ impl Session {
     fn restore_state_snapshot(&self) -> Result<Arc<SessionState>> {
         let captured = self.state_snapshot();
         if captured
-            .restore_regex_cache
+            .restore_matcher_cache
             .as_ref()
             .is_some_and(|(generation, _)| *generation == captured.generation)
         {
             return Ok(captured);
         }
-        let Some(regex) = build_restore_regex(&captured)? else {
+        let Some(matcher) = build_restore_matcher(&captured)? else {
             return Ok(captured);
         };
         let mut next = (*captured).clone();
-        next.restore_regex_cache = Some((next.generation, regex));
+        next.restore_matcher_cache = Some((next.generation, matcher));
         let next = Arc::new(next);
         let mut boundary = self
             .state
@@ -1280,7 +1280,7 @@ impl<'session> SessionTransaction<'session> {
             .captured_generation
             .checked_add(1)
             .expect("session generation exhausted");
-        self.staged.restore_regex_cache = None;
+        self.staged.restore_matcher_cache = None;
         let committed = Arc::new(self.staged);
         *boundary = Arc::clone(&committed);
         Ok(CommittedSessionSnapshot {
@@ -1388,7 +1388,7 @@ where
     if spelling == SourceSpelling::JsonEscaped && is_json_escaped_spelling(raw) {
         state.json_spelled.insert(token.clone());
     }
-    state.restore_regex_cache = None;
+    state.restore_matcher_cache = None;
     (token, true)
 }
 
@@ -1447,6 +1447,94 @@ fn known_restore_matches<'a>(
             .is_some_and(|(_, body)| body.starts_with("custom:family:"))
             && text.as_bytes().get(matched.end()) == Some(&b'-'))
     })
+}
+
+fn build_restore_matcher(state: &SessionState) -> Result<Option<Arc<aho_corasick::AhoCorasick>>> {
+    if state.value_by_token.is_empty() {
+        return Ok(None);
+    }
+    let mut tokens = state.value_by_token.keys().collect::<Vec<_>>();
+    tokens.sort_unstable();
+    aho_corasick::AhoCorasick::new(tokens)
+        .map(|matcher| Some(Arc::new(matcher)))
+        .map_err(|_| Error::RestoreMatcherBuild)
+}
+
+/// Locate complete manifest-owned runs. A join may replace a word boundary only when
+/// another exact manifest token covers the next bytes. Count all possible splits before
+/// substituting anything; overlapping valid spellings must never choose an original value.
+fn locate_restore_tokens(state: &SessionState, text: &str) -> Result<Vec<StrictRestoreToken>> {
+    let matcher = match &state.restore_matcher_cache {
+        Some((generation, matcher)) if *generation == state.generation => Some(Arc::clone(matcher)),
+        _ => build_restore_matcher(state)?,
+    };
+    let Some(matcher) = matcher else {
+        return Ok(Vec::new());
+    };
+    let mut spans = matcher
+        .find_overlapping_iter(text)
+        .map(|matched| matched.start()..matched.end())
+        .collect::<Vec<_>>();
+    spans.sort_unstable_by_key(|span| (span.start, span.end));
+
+    static WORD_BOUNDARY: OnceLock<Regex> = OnceLock::new();
+    let boundary = WORD_BOUNDARY.get_or_init(|| Regex::new(r"\b").expect("word boundary"));
+    let is_boundary = |offset| {
+        boundary
+            .find_at(text, offset)
+            .is_some_and(|matched| matched.start() == offset)
+    };
+    let wrapped = |span: &Range<usize>| {
+        text[span.clone()].starts_with('<') && text[span.clone()].ends_with('>')
+    };
+    // At each byte offset retain the number of complete parses, capped at two,
+    // and the first edge of its unique parse. Walking backwards avoids recursion.
+    let mut paths = HashMap::<usize, (u8, usize)>::new();
+    for (index, span) in spans.iter().enumerate().rev() {
+        let continuation = paths.get(&span.end).map_or(0, |(count, _)| *count);
+        let family_extension = text[span.clone()]
+            .split_once(':')
+            .is_some_and(|(_, body)| body.starts_with("custom:family:"))
+            && text.as_bytes().get(span.end) == Some(&b'-');
+        let count = if continuation > 0 {
+            continuation
+        } else {
+            u8::from(wrapped(span) || (is_boundary(span.end) && !family_extension))
+        };
+        if count > 0 {
+            let entry = paths.entry(span.start).or_insert((0, index));
+            entry.0 = entry.0.saturating_add(count).min(2);
+        }
+    }
+
+    let mut tokens = Vec::new();
+    let mut cursor = 0;
+    for span in &spans {
+        if span.start < cursor {
+            continue;
+        }
+        let prefixed = text[span.clone()]
+            .split_once(':')
+            .is_some_and(|(prefix, _)| is_session_hex(prefix));
+        if !wrapped(span) && !prefixed && !is_boundary(span.start) {
+            continue;
+        }
+        let mut start = span.start;
+        while let Some(&(count, index)) = paths.get(&start) {
+            if count > 1 {
+                return Err(unknown_token_error(&text[spans[index].clone()]));
+            }
+            let matched = &spans[index];
+            tokens.push(StrictRestoreToken {
+                start,
+                end: matched.end,
+                parsed: parsed_restore_token(&text[matched.clone()]),
+            });
+            start = matched.end;
+            cursor = start;
+        }
+    }
+    Ok(tokens)
 }
 
 /// Returns whether the stored evidence changed. Only a value the session
@@ -1586,22 +1674,7 @@ fn restore_tokens_with_provenance(
 
 fn assess_restore_text_from_state(state: &SessionState, text: &str) -> Result<RestoreAssessment> {
     // Substitution and classification share one immutable manifest generation.
-    let regex = match &state.restore_regex_cache {
-        Some((generation, regex)) if *generation == state.generation => Some(Arc::clone(regex)),
-        _ => build_restore_regex(state)?,
-    };
-    let tokens = regex
-        .as_ref()
-        .map(|regex| {
-            known_restore_matches(regex, text)
-                .map(|matched| StrictRestoreToken {
-                    start: matched.start(),
-                    end: matched.end(),
-                    parsed: parsed_restore_token(matched.as_str()),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let tokens = locate_restore_tokens(state, text)?;
     let restored = restore_tokens_with_provenance(state, text, tokens, false)?;
     Ok(classify_restore_output(state, restored))
 }
@@ -1696,11 +1769,18 @@ fn validated_restore_tokens(
     state: &SessionState,
     text: &str,
 ) -> std::result::Result<Vec<StrictRestoreToken>, RestoreError> {
-    let tokens = strict_restore_tokens(text)?;
-    for token in &tokens {
-        if !state.value_by_token.contains_key(token.parsed.raw.as_str()) {
+    strict_restore_tokens(text)?;
+    let tokens = locate_restore_tokens(state, text)?;
+    let mut cursor = 0;
+    for (start, end) in tokens
+        .iter()
+        .map(|token| (token.start, token.end))
+        .chain(std::iter::once((text.len(), text.len())))
+    {
+        if let Some(token) = strict_restore_tokens(&text[cursor..start])?.first() {
             return Err(unknown_token_error(token.parsed.raw.as_str()));
         }
+        cursor = end;
     }
     Ok(tokens)
 }
@@ -4174,11 +4254,11 @@ mod tests {
         assert!(Arc::ptr_eq(&session.identity, &snapshot.identity));
 
         let restore_state = session.restore_state_snapshot().expect("restore state");
-        let (_, regex) = restore_state
-            .restore_regex_cache
+        let (_, matcher) = restore_state
+            .restore_matcher_cache
             .as_ref()
-            .expect("non-empty regex");
-        assert!(regex.is_match(&token));
+            .expect("non-empty matcher");
+        assert!(matcher.is_match(&token));
         let state = session.state_snapshot();
         assert_eq!(state.token_by_value.len(), state.value_by_token.len());
         for (key, mapped_token) in &state.token_by_value {
@@ -4191,7 +4271,7 @@ mod tests {
         assert_eq!(state.next_by_class.get(&PiiClass::Email), Some(&1));
         assert_eq!(
             state
-                .restore_regex_cache
+                .restore_matcher_cache
                 .as_ref()
                 .map(|(generation, _)| *generation),
             Some(state.generation)

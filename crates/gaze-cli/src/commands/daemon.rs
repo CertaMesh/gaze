@@ -629,6 +629,61 @@ pub(crate) fn default_session_cap() -> usize {
 mod residual_wire_tests {
     use super::*;
 
+    #[test]
+    fn daemon_session_restores_adjacent_format_preserving_tokens() {
+        use clap::Parser;
+        #[derive(Parser)]
+        struct TestArgs {
+            #[command(flatten)]
+            daemon: Args,
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let policy = dir.path().join("policy.toml");
+        std::fs::write(
+            &policy,
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "synthetic_names"
+pattern = 'Synthetic[0-9]+'
+class = "name"
+[[rule]]
+kind = "class"
+class = "name"
+action = "format_preserve"
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+        )
+        .unwrap();
+        let args = TestArgs::parse_from(["daemon", "--policy", policy.to_str().unwrap()]);
+        let mut daemon = Daemon::new(args.daemon).unwrap();
+        for raw in ["Synthetic1Synthetic2", "Synthetic1Synthetic2Synthetic3"] {
+            let response = daemon.handle_line(
+                &serde_json::json!({
+                    "session_id": "synthetic", "text": raw,
+                })
+                .to_string(),
+            );
+            let DaemonResponse::Clean { clean_text, .. } = response else {
+                panic!("daemon clean must succeed");
+            };
+            let session = &daemon.sessions["synthetic"].session;
+            assert_eq!(session.restore_strict_text(&clean_text).unwrap(), raw);
+            assert_eq!(
+                Session::import(session.export().unwrap())
+                    .unwrap()
+                    .restore_strict_text(&clean_text)
+                    .unwrap(),
+                raw
+            );
+        }
+    }
+
     /// The daemon hands clients the manifest verbatim, and a client that treats
     /// one span as one recognized value would be wrong under residual coverage:
     /// a fragment is a replacement, not an entity.

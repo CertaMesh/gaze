@@ -52,6 +52,8 @@ pub enum Error {
     Protection(#[from] ProtectionError),
     #[error("invalid regex: {0}")]
     InvalidRegex(#[source] regex::Error),
+    #[error("restore manifest matcher build failed")]
+    RestoreMatcherBuild,
     #[error("unknown token: [REDACTED]")]
     UnknownToken {
         class: PiiClass,

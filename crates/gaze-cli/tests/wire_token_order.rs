@@ -276,14 +276,6 @@ action = "preserve"
 "#,
     )
     .unwrap();
-    let tokenize_policy = dir.path().join("tokenize.toml");
-    fs::write(
-        &tokenize_policy,
-        fs::read_to_string(&policy)
-            .unwrap()
-            .replace("format_preserve", "tokenize"),
-    )
-    .unwrap();
     for (input, expected_raws) in [
         ("xSynthetic1 Synthetic2", vec!["Synthetic1", "Synthetic2"]),
         ("Synthetic1 Synthetic2", vec!["Synthetic1", "Synthetic2"]),
@@ -297,12 +289,8 @@ action = "preserve"
         ),
     ] {
         let adjacent = input == "Synthetic1Synthetic2 Synthetic3";
-        let selected_policy = if adjacent { &tokenize_policy } else { &policy };
-        let clean = run_clean(selected_policy, input);
-        let lines = run_daemon(
-            selected_policy,
-            &[json!({"session_id": "s", "text": input})],
-        );
+        let clean = run_clean(&policy, input);
+        let lines = run_daemon(&policy, &[json!({"session_id": "s", "text": input})]);
         assert_eq!(lines.len(), 1);
         let daemon: Value = serde_json::from_str(&lines[0]).unwrap();
         assert_span_then_token_order(&daemon);
