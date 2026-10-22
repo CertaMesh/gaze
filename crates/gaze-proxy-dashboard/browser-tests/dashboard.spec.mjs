@@ -1251,6 +1251,8 @@ test("LC-SCROLL-PAUSE upward page scroll pauses follow and blocks silent row rep
     await shot(page, entry);
     await resume.click();
     await expect(page.locator('.event-row[data-logical-id="12"]')).toBeVisible();
+    // Deliver the layout-induced scroll event before checking the resumed state.
+    await page.evaluate(() => new Promise(requestAnimationFrame));
     await expect(page.locator("#follow-state")).toContainText("FOLLOW: LIVE");
   });
   await control("/__fixture", { id: "fx-default" });

@@ -1394,6 +1394,10 @@
     updateFollowControls();
     attachScrollPause();
     syncBarHeight();
+    // Replacing the rows can clamp the document's scroll position. Establish
+    // the new baseline before its queued scroll event can pause live follow.
+    const doc = document.scrollingElement || document.documentElement;
+    pageScrollLastTop = doc ? doc.scrollTop : 0;
   }
 
   /* The page/document is the real scroll container at every viewport
