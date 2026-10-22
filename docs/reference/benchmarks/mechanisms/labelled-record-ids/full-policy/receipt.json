@@ -1,33 +1,106 @@
 {
-  "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5",
+  "comparison": "full source pair",
+  "machine": "Apple M5 Max, 18 cores, 64 GiB RAM, macOS 26.5",
   "sampling_seed": 20260710,
+  "rust_toolchain": "1.96.0-aarch64-apple-darwin",
   "arms": {
     "base": {
-      "observations": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/observations-base.jsonl.gz",
-      "scorecards": {
-        "2": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/scorecard-base-v2.json.gz",
-        "1": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/scorecard-base-v1.json.gz",
-        "4": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/scorecard-base-v4.json.gz"
-      },
-      "revision": "0fcfef14f9846ab1e85c723217fd67a4cae4fc86",
+      "capture_exit_code": 4,
+      "capture_execution_outcome": "completed",
+      "absolute_release_readiness": "failed",
+      "revision": "9a70af36478ef84a6b43c9cc16b14ab302dff8ce",
+      "crates_tree": "fde68b2c8392dccaf013112a36f6a5beb6b5ac23",
+      "binary_sha256": "214b5cdaf97f42865bbd95ab538d55067ef79d062b7df461ef4774c2393be747",
       "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
-      "observations_sha256": "48d96749a7f17526c3f89779178e4b36bb2be04464811894d342a1bcb4f179ec"
+      "observations": "observations-base.jsonl.gz",
+      "observations_sha256": "9af94cfc9e9e9e5c810d9b629e93d7481083f8ab15c4ecc120ad5458169dd75c",
+      "scorecards": {
+        "2": "scorecard-base-v2.json.gz",
+        "1": "scorecard-base-v1.json.gz",
+        "4": "scorecard-base-v4.json.gz"
+      },
+      "scorecard_sha256": {
+        "2": "faa4193daa08f0715a95528119ce5d1197d913fbaa9ac571e7a8d5eeeff0da56",
+        "1": "d3ceffc94b7e36359c000fb07041f774eea38590b178a4f894f7d0553e324265",
+        "4": "1cd6fed1a94fd8d2d49a9368ed6b051b9f0e3b5be17b1d311755ed56b846f182"
+      },
+      "scorecard_archive_sha256": {
+        "2": "10db176af5dcb2522b88cfe7c9b88f54d9caf06ac39f021f5541558cede1f4ed",
+        "1": "1c737cb28486ccebee5ad5f114f8bf07e731f81dd0b5b7a17de134dfef103163",
+        "4": "a3df1f3db494a53408114eabf7915c948199e959f0523c39cff47fb2ea775584"
+      },
+      "captured_scorecard": "captured-scorecard-base.json.gz",
+      "captured_scorecard_uncompressed_sha256": "d3ceffc94b7e36359c000fb07041f774eea38590b178a4f894f7d0553e324265",
+      "execution_evidence": "run-evidence-base.json",
+      "execution_evidence_sha256": "75a328a9826740954ba23c9511728706ce4727df7d06bc60edc6ee1bcfff96bd",
+      "policy": "policy-base.toml",
+      "published_policy_sha256": "9ac5f5fcb6e801982a882ba440e5eaee3a72346e87e620334d3c8de4c4e68e8e",
+      "policy_export": "Only the home prefixes of ner.model_dir and safety_net.nym.model_dir are normalized to ~. policy_sha256 binds original capture bytes; published_policy_sha256 binds this portable copy."
     },
     "candidate": {
-      "observations": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/observations-candidate.jsonl.gz",
-      "scorecards": {
-        "2": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/scorecard-candidate-v2.json.gz",
-        "1": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/scorecard-candidate-v1.json.gz",
-        "4": "docs/reference/benchmarks/mechanisms/labelled-record-ids/full-policy/scorecard-candidate-v4.json.gz"
-      },
-      "revision": "ebce7063b2667119e923c5969aae6ee6b4210567",
+      "capture_exit_code": 4,
+      "capture_execution_outcome": "completed",
+      "absolute_release_readiness": "failed",
+      "revision": "d1d03fd3baf8ce55630e55efa0b7d85302467da0",
+      "crates_tree": "632c9a60abd095a636f4d5273d15a2f096160227",
+      "binary_sha256": "b90f6d1eb42f85b4c9e517488750859076e5fd3156eff5b51c2edfe16e1eb6bf",
       "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
-      "observations_sha256": "47aa8cbd6ca1884e295a0a666c51a50288d9903e8391857d372f8da84cb909a2"
+      "observations": "observations-candidate.jsonl.gz",
+      "observations_sha256": "ebd9b286b54afbc5e2c69ef7feaeb0d9da8876dfc7cf4d5394ed352446f519d9",
+      "scorecards": {
+        "2": "scorecard-candidate-v2.json.gz",
+        "1": "scorecard-candidate-v1.json.gz",
+        "4": "scorecard-candidate-v4.json.gz"
+      },
+      "scorecard_sha256": {
+        "2": "e9812807e0230fdc62cff0101afae296f6a2b889e8e4315dc2e1206a8ddfdc0b",
+        "1": "ad7b3c3770a196d7f9d90148f9db15fd733cc4a6c4c2d5655e0761ea9d4ef029",
+        "4": "fc5b9dff9e835ddd6bac12349481660a7f2c118ebd6202f87dfc7e587c12ec04"
+      },
+      "scorecard_archive_sha256": {
+        "2": "ded6be42239547594e8651c20355c1311c333cf2d49258cb355c1d5ae7825a57",
+        "1": "e5fa63c63ff6721ed0b4fa61a085b249ee9e2f5619b85fe70204dba8cb3eaf3a",
+        "4": "27cc28d9e827d7d55c667a88e15a5f50eede0b54c07b95905e645ee3f68b3891"
+      },
+      "captured_scorecard": "captured-scorecard-candidate.json.gz",
+      "captured_scorecard_uncompressed_sha256": "ad7b3c3770a196d7f9d90148f9db15fd733cc4a6c4c2d5655e0761ea9d4ef029",
+      "execution_evidence": "run-evidence-candidate.json",
+      "execution_evidence_sha256": "0935d9facd0db364a79e58a6db1b0f6716db672737f4f700ccb08061ae6b173b",
+      "policy": "policy-candidate.toml",
+      "published_policy_sha256": "9ac5f5fcb6e801982a882ba440e5eaee3a72346e87e620334d3c8de4c4e68e8e",
+      "policy_export": "Only the home prefixes of ner.model_dir and safety_net.nym.model_dir are normalized to ~. policy_sha256 binds original capture bytes; published_policy_sha256 binds this portable copy."
     }
   },
   "gates": [
     "gate-v2.json",
     "gate-v1.json",
     "gate-v4.json"
+  ],
+  "gate_sha256": {
+    "gate-v2.json": "03f00d3a4330ca1e06f38054cfc467087b471420001183db8a5a07ef91de196d",
+    "gate-v1.json": "9218a750321815798276a26dafc3c7624478ab8ddf17dbc9f509e4a6c968155a",
+    "gate-v4.json": "9218a750321815798276a26dafc3c7624478ab8ddf17dbc9f509e4a6c968155a"
+  },
+  "generator": {
+    "generator": "scripts/bench/agentic_layers.py",
+    "generator_version": 25,
+    "partition": "test",
+    "seed": 2026092602,
+    "docs_per_family": 10,
+    "documents": 24040,
+    "documents_by_layer": {
+      "A": 10037,
+      "D": 7522,
+      "R": 6481
+    },
+    "corpus_sha256": "133f8452d01fd517c77087e539ba9dc253e30a1886668bfab3e1631cc9ff6c32",
+    "synthetic_only": true
+  },
+  "capture_reconstruction": "Decompress captured-scorecard-<side>.json.gz as scorecard-v4.json beside observations-v1.jsonl.gz and run-evidence.json renamed from the matching retained side files. SHA-256 pins refer to the original capture bytes; scorecard_sha256 pins refer to decompressed JSON; scorecard_archive_sha256 pins refer to deterministic gzip archives.",
+  "commands": [
+    "gaze setup --non-interactive --force --policy-out target/gate/policy.toml",
+    "uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full --seed 20260710 --no-download --release --no-cache --policy <policy> --output-dir <output>",
+    "uv run --project scripts/bench python scripts/bench/rescore.py <observations> --expected-sha256 <pinned digest> --scored-labels docs/reference/benchmarks/scored-labels-v2.json --output <scorecard> (omit --scored-labels for v1; use v4 contract for v4)",
+    "uv run --project scripts/bench python scripts/bench/agentic_layers.py gate --base <scorecard> --candidate <scorecard> --output <gate>"
   ]
 }

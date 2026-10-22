@@ -1,0 +1,340 @@
+{
+  "schema_version": 2,
+  "outcome": "completed",
+  "cache": {
+    "status": "disabled",
+    "key_sha256": null,
+    "reason": "explicit_no_cache"
+  },
+  "artifacts": {
+    "scorecard": {
+      "file": "scorecard-v4.json",
+      "sha256": "d3ceffc94b7e36359c000fb07041f774eea38590b178a4f894f7d0553e324265"
+    },
+    "record": {
+      "file": "observations-v1.jsonl.gz",
+      "sha256": "9af94cfc9e9e9e5c810d9b629e93d7481083f8ab15c4ecc120ad5458169dd75c"
+    }
+  },
+  "timing_semantics": "inclusive spans; native stages use child process CPU; scoring excludes transport",
+  "stages": [
+    {
+      "stage": "build",
+      "contract": "scored-labels-v1",
+      "role": "detector",
+      "executed": true,
+      "wall_seconds": 81.89996912505012,
+      "cpu_self_seconds": 0.0036169999999999813,
+      "cpu_children_seconds": 157.27283500000001,
+      "cpu_seconds": 157.276452
+    },
+    {
+      "stage": "build",
+      "contract": "scored-labels-v1",
+      "role": "validator",
+      "wall_seconds": 96.01212979201227,
+      "cpu_self_seconds": 0.002471000000000112,
+      "cpu_children_seconds": 181.12240899999998,
+      "cpu_seconds": 181.12488
+    },
+    {
+      "stage": "validator_measurements",
+      "contract": "scored-labels-v1",
+      "layer": "C",
+      "wall_seconds": 4.419961708015762,
+      "cpu_self_seconds": 0.7371199999999998,
+      "cpu_children_seconds": 2.4759730000000104,
+      "cpu_seconds": 3.2130930000000104
+    },
+    {
+      "stage": "detection",
+      "contract": "scored-labels-v1",
+      "layer": "C",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 365.4015544520002,
+      "cpu_seconds": 513.5109230000021,
+      "samples": 2911,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "restore",
+      "contract": "scored-labels-v1",
+      "layer": "C",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 0.15402676299999998,
+      "cpu_seconds": 0.15379999999910776,
+      "samples": 2911,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "startup_model_load",
+      "contract": "scored-labels-v1",
+      "layer": "C",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 2.106177916,
+      "cpu_seconds": 2.106206,
+      "samples": 1,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "scoring",
+      "contract": "scored-labels-v1",
+      "layer": "C",
+      "config": "policy-file",
+      "repetition": 1,
+      "mode": "capture_accounting",
+      "wall_seconds": 1.4591023873072118,
+      "cpu_self_seconds": 1.4579109999999709,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 1.4579109999999709
+    },
+    {
+      "stage": "layer_capture",
+      "contract": "scored-labels-v1",
+      "layer": "C",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 529.6093258749461,
+      "cpu_self_seconds": 3.535017,
+      "cpu_children_seconds": 673.105388,
+      "cpu_seconds": 676.640405
+    },
+    {
+      "stage": "validator_measurements",
+      "contract": "scored-labels-agentic",
+      "layer": "A",
+      "wall_seconds": 3.171248249942437,
+      "cpu_self_seconds": 1.2885809999999998,
+      "cpu_children_seconds": 1.7250079999998889,
+      "cpu_seconds": 3.0135889999998886
+    },
+    {
+      "stage": "validator_measurements",
+      "contract": "scored-labels-agentic",
+      "layer": "R",
+      "wall_seconds": 2.6947048750007525,
+      "cpu_self_seconds": 1.2321190000000009,
+      "cpu_children_seconds": 1.3936670000000504,
+      "cpu_seconds": 2.6257860000000512
+    },
+    {
+      "stage": "detection",
+      "contract": "scored-labels-agentic",
+      "layer": "A",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 428.4846985770004,
+      "cpu_seconds": 837.4404649999924,
+      "samples": 10038,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "restore",
+      "contract": "scored-labels-agentic",
+      "layer": "A",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 0.2315661569999995,
+      "cpu_seconds": 0.23149700000268192,
+      "samples": 10038,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "startup_model_load",
+      "contract": "scored-labels-agentic",
+      "layer": "A",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 2.106111125,
+      "cpu_seconds": 2.1043659999999997,
+      "samples": 1,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "scoring",
+      "contract": "scored-labels-agentic",
+      "layer": "A",
+      "config": "policy-file",
+      "repetition": 1,
+      "mode": "capture_accounting",
+      "wall_seconds": 1.8789247618988156,
+      "cpu_self_seconds": 1.8748299999999265,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 1.8748299999999265
+    },
+    {
+      "stage": "layer_capture",
+      "contract": "scored-labels-agentic",
+      "layer": "A",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 583.6101698749699,
+      "cpu_self_seconds": 5.269803000000001,
+      "cpu_children_seconds": 987.114907,
+      "cpu_seconds": 992.38471
+    },
+    {
+      "stage": "detection",
+      "contract": "scored-labels-agentic",
+      "layer": "D",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 311.0537092010007,
+      "cpu_seconds": 636.9041370000003,
+      "samples": 7523,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "restore",
+      "contract": "scored-labels-agentic",
+      "layer": "D",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 0.07597006499999963,
+      "cpu_seconds": 0.07596899999783169,
+      "samples": 7523,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "startup_model_load",
+      "contract": "scored-labels-agentic",
+      "layer": "D",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 2.101601667,
+      "cpu_seconds": 2.1015840000000003,
+      "samples": 1,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "scoring",
+      "contract": "scored-labels-agentic",
+      "layer": "D",
+      "config": "policy-file",
+      "repetition": 1,
+      "mode": "capture_accounting",
+      "wall_seconds": 0.9744350431719795,
+      "cpu_self_seconds": 0.9719480000000065,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 0.9719480000000065
+    },
+    {
+      "stage": "layer_capture",
+      "contract": "scored-labels-agentic",
+      "layer": "D",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 420.53356108407024,
+      "cpu_self_seconds": 2.958260000000001,
+      "cpu_children_seconds": 743.2784650000003,
+      "cpu_seconds": 746.2367250000003
+    },
+    {
+      "stage": "detection",
+      "contract": "scored-labels-agentic",
+      "layer": "R",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 471.94948179399967,
+      "cpu_seconds": 1026.1835440000023,
+      "samples": 6482,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "restore",
+      "contract": "scored-labels-agentic",
+      "layer": "R",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 0.15513090299999965,
+      "cpu_seconds": 0.1550380000005389,
+      "samples": 6482,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "startup_model_load",
+      "contract": "scored-labels-agentic",
+      "layer": "R",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 2.106681375,
+      "cpu_seconds": 2.106638,
+      "samples": 1,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "scoring",
+      "contract": "scored-labels-agentic",
+      "layer": "R",
+      "config": "policy-file",
+      "repetition": 1,
+      "mode": "capture_accounting",
+      "wall_seconds": 1.5021082933526486,
+      "cpu_self_seconds": 1.4993449999999946,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 1.4993449999999946
+    },
+    {
+      "stage": "layer_capture",
+      "contract": "scored-labels-agentic",
+      "layer": "R",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 638.6894013339188,
+      "cpu_self_seconds": 4.441283000000002,
+      "cpu_children_seconds": 1188.3728379999998,
+      "cpu_seconds": 1192.814121
+    },
+    {
+      "stage": "artifact_write_compress",
+      "contract": "scored-labels-v1",
+      "wall_seconds": 1.0065594170009717,
+      "cpu_self_seconds": 1.0065230000000014,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 1.0065230000000014
+    },
+    {
+      "stage": "artifact_write",
+      "contract": "scored-labels-v1",
+      "wall_seconds": 0.016865624929778278,
+      "cpu_self_seconds": 0.016861000000002235,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 0.016861000000002235
+    },
+    {
+      "stage": "artifact_write",
+      "contract": "scored-labels-v1",
+      "wall_seconds": 0.0005589999491348863,
+      "cpu_self_seconds": 0.000558999999999088,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 0.000558999999999088
+    },
+    {
+      "stage": "artifact_write",
+      "contract": "scored-labels-v1",
+      "wall_seconds": 0.00018154201097786427,
+      "cpu_self_seconds": 0.00018099999999776628,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 0.00018099999999776628
+    },
+    {
+      "stage": "artifact_write",
+      "contract": "scored-labels-v1",
+      "wall_seconds": 0.00016220903489738703,
+      "cpu_self_seconds": 0.0001619999999995514,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 0.0001619999999995514
+    },
+    {
+      "stage": "artifact_write",
+      "contract": "scored-labels-v1",
+      "wall_seconds": 0.00015183305367827415,
+      "cpu_self_seconds": 0.00015199999999992997,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 0.00015199999999992997
+    }
+  ]
+}

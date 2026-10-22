@@ -1,38 +1,68 @@
 {
-  "comparison": "rules-only source pair",
-  "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5",
+  "comparison": "rules source pair",
+  "machine": "Apple M5 Max, 18 cores, 64 GiB RAM, macOS 26.5",
   "sampling_seed": 20260710,
   "rust_toolchain": "1.96.0-aarch64-apple-darwin",
-  "policy": "policy.toml",
-  "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
-  "ner_enabled": false,
-  "nym_enabled": false,
   "arms": {
     "base": {
-      "revision": "0fcfef14f9846ab1e85c723217fd67a4cae4fc86",
-      "binary_sha256": "a62eca126ab894223228c921b5e9a7d6dfa0e24e1ac622345cd46cf07ee24ef4",
+      "capture_exit_code": 4,
+      "capture_execution_outcome": "completed",
+      "absolute_release_readiness": "failed",
+      "revision": "9a70af36478ef84a6b43c9cc16b14ab302dff8ce",
+      "crates_tree": "fde68b2c8392dccaf013112a36f6a5beb6b5ac23",
+      "binary_sha256": "214b5cdaf97f42865bbd95ab538d55067ef79d062b7df461ef4774c2393be747",
       "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
       "observations": "observations-base.jsonl.gz",
-      "observations_sha256": "23d37cc79eb13a9fca100c6e68779d8808eab8a3b0689ce0076f5cd54a6defa9",
+      "observations_sha256": "8716e8560d68a21b8d48d224d4eef2162ec60c724bd3800e0c3ea8cf82e52511",
       "scorecards": {
         "2": "scorecard-base-v2.json.gz",
         "1": "scorecard-base-v1.json.gz",
         "4": "scorecard-base-v4.json.gz"
       },
-      "crates_tree": "6f7104cb68fca556635811951910b7a4cda35260"
+      "scorecard_sha256": {
+        "2": "6fcf549a336d282042755145ab3b6da7991aa2831b77169efa42715946089962",
+        "1": "08310a2c4db9517e94433bd507ccba6304c1e8d139dc85585e4d8f99f18fddb0",
+        "4": "9e9fb88aefbc10d3803280308bb567c0298f6c9966bebd60605d391819f45103"
+      },
+      "scorecard_archive_sha256": {
+        "2": "6259d72f25be19ae2ebbbaa5acf6d4c77fce38b29f9b7ae362fdd6c026e3df35",
+        "1": "1c1a7cecfc5259df96f204b44bce302f2247ee9413560940b78142878aa898cc",
+        "4": "3070e730f4c8a048aa81e67c0e6d5f147ce93265018c220491d2b778815ba6ba"
+      },
+      "captured_scorecard": "captured-scorecard-base.json.gz",
+      "captured_scorecard_uncompressed_sha256": "08310a2c4db9517e94433bd507ccba6304c1e8d139dc85585e4d8f99f18fddb0",
+      "execution_evidence": "run-evidence-base.json",
+      "execution_evidence_sha256": "43b2e00b567a71ef14c15742840dca0ac38b04992cf8b7ce2e6ebf032e3d4e9a"
     },
     "candidate": {
-      "revision": "ebce7063b2667119e923c5969aae6ee6b4210567",
-      "binary_sha256": "0cc16223d6076f1247dbd44fe352e9fc955414d0f38e2cecd280ec171d21fa4a",
+      "capture_exit_code": 4,
+      "capture_execution_outcome": "completed",
+      "absolute_release_readiness": "failed",
+      "revision": "d1d03fd3baf8ce55630e55efa0b7d85302467da0",
+      "crates_tree": "632c9a60abd095a636f4d5273d15a2f096160227",
+      "binary_sha256": "b90f6d1eb42f85b4c9e517488750859076e5fd3156eff5b51c2edfe16e1eb6bf",
       "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
       "observations": "observations-candidate.jsonl.gz",
-      "observations_sha256": "1e5dcfb7d7756f4e0c8befda1d80eefaafb50b044a1006c05a170864da8447a4",
+      "observations_sha256": "d06ca84e9564e1c5f3fff0cae06fcc06a13e9d130cff95ae4ec57a3485a7909f",
       "scorecards": {
         "2": "scorecard-candidate-v2.json.gz",
         "1": "scorecard-candidate-v1.json.gz",
         "4": "scorecard-candidate-v4.json.gz"
       },
-      "crates_tree": "0538e701e0ef555dbeb36e1446def92f09fdd0e5"
+      "scorecard_sha256": {
+        "2": "b234124bb4e850ba2785be3d24f8eeaf11a7597f76fdb2bf76133f17f1b0dbf4",
+        "1": "79e5cfb6609218dfa5b70af954b3e274702e831470723913810351b50d0b595b",
+        "4": "27ff1a2d2a8d51d2242d97cbf7d90c7b729138cf75f27ce4aae427ee47a33713"
+      },
+      "scorecard_archive_sha256": {
+        "2": "c4d9dfa5dba1d75dfc9ca38605985a7d5b1a094c19dde72a265170b39bc0a942",
+        "1": "221cdda73cd31ee7016213f580d2f08bea974f57f62c1575d7cfa5d2c05d4edc",
+        "4": "eef0ceb415e0fea6fd4abba81804aed3478dc79449d2e634dc70358bb6ce70da"
+      },
+      "captured_scorecard": "captured-scorecard-candidate.json.gz",
+      "captured_scorecard_uncompressed_sha256": "79e5cfb6609218dfa5b70af954b3e274702e831470723913810351b50d0b595b",
+      "execution_evidence": "run-evidence-candidate.json",
+      "execution_evidence_sha256": "dd13fd916283ea02d1097e554652dd9a9944b4ee44696063b012d75aad3b7b6d"
     }
   },
   "gates": [
@@ -40,14 +70,42 @@
     "gate-v1.json",
     "gate-v4.json"
   ],
+  "gate_sha256": {
+    "gate-v2.json": "473fd0c6c8cd15fc938c09360783c188c3690f4ab6785c63e3245fa3a934e1b9",
+    "gate-v1.json": "f8dbb8096602c240ce1653b4fd0cfb3dd7211d630095a3ac2180f9daf861e490",
+    "gate-v4.json": "f8dbb8096602c240ce1653b4fd0cfb3dd7211d630095a3ac2180f9daf861e490"
+  },
+  "generator": {
+    "generator": "scripts/bench/agentic_layers.py",
+    "generator_version": 25,
+    "partition": "test",
+    "seed": 2026092602,
+    "docs_per_family": 10,
+    "documents": 24040,
+    "documents_by_layer": {
+      "A": 10037,
+      "D": 7522,
+      "R": 6481
+    },
+    "corpus_sha256": "133f8452d01fd517c77087e539ba9dc253e30a1886668bfab3e1631cc9ff6c32",
+    "synthetic_only": true
+  },
+  "policy": "policy.toml",
+  "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
+  "ner_enabled": false,
+  "nym_enabled": false,
   "policy_derivation": {
-    "derived_from_revision": "ebce7063b2667119e923c5969aae6ee6b4210567",
-    "setup_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+    "derived_from_revision": "9a70af36478ef84a6b43c9cc16b14ab302dff8ce",
+    "derived_from_side": "base",
+    "source_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
     "rules_policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
-    "removed_sections": [
-      "ner",
-      "safety_net"
-    ],
-    "remaining_policy_unchanged": true
-  }
+    "transformation": "Remove only the top-level ner and safety_net tables, including their child tables; all other parsed policy values are identical. Candidate full setup policy must match base byte-for-byte before gain comparison."
+  },
+  "capture_reconstruction": "Decompress captured-scorecard-<side>.json.gz as scorecard-v4.json beside observations-v1.jsonl.gz and run-evidence.json renamed from the matching retained side files. SHA-256 pins refer to the original capture bytes; scorecard_sha256 pins refer to decompressed JSON; scorecard_archive_sha256 pins refer to deterministic gzip archives.",
+  "commands": [
+    "gaze setup --non-interactive --force --policy-out target/gate/policy.toml",
+    "uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full --seed 20260710 --no-download --release --no-cache --policy <policy> --output-dir <output>",
+    "uv run --project scripts/bench python scripts/bench/rescore.py <observations> --expected-sha256 <pinned digest> --scored-labels docs/reference/benchmarks/scored-labels-v2.json --output <scorecard> (omit --scored-labels for v1; use v4 contract for v4)",
+    "uv run --project scripts/bench python scripts/bench/agentic_layers.py gate --base <scorecard> --candidate <scorecard> --output <gate>"
+  ]
 }
