@@ -109,26 +109,53 @@ fn parse_marker(line: Option<&str>) -> Result<Marker, String> {
     }
 }
 
-/// Extracts every ```toml fence, including fences inside a blockquote.
+/// Recognizes a CommonMark fence delimiter with at most three spaces of indent.
+fn fence(line: &str) -> Option<(usize, u8, usize, &str)> {
+    let content = line.trim_start_matches(' ');
+    let indent = line.len() - content.len();
+    let delimiter = *content.as_bytes().first()?;
+    if indent > 3 || !matches!(delimiter, b'`' | b'~') {
+        return None;
+    }
+    let length = content
+        .bytes()
+        .take_while(|&byte| byte == delimiter)
+        .count();
+    (length >= 3).then_some((indent, delimiter, length, &content[length..]))
+}
+
+/// Extracts TOML fenced code blocks, including fences inside a blockquote.
 fn toml_blocks(page: &'static str, text: &str) -> Vec<Block> {
     let lines: Vec<&str> = text.lines().collect();
     let mut blocks = Vec::new();
     let mut index = 0;
     while index < lines.len() {
-        let open = unquote(lines[index]);
-        let indent = open.len() - open.trim_start().len();
-        let fence = open.trim();
-        if !fence.starts_with("```") {
+        let Some((indent, delimiter, length, info)) = fence(unquote(lines[index])) else {
+            index += 1;
+            continue;
+        };
+        if delimiter == b'`' && info.contains('`') {
             index += 1;
             continue;
         }
-        let is_toml = fence == "```toml";
+        let is_toml = info.split_whitespace().next() == Some("toml");
         let start = index;
         let mut body = Vec::new();
         index += 1;
-        while index < lines.len() && unquote(lines[index]).trim() != "```" {
+        while index < lines.len() {
             let line = unquote(lines[index]);
-            body.push(line.get(indent..).unwrap_or(line.trim_start()));
+            if let Some((_, close_delimiter, close_length, rest)) = fence(line) {
+                if close_delimiter == delimiter && close_length >= length && rest.trim().is_empty()
+                {
+                    break;
+                }
+            }
+            let strip = line
+                .bytes()
+                .take(indent)
+                .take_while(|&byte| byte == b' ')
+                .count();
+            body.push(&line[strip..]);
             index += 1;
         }
         index += 1;
@@ -221,7 +248,7 @@ fn every_policy_doc_toml_block_is_marked_and_loads() {
         skipped, expected,
         "not-a-policy blocks must match NOT_A_POLICY exactly"
     );
-    assert_eq!(checked, 30, "policy doc block inventory changed");
+    assert_eq!(checked, 31, "policy doc block inventory changed");
 }
 
 fn assert_invalid_policy_is_checked(prefix: &str, open: &str, close: &str) {
