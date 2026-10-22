@@ -14,12 +14,14 @@
 //! - `<!-- policy-fragment: recognizer -->`: sub-tables of one rulepack
 //!   `[[recognizers]]` entry, wrapped into a minimal regex recognizer.
 //! - `<!-- not-a-policy: <name> -->`: skipped; `<name>` must be listed in
-//!   [`NOT_A_POLICY`], so a new skip is visible in review.
+//!   [`NOT_A_POLICY`] with the page and exact body SHA-256, so changes need review.
 //!
 //! Wrappers only add tables and keys, so `deny_unknown_fields` still rejects a
 //! renamed key in the documented text. A block without a marker fails.
 
 use gaze::{Policy, Rulepack};
+use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
+use sha2::{Digest, Sha256};
 
 const PAGES: &[(&str, &str)] = &[
     (
@@ -44,8 +46,12 @@ const PAGES: &[(&str, &str)] = &[
     ),
 ];
 
-/// Every `<!-- not-a-policy: <name> -->` block, by page and name.
-const NOT_A_POLICY: &[(&str, &str)] = &[("docs/how-to/rust-library.md", "cargo-dependencies")];
+/// Every `<!-- not-a-policy: <name> -->` block, by page, name and body SHA-256.
+const NOT_A_POLICY: &[(&str, &str, &str)] = &[(
+    "docs/how-to/rust-library.md",
+    "cargo-dependencies",
+    "dd34746f96dfa450b8b80aed9a06401da125d40aac82409ba95a973f64c74dad",
+)];
 
 const RULEPACK_HEADER: &str = "schema_version = \"0.1.0\"\n\
 rulepack_id = \"docs.fragment\"\n\
@@ -81,14 +87,8 @@ struct Block {
     body: String,
 }
 
-fn unquote(line: &str) -> &str {
-    line.strip_prefix("> ")
-        .or_else(|| line.strip_prefix('>'))
-        .unwrap_or(line)
-}
-
 fn parse_marker(line: Option<&str>) -> Result<Marker, String> {
-    let line = line.map(|line| unquote(line).trim()).unwrap_or("");
+    let line = line.map(str::trim).unwrap_or("");
     let Some(inner) = line
         .strip_prefix("<!--")
         .and_then(|rest| rest.strip_suffix("-->"))
@@ -109,63 +109,39 @@ fn parse_marker(line: Option<&str>) -> Result<Marker, String> {
     }
 }
 
-/// Recognizes a CommonMark fence delimiter with at most three spaces of indent.
-fn fence(line: &str) -> Option<(usize, u8, usize, &str)> {
-    let content = line.trim_start_matches(' ');
-    let indent = line.len() - content.len();
-    let delimiter = *content.as_bytes().first()?;
-    if indent > 3 || !matches!(delimiter, b'`' | b'~') {
-        return None;
-    }
-    let length = content
-        .bytes()
-        .take_while(|&byte| byte == delimiter)
-        .count();
-    (length >= 3).then_some((indent, delimiter, length, &content[length..]))
-}
-
-/// Extracts TOML fenced code blocks, including fences inside a blockquote.
+/// Extracts TOML fences from the Markdown event stream, including all containers.
 fn toml_blocks(page: &'static str, text: &str) -> Vec<Block> {
-    let lines: Vec<&str> = text.lines().collect();
+    let mut events = Parser::new(text).into_offset_iter();
     let mut blocks = Vec::new();
-    let mut index = 0;
-    while index < lines.len() {
-        let Some((indent, delimiter, length, info)) = fence(unquote(lines[index])) else {
-            index += 1;
-            continue;
-        };
-        if delimiter == b'`' && info.contains('`') {
-            index += 1;
-            continue;
-        }
-        let is_toml = info.split_whitespace().next() == Some("toml");
-        let start = index;
-        let mut body = Vec::new();
-        index += 1;
-        while index < lines.len() {
-            let line = unquote(lines[index]);
-            if let Some((_, close_delimiter, close_length, rest)) = fence(line) {
-                if close_delimiter == delimiter && close_length >= length && rest.trim().is_empty()
-                {
-                    break;
+    let mut marker = None;
+    while let Some((event, range)) = events.next() {
+        let line = text[..range.start].bytes().filter(|&b| b == b'\n').count() + 1;
+        match event {
+            Event::Html(html) => marker = Some((line, parse_marker(Some(&html)))),
+            Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(info)))
+                if info.split_whitespace().next() == Some("toml") =>
+            {
+                let marker = marker
+                    .take()
+                    .filter(|(marker_line, _)| *marker_line + 1 == line)
+                    .map(|(_, marker)| marker)
+                    .unwrap_or_else(|| parse_marker(None));
+                let mut body = String::new();
+                for (event, _) in events.by_ref() {
+                    match event {
+                        Event::Text(content) => body.push_str(&content),
+                        Event::End(TagEnd::CodeBlock) => break,
+                        _ => {}
+                    }
                 }
+                blocks.push(Block {
+                    page,
+                    line,
+                    marker,
+                    body,
+                });
             }
-            let strip = line
-                .bytes()
-                .take(indent)
-                .take_while(|&byte| byte == b' ')
-                .count();
-            body.push(&line[strip..]);
-            index += 1;
-        }
-        index += 1;
-        if is_toml {
-            blocks.push(Block {
-                page,
-                line: start + 1,
-                marker: parse_marker(start.checked_sub(1).map(|prev| lines[prev])),
-                body: body.join("\n") + "\n",
-            });
+            _ => {}
         }
     }
     blocks
@@ -212,7 +188,24 @@ fn check(block: &Block) -> Result<Option<String>, String> {
                 .map(|_| None)
                 .map_err(|err| format!("{err:?}"))
         }
-        Marker::NotAPolicy(name) => Ok(Some(name)),
+        Marker::NotAPolicy(name) => {
+            let Some((_, _, expected)) = NOT_A_POLICY
+                .iter()
+                .find(|(page, allowed, _)| *page == block.page && *allowed == name)
+            else {
+                return Err(format!(
+                    "not-a-policy `{name}` is not allowlisted for {}",
+                    block.page
+                ));
+            };
+            let actual = format!("{:x}", Sha256::digest(block.body.as_bytes()));
+            if actual != *expected {
+                return Err(format!(
+                    "not-a-policy body SHA-256 changed for `{name}`: expected {expected}, got {actual}; review the excerpt before updating NOT_A_POLICY"
+                ));
+            }
+            Ok(Some(name))
+        }
     }
 }
 
@@ -240,7 +233,7 @@ fn every_policy_doc_toml_block_is_marked_and_loads() {
     );
     let mut expected: Vec<(&str, String)> = NOT_A_POLICY
         .iter()
-        .map(|(page, name)| (*page, (*name).to_string()))
+        .map(|(page, name, _)| (*page, (*name).to_string()))
         .collect();
     expected.sort();
     skipped.sort();
@@ -457,6 +450,29 @@ fn cargo_exception_rejects_replacement_policy_body() {
     let blocks = toml_blocks("docs/how-to/rust-library.md", page);
     assert_eq!(blocks.len(), 1);
     let error = check(&blocks[0]).expect_err("Cargo exception must reject a changed body");
+    assert!(
+        error.contains("not-a-policy body SHA-256 changed"),
+        "unexpected failure: {error}"
+    );
+}
+
+#[test]
+fn cargo_exception_requires_exact_page_and_body() {
+    let (page, text) = PAGES[2];
+    let mut block = toml_blocks(page, text)
+        .into_iter()
+        .find(|block| matches!(block.marker, Ok(Marker::NotAPolicy(_))))
+        .expect("Cargo dependency excerpt");
+    assert_eq!(check(&block), Ok(Some("cargo-dependencies".to_string())));
+    block.page = "fixture.md";
+    let error = check(&block).expect_err("exception must be scoped to its page");
+    assert!(
+        error.contains("not allowlisted"),
+        "unexpected failure: {error}"
+    );
+    block.page = page;
+    block.body.push('\n');
+    let error = check(&block).expect_err("even a whitespace body change needs review");
     assert!(
         error.contains("not-a-policy body SHA-256 changed"),
         "unexpected failure: {error}"
