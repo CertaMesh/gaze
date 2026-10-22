@@ -1,5 +1,6 @@
 """README publication uses byte counts and preserves measurement limits."""
 import copy
+import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -49,7 +50,45 @@ class BytePanelTests(unittest.TestCase):
         for kind, receipt in result.items():
             self.assertEqual({name: row["documents"] for name, row in receipt["sets"].items()}, panels.POPULATIONS[kind])
             self.assertEqual(receipt["method"], "retained-byte-counts")
-            self.assertEqual(receipt["source"]["sha256"], hashlib.sha256((directory / receipt["source"]["file"]).read_bytes()).hexdigest())
+            source = (panels.presidio_baseline_source(directory, "v0.16.0") if kind == "presidio-research"
+                      else (directory / receipt["source"]["file"]).read_bytes())
+            self.assertEqual(receipt["source"]["sha256"], hashlib.sha256(source).hexdigest())
+
+    def test_retained_source_verifies_history_and_rejects_release_changes(self):
+        original = {"benchmarks": {"presidio-research": {
+            "identity": {"sha256": "a" * 64},
+            "rows": {"gaze-v0.16.0": {"leaked_bytes": 7}, "vendor": {"leaked_bytes": 9}},
+            "provenance": {"gaze-v0.16.0": {"release": {"commit": "b" * 40}}}}}}
+        payload = json.dumps(original).encode()
+        archive = gzip.compress(payload, mtime=0)
+        historical_sha = hashlib.sha256(payload).hexdigest()
+        for changed in ("vendor", "current digest", "archive digest", "source digest", "git blob",
+                        "Gaze row", "Gaze provenance", "dataset"):
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as root:
+                directory = Path(root)
+                current = copy.deepcopy(original)
+                entry = current["benchmarks"]["presidio-research"]
+                entry["rows"]["vendor"]["leaked_bytes"] = 3
+                if changed == "Gaze row": entry["rows"]["gaze-v0.16.0"]["leaked_bytes"] = 6
+                if changed == "Gaze provenance": entry["provenance"]["gaze-v0.16.0"]["release"]["commit"] = "c" * 40
+                if changed == "dataset": entry["identity"]["sha256"] = "d" * 64
+                current_bytes = json.dumps(current).encode()
+                (directory / "their-benchmarks.json").write_bytes(current_bytes)
+                (directory / "historical.json.gz").write_bytes(archive)
+                pin = {"archive": "historical.json.gz", "archive_sha256": hashlib.sha256(archive).hexdigest(),
+                       "sha256": historical_sha, "current_sha256": hashlib.sha256(current_bytes).hexdigest(),
+                       "git_blob": hashlib.sha1(b"blob " + str(len(payload)).encode() + b"\0" + payload,
+                                               usedforsecurity=False).hexdigest()}
+                key = {"current digest": "current_sha256", "archive digest": "archive_sha256",
+                       "source digest": "sha256", "git blob": "git_blob"}.get(changed)
+                if key: pin[key] = "0" * len(pin[key])
+                (directory / "readme-byte-panels.json").write_text(json.dumps({"retained_presidio_source": pin}))
+                if changed == "vendor":
+                    self.assertEqual(panels.presidio_baseline_source(directory, "v0.16.0"), payload)
+                    self.assertEqual(pin["sha256"], historical_sha)
+                else:
+                    with self.assertRaises(ValueError):
+                        panels.presidio_baseline_source(directory, "v0.16.0")
 
     def test_micro_f2_pools_counts_instead_of_averaging_documents(self):
         first = counts()

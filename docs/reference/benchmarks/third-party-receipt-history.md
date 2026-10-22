@@ -8,6 +8,8 @@ Long decimal ratios use seven significant digits in this page. The [JSON history
 
 See the [receipt refresh guide](../../../scripts/bench/compare/theirbench/refresh-receipts.md) for capture and admission commands.
 
+The retained Gaze baseline receipt is unchanged. Its [source pins](readme-byte-panels.json) bind the original aggregate to a committed compressed snapshot and its Git commit/blob. A separate SHA-256 pins the current aggregate. Validation requires the same Gaze row, dataset identity and release provenance before retaining those byte counts.
+
 Published aggregate before this campaign: `e7e018ce8c4fa590a5c28db7031f030712a83103`.
 
 Refreshed rows: 31 of 31.

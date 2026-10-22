@@ -31,3 +31,10 @@ in the comparison runtime. It rechecks changed type pairs against the pinned
 analyzer and emits counts, labels and digests only. It refuses coordinate changes
 or unequal-score pairs. This explains order sensitivity without exporting text
 or choosing a seed to improve a benchmark score.
+
+The README's retained Gaze baseline keeps its original receipt and source SHA.
+The [panel manifest](../../../../docs/reference/benchmarks/readme-byte-panels.json)
+pins the original aggregate's compressed snapshot, Git commit and blob separately
+from the current aggregate SHA. A later aggregate refresh updates the current pin;
+it must preserve the historical pin. The panel renderer verifies both files and
+rejects changes to the retained Gaze row, dataset identity or release provenance.

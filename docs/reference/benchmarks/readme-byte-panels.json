@@ -178,5 +178,14 @@
       "scope": "the only published part of PII-TRACE: 500 English conversations; the paper's 13,148-conversation, 13-language set (1,922-document test split) is not public",
       "sha256": "1f37039ca2a9c7a93d7b755e1603d5192424c61e61fcbf2ce9405f26705fd670"
     }
+  },
+  "retained_presidio_source": {
+    "file": "their-benchmarks.json",
+    "sha256": "3e1219a24e04393290e3775a0b8e618efd441cced9083e9fc20ba65590c0c893",
+    "git_commit": "e7e018ce8c4fa590a5c28db7031f030712a83103",
+    "git_blob": "fd8c3dd43075619788f4fe8f4a00cae0de9c0953",
+    "archive": "receipt-sources/their-benchmarks-e7e018ce.json.gz",
+    "archive_sha256": "f634fc632de9cd62995fd897dae49f7b1162f6b6bf2dcf3c2393b08c031639a1",
+    "current_sha256": "7593f4a28810e2e38181aac83dd6d6f5e435ba7752810a750599032036148581"
   }
 }

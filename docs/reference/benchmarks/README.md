@@ -551,22 +551,22 @@ Byte-micro F2 pools UTF-8 bytes across documents: `5*TP/(5*TP+4*FN+FP)`. Labels 
 | Presidio Research | Gaze v0.16.0 | 0.825686 | 7,984 | 1,364 | 0 | [Receipt](readme-byte-measurements/v0.16.0-presidio-research.json) |
 | Presidio Research | Gaze v0.17.0 | 0.836725 | 7,463 | 1,436 | 0 | [Receipt](readme-byte-measurements/v0.17.0-presidio-research.json) |
 | Presidio Research | Presidio (tuned) | 0.918154 | 2,857 | 4,918 | — | [Counts](their-benchmarks.json) |
-| Presidio Research | DataFog core† | 0.144954 | 34,810 | 0 | — | [Counts](their-benchmarks.json) |
-| Presidio Research | DataFog spaCy† | 0.639104 | 15,769 | 4,015 | — | [Counts](their-benchmarks.json) |
-| Presidio Research | scrubadub† | 0.538389 | 20,226 | 1,856 | — | [Counts](their-benchmarks.json) |
-| Presidio Research | GLiNER† | 0.692474 | 13,326 | 4,884 | — | [Counts](their-benchmarks.json) |
-| Presidio Research | OPF† | 0.661851 | 15,305 | 667 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | DataFog core | 0.144954 | 34,810 | 0 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | DataFog spaCy | 0.639104 | 15,769 | 4,015 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | scrubadub | 0.538389 | 20,226 | 1,856 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | GLiNER | 0.692474 | 13,326 | 4,884 | — | [Counts](their-benchmarks.json) |
+| Presidio Research | OPF | 0.661851 | 15,305 | 667 | — | [Counts](their-benchmarks.json) |
 | PIIBench-commercial | Gaze v0.16.0 | 0.627119 | 105,077 | 48,309 | 0 | [Receipt](readme-byte-measurements/v0.16.0-piibench-commercial.json) |
 | PIIBench-commercial | Gaze v0.17.0 | 0.642375 | 100,557 | 49,124 | 0 | [Receipt](readme-byte-measurements/v0.17.0-piibench-commercial.json) |
-| PIIBench-commercial | Presidio† | 0.665144 | 87,853 | 88,715 | — | [Counts](their-benchmarks.json) |
-| PIIBench-commercial | DataFog core† | 0.182618 | 222,697 | 4,529 | — | [Counts](their-benchmarks.json) |
-| PIIBench-commercial | DataFog spaCy† | 0.521220 | 114,880 | 219,413 | — | [Counts](their-benchmarks.json) |
-| PIIBench-commercial | scrubadub† | 0.440551 | 145,119 | 166,114 | — | [Counts](their-benchmarks.json) |
-| PIIBench-commercial | GLiNER† | 0.532256 | 127,361 | 85,245 | — | [Counts](their-benchmarks.json) |
-| PIIBench-commercial | OPF† | 0.399735 | 170,336 | 12,174 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | Presidio | 0.665144 | 87,853 | 88,715 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | DataFog core | 0.182618 | 222,697 | 4,529 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | DataFog spaCy | 0.521220 | 114,880 | 219,413 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | scrubadub | 0.440551 | 145,119 | 166,114 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | GLiNER | 0.532256 | 127,361 | 85,245 | — | [Counts](their-benchmarks.json) |
+| PIIBench-commercial | OPF | 0.399735 | 170,336 | 12,174 | — | [Counts](their-benchmarks.json) |
 | PII-TRACE | Gaze v0.16.0 | 0.758824 | 15,739 | 357 | 0 | [Receipt](readme-byte-measurements/v0.16.0-pii-trace.json) |
 | PII-TRACE | Gaze v0.17.0 | 0.762383 | 15,455 | 710 | 0 | [Receipt](readme-byte-measurements/v0.17.0-pii-trace.json) |
-| PII-TRACE | PII-Tracer† | 0.977742 | 1,083 | 1,871 | — | [Counts](their-benchmarks.json) |
+| PII-TRACE | PII-Tracer | 0.977742 | 1,083 | 1,871 | — | [Counts](their-benchmarks.json) |
 
 † Pre-receipt evidence: not receipt-verified; regeneration pending.
 

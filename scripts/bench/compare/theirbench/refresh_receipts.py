@@ -84,6 +84,10 @@ def page(history: dict) -> str:
              '[JSON history](third-party-receipt-history.json) preserves full precision for both values.', '',
              'See the [receipt refresh guide](../../../scripts/bench/compare/theirbench/refresh-receipts.md) '
              'for capture and admission commands.', '',
+             'The retained Gaze baseline receipt is unchanged. Its [source pins](readme-byte-panels.json) '
+             'bind the original aggregate to a committed compressed snapshot and its Git commit/blob. '
+             'A separate SHA-256 pins the current aggregate. Validation requires the same Gaze row, '
+             'dataset identity and release provenance before retaining those byte counts.', '',
              f"Published aggregate before this campaign: `{history['published_commit']}`.", '',
              f"Refreshed rows: {len(history['rows'])} of {history['expected_rows']}.", '']
     if history.get('order_diagnostic'):
