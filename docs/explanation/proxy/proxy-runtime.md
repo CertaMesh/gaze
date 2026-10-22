@@ -107,7 +107,37 @@ A refusal carries its reason, never the text:
   names the suspect it rejected. A step 2 refusal names every class the nets
   flagged in that string.
 
-The legacy OpenAI and Gemini adapters answer `422 Unprocessable Entity`:
+Routing model identifiers need a different probe because a learned detector can
+mistake a product identifier for a person or username. Anthropic and OpenAI
+`model` fields and the model identifier in Gemini URLs use deterministic
+recognizers when the decoded value is 1 through 128 ASCII bytes from
+`[A-Za-z0-9._:/@-]`. Rules, dictionaries, validators, and the configured locale
+chain still apply. A value that would change returns `422 ControlWouldMutate`;
+the proxy never substitutes a token into a routing identifier. An email address
+fits this grammar and still fails the deterministic probe.
+
+Rule-backed values already established in the Anthropic session manifest stay
+protected. The probe uses a discarded copy of staged manifest state and cannot
+publish mappings or reuse prefix-cache state.
+
+Values outside that grammar run the full pipeline, including NER and safety
+nets, and fail closed on a change. Stop sequences, tool names and IDs,
+`previous_response_id`, message content, and every other field retain the full
+pipeline. A Gemini JSON field named `model` also keeps the full pipeline;
+Gemini routes by the model in its URL. The identifier grammar does not prove that a
+value is free of PII. A name that fits the grammar and has no deterministic
+match is outside this routing probe's coverage.
+
+At startup, `gaze proxy serve` prints
+`warning: no NER model configured: person names are not detected`
+when the policy has no NER model, including runs without a policy.
+
+To verify routing with the installed NER and Nym bundles, run
+`python3 scripts/ci/proxy_model_controls.py --gaze target/debug/gaze --policy target/model-policy.toml`
+with a policy written by `gaze setup`.
+
+The legacy OpenAI and Gemini adapters answer `422 Unprocessable Entity` for a
+protection refusal:
 
 ```json
 {

@@ -43,6 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Proxy routing model identifiers such as `claude-sonnet-4-5` no longer fail
+  because NER or a safety net classifies them as personal data. Strict ASCII
+  identifiers still run deterministic rules, dictionaries, and validators;
+  detected PII returns `422 ControlWouldMutate`. Other values retain the full
+  pipeline. The check covers Anthropic and OpenAI `model` fields and Gemini
+  model URLs. `gaze proxy serve` warns when no NER model is configured (#815).
 - Adjacent format-preserving tokens restore as a complete, unambiguous run,
   including bounded transaction restores. Live sessions, committed proxy
   snapshots, and staged validation share one lazy matcher per token map.
