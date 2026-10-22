@@ -1,1 +1,66 @@
-{}
+{
+  "schema_version": 1,
+  "method": "Each documented command runs in its own git-archive checkout with no target directory. Replay uses only committed value-free observations, contracts and policy snapshots.",
+  "checks": [
+    {
+      "check": "prefixes",
+      "revision": "5807c535842cf5998066caa1507f27190e6ecef6",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "docs/reference/benchmarks/password-code-credentials/json-prefixes/verify.py"
+      ],
+      "initial_target_absent": true,
+      "exit_code": 0,
+      "scorecards_replayed": 16,
+      "gates_verified": 8,
+      "retained_log_sha256": "98b469d8c6052831995bf5f62080ab33995cbc5415029c35c86ad74bf5637a0f",
+      "seconds": 85.83
+    },
+    {
+      "check": "separators",
+      "revision": "5807c535842cf5998066caa1507f27190e6ecef6",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "docs/reference/benchmarks/password-code-credentials/json-separators/verify.py"
+      ],
+      "initial_target_absent": true,
+      "exit_code": 0,
+      "scorecards_replayed": 16,
+      "gates_verified": 8,
+      "retained_log_sha256": "51055f44a8194ee9936dbca24f655f00817b420377fdd324fa9a189b02a967af",
+      "seconds": 76.62
+    },
+    {
+      "check": "escapes",
+      "revision": "5807c535842cf5998066caa1507f27190e6ecef6",
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "scripts/bench",
+        "--python",
+        "3.13",
+        "python",
+        "docs/reference/benchmarks/password-code-credentials/source-escapes/verify.py"
+      ],
+      "initial_target_absent": true,
+      "exit_code": 0,
+      "scorecards_replayed": 16,
+      "gates_verified": 8,
+      "retained_log_sha256": "a2c5868a56ed95650a47ef4ddc98fe4b1e07bf26c27c5afa46af9182786b2e5d",
+      "seconds": 77.41
+    }
+  ]
+}
