@@ -273,6 +273,47 @@ through a version-keyed legacy map in `render_benchmark_doc.py` (`v0.14.0`
 shipped `full-stack-kiji-resolve`); an unmapped row without the field is
 refused rather than re-labelled with today's default.
 
+### New exposure report
+
+`agentic_layers.py gate` adds `leak_diff` to its JSON receipt and a new-exposure
+table to its Markdown summary. It uses the observation records referenced by
+both scorecards. If the records are stored elsewhere, supply `--base-record`
+and `--candidate-record`; their hashes must match the scorecard references.
+Legacy comparisons without records say the report is unavailable.
+
+The report counts all ground-truth PII bytes, independently of the scored-label
+contract. A byte protected by the base and exposed by the candidate counts as
+`new_exposed_bytes`, even when other gains improve the net result.
+`newly_protected_bytes` counts the reverse transition. `net_leaked_bytes` is new
+exposure minus new protection, so a positive number means more leakage.
+The report has schema version 1 and does not change the gate's verdict rules.
+
+Layer totals count each byte once. Class rows deduplicate within each gold
+class, so overlapping classes must not be summed into a layer total.
+A prediction-class change that preserves protection exposes no bytes.
+Refusals return no content and count as protecting the document; the report
+includes refusal counts, and the gate's existing refusal checks still apply.
+
+The JSON includes at most 20 new-exposure spans, in deterministic layer,
+document, class, and offset order. Each span contains only a document ID,
+half-open UTF-8 byte offsets, and its gold class. It never copies protected
+values. The total span count remains available when the list is truncated.
+
+The standalone command needs no capture, model, binary, or original text:
+
+```bash
+uv run --project scripts/bench python scripts/bench/leak_diff.py \
+  --base-record target/gate/base/observations-v1.jsonl.gz \
+  --candidate-record target/gate/candidate/observations-v1.jsonl.gz \
+  --config policy-file --output target/gate/new-exposure.json
+```
+
+`--span-limit` controls the standalone sample size. Mismatched corpus digests,
+gold inventories, layer identities, or observed populations refuse a report.
+The committed [example report](fixtures/leak-diff-example.json) comes from the
+v0.17 GLiNER mechanism records, with their hashes pinned in the report.
+`test_leak_diff.py` reproduces its bytes without another benchmark capture.
+
 ## Required local models
 
 The runner validates the model bundle before it builds or starts a benchmark
