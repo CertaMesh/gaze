@@ -88,15 +88,7 @@ impl NerDetector {
         &self,
         input: &str,
     ) -> Result<Vec<NerSpanResult>, super::error::NerRuntimeError> {
-        let mut spans = Vec::new();
-        for chunk in self.backend.chunk_ranges(input)? {
-            spans.extend(self.backend.detect(&input[chunk.clone()])?.into_iter().map(
-                |mut span| {
-                    span.span = span.span.start + chunk.start..span.span.end + chunk.start;
-                    span
-                },
-            ));
-        }
+        let spans = self.backend.detect_document(input)?;
         Ok(merge_overlapping_spans(snap_word_class_edges(input, spans))
             .into_iter()
             .filter(|span| decode::is_valid_entity_span(input, &span.span, &span.class))
