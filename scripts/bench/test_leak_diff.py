@@ -1,6 +1,8 @@
 """New exposures must remain visible even when total protection improves."""
 
+import contextlib
 import copy
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -15,6 +17,7 @@ import agentic_layers as agentic
 import gaze_bench_score as score
 import scorecard_record as record
 import leak_diff
+from test_agentic_layers import _scorecard
 
 
 class LeakDiffTests(unittest.TestCase):
@@ -153,8 +156,10 @@ class LeakDiffTests(unittest.TestCase):
         self.assertIn('| C | EMAIL | 3 | 7 | -4 |', markdown)
         cards[1]['observation_record']['sha256'] = '0' * 64
         with mock.patch.object(agentic, 'compare_layers', return_value=verdict):
-            with self.assertRaises(agentic.LayerError):
-                agentic.gate(*cards, scorecard_paths=tuple(paths))
+            unavailable = agentic.gate(*cards, scorecard_paths=tuple(paths))
+        self.assertEqual(unavailable['verdict'], verdict['verdict'])
+        self.assertNotIn('leak_diff', unavailable)
+        self.assertIn('unavailable:', agentic.gate_markdown(unavailable))
 
     def test_committed_mechanism_pair_matches_report_bytes(self):
         root = Path(__file__).resolve().parents[2]
@@ -168,3 +173,134 @@ class LeakDiffTests(unittest.TestCase):
                          dict.fromkeys('ACDR', 0))
         self.assertEqual(result['layers']['A']['newly_protected_bytes'], 20)
         self.assertEqual(result['layers']['C']['newly_protected_bytes'], 81)
+
+
+class GateReportCliTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+
+    def write_card(self, name, card):
+        path = self.root / (name + '.json')
+        path.write_text(json.dumps(card))
+        return path
+
+    def cli(self, base, candidate, *options):
+        output = self.root / 'gate.json'
+        output.unlink(missing_ok=True)
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            status = agentic.main(['gate', '--base', str(base), '--candidate', str(candidate),
+                                   '--output', str(output), *map(str, options)])
+        receipt = json.loads(output.read_text()) if output.exists() else None
+        return status, receipt, stdout.getvalue(), stderr.getvalue()
+
+    def test_cli_missing_optional_records_preserves_pass_and_fail(self):
+        for leaks, expected, status in [(9, 'pass', 0), (11, 'fail', 1)]:
+            with self.subTest(verdict=expected):
+                paths = []
+                for name, count in [('base', 10), ('candidate', leaks)]:
+                    card = _scorecard(dict.fromkeys('CADR', count))
+                    card['observation_record'] = dict(file='absent.jsonl.gz', sha256='a' * 64)
+                    paths.append(self.write_card(name, card))
+                actual, receipt, stdout, stderr = self.cli(*paths)
+                self.assertEqual(actual, status, stderr)
+                self.assertEqual(receipt['verdict'], expected)
+                self.assertNotIn('leak_diff', receipt)
+                self.assertIn('unavailable:', stdout)
+                self.assertNotIn(str(self.root), stdout + stderr + json.dumps(receipt))
+                self.assertEqual(stderr, '')
+
+    def test_cli_invalid_optional_records_preserve_gate_without_echoing_values(self):
+        broken = self.root / 'broken.jsonl.gz'
+        broken.write_bytes(b'not a gzip record')
+        for pointer in [None, dict(file=broken.name, sha256='0' * 64),
+                        dict(file=broken.name, sha256=score.sha256_file(broken)),
+                        dict(file='../private-record.jsonl.gz', sha256='0' * 64),
+                        dict(file=broken.name)]:
+            with self.subTest(pointer=pointer):
+                paths = []
+                for name, count in [('base', 10), ('candidate', 9)]:
+                    card = _scorecard(dict.fromkeys('CADR', count))
+                    if pointer is not None:
+                        card['observation_record'] = pointer
+                    paths.append(self.write_card(name, card))
+                status, receipt, stdout, stderr = self.cli(*paths)
+                self.assertEqual(status, 0, stderr)
+                self.assertEqual(receipt['verdict'], 'pass')
+                self.assertNotIn('leak_diff', receipt)
+                self.assertIn('unavailable:', stdout)
+                self.assertNotIn('private-record', stdout + stderr + json.dumps(receipt))
+                self.assertEqual(stderr, '')
+
+    def test_cli_unexpected_report_error_preserves_gate_without_echoing_values(self):
+        source = self.root / 'record.jsonl.gz'
+        source.write_bytes(b'synthetic report input')
+        paths = []
+        for name, count in [('base', 10), ('candidate', 9)]:
+            card = _scorecard(dict.fromkeys('CADR', count))
+            card['observation_record'] = dict(file=source.name, sha256=score.sha256_file(source))
+            paths.append(self.write_card(name, card))
+        with mock.patch.object(leak_diff, 'report', side_effect=RuntimeError('private-input-value')):
+            status, receipt, stdout, stderr = self.cli(*paths)
+        self.assertEqual(status, 0, stderr)
+        self.assertEqual(receipt['verdict'], 'pass')
+        self.assertNotIn('leak_diff', receipt)
+        self.assertIn('unavailable:', stdout)
+        self.assertNotIn('private-input-value', stdout + stderr + json.dumps(receipt))
+
+    @staticmethod
+    def mechanism_records():
+        root = Path(__file__).resolve().parents[2]
+        pair = root / 'docs/reference/benchmarks/mechanisms/6cc02a9f9828c76883dba10f65925d675f52dd820e05311cf2280f47569b28d0'
+        return (pair / 'base-32cdbede14c02ecd07a41103c9892ba88b79b6c970500e816ef97460e05184f1.jsonl.gz',
+                pair / 'candidate-6e0d206cc7d9cd67b32ddb78df9884b50413f662be8086a49fa9dfd419de699d.jsonl.gz')
+
+    def test_cli_frozen_uses_relocated_explicit_records(self):
+        source = self.mechanism_records()[0]
+        path = self.write_card('relocated', record.rescore(source, score.SCORED_LABEL_CONTRACT_V1,
+                                                        max_workers=1))
+        status, receipt, stdout, stderr = self.cli(
+            path, path, '--base-record', source, '--candidate-record', source,
+            '--freeze-gold-verdicts', 'base', '--allow-legacy-policy-inputs')
+        self.assertEqual(status, 1, stderr)
+        self.assertEqual(receipt['verdict'], 'fail')
+        self.assertIn('Candidate-verdict sensitivity view:', stdout)
+        self.assertIn('leak_diff', receipt)
+        self.assertIn('leak_diff', receipt['frozen_gold_verdicts']['raw_comparison'])
+        self.assertNotIn('unavailable:', stdout)
+        self.assertNotIn('ERROR:', stderr)
+
+    def test_committed_fixtures_match_report_free_cli_verdicts_and_receipts(self):
+        sources = self.mechanism_records()
+        cards = [self.write_card(name, record.rescore(source, score.SCORED_LABEL_CONTRACT_V1,
+                                                     max_workers=1))
+                 for name, source in zip(('base', 'candidate'), sources, strict=True)]
+
+        def without_reports(value):
+            if isinstance(value, dict):
+                return {key: without_reports(item) for key, item in value.items()
+                        if key not in {'leak_diff', 'leak_diff_unavailable'}}
+            return value
+
+        for left, right in [(0, 1), (1, 0), (0, 0)]:
+            for frozen in (False, True):
+                with self.subTest(left=left, right=right, frozen=frozen):
+                    options = ['--base-record', sources[left], '--candidate-record', sources[right],
+                               '--allow-legacy-policy-inputs']
+                    if frozen:
+                        options += ['--freeze-gold-verdicts', 'base']
+                    # Disable only optional enrichment; admission and comparison still run.
+                    with mock.patch.object(agentic, '_with_leak_diff', side_effect=lambda result, *a, **k: result):
+                        baseline = self.cli(cards[left], cards[right], *options)
+                    reported = self.cli(cards[left], cards[right], *options)
+                    self.assertEqual(reported[0], baseline[0], reported[3])
+                    self.assertEqual(reported[1]['verdict'], baseline[1]['verdict'])
+                    self.assertEqual(without_reports(reported[1]), baseline[1])
+                    self.assertEqual(reported[2].splitlines()[0], baseline[2].splitlines()[0])
+                    self.assertEqual(reported[3], baseline[3])
+                    if reported[1]['verdict'] == 'not_comparable':
+                        self.assertNotIn('leak_diff', reported[1])
+                    else:
+                        self.assertIn('leak_diff', reported[1])

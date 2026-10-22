@@ -5710,11 +5710,11 @@ def gate(
 
 
 def _with_leak_diff(result, base, candidate, scorecard_paths=None, record_paths=None):
-    import leak_diff
-    import scorecard_record as records
     if result['verdict'] == 'not_comparable':
         return result
     try:
+        import leak_diff
+        import scorecard_record as records
         if record_paths is None:
             if scorecard_paths is None or not all(card.get('observation_record') for card in (base, candidate)):
                 return {**result, 'leak_diff_unavailable': 'supply both observation records to report new exposure'}
@@ -5729,8 +5729,10 @@ def _with_leak_diff(result, base, candidate, scorecard_paths=None, record_paths=
             if not pointer or pointer['sha256'] != score.sha256_file(path):
                 raise records.RecordError('scorecard observation record SHA-256 mismatch')
         report = leak_diff.report(*record_paths, config=result.get('config'))
-    except (records.RecordError, OSError, KeyError, TypeError) as error:
-        raise LayerError('cannot produce new-exposure report from scorecard-bound records') from error
+    except Exception:
+        # Optional enrichment cannot replace the admitted gate result or echo input values.
+        return {**result, 'leak_diff_unavailable':
+                'cannot produce new-exposure report from scorecard-bound records'}
     return {**result, 'leak_diff': report}
 
 
@@ -5781,7 +5783,8 @@ def gate_frozen_records(
     import scorecard_record as record
     kwargs = {"config": config, "policy_delta": policy_delta,
               "allow_legacy_policy_inputs": allow_legacy_policy_inputs}
-    raw = gate(base, candidate, scorecard_paths=scorecard_paths, **kwargs)
+    raw = gate(base, candidate, scorecard_paths=scorecard_paths,
+               record_paths=(base_record, candidate_record), **kwargs)
     if raw["verdict"] == "not_comparable" and raw["differing"] != ["layer_c_gold_validity"]:
         return raw
     try:

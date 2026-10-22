@@ -282,7 +282,10 @@ refused rather than re-labelled with today's default.
 table to its Markdown summary. It uses the observation records referenced by
 both scorecards. If the records are stored elsewhere, supply `--base-record`
 and `--candidate-record`; their hashes must match the scorecard references.
-Legacy comparisons without records say the report is unavailable.
+Missing, unreadable, or invalid optional records produce a value-free
+`unavailable:` diagnostic. The gate keeps its comparison verdict, receipt, and
+exit code. The initial gate call in frozen comparisons also uses the explicit
+record paths. Required record replay and artifact-admission checks remain mandatory.
 
 The report counts all ground-truth PII bytes, independently of the scored-label
 contract. A byte protected by the base and exposed by the candidate counts as
