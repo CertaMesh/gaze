@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 
 import render_theirbench as render
+from row_receipts import TIMING_LIMIT
 
 ROOT = Path(__file__).resolve().parents[4]
 HISTORY = ROOT / 'docs/reference/benchmarks/third-party-receipt-history.json'
@@ -48,8 +49,11 @@ def refresh(data: dict, history: dict, report: Path, own: Path, tool: str,
         timing = key.startswith('row.latency.') or key == 'own_metric.predict_seconds'
         if not timing and not metric_reason:
             raise ValueError(f'{benchmark}/{tool}: explain changed metric {key} before publication')
-        change['reason'] = ('Fresh capture of the pinned configuration. Per-document timing varies with machine '
-                            'load; no speed comparison is claimed.' if timing else metric_reason)
+        retained = (key.startswith('row.latency.')
+                    and measured['provenance'][tool].get('timing_samples', {}).get('test'))
+        timing_note = ('Per-document samples are retained for quantile recomputation.' if retained else TIMING_LIMIT)
+        change['reason'] = ('Fresh capture of the pinned configuration. Timing varies with machine load; '
+                            'no speed comparison is claimed. ' + timing_note if timing else metric_reason)
     provenance = fresh['provenance'][tool]
     updated = copy.deepcopy(history)
     updated['rows'].append({
@@ -77,6 +81,9 @@ def page(history: dict) -> str:
              'These rows originally had no prediction digest or scorer receipt. Each refreshed row passes '
              '`check_own_result` before its receipt marker is removed. The dataset, model and configuration '
              'remain pinned. Raw text and predictions stay outside the repository.', '',
+             TIMING_LIMIT + ' This includes both refreshed OPF rows and all three PII-Tracer rows. '
+             'The committed [capture receipts](receipt-sources/published-rows.json) preserve every published leaf, '
+             'including latency, for reconciliation. They do not restore the missing timing samples.', '',
              'The tables keep every replaced numeric value from the published measurement. New per-label '
              'byte telemetry has no historical value and appears only in the aggregate. Unlisted metrics '
              'retain their published values. Timing is recorded for provenance and does not establish a speed gain.', '',

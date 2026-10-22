@@ -20,6 +20,7 @@ import dataclasses
 import hashlib
 import json
 import re
+import shutil
 import os
 import platform
 import subprocess
@@ -41,6 +42,7 @@ from cpu_contention import ForeignCpuSampler  # noqa: E402
 import loaders  # noqa: E402
 from comparison_metrics import ComparisonMetrics  # noqa: E402
 import tagged_gaze  # noqa: E402
+from timing_samples import check_samples, latency_ns  # noqa: E402
 
 score = loaders.score
 BENCHMARKS = ("presidio-research", "piibench-commercial", "pii-trace")
@@ -318,11 +320,14 @@ def measure_tool(
     result: dict[str, object] = {}
     for split, documents in splits.items():
         cells, timers = Cells(mapping, common), []
-        with (predictions_dir / f"{name}.{split}.jsonl").open("w", encoding="utf-8") as sink:
+        with (predictions_dir / f"{name}.{split}.jsonl").open("w", encoding="utf-8") as sink, \
+             (predictions_dir / f"{name}.{split}.timings.jsonl").open("w", encoding="utf-8") as timing_sink:
             for index, document in enumerate(documents):
-                started = time.perf_counter()
+                started = time.perf_counter_ns()
                 predictions = predictor(document)
-                timers.append((time.perf_counter() - started) * 1000)
+                elapsed_ns = time.perf_counter_ns() - started
+                timers.append(elapsed_ns)
+                timing_sink.write(json.dumps({"index": index, "ns": elapsed_ns}, separators=(",", ":")) + "\n")
                 if name == "opf":
                     # As compare.measure does: OPF's native secret is scored as custom:secret.
                     predictions = [dataclasses.replace(s, label="custom:secret") if s.label == "secret" else s
@@ -330,8 +335,22 @@ def measure_tool(
                 compare.validate_labels(predictions, mapping)
                 cells.add(document, predictions)
                 sink.write(json.dumps({"index": index, "spans": char_spans(document, predictions)}) + "\n")
-        result[split] = {**cells.result(), "latency": latency(timers)}
+        result[split] = {**cells.result(), "latency": latency_ns(timers)}
     return result
+
+
+def retain_timing_samples(name: str, predictions_dir: Path, output: Path) -> dict:
+    """Keep text-free samples beside the capture report, with prediction and sample digests."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    receipts = {}
+    for source in sorted(predictions_dir.glob(f"{name}.*.timings.jsonl")):
+        split = source.name[len(name) + 1:-len('.timings.jsonl')]
+        destination = output.parent / source.name
+        if source.resolve() != destination.resolve():
+            shutil.copyfile(source, destination)
+        receipts[split] = {"file": destination.name, "sha256": sha256_file(destination),
+                           "prediction_sha256": sha256_file(predictions_dir / f"{name}.{split}.jsonl")}
+    return receipts
 
 
 def measure_gaze(
@@ -396,6 +415,10 @@ def rescore(report: dict, splits: Mapping[str, Sequence[score.Document]],
             for document, line in zip(documents, rows):
                 stored = json.loads(line)["spans"]
                 cells.add(document, compare.byte_spans(document.text, [tuple(span) for span in stored]))
+            timing = report.get("provenance", {}).get(name, {}).get("timing_samples", {}).get(split)
+            if timing:
+                check_samples(predictions_dir / f"{name}.{split}.timings.jsonl", timing,
+                              result[split]["latency"], sha256_file(predictions_dir / f"{name}.{split}.jsonl"))
             fresh = cells.result()
             for view, values in fresh.items():
                 old = result[split][view]
@@ -554,6 +577,8 @@ def main() -> int:
                     # The merge ties this row's own-scorer result to these exact predictions.
                     report["provenance"][name] = {**provenance, "cpu": watch.result(), "prediction_sha256":
                                                   sha256_file(args.predictions_dir / f"{name}.test.jsonl")}
+                    report["provenance"][name]["timing_samples"] = retain_timing_samples(
+                        name, args.predictions_dir, args.output)
                 finally:
                     if hasattr(backend, "close"):
                         backend.close()

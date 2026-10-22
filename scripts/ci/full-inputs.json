@@ -717,6 +717,8 @@
     "docs/reference/benchmarks/readme-byte-measurements/v0.17.0-presidio-research.json",
     "docs/reference/benchmarks/readme-byte-measurements/v0.17.0-sealed.json",
     "docs/reference/benchmarks/readme-byte-panels.json",
+    "docs/reference/benchmarks/receipt-sources/README.md",
+    "docs/reference/benchmarks/receipt-sources/published-rows.json",
     "docs/reference/benchmarks/receipt-sources/their-benchmarks-e7e018ce.json.gz",
     "docs/reference/benchmarks/record-id-boundaries-v19-contract-replay.json",
     "docs/reference/benchmarks/record-id-boundary-pre-fix-sensitivity.json",

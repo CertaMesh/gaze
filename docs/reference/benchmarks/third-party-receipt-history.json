@@ -15,13 +15,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 0.003,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.002
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 0.009,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.007
         }
       ],
@@ -50,7 +50,7 @@
         {
           "metric": "row.latency.p95_ms",
           "published": 0.038,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.036
         }
       ],
@@ -79,13 +79,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 0.047,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.04
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 0.087,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.075
         }
       ],
@@ -114,13 +114,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 0.076,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.07
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 0.441,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.399
         }
       ],
@@ -149,13 +149,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 0.035,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.033
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 0.129,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.122
         }
       ],
@@ -184,13 +184,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 0.093,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.09
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 0.631,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.597
         }
       ],
@@ -219,19 +219,19 @@
         {
           "metric": "own_metric.predict_seconds",
           "published": 0.1,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.0
         },
         {
           "metric": "row.latency.p50_ms",
           "published": 4.706,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 5.647
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 9.843,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 11.451
         }
       ],
@@ -260,13 +260,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 8.949,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 10.488
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 60.048,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 65.978
         }
       ],
@@ -295,13 +295,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 4.686,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 6.573
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 9.834,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 14.57
         }
       ],
@@ -330,13 +330,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 8.999,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 11.101
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 60.37,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 70.967
         }
       ],
@@ -365,19 +365,19 @@
         {
           "metric": "own_metric.predict_seconds",
           "published": 0.1,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.0
         },
         {
           "metric": "row.latency.p50_ms",
           "published": 5.213,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 6.802
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 10.971,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 14.601
         }
       ],
@@ -496,13 +496,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 9.793,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 11.922
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 64.429,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 73.77
         },
         {
@@ -573,19 +573,19 @@
         {
           "metric": "own_metric.predict_seconds",
           "published": 0.1,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.0
         },
         {
           "metric": "row.latency.p50_ms",
           "published": 5.137,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 5.614
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 10.733,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 11.684
         }
       ],
@@ -704,13 +704,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 9.833,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 12.883
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 64.836,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 76.992
         },
         {
@@ -781,19 +781,19 @@
         {
           "metric": "own_metric.predict_seconds",
           "published": 0.1,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.0
         },
         {
           "metric": "row.latency.p50_ms",
           "published": 5.173,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 5.422
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 10.765,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 11.141
         }
       ],
@@ -912,13 +912,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 9.824,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 10.33
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 64.904,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 66.174
         },
         {
@@ -989,19 +989,19 @@
         {
           "metric": "own_metric.predict_seconds",
           "published": 0.0,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.1
         },
         {
           "metric": "row.latency.p50_ms",
           "published": 21.199,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 42.459
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 38.686,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 82.95
         }
       ],
@@ -1102,13 +1102,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 30.079,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 35.707
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 318.774,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 359.326
         }
       ],
@@ -1137,19 +1137,19 @@
         {
           "metric": "own_metric.predict_seconds",
           "published": 0.1,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.0
         },
         {
           "metric": "row.latency.p50_ms",
           "published": 20.861,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 24.624
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 36.135,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 49.621
         }
       ],
@@ -1262,13 +1262,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 29.875,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 43.072
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 317.759,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 382.545
         },
         {
@@ -1339,19 +1339,19 @@
         {
           "metric": "own_metric.predict_seconds",
           "published": 0.1,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.0
         },
         {
           "metric": "row.latency.p50_ms",
           "published": 62.62,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 69.603
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 82.448,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 170.238
         }
       ],
@@ -1380,13 +1380,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 74.895,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 101.176
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 343.161,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 507.595
         }
       ],
@@ -1415,19 +1415,19 @@
         {
           "metric": "own_metric.predict_seconds",
           "published": 0.1,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.0
         },
         {
           "metric": "row.latency.p50_ms",
           "published": 119.853,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 132.947
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 268.137,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 220.431
         }
       ],
@@ -1456,13 +1456,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 132.258,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 187.91
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 447.331,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 723.676
         }
       ],
@@ -1491,19 +1491,19 @@
         {
           "metric": "own_metric.predict_seconds",
           "published": 0.2,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.0
         },
         {
           "metric": "row.latency.p50_ms",
           "published": 132.081,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 134.226
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 267.622,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 229.048
         }
       ],
@@ -1532,13 +1532,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 131.793,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 186.631
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 447.995,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 698.038
         }
       ],
@@ -1567,19 +1567,19 @@
         {
           "metric": "own_metric.predict_seconds",
           "published": 0.1,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 0.0
         },
         {
           "metric": "row.latency.p50_ms",
           "published": 199.362,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 204.245
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 678.434,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 672.942
         }
       ],
@@ -1608,13 +1608,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 374.949,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 318.063
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 1205.339,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 857.613
         }
       ],
@@ -1643,13 +1643,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 456.913,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 848.938
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 6439.749,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 11526.411
         }
       ],
@@ -1678,13 +1678,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 183.7,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 390.459
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 550.059,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 1188.997
         }
       ],
@@ -1713,13 +1713,13 @@
         {
           "metric": "row.latency.p50_ms",
           "published": 396.359,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 628.181
         },
         {
           "metric": "row.latency.p95_ms",
           "published": 3268.224,
-          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "reason": "Single-run timings; per-document samples were not retained. These machine-dependent aggregates cannot be reproduced from committed data. No speed comparison is claimed.",
           "regenerated": 5182.321
         }
       ],

@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 import render_theirbench as render
+import row_receipts
 from test_add_tool import report, own_presidio, trace_report, own_pii_trace, data
 import test_theirbench as fixtures
 
@@ -150,6 +151,7 @@ class ReceiptAdmissionTest(unittest.TestCase):
 
     def test_committed_receipt_backed_rows_reassemble_identically(self):
         committed = json.loads(render.DATA.read_text())
+        receipts = json.loads(row_receipts.RECEIPTS.read_text())['benchmarks']
         verified = 0
         for name, entry in committed['benchmarks'].items():
             for tool in render.public_rows(entry['rows']):
@@ -157,9 +159,11 @@ class ReceiptAdmissionTest(unittest.TestCase):
                 if not provenance.get('own_scorer_input'):
                     self.assertEqual(entry.get('receipt_status', {}).get(tool), 'pre-receipt')
                     continue
-                report = {'rows': {tool: {'test': entry['rows'][tool]}}, 'provenance': {tool: provenance}}
+                receipt = receipts[name][tool]
+                row_receipts.check_row(entry, tool, receipt, row_receipts.RECEIPTS.parent)
+                report = {'rows': {tool: {'test': receipt['row']}}, 'provenance': {tool: provenance}}
                 own = {'system': tool, 'input': provenance['own_scorer_input'],
-                       'scored': entry['own_metric'][tool], 'overall': entry['own_metric'][tool]}
+                       'scored': receipt['own_metric'], 'overall': receipt['own_metric']}
                 if name == 'pii-trace':
                     own['overall'], _ = render.pii_trace_repro.published(
                         render.pii_trace_repro.scores_from_counts(own['input']['counts']))

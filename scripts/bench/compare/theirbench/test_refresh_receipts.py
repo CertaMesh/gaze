@@ -81,3 +81,14 @@ def test_long_ratio_display_keeps_full_precision_in_numeric_history(tmp_path):
     rendered = page(history)
     assert '5.218500e-02' in rendered
     assert 'seven significant digits' in rendered and 'JSON history' in rendered
+
+
+def test_new_sample_backed_timing_is_not_described_as_missing_samples(tmp_path):
+    state = legacy()
+    body = copy.deepcopy(report())
+    body['rows']['pii-tracer']['test']['latency']['p50_ms'] = 2
+    body['provenance']['pii-tracer']['timing_samples'] = {'test': {'sha256': 'a' * 64}}
+    _, history = refresh(state, {'rows': []}, *write(tmp_path, body), 'pii-tracer', None)
+    reason = history['rows'][0]['changes'][0]['reason']
+    assert 'samples are retained' in reason
+    assert 'not retained' not in reason
