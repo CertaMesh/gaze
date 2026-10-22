@@ -160,6 +160,9 @@ class ReceiptAdmissionTest(unittest.TestCase):
                 report = {'rows': {tool: {'test': entry['rows'][tool]}}, 'provenance': {tool: provenance}}
                 own = {'system': tool, 'input': provenance['own_scorer_input'],
                        'scored': entry['own_metric'][tool], 'overall': entry['own_metric'][tool]}
+                if name == 'pii-trace':
+                    own['overall'], _ = render.pii_trace_repro.published(
+                        render.pii_trace_repro.scores_from_counts(own['input']['counts']))
                 bundle = render.checked_row_bundle(name, entry, report, tool, own)
                 after = copy.deepcopy(entry)
                 render.install_row_bundle(after, tool, bundle)

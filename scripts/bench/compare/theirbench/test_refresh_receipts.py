@@ -67,3 +67,17 @@ def test_does_not_replace_an_already_verified_row(tmp_path):
 def test_numeric_history_includes_removed_metrics_but_not_new_telemetry():
     assert metric_changes({'a': 1, 'b': 2}, {'a': 1, 'new': 3}) == [
         {'metric': 'b', 'published': 2, 'regenerated': None}]
+
+
+def test_long_ratio_display_keeps_full_precision_in_numeric_history(tmp_path):
+    state = legacy()
+    body = report()
+    body['rows'] = copy.deepcopy(body['rows'])
+    body['rows']['pii-tracer']['test']['latency']['p50_ms'] = 0.05218500317447932
+    _, history = refresh(state, {'rows': [], 'published_commit': 'a' * 40, 'expected_rows': 1},
+                         *write(tmp_path, body), 'pii-tracer', None)
+    change = next(item for item in history['rows'][0]['changes'] if item['metric'] == 'row.latency.p50_ms')
+    assert json.loads(json.dumps(change))['regenerated'] == 0.05218500317447932
+    rendered = page(history)
+    assert '5.218500e-02' in rendered
+    assert 'seven significant digits' in rendered and 'JSON history' in rendered

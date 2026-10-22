@@ -1560,6 +1560,117 @@
         "harness_revision": "5a25074ab4256da4be39ed81ff169a69646c4d5a"
       },
       "tool": "gliner-high-recall"
+    },
+    {
+      "benchmark": "presidio-research",
+      "changes": [
+        {
+          "metric": "own_metric.predict_seconds",
+          "published": 0.1,
+          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "regenerated": 0.0
+        },
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 199.362,
+          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "regenerated": 204.245
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 678.434,
+          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "regenerated": 672.942
+        }
+      ],
+      "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+      "prediction_sha256": "4c3fdcd3ebde02b5021a80dc64fca55136b03ed573c7621209f2f3ff1c5113ba",
+      "published_harness_revision": "7b09e385229fe21b15ef2d9be0400569c43bb1e4",
+      "regenerated_harness_revision": "870acad7a7a733cd2f7203a2358080a5aae85f1d",
+      "rescored_with": {
+        "at": "2026-10-22T06:51:14.084296+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "870acad7a7a733cd2f7203a2358080a5aae85f1d"
+      },
+      "tool": "pii-tracer"
+    },
+    {
+      "benchmark": "pii-trace",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 374.949,
+          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "regenerated": 318.063
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 1205.339,
+          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "regenerated": 857.613
+        }
+      ],
+      "dataset_sha256": "1f37039ca2a9c7a93d7b755e1603d5192424c61e61fcbf2ce9405f26705fd670",
+      "prediction_sha256": "c5198c15a78a83a009956d59e102e0e78ff93e4c8774b34821a385e400c802c1",
+      "published_harness_revision": "abcfeafc5f62151fc827bb0ce1b84185b718b31a",
+      "regenerated_harness_revision": "870acad7a7a733cd2f7203a2358080a5aae85f1d",
+      "rescored_with": {
+        "at": "2026-10-22T07:20:52.059787+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "870acad7a7a733cd2f7203a2358080a5aae85f1d"
+      },
+      "tool": "pii-tracer"
+    },
+    {
+      "benchmark": "piibench-commercial",
+      "changes": [
+        {
+          "metric": "row.latency.p50_ms",
+          "published": 456.913,
+          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "regenerated": 848.938
+        },
+        {
+          "metric": "row.latency.p95_ms",
+          "published": 6439.749,
+          "reason": "Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed.",
+          "regenerated": 11526.411
+        }
+      ],
+      "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+      "prediction_sha256": "a5ac13185052ab44aa42fdf0150431852bc5d32fc655c3fef7870ed0b79cc02b",
+      "published_harness_revision": "bfd35ce60e23fc7adcdc51aa8623e97901d9169d",
+      "regenerated_harness_revision": "870acad7a7a733cd2f7203a2358080a5aae85f1d",
+      "rescored_with": {
+        "at": "2026-10-22T11:03:59.065729+00:00",
+        "comparison_revision": "c26adac173f8792e35452e84bc377063dafc32bc",
+        "comparison_sha256": {
+          "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
+          "compare.py": "5feba7769302ee34383ba60f8fc04ca3bea881435deaa8c5f5ce5d4e49474a31",
+          "comparison_metrics.py": "def0384ab6e498af49a0a6dc65b583bbd3f1963e1a769d4c301c1a44317e6e8c",
+          "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
+          "label-map.json": "dd5b9d57406d969dc59c9e377c73b0fed68b1dee732acb1fac2167a8aacef4fa"
+        },
+        "harness_dirty": false,
+        "harness_revision": "870acad7a7a733cd2f7203a2358080a5aae85f1d"
+      },
+      "tool": "pii-tracer"
     }
   ],
   "schema_version": 1

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import re
 from pathlib import Path
 
 import render_theirbench as render
@@ -64,6 +65,13 @@ def refresh(data: dict, history: dict, report: Path, own: Path, tool: str,
     return candidate, updated
 
 
+def display_number(value: int | float | None) -> str:
+    text = str(value)
+    if isinstance(value, float) and any(len(run) > 6 for run in re.findall(r'\d+', text)):
+        return format(value, '.6e')
+    return text
+
+
 def page(history: dict) -> str:
     lines = ['# Third-party receipt refresh', '',
              'These rows originally had no prediction digest or scorer receipt. Each refreshed row passes '
@@ -72,6 +80,10 @@ def page(history: dict) -> str:
              'The tables keep every replaced numeric value from the published measurement. New per-label '
              'byte telemetry has no historical value and appears only in the aggregate. Unlisted metrics '
              'retain their published values. Timing is recorded for provenance and does not establish a speed gain.', '',
+             'Long decimal ratios use seven significant digits in this page. The '
+             '[JSON history](third-party-receipt-history.json) preserves full precision for both values.', '',
+             'See the [receipt refresh guide](../../../scripts/bench/compare/theirbench/refresh-receipts.md) '
+             'for capture and admission commands.', '',
              f"Published aggregate before this campaign: `{history['published_commit']}`.", '',
              f"Refreshed rows: {len(history['rows'])} of {history['expected_rows']}.", '']
     if history.get('order_diagnostic'):
@@ -98,7 +110,7 @@ def page(history: dict) -> str:
         else:
             lines += ['| Metric | Published (superseded) | Regenerated | Why |',
                       '| --- | ---: | ---: | --- |']
-            lines += [f"| `{v['metric']}` | {v['published']} | {v['regenerated']} | {v['reason']} |"
+            lines += [f"| `{v['metric']}` | {display_number(v['published'])} | {display_number(v['regenerated'])} | {v['reason']} |"
                       for v in item['changes']]
             lines += ['']
     for item in history.get('unavailable', []):

@@ -977,9 +977,9 @@ Gold PII bytes: 55,580. Common-intersection labels: account_number, private_addr
 
 | Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | Own metric (character F1, label-agnostic, the paper's metric) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| pii-tracer† | 1,083 | 1,871 | 8.7% | held (typed-metric review) | held (typed-metric review) | 702 | 0.974 |
+| pii-tracer | 1,083 | 1,871 | 8.7% | held (typed-metric review) | held (typed-metric review) | 702 | 0.974 |
 
-† Pre-receipt evidence: not receipt-verified; regeneration pending.
+pii-tracer was measured separately on the same documents, with harness `870acad7` (typed metrics rescored with `870acad7`); it changes neither the other rows nor the common-intersection labels.
 
 Gaze v0.17.0: no tagged character or vendor-evaluator measurement is available for this historical table, so no Gaze row is shown.
 
@@ -1006,7 +1006,7 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 | gliner | 127,361 | 85,245 | 81.1% | 0.253 | 0.243 | 48,389 | 0.181 |
 | gliner-high-recall | 113,436 | 118,822 | 77.5% | 0.235 | 0.241 | 45,994 | 0.176 |
 | opf† | 170,336 | 12,174 | 97.0% | held (typed-metric review) | held (typed-metric review) | 44,064 | held (typed-metric review) |
-| pii-tracer† | 128,632 | 22,988 | 95.2% | held (typed-metric review) | held (typed-metric review) | 33,519 | held (typed-metric review) |
+| pii-tracer | 128,632 | 22,988 | 95.2% | held (typed-metric review) | held (typed-metric review) | 33,519 | held (typed-metric review) |
 | presidio-all | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
 | presidio-en | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
 | presidio-en-de | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
@@ -1032,7 +1032,7 @@ gliner was measured separately on the same documents, with harness `5a25074a` (t
 
 gliner-high-recall was measured separately on the same documents, with harness `5a25074a` (typed metrics rescored with `5a25074a`); it changes neither the other rows nor the common-intersection labels.
 
-pii-tracer was measured separately on the same documents, with harness `bfd35ce6` (typed metrics rescored with `bfd35ce6`); it changes neither the other rows nor the common-intersection labels.
+pii-tracer was measured separately on the same documents, with harness `870acad7` (typed metrics rescored with `870acad7`); it changes neither the other rows nor the common-intersection labels.
 
 presidio-all was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
 
@@ -1074,7 +1074,7 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 | gliner | 13,326 | 4,884 | 44.7% | 0.528 | 0.489 | 8,173 | 0.615 |
 | gliner-high-recall | 8,158 | 7,031 | 34.8% | 0.517 | 0.504 | 4,482 | 0.676 |
 | opf† | 15,305 | 667 | 57.8% | held (typed-metric review) | held (typed-metric review) | 5,905 | 0.551 |
-| pii-tracer† | 6,510 | 5,277 | 38.4% | held (typed-metric review) | held (typed-metric review) | 773 | 0.640 |
+| pii-tracer | 6,510 | 5,277 | 38.4% | held (typed-metric review) | held (typed-metric review) | 773 | 0.640 |
 | presidio-all | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
 | presidio-en | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
 | presidio-en-de | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
@@ -1101,7 +1101,7 @@ gliner was measured separately on the same documents, with harness `5a25074a` (t
 
 gliner-high-recall was measured separately on the same documents, with harness `5a25074a` (typed metrics rescored with `5a25074a`); it changes neither the other rows nor the common-intersection labels.
 
-pii-tracer was measured separately on the same documents, with harness `7b09e385` (typed metrics rescored with `bfd35ce6`); it changes neither the other rows nor the common-intersection labels.
+pii-tracer was measured separately on the same documents, with harness `870acad7` (typed metrics rescored with `870acad7`); it changes neither the other rows nor the common-intersection labels.
 
 presidio-all was measured separately on the same documents, with harness `9225644b` (typed metrics rescored with `9225644b`); it changes neither the other rows nor the common-intersection labels.
 
