@@ -4,18 +4,18 @@ Copy these complete policies; A–C include sample results. `[at]` means `@`
 in the displayed input. See the [policy reference](../../reference/policy.md)
 for fields and actions.
 
+None of these policies declares `[policy.rulepacks]`, so the bundled `core`
+rulepack supplies email detection. Do not add a generic email regex as a
+custom recognizer: it also matches Gaze's own email-shaped tokens, and the
+loader rejects it with `TokenShapeShadow`.
+
 ## Example A — Tokenize emails, redact phone numbers
 
+<!-- policy -->
 ```toml
 [session]
 scope = "persistent"
 ttl_secs = 86400
-
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
-class = "email"
 
 [[policy.custom_recognizers]]
 kind = "regex"
@@ -43,6 +43,7 @@ Input `Reach Alice at alice [at] example.invalid or +49 171 3920010` produces
 
 ## Example B — Custom class for tenant order IDs
 
+<!-- policy -->
 ```toml
 [session]
 scope = "persistent"
@@ -70,16 +71,11 @@ action = "tokenize"
 
 `format_preserve` keeps email syntax for downstream parsers.
 
+<!-- policy -->
 ```toml
 [session]
 scope = "persistent"
 ttl_secs = 86400
-
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
-class = "email"
 
 [[rule]]
 kind = "class"
@@ -99,6 +95,7 @@ the real address.
 The canonical NER subset of this example lives in
 [`crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml`](../../../crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml).
 
+<!-- policy -->
 ```toml
 [session]
 scope = "persistent"
@@ -107,12 +104,6 @@ ttl_secs = 86400
 [ner]
 model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
 locale = "de"
-
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
-class = "email"
 
 [[policy.custom_recognizers]]
 kind = "regex"
@@ -150,7 +141,7 @@ kind = "default"
 action = "preserve"
 ```
 
-NER detects names, locations, and organizations; regex detects emails and
-order IDs. `tokenize` is reversible; `redact` and `generalize` are one-way.
+NER detects names, locations, and organizations; the bundled `core` rulepack
+detects emails, and the custom regex detects order IDs. `tokenize` is reversible; `redact` and `generalize` are one-way.
 `preserve` sends raw values, including organizations and any detected class
 without its own rule. Review this exposure before production use.
