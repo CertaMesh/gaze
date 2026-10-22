@@ -10,7 +10,7 @@ See the [receipt refresh guide](../../../scripts/bench/compare/theirbench/refres
 
 Published aggregate before this campaign: `e7e018ce8c4fa590a5c28db7031f030712a83103`.
 
-Refreshed rows: 29 of 31.
+Refreshed rows: 31 of 31.
 
 ## Presidio overlap order
 
@@ -444,3 +444,25 @@ Capture commit: `870acad7a7a733cd2f7203a2358080a5aae85f1d`. Previous capture com
 | --- | ---: | ---: | --- |
 | `row.latency.p50_ms` | 456.913 | 848.938 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 | `row.latency.p95_ms` | 6439.749 | 11526.411 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+
+## presidio-research: opf
+
+Prediction SHA-256: `bce7fd135b5859b45b59141ebcde4a0c32c2c566a8d2b482bde93b6ef6518c81`. Dataset SHA-256: `ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012`.
+
+Capture commit: `ed8af33b0652e0e5302d9a1715d9a917c5cc1064`. Previous capture commit: `a8293dc0bc3de251063848cfd3f7596e620ecb8b`.
+
+| Metric | Published (superseded) | Regenerated | Why |
+| --- | ---: | ---: | --- |
+| `row.latency.p50_ms` | 183.7 | 390.459 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 550.059 | 1188.997 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+
+## piibench-commercial: opf
+
+Prediction SHA-256: `25101e73c73033399d85a8c240c6d4a75bcb47954130eeb1e0a536da02043ee2`. Dataset SHA-256: `631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad`.
+
+Capture commit: `ed8af33b0652e0e5302d9a1715d9a917c5cc1064`. Previous capture commit: `a8293dc0bc3de251063848cfd3f7596e620ecb8b`.
+
+| Metric | Published (superseded) | Regenerated | Why |
+| --- | ---: | ---: | --- |
+| `row.latency.p50_ms` | 396.359 | 628.181 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 3268.224 | 5182.321 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
