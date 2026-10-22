@@ -1,5 +1,6 @@
 use super::{
-    configured_command, MatrixCommand, CORE_NO_PHONE_PARSER_LOAD_GUARD, FEATURE_MATRIX,
+    configured_command, library_graph_commands, MatrixCommand, CORE_NO_PHONE_PARSER_LOAD_GUARD,
+    DEFAULT_WORKSPACE_SUITE, FEATURE_GRAPH_PROBES, FEATURE_GRAPH_PROBE_PACKAGE, FEATURE_MATRIX,
     REQUIRED_EMBEDDED_CORE_LOAD_RESULT,
 };
 use std::fs;
@@ -42,7 +43,15 @@ fn ci_partitions_preserve_every_local_command_with_one_owner() {
     assert_eq!(defaults.len(), 1);
     assert_eq!(
         defaults[0].args,
-        ["test", "--workspace", "--lib", "--bins", "--tests"]
+        [
+            "test",
+            "--config",
+            "build.rustflags=['-D','warnings']",
+            "--workspace",
+            "--lib",
+            "--bins",
+            "--tests"
+        ]
     );
     let test_owned: Vec<_> = FEATURE_MATRIX
         .iter()
@@ -233,4 +242,201 @@ fn nested_build_inherits_matrix_environment() {
         .exists());
     assert!(!fixture.path().join("hostile-target").exists());
     println!("matrix nested environment verified");
+}
+
+fn published(names: &[&str]) -> Vec<String> {
+    names.iter().map(|name| name.to_string()).collect()
+}
+
+#[test]
+fn library_graphs_check_every_published_crate_both_graphs_with_denied_warnings() {
+    let crates = published(&["gaze-types", "gaze-pii", "gaze-assembly", "gaze-cli"]);
+    let commands = library_graph_commands(&crates).unwrap();
+    let checks: Vec<_> = commands
+        .iter()
+        .filter(|command| command.args[0] == "check")
+        .collect();
+    assert_eq!(checks.len(), crates.len() * 2);
+    for name in &crates {
+        for graph in [None, Some("--no-default-features")] {
+            let mut expected = vec!["check", "--locked", "-p", name.as_str()];
+            expected.extend(graph);
+            let command = checks
+                .iter()
+                .find(|command| command.args == expected)
+                .unwrap_or_else(|| panic!("missing {expected:?}"));
+            assert_eq!(command.rustflags, Some("-D warnings"));
+            assert_eq!(command.required_output, None);
+            assert_eq!(
+                command.label,
+                format!("RUSTFLAGS='-D warnings' cargo {}", expected.join(" "))
+            );
+        }
+    }
+}
+
+#[test]
+fn library_graph_commands_never_select_dev_dependency_targets() {
+    // Tests, examples and benches pull dev-dependencies into the graph and let
+    // feature unification hide a broken library graph.
+    let crates = published(&["gaze-types", "gaze-pii", "gaze-assembly"]);
+    for command in library_graph_commands(&crates).unwrap() {
+        for forbidden in [
+            "test",
+            "--tests",
+            "--all-targets",
+            "--examples",
+            "--example",
+            "--benches",
+            "--workspace",
+            "--all-features",
+        ] {
+            assert!(
+                !command.args.iter().any(|arg| arg == forbidden),
+                "{} selects {forbidden}",
+                command.label
+            );
+        }
+        assert!(command.args.iter().any(|arg| arg == "--locked"));
+        assert!(
+            matches!(command.args[0].as_str(), "check" | "run"),
+            "{}",
+            command.label
+        );
+    }
+}
+
+#[test]
+fn library_graph_probes_run_the_probe_bin_with_exactly_one_graph_feature() {
+    let crates = published(&["gaze-types", "gaze-pii", "gaze-assembly"]);
+    let probes: Vec<_> = library_graph_commands(&crates)
+        .unwrap()
+        .into_iter()
+        .filter(|command| command.args[0] == "run")
+        .collect();
+    assert_eq!(probes.len(), FEATURE_GRAPH_PROBES.len());
+    for (command, probe) in probes.iter().zip(FEATURE_GRAPH_PROBES) {
+        assert_eq!(
+            command.args,
+            [
+                "run",
+                "--locked",
+                "-p",
+                FEATURE_GRAPH_PROBE_PACKAGE,
+                "--no-default-features",
+                "--features",
+                probe.feature,
+            ]
+        );
+        assert_eq!(command.required_output, Some(probe.required_output));
+        assert_eq!(command.rustflags, None);
+    }
+    let all = library_graph_commands(&crates).unwrap();
+    let last_probe = all.iter().rposition(|command| command.args[0] == "run");
+    let first_check = all.iter().position(|command| command.args[0] == "check");
+    assert!(
+        last_probe < first_check,
+        "cheap probes must run before checks"
+    );
+    // The historical break: the bundled core rulepack must load with
+    // gaze-types/phone-parser off, and the probe must prove it was off.
+    assert!(FEATURE_GRAPH_PROBES
+        .iter()
+        .any(|probe| probe.library == "gaze-pii"
+            && probe.feature == "gaze-pii-no-default"
+            && probe
+                .required_output
+                .ends_with("core rulepack loaded, phone-parser=off ok")));
+    assert!(FEATURE_GRAPH_PROBES
+        .iter()
+        .any(|probe| probe.library == "gaze-pii"
+            && probe.required_output.ends_with("phone-parser=on ok")));
+}
+
+#[test]
+fn library_graph_probes_must_target_published_crates() {
+    let err = library_graph_commands(&published(&["gaze-types", "gaze-pii"]))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("unpublished crate gaze-assembly"), "{err}");
+    assert!(library_graph_commands(&[]).is_err());
+}
+
+#[test]
+fn library_graph_probe_features_exist_in_the_probe_manifest() {
+    let manifest: toml::Value = toml::from_str(
+        &fs::read_to_string(
+            crate::repo::repo_root()
+                .unwrap()
+                .join("crates/feature-graph-probe/Cargo.toml"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        manifest["package"]["name"].as_str(),
+        Some(FEATURE_GRAPH_PROBE_PACKAGE)
+    );
+    assert_eq!(manifest["package"]["publish"].as_bool(), Some(false));
+    assert!(
+        manifest.get("dev-dependencies").is_none(),
+        "the probe must not carry dev-dependencies"
+    );
+    let features = manifest["features"].as_table().unwrap();
+    assert_eq!(features["default"].as_array().unwrap().len(), 0);
+    for probe in FEATURE_GRAPH_PROBES {
+        assert!(features.contains_key(probe.feature), "{}", probe.feature);
+    }
+}
+
+#[test]
+fn library_graph_plan_covers_the_real_publish_plan() {
+    let root = crate::repo::repo_root().unwrap();
+    let crates = crate::publish_plan::published_package_names(&root).unwrap();
+    assert!(!crates
+        .iter()
+        .any(|name| name == FEATURE_GRAPH_PROBE_PACKAGE));
+    let commands = library_graph_commands(&crates).unwrap();
+    assert_eq!(
+        commands.len(),
+        crates.len() * 2 + FEATURE_GRAPH_PROBES.len()
+    );
+    for name in ["gaze-pii", "gaze-recognizers", "gaze-types", "gaze-cli"] {
+        assert!(crates.iter().any(|published| published == name), "{name}");
+    }
+}
+
+fn configured_rustflags(command: MatrixCommand) -> Option<String> {
+    configured_command(command)
+        .unwrap()
+        .get_envs()
+        .find(|(key, _)| *key == "RUSTFLAGS")
+        .and_then(|(_, value)| value.map(|value| value.to_string_lossy().into_owned()))
+}
+
+#[test]
+fn default_workspace_suite_denies_warnings_and_other_commands_do_not() {
+    use super::{partition_commands, Partition};
+
+    let defaults: Vec<_> = partition_commands(Partition::CiDefault).collect();
+    assert_eq!(defaults, [&DEFAULT_WORKSPACE_SUITE]);
+    let args = DEFAULT_WORKSPACE_SUITE.args;
+    let config = args
+        .iter()
+        .position(|arg| *arg == "--config")
+        .expect("default suite passes --config");
+    assert_eq!(args[config + 1], "build.rustflags=['-D','warnings']");
+    assert!(args.contains(&"--workspace"));
+    for command in FEATURE_MATRIX {
+        // Test binaries inherit the environment; RUSTFLAGS there would leak
+        // `-D warnings` into nested cargo/trybuild builds inside tests.
+        assert_eq!(configured_rustflags(*command), None, "{}", command.label);
+        if *command != DEFAULT_WORKSPACE_SUITE {
+            assert!(
+                !command.args.contains(&"build.rustflags=['-D','warnings']"),
+                "{}",
+                command.label
+            );
+        }
+    }
 }

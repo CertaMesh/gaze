@@ -8,6 +8,8 @@
 
 mod assets;
 mod auth;
+#[cfg(test)]
+mod browser_fixtures;
 mod child;
 mod collector;
 mod config;
@@ -17,8 +19,13 @@ mod runtime;
 mod security_headers;
 mod server;
 mod sink;
+mod snapshot;
+#[cfg(test)]
+mod snapshot_contract;
 mod store;
 mod supervisor;
+#[cfg(test)]
+mod test_support;
 mod view;
 
 pub use auth::{

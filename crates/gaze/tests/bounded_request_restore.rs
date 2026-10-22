@@ -73,3 +73,47 @@ fn owned_and_foreign_tokens_share_one_frozen_read_only_request() {
     drop(frozen);
     assert_eq!(session.snapshot_entries(), before_restore);
 }
+
+#[test]
+fn bounded_restore_roundtrips_adjacent_format_preserving_tokens() {
+    for class in [
+        PiiClass::Name,
+        PiiClass::Email,
+        PiiClass::Location,
+        PiiClass::Organization,
+        PiiClass::custom("record").unwrap(),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        let left = transaction
+            .format_preserving_fake(&class, "Synthetic-é")
+            .unwrap();
+        let right = transaction
+            .format_preserving_fake(&PiiClass::Name, "Synthetic2")
+            .unwrap();
+        let wrapped = transaction.tokenize(&PiiClass::Name, "Synthetic3").unwrap();
+        for (input, expected) in [
+            (format!("{left}{right}"), "Synthetic-éSynthetic2"),
+            (
+                format!("{wrapped}{left}{right}"),
+                "Synthetic3Synthetic-éSynthetic2",
+            ),
+            (
+                format!("{left}{right}{wrapped}"),
+                "Synthetic-éSynthetic2Synthetic3",
+            ),
+        ] {
+            assert_eq!(transaction.restore_strict_text(&input).unwrap(), expected);
+            assert_eq!(
+                transaction
+                    .restore_strict_text_bounded(&input, expected.len())
+                    .unwrap(),
+                expected
+            );
+            assert_eq!(
+                transaction.restore_strict_text_bounded(&input, expected.len() - 1),
+                Err(BoundedRestoreError::CapExceeded)
+            );
+        }
+    }
+}

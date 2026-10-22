@@ -39,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Adjacent format-preserving tokens restore as a complete, unambiguous run,
+  including bounded transaction restores. Live sessions, committed proxy
+  snapshots, and staged validation share one lazy matcher per token map.
+  A new mapping invalidates the cache. Ambiguous runs now return the distinct
+  `AmbiguousTokenRun` error, whose display and debug output contain no tokens
+  or manifest values.
 - `gaze-proxy` no longer restores a value captured from a JSON document with its
   JSON escapes. A name captured as `Robert \"Bob\" Smith` from a JSON text block
   or JSON tool result now reaches Anthropic `tool_use.input` as

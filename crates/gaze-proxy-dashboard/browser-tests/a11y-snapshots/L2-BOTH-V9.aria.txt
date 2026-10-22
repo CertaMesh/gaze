@@ -2,7 +2,7 @@
   - /url: "#main"
 - main:
   - group "Safety state":
-    - text: PROVIDER-VISIBLE CAPTURE — confidential pseudonymized payload, not verified clean BOTH OWNER DOMAINS CAPTURED VIEW INCOMPLETE — DROPPED 16 (FULL 7 · CLOSED 2 · OVERSIZE 1 · EVICTED 3 · STALE EPOCH 2 · CONFLICT 1) RING 12/64 · TTL 300 S · CONNECTED · EPOCH 1
+    - text: PROVIDER-VISIBLE CAPTURE — confidential pseudonymized payload, not verified clean BOTH OWNER DOMAINS CAPTURED VIEW INCOMPLETE — DROPPED 16 (FULL 7 · CLOSED 2 · OVERSIZE 1 · EVICTED 3 · STALE EPOCH 2 · CONFLICT 1) RING 2/64 · TTL 300 S · CONNECTED · EPOCH 1
     - button "Purge now"
   - 'region "LOG #12 — ANTHROPIC MESSAGES"':
     - button "← Back to event list"

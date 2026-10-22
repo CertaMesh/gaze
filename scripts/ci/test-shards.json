@@ -18,7 +18,8 @@
     "gaze-cli::proxy_dashboard",
     "gaze-cli::safety_net_cli",
     "gaze-cli::secrets_rulepack",
-    "gaze-cli::setup_policy"
+    "gaze-cli::setup_policy",
+    "gaze-cli::wire_token_order"
   ],
   "runtime": [
     "gaze-assembly",
@@ -42,6 +43,7 @@
     "gaze-pii::canary_e2e",
     "gaze-pii::contracts",
     "gaze-pii::custom_class_validation",
+    "gaze-pii::docs_policy_blocks",
     "gaze-pii::evidence_containment",
     "gaze-pii::family_emission",
     "gaze-pii::final_safety_admission",
@@ -192,6 +194,7 @@
     "gaze-model-setup",
     "gaze-token-bridge",
     "gaze-token-bridge::local_demo_assertions",
+    "gaze-token-bridge::output_safety_net_backstop",
     "gaze-token-bridge::residual_fragment_ingest",
     "gaze-token-bridge::token_class_roundtrip",
     "gaze-token-bridge::track_a_policy",
@@ -213,6 +216,7 @@
     "xtask::scrub_public_text",
     "xtask::snapshot_ack",
     "xtask::tokenbridge_encrypted_index",
-    "xtask::tokenbridge_no_raw_index"
+    "xtask::tokenbridge_no_raw_index",
+    "feature-graph-probe::bin/feature-graph-probe"
   ]
 }

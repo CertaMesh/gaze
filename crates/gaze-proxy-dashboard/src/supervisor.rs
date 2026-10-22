@@ -16,7 +16,7 @@ use gaze_inspection::{
 use gaze_types::inspection::DashboardCaptureDescriptorV1;
 use zeroize::Zeroize;
 
-use crate::collector::WriterHandle;
+use crate::collector::{StatusSource, WriterHandle};
 use crate::ipc::{reject_immediate_trailing, DeliveredAckV2, PairingEnvelopeV2, PairingReadyV2};
 use crate::runtime::{DashboardLaunch, RuntimeParts};
 use crate::sink::{Admission, DashboardInspectionSink};
@@ -446,6 +446,7 @@ impl PairedDashboard {
                 receiver: Some(receiver),
                 admission,
                 binding,
+                descriptor: self.descriptor,
                 frame_cap: self.ipc.frame_bytes(),
                 _config: self.config,
             },
@@ -462,6 +463,7 @@ pub struct PendingDashboardActivation {
     receiver: Option<Receiver<gaze_inspection::InspectionEventV1>>,
     admission: Arc<Admission>,
     binding: InspectionConsumerBindingV1,
+    descriptor: DashboardCaptureDescriptorV1,
     frame_cap: usize,
     _config: DashboardStartupConfig,
 }
@@ -487,7 +489,15 @@ impl PendingDashboardActivation {
             .take()
             .ok_or_else(|| DashboardError::new(DashboardErrorCode::ActivationFailed))?;
         let inspection = child.take_inspection()?;
-        let writer = WriterHandle::spawn(receiver, inspection, self.frame_cap)?;
+        let writer = WriterHandle::spawn(
+            receiver,
+            inspection,
+            self.frame_cap,
+            StatusSource {
+                descriptor: self.descriptor,
+                admission: self.admission.clone(),
+            },
+        )?;
         let admission = self.admission.clone();
         let launch = DashboardLaunch::start(
             RuntimeParts::new(bound, admission.clone(), writer, child),

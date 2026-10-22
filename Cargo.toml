@@ -15,6 +15,7 @@ members = [
     "crates/gaze-proxy",
     "crates/gaze-proxy-dashboard",
     "crates/gaze-token-bridge",
+    "crates/feature-graph-probe",
     "crates/xtask",
 ]
 resolver = "2"
@@ -45,3 +46,12 @@ tracing = "0.1"
 
 [workspace.metadata.dylint]
 libraries = [{ path = "lint/dylint" }]
+
+[profile.dev.package.regex-automata]
+opt-level = 3
+
+[profile.dev.package.regex-syntax]
+opt-level = 3
+
+[profile.dev.package.aho-corasick]
+opt-level = 3

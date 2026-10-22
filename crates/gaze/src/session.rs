@@ -48,6 +48,12 @@ pub enum BoundedRestoreError {
     /// A recognized token is malformed or absent from the frozen session.
     #[error("request token rejected")]
     UnknownToken,
+    /// A manifest-owned run admits more than one valid token split.
+    #[error("request token run ambiguous")]
+    AmbiguousTokenRun,
+    /// The manifest matcher could not be constructed.
+    #[error("request token matcher build failed")]
+    RestoreMatcherBuild,
     /// Restored UTF-8 bytes would exceed the caller's budget.
     #[error("request restoration limit exceeded")]
     CapExceeded,
@@ -196,6 +202,13 @@ struct SnapshotPayload {
     document: Option<DocumentExtension>,
 }
 
+/// Shared by every reader of the same token map, including staged validation
+/// and committed proxy snapshots. A new mapping replaces the entire cache.
+#[derive(Default)]
+struct RestoreMatcherCache {
+    matcher: OnceLock<std::result::Result<Option<aho_corasick::AhoCorasick>, ()>>,
+}
+
 #[derive(Clone)]
 struct SessionState {
     generation: u64,
@@ -206,9 +219,9 @@ struct SessionState {
     /// Tokens minted for a [`SourceSpelling::JsonEscaped`] value. Every other
     /// token is plain. Written once, when the token is minted.
     json_spelled: HashSet<String>,
-    restore_regex_cache: Option<(u64, Arc<Regex>)>,
+    restore_matcher_cache: Arc<RestoreMatcherCache>,
     /// Matcher over the sweepable values. Cleared whenever a value's evidence
-    /// changes, like the restore regex cache when a token is minted.
+    /// changes, like the restore matcher cache when a token is minted.
     sweep_matcher_cache: Option<Arc<SweepMatcher>>,
 }
 
@@ -221,7 +234,7 @@ impl SessionState {
             value_by_token: HashMap::new(),
             evidence_by_value: HashMap::new(),
             json_spelled: HashSet::new(),
-            restore_regex_cache: None,
+            restore_matcher_cache: Arc::default(),
             sweep_matcher_cache: None,
         }
     }
@@ -684,32 +697,6 @@ impl Session {
         0
     }
 
-    fn restore_state_snapshot(&self) -> Result<Arc<SessionState>> {
-        let captured = self.state_snapshot();
-        if captured
-            .restore_regex_cache
-            .as_ref()
-            .is_some_and(|(generation, _)| *generation == captured.generation)
-        {
-            return Ok(captured);
-        }
-        let Some(regex) = build_restore_regex(&captured)? else {
-            return Ok(captured);
-        };
-        let mut next = (*captured).clone();
-        next.restore_regex_cache = Some((next.generation, regex));
-        let next = Arc::new(next);
-        let mut boundary = self
-            .state
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if boundary.generation == captured.generation {
-            *boundary = Arc::clone(&next);
-        }
-        // A concurrent writer must not switch the map beneath this restore.
-        Ok(next)
-    }
-
     pub fn contains_token(&self, token: &str) -> bool {
         self.state_snapshot().value_by_token.contains_key(token)
     }
@@ -722,6 +709,10 @@ impl Session {
         &self.identity.audit_session_id
     }
 
+    /// Every mapping in the session, sorted by token, then family, class and raw value.
+    ///
+    /// The order is total and independent of hash seeds, so hosts that put this list on a
+    /// wire or in JSON emit the same bytes for the same session state.
     pub fn snapshot_entries(&self) -> Vec<SessionSnapshotEntry> {
         snapshot_entries_from_state(&self.state_snapshot())
     }
@@ -733,7 +724,7 @@ impl Session {
     }
 
     pub fn restore_strict_text(&self, text: &str) -> std::result::Result<String, RestoreError> {
-        restore_classified_strict_text_from_state(self.restore_state_snapshot()?.as_ref(), text)
+        restore_classified_strict_text_from_state(self.state_snapshot().as_ref(), text)
             .map(|restored| restored.text)
     }
 
@@ -741,14 +732,14 @@ impl Session {
         &self,
         text: &str,
     ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
-        restore_classified_strict_text_from_state(self.restore_state_snapshot()?.as_ref(), text)
+        restore_classified_strict_text_from_state(self.state_snapshot().as_ref(), text)
     }
 
     pub fn restore_strict_text_with_events(
         &self,
         text: &str,
     ) -> std::result::Result<(String, Vec<RestoreEvent>), RestoreError> {
-        let state = self.restore_state_snapshot()?;
+        let state = self.state_snapshot();
         let events =
             restore_boundary_events(text, &authorized_structural_values_from_state(&state));
         let restored = restore_classified_strict_text_from_state(&state, text)?.text;
@@ -761,7 +752,7 @@ impl Session {
     /// error. Use `restore_strict_text` when malformed input and unresolved tokens must
     /// return a typed error. Only broad bare identifiers are audit-only in both APIs.
     pub fn assess_restore_text(&self, text: &str) -> Result<RestoreAssessment> {
-        assess_restore_text_from_state(self.restore_state_snapshot()?.as_ref(), text)
+        assess_restore_text_from_state(self.state_snapshot().as_ref(), text)
     }
 
     pub fn restore_boundary_events(&self, text: &str) -> Vec<RestoreEvent> {
@@ -790,10 +781,7 @@ impl Session {
         &self,
         text: &str,
     ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
-        restore_strict_decoded_text_with_provenance_from_state(
-            self.restore_state_snapshot()?.as_ref(),
-            text,
-        )
+        restore_strict_decoded_text_with_provenance_from_state(self.state_snapshot().as_ref(), text)
     }
 
     pub fn export(&self) -> Result<SensitiveSnapshot> {
@@ -872,27 +860,41 @@ impl Session {
             .map(|duration| duration.as_secs())
             .unwrap_or(0);
 
+        // Both lists come from `HashMap`s; sort them so the payload does not depend on
+        // a per-instance hash seed (same rule as `snapshot_entries`).
+        let mut entries = state
+            .token_by_value
+            .iter()
+            .map(|(key, token)| SnapshotEntry {
+                family: key.family.clone(),
+                class: key.class.clone(),
+                raw: key.raw.clone(),
+                token: token.clone(),
+                evidence: state.evidence_by_value.get(key).copied(),
+                spelling: source_spelling_from_state(&state, token)
+                    .unwrap_or(SourceSpelling::Plain),
+            })
+            .collect::<Vec<_>>();
+        entries.sort_by(|left, right| {
+            (&left.token, &left.family, &left.class, &left.raw).cmp(&(
+                &right.token,
+                &right.family,
+                &right.class,
+                &right.raw,
+            ))
+        });
+        let mut next_by_class = state
+            .next_by_class
+            .iter()
+            .map(|(class, index)| (class.clone(), *index))
+            .collect::<Vec<_>>();
+        next_by_class.sort();
+
         let payload = SnapshotPayload {
             scope: snapshot_scope(&self.identity.scope),
             session_hex: self.session_hex(),
-            entries: state
-                .token_by_value
-                .iter()
-                .map(|(key, token)| SnapshotEntry {
-                    family: key.family.clone(),
-                    class: key.class.clone(),
-                    raw: key.raw.clone(),
-                    token: token.clone(),
-                    evidence: state.evidence_by_value.get(key).copied(),
-                    spelling: source_spelling_from_state(&state, token)
-                        .unwrap_or(SourceSpelling::Plain),
-                })
-                .collect::<Vec<_>>(),
-            next_by_class: state
-                .next_by_class
-                .iter()
-                .map(|(class, index)| (class.clone(), *index))
-                .collect(),
+            entries,
+            next_by_class,
             issued_at,
             document,
         };
@@ -1159,6 +1161,7 @@ impl<'session> SessionTransaction<'session> {
         validate_token_shapes_from_state(&self.staged, text)
     }
 
+    /// Staged mappings in the same total order as [`Session::snapshot_entries`].
     pub fn snapshot_entries(&self) -> Vec<SessionSnapshotEntry> {
         snapshot_entries_from_state(&self.staged)
     }
@@ -1174,7 +1177,7 @@ impl<'session> SessionTransaction<'session> {
 
     /// Restore tokens once, checking exact expansion before allocating output.
     ///
-    /// Uses the frozen strict parser without detectors, mapping creation, or
+    /// Uses the shared manifest locator without detectors, mapping creation, or
     /// commit. The budget counts output UTF-8 bytes; hosts also bound input and
     /// aggregate escaped serialization. Errors never carry request text.
     pub fn restore_strict_text_bounded(
@@ -1182,8 +1185,15 @@ impl<'session> SessionTransaction<'session> {
         text: &str,
         max_bytes: usize,
     ) -> std::result::Result<String, BoundedRestoreError> {
-        let tokens =
-            strict_restore_tokens(text).map_err(|_| BoundedRestoreError::MalformedToken)?;
+        // Preserve the bounded API's distinct malformed-syntax error before
+        // membership and ambiguity validation through the shared locator.
+        strict_restore_tokens(text).map_err(|_| BoundedRestoreError::MalformedToken)?;
+        let tokens = validated_restore_tokens(&self.staged, text).map_err(|error| match error {
+            Error::UnknownToken { .. } => BoundedRestoreError::UnknownToken,
+            Error::AmbiguousTokenRun => BoundedRestoreError::AmbiguousTokenRun,
+            Error::RestoreMatcherBuild => BoundedRestoreError::RestoreMatcherBuild,
+            _ => BoundedRestoreError::MalformedToken,
+        })?;
         let mut sum_raw = 0usize;
         let mut sum_spans = 0usize;
         for token in &tokens {
@@ -1261,7 +1271,6 @@ impl<'session> SessionTransaction<'session> {
             .captured_generation
             .checked_add(1)
             .expect("session generation exhausted");
-        self.staged.restore_regex_cache = None;
         let committed = Arc::new(self.staged);
         *boundary = Arc::clone(&committed);
         Ok(CommittedSessionSnapshot {
@@ -1369,7 +1378,7 @@ where
     if spelling == SourceSpelling::JsonEscaped && is_json_escaped_spelling(raw) {
         state.json_spelled.insert(token.clone());
     }
-    state.restore_regex_cache = None;
+    state.restore_matcher_cache = Arc::default();
     (token, true)
 }
 
@@ -1430,6 +1439,103 @@ fn known_restore_matches<'a>(
     })
 }
 
+#[cfg(test)]
+thread_local! {
+    static RESTORE_MATCHER_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn build_restore_matcher(state: &SessionState) -> Result<Option<aho_corasick::AhoCorasick>> {
+    if state.value_by_token.is_empty() {
+        return Ok(None);
+    }
+    #[cfg(test)]
+    RESTORE_MATCHER_BUILDS.with(|builds| builds.set(builds.get() + 1));
+    let mut tokens = state.value_by_token.keys().collect::<Vec<_>>();
+    tokens.sort_unstable();
+    aho_corasick::AhoCorasick::new(tokens)
+        .map(Some)
+        .map_err(|_| Error::RestoreMatcherBuild)
+}
+
+/// Locate complete manifest-owned runs. A join may replace a word boundary only when
+/// another exact manifest token covers the next bytes. Count all possible splits before
+/// substituting anything; overlapping valid spellings must never choose an original value.
+fn locate_restore_tokens(state: &SessionState, text: &str) -> Result<Vec<StrictRestoreToken>> {
+    let matcher = state
+        .restore_matcher_cache
+        .matcher
+        .get_or_init(|| build_restore_matcher(state).map_err(|_| ()))
+        .as_ref()
+        .map_err(|_| Error::RestoreMatcherBuild)?;
+    let Some(matcher) = matcher else {
+        return Ok(Vec::new());
+    };
+    let mut spans = matcher
+        .find_overlapping_iter(text)
+        .map(|matched| matched.start()..matched.end())
+        .collect::<Vec<_>>();
+    spans.sort_unstable_by_key(|span| (span.start, span.end));
+
+    static WORD_BOUNDARY: OnceLock<Regex> = OnceLock::new();
+    let boundary = WORD_BOUNDARY.get_or_init(|| Regex::new(r"\b").expect("word boundary"));
+    let is_boundary = |offset| {
+        boundary
+            .find_at(text, offset)
+            .is_some_and(|matched| matched.start() == offset)
+    };
+    let wrapped = |span: &Range<usize>| {
+        text[span.clone()].starts_with('<') && text[span.clone()].ends_with('>')
+    };
+    // At each byte offset retain the number of complete parses, capped at two,
+    // and the first edge of its unique parse. Walking backwards avoids recursion.
+    let mut paths = HashMap::<usize, (u8, usize)>::new();
+    for (index, span) in spans.iter().enumerate().rev() {
+        let continuation = paths.get(&span.end).map_or(0, |(count, _)| *count);
+        let family_extension = text[span.clone()]
+            .split_once(':')
+            .is_some_and(|(_, body)| body.starts_with("custom:family:"))
+            && text.as_bytes().get(span.end) == Some(&b'-');
+        let count = if continuation > 0 {
+            continuation
+        } else {
+            u8::from(wrapped(span) || (is_boundary(span.end) && !family_extension))
+        };
+        if count > 0 {
+            let entry = paths.entry(span.start).or_insert((0, index));
+            entry.0 = entry.0.saturating_add(count).min(2);
+        }
+    }
+
+    let mut tokens = Vec::new();
+    let mut cursor = 0;
+    for span in &spans {
+        if span.start < cursor {
+            continue;
+        }
+        let prefixed = text[span.clone()]
+            .split_once(':')
+            .is_some_and(|(prefix, _)| is_session_hex(prefix));
+        if !wrapped(span) && !prefixed && !is_boundary(span.start) {
+            continue;
+        }
+        let mut start = span.start;
+        while let Some(&(count, index)) = paths.get(&start) {
+            if count > 1 {
+                return Err(Error::AmbiguousTokenRun);
+            }
+            let matched = &spans[index];
+            tokens.push(StrictRestoreToken {
+                start,
+                end: matched.end,
+                parsed: parsed_restore_token(&text[matched.clone()]),
+            });
+            start = matched.end;
+            cursor = start;
+        }
+    }
+    Ok(tokens)
+}
+
 /// Returns whether the stored evidence changed. Only a value the session
 /// already maps can carry evidence.
 fn record_evidence_in_state(
@@ -1473,7 +1579,7 @@ fn build_sweep_matcher(state: &SessionState) -> Result<Option<Arc<SweepMatcher>>
 }
 
 fn snapshot_entries_from_state(state: &SessionState) -> Vec<SessionSnapshotEntry> {
-    state
+    let mut entries = state
         .token_by_value
         .iter()
         .map(|(key, token)| SessionSnapshotEntry {
@@ -1482,7 +1588,17 @@ fn snapshot_entries_from_state(state: &SessionState) -> Vec<SessionSnapshotEntry
             raw: key.raw.clone(),
             token: token.clone(),
         })
-        .collect()
+        .collect::<Vec<_>>();
+    // `token_by_value` is a `HashMap`; never let its per-instance seed choose the order.
+    entries.sort_by(|left, right| {
+        (&left.token, &left.family, &left.class, &left.raw).cmp(&(
+            &right.token,
+            &right.family,
+            &right.class,
+            &right.raw,
+        ))
+    });
+    entries
 }
 
 fn restore_strict_from_state(state: &SessionState, token: &str) -> Result<String> {
@@ -1557,22 +1673,7 @@ fn restore_tokens_with_provenance(
 
 fn assess_restore_text_from_state(state: &SessionState, text: &str) -> Result<RestoreAssessment> {
     // Substitution and classification share one immutable manifest generation.
-    let regex = match &state.restore_regex_cache {
-        Some((generation, regex)) if *generation == state.generation => Some(Arc::clone(regex)),
-        _ => build_restore_regex(state)?,
-    };
-    let tokens = regex
-        .as_ref()
-        .map(|regex| {
-            known_restore_matches(regex, text)
-                .map(|matched| StrictRestoreToken {
-                    start: matched.start(),
-                    end: matched.end(),
-                    parsed: parsed_restore_token(matched.as_str()),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let tokens = locate_restore_tokens(state, text)?;
     let restored = restore_tokens_with_provenance(state, text, tokens, false)?;
     Ok(classify_restore_output(state, restored))
 }
@@ -1667,11 +1768,18 @@ fn validated_restore_tokens(
     state: &SessionState,
     text: &str,
 ) -> std::result::Result<Vec<StrictRestoreToken>, RestoreError> {
-    let tokens = strict_restore_tokens(text)?;
-    for token in &tokens {
-        if !state.value_by_token.contains_key(token.parsed.raw.as_str()) {
+    strict_restore_tokens(text)?;
+    let tokens = locate_restore_tokens(state, text)?;
+    let mut cursor = 0;
+    for (start, end) in tokens
+        .iter()
+        .map(|token| (token.start, token.end))
+        .chain(std::iter::once((text.len(), text.len())))
+    {
+        if let Some(token) = strict_restore_tokens(&text[cursor..start])?.first() {
             return Err(unknown_token_error(token.parsed.raw.as_str()));
         }
+        cursor = end;
     }
     Ok(tokens)
 }
@@ -2538,6 +2646,60 @@ mod tests {
 
     fn snapshot_payload_json(snapshot: &SensitiveSnapshot) -> JsonValue {
         serde_json::from_slice(&snapshot.0[97..]).expect("snapshot payload json")
+    }
+
+    /// Fresh sessions each get a fresh `HashMap` seed. Holding the same mappings, they must
+    /// still list them, and export them, in one identical order.
+    #[test]
+    fn snapshot_entries_and_export_order_do_not_depend_on_hash_seed() {
+        let classes = [
+            PiiClass::Name,
+            PiiClass::Email,
+            PiiClass::Custom("case_ref".to_string()),
+        ];
+        let build = || {
+            let session = Session::new_with_session_hex_for_tests(
+                Scope::Conversation("order".to_string()),
+                [0xa7, 0xf3, 0xb8, 0xe2],
+            )
+            .expect("session");
+            for idx in 0..12 {
+                for class in &classes {
+                    session
+                        .tokenize(class, &format!("synthetic value {idx}"))
+                        .expect("token");
+                }
+            }
+            session
+        };
+        let reference = build();
+        let reference_entries = reference.snapshot_entries();
+        let mut sorted = reference_entries.clone();
+        sorted.sort_by(|a, b| {
+            (&a.token, &a.family, &a.class, &a.raw).cmp(&(&b.token, &b.family, &b.class, &b.raw))
+        });
+        assert_eq!(reference_entries, sorted, "entries must be sorted by token");
+        let reference_payload = snapshot_payload_json(&reference.export().expect("export"));
+        for _ in 0..8 {
+            let session = build();
+            assert_eq!(session.snapshot_entries(), reference_entries);
+            let mut transaction = session.begin_transaction();
+            assert_eq!(transaction.snapshot_entries(), reference_entries);
+            transaction
+                .tokenize(&PiiClass::Name, "synthetic value 99")
+                .expect("staged token");
+            let staged = transaction.snapshot_entries();
+            let mut staged_sorted = staged.clone();
+            staged_sorted.sort_by(|a, b| a.token.cmp(&b.token));
+            assert_eq!(
+                staged, staged_sorted,
+                "staged entries must be sorted by token"
+            );
+            drop(transaction);
+            let payload = snapshot_payload_json(&session.export().expect("export"));
+            assert_eq!(payload["entries"], reference_payload["entries"]);
+            assert_eq!(payload["next_by_class"], reference_payload["next_by_class"]);
+        }
     }
 
     fn document_extension(session: &Session) -> DocumentExtension {
@@ -4046,6 +4208,106 @@ mod tests {
     }
 
     #[test]
+    fn restore_matcher_generation_is_shared_by_live_snapshot_and_transaction() {
+        RESTORE_MATCHER_BUILDS.with(|builds| builds.set(0));
+        let builds = || RESTORE_MATCHER_BUILDS.with(std::cell::Cell::get);
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        for index in 0..1000 {
+            transaction
+                .format_preserving_fake(&PiiClass::Name, &format!("Synthetic {index}"))
+                .unwrap();
+        }
+        let token = transaction.tokens().into_iter().next().unwrap();
+        let expected = transaction.restore_strict(&token).unwrap();
+        let snapshot = transaction.commit().unwrap();
+        for _ in 0..20 {
+            assert_eq!(session.restore_strict_text(&token).unwrap(), expected);
+        }
+        let live_builds = builds();
+        assert_eq!(live_builds, 1, "live generation builds once");
+        // The proxy codec uses these exact committed-snapshot entry points.
+        for _ in 0..20 {
+            assert_eq!(
+                snapshot
+                    .restore_strict_decoded_text_with_provenance(&token)
+                    .unwrap()
+                    .text,
+                expected
+            );
+        }
+        let snapshot_builds = builds();
+        let live_next = session
+            .format_preserving_fake(&PiiClass::Name, "Synthetic live next")
+            .unwrap();
+        for _ in 0..20 {
+            assert_eq!(
+                session.restore_strict_text(&live_next).unwrap(),
+                "Synthetic live next"
+            );
+        }
+        let minted_builds = builds();
+        eprintln!(
+            "live/snapshot/mint build deltas: {:?}",
+            [
+                live_builds,
+                snapshot_builds - live_builds,
+                minted_builds - snapshot_builds
+            ]
+        );
+        assert_eq!(
+            [live_builds, snapshot_builds, minted_builds],
+            [1, 1, 2],
+            "snapshot shares the live generation's matcher; mint rebuilds once"
+        );
+        let mut transaction = session.begin_transaction();
+        for _ in 0..20 {
+            transaction.validate_token_shapes(&token).unwrap();
+            assert_eq!(transaction.restore_strict_text(&token).unwrap(), expected);
+        }
+        assert_eq!(builds(), 2, "unchanged transaction shares the matcher");
+        let next = transaction
+            .format_preserving_fake(&PiiClass::Name, "Synthetic next")
+            .unwrap();
+        for _ in 0..20 {
+            transaction.validate_token_shapes(&next).unwrap();
+            assert_eq!(
+                transaction.restore_strict_text(&next).unwrap(),
+                "Synthetic next"
+            );
+        }
+        assert_eq!(builds(), 3, "minting invalidates exactly once");
+        let next_snapshot = transaction.commit().unwrap();
+        for _ in 0..20 {
+            assert_eq!(
+                session.restore_strict_text(&next).unwrap(),
+                "Synthetic next"
+            );
+            assert_eq!(
+                next_snapshot.restore_strict_text(&next).unwrap(),
+                "Synthetic next"
+            );
+            assert_eq!(snapshot.restore_strict_text(&token).unwrap(), expected);
+            assert!(snapshot.restore_strict_text(&next).is_err());
+        }
+        assert_eq!(
+            builds(),
+            3,
+            "commit retains validation's matcher; old snapshot stays cached"
+        );
+        let last = session
+            .format_preserving_fake(&PiiClass::Name, "Synthetic last")
+            .unwrap();
+        for _ in 0..20 {
+            assert_eq!(
+                session.restore_strict_text(&last).unwrap(),
+                "Synthetic last"
+            );
+        }
+        assert_eq!(builds(), 4, "live mint causes one rebuild");
+    }
+
+    #[test]
     fn transaction_discard_then_commit_swaps_complete_state_and_shares_identity() {
         let session = Session::new(Scope::Ephemeral).expect("session");
         let initial_entries = session.snapshot_entries();
@@ -4090,12 +4352,17 @@ mod tests {
         );
         assert!(Arc::ptr_eq(&session.identity, &snapshot.identity));
 
-        let restore_state = session.restore_state_snapshot().expect("restore state");
-        let (_, regex) = restore_state
-            .restore_regex_cache
+        let restore_state = session.state_snapshot();
+        let matcher = restore_state
+            .restore_matcher_cache
+            .matcher
+            .get()
+            .expect("initialized matcher")
             .as_ref()
-            .expect("non-empty regex");
-        assert!(regex.is_match(&token));
+            .expect("valid matcher")
+            .as_ref()
+            .expect("non-empty matcher");
+        assert!(matcher.is_match(&token));
         let state = session.state_snapshot();
         assert_eq!(state.token_by_value.len(), state.value_by_token.len());
         for (key, mapped_token) in &state.token_by_value {
@@ -4106,13 +4373,10 @@ mod tests {
             );
         }
         assert_eq!(state.next_by_class.get(&PiiClass::Email), Some(&1));
-        assert_eq!(
-            state
-                .restore_regex_cache
-                .as_ref()
-                .map(|(generation, _)| *generation),
-            Some(state.generation)
-        );
+        assert!(Arc::ptr_eq(
+            &state.restore_matcher_cache,
+            &snapshot.state.restore_matcher_cache
+        ));
         assert!(state.generation > 0);
     }
 

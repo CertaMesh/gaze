@@ -11,8 +11,10 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use gaze_inspection::InspectionEventV1;
+use gaze_types::inspection::DashboardCaptureDescriptorV1;
 
-use crate::ipc::EncodedInspectionFrame;
+use crate::ipc::{EncodedInspectionFrame, RuntimeStatusFrameV1};
+use crate::sink::Admission;
 use crate::{DashboardError, DashboardErrorCode};
 
 enum WriterCommand {
@@ -31,13 +33,23 @@ impl WriterHandle {
         receiver: Receiver<InspectionEventV1>,
         stream: UnixStream,
         frame_cap: usize,
+        status: StatusSource,
     ) -> Result<Self, DashboardError> {
         let (commands, command_rx) = mpsc::sync_channel(16);
         let faulted = Arc::new(AtomicBool::new(false));
         let thread_faulted = faulted.clone();
         let thread = thread::Builder::new()
             .name("gaze-dashboard-writer".to_owned())
-            .spawn(move || writer_loop(receiver, command_rx, stream, frame_cap, &thread_faulted))
+            .spawn(move || {
+                writer_loop(
+                    receiver,
+                    command_rx,
+                    stream,
+                    frame_cap,
+                    &status,
+                    &thread_faulted,
+                );
+            })
             .map_err(|_| DashboardError::new(DashboardErrorCode::ActivationFailed))?;
         Ok(Self {
             commands,
@@ -92,15 +104,66 @@ impl Drop for WriterHandle {
     }
 }
 
+/// Parent-side facts the child cannot observe: the immutable startup descriptor and the
+/// bounded ingress drop counters.
+pub(crate) struct StatusSource {
+    pub(crate) descriptor: DashboardCaptureDescriptorV1,
+    pub(crate) admission: Arc<Admission>,
+}
+
+impl StatusSource {
+    fn counters(&self) -> (u64, u64) {
+        let counters = self.admission.snapshot();
+        (counters.full, counters.closed)
+    }
+}
+
+fn write_frame(stream: &mut UnixStream, frame: &[u8]) -> bool {
+    let Ok(length) = u32::try_from(frame.len()) else {
+        return false;
+    };
+    stream.write_all(&length.to_be_bytes()).is_ok()
+        && stream.write_all(frame).is_ok()
+        && stream.flush().is_ok()
+}
+
+/// Writes a status frame when the reported counters changed. `None` forces a write.
+fn write_status(
+    stream: &mut UnixStream,
+    status: &StatusSource,
+    last: &mut Option<(u64, u64)>,
+) -> bool {
+    let current = status.counters();
+    if *last == Some(current) {
+        return true;
+    }
+    let Ok(frame) = RuntimeStatusFrameV1::encode(status.descriptor, current.0, current.1) else {
+        return false;
+    };
+    *last = Some(current);
+    write_frame(stream, &frame)
+}
+
 fn writer_loop(
     receiver: Receiver<InspectionEventV1>,
     commands: Receiver<WriterCommand>,
     mut stream: UnixStream,
     frame_cap: usize,
+    status: &StatusSource,
     faulted: &AtomicBool,
 ) {
     let _ = stream.set_write_timeout(Some(Duration::from_secs(1)));
+    // The descriptor is reported before any event can be written.
+    let mut last_status = None;
+    if !write_status(&mut stream, status, &mut last_status) {
+        faulted.store(true, Ordering::Release);
+        return;
+    }
     loop {
+        if !write_status(&mut stream, status, &mut last_status) {
+            faulted.store(true, Ordering::Release);
+            break;
+        }
         match commands.try_recv() {
             Ok(WriterCommand::Drain(ack)) => {
                 drain_events(&receiver);
@@ -122,13 +185,7 @@ fn writer_loop(
                     Ok(frame) => frame,
                     Err(_) => continue,
                 };
-                let length = u32::try_from(frame.as_bytes().len())
-                    .expect("frame cap is below u32")
-                    .to_be_bytes();
-                if stream.write_all(&length).is_err()
-                    || stream.write_all(frame.as_bytes()).is_err()
-                    || stream.flush().is_err()
-                {
+                if !write_frame(&mut stream, frame.as_bytes()) {
                     faulted.store(true, Ordering::Release);
                     break;
                 }

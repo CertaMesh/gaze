@@ -8,6 +8,7 @@ numbers. A recognizer finds spans; a rule chooses the action. See the
 
 Add both to `policy.toml`:
 
+<!-- policy-fragment -->
 ```toml
 [[policy.custom_recognizers]]
 kind = "regex"

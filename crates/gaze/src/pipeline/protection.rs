@@ -335,7 +335,8 @@ impl Pipeline {
                 Error::Protection(error) => error,
                 _ => ProtectionError::SafetyNet,
             })?;
-        reject_unprotected_suspects(&clean, manifest, report).map_err(|refusal| refusal.error)?;
+        reject_unprotected_suspects(&clean, manifest, report.report)
+            .map_err(|refusal| refusal.error)?;
         Ok(clean)
     }
 
@@ -431,7 +432,7 @@ impl Pipeline {
                 Error::Protection(error) => error,
                 _ => ProtectionError::SafetyNet,
             })?;
-        reject_unprotected_suspects(text, manifest, report)
+        reject_unprotected_suspects(text, manifest, report.report)
     }
 
     #[allow(clippy::too_many_arguments)]
