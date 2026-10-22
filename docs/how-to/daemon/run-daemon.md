@@ -96,12 +96,33 @@ daemon.wait(timeout=10)
 Counters, manifests, and eviction belong to each `session_id`. Reuse only that
 session's entry in `tokens_by_session`.
 
-## Restore cleaned text
+## Reversible resident sessions (protocol version 1)
 
-This protocol cleans only: it accepts no restore request and emits no
-`session_blob`. For a CLI round trip, use `gaze clean`, send only `clean_text`
-to the LLM, then pass `{session_blob, text}` to
-[`gaze restore`](../../../crates/gaze-cli/README.md#restore).
+Use the versioned protocol when an agent needs stable tokens across model calls
+and owner-side restore. Keep the daemon on a trusted local stdio connection.
+Each request and response is one JSON line. The adapter chooses a unique
+`session_id` for one active run and sends these operations in order:
+
+```json
+{"version":1,"op":"open","session_id":"run-1"}
+{"version":1,"op":"clean","session_id":"run-1","text":"Email alice@example.invalid"}
+{"version":1,"op":"restore","session_id":"run-1","text":"Done for <token from clean_text>"}
+{"version":1,"op":"close","session_id":"run-1"}
+```
+
+`open` creates a new session and refuses an existing ID. `clean` returns
+`clean_text`, `manifest`, and `tokens` with `version: 1` and `op: "clean"`.
+`restore` uses strict unknown-token handling and returns restored `text`.
+`close` destroys the live session. Both `clean` and `restore` refuse a missing
+or evicted session; they never silently create one. The daemon does not emit a
+`session_blob` for this protocol. It keeps restore material in memory until
+`close`, eviction, or process exit. If the process exits during a model stream,
+discard that unfinished stream and start a new run from owner-side source data.
+
+The unversioned `{session_id,text}` cleaning request remains supported for
+existing adapters. It does not support restore. For a one-shot shell flow,
+[`gaze clean` and `gaze restore`](../../../crates/gaze-cli/README.md#restore)
+still exchange a signed `session_blob`.
 
 ## Shut down the daemon
 

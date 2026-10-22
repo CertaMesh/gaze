@@ -17,6 +17,7 @@ use super::{
     OpenAiFilterDevice, SafetyNetBackend, SafetyNetFallback, SafetyNetKind, SafetyNetMode,
 };
 use crate::error::CliError;
+use crate::error::RestoreMode;
 use crate::io::DEFAULT_MAX_BYTES;
 use crate::pipeline::build::{
     map_policy_error, policy_warnings, resolve_pipeline, validate_ner_threshold,
@@ -27,6 +28,7 @@ use crate::pipeline::run::{
     safety_net_policy, validate_safety_net_tolerant_gate, wire_ordered_entries, CleanOptions,
     CORE_EXTENDED_DEPRECATION,
 };
+use crate::restore::session::restore_pass2_validate;
 use gaze::{
     Action, ConflictTier, DictionaryBundle, DocumentKind, EmittedTokenSpan, LeakReport, LocaleTag,
     PiiClass, Policy, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger,
@@ -241,25 +243,79 @@ impl Daemon {
             Ok(_) => return DaemonResponse::error(None, "ProtocolInvalid", "missing session_id"),
             Err(_) => return DaemonResponse::error(None, "JsonMalformed", "malformed JSON line"),
         };
-        match self.clean_request(request) {
+        let session_id = request.session_id.clone();
+        let version = request.version;
+        let result = match (request.version, request.op.as_deref()) {
+            (None, None) => match request.text {
+                Some(text) => self.clean_request(session_id.clone(), text, false),
+                None => Err((session_id.clone(), DaemonError::ProtocolInvalid)),
+            },
+            (Some(1), Some("open")) if request.text.is_none() => {
+                self.evict_idle_sessions();
+                if self.sessions.contains_key(&session_id) {
+                    Err((session_id.clone(), DaemonError::SessionExists))
+                } else {
+                    self.ensure_session(&session_id)
+                        .map(|()| DaemonResponse::Opened {
+                            version: 1,
+                            session_id: session_id.clone(),
+                            op: "open",
+                        })
+                        .map_err(|error| (session_id.clone(), error))
+                }
+            }
+            (Some(1), Some("clean")) => match request.text {
+                Some(text) => self.clean_request(session_id.clone(), text, true),
+                None => Err((session_id.clone(), DaemonError::ProtocolInvalid)),
+            },
+            (Some(1), Some("restore")) => match request.text {
+                Some(text) => self.restore_request(session_id.clone(), text),
+                None => Err((session_id.clone(), DaemonError::ProtocolInvalid)),
+            },
+            (Some(1), Some("close")) if request.text.is_none() => {
+                self.evict_idle_sessions();
+                if self.sessions.remove(&session_id).is_some() {
+                    self.lru.retain(|id| id != &session_id);
+                    Ok(DaemonResponse::Closed {
+                        version: 1,
+                        session_id: session_id.clone(),
+                        op: "close",
+                    })
+                } else {
+                    Err((session_id.clone(), DaemonError::SessionMissing))
+                }
+            }
+            (Some(1), _) | (None, Some(_)) => {
+                Err((session_id.clone(), DaemonError::ProtocolInvalid))
+            }
+            (Some(_), _) => Err((session_id.clone(), DaemonError::ProtocolVersion)),
+        };
+        match result {
             Ok(response) => response,
-            Err((session_id, error)) => DaemonResponse::error(
+            Err((session_id, error)) => DaemonResponse::error_versioned(
+                version,
                 Some(session_id),
                 error.variant(),
-                error.detail().unwrap_or("clean request failed"),
+                error.detail().unwrap_or("daemon request failed closed"),
             ),
         }
     }
 
     fn clean_request(
         &mut self,
-        request: DaemonRequest,
+        session_id: String,
+        text: String,
+        versioned: bool,
     ) -> std::result::Result<DaemonResponse, (String, DaemonError)> {
-        self.ensure_session(&request.session_id)
-            .map_err(|err| (request.session_id.clone(), err))?;
+        if versioned {
+            self.touch_session(&session_id)
+        } else {
+            self.ensure_session(&session_id)
+        }
+        .map_err(|err| (session_id.clone(), err))?;
         let session = &self
             .sessions
-            .get(&request.session_id)
+            .get(&session_id)
             .expect("session inserted")
             .session;
         let policy = safety_net_policy(self.safety_net_mode, self.safety_net_fallback);
@@ -267,7 +323,7 @@ impl Daemon {
             .pipeline
             .clean_with_safety_net_policy_detect_context(
                 session,
-                RawDocument::Text(request.text),
+                RawDocument::Text(text),
                 &self.locale_chain,
                 &self.dictionaries,
                 policy,
@@ -278,32 +334,72 @@ impl Daemon {
                 } else {
                     CliError::Pipeline
                 };
-                (request.session_id.clone(), DaemonError::Cli(cli_error))
+                (session_id.clone(), DaemonError::Cli(cli_error))
             })?;
         self.logger
             .log_safety_net_report(&leak_report, session, DocumentKind::Text)
-            .map_err(|_| {
-                (
-                    request.session_id.clone(),
-                    DaemonError::Cli(CliError::Pipeline),
-                )
-            })?;
+            .map_err(|_| (session_id.clone(), DaemonError::Cli(CliError::Pipeline)))?;
         enforce_safety_net_mode(&leak_report, policy)
-            .map_err(|err| (request.session_id.clone(), DaemonError::Cli(err)))?;
+            .map_err(|err| (session_id.clone(), DaemonError::Cli(err)))?;
         let clean_text = match clean_doc {
             gaze::CleanDocument::Text(text) => text,
-            _ => return Err((request.session_id, DaemonError::Invariant)),
+            _ => return Err((session_id, DaemonError::Invariant)),
         };
         let tokens = wire_ordered_entries(session.snapshot_entries(), &clean_text, &manifest)
             .into_iter()
             .map(TokenJson::from)
             .collect();
         Ok(DaemonResponse::Clean {
-            session_id: request.session_id,
+            version: versioned.then_some(1),
+            op: versioned.then_some("clean"),
+            session_id,
             clean_text,
             manifest,
             tokens,
         })
+    }
+
+    fn restore_request(
+        &mut self,
+        session_id: String,
+        text: String,
+    ) -> std::result::Result<DaemonResponse, (String, DaemonError)> {
+        self.touch_session(&session_id)
+            .map_err(|error| (session_id.clone(), error))?;
+        let session = &self
+            .sessions
+            .get(&session_id)
+            .expect("session touched")
+            .session;
+        let assessment = session
+            .assess_restore_text(&text)
+            .map_err(|_| (session_id.clone(), DaemonError::RestoreFailed))?;
+        restore_pass2_validate(&assessment, RestoreMode::Strict).map_err(|error| {
+            let variant = if matches!(error, CliError::UnknownToken { .. }) {
+                DaemonError::UnknownToken
+            } else {
+                DaemonError::RestoreFailed
+            };
+            (session_id.clone(), variant)
+        })?;
+        Ok(DaemonResponse::Restored {
+            version: 1,
+            op: "restore",
+            session_id,
+            text: assessment.into_restored().text,
+        })
+    }
+
+    fn touch_session(&mut self, session_id: &str) -> std::result::Result<(), DaemonError> {
+        self.evict_idle_sessions();
+        let entry = self
+            .sessions
+            .get_mut(session_id)
+            .ok_or(DaemonError::SessionMissing)?;
+        entry.last_seen = Instant::now();
+        self.lru.retain(|existing| existing != session_id);
+        self.lru.push_back(session_id.to_string());
+        Ok(())
     }
 
     fn ensure_session(&mut self, session_id: &str) -> std::result::Result<(), DaemonError> {
@@ -535,20 +631,44 @@ impl RedactionLogger for DaemonLogger {
 
 #[derive(Deserialize)]
 struct DaemonRequest {
+    version: Option<u32>,
+    op: Option<String>,
     session_id: String,
-    text: String,
+    text: Option<String>,
 }
 
 #[derive(Serialize)]
 #[serde(untagged)]
 enum DaemonResponse {
     Clean {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        version: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        op: Option<&'static str>,
         session_id: String,
         clean_text: String,
         manifest: Vec<EmittedTokenSpan>,
         tokens: Vec<TokenJson>,
     },
+    Opened {
+        version: u32,
+        op: &'static str,
+        session_id: String,
+    },
+    Restored {
+        version: u32,
+        op: &'static str,
+        session_id: String,
+        text: String,
+    },
+    Closed {
+        version: u32,
+        op: &'static str,
+        session_id: String,
+    },
     Error {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        version: Option<u32>,
         session_id: Option<String>,
         error: &'static str,
         detail: String,
@@ -557,7 +677,17 @@ enum DaemonResponse {
 
 impl DaemonResponse {
     fn error(session_id: Option<String>, error: &'static str, detail: impl Into<String>) -> Self {
+        Self::error_versioned(None, session_id, error, detail)
+    }
+
+    fn error_versioned(
+        version: Option<u32>,
+        session_id: Option<String>,
+        error: &'static str,
+        detail: impl Into<String>,
+    ) -> Self {
         Self::Error {
+            version,
             session_id,
             error,
             detail: detail.into(),
@@ -586,6 +716,12 @@ impl From<SessionSnapshotEntry> for TokenJson {
 enum DaemonError {
     Cli(CliError),
     Invariant,
+    ProtocolInvalid,
+    ProtocolVersion,
+    SessionExists,
+    SessionMissing,
+    RestoreFailed,
+    UnknownToken,
 }
 
 impl DaemonError {
@@ -601,6 +737,12 @@ impl DaemonError {
                 _ => "CliError",
             },
             Self::Invariant => "PipelineInvariant",
+            Self::ProtocolInvalid => "ProtocolInvalid",
+            Self::ProtocolVersion => "ProtocolVersion",
+            Self::SessionExists => "SessionExists",
+            Self::SessionMissing => "SessionMissing",
+            Self::RestoreFailed => "RestoreFailed",
+            Self::UnknownToken => "UnknownToken",
         }
     }
 
@@ -611,6 +753,12 @@ impl DaemonError {
             | Self::Cli(CliError::PolicyOpenDetail(detail)) => Some(detail.as_str()),
             Self::Cli(_) => Some("gaze daemon request failed closed"),
             Self::Invariant => Some("unexpected non-text clean document"),
+            Self::ProtocolInvalid => Some("invalid daemon request"),
+            Self::ProtocolVersion => Some("unsupported daemon protocol version"),
+            Self::SessionExists => Some("session already open"),
+            Self::SessionMissing => Some("session not open"),
+            Self::RestoreFailed => Some("restore failed closed"),
+            Self::UnknownToken => Some("restore contains an unknown token"),
         }
     }
 }

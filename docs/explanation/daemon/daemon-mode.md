@@ -27,14 +27,30 @@ Error:
 Malformed JSON emits `JsonMalformed` with a null `session_id`, then reading
 continues. Errors never echo the input line.
 
+The legacy frame above is clean-only. Protocol version 1 adds four operations:
+
+| Request | Success | Failure condition |
+| --- | --- | --- |
+| `{"version":1,"op":"open","session_id":"run"}` | `op: "open"` | `SessionExists` |
+| `{"version":1,"op":"clean","session_id":"run","text":"..."}` | `op: "clean"`, `clean_text`, `manifest`, `tokens` | `SessionMissing` or pipeline error |
+| `{"version":1,"op":"restore","session_id":"run","text":"..."}` | `op: "restore"`, restored `text` | `SessionMissing`, `UnknownToken`, or `RestoreFailed` |
+| `{"version":1,"op":"close","session_id":"run"}` | `op: "close"` | `SessionMissing` |
+
+Version 1 successes and errors carry `version: 1`. Unsupported versions return
+`ProtocolVersion`; invalid operation shapes return `ProtocolInvalid`. Restore
+uses the same strict unknown-token validation as `gaze restore` and never
+creates a session. The caller must buffer model output until it can restore it;
+after daemon exit or session eviction, unfinished output cannot be restored.
+
 ## Runtime shape
 
 Startup builds one `Pipeline` from `--policy` through the `gaze clean` build
 path. Optional Pass-3 safety nets, including Nym-small, retain pinned bundle
 SHA checks and fail-closed initialization.
 
-First use of a `session_id` creates a session from policy. Reuse keeps its
-manifest and token map; distinct IDs never share a manifest. See the
+The legacy clean request creates a session on first use. Version 1 requires
+an explicit `open` and refuses a missing session on `clean` or `restore`.
+Reuse keeps its manifest and token map; distinct IDs never share a manifest. See the
 [session isolation contract](../core/session-contract.md#single-shared-session-across-conversations).
 
 ## Session lifecycle and eviction
