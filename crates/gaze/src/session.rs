@@ -48,6 +48,12 @@ pub enum BoundedRestoreError {
     /// A recognized token is malformed or absent from the frozen session.
     #[error("request token rejected")]
     UnknownToken,
+    /// A manifest-owned run admits more than one valid token split.
+    #[error("request token run ambiguous")]
+    AmbiguousTokenRun,
+    /// The manifest matcher could not be constructed.
+    #[error("request token matcher build failed")]
+    RestoreMatcherBuild,
     /// Restored UTF-8 bytes would exceed the caller's budget.
     #[error("request restoration limit exceeded")]
     CapExceeded,
@@ -196,6 +202,13 @@ struct SnapshotPayload {
     document: Option<DocumentExtension>,
 }
 
+/// Shared by every reader of the same token map, including staged validation
+/// and committed proxy snapshots. A new mapping replaces the entire cache.
+#[derive(Default)]
+struct RestoreMatcherCache {
+    matcher: OnceLock<std::result::Result<Option<aho_corasick::AhoCorasick>, ()>>,
+}
+
 #[derive(Clone)]
 struct SessionState {
     generation: u64,
@@ -206,7 +219,7 @@ struct SessionState {
     /// Tokens minted for a [`SourceSpelling::JsonEscaped`] value. Every other
     /// token is plain. Written once, when the token is minted.
     json_spelled: HashSet<String>,
-    restore_matcher_cache: Option<(u64, Arc<aho_corasick::AhoCorasick>)>,
+    restore_matcher_cache: Arc<RestoreMatcherCache>,
     /// Matcher over the sweepable values. Cleared whenever a value's evidence
     /// changes, like the restore matcher cache when a token is minted.
     sweep_matcher_cache: Option<Arc<SweepMatcher>>,
@@ -221,7 +234,7 @@ impl SessionState {
             value_by_token: HashMap::new(),
             evidence_by_value: HashMap::new(),
             json_spelled: HashSet::new(),
-            restore_matcher_cache: None,
+            restore_matcher_cache: Arc::default(),
             sweep_matcher_cache: None,
         }
     }
@@ -684,32 +697,6 @@ impl Session {
         0
     }
 
-    fn restore_state_snapshot(&self) -> Result<Arc<SessionState>> {
-        let captured = self.state_snapshot();
-        if captured
-            .restore_matcher_cache
-            .as_ref()
-            .is_some_and(|(generation, _)| *generation == captured.generation)
-        {
-            return Ok(captured);
-        }
-        let Some(matcher) = build_restore_matcher(&captured)? else {
-            return Ok(captured);
-        };
-        let mut next = (*captured).clone();
-        next.restore_matcher_cache = Some((next.generation, matcher));
-        let next = Arc::new(next);
-        let mut boundary = self
-            .state
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if boundary.generation == captured.generation {
-            *boundary = Arc::clone(&next);
-        }
-        // A concurrent writer must not switch the map beneath this restore.
-        Ok(next)
-    }
-
     pub fn contains_token(&self, token: &str) -> bool {
         self.state_snapshot().value_by_token.contains_key(token)
     }
@@ -737,7 +724,7 @@ impl Session {
     }
 
     pub fn restore_strict_text(&self, text: &str) -> std::result::Result<String, RestoreError> {
-        restore_classified_strict_text_from_state(self.restore_state_snapshot()?.as_ref(), text)
+        restore_classified_strict_text_from_state(self.state_snapshot().as_ref(), text)
             .map(|restored| restored.text)
     }
 
@@ -745,14 +732,14 @@ impl Session {
         &self,
         text: &str,
     ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
-        restore_classified_strict_text_from_state(self.restore_state_snapshot()?.as_ref(), text)
+        restore_classified_strict_text_from_state(self.state_snapshot().as_ref(), text)
     }
 
     pub fn restore_strict_text_with_events(
         &self,
         text: &str,
     ) -> std::result::Result<(String, Vec<RestoreEvent>), RestoreError> {
-        let state = self.restore_state_snapshot()?;
+        let state = self.state_snapshot();
         let events =
             restore_boundary_events(text, &authorized_structural_values_from_state(&state));
         let restored = restore_classified_strict_text_from_state(&state, text)?.text;
@@ -765,7 +752,7 @@ impl Session {
     /// error. Use `restore_strict_text` when malformed input and unresolved tokens must
     /// return a typed error. Only broad bare identifiers are audit-only in both APIs.
     pub fn assess_restore_text(&self, text: &str) -> Result<RestoreAssessment> {
-        assess_restore_text_from_state(self.restore_state_snapshot()?.as_ref(), text)
+        assess_restore_text_from_state(self.state_snapshot().as_ref(), text)
     }
 
     pub fn restore_boundary_events(&self, text: &str) -> Vec<RestoreEvent> {
@@ -794,10 +781,7 @@ impl Session {
         &self,
         text: &str,
     ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
-        restore_strict_decoded_text_with_provenance_from_state(
-            self.restore_state_snapshot()?.as_ref(),
-            text,
-        )
+        restore_strict_decoded_text_with_provenance_from_state(self.state_snapshot().as_ref(), text)
     }
 
     pub fn export(&self) -> Result<SensitiveSnapshot> {
@@ -1193,7 +1177,7 @@ impl<'session> SessionTransaction<'session> {
 
     /// Restore tokens once, checking exact expansion before allocating output.
     ///
-    /// Uses the frozen strict parser without detectors, mapping creation, or
+    /// Uses the shared manifest locator without detectors, mapping creation, or
     /// commit. The budget counts output UTF-8 bytes; hosts also bound input and
     /// aggregate escaped serialization. Errors never carry request text.
     pub fn restore_strict_text_bounded(
@@ -1201,8 +1185,15 @@ impl<'session> SessionTransaction<'session> {
         text: &str,
         max_bytes: usize,
     ) -> std::result::Result<String, BoundedRestoreError> {
-        let tokens =
-            strict_restore_tokens(text).map_err(|_| BoundedRestoreError::MalformedToken)?;
+        // Preserve the bounded API's distinct malformed-syntax error before
+        // membership and ambiguity validation through the shared locator.
+        strict_restore_tokens(text).map_err(|_| BoundedRestoreError::MalformedToken)?;
+        let tokens = validated_restore_tokens(&self.staged, text).map_err(|error| match error {
+            Error::UnknownToken { .. } => BoundedRestoreError::UnknownToken,
+            Error::AmbiguousTokenRun => BoundedRestoreError::AmbiguousTokenRun,
+            Error::RestoreMatcherBuild => BoundedRestoreError::RestoreMatcherBuild,
+            _ => BoundedRestoreError::MalformedToken,
+        })?;
         let mut sum_raw = 0usize;
         let mut sum_spans = 0usize;
         for token in &tokens {
@@ -1280,7 +1271,6 @@ impl<'session> SessionTransaction<'session> {
             .captured_generation
             .checked_add(1)
             .expect("session generation exhausted");
-        self.staged.restore_matcher_cache = None;
         let committed = Arc::new(self.staged);
         *boundary = Arc::clone(&committed);
         Ok(CommittedSessionSnapshot {
@@ -1388,7 +1378,7 @@ where
     if spelling == SourceSpelling::JsonEscaped && is_json_escaped_spelling(raw) {
         state.json_spelled.insert(token.clone());
     }
-    state.restore_matcher_cache = None;
+    state.restore_matcher_cache = Arc::default();
     (token, true)
 }
 
@@ -1454,7 +1444,7 @@ thread_local! {
     static RESTORE_MATCHER_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-fn build_restore_matcher(state: &SessionState) -> Result<Option<Arc<aho_corasick::AhoCorasick>>> {
+fn build_restore_matcher(state: &SessionState) -> Result<Option<aho_corasick::AhoCorasick>> {
     if state.value_by_token.is_empty() {
         return Ok(None);
     }
@@ -1463,7 +1453,7 @@ fn build_restore_matcher(state: &SessionState) -> Result<Option<Arc<aho_corasick
     let mut tokens = state.value_by_token.keys().collect::<Vec<_>>();
     tokens.sort_unstable();
     aho_corasick::AhoCorasick::new(tokens)
-        .map(|matcher| Some(Arc::new(matcher)))
+        .map(Some)
         .map_err(|_| Error::RestoreMatcherBuild)
 }
 
@@ -1471,10 +1461,12 @@ fn build_restore_matcher(state: &SessionState) -> Result<Option<Arc<aho_corasick
 /// another exact manifest token covers the next bytes. Count all possible splits before
 /// substituting anything; overlapping valid spellings must never choose an original value.
 fn locate_restore_tokens(state: &SessionState, text: &str) -> Result<Vec<StrictRestoreToken>> {
-    let matcher = match &state.restore_matcher_cache {
-        Some((generation, matcher)) if *generation == state.generation => Some(Arc::clone(matcher)),
-        _ => build_restore_matcher(state)?,
-    };
+    let matcher = state
+        .restore_matcher_cache
+        .matcher
+        .get_or_init(|| build_restore_matcher(state).map_err(|_| ()))
+        .as_ref()
+        .map_err(|_| Error::RestoreMatcherBuild)?;
     let Some(matcher) = matcher else {
         return Ok(Vec::new());
     };
@@ -1529,7 +1521,7 @@ fn locate_restore_tokens(state: &SessionState, text: &str) -> Result<Vec<StrictR
         let mut start = span.start;
         while let Some(&(count, index)) = paths.get(&start) {
             if count > 1 {
-                return Err(unknown_token_error(&text[spans[index].clone()]));
+                return Err(Error::AmbiguousTokenRun);
             }
             let matched = &spans[index];
             tokens.push(StrictRestoreToken {
@@ -4360,9 +4352,14 @@ mod tests {
         );
         assert!(Arc::ptr_eq(&session.identity, &snapshot.identity));
 
-        let restore_state = session.restore_state_snapshot().expect("restore state");
-        let (_, matcher) = restore_state
+        let restore_state = session.state_snapshot();
+        let matcher = restore_state
             .restore_matcher_cache
+            .matcher
+            .get()
+            .expect("initialized matcher")
+            .as_ref()
+            .expect("valid matcher")
             .as_ref()
             .expect("non-empty matcher");
         assert!(matcher.is_match(&token));
@@ -4376,13 +4373,10 @@ mod tests {
             );
         }
         assert_eq!(state.next_by_class.get(&PiiClass::Email), Some(&1));
-        assert_eq!(
-            state
-                .restore_matcher_cache
-                .as_ref()
-                .map(|(generation, _)| *generation),
-            Some(state.generation)
-        );
+        assert!(Arc::ptr_eq(
+            &state.restore_matcher_cache,
+            &snapshot.state.restore_matcher_cache
+        ));
         assert!(state.generation > 0);
     }
 

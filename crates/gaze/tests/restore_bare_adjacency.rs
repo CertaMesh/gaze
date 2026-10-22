@@ -294,39 +294,56 @@ fn adjacent_manifest_tokens_restore_across_spellings_and_json_strings() {
 #[test]
 fn ambiguous_manifest_concatenation_and_prefix_fail_closed() {
     let session = Session::new(Scope::Ephemeral).unwrap();
-    let left = session
+    let mut transaction = session.begin_transaction();
+    let left = transaction
         .format_preserving_fake(&PiiClass::custom("record").unwrap(), "Synthetic1")
         .unwrap();
-    let right = session
+    let right = transaction
         .format_preserving_fake(&PiiClass::Name, "Synthetic2")
         .unwrap();
     // The public Custom variant also admits adopter-defined labels containing separators.
     let combined_class = PiiClass::Custom(format!("record_1{}:name", session.session_hex()));
-    let combined = session
+    let combined = transaction
         .format_preserving_fake(&combined_class, "Synthetic3")
         .unwrap();
     assert_eq!(combined, format!("{left}{right}"));
-    for text in [combined.clone(), format!("prefix {combined} suffix")] {
-        assert!(matches!(
-            session.restore_strict_text(&text),
-            Err(gaze::Error::UnknownToken { .. })
-        ));
-        assert!(matches!(
-            session.restore_strict_decoded_text_with_provenance(&text),
-            Err(gaze::Error::UnknownToken { .. })
-        ));
-        assert!(matches!(
-            session.assess_restore_text(&text),
-            Err(gaze::Error::UnknownToken { .. })
-        ));
-    }
-    let prefix_class = PiiClass::Custom("record_1.extra".into());
-    let prefixed = session
-        .format_preserving_fake(&prefix_class, "Synthetic4")
+    let prefixed = transaction
+        .format_preserving_fake(&PiiClass::Custom("record_1.extra".into()), "Synthetic4")
         .unwrap();
     assert!(prefixed.starts_with(&left));
-    assert!(matches!(
-        session.restore_strict_text(&prefixed),
-        Err(gaze::Error::UnknownToken { .. })
-    ));
+    let unambiguous = transaction.tokenize(&PiiClass::Name, "Synthetic5").unwrap();
+    let inputs = [combined, prefixed].map(|run| format!("{unambiguous} {run} suffix"));
+    let assert_ambiguous = |error: gaze::Error| {
+        assert!(matches!(error, gaze::Error::AmbiguousTokenRun));
+        assert_eq!(error.to_string(), "ambiguous token run: [REDACTED]");
+        assert_eq!(format!("{error:?}"), "AmbiguousTokenRun");
+    };
+    for text in &inputs {
+        assert_ambiguous(transaction.validate_token_shapes(text).unwrap_err());
+        assert_ambiguous(transaction.restore_strict_text(text).unwrap_err());
+        let error = transaction
+            .restore_strict_text_bounded(text, usize::MAX)
+            .unwrap_err();
+        assert_eq!(error, gaze::BoundedRestoreError::AmbiguousTokenRun);
+        assert_eq!(error.to_string(), "request token run ambiguous");
+        assert_eq!(format!("{error:?}"), "AmbiguousTokenRun");
+    }
+    let snapshot = transaction.commit().unwrap();
+    for text in &inputs {
+        assert_ambiguous(session.restore_strict_text(text).unwrap_err());
+        assert_ambiguous(
+            session
+                .restore_strict_decoded_text_with_provenance(text)
+                .err()
+                .unwrap(),
+        );
+        assert_ambiguous(session.assess_restore_text(text).err().unwrap());
+        assert_ambiguous(snapshot.restore_strict_text(text).unwrap_err());
+        assert_ambiguous(
+            snapshot
+                .restore_strict_decoded_text_with_provenance(text)
+                .err()
+                .unwrap(),
+        );
+    }
 }

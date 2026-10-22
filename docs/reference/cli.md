@@ -81,6 +81,12 @@ each kept unknown token is reported on stderr as
 `{"warning":"UnknownToken","token":"<token>"}`. Restore telemetry is
 JSON-only, so `--telemetry` is refused here; `--audit-db` still records it.
 
+The library returns `RestoreError::AmbiguousTokenRun` when a manifest-owned
+run admits multiple token splits. `BoundedRestoreError::AmbiguousTokenRun`
+identifies the same failure in bounded transaction restores. Both errors
+carry no token spelling or manifest value. The CLI reports this failure as
+`Pipeline` with exit `3` and nothing on stdout, including in tolerant mode.
+
 A session-file flag implies `--format text`. `--format text` without it, or
 `--format json` with it, fails with `PolicyConfig` (exit `2`). The JSON stdin
 and stdout contracts are unchanged. `gaze audit --session` is unrelated: it
