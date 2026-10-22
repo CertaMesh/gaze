@@ -18,6 +18,7 @@ impl<'a> SafetyNetScanText<'a> {
         manifest: &Manifest,
         is_owned: impl Fn(&str) -> bool,
     ) -> Result<Self> {
+        let _perf = gaze_types::perf_span!("safety_view_build_ns");
         let mut stable = None::<Vec<u8>>;
         let mut neutral = None::<Vec<u8>>;
         for emitted in &manifest.spans {

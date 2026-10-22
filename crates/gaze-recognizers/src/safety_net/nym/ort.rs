@@ -185,12 +185,14 @@ impl NymOrtBackend {
                 actual: clean.len(),
             });
         }
+        let tokenize_perf = gaze_types::perf_span!("nym_tokenize_ns");
         let encoding = self
             .tokenizer
             .encode_char_offsets(clean, false)
             .map_err(|err| SafetyNetError::Runtime {
                 message: format!("nym tokenizer failed: {}", sanitize_error(&err.to_string())),
             })?;
+        drop(tokenize_perf);
         let ids = encoding.get_ids();
         let offsets = encoding.get_offsets().to_vec();
         let chars = clean.chars().collect::<Vec<_>>();
@@ -220,15 +222,20 @@ impl NymOrtBackend {
         let mask_tensor = ort::value::Tensor::from_array((shape, vec![1i64; seq_len]))
             .map_err(|err| runtime("attention_mask tensor failed", &err))?;
 
+        let wait_perf = gaze_types::perf_span!("nym_mutex_wait_ns");
         let mut session = self.session.lock().map_err(|_| SafetyNetError::Runtime {
             message: "nym ort session lock poisoned".to_string(),
         })?;
+        drop(wait_perf);
+        let ort_perf = gaze_types::perf_span!("nym_ort_ns");
+        gaze_types::perf_count!("nym_windows", 1);
         let outputs = session
             .run(ort::inputs![
                 "input_ids" => ids_tensor,
                 "attention_mask" => mask_tensor,
             ])
             .map_err(|err| runtime("ort inference failed", &err))?;
+        drop(ort_perf);
         let (_, logits) = outputs
             .iter()
             .next()

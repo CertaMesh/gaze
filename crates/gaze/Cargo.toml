@@ -20,6 +20,7 @@ name = "gaze"
 path = "src/lib.rs"
 
 [features]
+perf-timers = ["gaze-types/perf-timers", "gaze-recognizers?/perf-timers"]
 default = ["bundled-recognizers"]
 bundled-recognizers = ["dep:gaze-recognizers"]
 safety-net = ["gaze-recognizers/safety-net"]

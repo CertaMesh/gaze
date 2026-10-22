@@ -57,10 +57,13 @@ impl NerBackend for OrtBackend {
     fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
         let labels = &self.labels;
         let id2label: &[String] = &self.id2label;
+        let tokenize_perf = gaze_types::perf_span!("ner_tokenize_ns");
+        gaze_types::perf_count!("ner_encodes", 1);
         let encoded = self
             .tokenizer
             .encode(input, true)
             .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
+        drop(tokenize_perf);
         let offsets = encoded.get_offsets();
         let ids = encoded.get_ids();
         let attention = encoded.get_attention_mask();
@@ -92,14 +95,19 @@ impl NerBackend for OrtBackend {
             ]
         };
 
+        let wait_perf = gaze_types::perf_span!("ner_mutex_wait_ns");
         let mut session = self
             .session
             .lock()
             .map_err(|err| NerRuntimeError::Poisoned(err.to_string()))?;
+        drop(wait_perf);
+        let ort_perf = gaze_types::perf_span!("ner_ort_ns");
+        gaze_types::perf_count!("ner_windows", 1);
         let outputs = session
             .run(inputs)
             .map_err(|err| NerRuntimeError::Inference(err.to_string()))?;
 
+        drop(ort_perf);
         let Some((_, value)) = outputs.iter().next() else {
             return decode_output(labels, id2label, offsets, None, input);
         };
@@ -216,9 +224,12 @@ fn tokenized_chunk_ranges(
             .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
         &untruncated
     };
+    let tokenize_perf = gaze_types::perf_span!("ner_tokenize_ns");
+    gaze_types::perf_count!("ner_encodes", 1);
     let encoded = tokenizer
         .encode(input, true)
         .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
+    drop(tokenize_perf);
     let tokens: Vec<Range<usize>> = encoded
         .get_offsets()
         .iter()

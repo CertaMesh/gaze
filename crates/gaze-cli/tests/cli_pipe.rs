@@ -6288,3 +6288,94 @@ fn session_file_flags_reject_ambiguous_format_combinations() {
         assert_eq!(parse_stderr_variant(&out.stderr)["error"], "PolicyConfig");
     }
 }
+
+#[cfg(feature = "perf-timers")]
+#[test]
+fn attribution_capture_preserves_pipe_fixture_bytes_and_restore() {
+    use gaze::{
+        Action, ClassRule, DefaultRule, DictionaryBundle, LocaleTag, Pipeline, RawDocument,
+        SensitiveSnapshot,
+    };
+    use gaze_types::perf::Capture;
+
+    let pipeline = Pipeline::builder()
+        .detector(gaze_recognizers::RegexDetector::emails().unwrap())
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .unwrap();
+    let original = Session::new(Scope::Conversation("attribution-fixture".into())).unwrap();
+    let snapshot = original.export().unwrap().into_bytes();
+    for input in [
+        "alice@example.invalid",
+        "To: alice@example.invalid\nCc: alice@example.invalid",
+        "Unicode: Grüße — alice@example.invalid\nNo further contact.",
+        "{\"email\":\"alice@example.invalid\"}",
+        "No contact details here.",
+    ] {
+        let run = |capture: bool| {
+            let session = Session::import(SensitiveSnapshot::from(snapshot.clone())).unwrap();
+            let capture = capture.then(Capture::new);
+            let (clean, manifest, report) = pipeline
+                .clean_with_safety_net_detect_context(
+                    &session,
+                    RawDocument::Text(input.into()),
+                    &[LocaleTag::Global],
+                    &DictionaryBundle::default(),
+                )
+                .unwrap();
+            let gaze::CleanDocument::Text(clean) = clean else {
+                panic!("text")
+            };
+            assert_eq!(session.restore_strict_text(&clean).unwrap(), input);
+            let entries = session
+                .snapshot_entries()
+                .into_iter()
+                .map(|entry| (entry.class, entry.raw, entry.token, entry.family))
+                .collect::<Vec<_>>();
+            let bytes =
+                serde_json::to_vec(&(&clean, &manifest, &entries, format!("{report:?}"))).unwrap();
+            if let Some(capture) = capture {
+                let record = capture.finish();
+                assert_eq!(record.counters["input_bytes"], input.len() as u64);
+                assert!(!record.recognizers.is_empty());
+                assert!(record.metrics["registry_ns"].invocations > 0);
+                let diagnostic = serde_json::to_string(&record).unwrap();
+                assert!(!diagnostic.contains("alice"));
+                assert!(!diagnostic.contains("example.invalid"));
+            }
+            bytes
+        };
+        assert_eq!(
+            run(false),
+            run(true),
+            "fixture output must be byte-identical"
+        );
+    }
+}
+
+#[cfg(feature = "perf-timers")]
+#[test]
+fn attribution_cli_opt_in_emits_only_metadata() {
+    let input = "alice@example.invalid";
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .env("GAZE_PERF", "1")
+        .args(["clean", "--safety-net", "none"])
+        .write_stdin(input)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let response: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(!response["clean_text"].as_str().unwrap().contains(input));
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    let rows: Vec<_> = stderr
+        .lines()
+        .filter_map(|line| line.strip_prefix("GAZE_PERF "))
+        .collect();
+    assert_eq!(rows.len(), 1);
+    let trace: Value = serde_json::from_str(rows[0]).unwrap();
+    assert_eq!(trace["schema"], 1);
+    assert_eq!(trace["counters"]["input_bytes"], input.len());
+    assert!(!rows[0].contains(input));
+}

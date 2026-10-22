@@ -1259,7 +1259,9 @@ fn detect_declared(
     ctx: &DetectContext<'_>,
 ) -> Result<Vec<Candidate>, DetectError> {
     let evidence = recognizer.evidence();
+    let mut perf = gaze_types::perf_recognizer!(recognizer.id(), evidence);
     let candidates = recognizer.detect_for_registry(input, ctx)?;
+    perf.candidates(candidates.len());
     if candidates
         .iter()
         .any(|candidate| !candidate.score.is_finite())
@@ -1420,6 +1422,7 @@ impl RecognizerRegistry {
         ),
         DetectError,
     > {
+        let _perf = gaze_types::perf_span!("registry_ns");
         let locale_chain = LocaleChain::from(ctx.locale_chain);
         let classes = self
             .entries
