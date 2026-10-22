@@ -58,10 +58,11 @@ Protocol and pipeline failures are typed JSON objects:
 ```
 
 ```json
-{"session_id":"conversation-1","error":"Pipeline","detail":"gaze daemon request failed closed"}
+{"session_id":null,"error":"Pipeline","detail":"gaze daemon request failed closed"}
 ```
 
-Errors fail closed and never echo input. Log only the variant and detail.
+Errors fail closed and return `session_id: null`; they never echo the caller's
+session ID or input. Log only the variant and detail.
 
 ## Run multiple sessions
 

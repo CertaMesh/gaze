@@ -21,11 +21,12 @@ Success:
 Error:
 
 ```json
-{"session_id":"conversation-1","error":"Pipeline","detail":"gaze daemon request failed closed"}
+{"session_id":null,"error":"Pipeline","detail":"gaze daemon request failed closed"}
 ```
 
-Malformed JSON emits `JsonMalformed` with a null `session_id`, then reading
-continues. Errors never echo the input line.
+Malformed JSON syntax or malformed unversioned field types emit `JsonMalformed`
+with a null `session_id`, then reading continues. All errors carry a null
+`session_id` and never echo caller input.
 
 The legacy frame above is clean-only. Protocol version 1 adds four operations:
 

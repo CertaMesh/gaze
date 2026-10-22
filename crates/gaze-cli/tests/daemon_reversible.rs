@@ -229,7 +229,108 @@ fn invalid_v1_request_shapes_return_versioned_protocol_errors() {
     ] {
         let response = daemon.request(request);
         assert_eq!(response["version"], 1);
+        assert!(response["session_id"].is_null());
         assert_eq!(response["error"], "ProtocolInvalid");
         assert!(response.get("text").is_none());
+    }
+}
+
+#[test]
+fn rejected_requests_never_echo_fictional_pii_session_ids() {
+    let (dir, policy) = policy();
+    let audit_db = dir.path().join("audit.db");
+    let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args([
+            "daemon",
+            "--policy",
+            policy.to_str().unwrap(),
+            "--audit-db",
+            audit_db.to_str().unwrap(),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let legacy_id = "alice@example.invalid";
+    let v1_id = "bob@example.invalid";
+    let cases = [
+        (
+            json!({"session_id":legacy_id,"text":42}),
+            None,
+            "JsonMalformed",
+        ),
+        (json!({"session_id":legacy_id}), None, "ProtocolInvalid"),
+        (
+            json!({"version":1,"op":"restore","session_id":v1_id,"text":42}),
+            Some(1),
+            "ProtocolInvalid",
+        ),
+        (
+            json!({"version":1,"op":42,"session_id":v1_id,"text":"x"}),
+            Some(1),
+            "ProtocolInvalid",
+        ),
+        (
+            json!({"version":1,"op":"unknown","session_id":v1_id}),
+            Some(1),
+            "ProtocolInvalid",
+        ),
+        (
+            json!({"version":1,"op":"clean","session_id":v1_id,"text":"x"}),
+            Some(1),
+            "SessionMissing",
+        ),
+        (
+            json!({"version":1,"op":"restore","session_id":v1_id,"text":"x"}),
+            Some(1),
+            "SessionMissing",
+        ),
+        (
+            json!({"version":1,"op":"close","session_id":v1_id}),
+            Some(1),
+            "SessionMissing",
+        ),
+        (
+            json!({"version":2,"op":"restore","session_id":v1_id,"text":"x"}),
+            Some(2),
+            "ProtocolVersion",
+        ),
+    ];
+    {
+        let mut stdin = child.stdin.take().unwrap();
+        for (request, _, _) in &cases {
+            writeln!(stdin, "{request}").unwrap();
+        }
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let frames = stdout.lines().collect::<Vec<_>>();
+    assert_eq!(frames.len(), cases.len());
+    for (frame, (_, version, error)) in frames.iter().zip(cases) {
+        let response: Value = serde_json::from_str(frame).unwrap();
+        assert_eq!(response["error"], error);
+        assert!(response["session_id"].is_null());
+        match version {
+            Some(version) => assert_eq!(response["version"], version),
+            None => assert!(response.get("version").is_none()),
+        }
+        assert!(!frame.contains(legacy_id) && !frame.contains(v1_id));
+        assert!(response.get("text").is_none());
+        assert!(response.get("clean_text").is_none());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains(legacy_id) && !stderr.contains(v1_id));
+    let audit = rusqlite::Connection::open(&audit_db).unwrap();
+    let rows: i64 = audit
+        .query_row("SELECT count(*) FROM redaction_log", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(rows, 0, "rejected requests must not create audit rows");
+    let audit_bytes = fs::read(&audit_db).unwrap();
+    for id in [legacy_id, v1_id] {
+        assert!(!audit_bytes
+            .windows(id.len())
+            .any(|window| window == id.as_bytes()));
     }
 }

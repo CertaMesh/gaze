@@ -240,30 +240,27 @@ impl Daemon {
         let _perf = crate::perf::Document::from_env();
         let value: serde_json::Value = match serde_json::from_str(line) {
             Ok(value) => value,
-            Err(_) => return DaemonResponse::error(None, "JsonMalformed", "malformed JSON line"),
+            Err(_) => return DaemonResponse::error("JsonMalformed", "malformed JSON line"),
         };
         let version = value
             .get("version")
             .and_then(serde_json::Value::as_u64)
             .and_then(|version| u32::try_from(version).ok());
-        let invalid_session_id = value
-            .get("session_id")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned);
         let request = match serde_json::from_value::<DaemonRequest>(value) {
             Ok(request) if !request.session_id.trim().is_empty() => request,
             Ok(_) => {
                 return DaemonResponse::error_versioned(
                     version,
-                    invalid_session_id,
                     "ProtocolInvalid",
                     "missing session_id",
                 )
             }
+            Err(_) if version.is_none() => {
+                return DaemonResponse::error("JsonMalformed", "malformed JSON line")
+            }
             Err(_) => {
                 return DaemonResponse::error_versioned(
                     version,
-                    invalid_session_id,
                     "ProtocolInvalid",
                     "invalid request shape",
                 )
@@ -318,9 +315,8 @@ impl Daemon {
         };
         match result {
             Ok(response) => response,
-            Err((session_id, error)) => DaemonResponse::error_versioned(
+            Err((_, error)) => DaemonResponse::error_versioned(
                 version,
-                Some(session_id),
                 error.variant(),
                 error.detail().unwrap_or("daemon request failed closed"),
             ),
@@ -702,19 +698,18 @@ enum DaemonResponse {
 }
 
 impl DaemonResponse {
-    fn error(session_id: Option<String>, error: &'static str, detail: impl Into<String>) -> Self {
-        Self::error_versioned(None, session_id, error, detail)
+    fn error(error: &'static str, detail: impl Into<String>) -> Self {
+        Self::error_versioned(None, error, detail)
     }
 
     fn error_versioned(
         version: Option<u32>,
-        session_id: Option<String>,
         error: &'static str,
         detail: impl Into<String>,
     ) -> Self {
         Self::Error {
             version,
-            session_id,
+            session_id: None,
             error,
             detail: detail.into(),
         }
