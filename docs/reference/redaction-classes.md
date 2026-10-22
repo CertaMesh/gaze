@@ -9,9 +9,9 @@ rustup run 1.96.0 cargo test -p xtask --test redaction_classes_doc
 ```
 
 `core` contains exactly 54 recognizer specs. `core-extended` loads the same bytes but widens
-[activation](#shipped-default-activation). `secrets` has `security_token.anchored`
-and `password.field`; setup includes it, while library callers and hand-written
-policies must select it: `bundled = ["core", "secrets"]` or
+[activation](#shipped-default-activation). `secrets` protects password records, hashes, and credential
+code fields. Setup includes it, while library callers and hand-written policies
+must select it: `bundled = ["core", "secrets"]` or
 `--rulepack-bundled core,secrets`.
 
 No rulepack emits `custom:username`. Optional Nym can report username, licence
@@ -113,6 +113,9 @@ Definitions: `crates/gaze-recognizers/embedded/core.toml` and `secrets.toml`.
 | `core, core-extended` | `age.phrase` | `regex` | Numeric person age from 1 to 122 after `turned` with a person word before it and a clause boundary or time word after it, before `geworden` after a person word and a copula, after `at the age of` / `im Alter von` with a person word before it, before `y/o` after a person copula or before a person noun, and before `year old female`/`male` unless an animal noun follows; only the number is tokenized | `custom:age` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 | `secrets` | `security_token.anchored` | `regex` | Cue-anchored credential values (a complete three-segment JWT after a cue included) plus structurally prefixed AWS access keys and three-segment JWTs | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 87 |
 | `secrets` | `password.field` | `regex` | Values in explicit EN/DE password or passphrase records; 1 to 256 normalized grammar units, with matching quoted or plain scalar syntax; not a raw-byte ceiling | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
+| `secrets` | `password.hash` | `regex` | Whole bcrypt, PHC Argon2 v19, scrypt/yescrypt, SHA-crypt, MD5-crypt, phpass and Django password encodings, without a field cue | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.95 | 100 |
+| `secrets` | `password.code` | `regex` | Complete nonempty single-line quoted literals after EN/DE password keys; PHP arrays supported; bare keys require code punctuation, preserving line-record ownership; source escapes stay literal | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
+| `secrets` | `security_token.code` | `regex` | Complete quoted credential literals after `api_token`, `remember_token`, `security_token`, `access_token`, `auth_token`, `authorization_token`, or `api_key` | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 <!-- redaction-classes-gate:recognizers:end -->
 
 The three `*.labelled` rows are safe-default `core` rules. Their captured value,

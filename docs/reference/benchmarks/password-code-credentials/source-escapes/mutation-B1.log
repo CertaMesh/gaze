@@ -1,0 +1,27 @@
+   Compiling gaze-types v0.17.0 ({mutation-copy}/crates/gaze-types)
+   Compiling gaze-recognizers v0.17.0 ({mutation-copy}/crates/gaze-recognizers)
+   Compiling gaze-pii v0.17.0 ({mutation-copy}/crates/gaze)
+   Compiling gaze-assembly v0.17.0 ({mutation-copy}/crates/gaze-assembly)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 34.42s
+     Running tests/code_credentials.rs ({mutation-target}/debug/deps/code_credentials-03d42cdd6cbbb021)
+
+running 1 test
+test escaped_crypt_salts_count_decoded_units_at_producer_limits ... FAILED
+
+failures:
+
+---- escaped_crypt_salts_count_decoded_units_at_producer_limits stdout ----
+
+thread 'escaped_crypt_salts_count_decoded_units_at_producer_limits' ({thread-id}) panicked at crates/gaze-recognizers/tests/code_credentials.rs:421:9:
+assertion `left == right` failed: INSERT INTO accounts (password) VALUES ('$1$abc''defg$l64ZD2dsjBSSNNzzyX3XD.');
+  left: []
+ right: ["$1$abc''defg$l64ZD2dsjBSSNNzzyX3XD."]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    escaped_crypt_salts_count_decoded_units_at_producer_limits
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 1.72s
+
+error: test failed, to rerun pass `-p gaze-recognizers --test code_credentials`

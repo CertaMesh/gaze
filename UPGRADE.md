@@ -27,6 +27,28 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ---
 
+## v0.17.x → unreleased
+
+### Breaking: `session_blob` envelope version 7 for JSON-escaped values
+
+Upgrade every process that restores a blob before, or together with, every
+process that writes one.
+
+A session now records whether each value was captured inside a JSON string
+literal in its escaped spelling. A manifest that holds such a value exports as
+envelope version 7. Every other manifest still exports as version 6.
+
+- A v0.17 or older reader refuses a v7 blob with `InvalidSnapshotVersion(7)`.
+  It fails closed; nothing is restored.
+- This release imports v2 to v7 blobs. Older blobs restore exactly as before;
+  their values read as plain text.
+
+`gaze-proxy` restores such a value into Anthropic `tool_use.input` as the value
+its escapes spell, not with literal backslashes. Text blocks and other
+plain-text destinations still receive the bytes the client sent.
+
+---
+
 ## v0.16.x → v0.17.0
 
 ### TL;DR

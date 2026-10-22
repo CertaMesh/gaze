@@ -1,0 +1,162 @@
+{
+  "verdict": "pass",
+  "reason": "leaked bytes fell by 855588, FP bytes changed by +2874",
+  "summary": {
+    "leaked_bytes_decrease": 855588,
+    "false_positive_bytes_increase": 2874
+  },
+  "layers": {
+    "C": {
+      "attempted_base": 2910,
+      "attempted_candidate": 2910,
+      "documents_base": 2910,
+      "documents_candidate": 2910,
+      "headline_leaked_base": 9717,
+      "headline_leaked_candidate": 9717,
+      "leaked_base": 9717,
+      "leaked_candidate": 9717,
+      "twin_leaked_base": 0,
+      "twin_leaked_candidate": 0,
+      "false_positive_base": 27021,
+      "false_positive_candidate": 27021,
+      "failed_closed_base": 0,
+      "failed_closed_candidate": 0,
+      "restore_exact_base": 2910,
+      "restore_exact_candidate": 2910,
+      "restore_failures_base": 0,
+      "restore_failures_candidate": 0,
+      "manifest_valid_base": 2910,
+      "manifest_valid_candidate": 2910,
+      "manifest_invalid_base": 0,
+      "manifest_invalid_candidate": 0
+    },
+    "A": {
+      "attempted_base": 10037,
+      "attempted_candidate": 10037,
+      "documents_base": 10037,
+      "documents_candidate": 10037,
+      "headline_leaked_base": 323080,
+      "headline_leaked_candidate": 72446,
+      "leaked_base": 321878,
+      "leaked_candidate": 71244,
+      "twin_leaked_base": 1202,
+      "twin_leaked_candidate": 1202,
+      "false_positive_base": 3003,
+      "false_positive_candidate": 4953,
+      "failed_closed_base": 0,
+      "failed_closed_candidate": 0,
+      "restore_exact_base": 10037,
+      "restore_exact_candidate": 10037,
+      "restore_failures_base": 0,
+      "restore_failures_candidate": 0,
+      "manifest_valid_base": 10037,
+      "manifest_valid_candidate": 10037,
+      "manifest_invalid_base": 0,
+      "manifest_invalid_candidate": 0
+    },
+    "D": {
+      "attempted_base": 7522,
+      "attempted_candidate": 7522,
+      "documents_base": 7522,
+      "documents_candidate": 7522,
+      "headline_leaked_base": 0,
+      "headline_leaked_candidate": 0,
+      "leaked_base": 0,
+      "leaked_candidate": 0,
+      "twin_leaked_base": 0,
+      "twin_leaked_candidate": 0,
+      "false_positive_base": 13750,
+      "false_positive_candidate": 14680,
+      "failed_closed_base": 0,
+      "failed_closed_candidate": 0,
+      "restore_exact_base": 7522,
+      "restore_exact_candidate": 7522,
+      "restore_failures_base": 0,
+      "restore_failures_candidate": 0,
+      "manifest_valid_base": 7522,
+      "manifest_valid_candidate": 7522,
+      "manifest_invalid_base": 0,
+      "manifest_invalid_candidate": 0
+    },
+    "R": {
+      "attempted_base": 6481,
+      "attempted_candidate": 6481,
+      "documents_base": 6481,
+      "documents_candidate": 6481,
+      "headline_leaked_base": 725898,
+      "headline_leaked_candidate": 120944,
+      "leaked_base": 725898,
+      "leaked_candidate": 120944,
+      "twin_leaked_base": 0,
+      "twin_leaked_candidate": 0,
+      "false_positive_base": 1391,
+      "false_positive_candidate": 1385,
+      "failed_closed_base": 0,
+      "failed_closed_candidate": 0,
+      "restore_exact_base": 6481,
+      "restore_exact_candidate": 6481,
+      "restore_failures_base": 0,
+      "restore_failures_candidate": 0,
+      "manifest_valid_base": 6481,
+      "manifest_valid_candidate": 6481,
+      "manifest_invalid_base": 0,
+      "manifest_invalid_candidate": 0
+    }
+  },
+  "gate_credit_version": 2,
+  "credit_guard": {
+    "ref_number_9": {
+      "base": 18,
+      "candidate": 18
+    },
+    "ref_number_11": {
+      "base": 30,
+      "candidate": 30
+    },
+    "card_twin_grouped_ref_csv": {
+      "base": 0,
+      "candidate": 0
+    },
+    "card_twin_order": {
+      "base": 0,
+      "candidate": 0
+    },
+    "card_twin_reader_serial": {
+      "base": 0,
+      "candidate": 0
+    },
+    "card_twin_timestamp_log": {
+      "base": 0,
+      "candidate": 0
+    },
+    "card_twin_transaction_json": {
+      "base": 0,
+      "candidate": 0
+    },
+    "ref_number_16": {
+      "base": 0,
+      "candidate": 0
+    },
+    "ref_number_10": {
+      "base": 0,
+      "candidate": 0
+    },
+    "gov_twin_tax_eleven": {
+      "base": 0,
+      "candidate": 0
+    },
+    "gov_near_tax_eleven": {
+      "base": 0,
+      "candidate": 0
+    },
+    "gov_twin_tax_grouped": {
+      "base": 0,
+      "candidate": 0
+    },
+    "gov_near_tax_grouped": {
+      "base": 0,
+      "candidate": 0
+    }
+  },
+  "config": "policy-file"
+}

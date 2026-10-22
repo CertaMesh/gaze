@@ -1,0 +1,169 @@
+{
+  "verdict": "pass",
+  "reason": "leaked bytes fell by 403175, FP bytes changed by +2520",
+  "summary": {
+    "leaked_bytes_decrease": 403175,
+    "false_positive_bytes_increase": 2520
+  },
+  "layers": {
+    "C": {
+      "attempted_base": 2910,
+      "attempted_candidate": 2910,
+      "documents_base": 2910,
+      "documents_candidate": 2910,
+      "headline_leaked_base": 6652,
+      "headline_leaked_candidate": 6652,
+      "leaked_base": 6652,
+      "leaked_candidate": 6652,
+      "twin_leaked_base": 0,
+      "twin_leaked_candidate": 0,
+      "false_positive_base": 27004,
+      "false_positive_candidate": 27004,
+      "failed_closed_base": 0,
+      "failed_closed_candidate": 0,
+      "restore_exact_base": 2910,
+      "restore_exact_candidate": 2910,
+      "restore_failures_base": 0,
+      "restore_failures_candidate": 0,
+      "manifest_valid_base": 2910,
+      "manifest_valid_candidate": 2910,
+      "manifest_invalid_base": 0,
+      "manifest_invalid_candidate": 0
+    },
+    "A": {
+      "attempted_base": 8657,
+      "attempted_candidate": 8657,
+      "documents_base": 8657,
+      "documents_candidate": 8657,
+      "headline_leaked_base": 206671,
+      "headline_leaked_candidate": 72446,
+      "leaked_base": 205469,
+      "leaked_candidate": 71244,
+      "twin_leaked_base": 1202,
+      "twin_leaked_candidate": 1202,
+      "false_positive_base": 2993,
+      "false_positive_candidate": 4589,
+      "failed_closed_base": 0,
+      "failed_closed_candidate": 0,
+      "restore_exact_base": 8657,
+      "restore_exact_candidate": 8657,
+      "restore_failures_base": 0,
+      "restore_failures_candidate": 0,
+      "manifest_valid_base": 8657,
+      "manifest_valid_candidate": 8657,
+      "manifest_invalid_base": 0,
+      "manifest_invalid_candidate": 0
+    },
+    "D": {
+      "attempted_base": 6122,
+      "attempted_candidate": 6122,
+      "documents_base": 6122,
+      "documents_candidate": 6122,
+      "headline_leaked_base": 0,
+      "headline_leaked_candidate": 0,
+      "leaked_base": 0,
+      "leaked_candidate": 0,
+      "twin_leaked_base": 0,
+      "twin_leaked_candidate": 0,
+      "false_positive_base": 10650,
+      "false_positive_candidate": 11580,
+      "failed_closed_base": 0,
+      "failed_closed_candidate": 0,
+      "restore_exact_base": 6122,
+      "restore_exact_candidate": 6122,
+      "restore_failures_base": 0,
+      "restore_failures_candidate": 0,
+      "manifest_valid_base": 6122,
+      "manifest_valid_candidate": 6122,
+      "manifest_invalid_base": 0,
+      "manifest_invalid_candidate": 0
+    },
+    "R": {
+      "attempted_base": 5101,
+      "attempted_candidate": 5101,
+      "documents_base": 5101,
+      "documents_candidate": 5101,
+      "headline_leaked_base": 389894,
+      "headline_leaked_candidate": 120944,
+      "leaked_base": 389894,
+      "leaked_candidate": 120944,
+      "twin_leaked_base": 0,
+      "twin_leaked_candidate": 0,
+      "false_positive_base": 1347,
+      "false_positive_candidate": 1341,
+      "failed_closed_base": 0,
+      "failed_closed_candidate": 0,
+      "restore_exact_base": 5101,
+      "restore_exact_candidate": 5101,
+      "restore_failures_base": 0,
+      "restore_failures_candidate": 0,
+      "manifest_valid_base": 5101,
+      "manifest_valid_candidate": 5101,
+      "manifest_invalid_base": 0,
+      "manifest_invalid_candidate": 0
+    }
+  },
+  "gate_credit_version": 2,
+  "credit_guard": {
+    "ref_number_9": {
+      "base": 18,
+      "candidate": 18
+    },
+    "ref_number_11": {
+      "base": 30,
+      "candidate": 30
+    },
+    "card_twin_grouped_ref_csv": {
+      "base": 0,
+      "candidate": 0
+    },
+    "card_twin_order": {
+      "base": 0,
+      "candidate": 0
+    },
+    "card_twin_reader_serial": {
+      "base": 0,
+      "candidate": 0
+    },
+    "card_twin_timestamp_log": {
+      "base": 0,
+      "candidate": 0
+    },
+    "card_twin_transaction_json": {
+      "base": 0,
+      "candidate": 0
+    },
+    "ref_number_16": {
+      "base": 0,
+      "candidate": 0
+    },
+    "ref_number_10": {
+      "base": 0,
+      "candidate": 0
+    },
+    "gov_twin_tax_eleven": {
+      "base": 0,
+      "candidate": 0
+    },
+    "gov_near_tax_eleven": {
+      "base": 0,
+      "candidate": 0
+    },
+    "gov_twin_tax_grouped": {
+      "base": 0,
+      "candidate": 0
+    },
+    "gov_near_tax_grouped": {
+      "base": 0,
+      "candidate": 0
+    }
+  },
+  "config": "policy-file",
+  "policy_digests": {
+    "base": "c4ff3bddcf9e79d5d0f4c57482799653eb97a49428efe7cf217058a863dfcaf3",
+    "candidate": "d0dd04ca1b312f2a757d3c2d8981fef65bfd381c4f0d486c71719a2420359682",
+    "delta": "d5b25b1e913fd9ea39ed20cbc57f027f6814ba2d65abb98e6f193fccb5729d17"
+  },
+  "policy_delta_reason": "candidate policy equals base plus appended rulepack paths",
+  "policy_delta_path": "scripts/bench/mechanisms/password-code-credentials.toml"
+}

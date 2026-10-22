@@ -18,26 +18,16 @@
 //! Fixture values are synthetic. Every town name is invented, so no fixture is a deliverable
 //! address even where the four digits are an assigned code.
 
-use gaze::Context;
+mod support;
+
 use gaze::{
-    Action, CleanDocument, DictionaryBundle, LocaleChain, LocaleTag, PiiClass, Pipeline,
-    RawDocument, RuleSpec, Rulepack, RulepackSource, Scope, Session,
+    Action, CleanDocument, DictionaryBundle, LocaleTag, PiiClass, Pipeline, RawDocument, RuleSpec,
+    Scope, Session,
 };
-use gaze_recognizers::embedded;
 
 #[path = "support/token_assertions.rs"]
 mod token_assertions;
 use token_assertions::without_tokens;
-
-fn empty_context() -> Context {
-    Context {
-        dictionaries: std::collections::HashMap::new(),
-        class_map: std::collections::HashMap::new(),
-        fields: serde_json::Map::new(),
-        record_match_kinds: Default::default(),
-        record_value_rejections: Default::default(),
-    }
-}
 
 fn postal_class() -> PiiClass {
     PiiClass::custom("postal_code").expect("valid custom class")
@@ -46,25 +36,20 @@ fn postal_class() -> PiiClass {
 /// The core bundle through the real activation path, locale-gated auto-activation OFF and only
 /// the caller's chain active, so a rule runs only where its declared locales intersect the chain.
 fn pipeline_for(locales: &[LocaleTag]) -> Pipeline {
-    let rulepack = Rulepack::load(RulepackSource::Embedded(
-        embedded("core").expect("core rulepack"),
-    ))
-    .expect("core loads");
-    let mut policy = gaze::Policy::default();
-    policy.rules = vec![
-        RuleSpec::Class {
-            class: postal_class(),
-            action: Action::Tokenize,
-        },
-        RuleSpec::Default {
-            action: Action::Preserve,
-        },
-    ];
-    policy.rulepacks.bundled = vec!["core".to_string()];
-    policy.rulepacks.auto_activate_locale_gated = false;
-    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(locales));
-    gaze_assembly::build_pipeline(&policy, &empty_context(), &[rulepack], &chain, None)
-        .expect("pipeline")
+    support::pipeline_for(
+        locales,
+        &["core"],
+        vec![
+            RuleSpec::Class {
+                class: postal_class(),
+                action: Action::Tokenize,
+            },
+            RuleSpec::Default {
+                action: Action::Preserve,
+            },
+        ],
+        false,
+    )
 }
 
 fn clean_in(locales: &[LocaleTag], text: &str) -> String {
@@ -73,19 +58,7 @@ fn clean_in(locales: &[LocaleTag], text: &str) -> String {
 }
 
 fn clean_in_session(locales: &[LocaleTag], text: &str, session: &Session) -> String {
-    let pipeline = pipeline_for(locales);
-    let (clean, _, _) = pipeline
-        .clean_with_safety_net_detect_context(
-            session,
-            RawDocument::Text(text.to_string()),
-            locales,
-            &DictionaryBundle::default(),
-        )
-        .expect("clean");
-    match clean {
-        CleanDocument::Text(text) => text,
-        _ => panic!("expected text"),
-    }
+    support::clean(&pipeline_for(locales), session, text, locales)
 }
 
 #[test]

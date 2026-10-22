@@ -20,6 +20,7 @@ pub mod rulepack;
 mod safety_net_scan;
 mod sandbox;
 mod session;
+mod spelling;
 mod sweep;
 pub mod token_shape;
 mod types;
@@ -96,5 +97,6 @@ pub use session::{
     RestoreEventKind, RestoredTextWithProvenance, Scope, SensitiveSnapshot, Session,
     SessionSnapshotEntry, SessionTransaction, SessionTransactionError,
 };
+pub use spelling::SourceSpelling;
 pub use sweep::ManifestSweepError;
 pub use types::{CleanDocument, RawDocument, Value};

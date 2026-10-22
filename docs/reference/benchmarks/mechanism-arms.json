@@ -320,11 +320,11 @@
           "records": {
             "base": {
               "file": "docs/reference/benchmarks/mechanisms/nym-safety-net-491df871dd57-base.jsonl.gz",
-              "sha256": "c12c48a0930ace5d39a9e8f0fe8205532df2eae2a171c39726ab457ba18151f9"
+              "sha256": "aa158bac7356cec706ac1e2161032f8cabdd04da51c74a742e7b4b45c817092f"
             },
             "candidate": {
               "file": "docs/reference/benchmarks/mechanisms/nym-safety-net-491df871dd57-candidate.jsonl.gz",
-              "sha256": "d99a4f35271fc054c0dc8ae0ee43047e614f93e40155788a3d5cd554cf19931f"
+              "sha256": "baf03845aaf32d3d5384183ad90e0f32f0d0bdd24cf93229695133e1cb63e34d"
             }
           },
           "revision": "491df871dd572dae216d145a0cdb171307ef5a5a",
@@ -1163,11 +1163,11 @@
           "records": {
             "base": {
               "file": "docs/reference/benchmarks/mechanisms/davlan-ner-491df871dd57-base.jsonl.gz",
-              "sha256": "b7fd110e416ceacddd6c80a665b4d896d7b96d79382fd6cb410f480b81293a4c"
+              "sha256": "4293cd9132b7dbee9bc51168b31ec81745beb30ee6ce287529cfb18055b4d778"
             },
             "candidate": {
               "file": "docs/reference/benchmarks/mechanisms/davlan-ner-491df871dd57-candidate.jsonl.gz",
-              "sha256": "d99a4f35271fc054c0dc8ae0ee43047e614f93e40155788a3d5cd554cf19931f"
+              "sha256": "baf03845aaf32d3d5384183ad90e0f32f0d0bdd24cf93229695133e1cb63e34d"
             }
           },
           "revision": "491df871dd572dae216d145a0cdb171307ef5a5a",
@@ -2572,6 +2572,428 @@
         }
       ],
       "shipped": "default-on in the policy from gaze setup"
+    },
+    {
+      "id": "password-code-credentials",
+      "title": "Password hashes and code credentials",
+      "added_in": "v0.18",
+      "policy_delta": {
+        "file": "scripts/bench/mechanisms/password-code-credentials.toml",
+        "sha256": "d5b25b1e913fd9ea39ed20cbc57f027f6814ba2d65abb98e6f193fccb5729d17"
+      },
+      "measurements": [
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/90550d3ac1b374b6479de9d674f76ace0d1926baece405bc9a67330077cb321d/base-c5bd3e1fbb28946d6d994488128792bffbe61f591c61b8f2a8b00b8dbf80ae97.jsonl.gz",
+              "sha256": "c5bd3e1fbb28946d6d994488128792bffbe61f591c61b8f2a8b00b8dbf80ae97"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/90550d3ac1b374b6479de9d674f76ace0d1926baece405bc9a67330077cb321d/candidate-4ef58408d724aa690ebb452ab419d43a5de4e38ff946b91ea8ccecacdbc6dce6.jsonl.gz",
+              "sha256": "4ef58408d724aa690ebb452ab419d43a5de4e38ff946b91ea8ccecacdbc6dce6"
+            }
+          },
+          "revision": "2068418bb89db000adcf880307974357ff716afe",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "c4ff3bddcf9e79d5d0f4c57482799653eb97a49428efe7cf217058a863dfcaf3",
+          "candidate_policy_sha256": "d0dd04ca1b312f2a757d3c2d8981fef65bfd381c4f0d486c71719a2420359682",
+          "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {}
+            },
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {}
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {},
+              "false_positive_by_class_delta": {}
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {},
+              "false_positive_by_class_delta": {}
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 205469,
+                "false_positive": 2993,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 71244,
+                "false_positive": 4589,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 10650,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 11580,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 389894,
+                "false_positive": 1347,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 120944,
+                "false_positive": 1341,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 403175, FP bytes changed by +2520"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 403175, FP bytes changed by +2520"
+            }
+          },
+          "attested": {
+            "binary_sha256": "22ee0dfa6204a913a467d6038af88f6bd1aec0d347029923682f16c21f3b32d4",
+            "crates_tree": "83331f0a72486dd682579f48e87c4e7d908fe827",
+            "machine": "Apple M5 Max, 18 physical cores, 64 GiB RAM, arm64, macOS 26.5, Rust 1.96.0",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
+          }
+        },
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/1c20a5f5a4d01bc7929909a82d543f9a29f26ecc2a17366335c476a54925100a/base-e69c095cb6420d69b498a72c3caeee005476191352aab60cdee0495535ce9b7c.jsonl.gz",
+              "sha256": "e69c095cb6420d69b498a72c3caeee005476191352aab60cdee0495535ce9b7c"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/1c20a5f5a4d01bc7929909a82d543f9a29f26ecc2a17366335c476a54925100a/candidate-61942cebce2dba191187983491ce3903a939d3a166280ccc1e3a1a31ffea6a26.jsonl.gz",
+              "sha256": "61942cebce2dba191187983491ce3903a939d3a166280ccc1e3a1a31ffea6a26"
+            }
+          },
+          "revision": "6eb72a93e341962945e5569e0c27cf3e989ad986",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "1b4b44d2b53d224594cbdbc1cc16486e29523eadead03d256ddc5ff6a5206c27",
+          "candidate_policy_sha256": "b808dc4f07a005c2ac2466532fba7341e878b27f1f5c79505f28a090e3594d45",
+          "binary_sha256": "577e83afc68189ad92f81af9391d59e1880919ed67b57ca65ac4123495c46348",
+          "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {}
+            },
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {}
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {},
+              "false_positive_by_class_delta": {}
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {},
+              "false_positive_by_class_delta": {}
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 218473,
+                "false_positive": 3003,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 71244,
+                "false_positive": 4953,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 11000,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 11930,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 415850,
+                "false_positive": 1391,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 120944,
+                "false_positive": 1385,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 442135, FP bytes changed by +2874"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 442135, FP bytes changed by +2874"
+            }
+          },
+          "attested": {
+            "binary_sha256": "577e83afc68189ad92f81af9391d59e1880919ed67b57ca65ac4123495c46348",
+            "crates_tree": "7885cd27670b96792451836d7310e4124bc5fe8f",
+            "machine": "Apple M5 Max, 18 physical cores, 64 GiB RAM, arm64, macOS 26.5, rustc 1.96.0 (ac68faa20 2026-05-25)",
+            "note": "Binary SHA-256 verified against both capture-time record bindings and --binary; crates tree and machine are attested, not re-derivable."
+          }
+        },
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/a44a33db2060511346246cf9b53654b084cac9df91e2c9820012c8da9da5214b/base-0f4f3dc81d95e02ca868a6b3ce4b8ca985c7e647202ce5c91c0f379504b70675.jsonl.gz",
+              "sha256": "0f4f3dc81d95e02ca868a6b3ce4b8ca985c7e647202ce5c91c0f379504b70675"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/a44a33db2060511346246cf9b53654b084cac9df91e2c9820012c8da9da5214b/candidate-8b9bc9b561ad54e888be8c4d03455333410f315563831ba078bf5977ae4c87b8.jsonl.gz",
+              "sha256": "8b9bc9b561ad54e888be8c4d03455333410f315563831ba078bf5977ae4c87b8"
+            }
+          },
+          "revision": "3188916e61972b651f1de7e3f99ed421c2320098",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "1b4b44d2b53d224594cbdbc1cc16486e29523eadead03d256ddc5ff6a5206c27",
+          "candidate_policy_sha256": "b808dc4f07a005c2ac2466532fba7341e878b27f1f5c79505f28a090e3594d45",
+          "binary_sha256": "d9538aea2d05a0f9cac5efdeba6ea59dfb9f8e80e911841e93e12fa0b1a77a5f",
+          "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {}
+            },
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {}
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {},
+              "false_positive_by_class_delta": {}
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {},
+              "false_positive_by_class_delta": {}
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 270153,
+                "false_positive": 3003,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 71244,
+                "false_positive": 4953,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 12060,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 12990,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 519210,
+                "false_positive": 1391,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 120944,
+                "false_positive": 1385,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 597175, FP bytes changed by +2874"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 597175, FP bytes changed by +2874"
+            }
+          },
+          "attested": {
+            "binary_sha256": "d9538aea2d05a0f9cac5efdeba6ea59dfb9f8e80e911841e93e12fa0b1a77a5f",
+            "crates_tree": "36b4be6276768fa2618df6187f96abe171527cb2",
+            "machine": "Apple M5 Max, 18 physical cores, 64 GiB RAM, arm64, macOS 26.5, rustc 1.96.0 (ac68faa20 2026-05-25)",
+            "note": "Binary SHA-256 verified against both capture-time record bindings and --binary; crates tree and machine are attested, not re-derivable."
+          }
+        }
+      ],
+      "shipped": "on in gaze setup; explicit secrets bundle for library policies"
     }
   ]
 }

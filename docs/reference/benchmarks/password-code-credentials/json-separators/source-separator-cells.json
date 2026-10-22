@@ -1,0 +1,38 @@
+{
+  "A": {
+    "base": {
+      "pii": 53800,
+      "leaked": 51680,
+      "false_positive": 0
+    },
+    "candidate": {
+      "pii": 53800,
+      "leaked": 0,
+      "false_positive": 0
+    }
+  },
+  "D": {
+    "base": {
+      "pii": 0,
+      "leaked": 0,
+      "false_positive": 1060
+    },
+    "candidate": {
+      "pii": 0,
+      "leaked": 0,
+      "false_positive": 1060
+    }
+  },
+  "R": {
+    "base": {
+      "pii": 107600,
+      "leaked": 103360,
+      "false_positive": 0
+    },
+    "candidate": {
+      "pii": 107600,
+      "leaked": 0,
+      "false_positive": 0
+    }
+  }
+}
