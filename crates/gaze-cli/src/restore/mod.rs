@@ -1,5 +1,5 @@
 mod manifest;
-mod session;
+pub(crate) mod session;
 
 use std::path::Path;
 
