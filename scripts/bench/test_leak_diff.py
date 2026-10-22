@@ -1,0 +1,170 @@
+"""New exposures must remain visible even when total protection improves."""
+
+import copy
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import agentic_layers as agentic
+import gaze_bench_score as score
+import scorecard_record as record
+import leak_diff
+
+
+class LeakDiffTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+
+    def capture(self, name, spans, *, gold=None, refused=False, prediction_class='Email'):
+        gold = gold if gold is not None else [[0, 10, 'EMAIL']]
+        document = dict(id='synthetic-document', layer='C', utf8_bytes=20, gold=gold,
+                        language='en', region='US', source_dataset='synthetic',
+                        negative_category=None, cell=None, validator=None)
+        population = dict(document_ids=['synthetic-document'])
+        card = dict(dataset=dict(integrity=dict(sha256='a' * 64)),
+                    runs=[dict(config='production', scored_population=population if not refused else dict(document_ids=[]),
+                               failed_closed_population=population if refused else dict(document_ids=[]))])
+        header = dict(kind='header', schema_version=1, corpus_sha256='a' * 64,
+                      documents=[document], scorecard=card, layer_identity=None)
+        response = dict(fixture_id=document['id'], refused=refused,
+                        final_protection_trace=[dict(raw_start=a, raw_end=b, action='tokenize', provenance={},
+                                                     **{'class': prediction_class}) for a, b in spans])
+        if refused:
+            response['pipeline_error_code'] = 'synthetic-refusal'
+            response.pop('final_protection_trace')
+        observation = dict(kind='observation', layer='C', config='production',
+                           document_id=document['id'], response=response)
+        path = self.root / (name + '.jsonl.gz')
+        record._write_rows(path, [header, observation])
+        return path
+
+    def diff(self, base_spans, candidate_spans, **kwargs):
+        return leak_diff.report(self.capture('base', base_spans, **kwargs),
+                                self.capture('candidate', candidate_spans, **kwargs), config='production')
+
+    def counts(self, report):
+        row = report['layers']['C']
+        return row['new_exposed_bytes'], row['newly_protected_bytes'], row['net_leaked_bytes']
+
+    def test_pure_gain(self):
+        report = self.diff([], [(0, 10)])
+        self.assertEqual(self.counts(report), (0, 10, -10))
+        self.assertEqual(report['new_exposure_spans'], [])
+
+    def test_pure_loss_and_value_free_offsets(self):
+        report = self.diff([(0, 10)], [(0, 3)])
+        self.assertEqual(self.counts(report), (7, 0, 7))
+        self.assertEqual(report['new_exposure_spans'], [dict(layer='C', document_id='synthetic-document',
+                                                            start=3, end=10, **{'class': 'EMAIL'})])
+        self.assertEqual(report['layers']['C']['classes']['EMAIL']['new_exposed_bytes'], 7)
+        self.assertTrue(report['report_only'])
+
+    def test_mixed_net_gain_does_not_hide_new_exposure(self):
+        report = self.diff([(0, 3)], [(3, 10)])
+        self.assertEqual(self.counts(report), (3, 7, -4))
+        self.assertEqual(report['layers']['C']['classes']['EMAIL']['new_exposed_bytes'], 3)
+        self.assertEqual(report['new_exposure_spans'][0]['end'], 3)
+
+    def test_overlapping_gold_and_protection_count_each_byte_once(self):
+        report = self.diff([(0, 5), (2, 7)], [(3, 10)],
+                           gold=[[0, 8, 'EMAIL'], [2, 10, 'EMAIL'], [4, 9, 'PERSON']])
+        self.assertEqual(self.counts(report), (3, 3, 0))
+        self.assertEqual(report['layers']['C']['classes']['EMAIL']['new_exposed_bytes'], 3)
+        self.assertEqual(report['layers']['C']['classes']['PERSON']['new_exposed_bytes'], 0)
+        self.assertEqual(report['layers']['C']['classes']['PERSON']['newly_protected_bytes'], 2)
+
+    def test_prediction_class_change_on_same_bytes_is_not_exposure(self):
+        base = self.capture('base', [(0, 10)], prediction_class='Email')
+        candidate = self.capture('candidate', [(0, 10)], prediction_class='Person')
+        self.assertEqual(self.counts(leak_diff.report(base, candidate, config='production')), (0, 0, 0))
+
+    def test_refusal_releases_no_bytes_and_is_reported_separately(self):
+        base = self.capture('base', [], refused=True)
+        candidate = self.capture('candidate', [])
+        result = leak_diff.report(base, candidate, config='production')
+        self.assertEqual(self.counts(result), (10, 0, 10))
+        self.assertEqual(result['layers']['C']['refusals'], dict(base=1, candidate=0))
+
+    def test_mismatched_gold_or_corpus_refused(self):
+        base = self.capture('base', [])
+        candidate = self.capture('candidate', [], gold=[[0, 10, 'PERSON']])
+        with self.assertRaisesRegex(record.RecordError, 'inventor'):
+            leak_diff.report(base, candidate, config='production')
+        header, rows = record._read(base)
+        header['corpus_sha256'] = header['scorecard']['dataset']['integrity']['sha256'] = 'b' * 64
+        record._write_rows(candidate, [header, *rows])
+        with self.assertRaisesRegex(record.RecordError, 'corpus'):
+            leak_diff.report(base, candidate, config='production')
+
+    def test_incomplete_duplicate_wrong_config_or_invalid_trace_refused(self):
+        base = self.capture('base', [(0, 5)])
+        header, rows = record._read(base)
+        variants = [[], rows + rows, [{**rows[0], 'config': 'other'}]]
+        for change in [dict(raw_start=-1), dict(raw_end=21), dict(raw_start=True), dict(action='ignore')]:
+            altered = copy.deepcopy(rows)
+            altered[0]['response']['final_protection_trace'][0].update(change)
+            variants.append(altered)
+        for observations in variants:
+            with self.subTest(observations=observations):
+                candidate = self.root / 'invalid.jsonl.gz'
+                record._write_rows(candidate, [header, *observations])
+                with self.assertRaises(record.RecordError):
+                    leak_diff.report(base, candidate, config='production')
+
+    def test_report_bytes_deterministic_and_samples_bounded(self):
+        base = self.capture('base', [(0, 10)])
+        candidate = self.capture('candidate', [])
+        command = [sys.executable, str(Path(leak_diff.__file__)), '--base-record', str(base),
+                   '--candidate-record', str(candidate), '--config', 'production', '--span-limit', '0']
+        first = subprocess.check_output(command)
+        self.assertEqual(first, subprocess.check_output(command))
+        result = json.loads(first)
+        self.assertEqual(result['new_exposure_span_count'], 1)
+        self.assertEqual(result['new_exposure_spans'], [])
+        self.assertNotIn(str(self.root), first.decode())
+
+    def test_gate_attaches_report_without_changing_verdict(self):
+        base = self.capture('base', [(0, 3)])
+        candidate = self.capture('candidate', [(3, 10)])
+        cards, paths = [], []
+        for name, path in [('base', base), ('candidate', candidate)]:
+            header, _ = record._read(path)
+            card = header['scorecard']
+            card['observation_record'] = dict(file=path.name, sha256=score.sha256_file(path))
+            card_path = self.root / (name + '.json')
+            card_path.write_text(json.dumps(card))
+            cards.append(card)
+            paths.append(card_path)
+        verdict = dict(verdict='pass', reason='synthetic gain', layers={}, config='production')
+        with mock.patch.object(agentic, 'compare_layers', return_value=verdict):
+            result = agentic.gate(*cards, scorecard_paths=tuple(paths))
+        self.assertEqual(result['verdict'], 'pass')
+        self.assertEqual(self.counts(result['leak_diff']), (3, 7, -4))
+        markdown = agentic.gate_markdown(result)
+        self.assertIn('New exposure', markdown)
+        self.assertIn('| C | EMAIL | 3 | 7 | -4 |', markdown)
+        cards[1]['observation_record']['sha256'] = '0' * 64
+        with mock.patch.object(agentic, 'compare_layers', return_value=verdict):
+            with self.assertRaises(agentic.LayerError):
+                agentic.gate(*cards, scorecard_paths=tuple(paths))
+
+    def test_committed_mechanism_pair_matches_report_bytes(self):
+        root = Path(__file__).resolve().parents[2]
+        pair = root / 'docs/reference/benchmarks/mechanisms/6cc02a9f9828c76883dba10f65925d675f52dd820e05311cf2280f47569b28d0'
+        result = leak_diff.report(
+            pair / 'base-32cdbede14c02ecd07a41103c9892ba88b79b6c970500e816ef97460e05184f1.jsonl.gz',
+            pair / 'candidate-6e0d206cc7d9cd67b32ddb78df9884b50413f662be8086a49fa9dfd419de699d.jsonl.gz')
+        encoded = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=True) + '\n'
+        self.assertEqual(encoded, (root / 'scripts/bench/fixtures/leak-diff-example.json').read_text())
+        self.assertEqual({layer: row['new_exposed_bytes'] for layer, row in result['layers'].items()},
+                         dict.fromkeys('ACDR', 0))
+        self.assertEqual(result['layers']['A']['newly_protected_bytes'], 20)
+        self.assertEqual(result['layers']['C']['newly_protected_bytes'], 81)
