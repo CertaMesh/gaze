@@ -22,8 +22,8 @@ Capture commit: `e7e018ce8c4fa590a5c28db7031f030712a83103`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `row.latency.p50_ms` | 0.003 | 0.002 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 0.009 | 0.007 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 0.003 | 0.002 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 0.009 | 0.007 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## piibench-commercial: datafog-core
 
@@ -33,7 +33,7 @@ Capture commit: `e7e018ce8c4fa590a5c28db7031f030712a83103`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `row.latency.p95_ms` | 0.038 | 0.036 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 0.038 | 0.036 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## presidio-research: datafog-regex
 
@@ -43,8 +43,8 @@ Capture commit: `e7e018ce8c4fa590a5c28db7031f030712a83103`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `row.latency.p50_ms` | 0.047 | 0.04 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 0.087 | 0.075 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 0.047 | 0.04 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 0.087 | 0.075 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## piibench-commercial: datafog-regex
 
@@ -54,8 +54,8 @@ Capture commit: `e7e018ce8c4fa590a5c28db7031f030712a83103`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `row.latency.p50_ms` | 0.076 | 0.07 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 0.441 | 0.399 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 0.076 | 0.07 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 0.441 | 0.399 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## presidio-research: scrubadub-base
 
@@ -65,8 +65,8 @@ Capture commit: `e7e018ce8c4fa590a5c28db7031f030712a83103`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `row.latency.p50_ms` | 0.035 | 0.033 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 0.129 | 0.122 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 0.035 | 0.033 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 0.129 | 0.122 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## piibench-commercial: scrubadub-base
 
@@ -76,8 +76,8 @@ Capture commit: `e7e018ce8c4fa590a5c28db7031f030712a83103`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `row.latency.p50_ms` | 0.093 | 0.09 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 0.631 | 0.597 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 0.093 | 0.09 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 0.631 | 0.597 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## presidio-research: datafog-spacy
 
@@ -87,9 +87,9 @@ Capture commit: `9225644b9fb58b20a4b84aedd558e5d3cdcb78fd`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p50_ms` | 4.706 | 5.647 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 9.843 | 11.451 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 4.706 | 5.647 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 9.843 | 11.451 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## piibench-commercial: datafog-spacy
 
@@ -99,8 +99,8 @@ Capture commit: `9225644b9fb58b20a4b84aedd558e5d3cdcb78fd`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `row.latency.p50_ms` | 8.949 | 10.488 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 60.048 | 65.978 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 8.949 | 10.488 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 60.048 | 65.978 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## presidio-research: scrubadub-spacy
 
@@ -110,8 +110,8 @@ Capture commit: `9225644b9fb58b20a4b84aedd558e5d3cdcb78fd`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `row.latency.p50_ms` | 4.686 | 6.573 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 9.834 | 14.57 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 4.686 | 6.573 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 9.834 | 14.57 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## piibench-commercial: scrubadub-spacy
 
@@ -121,8 +121,8 @@ Capture commit: `9225644b9fb58b20a4b84aedd558e5d3cdcb78fd`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `row.latency.p50_ms` | 8.999 | 11.101 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 60.37 | 70.967 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 8.999 | 11.101 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 60.37 | 70.967 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## presidio-research: presidio-en
 
@@ -132,9 +132,9 @@ Capture commit: `9225644b9fb58b20a4b84aedd558e5d3cdcb78fd`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p50_ms` | 5.213 | 6.802 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 10.971 | 14.601 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 5.213 | 6.802 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 10.971 | 14.601 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## piibench-commercial: presidio-en
 
@@ -159,8 +159,8 @@ Capture commit: `9225644b9fb58b20a4b84aedd558e5d3cdcb78fd`. Previous capture com
 | `row.common_intersection.typed_entities.f2` | 0.35029819741338875 | 0.3502395229640548 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.common_intersection.typed_entities.fp` | 6555 | 6560 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.common_intersection.typed_entities.precision` | 0.24184594031922277 | 0.24170616113744076 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
-| `row.latency.p50_ms` | 9.793 | 11.922 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 64.429 | 73.77 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 9.793 | 11.922 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 64.429 | 73.77 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 | `row.product_coverage.typed_entities.f1` | 0.20767743717205192 | 0.20763140937126023 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.product_coverage.typed_entities.f2` | 0.23901090169405337 | 0.23895792941974173 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.product_coverage.typed_entities.fn` | 12467 | 12468 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
@@ -177,9 +177,9 @@ Capture commit: `9225644b9fb58b20a4b84aedd558e5d3cdcb78fd`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p50_ms` | 5.137 | 5.614 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 10.733 | 11.684 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 5.137 | 5.614 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 10.733 | 11.684 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## piibench-commercial: presidio-en-de
 
@@ -204,8 +204,8 @@ Capture commit: `9225644b9fb58b20a4b84aedd558e5d3cdcb78fd`. Previous capture com
 | `row.common_intersection.typed_entities.f2` | 0.35029819741338875 | 0.3502395229640548 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.common_intersection.typed_entities.fp` | 6555 | 6560 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.common_intersection.typed_entities.precision` | 0.24184594031922277 | 0.24170616113744076 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
-| `row.latency.p50_ms` | 9.833 | 12.883 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 64.836 | 76.992 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 9.833 | 12.883 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 64.836 | 76.992 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 | `row.product_coverage.typed_entities.f1` | 0.20767743717205192 | 0.20763140937126023 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.product_coverage.typed_entities.f2` | 0.23901090169405337 | 0.23895792941974173 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.product_coverage.typed_entities.fn` | 12467 | 12468 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
@@ -222,9 +222,9 @@ Capture commit: `9225644b9fb58b20a4b84aedd558e5d3cdcb78fd`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p50_ms` | 5.173 | 5.422 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 10.765 | 11.141 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 5.173 | 5.422 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 10.765 | 11.141 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## piibench-commercial: presidio-all
 
@@ -249,8 +249,8 @@ Capture commit: `9225644b9fb58b20a4b84aedd558e5d3cdcb78fd`. Previous capture com
 | `row.common_intersection.typed_entities.f2` | 0.35029819741338875 | 0.3502395229640548 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.common_intersection.typed_entities.fp` | 6555 | 6560 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.common_intersection.typed_entities.precision` | 0.24184594031922277 | 0.24170616113744076 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
-| `row.latency.p50_ms` | 9.824 | 10.33 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 64.904 | 66.174 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 9.824 | 10.33 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 64.904 | 66.174 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 | `row.product_coverage.typed_entities.f1` | 0.20767743717205192 | 0.20763140937126023 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.product_coverage.typed_entities.f2` | 0.23901090169405337 | 0.23895792941974173 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
 | `row.product_coverage.typed_entities.fn` | 12467 | 12468 | Equal-score type ties are order-sensitive. This capture fixes hash seed 0; the historical seed and exact type choices were not retained. |
@@ -267,9 +267,9 @@ Capture commit: `1eaff62e7a45dfe3665e2a337ec1764d3496b145`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `own_metric.predict_seconds` | 0.0 | 0.1 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p50_ms` | 21.199 | 42.459 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 38.686 | 82.95 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `own_metric.predict_seconds` | 0.0 | 0.1 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 21.199 | 42.459 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 38.686 | 82.95 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## piibench-commercial: presidio-strong
 
@@ -291,8 +291,8 @@ Capture commit: `1eaff62e7a45dfe3665e2a337ec1764d3496b145`. Previous capture com
 | `row.common_intersection.typed_entities.f2` | 0.4561849798769838 | 0.45601184150599666 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
 | `row.common_intersection.typed_entities.fp` | 2735 | 2745 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
 | `row.common_intersection.typed_entities.precision` | 0.467691708836123 | 0.46678321678321677 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
-| `row.latency.p50_ms` | 30.079 | 35.707 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 318.774 | 359.326 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 30.079 | 35.707 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 318.774 | 359.326 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## presidio-research: presidio-strong-high-recall
 
@@ -302,9 +302,9 @@ Capture commit: `1eaff62e7a45dfe3665e2a337ec1764d3496b145`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p50_ms` | 20.861 | 24.624 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 36.135 | 49.621 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 20.861 | 24.624 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 36.135 | 49.621 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## piibench-commercial: presidio-strong-high-recall
 
@@ -328,8 +328,8 @@ Capture commit: `1eaff62e7a45dfe3665e2a337ec1764d3496b145`. Previous capture com
 | `row.common_intersection.typed_entities.f2` | 0.45682197602064056 | 0.4567180031864046 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
 | `row.common_intersection.typed_entities.fp` | 2748 | 2754 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
 | `row.common_intersection.typed_entities.precision` | 0.4670287044220326 | 0.4664858581944983 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
-| `row.latency.p50_ms` | 29.875 | 43.072 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 317.759 | 382.545 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 29.875 | 43.072 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 317.759 | 382.545 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 | `row.product_coverage.typed_entities.f1` | 0.2939484282650766 | 0.2938961242742821 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
 | `row.product_coverage.typed_entities.f2` | 0.3151107373142697 | 0.3150546677880572 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
 | `row.product_coverage.typed_entities.fn` | 11359 | 11360 | Fresh fixed-seed Presidio capture. Equal-score type ties are order-sensitive; the historical seed and predictions were not retained, so exact historical choices cannot be recovered. |
@@ -346,9 +346,9 @@ Capture commit: `5a25074ab4256da4be39ed81ff169a69646c4d5a`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p50_ms` | 62.62 | 69.603 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 82.448 | 170.238 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 62.62 | 69.603 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 82.448 | 170.238 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## piibench-commercial: datafog-gliner
 
@@ -358,8 +358,8 @@ Capture commit: `5a25074ab4256da4be39ed81ff169a69646c4d5a`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `row.latency.p50_ms` | 74.895 | 101.176 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 343.161 | 507.595 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 74.895 | 101.176 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 343.161 | 507.595 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## presidio-research: gliner
 
@@ -369,9 +369,9 @@ Capture commit: `5a25074ab4256da4be39ed81ff169a69646c4d5a`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p50_ms` | 119.853 | 132.947 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 268.137 | 220.431 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `own_metric.predict_seconds` | 0.1 | 0.0 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 119.853 | 132.947 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 268.137 | 220.431 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## piibench-commercial: gliner
 
@@ -381,8 +381,8 @@ Capture commit: `5a25074ab4256da4be39ed81ff169a69646c4d5a`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `row.latency.p50_ms` | 132.258 | 187.91 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 447.331 | 723.676 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 132.258 | 187.91 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 447.331 | 723.676 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## presidio-research: gliner-high-recall
 
@@ -392,9 +392,9 @@ Capture commit: `5a25074ab4256da4be39ed81ff169a69646c4d5a`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `own_metric.predict_seconds` | 0.2 | 0.0 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p50_ms` | 132.081 | 134.226 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 267.622 | 229.048 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `own_metric.predict_seconds` | 0.2 | 0.0 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 132.081 | 134.226 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 267.622 | 229.048 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
 
 ## piibench-commercial: gliner-high-recall
 
@@ -404,5 +404,5 @@ Capture commit: `5a25074ab4256da4be39ed81ff169a69646c4d5a`. Previous capture com
 
 | Metric | Published (superseded) | Regenerated | Why |
 | --- | ---: | ---: | --- |
-| `row.latency.p50_ms` | 131.793 | 186.631 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
-| `row.latency.p95_ms` | 447.995 | 698.038 | Fresh capture of the pinned configuration. Timing varies with runtime startup and machine load; no speed comparison is claimed. |
+| `row.latency.p50_ms` | 131.793 | 186.631 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |
+| `row.latency.p95_ms` | 447.995 | 698.038 | Fresh capture of the pinned configuration. Per-document timing varies with machine load; no speed comparison is claimed. |

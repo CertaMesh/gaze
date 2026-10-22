@@ -47,8 +47,8 @@ def refresh(data: dict, history: dict, report: Path, own: Path, tool: str,
         timing = key.startswith('row.latency.') or key == 'own_metric.predict_seconds'
         if not timing and not metric_reason:
             raise ValueError(f'{benchmark}/{tool}: explain changed metric {key} before publication')
-        change['reason'] = ('Fresh capture of the pinned configuration. Timing varies with runtime startup '
-                            'and machine load; no speed comparison is claimed.' if timing else metric_reason)
+        change['reason'] = ('Fresh capture of the pinned configuration. Per-document timing varies with machine '
+                            'load; no speed comparison is claimed.' if timing else metric_reason)
     provenance = fresh['provenance'][tool]
     updated = copy.deepcopy(history)
     updated['rows'].append({
