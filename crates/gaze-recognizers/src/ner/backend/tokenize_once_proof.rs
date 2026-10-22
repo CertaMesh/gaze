@@ -208,3 +208,34 @@ fn preparation_preserves_wordpiece_windows_and_truncation() {
         }
     }
 }
+
+#[test]
+fn preparation_reencodes_stochastic_bpe() {
+    use tokenizers::models::bpe::BPE;
+    let vocab: [(String, u32); 5] = [
+        ("a".into(), 0),
+        ("b".into(), 1),
+        ("c".into(), 2),
+        ("ab".into(), 3),
+        ("abc".into(), 4),
+    ];
+    let merges = vec![("a".into(), "b".into()), ("ab".into(), "c".into())];
+    for dropout in [0.0, 0.5, 1.0] {
+        let model = BPE::builder()
+            .vocab_and_merges(vocab.clone(), merges.clone())
+            .dropout(dropout)
+            .build()
+            .unwrap();
+        let tokenizer = tokenizers::Tokenizer::new(model);
+        ENCODE_CALLS.with(|calls| calls.set(0));
+        let windows: Vec<_> = prepare_windows(&tokenizer, "abc")
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(windows.len(), 1);
+        assert_eq!(
+            ENCODE_CALLS.with(|calls| calls.get()),
+            if dropout == 0.0 { 1 } else { 2 }
+        );
+    }
+}
