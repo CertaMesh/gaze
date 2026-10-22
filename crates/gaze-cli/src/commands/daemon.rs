@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -292,13 +292,10 @@ impl Daemon {
             gaze::CleanDocument::Text(text) => text,
             _ => return Err((request.session_id, DaemonError::Invariant)),
         };
-        let tokens = wire_ordered_entries(
-            session.snapshot_entries(),
-            &first_token_starts(&clean_text, &manifest),
-        )
-        .into_iter()
-        .map(TokenJson::from)
-        .collect();
+        let tokens = wire_ordered_entries(session.snapshot_entries(), &clean_text, &manifest)
+            .into_iter()
+            .map(TokenJson::from)
+            .collect();
         Ok(DaemonResponse::Clean {
             session_id: request.session_id,
             clean_text,
@@ -564,21 +561,6 @@ impl DaemonResponse {
             detail: detail.into(),
         }
     }
-}
-
-/// First clean-text start of each emitted token in this response's manifest.
-fn first_token_starts<'a>(
-    clean_text: &'a str,
-    manifest: &[EmittedTokenSpan],
-) -> BTreeMap<&'a str, usize> {
-    let mut starts = BTreeMap::new();
-    for span in manifest {
-        if let Some(token) = clean_text.get(span.clean_span.clone()) {
-            let start = starts.entry(token).or_insert(span.clean_span.start);
-            *start = (*start).min(span.clean_span.start);
-        }
-    }
-    starts
 }
 
 #[derive(Serialize)]

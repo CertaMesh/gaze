@@ -14,9 +14,10 @@ use serde::Serialize;
 #[cfg(feature = "safety-net-openai")]
 use gaze::LocaleTag;
 use gaze::{
-    DictionarySource, DocumentKind, LeakKind, LeakReport, LeakReportTelemetry, PiiClass,
-    RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, Result as GazeResult,
-    SensitiveSnapshot, Session, SessionScope, SessionSnapshotEntry, TypedContext,
+    DictionarySource, DocumentKind, EmittedTokenSpan, LeakKind, LeakReport, LeakReportTelemetry,
+    PiiClass, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger,
+    Result as GazeResult, SensitiveSnapshot, Session, SessionScope, SessionSnapshotEntry,
+    TypedContext,
 };
 use gaze_audit::SqliteLogger;
 
@@ -156,28 +157,21 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let session = Session::from_policy_with_ttl_override(&effective_policy, options.session_ttl)
         .map_err(|_| CliError::Pipeline)?;
 
-    let (clean_doc, leak_report) = if pipeline.safety_net_count() > 0 {
-        let (doc, _manifest, _report) = pipeline
-            .clean_with_safety_net_policy_detect_context(
-                &session,
-                RawDocument::Text(raw),
-                locale_chain.as_slice(),
-                &dictionaries,
-                policy,
-            )
-            .map_err(map_safety_net_pipeline_error)?;
-        (doc, _report)
-    } else {
-        let doc = pipeline
-            .pseudonymize_with_detect_context(
-                &session,
-                RawDocument::Text(raw),
-                locale_chain.as_slice(),
-                &dictionaries,
-            )
-            .map_err(|_| CliError::Pipeline)?;
-        (doc, LeakReport::default())
-    };
+    let (clean_doc, manifest, leak_report) = pipeline
+        .clean_with_safety_net_policy_detect_context(
+            &session,
+            RawDocument::Text(raw),
+            locale_chain.as_slice(),
+            &dictionaries,
+            policy,
+        )
+        .map_err(|err| {
+            if pipeline.safety_net_count() > 0 {
+                map_safety_net_pipeline_error(err)
+            } else {
+                CliError::Pipeline
+            }
+        })?;
     counter
         .log_safety_net_report(&leak_report, &session, DocumentKind::Text)
         .map_err(|_| CliError::Pipeline)?;
@@ -195,13 +189,10 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         ),
     };
 
-    let entries = wire_ordered_entries(
-        session.snapshot_entries(),
-        &first_token_starts_in_clean_text(&clean_text),
-    )
-    .into_iter()
-    .map(EntryJson::from)
-    .collect();
+    let entries = wire_ordered_entries(session.snapshot_entries(), &clean_text, &manifest)
+        .into_iter()
+        .map(EntryJson::from)
+        .collect();
     let snapshot: SensitiveSnapshot = session.export().map_err(|_| CliError::Pipeline)?;
     let session_blob = BASE64.encode(snapshot.into_bytes());
 
@@ -715,8 +706,16 @@ struct CleanResponse {
 /// `HashMap` seed. `gaze clean` and `gaze daemon` both use it.
 pub(crate) fn wire_ordered_entries(
     mut entries: Vec<SessionSnapshotEntry>,
-    first_starts: &BTreeMap<&str, usize>,
+    clean_text: &str,
+    manifest: &[EmittedTokenSpan],
 ) -> Vec<SessionSnapshotEntry> {
+    let mut first_starts = BTreeMap::new();
+    for span in manifest {
+        if let Some(token) = clean_text.get(span.clean_span.clone()) {
+            let start = first_starts.entry(token).or_insert(span.clean_span.start);
+            *start = (*start).min(span.clean_span.start);
+        }
+    }
     let start_of = |entry: &SessionSnapshotEntry| {
         first_starts
             .get(entry.token.as_str())
@@ -740,17 +739,6 @@ pub(crate) fn wire_ordered_entries(
             ))
     });
     entries
-}
-
-/// First start of every token-shaped run in `clean_text`. `gaze clean` gets no manifest
-/// back from the pipeline, so this recovers each token's span start from the clean text;
-/// runs that are not session tokens are simply never looked up.
-fn first_token_starts_in_clean_text(clean_text: &str) -> BTreeMap<&str, usize> {
-    let mut starts = BTreeMap::new();
-    for found in gaze::token_shape::pattern().find_iter(clean_text) {
-        starts.entry(found.as_str()).or_insert(found.start());
-    }
-    starts
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1060,6 +1048,44 @@ fn emit_safety_net_warning(variant: &'static str, count: usize) {
 mod tests {
     use super::*;
     use gaze::Policy;
+
+    #[test]
+    fn wire_order_breaks_all_ties_and_puts_absent_tokens_last() {
+        let entry = |token: &str, family: &str, class, raw: &str| SessionSnapshotEntry {
+            token: token.into(),
+            family: family.into(),
+            class,
+            raw: raw.into(),
+        };
+        let expected = vec![
+            entry("same", "a", PiiClass::Email, "a"),
+            entry("same", "a", PiiClass::Email, "z"),
+            entry("same", "a", PiiClass::Name, "a"),
+            entry("same", "z", PiiClass::Name, "a"),
+            entry("z", "a", PiiClass::Name, "a"),
+            entry("absent-a", "a", PiiClass::Name, "a"),
+            entry("absent-z", "a", PiiClass::Name, "a"),
+        ];
+        let text = "same z same";
+        let manifest = vec![
+            EmittedTokenSpan::new(0..4, 0..1, PiiClass::Name),
+            EmittedTokenSpan::new(7..11, 0..1, PiiClass::Name),
+            EmittedTokenSpan::new(5..6, 0..1, PiiClass::Name),
+        ];
+        // The manifest can arrive out of order; each token's earliest span wins.
+        for offset in 0..expected.len() {
+            let mut input = expected.clone();
+            input.rotate_left(offset);
+            input.reverse();
+            assert_eq!(wire_ordered_entries(input.clone(), "", &[]), {
+                let mut absent = expected.clone();
+                absent.rotate_right(2);
+                absent
+            });
+            assert_eq!(wire_ordered_entries(input, text, &manifest), expected);
+        }
+        assert!(wire_ordered_entries(vec![], "", &[]).is_empty());
+    }
 
     fn resolved_ner_threshold(policy: &Policy, override_value: Option<f32>) -> f32 {
         gaze_assembly::resolve_policy_inputs(policy, None, None, override_value)

@@ -246,3 +246,134 @@ fn clean_entries_are_byte_identical_across_processes() {
         assert_eq!(line, &serialized[0], "clean entries differ between runs");
     }
 }
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn clean_and_daemon_order_format_preserving_tokens_by_emitted_spans() {
+    let dir = tempdir().unwrap();
+    let policy = dir.path().join("policy.toml");
+    fs::write(
+        &policy,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "synthetic_names"
+pattern = 'Synthetic[0-9]+'
+class = "name"
+
+[[rule]]
+kind = "class"
+class = "name"
+action = "format_preserve"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+    let tokenize_policy = dir.path().join("tokenize.toml");
+    fs::write(
+        &tokenize_policy,
+        fs::read_to_string(&policy)
+            .unwrap()
+            .replace("format_preserve", "tokenize"),
+    )
+    .unwrap();
+    for (input, expected_raws) in [
+        ("xSynthetic1 Synthetic2", vec!["Synthetic1", "Synthetic2"]),
+        ("Synthetic1 Synthetic2", vec!["Synthetic1", "Synthetic2"]),
+        (
+            "Synthetic1Synthetic2 Synthetic3",
+            vec!["Synthetic1", "Synthetic2", "Synthetic3"],
+        ),
+        (
+            "xSynthetic2 Synthetic1 Synthetic2 Synthetic3",
+            vec!["Synthetic2", "Synthetic1", "Synthetic3"],
+        ),
+    ] {
+        let adjacent = input == "Synthetic1Synthetic2 Synthetic3";
+        let selected_policy = if adjacent { &tokenize_policy } else { &policy };
+        let clean = run_clean(selected_policy, input);
+        let lines = run_daemon(
+            selected_policy,
+            &[json!({"session_id": "s", "text": input})],
+        );
+        assert_eq!(lines.len(), 1);
+        let daemon: Value = serde_json::from_str(&lines[0]).unwrap();
+        assert_span_then_token_order(&daemon);
+        let entries = clean["entries"].as_array().unwrap();
+        let tokens = daemon["tokens"].as_array().unwrap();
+        assert_eq!(entries.len(), tokens.len());
+        assert_eq!(
+            entries
+                .iter()
+                .map(|entry| entry["raw"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            expected_raws,
+            "entries must follow the first occurrence of each distinct value for {input:?}"
+        );
+        let text = clean["clean_text"].as_str().unwrap();
+        let starts = entries
+            .iter()
+            .map(|entry| text.find(entry["token"].as_str().unwrap()).unwrap())
+            .collect::<Vec<_>>();
+        assert!(
+            starts.windows(2).all(|pair| pair[0] < pair[1]),
+            "entries must follow first occurrence for {input:?}: {starts:?}"
+        );
+        if input.starts_with("Synthetic") {
+            assert_eq!(starts[0], 0);
+        }
+        if adjacent {
+            assert_eq!(starts[1], entries[0]["token"].as_str().unwrap().len());
+        }
+        let clean_token = entries[0]["token"]
+            .as_str()
+            .unwrap()
+            .trim_start_matches('<');
+        let daemon_token = tokens[0]["token"].as_str().unwrap().trim_start_matches('<');
+        let clean_hex = &clean_token[..8];
+        let daemon_hex = &daemon_token[..8];
+        assert_eq!(
+            text.replace(clean_hex, "HEX"),
+            daemon["clean_text"]
+                .as_str()
+                .unwrap()
+                .replace(daemon_hex, "HEX")
+        );
+        for (entry, token) in entries.iter().zip(tokens) {
+            assert_eq!(
+                entry["token"].as_str().unwrap().replace(clean_hex, "HEX"),
+                token["token"].as_str().unwrap().replace(daemon_hex, "HEX")
+            );
+            assert_eq!(entry["class"], token["class"]);
+            assert_eq!(entry["family"], token["family"]);
+        }
+        let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+            .args(["restore", "--restore-mode=strict"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        writeln!(
+            child.stdin.take().unwrap(),
+            "{}",
+            json!({"session_blob": clean["session_blob"], "text": text})
+        )
+        .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let restored: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(restored["text"], input);
+    }
+}
