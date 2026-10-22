@@ -722,6 +722,10 @@ impl Session {
         &self.identity.audit_session_id
     }
 
+    /// Every mapping in the session, sorted by token, then family, class and raw value.
+    ///
+    /// The order is total and independent of hash seeds, so hosts that put this list on a
+    /// wire or in JSON emit the same bytes for the same session state.
     pub fn snapshot_entries(&self) -> Vec<SessionSnapshotEntry> {
         snapshot_entries_from_state(&self.state_snapshot())
     }
@@ -872,27 +876,41 @@ impl Session {
             .map(|duration| duration.as_secs())
             .unwrap_or(0);
 
+        // Both lists come from `HashMap`s; sort them so the payload does not depend on
+        // a per-instance hash seed (same rule as `snapshot_entries`).
+        let mut entries = state
+            .token_by_value
+            .iter()
+            .map(|(key, token)| SnapshotEntry {
+                family: key.family.clone(),
+                class: key.class.clone(),
+                raw: key.raw.clone(),
+                token: token.clone(),
+                evidence: state.evidence_by_value.get(key).copied(),
+                spelling: source_spelling_from_state(&state, token)
+                    .unwrap_or(SourceSpelling::Plain),
+            })
+            .collect::<Vec<_>>();
+        entries.sort_by(|left, right| {
+            (&left.token, &left.family, &left.class, &left.raw).cmp(&(
+                &right.token,
+                &right.family,
+                &right.class,
+                &right.raw,
+            ))
+        });
+        let mut next_by_class = state
+            .next_by_class
+            .iter()
+            .map(|(class, index)| (class.clone(), *index))
+            .collect::<Vec<_>>();
+        next_by_class.sort();
+
         let payload = SnapshotPayload {
             scope: snapshot_scope(&self.identity.scope),
             session_hex: self.session_hex(),
-            entries: state
-                .token_by_value
-                .iter()
-                .map(|(key, token)| SnapshotEntry {
-                    family: key.family.clone(),
-                    class: key.class.clone(),
-                    raw: key.raw.clone(),
-                    token: token.clone(),
-                    evidence: state.evidence_by_value.get(key).copied(),
-                    spelling: source_spelling_from_state(&state, token)
-                        .unwrap_or(SourceSpelling::Plain),
-                })
-                .collect::<Vec<_>>(),
-            next_by_class: state
-                .next_by_class
-                .iter()
-                .map(|(class, index)| (class.clone(), *index))
-                .collect(),
+            entries,
+            next_by_class,
             issued_at,
             document,
         };
@@ -1159,6 +1177,7 @@ impl<'session> SessionTransaction<'session> {
         validate_token_shapes_from_state(&self.staged, text)
     }
 
+    /// Staged mappings in the same total order as [`Session::snapshot_entries`].
     pub fn snapshot_entries(&self) -> Vec<SessionSnapshotEntry> {
         snapshot_entries_from_state(&self.staged)
     }
@@ -1473,7 +1492,7 @@ fn build_sweep_matcher(state: &SessionState) -> Result<Option<Arc<SweepMatcher>>
 }
 
 fn snapshot_entries_from_state(state: &SessionState) -> Vec<SessionSnapshotEntry> {
-    state
+    let mut entries = state
         .token_by_value
         .iter()
         .map(|(key, token)| SessionSnapshotEntry {
@@ -1482,7 +1501,17 @@ fn snapshot_entries_from_state(state: &SessionState) -> Vec<SessionSnapshotEntry
             raw: key.raw.clone(),
             token: token.clone(),
         })
-        .collect()
+        .collect::<Vec<_>>();
+    // `token_by_value` is a `HashMap`; never let its per-instance seed choose the order.
+    entries.sort_by(|left, right| {
+        (&left.token, &left.family, &left.class, &left.raw).cmp(&(
+            &right.token,
+            &right.family,
+            &right.class,
+            &right.raw,
+        ))
+    });
+    entries
 }
 
 fn restore_strict_from_state(state: &SessionState, token: &str) -> Result<String> {
@@ -2538,6 +2567,60 @@ mod tests {
 
     fn snapshot_payload_json(snapshot: &SensitiveSnapshot) -> JsonValue {
         serde_json::from_slice(&snapshot.0[97..]).expect("snapshot payload json")
+    }
+
+    /// Fresh sessions each get a fresh `HashMap` seed. Holding the same mappings, they must
+    /// still list them, and export them, in one identical order.
+    #[test]
+    fn snapshot_entries_and_export_order_do_not_depend_on_hash_seed() {
+        let classes = [
+            PiiClass::Name,
+            PiiClass::Email,
+            PiiClass::Custom("case_ref".to_string()),
+        ];
+        let build = || {
+            let session = Session::new_with_session_hex_for_tests(
+                Scope::Conversation("order".to_string()),
+                [0xa7, 0xf3, 0xb8, 0xe2],
+            )
+            .expect("session");
+            for idx in 0..12 {
+                for class in &classes {
+                    session
+                        .tokenize(class, &format!("synthetic value {idx}"))
+                        .expect("token");
+                }
+            }
+            session
+        };
+        let reference = build();
+        let reference_entries = reference.snapshot_entries();
+        let mut sorted = reference_entries.clone();
+        sorted.sort_by(|a, b| {
+            (&a.token, &a.family, &a.class, &a.raw).cmp(&(&b.token, &b.family, &b.class, &b.raw))
+        });
+        assert_eq!(reference_entries, sorted, "entries must be sorted by token");
+        let reference_payload = snapshot_payload_json(&reference.export().expect("export"));
+        for _ in 0..8 {
+            let session = build();
+            assert_eq!(session.snapshot_entries(), reference_entries);
+            let mut transaction = session.begin_transaction();
+            assert_eq!(transaction.snapshot_entries(), reference_entries);
+            transaction
+                .tokenize(&PiiClass::Name, "synthetic value 99")
+                .expect("staged token");
+            let staged = transaction.snapshot_entries();
+            let mut staged_sorted = staged.clone();
+            staged_sorted.sort_by(|a, b| a.token.cmp(&b.token));
+            assert_eq!(
+                staged, staged_sorted,
+                "staged entries must be sorted by token"
+            );
+            drop(transaction);
+            let payload = snapshot_payload_json(&session.export().expect("export"));
+            assert_eq!(payload["entries"], reference_payload["entries"]);
+            assert_eq!(payload["next_by_class"], reference_payload["next_by_class"]);
+        }
     }
 
     fn document_extension(session: &Session) -> DocumentExtension {

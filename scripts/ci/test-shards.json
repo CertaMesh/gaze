@@ -18,7 +18,8 @@
     "gaze-cli::proxy_dashboard",
     "gaze-cli::safety_net_cli",
     "gaze-cli::secrets_rulepack",
-    "gaze-cli::setup_policy"
+    "gaze-cli::setup_policy",
+    "gaze-cli::wire_token_order"
   ],
   "runtime": [
     "gaze-assembly",
