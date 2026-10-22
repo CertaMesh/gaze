@@ -132,7 +132,16 @@ cd gaze
 cargo install --path crates/gaze-cli
 ```
 
-Pre-built binaries for Apple Silicon macOS and Linux x86_64 (glibc 2.39+) are attached to each [GitHub release](https://github.com/CertaMesh/gaze/releases). Other targets: `cargo build --release -p gaze-cli`.
+Pre-built binaries are attached to each [GitHub release](https://github.com/CertaMesh/gaze/releases), with a matching `.sha256` file:
+
+| Platform | Artifact |
+| --- | --- |
+| Apple Silicon macOS | `gaze-aarch64-apple-darwin` |
+| Linux x86_64, glibc 2.39+ | `gaze-x86_64-linux-gnu` |
+| Linux arm64, glibc 2.39+ | `gaze-aarch64-linux-gnu` |
+
+Use the arm64 Linux binary in arm64 containers, including containers on Apple
+Silicon. Other targets: `cargo build --release -p gaze-cli`.
 
 For the LLM API proxy:
 

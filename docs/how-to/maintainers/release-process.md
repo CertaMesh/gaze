@@ -9,7 +9,21 @@ Tag pushes publish GitHub Releases and crates.io packages. Homebrew is repo-loca
 Source: [`.github/workflows/release.yml`](../../../.github/workflows/release.yml).
 
 - Triggered on `v*` tag pushes.
-- Builds and uploads platform binary artifacts plus a source tarball to the GitHub Releases page.
+- Builds and uploads `gaze-aarch64-apple-darwin`, `gaze-x86_64-linux-gnu`,
+  and `gaze-aarch64-linux-gnu`, each with a `.sha256` file. GitHub also provides
+  source archives. Linux binaries target Ubuntu 24.04 and require glibc 2.39+.
+- Linux arm64 builds run natively on `ubuntu-24.04-arm`. Release builds and the
+  arm64 PR dry-run share [release-build.yml](../../../.github/workflows/release-build.yml),
+  including features, packaging, checksum verification, and artifact smoke tests.
+  The arm64 smoke also installs the pinned NER bundle, runs `gaze clean` with
+  NER and the core rulepack, and checks exact restore. The same input must stay
+  unchanged with the core rulepack alone.
+- Before merging changes to either release workflow, require `arm64-dry-run`
+  to pass on the PR head. This job runs only on PRs that change those workflows.
+  It uploads Actions artifacts without publishing a release. Publication runs
+  only on a `v*` tag push and is exercised at the next release.
+- After publication, confirm all three binaries and their checksums are present. Select
+  the matching Linux architecture when replaying installation in a container.
 - GitHub generates release notes from tag history. Keep curated highlights in
   `CHANGELOG.md`; do not maintain `dist/release-notes/` files.
 - `cargo run -p xtask -- scrub-public-text --published` checks all of `CHANGELOG.md`,
