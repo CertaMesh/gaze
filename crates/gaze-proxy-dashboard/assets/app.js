@@ -618,6 +618,9 @@
       if (app) { renderTerminal(app, "purged"); }
       return;
     }
+    // Sample movement before deciding whether this response may replace rows;
+    // its native scroll event may still be queued behind these microtasks.
+    if (fromFollow) { onPageScrollPause(); }
     if (fromFollow && followPaused()) {
       const oldIds = new Set((oldSnap && oldSnap.events || []).map((e) => e.logicalId));
       const fresh = (snap.events || []).filter((e) => !oldIds.has(e.logicalId)).length;
@@ -1394,8 +1397,8 @@
     updateFollowControls();
     attachScrollPause();
     syncBarHeight();
-    // Replacing the rows can clamp the document's scroll position. Establish
-    // the new baseline before its queued scroll event can pause live follow.
+    // Follow already sampled pending user movement before committing. Ignore
+    // only the scroll clamp caused by replacing the rows (including Resume).
     const doc = document.scrollingElement || document.documentElement;
     pageScrollLastTop = doc ? doc.scrollTop : 0;
   }

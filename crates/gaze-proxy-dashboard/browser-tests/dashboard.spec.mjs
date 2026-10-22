@@ -1290,6 +1290,7 @@ test("LC-SCROLL-PENDING upward scroll queued before a follow render still pauses
     expect(await page.evaluate(() => window.scrollY)).toBe(400);
     await expect(page.locator("#follow-state")).toContainText("FOLLOW: LIVE");
     await page.waitForFunction(() => typeof window.releaseFollow === "function");
+    await control("/__fixture", { id: "fx-owner-both" });
     await check(entry, "a follow response cannot erase an upward scroll whose native event is pending", async () => {
       // The response continuation runs as microtasks before the native scroll
       // event. Keep both actions in one browser task to enforce that ordering.
@@ -1300,7 +1301,6 @@ test("LC-SCROLL-PENDING upward scroll queued before a follow render still pauses
       await expect(page.locator("#follow-state")).toContainText("FOLLOW PAUSED — 0 BUFFERED");
     });
     await check(entry, "subsequent rows buffer until an explicit Resume", async () => {
-      await control("/__fixture", { id: "fx-owner-both" });
       await page.waitForFunction(() => typeof window.releaseFollow === "function");
       await page.evaluate(() => window.releaseFollow());
       await expect(page.locator("#follow-state")).toContainText("FOLLOW PAUSED — 2 BUFFERED");
