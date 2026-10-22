@@ -160,6 +160,7 @@ impl SafetyNet for NymSafetyNet {
         context: SafetyNetContext<'_>,
     ) -> Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError> {
         let Some(neutral_text) = neutral_text else {
+            let _perf = gaze_types::perf_span!("nym_stable_ns");
             let (stable, telemetry) = self.check_with_telemetry(stable_text, context)?;
             return Ok((
                 union_view_suspects(stable_text, context.manifest, stable, Vec::new()),
@@ -176,8 +177,14 @@ impl SafetyNet for NymSafetyNet {
                 message: "nym neutral view changed byte offsets".to_string(),
             });
         }
-        let (stable, mut telemetry) = self.check_with_telemetry(stable_text, context)?;
-        let (neutral, neutral_telemetry) = self.check_with_telemetry(neutral_text, context)?;
+        let (stable, mut telemetry) = {
+            let _perf = gaze_types::perf_span!("nym_stable_ns");
+            self.check_with_telemetry(stable_text, context)?
+        };
+        let (neutral, neutral_telemetry) = {
+            let _perf = gaze_types::perf_span!("nym_neutral_ns");
+            self.check_with_telemetry(neutral_text, context)?
+        };
         for event in neutral_telemetry {
             if !telemetry.contains(&event) {
                 telemetry.push(event);

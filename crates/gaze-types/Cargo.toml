@@ -30,5 +30,6 @@ regex = "1"
 serde_json = { workspace = true }
 
 [features]
+perf-timers = []
 default = []
 phone-parser = ["dep:phonenumber"]

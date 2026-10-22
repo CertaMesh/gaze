@@ -234,6 +234,8 @@ impl Daemon {
     }
 
     fn handle_line(&mut self, line: &str) -> DaemonResponse {
+        #[cfg(feature = "perf-timers")]
+        let _perf = crate::perf::Document::from_env();
         let request = match serde_json::from_str::<DaemonRequest>(line) {
             Ok(request) if !request.session_id.trim().is_empty() => request,
             Ok(_) => return DaemonResponse::error(None, "ProtocolInvalid", "missing session_id"),

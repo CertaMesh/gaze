@@ -9,6 +9,9 @@ scripts/bench/run_no_opf_benchmark.py
 The other files in this directory are scorer, producer, or specialized research
 components. They are not alternate release-regression entry points.
 
+For pipeline costs across revisions, see [Performance attribution](perf-attribution.md).
+The guide covers frozen and shipped policies, recognizer counters, and the quiet-host gate.
+
 ## Setup and profiles
 
 Create the locked Python environment once:

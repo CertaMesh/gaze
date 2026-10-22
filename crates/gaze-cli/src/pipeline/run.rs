@@ -157,6 +157,8 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let session = Session::from_policy_with_ttl_override(&effective_policy, options.session_ttl)
         .map_err(|_| CliError::Pipeline)?;
 
+    #[cfg(feature = "perf-timers")]
+    let _perf = crate::perf::Document::from_env();
     let (clean_doc, manifest, leak_report) = pipeline
         .clean_with_safety_net_policy_detect_context(
             &session,
