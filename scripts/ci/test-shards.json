@@ -123,6 +123,7 @@
     "gaze-recognizers::birth_date_cues",
     "gaze-recognizers::bundled_guard_adjacency",
     "gaze-recognizers::checksum_failed_iban_card",
+    "gaze-recognizers::code_credentials",
     "gaze-recognizers::context_sensitivity_v0_6",
     "gaze-recognizers::core_extended",
     "gaze-recognizers::coverage_loop",

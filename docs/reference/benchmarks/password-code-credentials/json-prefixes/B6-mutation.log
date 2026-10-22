@@ -1,0 +1,36 @@
+   Compiling gaze-types v0.17.0 (/private/tmp/fix825r5/mutation-copy/crates/gaze-types)
+   Compiling gaze-recognizers v0.17.0 (/private/tmp/fix825r5/mutation-copy/crates/gaze-recognizers)
+   Compiling gaze-pii v0.17.0 (/private/tmp/fix825r5/mutation-copy/crates/gaze)
+   Compiling gaze-assembly v0.17.0 (/private/tmp/fix825r5/mutation-copy/crates/gaze-assembly)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 31s
+     Running tests/code_credentials.rs (target/debug/deps/code_credentials-03d42cdd6cbbb021)
+
+running 3 tests
+
+thread 'serialized_hash_prefixes_reject_malformed_escapes_and_glued_identifiers' (67371079) panicked at crates/gaze-recognizers/tests/code_credentials.rs:581:9:
+\
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test serialized_hash_prefixes_reject_malformed_escapes_and_glued_identifiers ... FAILED
+
+thread 'hash_after_serialized_line_prefix_is_protected' (67371078) panicked at crates/gaze-recognizers/tests/code_credentials.rs:394:5:
+assertion `left == right` failed: one complete hash: "{\"stdout\":\"heading\\n$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi\\n\"}"; []
+  left: 0
+ right: 1
+test hash_after_serialized_line_prefix_is_protected ... FAILED
+
+thread 'distinct_hashes_inside_one_serialized_string_are_protected' (67371077) panicked at crates/gaze-recognizers/tests/code_credentials.rs:546:9:
+assertion `left == right` failed: both hashes: {"stdout":"$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi\n$2b$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi\n"}; [EmittedTokenSpan { clean_span: 11..39, raw_span: 11..71, class: Custom("password"), origin: Whole }]
+  left: 1
+ right: 2
+test distinct_hashes_inside_one_serialized_string_are_protected ... FAILED
+
+failures:
+
+failures:
+    distinct_hashes_inside_one_serialized_string_are_protected
+    hash_after_serialized_line_prefix_is_protected
+    serialized_hash_prefixes_reject_malformed_escapes_and_glued_identifiers
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 15 filtered out; finished in 5.67s
+
+error: test failed, to rerun pass `-p gaze-recognizers --test code_credentials`

@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "measured_candidate": "2068418bb89db000adcf880307974357ff716afe",
+  "merged_candidate": "0a25d8458465cfd4cf529b90f3eb1aca8fe2d296",
+  "measured_main": "4c15ca80f85bbd3258eb856ac71ea424b1cc6bb5",
+  "merged_main": "3aa5c95fe5d996d29a774aa99dc827c0ec7cddfb",
+  "changed_files": [
+    ".github/actions/setup-ocr/action.yml",
+    ".github/workflows/dashboard-pairing.yml",
+    ".github/workflows/dco.yml",
+    ".github/workflows/docs.yml",
+    ".github/workflows/dylint.yml",
+    ".github/workflows/publish-crates.yml",
+    ".github/workflows/release.yml",
+    ".github/workflows/test.yml",
+    "crates/gaze-proxy/tests/anthropic_direct.rs",
+    "crates/gaze-proxy/tests/inspection_contract.rs",
+    "crates/gaze-proxy/tests/legacy_adapter_leak_proof.rs",
+    "crates/gaze-proxy/tests/legacy_response_header_forward.rs",
+    "crates/gaze-proxy/tests/openai_non_stream.rs",
+    "crates/gaze-proxy/tests/proxy_compat_golden.rs",
+    "crates/gaze-proxy/tests/proxy_locale_chain.rs",
+    "crates/gaze-proxy/tests/support/mod.rs",
+    "crates/xtask/src/ci_feature_matrix.rs",
+    "crates/xtask/src/fixture_citation.rs",
+    "crates/xtask/src/main.rs",
+    "crates/xtask/src/mcp_tier_isolation.rs",
+    "crates/xtask/src/safety_net_sanity.rs",
+    "crates/xtask/src/test_commands.rs",
+    "crates/xtask/src/tokenbridge_encrypted_index.rs",
+    "crates/xtask/tests/adversarial_fixture_citation.rs",
+    "crates/xtask/tests/ci_feature_matrix.rs",
+    "scripts/bench/test_bench_subprocess.py",
+    "scripts/bench/test_producer_build_binding.py",
+    "scripts/bench/test_render_mechanism_arms_doc.py",
+    "scripts/ci/test_shards.py"
+  ],
+  "detection_and_benchmark_implementation_unchanged": true,
+  "classification": "CI workflows, test support, tests, and internal gate commands only. No detection runtime, benchmark generator/scorer/producer, dependencies, toolchain, corpus, or contract changed.",
+  "command": [
+    "git",
+    "diff",
+    "--name-only",
+    "2068418bb89db000adcf880307974357ff716afe",
+    "0a25d8458465cfd4cf529b90f3eb1aca8fe2d296"
+  ],
+  "protected_paths": [
+    "crates/",
+    "scripts/bench/",
+    "Cargo.toml",
+    "Cargo.lock",
+    "rust-toolchain.toml"
+  ],
+  "excluded_test_and_gate_paths": [
+    "crates/xtask/",
+    "crates/gaze-proxy/tests/",
+    "scripts/bench/test_"
+  ],
+  "unchanged_blob_manifests": {
+    "main": {
+      "identical": true,
+      "files": 1088,
+      "manifest_sha256": "b6b57956397cde793acdb87749f78761e80fde5c6fc88471dd197d7f505ecacd"
+    },
+    "candidate": {
+      "identical": true,
+      "files": 1093,
+      "manifest_sha256": "28cad2e34a4ad8017f9515140fb9532ac17ac53ceb1d60c62c88880e85136909"
+    }
+  }
+}

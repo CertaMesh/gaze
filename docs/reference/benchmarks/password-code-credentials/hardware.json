@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-20T12:19:41.649010+00:00",
+  "model": "Mac17,7",
+  "chip": "Apple M5 Max",
+  "physical_cores": 18,
+  "memory_bytes": 68719476736,
+  "architecture": "arm64",
+  "os": {
+    "name": "macOS",
+    "version": "26.5",
+    "build": "25F71"
+  },
+  "measurement_limits": "Shared host. Exactly one benchmark process tree at a time; heavy Python suites run only when no benchmark is active. No latency or throughput comparison is claimed."
+}
