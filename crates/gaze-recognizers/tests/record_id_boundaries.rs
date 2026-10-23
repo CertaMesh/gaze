@@ -1379,6 +1379,77 @@ fn streamed_json_wrappers_keep_complete_private_values_and_escape_tails() {
 }
 
 #[test]
+fn escaped_quotes_in_earlier_repeats_cannot_invent_json_enclosures() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        let class = PiiClass::custom(if cue == "customerId" {
+            "customer_id"
+        } else if cue == "employeeId" {
+            "employee_id"
+        } else {
+            "record_id"
+        })
+        .unwrap();
+        for (open, close) in [
+            ('“', '”'),
+            ('「', '」'),
+            ('🔐', '🔐'),
+            ('`', '`'),
+            ('\'', '\''),
+            ('"', '"'),
+        ] {
+            for streamed in [false, true] {
+                let value = "NX512\"345";
+                let value = if open == close {
+                    value.replace(open, &open.to_string().repeat(2))
+                } else {
+                    value.to_owned()
+                };
+                let note = ascii_json(&format!("{cue}={open}{value}{close}"));
+                let mut input = if streamed {
+                    format!(
+                        "{{\"public_version\":\"FRAME\",\"note\":{}",
+                        &note[..note.len() - 1]
+                    )
+                } else {
+                    format!("{{\"public_version\":\"FRAME\",\"note\":{note}}}")
+                };
+                let encoded = ascii_json(&value);
+                let mut raw = encoded[1..encoded.len() - 1].to_owned();
+                for depth in 1..=9 {
+                    let text = format!("Lookup {raw} again.\n{input}");
+                    let session =
+                        Session::new(Scope::Conversation("synthetic-repeat-json".into())).unwrap();
+                    let clean = public_clean(&pipeline, &session, &text);
+                    let entries = session.snapshot_entries();
+                    let entry = entries.iter().find(|entry| entry.raw == raw && entry.class == class).unwrap_or_else(|| panic!("whole private scalar at repeat depth{depth}: {text:?} -> {clean:?}; {entries:?}"));
+                    assert_eq!(
+                        clean,
+                        text.replace(&raw, &entry.token),
+                        "public bytes changed"
+                    );
+                    let imported = Session::import(session.export().unwrap()).unwrap();
+                    assert_eq!(
+                        pipeline.restore_strict_text(&imported, &clean).unwrap(),
+                        text
+                    );
+                    let public = text.replace(cue, "inventory_reference");
+                    let public_session = Session::new(Scope::Ephemeral).unwrap();
+                    assert_eq!(public_clean(&pipeline, &public_session, &public), public);
+                    assert!(public_session.snapshot_entries().is_empty());
+                    input = serde_json::to_string(
+                        &serde_json::json!({"note":input,"public_version":"FRAME"}),
+                    )
+                    .unwrap();
+                    let encoded = serde_json::to_string(&raw).unwrap();
+                    raw = encoded[1..encoded.len() - 1].to_owned();
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn doubled_quote_dialects_keep_private_suffixes() {
     let pipeline = record_pipeline();
     for cue in ["customerId", "employeeId", "member_id"] {

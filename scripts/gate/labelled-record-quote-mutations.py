@@ -47,6 +47,9 @@ def main():
         ("stream_prefix", "crates/gaze-recognizers/src/regex.rs",
          "view.json_frame(token, closed)?", "view.json_frame(token, closed).filter(|_| closed)?",
          "streamed_json_wrappers_keep_complete_private_values_and_escape_tails", 1),
+        ("prior_repeat_escape", "crates/gaze-recognizers/src/regex.rs",
+         "        // repeat) cannot open an enclosing JSON string.\n        if bytes[at] == b'\\\\' {", "        // repeat) cannot open an enclosing JSON string.\n        if false && bytes[at] == b'\\\\' {",
+         "escaped_quotes_in_earlier_repeats_cannot_invent_json_enclosures", 1),
     ]
     receipt = {"revision": head, "mutants": []}
     for name, source, before, after, test, count in mutants:
@@ -79,7 +82,7 @@ def main():
             assert path.read_bytes() == original
     assert not git("status", "--porcelain")
     (output / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
-    print(f"All five mutation probes failed behaviorally; original source restored at {head}")
+    print(f"All six mutation probes failed behaviorally; original source restored at {head}")
 
 
 if __name__ == "__main__":

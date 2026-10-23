@@ -1258,6 +1258,12 @@ fn json_string_frame(input: &str, anchor: usize) -> Option<(std::ops::Range<usiz
     let bytes = input.as_bytes();
     let mut at = 0;
     while at < bytes.len() {
+        // Escaped quotes in surrounding prose (including a prior raw-value
+        // repeat) cannot open an enclosing JSON string.
+        if bytes[at] == b'\\' {
+            at += 2;
+            continue;
+        }
         if bytes[at] != b'"' {
             at += 1;
             continue;

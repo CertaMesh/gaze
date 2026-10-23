@@ -68,7 +68,8 @@ Unicode opening punctuation (`Ps`/`Pi`), paired brackets, typographic quotes,
 backticks, and ASCII angle wrappers use the same ownership contract. JSON `\u`
 escapes, including surrogate pairs, preserve this contract and original-byte
 manifest spans. A valid JSON stream prefix retains ownership when its closing
-quote or final escape is incomplete. Known
+quote or final escape is incomplete. Escapes in a prior raw-value repeat cannot
+open an enclosing JSON string. Known
 pairs stop at their matching closer; an unmatched or unknown opener keeps the
 value through the enclosing string or record boundary. Complete CSV-labelled
 cells recognize doubled quotes separately from JSON escapes, including embedded
