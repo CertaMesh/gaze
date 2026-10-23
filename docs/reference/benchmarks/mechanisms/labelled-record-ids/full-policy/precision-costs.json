@@ -2,14 +2,14 @@
   "contract": "v2; generated contract unchanged across v2/v1/v4",
   "counts": {
     "A": {
-      "base": 4973,
+      "base": 4980,
       "candidate": 5035,
       "added": 150,
-      "removed": 88
+      "removed": 95
     },
     "D": {
-      "base": 17186,
-      "candidate": 17186,
+      "base": 19242,
+      "candidate": 19242,
       "added": 0,
       "removed": 0
     },
@@ -252,7 +252,7 @@
     }
   ],
   "observation_sha256": {
-    "base": "e9f756722f9c443ec97e32b1016064c64ad88f2df8ba600de49b0b7085a0b381",
-    "candidate": "8a29f467da4983385e5fbaa332300282b26a95c7742e735abea9e7719ddfdd4c"
+    "base": "d7bfd41a816c3816451e2861b5fd7b9598bbeb0358bd40ed39cd34b8276e6dde",
+    "candidate": "1aaab134b74b2e40fb0e8998bada1ffdfce540c751f4760606e04f466db89710"
   }
 }

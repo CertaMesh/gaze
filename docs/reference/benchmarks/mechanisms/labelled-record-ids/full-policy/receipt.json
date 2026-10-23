@@ -9,65 +9,65 @@
       "capture_exit_code": 4,
       "capture_execution_outcome": "completed",
       "absolute_release_readiness": "failed",
-      "revision": "14c5331968d2e3c6e16bdf410f76d197b8dcb899",
+      "revision": "c4ab57de271812acd509699c2e9d4e40998f3694",
       "crates_tree": "24caad760a0da2105b44a7bb09917c2e89ad53a1",
       "binary_sha256": "214b5cdaf97f42865bbd95ab538d55067ef79d062b7df461ef4774c2393be747",
       "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
       "observations": "observations-base.jsonl.gz",
-      "observations_sha256": "e9f756722f9c443ec97e32b1016064c64ad88f2df8ba600de49b0b7085a0b381",
+      "observations_sha256": "d7bfd41a816c3816451e2861b5fd7b9598bbeb0358bd40ed39cd34b8276e6dde",
       "scorecards": {
         "2": "scorecard-base-v2.json.gz",
         "1": "scorecard-base-v1.json.gz",
         "4": "scorecard-base-v4.json.gz"
       },
       "scorecard_sha256": {
-        "2": "400a602c82ebffa9d9fc6a3ae25b2230b2907a57e0e2a8b4c74d03b4f85a48e9",
-        "1": "e1cfd9198452907d82ccb51a9b1121eb8c9ef4929549fc7ef2951dfe2fa4e4eb",
-        "4": "d0bf25190ef5b0842215c0e2ca41a6572d0217985f809b45a8064c3a76048c59"
+        "2": "ec845989178efd92320bf8724767fd4378519c53d44ccfdef6bd083eab32a6dc",
+        "1": "f60009ec11d654ad4d3bf93630efb49bb534004c87ae5be72f7d5443dbd3c88e",
+        "4": "9910b6902289d3425315cda1e49ae043f38e043530ecc9dfbb8e751cb965ab10"
       },
       "scorecard_archive_sha256": {
-        "2": "8904691dae4783ce6c68cac64c41d7c1156bab6f20d8bf2f4acc0301e39d707e",
-        "1": "b02641aea645ee66eebb1d9f24cb038729ad3e76e6602e52d027dd41130d4afe",
-        "4": "bcd57e62a94479f4d4afa869ee5f540ccf70a4e118021679edb3aebf8618d525"
+        "2": "33932500f6480bde7223a7ae8f61b04ef1b96fe51527ffada926f80892c6bf12",
+        "1": "1c7072fa0320100711952a5e2edb63da44f681014fcd83fe32c3d72761a5be3e",
+        "4": "7580c49eb3b9506c50f90f5b1e60d8fcf0197c55734020020ff984a713896c07"
       },
       "captured_scorecard": "captured-scorecard-base.json.gz",
-      "captured_scorecard_uncompressed_sha256": "e1cfd9198452907d82ccb51a9b1121eb8c9ef4929549fc7ef2951dfe2fa4e4eb",
+      "captured_scorecard_uncompressed_sha256": "f60009ec11d654ad4d3bf93630efb49bb534004c87ae5be72f7d5443dbd3c88e",
       "execution_evidence": "run-evidence-base.json",
-      "execution_evidence_sha256": "041f4493864861cb68c1e9c95f515ab65363e9fefee04261c326c63dfbaf8e22",
+      "execution_evidence_sha256": "8ba08eae66125eb6c03fb21bc81cf30bd8be66b377433a89bd5fb2c5d1c22a47",
       "policy": "policy-base.toml",
       "published_policy_sha256": "9ac5f5fcb6e801982a882ba440e5eaee3a72346e87e620334d3c8de4c4e68e8e",
       "policy_export": "Only the home prefixes of ner.model_dir and safety_net.nym.model_dir are normalized to ~. policy_sha256 binds original capture bytes; published_policy_sha256 binds this portable copy."
     },
     "candidate": {
-      "detector_revision": "e73e53a2a5a7b1df6e0445c68b3b3ceae8cd72a6",
+      "detector_revision": "20ff2b01e621383ff903989ce5f40e8300871290",
       "capture_exit_code": 4,
       "capture_execution_outcome": "completed",
       "absolute_release_readiness": "failed",
-      "revision": "e73e53a2a5a7b1df6e0445c68b3b3ceae8cd72a6",
-      "crates_tree": "56f0fada9a5bb4768f32428f3a6f5aba06f3a71c",
-      "binary_sha256": "14643603c406f337554fcfb17d79c559c21b629fe0f3e141a8e4137355532aaa",
+      "revision": "20ff2b01e621383ff903989ce5f40e8300871290",
+      "crates_tree": "da250b9d63cd35391c353afeaff7275893d5f32e",
+      "binary_sha256": "1af427e777a2dbe21fe6a678e035d22eb214f34f36c870994dcacc78bdb85d84",
       "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
       "observations": "observations-candidate.jsonl.gz",
-      "observations_sha256": "8a29f467da4983385e5fbaa332300282b26a95c7742e735abea9e7719ddfdd4c",
+      "observations_sha256": "1aaab134b74b2e40fb0e8998bada1ffdfce540c751f4760606e04f466db89710",
       "scorecards": {
         "2": "scorecard-candidate-v2.json.gz",
         "1": "scorecard-candidate-v1.json.gz",
         "4": "scorecard-candidate-v4.json.gz"
       },
       "scorecard_sha256": {
-        "2": "caee4ee47761e461ee9bf4284cfbeb5939b76f84ee93e9261385a39826f9a77d",
-        "1": "90ad28c5ac5c2489a6e4dd38bb834ff78fa253b1797f6bbedefadf8b58f0235c",
-        "4": "6bd469718e639734c36724926f62b227a604d4199350e733ff36a31fcce9426c"
+        "2": "90840d3b79743119ab87022215afa2508cfcacaa6ae7a214487f33156fe0168d",
+        "1": "9518d11e0a49c485e93f0eb4c5cde23eb20bc234cbf95ffbaf8afe1c09d71a94",
+        "4": "5f41416f9e4c888a0e5f4e527670abc4fbbd82f555321ea57a8bb85e19e53276"
       },
       "scorecard_archive_sha256": {
-        "2": "a5ecfbeb27c530d2fb48fd0ec5e3d0e4aa62c23d3226650022f7b29b3630b9b0",
-        "1": "ad99535992209c3e029c81d7b1cec4ac883cb2851a7510018047cbcdfc271af2",
-        "4": "fde0fc0ccbc3d22e10a90de8226bc4f578c98dd1e762f93cef71dbb39ce1031c"
+        "2": "0adc05f9c7fe63b07b9fc4d026486995ae401e5e29632440ad9e97faca7dd191",
+        "1": "6f043f37bcd36668981c6858e46c84ec666dd3011384703cd884405c5c728399",
+        "4": "6b067386ee7e0c93019bb63103b43847ece8d61424952c0f17937c15f02eefff"
       },
       "captured_scorecard": "captured-scorecard-candidate.json.gz",
-      "captured_scorecard_uncompressed_sha256": "90ad28c5ac5c2489a6e4dd38bb834ff78fa253b1797f6bbedefadf8b58f0235c",
+      "captured_scorecard_uncompressed_sha256": "9518d11e0a49c485e93f0eb4c5cde23eb20bc234cbf95ffbaf8afe1c09d71a94",
       "execution_evidence": "run-evidence-candidate.json",
-      "execution_evidence_sha256": "c345fe8a8ba88cc458b88d22d53968f9b3aa28cecd999d426320c390b03c846d",
+      "execution_evidence_sha256": "d6ad1804b79f3c40924ede4da5b1d29e516846ff8de339749fb1829711a75b0a",
       "policy": "policy-candidate.toml",
       "published_policy_sha256": "9ac5f5fcb6e801982a882ba440e5eaee3a72346e87e620334d3c8de4c4e68e8e",
       "policy_export": "Only the home prefixes of ner.model_dir and safety_net.nym.model_dir are normalized to ~. policy_sha256 binds original capture bytes; published_policy_sha256 binds this portable copy."
@@ -79,9 +79,9 @@
     "gate-v4.json"
   ],
   "gate_sha256": {
-    "gate-v2.json": "fc2fa2aff889c918c4bf811a5628ea031088266273be78cc2dc1ef9eee2c38fa",
-    "gate-v1.json": "330acc802165a95069dbc5b0bb72e411349d56039af5ba5410e0799de6c57922",
-    "gate-v4.json": "330acc802165a95069dbc5b0bb72e411349d56039af5ba5410e0799de6c57922"
+    "gate-v2.json": "9884acbb646a4a287c9b42455b79c87957c7da377c04dc957a14bd0f4d34f616",
+    "gate-v1.json": "0e24ec92ed91fe450e2ee576fb8fd4de0da4e8b056a2a766fec3af9173ba2d6b",
+    "gate-v4.json": "0e24ec92ed91fe450e2ee576fb8fd4de0da4e8b056a2a766fec3af9173ba2d6b"
   },
   "generator": {
     "generator": "scripts/bench/agentic_layers.py",
@@ -89,18 +89,18 @@
     "partition": "test",
     "seed": 2026092602,
     "docs_per_family": 10,
-    "documents": 26713,
+    "documents": 29503,
     "documents_by_layer": {
-      "A": 10928,
-      "D": 8413,
-      "R": 7372
+      "A": 11840,
+      "D": 9379,
+      "R": 8284
     },
-    "corpus_sha256": "06cabb6ad1a9d962c17e230a5b68a509eaffdb44479d0e11ee813a5731d3ae89",
+    "corpus_sha256": "060251ba678e85e6180ea44dec8eff820894b452414e96e17a092661c6bc0ac0",
     "synthetic_only": true
   },
   "baseline_harness": "The baseline capture revision carries the committed benchmark corpus, tests and export helper over detector main 9cb43a703c729140315d5951304bd5734e1e96f7. crates, Cargo.toml and Cargo.lock match that main commit exactly.",
   "precision_costs": "precision-costs.json",
-  "precision_costs_sha256": "79ec4f5877c66c521ac18cab0412226259fb00c54b71112ac592664ce3e1682d",
+  "precision_costs_sha256": "dfeba117d9bc7b4b989be23499a7269c83fe81f38f5c6249ce0900fbe14283c0",
   "capture_reconstruction": "Decompress captured-scorecard-<side>.json.gz as scorecard-v4.json beside observations-v1.jsonl.gz and run-evidence.json renamed from the matching retained side files. SHA-256 pins refer to the original capture bytes; scorecard_sha256 pins refer to decompressed JSON; scorecard_archive_sha256 pins refer to deterministic gzip archives.",
   "commands": [
     "gaze setup --non-interactive --force --policy-out target/gate/policy.toml",

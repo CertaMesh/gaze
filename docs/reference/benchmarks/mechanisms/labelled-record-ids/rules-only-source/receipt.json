@@ -9,62 +9,62 @@
       "capture_exit_code": 4,
       "capture_execution_outcome": "completed",
       "absolute_release_readiness": "failed",
-      "revision": "14c5331968d2e3c6e16bdf410f76d197b8dcb899",
+      "revision": "c4ab57de271812acd509699c2e9d4e40998f3694",
       "crates_tree": "24caad760a0da2105b44a7bb09917c2e89ad53a1",
       "binary_sha256": "214b5cdaf97f42865bbd95ab538d55067ef79d062b7df461ef4774c2393be747",
       "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
       "observations": "observations-base.jsonl.gz",
-      "observations_sha256": "441c01aa0ef15d0e8005b90ccd95a8135f1e588896902eea34d3ec718fdab632",
+      "observations_sha256": "b8ac93102fe2226722ffd44c217a00c7540f17ef628a4e8567e0d4049f377e76",
       "scorecards": {
         "2": "scorecard-base-v2.json.gz",
         "1": "scorecard-base-v1.json.gz",
         "4": "scorecard-base-v4.json.gz"
       },
       "scorecard_sha256": {
-        "2": "2274b272f265849c1816030dd6256b45a13f043eef33adf26b5e2ae4d5cc4c18",
-        "1": "671664d5ce18e9fbc04a44cc1cabc2c7b9f0899cc541c0bfa894b899f235b30d",
-        "4": "a7f47c6f0f3e9005f1621fe416469949c92837791d057c603f283ca05e8b01c9"
+        "2": "5a2d7e1d0e0f2bfb1153398a2a4371e7da0e59fe8c7affd4261118ee77324158",
+        "1": "715749bec4ae2b2ccd04beb04ce5a02f57575baf3a14aec6064b519212f2de27",
+        "4": "af26dcc2da2937c7494370fddbbeacde03f6696c23c8fef09cd6e9211587ae75"
       },
       "scorecard_archive_sha256": {
-        "2": "7f92b75f86a338929aea744a692d6b447b89b73a18941f8924720c8cb2682d62",
-        "1": "69608da6ffd1a18578e7727fdf6889046320e11a90a8218a784850a022b7b80b",
-        "4": "eae745cc047846fcc9b75436fdbc72be3a2f546ec6851dca470794fe416f260f"
+        "2": "a4f6bbd81957d9256a4bdf70d82cf93a9bb9cadb511ada9127e9e6dd62425179",
+        "1": "4e446c164579040b30c1fae92b63a5e31004775e54df067933cdea2ea23da9f7",
+        "4": "fcaab1b8045de3f2a6f5791712b34c3b8a36a7cba4f97a69f24131f1e134847b"
       },
       "captured_scorecard": "captured-scorecard-base.json.gz",
-      "captured_scorecard_uncompressed_sha256": "671664d5ce18e9fbc04a44cc1cabc2c7b9f0899cc541c0bfa894b899f235b30d",
+      "captured_scorecard_uncompressed_sha256": "715749bec4ae2b2ccd04beb04ce5a02f57575baf3a14aec6064b519212f2de27",
       "execution_evidence": "run-evidence-base.json",
-      "execution_evidence_sha256": "752246a6dc39220a2ab3f24c8afbe7772fe6f05425c3e216b005d766310d529b"
+      "execution_evidence_sha256": "186430f786daf606e614a7009f47c0095bce13f99c457d5926a68e5c9dd649f2"
     },
     "candidate": {
-      "detector_revision": "e73e53a2a5a7b1df6e0445c68b3b3ceae8cd72a6",
+      "detector_revision": "20ff2b01e621383ff903989ce5f40e8300871290",
       "capture_exit_code": 4,
       "capture_execution_outcome": "completed",
       "absolute_release_readiness": "failed",
-      "revision": "e73e53a2a5a7b1df6e0445c68b3b3ceae8cd72a6",
-      "crates_tree": "56f0fada9a5bb4768f32428f3a6f5aba06f3a71c",
-      "binary_sha256": "14643603c406f337554fcfb17d79c559c21b629fe0f3e141a8e4137355532aaa",
+      "revision": "20ff2b01e621383ff903989ce5f40e8300871290",
+      "crates_tree": "da250b9d63cd35391c353afeaff7275893d5f32e",
+      "binary_sha256": "1af427e777a2dbe21fe6a678e035d22eb214f34f36c870994dcacc78bdb85d84",
       "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
       "observations": "observations-candidate.jsonl.gz",
-      "observations_sha256": "68a65a3b1e920dd65af7df73489309dea23ae601c85202b1fcc0340a0ef6f4b6",
+      "observations_sha256": "1329ae573dff2120f8d9f19b0c753effa69c7f9c010d9f8bf706d2ba35cca5b2",
       "scorecards": {
         "2": "scorecard-candidate-v2.json.gz",
         "1": "scorecard-candidate-v1.json.gz",
         "4": "scorecard-candidate-v4.json.gz"
       },
       "scorecard_sha256": {
-        "2": "aa00fed36f7150c9c9144cb8203d6b8d178f407e56c59f888c55719dc3981e5c",
-        "1": "0fcfbbdb98078c08bfcec8e9a0bcc9847c1e740106d2a98dd44793e623a205bd",
-        "4": "08027d07d2dc0218dc3f026e2ee6ea03425308cf2bebc5b70b797d1ad457ea0a"
+        "2": "9b87547058f94898706ed342532ddce673b602539c386d861b906fe45a4fd28f",
+        "1": "20aab4955ee6d2ff48436b0f359440ece94f82627358dd7cc332bf54c33d7fd9",
+        "4": "c7ff3c330635eb6ec8c2b8ce5cfce34bb0067e58150d71c8e916f39e7360ba26"
       },
       "scorecard_archive_sha256": {
-        "2": "b630928864224fa526b5d2dc177c6d08f78a0f91734351872e7796e8714be866",
-        "1": "50c8200614ec08f443fd76ef26890bcf0040845dc9948f3a461b438839307e31",
-        "4": "e4bd4acf83188906c6630fd37d6baa13cefdf8c04ba92c983da34c964f8c7b40"
+        "2": "29771be7bb3c60faba5ee3070b3d33a1bd31303bfda67d8b177ac403908402f3",
+        "1": "882712f72babc1840cd54194fbd4bc1f92f1ebdfb776c888f83d967fdfb9f72d",
+        "4": "7205953175421a0d8651e9e050973f90f863987a9412d8df297f077d01f736fe"
       },
       "captured_scorecard": "captured-scorecard-candidate.json.gz",
-      "captured_scorecard_uncompressed_sha256": "0fcfbbdb98078c08bfcec8e9a0bcc9847c1e740106d2a98dd44793e623a205bd",
+      "captured_scorecard_uncompressed_sha256": "20aab4955ee6d2ff48436b0f359440ece94f82627358dd7cc332bf54c33d7fd9",
       "execution_evidence": "run-evidence-candidate.json",
-      "execution_evidence_sha256": "19de7d4735ac83db1f8216c534ec2413b9657dd1e7585a9ed13ce4f860b95ab2"
+      "execution_evidence_sha256": "9ff6d24dcf938d3ef13107a21da8fe1cb31720bd83122f949db2ea4cb827ea1b"
     }
   },
   "gates": [
@@ -73,9 +73,9 @@
     "gate-v4.json"
   ],
   "gate_sha256": {
-    "gate-v2.json": "aa4fa9c04bb704654ad519732c336a2941732b2e2fea5cb7ba985f6c7ee0017b",
-    "gate-v1.json": "22138589477a402906f06e64846c849f34f9f2c6d1e1863c9eb6fce25601e11b",
-    "gate-v4.json": "22138589477a402906f06e64846c849f34f9f2c6d1e1863c9eb6fce25601e11b"
+    "gate-v2.json": "03f2d3dfd12e3a6c5d1e4c5d9739aaf8175ece7166882fd8cc5ec21a43b5284e",
+    "gate-v1.json": "3eae29e08bcbbfaa1da37a90146cc2110804b43bc387274f46702ae40c246a77",
+    "gate-v4.json": "3eae29e08bcbbfaa1da37a90146cc2110804b43bc387274f46702ae40c246a77"
   },
   "generator": {
     "generator": "scripts/bench/agentic_layers.py",
@@ -83,13 +83,13 @@
     "partition": "test",
     "seed": 2026092602,
     "docs_per_family": 10,
-    "documents": 26713,
+    "documents": 29503,
     "documents_by_layer": {
-      "A": 10928,
-      "D": 8413,
-      "R": 7372
+      "A": 11840,
+      "D": 9379,
+      "R": 8284
     },
-    "corpus_sha256": "06cabb6ad1a9d962c17e230a5b68a509eaffdb44479d0e11ee813a5731d3ae89",
+    "corpus_sha256": "060251ba678e85e6180ea44dec8eff820894b452414e96e17a092661c6bc0ac0",
     "synthetic_only": true
   },
   "policy": "policy.toml",
@@ -97,16 +97,16 @@
   "ner_enabled": false,
   "nym_enabled": false,
   "policy_derivation": {
-    "derived_from_revision": "14c5331968d2e3c6e16bdf410f76d197b8dcb899",
+    "derived_from_revision": "c4ab57de271812acd509699c2e9d4e40998f3694",
     "detector_revision": "9cb43a703c729140315d5951304bd5734e1e96f7",
     "derived_from_side": "base",
     "source_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
     "rules_policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
-    "transformation": "Remove only the top-level ner and safety_net tables, including their child tables; all other parsed policy values are identical. Candidate full setup policy must match base byte-for-byte before gain comparison."
+    "transformation": "Remove only the top-level ner and safety_net tables, including their child tables; all other parsed policy values are identical. Candidate full setup policy matches base byte-for-byte before gain comparison."
   },
   "baseline_harness": "The baseline capture revision carries the committed benchmark corpus, tests and export helper over detector main 9cb43a703c729140315d5951304bd5734e1e96f7. crates, Cargo.toml and Cargo.lock match that main commit exactly.",
   "precision_costs": "precision-costs.json",
-  "precision_costs_sha256": "40af53aa06c602b33ad17a3a5d38b1d5285e697f36c4bc903fe1d67d4872ddfd",
+  "precision_costs_sha256": "4d6dfa43465f05707fbfffedd918fce1147d33d8a94806d6616ede9b51d1e691",
   "capture_reconstruction": "Decompress captured-scorecard-<side>.json.gz as scorecard-v4.json beside observations-v1.jsonl.gz and run-evidence.json renamed from the matching retained side files. SHA-256 pins refer to the original capture bytes; scorecard_sha256 pins refer to decompressed JSON; scorecard_archive_sha256 pins refer to deterministic gzip archives.",
   "commands": [
     "gaze setup --non-interactive --force --policy-out target/gate/policy.toml",

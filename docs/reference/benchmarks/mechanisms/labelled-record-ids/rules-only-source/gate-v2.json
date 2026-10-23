@@ -1,8 +1,8 @@
 {
   "verdict": "pass",
-  "reason": "leaked bytes fell by 293834, FP bytes changed by +307",
+  "reason": "leaked bytes fell by 502112, FP bytes changed by +307",
   "summary": {
-    "leaked_bytes_decrease": 293834,
+    "leaked_bytes_decrease": 502112,
     "false_positive_bytes_increase": 307
   },
   "layers": {
@@ -31,13 +31,13 @@
       "manifest_invalid_candidate": 0
     },
     "A": {
-      "attempted_base": 10928,
-      "attempted_candidate": 10928,
-      "documents_base": 10928,
-      "documents_candidate": 10928,
-      "headline_leaked_base": 114202,
+      "attempted_base": 11840,
+      "attempted_candidate": 11840,
+      "documents_base": 11840,
+      "documents_candidate": 11840,
+      "headline_leaked_base": 183628,
       "headline_leaked_candidate": 10711,
-      "leaked_base": 112997,
+      "leaked_base": 182423,
       "leaked_candidate": 9506,
       "twin_leaked_base": 1205,
       "twin_leaked_candidate": 1205,
@@ -45,20 +45,20 @@
       "false_positive_candidate": 246,
       "failed_closed_base": 0,
       "failed_closed_candidate": 0,
-      "restore_exact_base": 10928,
-      "restore_exact_candidate": 10928,
+      "restore_exact_base": 11840,
+      "restore_exact_candidate": 11840,
       "restore_failures_base": 0,
       "restore_failures_candidate": 0,
-      "manifest_valid_base": 10928,
-      "manifest_valid_candidate": 10928,
+      "manifest_valid_base": 11840,
+      "manifest_valid_candidate": 11840,
       "manifest_invalid_base": 0,
       "manifest_invalid_candidate": 0
     },
     "D": {
-      "attempted_base": 8413,
-      "attempted_candidate": 8413,
-      "documents_base": 8413,
-      "documents_candidate": 8413,
+      "attempted_base": 9379,
+      "attempted_candidate": 9379,
+      "documents_base": 9379,
+      "documents_candidate": 9379,
       "headline_leaked_base": 0,
       "headline_leaked_candidate": 0,
       "leaked_base": 0,
@@ -69,23 +69,23 @@
       "false_positive_candidate": 9515,
       "failed_closed_base": 0,
       "failed_closed_candidate": 0,
-      "restore_exact_base": 8413,
-      "restore_exact_candidate": 8413,
+      "restore_exact_base": 9379,
+      "restore_exact_candidate": 9379,
       "restore_failures_base": 0,
       "restore_failures_candidate": 0,
-      "manifest_valid_base": 8413,
-      "manifest_valid_candidate": 8413,
+      "manifest_valid_base": 9379,
+      "manifest_valid_candidate": 9379,
       "manifest_invalid_base": 0,
       "manifest_invalid_candidate": 0
     },
     "R": {
-      "attempted_base": 7372,
-      "attempted_candidate": 7372,
-      "documents_base": 7372,
-      "documents_candidate": 7372,
-      "headline_leaked_base": 193428,
+      "attempted_base": 8284,
+      "attempted_candidate": 8284,
+      "documents_base": 8284,
+      "documents_candidate": 8284,
+      "headline_leaked_base": 332280,
       "headline_leaked_candidate": 3150,
-      "leaked_base": 193428,
+      "leaked_base": 332280,
       "leaked_candidate": 3150,
       "twin_leaked_base": 0,
       "twin_leaked_candidate": 0,
@@ -93,12 +93,12 @@
       "false_positive_candidate": 593,
       "failed_closed_base": 0,
       "failed_closed_candidate": 0,
-      "restore_exact_base": 7372,
-      "restore_exact_candidate": 7372,
+      "restore_exact_base": 8284,
+      "restore_exact_candidate": 8284,
       "restore_failures_base": 0,
       "restore_failures_candidate": 0,
-      "manifest_valid_base": 7372,
-      "manifest_valid_candidate": 7372,
+      "manifest_valid_base": 8284,
+      "manifest_valid_candidate": 8284,
       "manifest_invalid_base": 0,
       "manifest_invalid_candidate": 0
     }
@@ -165,15 +165,15 @@
     "scope": "all-ground-truth",
     "config": "policy-file",
     "record_sha256": {
-      "base": "441c01aa0ef15d0e8005b90ccd95a8135f1e588896902eea34d3ec718fdab632",
-      "candidate": "68a65a3b1e920dd65af7df73489309dea23ae601c85202b1fcc0340a0ef6f4b6"
+      "base": "b8ac93102fe2226722ffd44c217a00c7540f17ef628a4e8567e0d4049f377e76",
+      "candidate": "1329ae573dff2120f8d9f19b0c753effa69c7f9c010d9f8bf706d2ba35cca5b2"
     },
     "layers": {
       "A": {
         "new_exposed_bytes": 0,
-        "newly_protected_bytes": 103491,
-        "net_leaked_bytes": -103491,
-        "documents": 10928,
+        "newly_protected_bytes": 172917,
+        "net_leaked_bytes": -172917,
+        "documents": 11840,
         "refusals": {
           "base": 0,
           "candidate": 0
@@ -226,18 +226,18 @@
           },
           "CUSTOMER_ID": {
             "new_exposed_bytes": 0,
-            "newly_protected_bytes": 34461,
-            "net_leaked_bytes": -34461
+            "newly_protected_bytes": 57603,
+            "net_leaked_bytes": -57603
           },
           "EMPLOYEE_ID": {
             "new_exposed_bytes": 0,
-            "newly_protected_bytes": 34578,
-            "net_leaked_bytes": -34578
+            "newly_protected_bytes": 57720,
+            "net_leaked_bytes": -57720
           },
           "RECORD_ID": {
             "new_exposed_bytes": 0,
-            "newly_protected_bytes": 34452,
-            "net_leaked_bytes": -34452
+            "newly_protected_bytes": 57594,
+            "net_leaked_bytes": -57594
           },
           "BSN": {
             "new_exposed_bytes": 0,
@@ -512,7 +512,7 @@
         "new_exposed_bytes": 0,
         "newly_protected_bytes": 0,
         "net_leaked_bytes": 0,
-        "documents": 8413,
+        "documents": 9379,
         "refusals": {
           "base": 0,
           "candidate": 0
@@ -521,9 +521,9 @@
       },
       "R": {
         "new_exposed_bytes": 0,
-        "newly_protected_bytes": 190278,
-        "net_leaked_bytes": -190278,
-        "documents": 7372,
+        "newly_protected_bytes": 329130,
+        "net_leaked_bytes": -329130,
+        "documents": 8284,
         "refusals": {
           "base": 0,
           "candidate": 0
@@ -531,18 +531,18 @@
         "classes": {
           "CUSTOMER_ID": {
             "new_exposed_bytes": 0,
-            "newly_protected_bytes": 63368,
-            "net_leaked_bytes": -63368
+            "newly_protected_bytes": 109652,
+            "net_leaked_bytes": -109652
           },
           "EMPLOYEE_ID": {
             "new_exposed_bytes": 0,
-            "newly_protected_bytes": 63560,
-            "net_leaked_bytes": -63560
+            "newly_protected_bytes": 109844,
+            "net_leaked_bytes": -109844
           },
           "RECORD_ID": {
             "new_exposed_bytes": 0,
-            "newly_protected_bytes": 63350,
-            "net_leaked_bytes": -63350
+            "newly_protected_bytes": 109634,
+            "net_leaked_bytes": -109634
           },
           "EMAIL": {
             "new_exposed_bytes": 0,
