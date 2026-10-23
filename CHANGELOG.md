@@ -97,6 +97,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** context JSON requires a top-level object. Positional arrays of
+  zero through six fields are rejected with `PolicyConfig` by
+  `gaze clean --context-json` and daemon clean frames. Replace positional input
+  such as `[{}, {}, {}, {"full_name":"[customer name]"}]` with
+  `{"record":{"full_name":"[customer name]"}}`. Existing object input is unchanged.
+
 - **Snapshot contract.** `Session` records each token's source spelling and
   adds `source_spelling` and `restore_strict_decoded_text_with_provenance`. A
   manifest holding a JSON-escaped value exports as `session_blob` envelope v7,

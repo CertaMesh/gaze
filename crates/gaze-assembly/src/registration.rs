@@ -33,6 +33,11 @@ impl AssemblyBuilder {
         self.registered_recognizers += 1;
     }
 
+    pub(crate) fn recognizer_arc(&mut self, recognizer: std::sync::Arc<dyn Recognizer>) {
+        self.map(|builder| builder.recognizer_arc(recognizer));
+        self.registered_recognizers += 1;
+    }
+
     pub(crate) fn recognizer_with_membership<R>(
         &mut self,
         recognizer: R,

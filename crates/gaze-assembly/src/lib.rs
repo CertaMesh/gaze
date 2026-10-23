@@ -204,6 +204,48 @@ pub fn build_pipeline_builder(
     active_locales: &LocaleChain,
     ner_threshold: Option<f32>,
 ) -> Result<PipelineBuilder, BuildError> {
+    build_pipeline_builder_inner(
+        policy,
+        context,
+        rulepacks,
+        active_locales,
+        ner_threshold,
+        None,
+    )
+}
+
+/// Assemble request-local context against the resident pipeline's unchanged policy and
+/// rulepacks. NER, the DOB judge, safety nets and loggers retain their resident handles.
+/// Drop the returned pipeline and dictionary bundle after the request.
+pub fn pipeline_with_context(
+    resident: &Pipeline,
+    policy: &gaze::Policy,
+    context: &Context,
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+) -> Result<Pipeline, BuildError> {
+    let detection = build_pipeline_builder_inner(
+        policy,
+        context,
+        rulepacks,
+        active_locales,
+        None,
+        Some(resident.registry()),
+    )?
+    .build()?;
+    Ok(resident
+        .clone()
+        .with_recognizer_registry(detection.registry().clone()))
+}
+
+fn build_pipeline_builder_inner(
+    policy: &gaze::Policy,
+    context: &Context,
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+    ner_threshold: Option<f32>,
+    resident: Option<&gaze::RecognizerRegistry>,
+) -> Result<PipelineBuilder, BuildError> {
     let mut builder = registration::AssemblyBuilder::default();
     let mut registered_dictionaries = BTreeSet::<String>::new();
     let locale_vocab = merged_locale_vocab(rulepacks, active_locales);
@@ -234,8 +276,8 @@ pub fn build_pipeline_builder(
     if policy.address_blocks {
         register_address_vocabularies(&mut builder, rulepacks, active_locales);
     }
-    ner::register_ner(&mut builder, policy, ner_threshold)?;
-    ner::register_dob_judge(&mut builder, policy)?;
+    ner::register_ner(&mut builder, policy, ner_threshold, resident)?;
+    ner::register_dob_judge(&mut builder, policy, resident)?;
 
     if builder.registered_recognizers() == 0 {
         return Err(BuildError::NoRecognizers);
