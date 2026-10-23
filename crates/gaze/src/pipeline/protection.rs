@@ -172,10 +172,10 @@ impl Pipeline {
     ) -> Result<String> {
         if candidate.recognizer_id != crate::sweep::SWEEP_ID
             || candidate.evidence != crate::EvidenceKind::Rule
-            || !self
+            || self
                 .resolve_action(&candidate.class, &build_context(None))
                 .action
-                .is_protective()
+                != Action::Tokenize
         {
             return Err(Error::UnsupportedActionVariant);
         }

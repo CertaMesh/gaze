@@ -1461,10 +1461,17 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
             .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
         let mut output = String::with_capacity(input.len());
         let mut cursor = 0;
+        let mut hit_cursor = 0;
         for (source, view) in gaps {
             output.push_str(&input[cursor..source.start]);
             let mut gap_cursor = source.start;
-            for hit in &hits {
+            while hit_cursor < hits.len() && hits[hit_cursor].span.end <= view.start {
+                hit_cursor += 1;
+            }
+            for hit in hits[hit_cursor..]
+                .iter()
+                .take_while(|hit| hit.span.start < view.end)
+            {
                 // A hit wholly within this raw gap is handled by ordinary protection.
                 // Only the expanded view can see repeats crossing its token boundary.
                 if hit.span.start >= view.start && hit.span.end <= view.end {
