@@ -13,6 +13,9 @@ class InvisibleSeparatorCellsTests(unittest.TestCase):
             for name, separator in cells.SEPARATORS.items():
                 selected = [row for row in rows if row.surface.startswith("invisible_" + name + "_")]
                 self.assertEqual({row.layer for row in selected}, {"A", "D", "R"})
+                self.assertTrue({"invisible_card_twin", "invisible_tax_twin", "invisible_phone_twin",
+                                 "invisible_iban_twin", "invisible_email_twin"}
+                                <= {row.family for row in selected if row.layer == "D"})
                 self.assertEqual({span.label for row in selected for span in row.gold},
                                  {"TAXNUM", "IBAN", "TELEPHONENUM", "CREDITCARDNUMBER", "EMAIL"})
                 for row in selected:
@@ -21,6 +24,13 @@ class InvisibleSeparatorCellsTests(unittest.TestCase):
                     for span in (*row.gold, *row.decoys):
                         self.assertEqual(row.text.encode()[span.start:span.end].decode(), span.value)
                         self.assertIn(separator, span.value)
+
+    def test_cued_tax_gold_and_counterweights_participate_in_credit_gate(self):
+        self.assertIn("invisible_card_twin", agentic.guard_families(agentic.GENERATOR_VERSION))
+        self.assertIn("invisible_tax_twin", agentic.guard_families(agentic.GENERATOR_VERSION))
+        self.assertNotIn("invisible_card_twin", agentic.guard_families(25))
+        for surface in cells.CUED_SURFACES:
+            self.assertTrue(agentic.invalid_twin_credited("TAXNUM", surface))
 
     def test_old_generation_stays_byte_identical(self):
         pins = {"dev": "a88025bd7c995e3633738debf8b8bab45c8c7232bf222a4d72a9af36fc67ca59",

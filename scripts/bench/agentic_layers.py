@@ -104,7 +104,7 @@ CREDIT_SCOPE_BY_LABEL: dict[str, CreditScope] = {
 }
 CUED_SURFACES = (frozenset(SURFACES) - {"prose_nocue"}) | {
     "gov_prose", "gov_log_kv", "gov_tool_json", "gov_tool_result",
-}
+} | invisible_separators.CUED_SURFACES
 
 
 def invalid_twin_credited(label: str | None, surface: str) -> bool:
@@ -3168,6 +3168,9 @@ CREDIT_GUARD_SINCE: dict[str, int] = {
 
 CREDIT_GUARD_FAMILIES["TAXNUM"] += government_ids.TAX_GUARD_FAMILIES
 CREDIT_GUARD_SINCE.update({family: 11 for family in government_ids.TAX_GUARD_FAMILIES})
+CREDIT_GUARD_FAMILIES["CREDITCARDNUMBER"] += ("invisible_card_twin",)
+CREDIT_GUARD_FAMILIES["TAXNUM"] += ("invisible_tax_twin",)
+CREDIT_GUARD_SINCE.update({"invisible_card_twin": 27, "invisible_tax_twin": 27})
 
 
 def guard_families(generator_version: int) -> list[str]:

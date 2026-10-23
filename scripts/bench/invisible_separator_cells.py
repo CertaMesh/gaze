@@ -6,6 +6,8 @@ No detector output determines gold or the negative examples.
 """
 
 SEPARATORS = {"zwsp": "\u200b", "word_joiner": "\u2060", "soft_hyphen": "\u00ad", "nb_hyphen": "\u2011"}
+CUED_SURFACES = {"invisible_" + separator + "_" + surface
+                 for separator in SEPARATORS for surface in ("prose", "json")}
 
 
 def records(api, partition):
@@ -58,5 +60,20 @@ def records(api, partition):
             }
             for family, value in benign.items():
                 template = "Public sample: {V}; complete." if partition == "dev" else "Documentation only = {V}. Done."
+                emit("D", family, separator_name + "_" + family, index, template, value, None)
+            # Format-matched benign twins remain invalid after any mapping:
+            # an unassignable country code, unknown IBAN prefix, wrong card
+            # checksum, numeric schema placeholder and incomplete mailbox.
+            card = "".join(values[3][1])
+            wrong_card = card[:-1] + str((int(card[-1]) + 1) % 10)
+            twins = {
+                "invisible_card_twin": separator.join(api._by_four(wrong_card)),
+                "invisible_tax_twin": separator.join(("000", "000", "0000")),
+                "invisible_phone_twin": separator.join(("+0", *phone[1:])),
+                "invisible_iban_twin": separator.join(("XY00", *values[1][1][1:])),
+                "invisible_email_twin": separator.join((email[:3], email[3:] + "@")),
+            }
+            for family, value in twins.items():
+                template = "Schema example: {V}; incomplete." if partition == "dev" else "Public format fixture = {V}. Not assigned."
                 emit("D", family, separator_name + "_" + family, index, template, value, None)
     return result

@@ -107,3 +107,57 @@ fn invisible_prose_and_public_fragments_stay_byte_exact_without_tokens() {
         assert!(session.snapshot_entries().is_empty());
     }
 }
+
+#[test]
+fn normalized_aliases_keep_independent_original_spellings_across_turns() {
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let originals = [
+        "Mail: al\u{200b}ice@example.invalid",
+        "Mail: al\u{2060}ice@example.invalid",
+        "Mail: al\u{00ad}ice@example.invalid",
+    ];
+    for input in originals.iter().chain(originals.iter().rev()) {
+        let clean = support::clean(
+            pipeline(),
+            &session,
+            input,
+            &[LocaleTag::EnUs, LocaleTag::Global],
+        );
+        assert_eq!(
+            gaze::token_shape::pattern().replace_all(&clean, "\0"),
+            "Mail: \0"
+        );
+        assert_eq!(session.restore_strict_text(&clean).unwrap(), *input);
+    }
+    assert_eq!(session.snapshot_entries().len(), 3);
+}
+
+#[test]
+fn preservation_policy_keeps_original_formatting_and_emits_no_tokens() {
+    let preserving = support::pipeline_for(
+        &[LocaleTag::EnUs, LocaleTag::Global],
+        &["core", "locale-en"],
+        vec![RuleSpec::Default {
+            action: Action::Preserve,
+        }],
+        true,
+    );
+    for input in [
+        "Mail: al\u{200b}ice@example.invalid",
+        "Mail: al\u{2060}ice@example.invalid",
+        "Mail: al\u{00ad}ice@example.invalid",
+        "Mail: al\u{2011}ice@example.invalid",
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        assert_eq!(
+            support::clean(
+                &preserving,
+                &session,
+                input,
+                &[LocaleTag::EnUs, LocaleTag::Global]
+            ),
+            input
+        );
+        assert!(session.snapshot_entries().is_empty());
+    }
+}
