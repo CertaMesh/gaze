@@ -1,4 +1,4 @@
-//! Independent application-owned byte ranges from the v19 boundary corpus.
+//! Independent application-owned byte ranges from the v27 boundary corpus.
 //! Observe only public pipeline, manifest, trace, and strict restore contracts.
 use gaze::{
     Action, CleanDocument, Context, DictionaryBundle, LocaleTag, PiiClass, Pipeline, Policy,
@@ -67,8 +67,8 @@ fn check_cells(family: &str, surface_prefix: &str) {
 
 fn check_selected_cells(family: &str, surface_prefix: &str, benign_only: bool) {
     let fixture: Fixture =
-        serde_json::from_str(include_str!("fixtures/record_id_boundaries_v19.json")).unwrap();
-    assert_eq!(fixture.generator_version, 19);
+        serde_json::from_str(include_str!("fixtures/record_id_boundaries_v27.json")).unwrap();
+    assert_eq!(fixture.generator_version, 27);
     let pipeline = record_pipeline();
     let mut checked = 0;
     for case in fixture.records.iter().filter(|case| {
@@ -567,9 +567,9 @@ impl gaze::RedactionLogger for ScanReasons {
 }
 
 #[test]
-fn nested_and_inconsistent_quotes_keep_only_the_bounded_scalar() {
+fn nested_quotes_and_inconsistent_contexts_keep_private_content() {
     let fixture: Fixture =
-        serde_json::from_str(include_str!("fixtures/record_id_boundaries_v19.json")).unwrap();
+        serde_json::from_str(include_str!("fixtures/record_id_boundaries_v27.json")).unwrap();
     for family in ["customer_id", "employee_id", "record_id"] {
         let case = fixture
             .records
@@ -632,8 +632,8 @@ fn nested_and_inconsistent_quotes_keep_only_the_bounded_scalar() {
         assert!(session
             .snapshot_entries()
             .iter()
-            .any(|entry| entry.raw == "Q731284\\\""));
-        assert!(clean.ends_with("; public_version=FRAME"));
+            .any(|entry| entry.raw == "Q731284\\\"; public_version=FRAME"));
+        assert!(!clean.contains("FRAME"));
         assert!(reasons
             .0
             .lock()
@@ -676,8 +676,8 @@ fn field_owned_repeat_seeds_survive_later_turns_and_signed_snapshots() {
                 format!("{cue}: \"\nNX731284 É842395\"; public_version=FRAME"),
             ),
             (
-                "\nNX731284 É842395",
-                format!("{cue}: \"\nNX731284 É842395; public_version=FRAME"),
+                " NX731284 É842395",
+                format!("{cue}: \" NX731284 É842395\npublic_version=FRAME"),
             ),
             (
                 "NX731284\tÉ842395",
@@ -1186,46 +1186,179 @@ fn content_wrapper_is_not_a_scanner_prepended_wrapper() {
     );
 }
 
+boundary_test!(customer_unterminated_corpus, "customer_id", "unterminated_");
+boundary_test!(employee_unterminated_corpus, "employee_id", "unterminated_");
+boundary_test!(member_unterminated_corpus, "record_id", "unterminated_");
+boundary_test!(customer_private_key_corpus, "customer_id", "private_keys_");
+boundary_test!(employee_private_key_corpus, "employee_id", "private_keys_");
+boundary_test!(member_private_key_corpus, "record_id", "private_keys_");
+
 #[test]
-fn unterminated_private_suffix_requires_a_proven_boundary() {
+fn unterminated_values_own_key_looking_private_suffixes() {
     let pipeline = record_pipeline();
-    for (cue, separator) in [
-        ("customer ID", ";"),
-        ("employee ID", ","),
-        ("member ID", "\n"),
-    ] {
-        for tail in [separator, "]", "}"] {
-            let value = format!("Q731284{tail}É842395");
+    for cue in ["customer ID", "employee ID", "member ID"] {
+        for tail in [
+            ";É842395",
+            ",É842395",
+            "]É842395",
+            "}É842395",
+            ";private_code=É842395",
+            ";ID: 123",
+            ", name=Anna",
+            ";\u{a0}private_code=É842395",
+            "; public_version=FRAME",
+            "; \"public_version\": 7",
+            "\\\nprivate_code=É842395",
+        ] {
+            let value = format!("Q731284{tail}");
             let input = format!("{cue}: \"{value}");
-            let session = Session::new(Scope::Ephemeral).unwrap();
+            let session =
+                Session::new(Scope::Conversation("synthetic-unterminated-value".into())).unwrap();
             let clean = public_clean(&pipeline, &session, &input);
-            assert!(!clean.contains("É842395"), "private suffix exposed");
-            assert!(session
-                .snapshot_entries()
-                .iter()
-                .any(|entry| entry.raw == value));
+            assert!(
+                session
+                    .snapshot_entries()
+                    .iter()
+                    .any(|entry| entry.raw == value),
+                "entire private value must be owned: {input:?} -> {clean:?}"
+            );
+            let imported = Session::import(session.export().unwrap()).unwrap();
+            assert_eq!(
+                pipeline.restore_strict_text(&imported, &clean).unwrap(),
+                input
+            );
         }
     }
 }
 
 #[test]
-fn unterminated_private_suffix_preserves_proven_public_fields() {
+fn prior_unterminated_records_do_not_supply_an_enclosing_string() {
     let pipeline = record_pipeline();
-    for delimiter in ["; ", ", ", "\n"] {
+    let value = "Q731284; \"public_version\": 7";
+    let input = format!("note: \"unfinished\ncustomer ID: \"{value}");
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let clean = public_clean(&pipeline, &session, &input);
+    assert!(session
+        .snapshot_entries()
+        .iter()
+        .any(|entry| entry.raw == value));
+    assert_eq!(
+        pipeline.restore_strict_text(&session, &clean).unwrap(),
+        input
+    );
+}
+
+#[test]
+fn unterminated_values_end_at_unescaped_record_line_breaks() {
+    let pipeline = record_pipeline();
+    for newline in ["\n", "\r\n", "\r"] {
         for public in [
             "public_version=FRAME",
             "public_version: FRAME",
             "\"public_version\": 7",
         ] {
-            let input = format!("customer ID: \"Q731284;É842395{delimiter}{public}");
-            let session = Session::new(Scope::Ephemeral).unwrap();
+            let value = "Q731284;private_code=É842395";
+            let input = format!("customer ID: \"{value}{newline}{public}");
+            let session =
+                Session::new(Scope::Conversation("synthetic-unterminated-value".into())).unwrap();
             let clean = public_clean(&pipeline, &session, &input);
-            assert!(!clean.contains("É842395"), "private suffix exposed");
+            assert!(session
+                .snapshot_entries()
+                .iter()
+                .any(|entry| entry.raw == value));
             assert!(
-                clean.ends_with(&format!("{delimiter}{public}")),
-                "public field consumed"
+                clean.ends_with(&format!("{newline}{public}")),
+                "record tail consumed"
+            );
+            assert_eq!(
+                pipeline.restore_strict_text(&session, &clean).unwrap(),
+                input
             );
         }
+    }
+}
+
+#[test]
+fn unterminated_values_preserve_enclosing_serialized_string_closes() {
+    let pipeline = record_pipeline();
+    for cue in ["customer ID", "employee ID", "member ID"] {
+        for tail in [
+            ";É842395",
+            ";private_code=É842395",
+            ";ID: 123",
+            ", name=Anna",
+            ";\u{a0}private_code=É842395",
+            "\r\nprivate_code=É842395",
+        ] {
+            for inner_json in [false, true] {
+                let value = format!("Q731284{tail}");
+                let content = if inner_json {
+                    let key = match cue {
+                        "customer ID" => "customerId",
+                        "employee ID" => "employeeId",
+                        _ => "member_id",
+                    };
+                    format!("{{\"{key}\":\"{value}")
+                } else {
+                    format!("{cue}: \"{value}")
+                };
+                let mut input = content;
+                let mut raw = value;
+                for depth in 0..=9 {
+                    input = serde_json::to_string(
+                        &serde_json::json!({"note": input, "public_version": "FRAME"}),
+                    )
+                    .unwrap();
+                    raw = serde_json::to_string(&raw).unwrap();
+                    raw = raw[1..raw.len() - 1].to_owned();
+                    let session =
+                        Session::new(Scope::Conversation("synthetic-unterminated-value".into()))
+                            .unwrap();
+                    let clean = public_clean(&pipeline, &session, &input);
+                    assert!(
+                        session
+                            .snapshot_entries()
+                            .iter()
+                            .any(|entry| entry.raw == raw),
+                        "private scalar bytes differ at depth {depth}: {input:?} -> {clean:?}"
+                    );
+                    let mut parsed: serde_json::Value =
+                        serde_json::from_str(&clean).expect("outer JSON stays valid");
+                    for _ in 0..depth {
+                        assert_eq!(parsed["public_version"], "FRAME");
+                        parsed = serde_json::from_str(parsed["note"].as_str().unwrap())
+                            .expect("nested JSON stays valid");
+                    }
+                    assert_eq!(parsed["public_version"], "FRAME");
+                    let imported = Session::import(session.export().unwrap()).unwrap();
+                    assert_eq!(
+                        pipeline.restore_strict_text(&imported, &clean).unwrap(),
+                        input
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn closed_private_values_preserve_separate_real_public_fields() {
+    let pipeline = record_pipeline();
+    for delimiter in ["; ", ", ", "\n"] {
+        let value = "Q731284;private_code=É842395";
+        let public = "public_version=FRAME";
+        let input = format!("customer ID: \"{value}\"{delimiter}{public}");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let clean = public_clean(&pipeline, &session, &input);
+        assert!(session
+            .snapshot_entries()
+            .iter()
+            .any(|entry| entry.raw == value));
+        assert!(clean.ends_with(&format!("\"{delimiter}{public}")));
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &clean).unwrap(),
+            input
+        );
     }
 }
 

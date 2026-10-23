@@ -1068,75 +1068,54 @@ fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> Label
     }
 }
 
-fn quoted_assignment_starts(rest: &str) -> bool {
-    static FIELD: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    FIELD
-        .get_or_init(|| {
-            Regex::new(r#"\A(?:"[\p{L}_][\p{L}\p{N}\p{M}_.-]*"|'[\p{L}_][\p{L}\p{N}\p{M}_.-]*')[ \t]*[:=]"#)
-                .expect("static quoted assignment syntax")
-        })
-        .is_match(rest)
-}
-
-fn unterminated_scalar_end(input: &str, start: usize) -> usize {
-    // Recover only containers opened outside earlier, complete quoted values.
-    // The current scalar's opening quote is excluded from this prefix.
-    let mut containers = Vec::new();
-    let mut quote = None;
-    let mut escaped = false;
-    for ch in input[..start - 1].chars() {
-        if escaped {
-            escaped = false;
-        } else if ch == '\\' {
-            escaped = true;
-        } else if let Some(open) = quote {
-            if ch == open {
-                quote = None;
+fn unterminated_scalar_end(input: &str, start: usize, opening_escapes: usize) -> usize {
+    // At each serialization level a delimiter has 2^depth - 1 backslashes.
+    // Replay the prefix to find strings enclosing this scalar, excluding its
+    // own opening quote and escape bytes. Key-looking content proves nothing.
+    let mut enclosing = Vec::new();
+    let mut escapes = 0usize;
+    for byte in input[..start - 1 - opening_escapes].bytes() {
+        if byte == b'\\' {
+            escapes += 1;
+            continue;
+        }
+        if matches!(byte, b'\n' | b'\r') && escapes.is_multiple_of(2) {
+            enclosing.clear();
+        }
+        if byte == b'"' && (escapes + 1).is_power_of_two() {
+            while enclosing.last().is_some_and(|depth| *depth > escapes) {
+                enclosing.pop();
             }
-        } else {
-            match ch {
-                '"' | '\'' => quote = Some(ch),
-                '{' => containers.push('}'),
-                '[' => containers.push(']'),
-                '}' | ']' if containers.last() == Some(&ch) => {
-                    containers.pop();
-                }
-                '}' | ']' => containers.clear(),
-                _ => {}
+            if enclosing.last() == Some(&escapes) {
+                enclosing.pop();
+            } else {
+                enclosing.push(escapes);
             }
         }
+        escapes = 0;
     }
-    let assignment = |rest: &str| assignment_starts(rest) || quoted_assignment_starts(rest);
-    let closes_record = |mut rest: &str| {
-        let mut remaining = containers.as_slice();
-        while let Some(close) = remaining.last() {
-            let Some(tail) = rest.strip_prefix(*close) else {
-                return false;
-            };
-            remaining = &remaining[..remaining.len() - 1];
-            rest = tail.trim_start();
-            if let Some(tail) = rest.strip_prefix([',', ';']) {
-                return assignment(tail.trim_start());
-            }
+    let enclosing_depth = enclosing.last().copied();
+    escapes = 0;
+    for (offset, byte) in input[start..].bytes().enumerate() {
+        if byte == b'\\' {
+            escapes += 1;
+            continue;
         }
-        rest.is_empty()
-    };
-    let content = start + input[start..].len() - input[start..].trim_start().len();
-    input[content..]
-        .char_indices()
-        .find_map(|(offset, ch)| {
-            let boundary = content + offset;
-            let proven = match ch {
-                ';' | ',' | '\n' | '\r' => {
-                    let rest = input[boundary + ch.len_utf8()..].trim_start();
-                    rest.is_empty() || assignment(rest) || closes_record(rest)
-                }
-                '}' | ']' => closes_record(&input[boundary..]),
-                _ => false,
-            };
-            proven.then_some(boundary)
-        })
-        .unwrap_or(input.len())
+        let at = start + offset;
+        if matches!(byte, b'\n' | b'\r') && escapes.is_multiple_of(2) {
+            return at;
+        }
+        if byte == b'"'
+            && (escapes + 1).is_power_of_two()
+            && enclosing_depth.is_some_and(|depth| escapes <= depth)
+        {
+            // Exclude the delimiter's entire encoded spelling. Retaining these
+            // bytes keeps every enclosing serialized JSON string parseable.
+            return at - escapes;
+        }
+        escapes = 0;
+    }
+    input.len()
 }
 
 fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
@@ -1187,7 +1166,7 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
         }
     }
     if reason.is_some() {
-        end = unterminated_scalar_end(input, capture.start);
+        end = unterminated_scalar_end(input, capture.start, opening_escapes);
     }
     let span = capture.start..end;
     let repeat_seed = (!span.is_empty()).then_some(gaze_types::LabelledValueRepeatSeed {
@@ -1457,7 +1436,7 @@ mod tests {
     }
 
     #[test]
-    fn field_owned_unterminated_quote_stops_at_a_complete_next_assignment() {
+    fn field_owned_unterminated_quote_keeps_assignments_until_record_end() {
         for opening in ["", "\n", "\r\n"] {
             for delimiter in ["; ", ", ", "\n"] {
                 for suffix in ["dispatch_reference=7", "dispatch_reference={\"kind\":7}"] {
@@ -1465,21 +1444,27 @@ mod tests {
                     let input = format!("customerId: \"{value}{delimiter}{suffix}");
                     let start = input.find('"').unwrap() + 1;
                     let scan = scan_field_owned_value(&input, start..start + 2);
-                    assert_eq!(scan.span, start..start + value.len());
-                    assert_eq!(scan.repeat_seed.unwrap().span, scan.span);
+                    let end = input[start..]
+                        .find(['\n', '\r'])
+                        .map_or(input.len(), |offset| start + offset);
+                    assert_eq!(scan.span, start..end);
+                    assert_eq!(
+                        scan.repeat_seed.map(|seed| seed.span),
+                        (start != end).then_some(start..end)
+                    );
                 }
             }
         }
     }
 
     #[test]
-    fn unterminated_scalar_releases_only_matching_container_closes() {
+    fn unterminated_scalar_owns_container_looking_private_content() {
         for (prefix, suffix) in [("{", "}"), ("[{", "}]"), ("[", "]")] {
             let value = "Q731284;É842395";
             let input = format!("{prefix}customerId: \"{value}{suffix}");
             let start = input.find('"').unwrap() + 1;
             let scan = scan_field_owned_value(&input, start..start + 2);
-            assert_eq!(&input[scan.span], value);
+            assert_eq!(&input[scan.span], format!("{value}{suffix}"));
         }
         let value = "Q731284;É842395; \"public_version':7";
         let input = format!("customerId: \"{value}");

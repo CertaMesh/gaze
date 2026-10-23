@@ -108,8 +108,11 @@ whitespace fringes; ordinary spelling variants retain their previous behavior.
 The existing length floor is evaluated on the value body, never on whitespace.
 
 Nested JSON escaping preserves scalar boundaries at every representable depth.
-An unclosed or inconsistent quote stops at the next scalar delimiter; following
-structure and public fields never become part of that scalar's repeat pattern.
+An unclosed or inconsistent value owns through the nearest enclosing serialized
+string close (excluded, with escape depth preserved), unescaped LF/CRLF/CR record
+boundary, or input end. Key-looking private content stays in the repeat pattern;
+a following assignment alone does not establish a public field. Escaped line
+breaks remain value content. The enclosing JSON stays parseable.
 An ambiguous tab group can retain a typed conservative prefix seed consisting
 of numeric-bearing groups before its final alphabetic-only group. The whole
 grouped value stays owned. This seed never declares a public boundary or

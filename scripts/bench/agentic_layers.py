@@ -51,7 +51,7 @@ import full_name_case_cells as full_name_case
 import credential_code_cells as credential_code
 
 
-GENERATOR_VERSION = 26
+GENERATOR_VERSION = 27
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -4485,6 +4485,7 @@ GENERATOR_ADDITIONS = {
     24: "credentials_separators_",
     25: "credentials_prefixes_",
     26: "recordids_boundary_unterminated_",
+    27: "recordids_boundary_private_keys_",
 }
 
 
@@ -4492,6 +4493,15 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
     """The documents of generator `version`, from the current generator's output."""
     if not 3 <= version <= GENERATOR_VERSION:
         raise LayerError(f"generator version {version} cannot be rebuilt from version {GENERATOR_VERSION}")
+    records = list(records)
+    if version < 27:
+        # Replay the previous ownership contract exactly. The current corpus
+        # makes raw line breaks record ends and keeps public counterweights
+        # outside unfinished values; these are contract changes, not new gold
+        # inferred from recognizer output.
+        historical = {row.uid: row for partition in {row.partition for row in records}
+                      for row in record_id_boundary.records(sys.modules[__name__], partition, version=26)}
+        records = [historical.get(row.uid, row) for row in records]
     later = tuple(prefix for added, prefix in GENERATOR_ADDITIONS.items() if added > version)
     selected = [record for record in records if not record.surface.startswith(later)] if later else list(records)
     if version < 18:
@@ -4518,6 +4528,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    26: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v26.json"),
     25: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v25.json"),
     24: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v24.json"),
     23: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v23.json"),

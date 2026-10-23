@@ -1,6 +1,9 @@
 # Labelled record ID measurements
 
-All six source gates pass on generator v26, under contracts v2, v1 and v4.
+The v26 evidence below is historical. The enclosing-string and record-end repair
+and generator v27 require fresh captures; those measurements are pending.
+
+All six historical source gates pass on generator v26, under contracts v2, v1 and v4.
 Full policy removes 199,535 gated leaked bytes with +239 net FP bytes;
 rules only removes 211,133 with +307 net FP bytes.
 No layer's gated or all-processed leaks or refusals rise. Every attempted document
@@ -64,11 +67,13 @@ hashes differ from publication copies whose model-directory home prefixes use `~
 
 ## Ownership and precision limits
 
-Quoted scalars retain raw bytes through nested JSON escaping. Unterminated
-values release a suffix only when a delimiter proves a following assignment,
-a matching container close, or record end. Ambiguous punctuation and newlines
-stay owned. Generator v26 adds 810 A/D/R documents with private delimiters and
-public-field counterweights. The v25 corpus remains byte-identical and rebuildable.
+The current repair retains raw bytes through nested JSON escaping. An
+unterminated value ends before the nearest enclosing serialized-string close
+(with escape depth preserved), at an unescaped LF/CRLF/CR record boundary, or
+at input end. Key-looking content and container punctuation stay private;
+escaped line breaks remain content. Generator v27 adds key-looking private
+content and separate real public-field counterweights. Historical v25 and v26
+corpora remain byte-identical and rebuildable under their original contracts.
 
 Conservative malformed suffixes and unquoted tab grouping can protect public
 bytes. The tables report the measured precision cost. The source gain gate

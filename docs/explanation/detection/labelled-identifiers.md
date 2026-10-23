@@ -48,8 +48,10 @@ escape byte, while unquoted grouped identifiers stop before another field
 assignment. Each personal field supplies its own token and repeat seed; a public
 field stays outside the prior value. The unquoted-placeholder guard judges that
 complete bounded value, and rejection leaves later cues available for matching.
-An unterminated quote stops only when a delimiter proves a following field
-assignment, a matching container close, or the end of the record. Otherwise it
-keeps the remaining text, so a missing quote cannot expose a private suffix
-containing punctuation or newlines. Ambiguous public text may also be protected. Typographic quotes remain uncharacterized.
+An unterminated value ends at the nearest enclosing serialized string close
+(excluded, with escape depth preserved), unescaped LF/CRLF/CR record boundary,
+or input end. The line break defines the end of that record; escaped line breaks
+remain content. Key-looking assignments and container punctuation stay private.
+An enclosing JSON string keeps its closing quote and remains parseable. Ambiguous
+public-looking text may also be protected. Typographic quotes remain uncharacterized.
 This opt-in mode leaves the tax/licence/identity scanner described above unchanged.
