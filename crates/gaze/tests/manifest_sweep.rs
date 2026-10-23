@@ -753,3 +753,68 @@ fn request_discovery_collects_only_rule_sources_and_accepts_no_rule_pipelines() 
         .unwrap();
     assert!(transaction.tokens().is_empty());
 }
+
+#[test]
+fn whole_leaf_net_resolve_preserves_owned_tokens_and_does_not_seed_repeats() {
+    struct ContextNet;
+    impl SafetyNet for ContextNet {
+        fn id(&self) -> &str {
+            "synthetic-context-net"
+        }
+        fn supported_locales(&self) -> &[LocaleTag] {
+            &[LocaleTag::Global]
+        }
+        fn check(
+            &self,
+            text: &str,
+            _: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            if text.contains(":Name_") {
+                if let Some(start) = text.find("synthetic_handle") {
+                    return Ok(vec![LeakSuspect::new(
+                        start..start + 16,
+                        PiiClass::Custom("username".into()),
+                        self.id(),
+                        Some(0.95),
+                        LeakKind::Uncovered,
+                        "synthetic handle",
+                        None,
+                    )]);
+                }
+            }
+            Ok(vec![])
+        }
+    }
+    let p = Pipeline::builder()
+        .recognizer(Header)
+        .register_safety_net(ContextNet)
+        .rule(DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let token = session.tokenize(&PiiClass::Name, "Maria").unwrap();
+    let input = format!("Public {token}; thanks synthetic_handle");
+    let mut transaction = session.begin_transaction();
+    let dictionaries = DictionaryBundle::default();
+    let context = ProtectionContext::strict(&[LocaleTag::Global], &dictionaries);
+    let before = transaction.snapshot_entries();
+    assert!(p
+        .resolve_staged_owned_text(&mut transaction, &input, context, 1)
+        .is_err());
+    assert_eq!(transaction.snapshot_entries(), before);
+    let clean = p
+        .resolve_staged_owned_text(&mut transaction, &input, context, 1024)
+        .unwrap();
+    assert!(clean.contains(&token));
+    assert!(!clean.contains("synthetic_handle"));
+    assert_eq!(
+        transaction.restore_strict_text(&clean).unwrap(),
+        "Public Maria; thanks synthetic_handle"
+    );
+    assert!(p
+        .staged_rule_repeat_candidates(&mut transaction, "synthetic_handle")
+        .unwrap()
+        .is_empty());
+    drop(transaction);
+    assert_eq!(session.tokens(), vec![token]);
+}

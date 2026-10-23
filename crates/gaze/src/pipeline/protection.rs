@@ -223,6 +223,92 @@ impl Pipeline {
         transaction.tokenize_with_family(&candidate.token_family, &candidate.class, raw)
     }
 
+    /// Resolve full-leaf safety-net findings after primary protection, keeping owned tokens.
+    /// This reuses the core's bounded Resolve/Strict path and never promotes net values to Rule.
+    pub fn resolve_staged_owned_text(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        input: &str,
+        context: ProtectionContext<'_>,
+        max_expanded_bytes: usize,
+    ) -> std::result::Result<String, BoundaryRefusal> {
+        if self.safety_nets_len() == 0 {
+            return Ok(input.to_owned());
+        }
+        self.validate_protection_context(context)?;
+        let expected = transaction
+            .restore_strict_text_bounded(input, max_expanded_bytes)
+            .map_err(|_| ProtectionError::Provenance)?;
+        let entries = transaction.snapshot_entries();
+        let ranges = transaction
+            .restore_token_ranges(input)
+            .map_err(|_| ProtectionError::Provenance)?;
+        let mut ledger = Ledger::default();
+        let (mut clean_cursor, mut raw_cursor) = (0, 0);
+        for range in ranges {
+            let entry = entries
+                .iter()
+                .find(|entry| entry.token == input[range.clone()])
+                .ok_or(ProtectionError::Provenance)?;
+            raw_cursor += range.start - clean_cursor;
+            let raw_end = raw_cursor + entry.raw.len();
+            clean_cursor = range.end;
+            ledger.existing_owned(EmittedTokenSpan::new(
+                range,
+                raw_cursor..raw_end,
+                entry.class.clone(),
+            ));
+            raw_cursor = raw_end;
+        }
+        ledger.validate().map_err(|_| ProtectionError::Provenance)?;
+        let mut clean = CleanText {
+            text: input.to_owned(),
+            manifest: ledger,
+        };
+        let mut report = self
+            .run_safety_nets_in_context(
+                &mut ProtectionTarget::Staged(transaction),
+                &clean.text,
+                clean.manifest.projection(),
+                DocumentKind::Text,
+                context.locale_chain,
+                None,
+                BOUNDARY_DECISION,
+                context.dictionaries,
+                SafetyNetExecution::Admission,
+            )
+            .map_err(|error| BoundaryRefusal::from_resolve_error(error, &LeakReport::default()))?
+            .report;
+        if reject_unprotected_suspects(input, clean.manifest.projection(), report.clone()).is_ok() {
+            return Ok(clean.text);
+        }
+        self.apply_safety_net_policy(
+            &mut ProtectionTarget::Staged(transaction),
+            &mut clean,
+            &mut report,
+            DocumentKind::Text,
+            context.locale_chain,
+            None,
+            BOUNDARY_DECISION,
+            None,
+        )
+        .map_err(|error| BoundaryRefusal::from_resolve_error(error, &report))?;
+        if transaction
+            .restore_strict_text_bounded(&clean.text, max_expanded_bytes)
+            .map_err(|_| ProtectionError::Provenance)?
+            != expected
+        {
+            return Err(ProtectionError::Provenance.into());
+        }
+        self.admit_boundary_text_transaction(
+            transaction,
+            &clean.text,
+            context.locale_chain,
+            context.dictionaries,
+        )?;
+        Ok(clean.text)
+    }
+
     /// Protects a text leaf for an outbound boundary such as `gaze-proxy`: the primary pipeline,
     /// then the configured safety nets through the Resolve step
     /// `gaze clean --safety-net-fallback strict` runs, so a net-flagged span becomes a

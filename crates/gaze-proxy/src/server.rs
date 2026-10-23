@@ -1413,14 +1413,13 @@ impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         prefix_cache_write_mode: PrefixCacheWriteMode,
     ) -> Result<String, CodecErrorCode> {
         let output = self.protect_preserving_tokens(input, prefix_cache_write_mode)?;
-        let admitted = self.pipeline.admit_boundary_text_transaction(
+        let resolved = self.pipeline.resolve_staged_owned_text(
             self.transaction,
             &output,
-            self.locale_chain,
-            self.dictionaries,
+            gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries),
+            DEFAULT_MAX_REQUEST_BYTES,
         );
-        self.refused(admitted)?;
-        Ok(output)
+        self.refused(resolved)
     }
 
     fn validate_token_shapes(&mut self, input: &str) -> Result<(), CodecErrorCode> {

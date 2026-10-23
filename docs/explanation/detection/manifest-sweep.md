@@ -28,7 +28,9 @@ For caller-supplied owned tokens, the proxy expands their manifest values in a
 bounded view and maps Rule-repeat spans back onto adjacent raw bytes. A repeat
 may cross either edge of a token or cover raw text between tokens. Original
 token identities stay unchanged. New fragments get reversible mappings without
-becoming independent Rule sources. The expanded pass runs no recognizers or nets.
+becoming independent Rule sources. The expanded Rule pass runs no recognizers or nets. Full-leaf net resolution
+then uses the existing core resolver to protect remaining raw gaps with complete
+context, retaining owned tokens and keeping net values out of Rule propagation.
 A final proof re-protects the original fields and rejects output that would still
 change. Caller-supplied session tokens retain their exact restore spelling. Mappings commit
 only after the whole request passes; a failure discards the staged session state.

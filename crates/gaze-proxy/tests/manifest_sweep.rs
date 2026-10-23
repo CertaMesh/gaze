@@ -109,23 +109,28 @@ impl gaze::SafetyNet for RepeatNet {
         text: &str,
         _: gaze::SafetyNetContext<'_>,
     ) -> Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
-        Ok(
-            regex::Regex::new(r"(?i)(?:maria(?:\s+johanna)?|<[0-9a-f]{8}:Name_[0-9]+>)\s+(?:schneider|<[0-9a-f]{8}:Name_[0-9]+>)(?:\s+(?:maria|<[0-9a-f]{8}:Name_[0-9]+>))?")
-                .unwrap()
-                .find_iter(text)
-                .map(|found| {
-                    gaze::LeakSuspect::new(
-                        found.range(),
-                        PiiClass::Name,
-                        self.id(),
-                        Some(0.95),
-                        gaze::LeakKind::Uncovered,
-                        "synthetic full-name repeat",
-                        None,
-                    )
-                })
-                .collect(),
-        )
+        let mut hits: Vec<_> = regex::Regex::new(r"(?i)(?:maria(?:\s+johanna)?|<[0-9a-f]{8}:Name_[0-9]+>)\s+(?:schneider|<[0-9a-f]{8}:Name_[0-9]+>)(?:\s+(?:maria|<[0-9a-f]{8}:Name_[0-9]+>))?").unwrap()
+            .find_iter(text).map(|found| gaze::LeakSuspect::new(found.range(), PiiClass::Name,
+                self.id(), Some(0.95), gaze::LeakKind::Uncovered, "synthetic full-name repeat", None)).collect();
+        if text.starts_with("Public ") && text.contains(":Name_") {
+            hits.extend(
+                regex::Regex::new(r"\bschneider\b")
+                    .unwrap()
+                    .find_iter(text)
+                    .map(|found| {
+                        gaze::LeakSuspect::new(
+                            found.range(),
+                            PiiClass::Custom("username".into()),
+                            self.id(),
+                            Some(0.95),
+                            gaze::LeakKind::Uncovered,
+                            "synthetic contextual handle",
+                            None,
+                        )
+                    }),
+            );
+        }
+        Ok(hits)
     }
 }
 
@@ -611,4 +616,33 @@ async fn gemini_rule_discovery_precedes_full_value_net() {
 #[tokio::test]
 async fn anthropic_rule_discovery_precedes_full_value_net() {
     check_existing_token(Provider::Anthropic, true).await;
+}
+
+async fn check_complete_net_context(provider: Provider) {
+    for stream in [false, true] {
+        for source_first in [false, true] {
+            run_configured_case(
+                provider,
+                stream,
+                source_first,
+                Some(gaze::EvidenceKind::Rule),
+                (SOURCE, "Public {token}; thanks schneider"),
+                Some("Maria"),
+                true,
+            )
+            .await;
+        }
+    }
+}
+#[tokio::test]
+async fn openai_complete_leaf_net_preserves_owned_tokens() {
+    check_complete_net_context(Provider::OpenAi).await;
+}
+#[tokio::test]
+async fn gemini_complete_leaf_net_preserves_owned_tokens() {
+    check_complete_net_context(Provider::Gemini).await;
+}
+#[tokio::test]
+async fn anthropic_complete_leaf_net_preserves_owned_tokens() {
+    check_complete_net_context(Provider::Anthropic).await;
 }
