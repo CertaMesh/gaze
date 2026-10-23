@@ -67,12 +67,12 @@ class RecordIdBoundaryTests(unittest.TestCase):
         for partition in api.PARTITIONS:
             self.assertEqual(hashlib.sha256(api.corpus_bytes(api.records_as_of(26, api.generate(partition)))).hexdigest(), pins[partition])
             rows = [r for r in cells.records(api, partition) if r.surface.startswith("recordids_boundary_private_keys_")]
-            self.assertEqual(len(rows), 1584)
+            self.assertEqual(len(rows), 1863)
             self.assertEqual({r.layer for r in rows}, {"A", "D", "R"})
             for row in rows:
                 self.assertTrue(any(d.label == "public_column" for d in row.decoys))
                 spans = row.gold or tuple(d for d in row.decoys if d.label == "public_reference")
-                self.assertTrue(any("=" in span.value or "ID:" in span.value for span in spans))
+                self.assertTrue(any("=" in span.value or "ID:" in span.value or "private_code" in span.value for span in spans))
                 if row.gold:
                     self.assertEqual(len(row.gold), 2 if row.layer == "R" else 1)
                     self.assertLess(row.gold[-1].end, row.decoys[-1].start)
@@ -85,6 +85,15 @@ class RecordIdBoundaryTests(unittest.TestCase):
                         parsed = json.loads(parsed["payload"])
                     self.assertIn("public_version", parsed)
                     self.assertIn("note", parsed)
+
+    def test_quoted_private_keys_do_not_borrow_quotes_from_prior_public_fields(self):
+        for partition in api.PARTITIONS:
+            rows = api.generate(partition)
+            selected = [r for r in rows if r.surface == "recordids_boundary_private_keys_quoted_key_record"]
+            self.assertEqual(len(selected), 90)
+            self.assertEqual({r.layer for r in selected}, {"A", "D", "R"})
+            self.assertTrue(any("format_hint='quote character:" in r.text for r in selected))
+            self.assertTrue(all('"private_code":' in (r.gold or r.decoys)[0].value for r in selected))
 
     def test_terminal_internal_and_quoted_punctuation_own_different_bytes(self):
         for partition in api.PARTITIONS:

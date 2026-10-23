@@ -1232,6 +1232,28 @@ fn unterminated_values_own_key_looking_private_suffixes() {
 }
 
 #[test]
+fn prior_single_quoted_fields_do_not_supply_an_enclosing_string() {
+    let pipeline = record_pipeline();
+    let value = "Q731284; \"public_version\": 7";
+    for prefix in ["note: 'literal \"'; ", "note: 'literal \\' \"'; "] {
+        for cue in ["customer ID", "employee ID", "member ID"] {
+            let input = format!("{prefix}{cue}: \"{value}");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let clean = public_clean(&pipeline, &session, &input);
+            assert!(session
+                .snapshot_entries()
+                .iter()
+                .any(|entry| entry.raw == value));
+            assert!(clean.starts_with(prefix));
+            assert_eq!(
+                pipeline.restore_strict_text(&session, &clean).unwrap(),
+                input
+            );
+        }
+    }
+}
+
+#[test]
 fn prior_unterminated_records_do_not_supply_an_enclosing_string() {
     let pipeline = record_pipeline();
     let value = "Q731284; \"public_version\": 7";

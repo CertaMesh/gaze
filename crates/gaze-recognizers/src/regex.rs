@@ -1073,6 +1073,9 @@ fn unterminated_scalar_end(input: &str, start: usize, opening_escapes: usize) ->
     // Replay the prefix to find strings enclosing this scalar, excluding its
     // own opening quote and escape bytes. Key-looking content proves nothing.
     let mut enclosing = Vec::new();
+    // A double quote inside a prior single-quoted field is content, not an
+    // enclosing string around a later record value.
+    let mut single_quoted = false;
     let mut escapes = 0usize;
     for byte in input[..start - 1 - opening_escapes].bytes() {
         if byte == b'\\' {
@@ -1081,8 +1084,12 @@ fn unterminated_scalar_end(input: &str, start: usize, opening_escapes: usize) ->
         }
         if matches!(byte, b'\n' | b'\r') && escapes.is_multiple_of(2) {
             enclosing.clear();
+            single_quoted = false;
         }
-        if byte == b'"' && (escapes + 1).is_power_of_two() {
+        if byte == b'\'' && escapes.is_multiple_of(2) && enclosing.is_empty() {
+            single_quoted = !single_quoted;
+        }
+        if byte == b'"' && !single_quoted && (escapes + 1).is_power_of_two() {
             while enclosing.last().is_some_and(|depth| *depth > escapes) {
                 enclosing.pop();
             }
