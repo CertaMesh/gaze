@@ -295,6 +295,7 @@ pub(crate) fn prepare_clean_pipeline(
 pub(crate) fn map_context_error(err: gaze::ContextError) -> CliError {
     match err {
         gaze::ContextError::Io(_) => CliError::PolicyOpen,
+        gaze::ContextError::ExpectedObject => CliError::PolicyConfigDetail(err.to_string()),
         gaze::ContextError::Json(err) => CliError::PolicyConfigDetail(format!(
             "context JSON parse error at line {}, column {}",
             err.line(),

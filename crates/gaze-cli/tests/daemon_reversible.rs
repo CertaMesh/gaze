@@ -525,6 +525,125 @@ fn context_preserves_raw_duplicate_and_encoded_size_checks() {
     }
 }
 
+fn clean_with_context(policy: &std::path::Path, raw_context: &str) -> std::process::Output {
+    let dir = tempdir().unwrap();
+    let context = dir.path().join("context.json");
+    fs::write(&context, raw_context).unwrap();
+    let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .arg("clean")
+        .arg("--policy")
+        .arg(policy)
+        .arg("--context-json")
+        .arg(context)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"Zelmora Quentrix")
+        .unwrap();
+    child.wait_with_output().unwrap()
+}
+
+#[test]
+fn context_positional_arrays_report_object_migration_without_echoing_values() {
+    let (_dir, policy) = policy();
+    let mut daemon = Daemon::start(&policy);
+    for count in 0..=6 {
+        let mut fields = vec!["{}"; count];
+        if count >= 4 {
+            fields[3] = r#"{"full_name":"Zelmora Quentrix"}"#;
+        }
+        let context = format!("[{}]", fields.join(","));
+        let output = clean_with_context(&policy, &context);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(error["error"], "PolicyConfig");
+        let detail = error["detail"].as_str().unwrap();
+        assert!(detail.contains("use a JSON object"), "{error}");
+        assert!(detail.contains(r#"{"record":{"full_name":"..."}}"#));
+        assert!(!detail.contains("Zelmora Quentrix"));
+        let response = daemon.request_raw(&format!(
+            r#"{{"session_id":"array-context","text":"Zelmora Quentrix","context":{context}}}"#
+        ));
+        assert_eq!(response["error"], error["error"]);
+        assert_eq!(response["detail"], error["detail"]);
+        assert!(response.get("clean_text").is_none());
+    }
+    let output = clean_with_context(&policy, r#"{"record":{"full_name":"Zelmora Quentrix"}}"#);
+    assert!(output.status.success(), "{:?}", output.stderr);
+    let cleaned: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(!cleaned["clean_text"]
+        .as_str()
+        .unwrap()
+        .contains("Zelmora Quentrix"));
+}
+
+fn nested_fields_context(depth: usize) -> String {
+    format!(
+        r#"{{"fields":{{"private":{}0{}}}}}"#,
+        "[".repeat(depth),
+        "]".repeat(depth)
+    )
+}
+
+#[test]
+fn context_depth_accepted_by_clean_is_accepted_by_daemon() {
+    let (_dir, policy) = policy();
+    let context = nested_fields_context(125);
+    let output = clean_with_context(&policy, &context);
+    assert!(output.status.success(), "{:?}", output.stderr);
+    let mut daemon = Daemon::start(&policy);
+    daemon.request(json!({"version":1,"op":"open","session_id":"depth"}));
+    for versioned in [true, false] {
+        let prefix = if versioned {
+            r#""version":1,"op":"clean","#
+        } else {
+            ""
+        };
+        let response = daemon.request_raw(&format!(
+            r#"{{{prefix}"session_id":"depth","text":"Zelmora Quentrix","context":{context}}}"#
+        ));
+        assert_eq!(response["clean_text"], "Zelmora Quentrix", "{response}");
+        if versioned {
+            assert_eq!(response["version"], 1);
+        }
+    }
+}
+
+#[test]
+fn context_depth_rejected_by_clean_has_same_versioned_policy_error_in_daemon() {
+    let (_dir, policy) = policy();
+    let mut daemon = Daemon::start(&policy);
+    daemon.request(json!({"version":1,"op":"open","session_id":"depth"}));
+    for depth in [126, 127, 256] {
+        let context = nested_fields_context(depth);
+        let output = clean_with_context(&policy, &context);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(error["error"], "PolicyConfig");
+        let response = daemon.request_raw(&format!(
+            r#"{{"version":1,"op":"clean","session_id":"depth","text":"Zelmora Quentrix","context":{context}}}"#
+        ));
+        assert_eq!(response["version"], 1, "{response}");
+        assert_eq!(response["error"], error["error"]);
+        assert_eq!(response["detail"], error["detail"]);
+        assert!(response.get("clean_text").is_none());
+    }
+    let malformed = daemon
+        .request_raw(r#"{"version":1,"op":"clean","session_id":"depth","context":{"fields":[}}"#);
+    assert_eq!(malformed["error"], "JsonMalformed");
+    let response =
+        daemon.request(json!({"version":1,"op":"clean","session_id":"depth","text":"ordinary"}));
+    assert_eq!(response["clean_text"], "ordinary");
+}
+
 #[test]
 fn context_is_rejected_on_non_clean_operations() {
     let (_dir, policy) = policy();

@@ -240,19 +240,28 @@ impl Daemon {
     fn handle_line(&mut self, line: &str) -> DaemonResponse {
         #[cfg(feature = "perf-timers")]
         let _perf = crate::perf::Document::from_env();
-        let value: serde_json::Value = match serde_json::from_str(line) {
-            Ok(value) => value,
-            Err(_) => return DaemonResponse::error("JsonMalformed", "malformed JSON line"),
-        };
-        let version = value
-            .get("version")
-            .and_then(serde_json::Value::as_u64)
-            .and_then(|version| u32::try_from(version).ok());
-        // Raw context retains duplicate keys and encoded size for the strict shared parser.
-        let parsed = if value.get("context").is_some() {
-            serde_json::from_str::<DaemonRequest>(line)
-        } else {
-            serde_json::from_value::<DaemonRequest>(value)
+        // Keep context opaque so only the shared parser applies its depth and size limits.
+        let envelope =
+            serde_json::from_str::<HashMap<String, Box<serde_json::value::RawValue>>>(line);
+        let (version, parsed) = match envelope {
+            Ok(envelope) if envelope.contains_key("context") => {
+                let version = envelope
+                    .get("version")
+                    .and_then(|raw| serde_json::from_str::<u32>(raw.get()).ok());
+                (version, serde_json::from_str::<DaemonRequest>(line))
+            }
+            _ => {
+                // Preserve the legacy no-context shape and duplicate-key behavior.
+                let value: serde_json::Value = match serde_json::from_str(line) {
+                    Ok(value) => value,
+                    Err(_) => return DaemonResponse::error("JsonMalformed", "malformed JSON line"),
+                };
+                let version = value
+                    .get("version")
+                    .and_then(serde_json::Value::as_u64)
+                    .and_then(|version| u32::try_from(version).ok());
+                (version, serde_json::from_value::<DaemonRequest>(value))
+            }
         };
         let request = match parsed {
             Ok(request) if !request.session_id.trim().is_empty() => request,

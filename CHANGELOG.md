@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** context JSON requires a top-level object. Positional arrays of
+  zero through six fields are rejected with `PolicyConfig` by
+  `gaze clean --context-json` and daemon clean frames. Replace positional input
+  such as `[{}, {}, {}, {"full_name":"[customer name]"}]` with
+  `{"record":{"full_name":"[customer name]"}}`. Existing object input is unchanged.
+
 ### Security
 
 - Gemini URL model identifiers are decoded and validated before forwarding.
