@@ -983,9 +983,7 @@ fn public_metadata_assignment_starts(rest: &str) -> bool {
 }
 
 fn field_wrapper_opens(ch: char) -> bool {
-    static OPEN: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    OPEN.get_or_init(|| Regex::new(r#"\A["'`<\p{Ps}\p{Pi}]\z"#).expect("wrapper categories"))
-        .is_match(ch.encode_utf8(&mut [0; 4]))
+    !field_value_char(ch) && !ch.is_whitespace()
 }
 
 fn field_wrapper_closes(open: char, close: char) -> bool {
@@ -1094,6 +1092,22 @@ fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> Label
         .is_some_and(field_wrapper_opens)
     {
         return scan_quoted_field_value(input, capture);
+    }
+    // The seed includes an unfamiliar wrapper instead of consuming it in the
+    // regex. A personal field still owns its value; punctuation cannot turn
+    // that evidence into an empty unquoted capture. Leading escape bytes are
+    // wrapper syntax (for example Markdown's escaped backtick).
+    let escapes = input[capture.start..]
+        .bytes()
+        .take_while(|byte| *byte == b'\\')
+        .count();
+    if let Some(opener) = input[capture.start + escapes..]
+        .chars()
+        .next()
+        .filter(|ch| field_wrapper_opens(*ch))
+    {
+        let start = capture.start + escapes + opener.len_utf8();
+        return scan_paired_field_value(input, start..capture.end.max(start), opener, escapes);
     }
     let mut end = capture.start;
     let mut reason = None;
@@ -1470,7 +1484,7 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
         .next_back()
         .expect("wrapper opener");
     if !matches!(opener, '"' | '\'') {
-        return scan_paired_field_value(input, capture, opener);
+        return scan_paired_field_value(input, capture, opener, 0);
     }
     let quote = opener as u8;
     let opening_escapes = input[..capture.start - 1]
@@ -1550,9 +1564,10 @@ fn scan_paired_field_value(
     input: &str,
     capture: std::ops::Range<usize>,
     opener: char,
+    wrapper_escapes: usize,
 ) -> LabelledValueScan {
     let opening = capture.start - opener.len_utf8();
-    let enclosing = enclosing_scalar_boundary(input, opening, capture.start, 0);
+    let enclosing = enclosing_scalar_boundary(input, opening, capture.start, wrapper_escapes);
     let mut close = None;
     let mut at = capture.start;
     while at < enclosing.end {
@@ -1569,7 +1584,17 @@ fn scan_paired_field_value(
                     .next()
                     .is_some_and(|next| next.is_alphanumeric() || next == '_')
             {
-                close = Some(run_end - ch.len_utf8());
+                let delimiter = run_end - ch.len_utf8();
+                let closing_escapes = input[..delimiter]
+                    .bytes()
+                    .rev()
+                    .take_while(|byte| *byte == b'\\')
+                    .count();
+                close = Some(if closing_escapes == wrapper_escapes {
+                    delimiter - wrapper_escapes
+                } else {
+                    delimiter
+                });
                 break;
             }
             at = run_end;

@@ -1738,6 +1738,9 @@ fn wrapper_and_enclosing_dialects_cover_every_private_byte() {
         ('\u{2e57}', '\u{2e58}'),
         ('\u{2e59}', '\u{2e5a}'),
         ('\u{2e5b}', '\u{2e5c}'),
+        ('§', '§'),
+        ('🔐', '🔐'),
+        ('⏣', '⏣'),
     ];
     let category = regex::Regex::new(r"\A[\p{Ps}\p{Pi}]\z").unwrap();
     for ch in (0..=0x10ffff).filter_map(char::from_u32) {
@@ -1864,6 +1867,22 @@ fn backtick_and_typographic_wrappers_keep_complete_values() {
                 format!("{cue}={open}ZX-482619{close}\npublic_version=FRAME"),
                 "ZX-482619".into(),
             );
+        }
+    }
+}
+
+#[test]
+fn unknown_wrappers_and_escaped_markdown_never_reject_owned_values() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        for (open, close) in [("§", "§"), ("🔐", "🔐"), ("⏣", "⏣"), ("\\`", "\\`")] {
+            for value in ["ZX-482619", "PALACE", "ÉCHELON"] {
+                check_quote_dialect(
+                    &pipeline,
+                    format!("{cue}={open}{value}{close}\npublic_version=FRAME"),
+                    value.into(),
+                );
+            }
         }
     }
 }

@@ -33,9 +33,10 @@ def main():
         ("csv", "crates/gaze-recognizers/src/regex.rs",
          "if escapes == depth && run >= 2 {", "if false && escapes == depth && run >= 2 {",
          "complete_csv_and_sql_cells_keep_embedded_quote_suffixes", 1),
-        ("wrappers", "crates/gaze-recognizers/embedded/core.toml",
-         r'''["'`<\p{Ps}\p{Pi}]''', r'''["']''',
-         "backtick_and_typographic_wrappers_keep_complete_values", 3),
+        ("wrappers", "crates/gaze-recognizers/src/regex.rs",
+         ".filter(|ch| field_wrapper_opens(*ch))",
+         ".filter(|_| false)",
+         "backtick_and_typographic_wrappers_keep_complete_values", 1),
     ]
     receipt = {"revision": head, "mutants": []}
     for name, source, before, after, test, count in mutants:
