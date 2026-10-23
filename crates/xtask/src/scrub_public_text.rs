@@ -241,6 +241,16 @@ const PUBLIC_URL_ALLOWLIST: &[(&str, &str)] = &[
     ),
 ];
 
+const PUBLIC_CREDENTIAL_SOURCE_URLS: &[&str] = &[
+    "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github",
+    "https://github.blog/changelog/2026-05-15-github-app-installation-tokens-per-request-override-header/",
+    "https://platform.claude.com/docs/en/get-api-key",
+    "https://api.slack.com/concepts/token-types",
+    "https://docs.stripe.com/keys",
+    "https://github.com/gitleaks/gitleaks/blob/master/cmd/generate/config/rules/openai.go",
+    "https://www.rfc-editor.org/rfc/rfc7468",
+];
+
 // Exact pinned citations on the public feature comparison must pass without masking other URLs.
 const PUBLIC_COMPARISON_SOURCE_URLS: &[&str] = &[
     "https://github.com/DataFog/datafog-core/blob/v0.3.0/LICENSE",
@@ -403,7 +413,8 @@ fn is_allowlisted_public_url(url: &str) -> bool {
     if loopback_http && host != "127.0.0.1:8787" {
         return false;
     }
-    if PUBLIC_COMPARISON_SOURCE_URLS.contains(&url) {
+    if PUBLIC_COMPARISON_SOURCE_URLS.contains(&url) || PUBLIC_CREDENTIAL_SOURCE_URLS.contains(&url)
+    {
         return true;
     }
     if host == "github.com" && PUBLIC_GITHUB_BLOBS.contains(&path) {
@@ -614,6 +625,34 @@ mod tests {
             "http://api.openai.com/",
         ] {
             assert!(!is_allowlisted_public_url(url), "{url} must be refused");
+        }
+    }
+
+    #[test]
+    fn credential_citations_allow_only_the_exact_public_source() {
+        for url in PUBLIC_CREDENTIAL_SOURCE_URLS {
+            assert!(is_allowlisted_public_url(url), "{url} must be allowed");
+            for suffix in [
+                "?contact=alice@example.invalid",
+                "#alice@example.invalid",
+                "/alice@example.invalid",
+            ] {
+                let changed = format!("{url}{suffix}");
+                assert!(
+                    !is_allowlisted_public_url(&changed),
+                    "{changed} must be refused"
+                );
+            }
+            let (host, path) = url
+                .strip_prefix("https://")
+                .unwrap()
+                .split_once('/')
+                .unwrap();
+            let lookalike = format!("https://{host}.example.invalid/{path}");
+            assert!(
+                !is_allowlisted_public_url(&lookalike),
+                "{lookalike} must be refused"
+            );
         }
     }
 

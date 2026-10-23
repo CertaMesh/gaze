@@ -37,7 +37,7 @@
     "crates/xtask/src/readme_version_check.rs": "bad821d16993e6bd7fb69862b1734f56c9d22c02c01e76627d22ff9bebc8d3df",
     "crates/xtask/src/repo.rs": "eab275e3c77504c517f78fc288be1cf820833ebbb5a0c522e14385376c0fff1e",
     "crates/xtask/src/safety_net_sanity.rs": "64e3d85929ffa3accd4bfc82fda98c5a49659a7aab55e598a6be85a650c35380",
-    "crates/xtask/src/scrub_public_text.rs": "bb8ad79f09dda7ca0f6162615feca0381889598ea2e0cd84df0bf4e20eec2466",
+    "crates/xtask/src/scrub_public_text.rs": "6ad941f4034efbd71a06a5faf5a374a8d47b9bdfed874327b7b4bcad157f6ded",
     "crates/xtask/src/test_commands.rs": "d8acfdc026775766f6cd0f589c7d029ce80b8ac65e3df0a764465b637d0a12b9",
     "crates/xtask/src/tokenbridge_encrypted_index.rs": "f74b86a82f9233891f68ca40d90e8e626135ebcae1da9fdff24f4eead12c8ac3",
     "crates/xtask/src/tokenbridge_no_raw_index.rs": "36c08aae8d7fedf76f7b0673090d5a3f0cd6b4c1618c1bdffc021dcfa8a4bcb6",
