@@ -24,7 +24,7 @@ class WrapperCellsTests(unittest.TestCase):
     def test_genuine_csv_cells_and_private_public_gold(self):
         for partition in api.PARTITIONS:
             rows = cells.records(api, partition)
-            self.assertEqual(len(rows), len(WRAPPERS) * 21 * 3 * 3)
+            self.assertEqual(len(rows), len(WRAPPERS) * 21 * 3 * 3 + 900)
             self.assertEqual(len(rows), len({row.uid for row in rows}))
             self.assertEqual({row.family for row in rows}, set(cells.LABELS))
             for row in rows:
@@ -34,7 +34,9 @@ class WrapperCellsTests(unittest.TestCase):
                     self.assertEqual(row.text.encode()[span.start:span.end].decode(), span.value)
                 if row.layer == "R":
                     self.assertEqual(row.gold[0].value, row.gold[1].value)
-                    text = row.text.split('\n', 1)[1]
+                    prefix = 'Lookup ' + row.gold[0].value + ' again.\n'
+                    self.assertTrue(row.text.startswith(prefix))
+                    text = row.text[len(prefix):]
                 else:
                     text = row.text
                 if "_csv_" in row.surface:
@@ -46,6 +48,9 @@ class WrapperCellsTests(unittest.TestCase):
                     if row.layer != "D":
                         raw = row.gold[-1].value
                         self.assertIn(raw.replace('""', '"'), parsed[0][0])
+                if "_sql_identifier_" in row.surface:
+                    with closing(sqlite3.connect(":memory:")) as db:
+                        self.assertEqual(db.execute(text).fetchone(), (cells.PUBLIC[partition][2], 0))
                 if "_sql_literal_" in row.surface:
                     with closing(sqlite3.connect(":memory:")) as db:
                         private, public = db.execute(text).fetchone()
