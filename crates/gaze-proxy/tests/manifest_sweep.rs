@@ -319,21 +319,33 @@ async fn run_case(
     upstream_task.abort();
 }
 
-#[tokio::test]
-async fn a_rule_found_name_is_swept_in_every_message_of_the_request() {
-    for provider in [Provider::OpenAi, Provider::Gemini, Provider::Anthropic] {
-        for stream in [false, true] {
-            for source_first in [false, true] {
-                run_case(
-                    provider,
-                    stream,
-                    source_first,
-                    Some(gaze::EvidenceKind::Rule),
-                )
-                .await;
-            }
+async fn check_rule_source_order(provider: Provider) {
+    for stream in [false, true] {
+        for source_first in [false, true] {
+            run_case(
+                provider,
+                stream,
+                source_first,
+                Some(gaze::EvidenceKind::Rule),
+            )
+            .await;
         }
     }
+}
+
+#[tokio::test]
+async fn openai_rule_sources_protect_earlier_fields() {
+    check_rule_source_order(Provider::OpenAi).await;
+}
+
+#[tokio::test]
+async fn gemini_rule_sources_protect_earlier_fields() {
+    check_rule_source_order(Provider::Gemini).await;
+}
+
+#[tokio::test]
+async fn anthropic_rule_sources_protect_earlier_fields() {
+    check_rule_source_order(Provider::Anthropic).await;
 }
 
 #[tokio::test]

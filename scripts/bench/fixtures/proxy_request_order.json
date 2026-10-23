@@ -1,0 +1,396 @@
+{
+  "schema": "gaze-proxy-request-order-cases-v1",
+  "provenance": "Authored synthetic names and reserved-domain mailboxes; independent byte gold. URL paths, code labels and common-word parts are explicit non-gold counterweights. No detector output defines gold.",
+  "cases": [
+    {
+      "id": "synthetic-0-source_first",
+      "order": "source_first",
+      "leaves": [
+        {
+          "text": "From: Lena Vogelsang <person0@example.invalid>\nSynthetic message.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 10,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 11,
+              "end": 20,
+              "label": "SURNAME"
+            },
+            {
+              "start": 22,
+              "end": 45,
+              "label": "EMAIL"
+            }
+          ]
+        },
+        {
+          "text": "The earlier sender is lena vogelsang again.",
+          "gold": [
+            {
+              "start": 22,
+              "end": 26,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 27,
+              "end": 36,
+              "label": "SURNAME"
+            }
+          ]
+        },
+        {
+          "text": "const NAME_FIELD = \"name\"; see https://example.invalid/Lena/Vogelsang; package BUILD_XQ.",
+          "gold": []
+        }
+      ]
+    },
+    {
+      "id": "synthetic-0-source_last",
+      "order": "source_last",
+      "leaves": [
+        {
+          "text": "The earlier sender is lena vogelsang again.",
+          "gold": [
+            {
+              "start": 22,
+              "end": 26,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 27,
+              "end": 36,
+              "label": "SURNAME"
+            }
+          ]
+        },
+        {
+          "text": "const NAME_FIELD = \"name\"; see https://example.invalid/Lena/Vogelsang; package BUILD_XQ.",
+          "gold": []
+        },
+        {
+          "text": "From: Lena Vogelsang <person0@example.invalid>\nSynthetic message.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 10,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 11,
+              "end": 20,
+              "label": "SURNAME"
+            },
+            {
+              "start": 22,
+              "end": 45,
+              "label": "EMAIL"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "synthetic-1-source_first",
+      "order": "source_first",
+      "leaves": [
+        {
+          "text": "From: Jonas Albrecht-Quaye <person1@example.invalid>\nSynthetic message.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 26,
+              "label": "SURNAME"
+            },
+            {
+              "start": 28,
+              "end": 51,
+              "label": "EMAIL"
+            }
+          ]
+        },
+        {
+          "text": "The earlier sender is jonas albrecht-quaye again.",
+          "gold": [
+            {
+              "start": 22,
+              "end": 27,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 28,
+              "end": 42,
+              "label": "SURNAME"
+            }
+          ]
+        },
+        {
+          "text": "const NAME_FIELD = \"name\"; see https://example.invalid/Jonas/Albrecht-Quaye; package BUILD_XQ.",
+          "gold": []
+        }
+      ]
+    },
+    {
+      "id": "synthetic-1-source_last",
+      "order": "source_last",
+      "leaves": [
+        {
+          "text": "The earlier sender is jonas albrecht-quaye again.",
+          "gold": [
+            {
+              "start": 22,
+              "end": 27,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 28,
+              "end": 42,
+              "label": "SURNAME"
+            }
+          ]
+        },
+        {
+          "text": "const NAME_FIELD = \"name\"; see https://example.invalid/Jonas/Albrecht-Quaye; package BUILD_XQ.",
+          "gold": []
+        },
+        {
+          "text": "From: Jonas Albrecht-Quaye <person1@example.invalid>\nSynthetic message.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 26,
+              "label": "SURNAME"
+            },
+            {
+              "start": 28,
+              "end": 51,
+              "label": "EMAIL"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "synthetic-2-source_first",
+      "order": "source_first",
+      "leaves": [
+        {
+          "text": "From: Nora Lichtenhain <person2@example.invalid>\nSynthetic message.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 10,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 11,
+              "end": 22,
+              "label": "SURNAME"
+            },
+            {
+              "start": 24,
+              "end": 47,
+              "label": "EMAIL"
+            }
+          ]
+        },
+        {
+          "text": "The earlier sender is nora lichtenhain again.",
+          "gold": [
+            {
+              "start": 22,
+              "end": 26,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 27,
+              "end": 38,
+              "label": "SURNAME"
+            }
+          ]
+        },
+        {
+          "text": "const NAME_FIELD = \"name\"; see https://example.invalid/Nora/Lichtenhain; package BUILD_XQ.",
+          "gold": []
+        }
+      ]
+    },
+    {
+      "id": "synthetic-2-source_last",
+      "order": "source_last",
+      "leaves": [
+        {
+          "text": "The earlier sender is nora lichtenhain again.",
+          "gold": [
+            {
+              "start": 22,
+              "end": 26,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 27,
+              "end": 38,
+              "label": "SURNAME"
+            }
+          ]
+        },
+        {
+          "text": "const NAME_FIELD = \"name\"; see https://example.invalid/Nora/Lichtenhain; package BUILD_XQ.",
+          "gold": []
+        },
+        {
+          "text": "From: Nora Lichtenhain <person2@example.invalid>\nSynthetic message.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 10,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 11,
+              "end": 22,
+              "label": "SURNAME"
+            },
+            {
+              "start": 24,
+              "end": 47,
+              "label": "EMAIL"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "synthetic-3-source_first",
+      "order": "source_first",
+      "leaves": [
+        {
+          "text": "From: Elias Winterfeld <person3@example.invalid>\nSynthetic message.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 22,
+              "label": "SURNAME"
+            },
+            {
+              "start": 24,
+              "end": 47,
+              "label": "EMAIL"
+            }
+          ]
+        },
+        {
+          "text": "The earlier sender is elias winterfeld again.",
+          "gold": [
+            {
+              "start": 22,
+              "end": 27,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 28,
+              "end": 38,
+              "label": "SURNAME"
+            }
+          ]
+        },
+        {
+          "text": "const NAME_FIELD = \"name\"; see https://example.invalid/Elias/Winterfeld; package BUILD_XQ.",
+          "gold": []
+        }
+      ]
+    },
+    {
+      "id": "synthetic-3-source_last",
+      "order": "source_last",
+      "leaves": [
+        {
+          "text": "The earlier sender is elias winterfeld again.",
+          "gold": [
+            {
+              "start": 22,
+              "end": 27,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 28,
+              "end": 38,
+              "label": "SURNAME"
+            }
+          ]
+        },
+        {
+          "text": "const NAME_FIELD = \"name\"; see https://example.invalid/Elias/Winterfeld; package BUILD_XQ.",
+          "gold": []
+        },
+        {
+          "text": "From: Elias Winterfeld <person3@example.invalid>\nSynthetic message.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 22,
+              "label": "SURNAME"
+            },
+            {
+              "start": 24,
+              "end": 47,
+              "label": "EMAIL"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "common-parts-counterweight",
+      "order": "source_last",
+      "leaves": [
+        {
+          "text": "The Rose garden opens in May. const release_name = \"PUBLIC_BUILD\";",
+          "gold": []
+        },
+        {
+          "text": "From: Rose May <public-twin@example.invalid>\nSynthetic message.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 10,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 11,
+              "end": 14,
+              "label": "SURNAME"
+            },
+            {
+              "start": 16,
+              "end": 43,
+              "label": "EMAIL"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
