@@ -5,6 +5,7 @@
     "gaze-cli::card_forward_path",
     "gaze-cli::cli_help_surface",
     "gaze-cli::cli_pipe",
+    "gaze-cli::daemon_reversible",
     "gaze-cli::daemon_smoke",
     "gaze-cli::document_clean",
     "gaze-cli::eval_cli",

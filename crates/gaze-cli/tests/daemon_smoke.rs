@@ -1491,7 +1491,11 @@ fn assert_two_request_responses(lines: &[String], session_id: &str) {
         "first request must be clean"
     );
     let second: Value = serde_json::from_str(&lines[1]).unwrap();
-    assert_eq!(second["session_id"], session_id);
+    if second.get("error").is_some() {
+        assert!(second["session_id"].is_null());
+    } else {
+        assert_eq!(second["session_id"], session_id);
+    }
     assert!(
         second.get("clean_text").is_some() || second.get("error").is_some(),
         "second request must have a typed response"
