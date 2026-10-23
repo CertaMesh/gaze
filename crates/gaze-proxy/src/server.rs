@@ -1322,8 +1322,8 @@ pub fn parse_request_stream_format(body: &[u8]) -> Result<WireFormat, DirectProx
 /// Production request protection over the real staged core transaction.
 ///
 /// It delegates to the single shared Pipeline algorithm introduced by P4a and performs only
-/// validation against the staged token namespace. No throwaway session, replay, or whole-value
-/// token shortcut exists here.
+/// validation against the staged token namespace. No throwaway session or whole-value token shortcut exists
+/// here.
 struct PipelineRequestPseudonymizer<'pipeline, 'context, 'transaction, 'session> {
     pipeline: &'pipeline Pipeline,
     transaction: &'transaction mut SessionTransaction<'session>,

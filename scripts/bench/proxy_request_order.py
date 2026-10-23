@@ -50,7 +50,7 @@ def replies(provider, texts):
     if provider == "gemini":
         return {"candidates": [{"index": index, "content": {"role": "model", "parts": [{"text": text}]}}
                                for index, text in enumerate(texts)]}
-    return {"id": "msg_synthetic", "type": "message", "role": "assistant", "model": "claude-test",
+    return {"id": "msg_synthetic", "type": "message", "role": "assistant", "model": "gpt-test",
             "content": [{"type": "text", "text": text} for text in texts],
             "stop_reason": "end_turn", "stop_sequence": None,
             "usage": {"input_tokens": 1, "output_tokens": 1}}
@@ -120,7 +120,7 @@ def native_request(provider, case):
         return "/v1beta/models/gemini-test:generateContent", {
             "contents": [{"role": "user", "parts": [{"text": text}]} for text in texts]}
     path = "/v1/messages" if provider == "anthropic" else "/v1/chat/completions"
-    return path, {"model": "claude-test", "max_tokens": 256,
+    return path, {"model": "gpt-test", "max_tokens": 256,
                   "messages": [{"role": "user", "content": text} for text in texts]}
 
 
