@@ -289,6 +289,9 @@ def seed_session(base_url, provider, case, captured, session_id):
     owners = [token for token, value in known.items() if value == name and ":Name_" in token]
     if len(owners) != 1:
         raise ValueError(f"{provider}/{case['id']}: seed did not yield one manifest-owned full name token")
+    for leaf in case["leaves"]:
+        if leaf.get("wire_text", leaf["text"]).replace("{seed}", name) != leaf["text"]:
+            raise ValueError("seeded wire text differs from the authored owner text")
     bound = dict(case, leaves=[dict(leaf, wire_text=leaf.get("wire_text", leaf["text"]).replace("{seed}", owners[0]))
                               for leaf in case["leaves"]])
     return bound, known, score_leaf(seed, clean, known), owners[0]
@@ -433,11 +436,24 @@ def compare(base, candidate):
         same_content = (twin_id != row["id"] and twin_id in fixture and
                         sorted(json.dumps(leaf, sort_keys=True) for leaf in fixture[twin_id]["leaves"]) ==
                         sorted(json.dumps(leaf, sort_keys=True) for leaf in fixture[row["id"]]["leaves"]))
+        control_kind = "source_first"
+        if not (same_content and control and control["forwarded"]):
+            expanded_id = fixture[row["id"]].get("admission_control")
+            expanded_case = fixture.get(expanded_id)
+            if expanded_case and expanded_case.get("expanded_copy_control"):
+                def owner_leaves(case):
+                    return sorted(json.dumps({"text": leaf["text"], "gold": leaf["gold"]}, sort_keys=True)
+                                  for leaf in case["leaves"])
+                same_content = (expanded_case.get("seed") == fixture[row["id"]].get("seed")
+                                and owner_leaves(expanded_case) == owner_leaves(fixture[row["id"]]))
+                control = rows.get((row["provider"], expanded_id))
+                twin_id = expanded_id
+                control_kind = "expanded_owner_content"
         proven = bool(same_content and control and control["forwarded"] and
                       all(control["false_positive_bytes_" + contract] == row["false_positive_bytes_" + contract]
                           for contract in ("v2", "v1")))
         transitions.append({"provider": row["provider"], "id": row["id"],
-                            "candidate": row, "base_source_first_control": control,
+                            "candidate": row, "base_source_first_control": control, "control_id": twin_id, "control_kind": control_kind,
                             "preexisting_fp_proven": proven})
         if not proven:
             regressions.append([row["provider"], row["id"], "unproven admission FP"])

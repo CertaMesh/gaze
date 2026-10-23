@@ -247,3 +247,29 @@ def test_native_session_ids_satisfy_the_transport_uuid4_contract():
         identifier = uuid.UUID(value)
         assert identifier.version == 4 and identifier.variant == uuid.RFC_4122
         assert str(identifier) == value
+
+
+def test_seeded_admission_uses_an_expanded_owner_control_and_prices_all_fp():
+    baseline, candidate = capture_card(2), capture_card(0)
+    ids = ["existing-token-given-source_first", "existing-token-given-source_last"]
+    for row in baseline["cases"]:
+        if row["provider"] == "anthropic" and row["id"] in ids:
+            row.update(forwarded=0, failed_closed=1, selected_restore_exact=0, alignment_valid=0, leaked_bytes=0)
+    for card in [baseline, candidate]:
+        for row in card["cases"]:
+            if row["provider"] == "anthropic" and row["id"] == "existing-token-given-expanded-source_first":
+                row.update(false_positive_bytes_v1=3, false_positive_bytes_v2=3)
+        card["totals"] = {key: sum(row[key] for row in card["cases"]) for key in card["totals"]}
+    for row in candidate["cases"]:
+        if row["provider"] == "anthropic" and row["id"] in ids:
+            row.update(false_positive_bytes_v1=3, false_positive_bytes_v2=3)
+    candidate["totals"] = {key: sum(row[key] for row in candidate["cases"]) for key in candidate["totals"]}
+    result = bench.compare(baseline, candidate)
+    admissions = [row for row in result["refused_to_forwarded"] if row["id"] in ids]
+    assert len(admissions) == 2
+    assert all(row["control_kind"] == "expanded_owner_content" and row["preexisting_fp_proven"] for row in admissions)
+    assert not result["regressions"]
+    candidate["cases"][next(i for i, row in enumerate(candidate["cases"])
+                            if row["provider"] == "anthropic" and row["id"] == ids[0])]["false_positive_bytes_v2"] += 1
+    candidate["totals"]["false_positive_bytes_v2"] += 1
+    assert bench.compare(baseline, candidate)["regressions"]

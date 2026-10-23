@@ -808,7 +808,8 @@
             }
           ]
         }
-      ]
+      ],
+      "admission_control": "existing-token-given-expanded-source_first"
     },
     {
       "id": "existing-token-given-source_last",
@@ -876,7 +877,8 @@
             }
           ]
         }
-      ]
+      ],
+      "admission_control": "existing-token-given-expanded-source_first"
     },
     {
       "id": "existing-token-surname-source_first",
@@ -944,7 +946,8 @@
             }
           ]
         }
-      ]
+      ],
+      "admission_control": "existing-token-surname-expanded-source_first"
     },
     {
       "id": "existing-token-surname-source_last",
@@ -1012,7 +1015,8 @@
             }
           ]
         }
-      ]
+      ],
+      "admission_control": "existing-token-surname-expanded-source_first"
     },
     {
       "id": "existing-token-middle-source_first",
@@ -1090,7 +1094,8 @@
             }
           ]
         }
-      ]
+      ],
+      "admission_control": "existing-token-middle-expanded-source_first"
     },
     {
       "id": "existing-token-middle-source_last",
@@ -1168,7 +1173,8 @@
             }
           ]
         }
-      ]
+      ],
+      "admission_control": "existing-token-middle-expanded-source_first"
     },
     {
       "id": "existing-token-between-source_first",
@@ -1246,7 +1252,8 @@
             }
           ]
         }
-      ]
+      ],
+      "admission_control": "existing-token-between-expanded-source_first"
     },
     {
       "id": "existing-token-between-source_last",
@@ -1324,7 +1331,8 @@
             }
           ]
         }
-      ]
+      ],
+      "admission_control": "existing-token-between-expanded-source_first"
     },
     {
       "id": "existing-token-suffix-source_first",
@@ -1402,7 +1410,8 @@
             }
           ]
         }
-      ]
+      ],
+      "admission_control": "existing-token-suffix-expanded-source_first"
     },
     {
       "id": "existing-token-suffix-source_last",
@@ -1480,7 +1489,8 @@
             }
           ]
         }
-      ]
+      ],
+      "admission_control": "existing-token-suffix-expanded-source_first"
     },
     {
       "id": "existing-token-prefix-source_first",
@@ -1558,7 +1568,8 @@
             }
           ]
         }
-      ]
+      ],
+      "admission_control": "existing-token-prefix-expanded-source_first"
     },
     {
       "id": "existing-token-prefix-source_last",
@@ -1636,7 +1647,916 @@
             }
           ]
         }
-      ]
+      ],
+      "admission_control": "existing-token-prefix-expanded-source_first"
+    },
+    {
+      "id": "existing-token-given-expanded-source_first",
+      "order": "source_first",
+      "seed": {
+        "text": "From: Maria <m@example.invalid>\nHello.",
+        "gold": [
+          {
+            "start": 6,
+            "end": 11,
+            "label": "FIRSTNAME"
+          },
+          {
+            "start": 13,
+            "end": 30,
+            "label": "EMAIL"
+          }
+        ]
+      },
+      "leaves": [
+        {
+          "text": "From: Maria Schneider <m@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            },
+            {
+              "start": 23,
+              "end": 40,
+              "label": "EMAIL"
+            }
+          ]
+        },
+        {
+          "text": "Hello Maria schneider",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            }
+          ],
+          "wire_text": "Hello Maria schneider"
+        },
+        {
+          "text": "Public Maria; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "gold": [
+            {
+              "start": 7,
+              "end": 12,
+              "label": "FIRSTNAME"
+            }
+          ]
+        }
+      ],
+      "expanded_copy_control": true
+    },
+    {
+      "id": "existing-token-given-expanded-source_last",
+      "order": "source_last",
+      "seed": {
+        "text": "From: Maria <m@example.invalid>\nHello.",
+        "gold": [
+          {
+            "start": 6,
+            "end": 11,
+            "label": "FIRSTNAME"
+          },
+          {
+            "start": 13,
+            "end": 30,
+            "label": "EMAIL"
+          }
+        ]
+      },
+      "leaves": [
+        {
+          "text": "Hello Maria schneider",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            }
+          ],
+          "wire_text": "Hello Maria schneider"
+        },
+        {
+          "text": "Public Maria; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "gold": [
+            {
+              "start": 7,
+              "end": 12,
+              "label": "FIRSTNAME"
+            }
+          ]
+        },
+        {
+          "text": "From: Maria Schneider <m@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            },
+            {
+              "start": 23,
+              "end": 40,
+              "label": "EMAIL"
+            }
+          ]
+        }
+      ],
+      "expanded_copy_control": true
+    },
+    {
+      "id": "existing-token-surname-expanded-source_first",
+      "order": "source_first",
+      "seed": {
+        "text": "From: Schneider <m@example.invalid>\nHello.",
+        "gold": [
+          {
+            "start": 6,
+            "end": 15,
+            "label": "SURNAME"
+          },
+          {
+            "start": 17,
+            "end": 34,
+            "label": "EMAIL"
+          }
+        ]
+      },
+      "leaves": [
+        {
+          "text": "From: Maria Schneider <m@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            },
+            {
+              "start": 23,
+              "end": 40,
+              "label": "EMAIL"
+            }
+          ]
+        },
+        {
+          "text": "Hello maria Schneider",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            }
+          ],
+          "wire_text": "Hello maria Schneider"
+        },
+        {
+          "text": "Public Schneider; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "gold": [
+            {
+              "start": 7,
+              "end": 16,
+              "label": "SURNAME"
+            }
+          ]
+        }
+      ],
+      "expanded_copy_control": true
+    },
+    {
+      "id": "existing-token-surname-expanded-source_last",
+      "order": "source_last",
+      "seed": {
+        "text": "From: Schneider <m@example.invalid>\nHello.",
+        "gold": [
+          {
+            "start": 6,
+            "end": 15,
+            "label": "SURNAME"
+          },
+          {
+            "start": 17,
+            "end": 34,
+            "label": "EMAIL"
+          }
+        ]
+      },
+      "leaves": [
+        {
+          "text": "Hello maria Schneider",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            }
+          ],
+          "wire_text": "Hello maria Schneider"
+        },
+        {
+          "text": "Public Schneider; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "gold": [
+            {
+              "start": 7,
+              "end": 16,
+              "label": "SURNAME"
+            }
+          ]
+        },
+        {
+          "text": "From: Maria Schneider <m@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            },
+            {
+              "start": 23,
+              "end": 40,
+              "label": "EMAIL"
+            }
+          ]
+        }
+      ],
+      "expanded_copy_control": true
+    },
+    {
+      "id": "existing-token-middle-expanded-source_first",
+      "order": "source_first",
+      "seed": {
+        "text": "From: Johanna <m@example.invalid>\nHello.",
+        "gold": [
+          {
+            "start": 6,
+            "end": 13,
+            "label": "FIRSTNAME"
+          },
+          {
+            "start": 15,
+            "end": 32,
+            "label": "EMAIL"
+          }
+        ]
+      },
+      "leaves": [
+        {
+          "text": "From: Maria Johanna Schneider <m@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 19,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 20,
+              "end": 29,
+              "label": "SURNAME"
+            },
+            {
+              "start": 31,
+              "end": 48,
+              "label": "EMAIL"
+            }
+          ]
+        },
+        {
+          "text": "Hello maria Johanna schneider",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 19,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 20,
+              "end": 29,
+              "label": "SURNAME"
+            }
+          ],
+          "wire_text": "Hello maria Johanna schneider"
+        },
+        {
+          "text": "Public Johanna; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "gold": [
+            {
+              "start": 7,
+              "end": 14,
+              "label": "FIRSTNAME"
+            }
+          ]
+        }
+      ],
+      "expanded_copy_control": true
+    },
+    {
+      "id": "existing-token-middle-expanded-source_last",
+      "order": "source_last",
+      "seed": {
+        "text": "From: Johanna <m@example.invalid>\nHello.",
+        "gold": [
+          {
+            "start": 6,
+            "end": 13,
+            "label": "FIRSTNAME"
+          },
+          {
+            "start": 15,
+            "end": 32,
+            "label": "EMAIL"
+          }
+        ]
+      },
+      "leaves": [
+        {
+          "text": "Hello maria Johanna schneider",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 19,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 20,
+              "end": 29,
+              "label": "SURNAME"
+            }
+          ],
+          "wire_text": "Hello maria Johanna schneider"
+        },
+        {
+          "text": "Public Johanna; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "gold": [
+            {
+              "start": 7,
+              "end": 14,
+              "label": "FIRSTNAME"
+            }
+          ]
+        },
+        {
+          "text": "From: Maria Johanna Schneider <m@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 19,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 20,
+              "end": 29,
+              "label": "SURNAME"
+            },
+            {
+              "start": 31,
+              "end": 48,
+              "label": "EMAIL"
+            }
+          ]
+        }
+      ],
+      "expanded_copy_control": true
+    },
+    {
+      "id": "existing-token-between-expanded-source_first",
+      "order": "source_first",
+      "seed": {
+        "text": "From: Maria <m@example.invalid>\nHello.",
+        "gold": [
+          {
+            "start": 6,
+            "end": 11,
+            "label": "FIRSTNAME"
+          },
+          {
+            "start": 13,
+            "end": 30,
+            "label": "EMAIL"
+          }
+        ]
+      },
+      "leaves": [
+        {
+          "text": "From: Maria Schneider Maria <m@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            },
+            {
+              "start": 22,
+              "end": 27,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 29,
+              "end": 46,
+              "label": "EMAIL"
+            }
+          ]
+        },
+        {
+          "text": "Hello Maria schneider Maria",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            },
+            {
+              "start": 22,
+              "end": 27,
+              "label": "FIRSTNAME"
+            }
+          ],
+          "wire_text": "Hello Maria schneider Maria"
+        },
+        {
+          "text": "Public Maria; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "gold": [
+            {
+              "start": 7,
+              "end": 12,
+              "label": "FIRSTNAME"
+            }
+          ]
+        }
+      ],
+      "expanded_copy_control": true
+    },
+    {
+      "id": "existing-token-between-expanded-source_last",
+      "order": "source_last",
+      "seed": {
+        "text": "From: Maria <m@example.invalid>\nHello.",
+        "gold": [
+          {
+            "start": 6,
+            "end": 11,
+            "label": "FIRSTNAME"
+          },
+          {
+            "start": 13,
+            "end": 30,
+            "label": "EMAIL"
+          }
+        ]
+      },
+      "leaves": [
+        {
+          "text": "Hello Maria schneider Maria",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            },
+            {
+              "start": 22,
+              "end": 27,
+              "label": "FIRSTNAME"
+            }
+          ],
+          "wire_text": "Hello Maria schneider Maria"
+        },
+        {
+          "text": "Public Maria; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "gold": [
+            {
+              "start": 7,
+              "end": 12,
+              "label": "FIRSTNAME"
+            }
+          ]
+        },
+        {
+          "text": "From: Maria Schneider Maria <m@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            },
+            {
+              "start": 22,
+              "end": 27,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 29,
+              "end": 46,
+              "label": "EMAIL"
+            }
+          ]
+        }
+      ],
+      "expanded_copy_control": true
+    },
+    {
+      "id": "existing-token-suffix-expanded-source_first",
+      "order": "source_first",
+      "seed": {
+        "text": "From: Maria Sch <m@example.invalid>\nHello.",
+        "gold": [
+          {
+            "start": 6,
+            "end": 11,
+            "label": "FIRSTNAME"
+          },
+          {
+            "start": 12,
+            "end": 15,
+            "label": "SURNAME"
+          },
+          {
+            "start": 17,
+            "end": 34,
+            "label": "EMAIL"
+          }
+        ]
+      },
+      "leaves": [
+        {
+          "text": "From: Maria Schneider <m@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            },
+            {
+              "start": 23,
+              "end": 40,
+              "label": "EMAIL"
+            }
+          ]
+        },
+        {
+          "text": "Hello Maria Schneider",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            }
+          ],
+          "wire_text": "Hello Maria Schneider"
+        },
+        {
+          "text": "Public Maria Sch; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "gold": [
+            {
+              "start": 7,
+              "end": 12,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 13,
+              "end": 16,
+              "label": "SURNAME"
+            }
+          ]
+        }
+      ],
+      "expanded_copy_control": true
+    },
+    {
+      "id": "existing-token-suffix-expanded-source_last",
+      "order": "source_last",
+      "seed": {
+        "text": "From: Maria Sch <m@example.invalid>\nHello.",
+        "gold": [
+          {
+            "start": 6,
+            "end": 11,
+            "label": "FIRSTNAME"
+          },
+          {
+            "start": 12,
+            "end": 15,
+            "label": "SURNAME"
+          },
+          {
+            "start": 17,
+            "end": 34,
+            "label": "EMAIL"
+          }
+        ]
+      },
+      "leaves": [
+        {
+          "text": "Hello Maria Schneider",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            }
+          ],
+          "wire_text": "Hello Maria Schneider"
+        },
+        {
+          "text": "Public Maria Sch; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "gold": [
+            {
+              "start": 7,
+              "end": 12,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 13,
+              "end": 16,
+              "label": "SURNAME"
+            }
+          ]
+        },
+        {
+          "text": "From: Maria Schneider <m@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            },
+            {
+              "start": 23,
+              "end": 40,
+              "label": "EMAIL"
+            }
+          ]
+        }
+      ],
+      "expanded_copy_control": true
+    },
+    {
+      "id": "existing-token-prefix-expanded-source_first",
+      "order": "source_first",
+      "seed": {
+        "text": "From: Ria Schneider <m@example.invalid>\nHello.",
+        "gold": [
+          {
+            "start": 6,
+            "end": 9,
+            "label": "FIRSTNAME"
+          },
+          {
+            "start": 10,
+            "end": 19,
+            "label": "SURNAME"
+          },
+          {
+            "start": 21,
+            "end": 38,
+            "label": "EMAIL"
+          }
+        ]
+      },
+      "leaves": [
+        {
+          "text": "From: Maria Schneider <m@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            },
+            {
+              "start": 23,
+              "end": 40,
+              "label": "EMAIL"
+            }
+          ]
+        },
+        {
+          "text": "Hello MaRia Schneider",
+          "wire_text": "Hello MaRia Schneider",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            }
+          ]
+        },
+        {
+          "text": "Public Ria Schneider; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "gold": [
+            {
+              "start": 7,
+              "end": 10,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 11,
+              "end": 20,
+              "label": "SURNAME"
+            }
+          ]
+        }
+      ],
+      "expanded_copy_control": true
+    },
+    {
+      "id": "existing-token-prefix-expanded-source_last",
+      "order": "source_last",
+      "seed": {
+        "text": "From: Ria Schneider <m@example.invalid>\nHello.",
+        "gold": [
+          {
+            "start": 6,
+            "end": 9,
+            "label": "FIRSTNAME"
+          },
+          {
+            "start": 10,
+            "end": 19,
+            "label": "SURNAME"
+          },
+          {
+            "start": 21,
+            "end": 38,
+            "label": "EMAIL"
+          }
+        ]
+      },
+      "leaves": [
+        {
+          "text": "Hello MaRia Schneider",
+          "wire_text": "Hello MaRia Schneider",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            }
+          ]
+        },
+        {
+          "text": "Public Ria Schneider; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "gold": [
+            {
+              "start": 7,
+              "end": 10,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 11,
+              "end": 20,
+              "label": "SURNAME"
+            }
+          ]
+        },
+        {
+          "text": "From: Maria Schneider <m@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 11,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 12,
+              "end": 21,
+              "label": "SURNAME"
+            },
+            {
+              "start": 23,
+              "end": 40,
+              "label": "EMAIL"
+            }
+          ]
+        }
+      ],
+      "expanded_copy_control": true
     }
   ]
 }

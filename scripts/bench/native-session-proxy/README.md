@@ -40,3 +40,10 @@ Captures are untimed and run sequentially under the benchmark lease with
 private model and ORT copies. Historical revisions use this same committed
 host and fixture. A revision that cannot build or supply its own full policy
 is reported as unavailable.
+
+Admission controls use the same authored owner text, gold spans, and seed request.
+Their main copy is sent as expanded text while the public counterweight retains
+its owned token. A baseline source-first control must already forward and have
+exactly the candidate admission's false-positive bytes under both contracts.
+These admissions receive no paired leak credit. The driver verifies that bound
+wire text restores to the authored owner text before scoring.
