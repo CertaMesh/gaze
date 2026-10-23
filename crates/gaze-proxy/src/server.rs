@@ -1322,8 +1322,8 @@ pub fn parse_request_stream_format(body: &[u8]) -> Result<WireFormat, DirectProx
 /// Production request protection over the real staged core transaction.
 ///
 /// It delegates to the single shared Pipeline algorithm introduced by P4a and performs only
-/// validation against the staged token namespace. No throwaway session or whole-value token shortcut exists
-/// here.
+/// validation against the staged token namespace. Owned tokens keep their identity when
+/// expanded-view protection covers neighboring raw bytes.
 struct PipelineRequestPseudonymizer<'pipeline, 'context, 'transaction, 'session> {
     pipeline: &'pipeline Pipeline,
     transaction: &'transaction mut SessionTransaction<'session>,
@@ -1427,39 +1427,124 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
             return self.protect_unstaged_segment(input, prefix_cache_write_mode);
         }
         tokens.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
+        let owned = owned_token_ranges(input, &tokens);
+        if owned.is_empty() {
+            return self.protect_unstaged_segment(input, prefix_cache_write_mode);
+        }
 
-        let mut output = String::with_capacity(input.len());
-        let mut cursor = 0;
-        while cursor < input.len() {
-            let next = tokens
+        // Restore once, with an expansion cap, then retain the correspondence between
+        // each raw gap and its expanded coordinates. Existing token bytes are immutable.
+        let expanded = self
+            .transaction
+            .restore_strict_text_bounded(input, DEFAULT_MAX_REQUEST_BYTES)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+        let mut gaps = Vec::with_capacity(owned.len() + 1);
+        let (mut source_cursor, mut expanded_cursor) = (0, 0);
+        for range in &owned {
+            let length = range.start - source_cursor;
+            gaps.push((
+                source_cursor..range.start,
+                expanded_cursor..expanded_cursor + length,
+            ));
+            expanded_cursor += length
+                + self
+                    .transaction
+                    .restore_strict_text(&input[range.clone()])
+                    .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?
+                    .len();
+            source_cursor = range.end;
+        }
+        gaps.push((source_cursor..input.len(), expanded_cursor..expanded.len()));
+        let protected = self.protect_unstaged_segment(&expanded, prefix_cache_write_mode)?;
+        // Projection is valid only for reversible, byte-exact substitution.
+        if self
+            .transaction
+            .restore_strict_text_bounded(&protected, DEFAULT_MAX_REQUEST_BYTES)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?
+            != expanded
+        {
+            return Err(CodecErrorCode::ProtectionFailedClosed);
+        }
+        let entries = self.transaction.snapshot_entries();
+        let mut protected_tokens = self.transaction.tokens();
+        protected_tokens.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
+        let mut protected_spans = Vec::new();
+        let (mut protected_cursor, mut raw_cursor) = (0, 0);
+        for range in owned_token_ranges(&protected, &protected_tokens) {
+            raw_cursor += range.start - protected_cursor;
+            let token = &protected[range.clone()];
+            let entry = entries
                 .iter()
-                .filter_map(|token| {
-                    input[cursor..]
-                        .find(token)
-                        .map(|offset| (cursor + offset, token.as_str()))
-                })
-                .min_by(|left, right| {
-                    left.0
-                        .cmp(&right.0)
-                        .then_with(|| right.1.len().cmp(&left.1.len()))
-                });
-            let Some((start, token)) = next else {
-                output.push_str(
-                    &self.protect_unstaged_segment(&input[cursor..], prefix_cache_write_mode)?,
-                );
-                break;
-            };
-            if start > cursor {
-                output.push_str(
-                    &self
-                        .protect_unstaged_segment(&input[cursor..start], prefix_cache_write_mode)?,
-                );
+                .find(|entry| entry.token == token)
+                .ok_or(CodecErrorCode::ProtectionFailedClosed)?;
+            let length = self
+                .transaction
+                .restore_strict_text(token)
+                .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?
+                .len();
+            protected_spans.push((raw_cursor..raw_cursor + length, entry));
+            raw_cursor += length;
+            protected_cursor = range.end;
+        }
+
+        let mut output = String::with_capacity(protected.len());
+        let mut cursor = 0;
+        for (source, view) in gaps {
+            output.push_str(&input[cursor..source.start]);
+            let mut gap_cursor = source.start;
+            for (span, entry) in &protected_spans {
+                let start = span.start.max(view.start);
+                let end = span.end.min(view.end);
+                if start >= end {
+                    continue;
+                }
+                let start = source.start + start - view.start;
+                let end = source.start + end - view.start;
+                output.push_str(&input[gap_cursor..start]);
+                // A partial intersection gets its own reversible mapping, without
+                // promoting that fragment to Rule evidence for future sweeps.
+                let token = self
+                    .transaction
+                    .tokenize_with_family(&entry.family, &entry.class, &input[start..end])
+                    .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+                output.push_str(&token);
+                gap_cursor = end;
             }
-            output.push_str(token);
-            cursor = start + token.len();
+            output.push_str(&input[gap_cursor..source.end]);
+            cursor = source.end;
+        }
+        if self
+            .transaction
+            .restore_strict_text_bounded(&output, DEFAULT_MAX_REQUEST_BYTES)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?
+            != expanded
+        {
+            return Err(CodecErrorCode::ProtectionFailedClosed);
         }
         Ok(output)
     }
+}
+
+/// Locate immutable owned tokens in wire order, preferring the longest at a shared start.
+fn owned_token_ranges(input: &str, tokens: &[String]) -> Vec<std::ops::Range<usize>> {
+    let mut ranges = Vec::new();
+    let mut cursor = 0;
+    while cursor < input.len() {
+        let next = tokens
+            .iter()
+            .filter_map(|token| {
+                input[cursor..]
+                    .find(token)
+                    .map(|offset| (cursor + offset, token.len()))
+            })
+            .min_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)));
+        let Some((start, length)) = next else {
+            break;
+        };
+        ranges.push(start..start + length);
+        cursor = start + length;
+    }
+    ranges
 }
 
 struct PipelineResponseResidualValidator<'pipeline, 'context> {

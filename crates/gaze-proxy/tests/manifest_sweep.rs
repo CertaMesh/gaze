@@ -208,6 +208,18 @@ async fn run_text_case(
     source: &str,
     copy: &str,
 ) {
+    run_seeded_case(provider, stream, source_first, evidence, source, copy, None).await;
+}
+
+async fn run_seeded_case(
+    provider: Provider,
+    stream: bool,
+    source_first: bool,
+    evidence: Option<gaze::EvidenceKind>,
+    source: &str,
+    copy: &str,
+    seed: Option<&str>,
+) {
     let forwarded = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()
         .route("/{*path}", post(capture))
@@ -234,7 +246,15 @@ async fn run_text_case(
                 "/v1beta/models/gemini-test:generateContent"
             },
         ),
-        Provider::Anthropic => (Arc::new(AnthropicAdapter::new(upstream)), "/v1/messages"),
+        Provider::Anthropic => (
+            Arc::new(
+                AnthropicAdapter::builder(upstream)
+                    .session_registry_config(gaze_proxy::SessionRegistryConfig::default())
+                    .build()
+                    .unwrap(),
+            ),
+            "/v1/messages",
+        ),
     };
     let config = ProxyConfig::new(bind, vec![adapter]);
     let mut builder = Pipeline::builder()
@@ -264,6 +284,38 @@ async fn run_text_case(
         );
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
+    let mut token = String::new();
+    if let Some(seed) = seed {
+        let seed_text = format!("From: {seed} <m@example.invalid>");
+        let request = match provider {
+            Provider::OpenAi | Provider::Anthropic => {
+                json!({"model":"claude-test", "max_tokens":128, "stream":stream,
+                "messages":[{"role":"user","content":seed_text}]})
+            }
+            Provider::Gemini => json!({"contents":[{"role":"user","parts":[{"text":seed_text}]}]}),
+        };
+        let response = client
+            .post(format!("http://{bind}{path}"))
+            .header("x-gaze-session-id", "00000000-0000-4000-8000-000000000869")
+            .header("x-api-key", "synthetic-key")
+            .header("anthropic-version", "2023-06-01")
+            .json(&request)
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let reply = response.text().await.unwrap();
+        assert!(status.is_success(), "seed: {provider:?} {status} {reply}");
+        let capture = forwarded.lock().await.pop().unwrap();
+        token = regex::Regex::new(r"<[0-9a-f]{8}:Name_[0-9]+>")
+            .unwrap()
+            .find(provider.text(&capture, 0))
+            .unwrap()
+            .as_str()
+            .to_owned();
+    }
+    let copy_owned = copy.replace("{token}", &token);
+    let copy = copy_owned.as_str();
     let texts = if source_first {
         [source, copy, PUBLIC]
     } else {
@@ -280,6 +332,7 @@ async fn run_text_case(
     };
     let response = client
         .post(format!("http://{bind}{path}"))
+        .header("x-gaze-session-id", "00000000-0000-4000-8000-000000000869")
         .header("x-api-key", "synthetic-key")
         .header("anthropic-version", "2023-06-01")
         .json(&request)
@@ -320,8 +373,20 @@ async fn run_text_case(
             .unwrap()
             .to_owned()
     };
+    if seed.is_some() {
+        let index = usize::from(source_first);
+        assert!(
+            provider.text(&captured[0], index).contains(&token),
+            "owned token changed"
+        );
+    }
+    let expected = if let Some(seed) = seed {
+        texts[0].replace(&token, seed)
+    } else {
+        texts[0].to_owned()
+    };
     assert_eq!(
-        restored, texts[0],
+        restored, expected,
         "{provider:?} stream={stream} exact restore"
     );
     proxy_task.abort();
@@ -410,4 +475,69 @@ async fn gemini_partial_overlaps_use_original_fields() {
 #[tokio::test]
 async fn anthropic_partial_overlaps_use_original_fields() {
     check_partial_overlaps(Provider::Anthropic).await;
+}
+
+async fn check_existing_token(provider: Provider) {
+    for (seed, source, copy) in [
+        ("Maria", SOURCE, "Hello {token} schneider"),
+        ("Schneider", SOURCE, "Hello maria {token}"),
+        (
+            "Johanna",
+            "From: Maria Johanna Schneider <m@example.invalid>\nHello.",
+            "Hello maria {token} schneider",
+        ),
+        (
+            "Maria",
+            "From: Maria Schneider Maria <m@example.invalid>\nHello.",
+            "Hello {token} schneider {token}",
+        ),
+        ("Maria Sch", SOURCE, "Hello {token}neider"),
+        ("ia Schneider", SOURCE, "Hello Mar{token}"),
+    ] {
+        for stream in [false, true] {
+            for source_first in [false, true] {
+                run_seeded_case(
+                    provider,
+                    stream,
+                    source_first,
+                    Some(gaze::EvidenceKind::Rule),
+                    source,
+                    copy,
+                    Some(seed),
+                )
+                .await;
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn learned_and_net_existing_tokens_do_not_seed_longer_repeats() {
+    for provider in [Provider::OpenAi, Provider::Gemini, Provider::Anthropic] {
+        for evidence in [Some(gaze::EvidenceKind::Learned), None] {
+            run_seeded_case(
+                provider,
+                false,
+                false,
+                evidence,
+                SOURCE,
+                "Hello {token} schneider",
+                Some("Maria"),
+            )
+            .await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn openai_existing_token_cannot_hide_suffix() {
+    check_existing_token(Provider::OpenAi).await;
+}
+#[tokio::test]
+async fn gemini_existing_token_cannot_hide_suffix() {
+    check_existing_token(Provider::Gemini).await;
+}
+#[tokio::test]
+async fn anthropic_existing_token_cannot_hide_suffix() {
+    check_existing_token(Provider::Anthropic).await;
 }
