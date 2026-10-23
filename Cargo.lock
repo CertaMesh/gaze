@@ -1477,6 +1477,7 @@ dependencies = [
  "hmac",
  "http",
  "libc",
+ "percent-encoding",
  "regex",
  "reqwest",
  "same-file",

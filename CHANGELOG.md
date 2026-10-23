@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Gemini URL model identifiers are decoded and validated before forwarding.
+  Previously, that URI segment bypassed request scanning and could carry PII
+  to the provider. Strict model identifiers retain deterministic checks; values
+  outside the grammar receive the full pipeline. This applies only to the
+  routing model segment; other fields retain full validation (#815).
 - **Password hashes and code credentials.** The setup-default `secrets` bundle
   protects whole bcrypt, Argon2, scrypt/yescrypt, crypt, phpass and Django
   encodings, including broader crypt/Django salts and hashes in SQL dumps.
@@ -43,6 +48,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Proxy routing model identifiers such as `claude-sonnet-4-5` no longer fail
+  because NER or a safety net classifies them as personal data. Strict ASCII
+  identifiers still run deterministic rules, dictionaries, and validators;
+  detected PII returns `422 ControlWouldMutate`. Other values retain the full
+  pipeline. The check covers Anthropic and OpenAI `model` fields and Gemini
+  model URLs, plus response `model` fields in JSON and SSE. Provider-origin
+  PII in response models fails closed with `ProviderOriginPii`; other response
+  fields retain their existing validation. `gaze proxy serve` warns when no
+  NER model is configured (#815).
 - Adjacent format-preserving tokens restore as a complete, unambiguous run,
   including bounded transaction restores. Live sessions, committed proxy
   snapshots, and staged validation share one lazy matcher per token map.

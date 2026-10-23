@@ -1036,6 +1036,15 @@ impl Session {
 }
 
 impl<'session> SessionTransaction<'session> {
+    pub(crate) fn fork_for_probe(&self) -> Self {
+        Self {
+            session: self.session,
+            identity: Arc::clone(&self.identity),
+            captured_generation: self.captured_generation,
+            staged: self.staged.clone(),
+        }
+    }
+
     pub(crate) fn restore_token_ranges(&self, text: &str) -> Result<Vec<Range<usize>>> {
         Ok(build_restore_regex(&self.staged)?
             .map(|regex| {
@@ -1281,6 +1290,13 @@ impl<'session> SessionTransaction<'session> {
 }
 
 impl CommittedSessionSnapshot {
+    pub(crate) fn session_for_probe(&self) -> Session {
+        Session {
+            identity: Arc::clone(&self.identity),
+            state: RwLock::new(Arc::clone(&self.state)),
+        }
+    }
+
     pub fn tokens(&self) -> Vec<String> {
         self.state.value_by_token.keys().cloned().collect()
     }
