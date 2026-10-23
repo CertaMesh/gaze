@@ -102,9 +102,9 @@ made solely of common words, and all-caps surnames in mixed-case names.
 
 ## Field-owned scalar repeats
 
-The opt-in CRM/HR scanner preserves every byte of a quoted scalar, including an
-initial LF/CRLF and terminal punctuation. Its exact repeat pattern includes raw
-whitespace fringes; ordinary spelling variants retain their previous behavior.
+The opt-in CRM/HR scanner preserves every byte of a complete quoted scalar,
+including an initial LF/CRLF and terminal punctuation. Its exact repeat pattern
+includes raw whitespace fringes; ordinary spelling variants retain their previous behavior.
 The existing length floor is evaluated on the value body, never on whitespace.
 
 Nested JSON escaping preserves scalar boundaries at every representable depth.

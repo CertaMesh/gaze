@@ -146,8 +146,9 @@ scalar boundaries through nested serialization without a fixed wrapper limit.
 Inconsistent or unclosed values end at the nearest enclosing serialized string
 close (excluded, with escape depth preserved), unescaped LF/CRLF/CR record
 boundary, or input end. Key-looking text and container punctuation stay private;
-escaped line breaks remain content. The typed audit reason is retained. An initial LF/CRLF is admitted only inside
-quotes. Tabs group coherent identifiers; header-to-cell linkage is not inferred.
+escaped line breaks remain content. The typed audit reason is retained. An initial
+LF/CRLF is retained inside complete quoted scalars. Tabs group coherent identifiers;
+header-to-cell linkage is not inferred.
 The placeholder guard sees the entire owned value, including schema underscores.
 Exact scalar and conservative tab prefix seeds preserve repeats under unchanged floors;
 public-byte costs are measured. See the [repeat contract](../explanation/detection/manifest-sweep.md).
