@@ -3021,10 +3021,29 @@ fn residual_scan_request(
         surfaced,
         locale_chain,
         dictionaries,
-        model_is_routing_control,
-        routing_session,
     };
-    scan.walk("", "", body, false, true)
+    let Value::Object(root) = body else {
+        return scan.walk("", "", body, false, true);
+    };
+    for (key, value) in root {
+        match (model_is_routing_control, key.as_str(), value) {
+            (true, "model", Value::String(text)) => residual_scan_model_control(
+                pipeline,
+                routing_session,
+                text,
+                locale_chain,
+                dictionaries,
+            )?,
+            _ => scan.walk(
+                key,
+                key,
+                value,
+                CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
+                !key.is_empty() && !key.contains('.') && !key.contains('['),
+            )?,
+        }
+    }
+    Ok(())
 }
 
 fn residual_scan_model_control(
@@ -3073,8 +3092,6 @@ struct RequestResidualScan<'a> {
     locale_chain: &'a [LocaleTag],
     /// The exact bundle used by the primary pass.
     dictionaries: &'a DictionaryBundle,
-    model_is_routing_control: bool,
-    routing_session: &'a Session,
 }
 
 impl RequestResidualScan<'_> {
@@ -3112,9 +3129,9 @@ impl RequestResidualScan<'_> {
     /// Recurses the outbound body probing every scalar the adapter did not surface.
     ///
     /// `unambiguous` tracks whether the constructed path can still be compared against adapter
-    /// field paths. A JSON key containing `.` or `[` could make two distinct nodes render the
-    /// same path string, so once such a key is seen the subtree stops trusting path equality and
-    /// probes unconditionally. Extra probing is always safe: a surfaced position is already clean.
+    /// field paths. An empty JSON key or one containing `.` or `[` can make distinct nodes
+    /// render the same path string. Such subtrees stop trusting path equality and are probed
+    /// unconditionally. Extra probing is safe: a surfaced position is already clean.
     fn walk(
         &self,
         path: &str,
@@ -3125,15 +3142,7 @@ impl RequestResidualScan<'_> {
     ) -> Result<(), ProxyError> {
         match value {
             Value::String(text) => {
-                if self.model_is_routing_control && unambiguous && path == "model" {
-                    residual_scan_model_control(
-                        self.pipeline,
-                        self.routing_session,
-                        text,
-                        self.locale_chain,
-                        self.dictionaries,
-                    )?;
-                } else if !(unambiguous && self.surfaced.contains(path)) {
+                if !(unambiguous && self.surfaced.contains(path)) {
                     self.probe(path, text)?;
                 }
             }
@@ -3165,7 +3174,7 @@ impl RequestResidualScan<'_> {
                         key,
                         child,
                         in_carrier_subtree || CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
-                        unambiguous && !key.contains('.') && !key.contains('['),
+                        unambiguous && !key.is_empty() && !key.contains('.') && !key.contains('['),
                     )?;
                 }
             }

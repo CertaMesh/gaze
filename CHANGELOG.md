@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Gemini URL model identifiers are decoded and validated before forwarding.
+  Previously, that URI segment bypassed request scanning and could carry PII
+  to the provider. Strict model identifiers retain deterministic checks; values
+  outside the grammar receive the full pipeline. This applies only to the
+  routing model segment; other fields retain full validation (#815).
 - **Password hashes and code credentials.** The setup-default `secrets` bundle
   protects whole bcrypt, Argon2, scrypt/yescrypt, crypt, phpass and Django
   encodings, including broader crypt/Django salts and hashes in SQL dumps.

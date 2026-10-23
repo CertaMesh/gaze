@@ -290,6 +290,44 @@ async fn exercise_models(ner: bool, net: bool) {
         );
         drop(requests);
 
+        if provider != "anthropic" {
+            let mut nested_body = body.clone();
+            if provider == "openai" {
+                nested_body["messages"][0]["content"] = json!("hello");
+            } else {
+                nested_body["contents"][0]["parts"][0]["text"] = json!("hello");
+            }
+            let carrier = if provider == "openai" {
+                json!({"messages":[{"role":"user","content":"claude-sonnet-5"}]})
+            } else {
+                json!({"contents":[{"parts":[{"text":"claude-sonnet-5"}]}]})
+            };
+            for subtree in [json!({"model":"claude-sonnet-5"}), carrier] {
+                for depth in 1..=4 {
+                    let mut nested = subtree.clone();
+                    for _ in 1..depth {
+                        nested = json!({"":nested});
+                    }
+                    nested_body[""] = nested;
+                    let before = forwarded.lock().await.len();
+                    let response = client
+                        .post(format!("http://{bind}{path}"))
+                        .header("x-api-key", "synthetic-key")
+                        .json(&nested_body)
+                        .send()
+                        .await
+                        .unwrap();
+                    assert_eq!(
+                        response.status(),
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        "{provider}: a subtree below {depth} empty keys must retain learned scans: {}",
+                        response.text().await.unwrap()
+                    );
+                    assert_eq!(forwarded.lock().await.len(), before);
+                }
+            }
+        }
+
         let mut other_control = body;
         match provider {
             "anthropic" => {
