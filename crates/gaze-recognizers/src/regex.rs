@@ -1254,7 +1254,7 @@ fn enclosing_csv_cell(input: &str, anchor: usize) -> Option<(usize, bool)> {
     None
 }
 
-fn json_string_around(input: &str, anchor: usize) -> Option<std::ops::Range<usize>> {
+fn json_string_frame(input: &str, anchor: usize) -> Option<(std::ops::Range<usize>, bool)> {
     let bytes = input.as_bytes();
     let mut at = 0;
     while at < bytes.len() {
@@ -1271,15 +1271,19 @@ fn json_string_around(input: &str, anchor: usize) -> Option<std::ops::Range<usiz
                 _ => at += 1,
             }
         }
-        if at >= bytes.len() {
-            return None;
-        }
+        let closed = at < bytes.len();
         if start < anchor && anchor < at {
-            return Some(start..at + 1);
+            return Some((start..if closed { at + 1 } else { bytes.len() }, closed));
         }
         at += 1;
     }
     None
+}
+
+fn json_string_around(input: &str, anchor: usize) -> Option<std::ops::Range<usize>> {
+    json_string_frame(input, anchor)
+        .filter(|(_, closed)| *closed)
+        .map(|(range, _)| range)
 }
 
 struct ScalarSourceView {
@@ -1288,6 +1292,46 @@ struct ScalarSourceView {
 }
 
 impl ScalarSourceView {
+    fn json_frame(&self, token: std::ops::Range<usize>, closed: bool) -> Option<Self> {
+        if closed {
+            return self.json_string(token);
+        }
+        // A streaming JSON string may stop before its close or halfway through
+        // an escape. Validate the complete prefix with a virtual close; retain
+        // incomplete escape bytes literally in the same original-byte domain.
+        static PARTIAL_ESCAPE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+        let partial_escape = PARTIAL_ESCAPE.get_or_init(|| Regex::new(
+            r"(?i)\A\\(?:u[0-9a-f]{0,3}|ud[89ab][0-9a-f]{2}(?:\\(?:u(?:d(?:[c-f][0-9a-f]?)?)?)?)?)?\z"
+        ).expect("partial JSON escape"));
+        for trim in 0..=12.min(token.len().saturating_sub(1)) {
+            let end = token.end - trim;
+            let Some(tail) = self.text.get(end..token.end) else {
+                continue;
+            };
+            if trim != 0 && !partial_escape.is_match(tail) {
+                continue;
+            }
+            let mut frame = Self {
+                text: self.text[..end].to_owned(),
+                source: self.source[..end].to_vec(),
+            };
+            frame.text.push('"');
+            let point = self.source.get(end).map_or_else(
+                || self.source.last().map_or(0, |range| range.end),
+                |range| range.start,
+            );
+            frame.source.push(point..point);
+            if let Some(mut decoded) = frame.json_string(token.start..end + 1) {
+                decoded.text.push_str(tail);
+                decoded
+                    .source
+                    .extend_from_slice(&self.source[end..token.end]);
+                return Some(decoded);
+            }
+        }
+        None
+    }
+
     fn json_string(&self, token: std::ops::Range<usize>) -> Option<Self> {
         let raw = self.text.get(token.clone())?;
         let decoded: String = serde_json::from_str(raw).ok()?;
@@ -1327,7 +1371,7 @@ impl ScalarSourceView {
     }
 }
 
-// Decode only validated enclosing JSON strings, keeping every emitted range
+// Decode validated enclosing JSON strings or stream prefixes, keeping every emitted range
 // in the original byte domain. Escaped Unicode punctuation is wrapper syntax
 // just as the literal glyph is; the serializer cannot change field ownership.
 fn scan_json_encoded_wrapper(
@@ -1343,7 +1387,8 @@ fn scan_json_encoded_wrapper(
             .source
             .iter()
             .position(|range| range.contains(&capture.start))?;
-        view = view.json_string(json_string_around(&view.text, anchor)?)?;
+        let (token, closed) = json_string_frame(&view.text, anchor)?;
+        view = view.json_frame(token, closed)?;
         let anchor = view
             .source
             .iter()

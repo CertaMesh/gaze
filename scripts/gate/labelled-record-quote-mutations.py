@@ -44,6 +44,9 @@ def main():
          "scan_json_encoded_wrapper(input, capture.clone())",
          "scan_json_encoded_wrapper(input, capture.clone()).filter(|_| false)",
          "ascii_encoded_wrappers_keep_embedded_quotes_and_opaque_values", 1),
+        ("stream_prefix", "crates/gaze-recognizers/src/regex.rs",
+         "view.json_frame(token, closed)?", "view.json_frame(token, closed).filter(|_| closed)?",
+         "streamed_json_wrappers_keep_complete_private_values_and_escape_tails", 1),
     ]
     receipt = {"revision": head, "mutants": []}
     for name, source, before, after, test, count in mutants:
@@ -76,7 +79,7 @@ def main():
             assert path.read_bytes() == original
     assert not git("status", "--porcelain")
     (output / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
-    print(f"All four mutation probes failed behaviorally; original source restored at {head}")
+    print(f"All five mutation probes failed behaviorally; original source restored at {head}")
 
 
 if __name__ == "__main__":

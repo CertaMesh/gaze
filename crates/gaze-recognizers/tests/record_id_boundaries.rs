@@ -1339,6 +1339,46 @@ fn ascii_encoded_wrappers_keep_embedded_quotes_and_opaque_values() {
 }
 
 #[test]
+fn streamed_json_wrappers_keep_complete_private_values_and_escape_tails() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        let value = "ZX-48\"2619\nprivate suffix";
+        for (open, close) in [('“', '”'), ('🔐', '🔐'), ('「', '」')] {
+            let note = ascii_json(&format!("{cue}={open}{value}{close}"));
+            let encoded = ascii_json(value);
+            check_quote_dialect_depths(
+                &pipeline,
+                format!("{{\"note\":{}", &note[..note.len() - 1]),
+                encoded[1..encoded.len() - 1].to_owned(),
+                8,
+            );
+            for tail in [
+                "\\",
+                "\\u",
+                "\\u2",
+                "\\u20",
+                "\\u201",
+                "\\ud83d",
+                "\\ud83d\\",
+                "\\ud83d\\u",
+                "\\ud83d\\ud",
+                "\\ud83d\\udc",
+                "\\ud83d\\udc0",
+            ] {
+                let note = ascii_json(&format!("{cue}={open}{value}"));
+                let raw = format!("{}{tail}", &encoded[1..encoded.len() - 1]);
+                check_quote_dialect_depths(
+                    &pipeline,
+                    format!("{{\"note\":{}{tail}", &note[..note.len() - 1]),
+                    raw,
+                    8,
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn doubled_quote_dialects_keep_private_suffixes() {
     let pipeline = record_pipeline();
     for cue in ["customerId", "employeeId", "member_id"] {
@@ -1805,6 +1845,14 @@ fn wrapper_and_enclosing_dialects_cover_every_private_byte() {
                     8,
                 );
                 checked += 9;
+                let note = ascii_json(&format!("{cue}={open}{value}{close}"));
+                check_quote_dialect_depths(
+                    &pipeline,
+                    format!("{{\"note\":{}", &note[..note.len() - 1]),
+                    encoded[1..encoded.len() - 1].to_owned(),
+                    8,
+                );
+                checked += 9;
             }
             for shape in ["ZX-482619", "ZX-48\"2619", "ZX-48'2619"] {
                 let value = if open == close {
@@ -1853,7 +1901,7 @@ fn wrapper_and_enclosing_dialects_cover_every_private_byte() {
             }
         }
     }
-    assert_eq!(checked, wrappers.len() * 3 * 3 * 24);
+    assert_eq!(checked, wrappers.len() * 3 * 3 * 33);
     eprintln!("wrapper matrix: {checked} private cases plus {checked} public counterweights");
 }
 

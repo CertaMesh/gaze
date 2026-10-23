@@ -85,7 +85,7 @@ def records(api, partition):
                             template=f"recordids-wrappers/{family}/{index}/{shape}/{variant}/{partition}",
                             language="en", region="US", text=text, gold=gold, decoys=decoys))
     return (result + multiline_records(api, partition) + structured_quote_records(api, partition)
-            + backslash_records(api, partition) + absent_records(api, partition) + mysql_records(api, partition) + sql_identifier_records(api, partition) + ascii_wrapper_records(api, partition))
+            + backslash_records(api, partition) + absent_records(api, partition) + mysql_records(api, partition) + sql_identifier_records(api, partition) + ascii_wrapper_records(api, partition) + ascii_wrapper_records(api, partition, streamed=True) + stream_tail_records(api, partition))
 
 
 def multiline_records(api, partition):
@@ -278,7 +278,7 @@ def sql_identifier_records(api, partition):
     return result
 
 
-def ascii_wrapper_records(api, partition):
+def ascii_wrapper_records(api, partition, streamed=False):
     """ASCII-only JSON serializers preserve wrapper and private value ownership."""
     result = []
     public_key, _, word = PUBLIC[partition]
@@ -296,8 +296,9 @@ def ascii_wrapper_records(api, partition):
                         value = value.replace(opening, opening * 2)
                     template = '{C}=' + opening + value + closing
                     raw = value
-                    for _ in range(depth):
-                        template = json.dumps({'note': template, 'public_version': '{W}'}, ensure_ascii=True)
+                    for level in range(depth):
+                        template = ('{\"public_version\":\"{W}\",\"note\":' + json.dumps(template, ensure_ascii=True)[:-1]
+                                    if streamed and level == 0 else json.dumps({'note': template, 'public_version': '{W}'}, ensure_ascii=True))
                         raw = json.dumps(raw, ensure_ascii=True)[1:-1]
                     template = template.replace(raw, '{V}')
                     fields = {'C': (key, None), 'V': (raw, LABELS[family]),
@@ -308,11 +309,49 @@ def ascii_wrapper_records(api, partition):
                         text, gold, decoys = api._fill_with_decoys(
                             template if layer != 'R' else 'Lookup {V} again.\n' + template, actual)
                         result.append(api.Record(
-                            uid=f'agentic-{partition}-{layer}-wrappers-ascii-{family}-{index}-{depth}-{shape}',
+                            uid=f'agentic-{partition}-{layer}-wrappers-ascii-{family}-{index}-{depth}-{shape}' + ('-stream' if streamed else ''),
                             partition=partition, layer=layer, family=family,
-                            surface=f'recordids_wrappers_ascii_{index}_{depth}_{shape}',
+                            surface=f'recordids_wrappers_ascii_{index}_{depth}_{shape}' + ('_stream' if streamed else ''),
                             validity=api.BENIGN if layer == 'D' else api.UNCHECKED,
                             group=f'{partition}-recordids-wrappers-ascii-{family}-{index}',
-                            template=f'recordids-wrappers-ascii/{family}/{index}/{depth}/{shape}/{partition}',
+                            template=f'recordids-wrappers-ascii/{family}/{index}/{depth}/{shape}/{partition}' + ('/stream' if streamed else ''),
+                            language='en', region='US', text=text, gold=gold, decoys=decoys))
+    return result
+
+
+def stream_tail_records(api, partition):
+    """Incomplete JSON escape units belong to the unfinished private scalar."""
+    result = []
+    public_key, _, word = PUBLIC[partition]
+    tails = ('\\', '\\u', '\\u2', '\\u20', '\\u201', '\\ud83d', '\\ud83d\\',
+             '\\ud83d\\u', '\\ud83d\\ud', '\\ud83d\\udc', '\\ud83d\\udc0')
+    for family in LABELS:
+        key = FIELDS[partition][family][0]
+        for index, opening in enumerate(('“', '🔐', '「')):
+            for depth in (1, 9):
+                for tail_index, tail in enumerate(tails):
+                    rng = api.Rng(api.PARTITION_SEEDS[partition], f'recordids-stream-tail/{family}/{index}/{depth}/{tail_index}')
+                    serial = ('5' if partition == 'dev' else '7') + rng.digits(5)
+                    value = 'NX' + serial[:3] + '"' + serial[3:] + '\nprivate suffix'
+                    template = '{"public_version":"{W}","note":' + json.dumps('{C}=' + opening + value, ensure_ascii=True)[:-1] + tail
+                    raw = json.dumps(value, ensure_ascii=True)[1:-1] + tail
+                    for _ in range(depth - 1):
+                        template = json.dumps({'note': template, 'public_version': '{W}'}, ensure_ascii=True)
+                        raw = json.dumps(raw, ensure_ascii=True)[1:-1]
+                    template = template.replace(raw, '{V}')
+                    fields = {'C': (key, None), 'V': (raw, LABELS[family]),
+                              'W': (word, 'decoy:public_column')}
+                    for layer in ('A', 'D', 'R'):
+                        actual = fields if layer != 'D' else {**fields, 'C': (public_key, None),
+                                  'V': (raw, 'decoy:public_reference')}
+                        text, gold, decoys = api._fill_with_decoys(
+                            template if layer != 'R' else 'Lookup {V} again.\n' + template, actual)
+                        result.append(api.Record(
+                            uid=f'agentic-{partition}-{layer}-wrappers-stream-tail-{family}-{index}-{depth}-{tail_index}',
+                            partition=partition, layer=layer, family=family,
+                            surface=f'recordids_wrappers_stream_tail_{index}_{depth}_{tail_index}',
+                            validity=api.BENIGN if layer == 'D' else api.UNCHECKED,
+                            group=f'{partition}-recordids-wrappers-stream-tail-{family}-{index}',
+                            template=f'recordids-wrappers-stream-tail/{family}/{index}/{depth}/{tail_index}/{partition}',
                             language='en', region='US', text=text, gold=gold, decoys=decoys))
     return result
