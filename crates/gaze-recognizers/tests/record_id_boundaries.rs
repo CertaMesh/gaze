@@ -1306,6 +1306,38 @@ fn check_quote_dialect_depths(
     }
 }
 
+fn ascii_json(text: &str) -> String {
+    let json = serde_json::to_string(text).unwrap();
+    let mut encoded = String::new();
+    for ch in json.chars() {
+        if ch.is_ascii() {
+            encoded.push(ch);
+        } else {
+            for unit in ch.encode_utf16(&mut [0; 2]) {
+                use std::fmt::Write;
+                write!(&mut encoded, "\\u{unit:04x}").unwrap();
+            }
+        }
+    }
+    encoded
+}
+
+#[test]
+fn ascii_encoded_wrappers_keep_embedded_quotes_and_opaque_values() {
+    let pipeline = record_pipeline();
+    for (open, close) in [('“', '”'), ('🔐', '🔐'), ('「', '」')] {
+        for value in ["ZX-48\"2619", "opaque private value", "ZX-48\n2619"] {
+            let note = format!("customerId={open}{value}{close}");
+            let input = format!(
+                "{{\"note\":{},\"public_version\":\"FRAME\"}}",
+                ascii_json(&note)
+            );
+            let value = ascii_json(value);
+            check_quote_dialect_depths(&pipeline, input, value[1..value.len() - 1].to_owned(), 8);
+        }
+    }
+}
+
 #[test]
 fn doubled_quote_dialects_keep_private_suffixes() {
     let pipeline = record_pipeline();
@@ -1755,6 +1787,25 @@ fn wrapper_and_enclosing_dialects_cover_every_private_byte() {
     for &(open, close) in wrappers {
         eprintln!("wrapper {open:?} -> {close:?}");
         for cue in ["customerId", "employeeId", "member_id"] {
+            for shape in ["ZX-48\"2619", "opaque private value", "ZX-48\n2619"] {
+                let value = if open == close {
+                    shape.replace(open, &open.to_string().repeat(2))
+                } else {
+                    shape.to_owned()
+                };
+                let input = format!(
+                    "{{\"note\":{},\"public_version\":\"FRAME\"}}",
+                    ascii_json(&format!("{cue}={open}{value}{close}"))
+                );
+                let encoded = ascii_json(&value);
+                check_quote_dialect_depths(
+                    &pipeline,
+                    input,
+                    encoded[1..encoded.len() - 1].to_owned(),
+                    8,
+                );
+                checked += 9;
+            }
             for shape in ["ZX-482619", "ZX-48\"2619", "ZX-48'2619"] {
                 let value = if open == close {
                     shape.replace(open, &open.to_string().repeat(2))
@@ -1802,7 +1853,7 @@ fn wrapper_and_enclosing_dialects_cover_every_private_byte() {
             }
         }
     }
-    assert_eq!(checked, wrappers.len() * 3 * 3 * 15);
+    assert_eq!(checked, wrappers.len() * 3 * 3 * 24);
     eprintln!("wrapper matrix: {checked} private cases plus {checked} public counterweights");
 }
 

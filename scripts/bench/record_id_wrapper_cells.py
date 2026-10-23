@@ -85,7 +85,7 @@ def records(api, partition):
                             template=f"recordids-wrappers/{family}/{index}/{shape}/{variant}/{partition}",
                             language="en", region="US", text=text, gold=gold, decoys=decoys))
     return (result + multiline_records(api, partition) + structured_quote_records(api, partition)
-            + backslash_records(api, partition) + absent_records(api, partition) + mysql_records(api, partition) + sql_identifier_records(api, partition))
+            + backslash_records(api, partition) + absent_records(api, partition) + mysql_records(api, partition) + sql_identifier_records(api, partition) + ascii_wrapper_records(api, partition))
 
 
 def multiline_records(api, partition):
@@ -275,4 +275,44 @@ def sql_identifier_records(api, partition):
                     surface=f'recordids_wrappers_sql_identifier_{index}_value',validity=api.BENIGN if layer=='D' else api.UNCHECKED,
                     group=f'{partition}-recordids-wrappers-sql-identifier-{family}-{index}',template=f'recordids-wrappers-sql-identifier/{family}/{index}/{partition}',
                     language='en',region='US',text=text,gold=gold,decoys=decoys))
+    return result
+
+
+def ascii_wrapper_records(api, partition):
+    """ASCII-only JSON serializers preserve wrapper and private value ownership."""
+    result = []
+    public_key, _, word = PUBLIC[partition]
+    for family in LABELS:
+        key = FIELDS[partition][family][0]
+        for index, (opening, closing) in enumerate(WRAPPERS):
+            for depth in (1, 9):
+                for shape in ('embedded_quote', 'opaque', 'line_content'):
+                    rng = api.Rng(api.PARTITION_SEEDS[partition], f'recordids-ascii-wrapper/{family}/{index}/{depth}/{shape}')
+                    serial = ('5' if partition == 'dev' else '7') + rng.digits(5)
+                    value = ('NX' + serial[:3] + '"' + serial[3:] if shape == 'embedded_quote'
+                             else 'opaque private value' if shape == 'opaque'
+                             else 'NX' + serial[:3] + '\n' + serial[3:])
+                    if opening == closing:
+                        value = value.replace(opening, opening * 2)
+                    template = '{C}=' + opening + value + closing
+                    raw = value
+                    for _ in range(depth):
+                        template = json.dumps({'note': template, 'public_version': '{W}'}, ensure_ascii=True)
+                        raw = json.dumps(raw, ensure_ascii=True)[1:-1]
+                    template = template.replace(raw, '{V}')
+                    fields = {'C': (key, None), 'V': (raw, LABELS[family]),
+                              'W': (word, 'decoy:public_column')}
+                    for layer in (('A', 'D') if shape == 'opaque' else ('A', 'D', 'R')):
+                        actual = fields if layer != 'D' else {**fields, 'C': (public_key, None),
+                                  'V': (raw, 'decoy:public_reference')}
+                        text, gold, decoys = api._fill_with_decoys(
+                            template if layer != 'R' else 'Lookup {V} again.\n' + template, actual)
+                        result.append(api.Record(
+                            uid=f'agentic-{partition}-{layer}-wrappers-ascii-{family}-{index}-{depth}-{shape}',
+                            partition=partition, layer=layer, family=family,
+                            surface=f'recordids_wrappers_ascii_{index}_{depth}_{shape}',
+                            validity=api.BENIGN if layer == 'D' else api.UNCHECKED,
+                            group=f'{partition}-recordids-wrappers-ascii-{family}-{index}',
+                            template=f'recordids-wrappers-ascii/{family}/{index}/{depth}/{shape}/{partition}',
+                            language='en', region='US', text=text, gold=gold, decoys=decoys))
     return result

@@ -404,6 +404,7 @@ impl RegexDetector {
                         scan_labelled_value(input, span, trim_internal_field_boundary)
                     } else {
                         LabelledValueScan {
+                            quoted_value: false,
                             capture: span.clone(),
                             extension: span.clone(),
                             span,
@@ -440,10 +441,11 @@ impl RegexDetector {
                         .reject_unquoted_capture_regex
                         .as_ref()
                         .is_some_and(|guard| {
-                            let value_quoted = input[..span.capture.start]
-                                .chars()
-                                .next_back()
-                                .is_some_and(field_wrapper_opens);
+                            let value_quoted = span.quoted_value
+                                || input[..span.capture.start]
+                                    .chars()
+                                    .next_back()
+                                    .is_some_and(field_wrapper_opens);
                             let checked =
                                 if self.labelled_value_mode == LabelledValueMode::FieldOwned {
                                     span.span.clone()
@@ -465,6 +467,7 @@ impl RegexDetector {
                         Some(parts) => parts
                             .into_iter()
                             .map(|part| LabelledValueScan {
+                                quoted_value: false,
                                 capture: part.clone(),
                                 extension: part.clone(),
                                 span: part,
@@ -491,6 +494,7 @@ impl RegexDetector {
                 spans
                     .into_iter()
                     .map(|span| LabelledValueScan {
+                        quoted_value: false,
                         repeat_seed: None,
                         capture: span.clone(),
                         extension: span.clone(),
@@ -843,6 +847,7 @@ fn has_sku_identifier_prefix(input: &str, start: usize) -> bool {
 /// A regex capture proves the first group. Scan the rest as a value run, stopping at the first
 /// prose token or field delimiter. Limits are audit signals, never a reason to leave PII raw.
 struct LabelledValueScan {
+    quoted_value: bool,
     capture: std::ops::Range<usize>,
     extension: std::ops::Range<usize>,
     span: std::ops::Range<usize>,
@@ -1094,6 +1099,11 @@ fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> Label
     {
         return scan_quoted_field_value(input, capture);
     }
+    if input.as_bytes().get(capture.start) == Some(&b'\\') {
+        if let Some(scan) = scan_json_encoded_wrapper(input, capture.clone()) {
+            return scan;
+        }
+    }
     // The seed includes an unfamiliar wrapper instead of consuming it in the
     // regex. A personal field still owns its value; punctuation cannot turn
     // that evidence into an empty unquoted capture. Leading escape bytes are
@@ -1177,6 +1187,7 @@ fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> Label
             })
         });
     LabelledValueScan {
+        quoted_value: false,
         repeat_seed,
         capture: capture.start..capture.end.min(end),
         extension: capture.end.min(end)..end,
@@ -1313,6 +1324,88 @@ impl ScalarSourceView {
             text: decoded,
             source,
         })
+    }
+}
+
+// Decode only validated enclosing JSON strings, keeping every emitted range
+// in the original byte domain. Escaped Unicode punctuation is wrapper syntax
+// just as the literal glyph is; the serializer cannot change field ownership.
+fn scan_json_encoded_wrapper(
+    input: &str,
+    capture: std::ops::Range<usize>,
+) -> Option<LabelledValueScan> {
+    let mut view = ScalarSourceView {
+        text: input.to_owned(),
+        source: (0..input.len()).map(|at| at..at + 1).collect(),
+    };
+    loop {
+        let anchor = view
+            .source
+            .iter()
+            .position(|range| range.contains(&capture.start))?;
+        view = view.json_string(json_string_around(&view.text, anchor)?)?;
+        let anchor = view
+            .source
+            .iter()
+            .position(|range| range.contains(&capture.start))?;
+        let escapes = view.text[anchor..]
+            .bytes()
+            .take_while(|byte| *byte == b'\\')
+            .count();
+        let opening = anchor + escapes;
+        let opener = view.text[opening..].chars().next()?;
+        if !field_wrapper_opens(opener) {
+            continue;
+        }
+        let start = opening + opener.len_utf8();
+        let seed_end = view
+            .text
+            .char_indices()
+            .map(|(at, ch)| at + ch.len_utf8())
+            .find(|end| view.source[end - 1].end >= capture.end)
+            .unwrap_or(view.text.len())
+            .max(start);
+        let mut scan = if matches!(opener, '\'' | '"') {
+            scan_quoted_field_value(&view.text, start..seed_end)
+        } else {
+            scan_paired_field_value(&view.text, start..seed_end, opener, escapes)
+        };
+        if scan.reason == Some(LabelledValueScanReason::UncertainQuoteBoundary) {
+            // A decoded line break was escaped content in the proven enclosing
+            // JSON string. Only an inner scalar/cell boundary can end ownership.
+            let boundary = enclosing_scalar_boundary(&view.text, opening, start, escapes);
+            let end = boundary.end.max(scan.span.end);
+            scan.span.end = end;
+            scan.extension.end = end;
+            scan.rejected = scan.span.is_empty();
+            scan.repeat_seed = (!scan.rejected).then_some(gaze_types::LabelledValueRepeatSeed {
+                span: scan.span.clone(),
+                kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
+            });
+        }
+        let project = |range: std::ops::Range<usize>| {
+            let start = view.source.get(range.start).map_or_else(
+                || view.source.last().map_or(capture.start, |range| range.end),
+                |range| range.start,
+            );
+            let end = if range.is_empty() {
+                start
+            } else {
+                view.source[range.end - 1].end
+            };
+            start..end
+        };
+        scan.capture = project(scan.capture);
+        scan.extension = project(scan.extension);
+        scan.span = project(scan.span);
+        if let Some(seed) = &mut scan.repeat_seed {
+            seed.span = project(seed.span.clone());
+        }
+        scan.reason = scan.reason.or_else(|| {
+            labelled_value_over_limit(&input[scan.span.clone()])
+                .then_some(LabelledValueScanReason::LimitExceeded)
+        });
+        return Some(scan);
     }
 }
 
@@ -1885,6 +1978,7 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
         kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
     });
     LabelledValueScan {
+        quoted_value: true,
         repeat_seed,
         capture: start..capture_end,
         extension: capture_end..end,
@@ -1943,6 +2037,7 @@ fn scan_paired_field_value(
     let span = capture.start..end;
     let capture_end = capture.end.min(end);
     LabelledValueScan {
+        quoted_value: true,
         capture: capture.start..capture_end,
         extension: capture_end..end,
         span: span.clone(),
@@ -2107,6 +2202,7 @@ fn scan_labelled_value(
         )
     });
     LabelledValueScan {
+        quoted_value: false,
         repeat_seed,
         reason: labelled_value_over_limit(&input[span.clone()])
             .then_some(LabelledValueScanReason::LimitExceeded)

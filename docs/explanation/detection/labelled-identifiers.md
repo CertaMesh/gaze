@@ -65,7 +65,9 @@ remain content. Key-looking assignments and container punctuation stay private.
 An enclosing JSON string keeps its closing quote and remains parseable. Ambiguous
 public-looking text may also be protected.
 Unicode opening punctuation (`Ps`/`Pi`), paired brackets, typographic quotes,
-backticks, and ASCII angle wrappers use the same ownership contract. Known
+backticks, and ASCII angle wrappers use the same ownership contract. JSON `\u`
+escapes, including surrogate pairs, preserve this contract and original-byte
+manifest spans. Known
 pairs stop at their matching closer; an unmatched or unknown opener keeps the
 value through the enclosing string or record boundary. Complete CSV-labelled
 cells recognize doubled quotes separately from JSON escapes, including embedded
