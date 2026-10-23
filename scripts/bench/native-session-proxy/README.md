@@ -26,7 +26,9 @@ source tree in `target`; no runtime code is patched.
 
 Two-turn cases first send a real header and capture its owned name token. The
 second request reuses that token in the same session alongside a request-known
-longer name. Fixture gold describes the expanded owner text. The scorer uses
+longer name. Contained and chained overlap cases reuse a full name token whose
+value overlaps another declared name. Their lowercase and URL counterweights
+remain outside the authored name spans. Fixture gold describes the expanded owner text. The scorer uses
 the independently captured seed mapping to align adjacent tokens uniquely.
 Unseeded ambiguous token alignments still refuse scoring.
 
