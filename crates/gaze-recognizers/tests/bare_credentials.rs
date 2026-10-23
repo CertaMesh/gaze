@@ -12,7 +12,7 @@ fn core() -> gaze_assembly::CorePipeline {
 
 fn assert_whole(core: &gaze_assembly::CorePipeline, raw: &str, values: &[&str]) {
     let session = Session::new(Scope::Ephemeral).unwrap();
-    let (clean, spans, _, _) = core
+    let (clean, spans, _, trace) = core
         .pipeline()
         .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
             &session,
@@ -22,6 +22,14 @@ fn assert_whole(core: &gaze_assembly::CorePipeline, raw: &str, values: &[&str]) 
             SafetyNetPolicy::default(),
         )
         .unwrap();
+    for item in &trace {
+        assert!(!item.source_ids().is_empty());
+        for source in item.source_ids() {
+            assert!(source
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || "._:/-".contains(ch)));
+        }
+    }
     let observed: Vec<_> = spans
         .iter()
         .map(|span| {
@@ -89,7 +97,10 @@ fn bare_vendor_prefixes_are_whole_restorable_credentials() {
         for raw in [
             value.clone(),
             format!("before ({value}), after"),
+            format!("Received {value}."),
             format!(r#"{{"value":"{value}"}}"#),
+            format!("token = {value}"),
+            format!(r#"{{"api_key":"{value}"}}"#),
         ] {
             assert_whole(&core, &raw, &[&value]);
         }
@@ -137,7 +148,12 @@ fn prose_and_public_material_remain_untouched() {
         pem("CERTIFICATE", "\n"),
     ];
     for value in prefixed_values() {
-        negatives.extend([format!("word{value}"), format!("task-{value}")]);
+        negatives.extend([
+            format!("word{value}"),
+            format!("task-{value}"),
+            format!("é{value}"),
+            format!("{value}é"),
+        ]);
     }
     for (prefix, length) in [
         ("ghp_", 35),

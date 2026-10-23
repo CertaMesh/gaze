@@ -163,7 +163,9 @@ and [Stripe documents secret and restricted keys](https://docs.stripe.com/keys).
 records legacy and project-key alphabets. Gaze uses a broader bounded suffix
 without requiring a watermark or checksum, so invalid credentials with these
 shapes receive the same protection. Unicode word characters and hyphens cannot
-abut either end. JSON separator escapes can establish a boundary.
+abut either end. JSON separator escapes can establish a boundary. The legacy
+opaque `ghs_` alternative accepts a trailing period only as terminal
+punctuation, so it cannot protect only the first segment of a longer JWT.
 
 The PEM rule owns the BEGIN line, body, and matching END line for `PRIVATE KEY`,
 `RSA PRIVATE KEY`, `EC PRIVATE KEY`, `OPENSSH PRIVATE KEY`, and
