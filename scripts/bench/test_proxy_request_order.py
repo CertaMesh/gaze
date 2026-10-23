@@ -183,3 +183,19 @@ def test_post_forward_response_errors_cannot_hide_request_leaks(monkeypatch, tmp
     assert result["totals"]["failed_closed"] == 0
     assert result["totals"]["leaked_bytes"] == result["totals"]["gold_bytes"] > 0
     assert result["totals"]["selected_restore_exact"] == 0
+
+
+def test_repeated_literal_gaps_use_complete_leaf_and_reused_token_constraints():
+    email = "<1234abcd:Email_1>"
+    given, surname = "<1234abcd:Name_3>", "<1234abcd:Name_2>"
+    raw = "From: Johanna <m@example.invalid>\nHello maria Johanna schneider"
+    clean = f"From: {TOKEN} <{email}>\nHello {given} {TOKEN} {surname}"
+    assert bench.infer_mappings(raw, clean) == {
+        TOKEN: "Johanna", email: "m@example.invalid", given: "maria", surname: "schneider",
+    }
+    assert bench.protected_bytes(raw, clean, bench.infer_mappings(raw, clean))
+
+
+def test_literal_gap_alignment_still_refuses_genuinely_ambiguous_token_extents():
+    with pytest.raises(ValueError, match="uniquely"):
+        bench.infer_mappings("maria johanna schneider", f"{TOKEN} <1234abcd:Name_2>")

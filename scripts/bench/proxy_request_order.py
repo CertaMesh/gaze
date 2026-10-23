@@ -90,7 +90,7 @@ def protected_bytes(raw, clean, mappings):
 
 
 def infer_mappings(raw, clean):
-    """Unique literal-gap alignment; refuse adjacent tokens or ambiguous separators."""
+    """Require one complete literal-gap alignment with consistent reused tokens."""
     matches = list(TOKEN.finditer(clean))
     if not matches:
         if raw != clean:
@@ -99,27 +99,50 @@ def infer_mappings(raw, clean):
     prefix = clean[:matches[0].start()]
     if not raw.startswith(prefix):
         raise ValueError("protected leaf changed its literal prefix")
-    cursor, result = len(prefix), {}
+    parts = []
     for index, match in enumerate(matches):
         next_start = matches[index + 1].start() if index + 1 < len(matches) else len(clean)
         gap = clean[match.end():next_start]
-        if not gap:
-            if index + 1 < len(matches):
-                raise ValueError("adjacent tokens have no independent byte boundary")
-            end = len(raw)
-        else:
-            end = raw.find(gap, cursor)
-            if end < cursor or raw.find(gap, end + 1) >= 0:
-                raise ValueError("literal gap does not uniquely identify token extent")
-        value = raw[cursor:end]
-        if not value or (match.group() in result and result[match.group()] != value):
-            raise ValueError("inconsistent or empty token mapping")
-        result[match.group()] = value
-        cursor = end + len(gap)
-    if cursor != len(raw):
-        raise ValueError("literal-gap alignment left unaccounted bytes")
-    protected_bytes(raw, clean, result)
-    return result
+        if not gap and index + 1 < len(matches):
+            raise ValueError("adjacent tokens have no independent byte boundary")
+        parts.append((match.group(), gap))
+    solutions, mappings = [], {}
+    explored = 0
+
+    def align(index, cursor):
+        nonlocal explored
+        explored += 1
+        if explored > 20000:
+            raise ValueError("literal-gap alignment search limit exceeded")
+        if len(solutions) > 1:
+            return
+        if index == len(parts):
+            if cursor == len(raw):
+                solutions.append(dict(mappings))
+            return
+        token, gap = parts[index]
+        if token in mappings:
+            value = mappings[token]
+            end = cursor + len(value)
+            if raw.startswith(value, cursor) and raw.startswith(gap, end):
+                align(index + 1, end + len(gap))
+            return
+        end = raw.find(gap, cursor + 1) if gap else len(raw)
+        while end > cursor:
+            mappings[token] = raw[cursor:end]
+            align(index + 1, end + len(gap))
+            del mappings[token]
+            if not gap or len(solutions) > 1:
+                break
+            end = raw.find(gap, end + 1)
+
+    align(0, len(prefix))
+    if not solutions:
+        raise ValueError("literal-gap alignment has inconsistent or empty token mappings")
+    if len(solutions) != 1:
+        raise ValueError("literal gap does not uniquely identify token extent")
+    protected_bytes(raw, clean, solutions[0])
+    return solutions[0]
 
 
 def echoed_tokens(tokens):
