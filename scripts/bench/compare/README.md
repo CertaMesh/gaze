@@ -65,6 +65,21 @@ choice and disjoint test results stay in `competitors.md`.
 
 ## Reproduce
 
+`requirements.lock` is a reproduction-only pin for the published comparison
+measurements. It retains `cryptography==48.0.1`, affected by
+GHSA-m2h6-j472-rp4c, GHSA-jwv3-5hgf-82ww, and GHSA-g6cj-pr64-35w5.
+Its bytes stay unchanged because the published reports record its full
+SHA-256 and the renderer verifies it. Install it only in an explicitly
+selected historical reproduction environment.
+
+CI and Anvil preparation use `scripts/bench/pyproject.toml` and `uv.lock`,
+which require `cryptography>=50.0.2,<51` through the documented Presidio
+override. Use that patched environment for routine model-free checks:
+
+```sh
+uv sync --project scripts/bench --python 3.13 --locked --group comparison-test
+```
+
 Use Python 3.12. `requirements.lock` and `requirements-scrubadub.lock` pin
 package hashes in separate environments because their Transformers constraints
 conflict. Install each with `uv pip sync --require-hashes`. The spaCy model
