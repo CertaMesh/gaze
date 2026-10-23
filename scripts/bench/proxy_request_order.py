@@ -365,6 +365,7 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
               "runtime_revision": revision, "scored_contracts": ["v2", "v1"], "v2_contract_sha256": digest(V2_CONTRACT), "fixture_sha256": digest(fixture),
               "harness_sha256": digest(Path(__file__)), "binary_sha256": digest(binary), "policy_sha256": digest(policy), "command": command,
               "session_host_sha256": digest(Path(__file__).with_name("native-session-proxy") / "main.rs"),
+              "session_builder_sha256": digest(Path(__file__).with_name("build_native_session_proxy.py")),
               "session_binary_sha256": digest(session_binary) if session_binary else None,
               "scope": "native nonstream proxy requests; seed requests forwarded, restored and byte-scored; unique source-byte alignment and Name/Email owner echo; other classes priced as request FP bytes; no exported manifest validation",
               "totals": {key: sum(row[key] for row in rows) for key in counts}, "cases": rows}
@@ -375,7 +376,7 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
 def compare(base, candidate):
     """The transport layer's gain rule; C/A/D/R need their own admitted captures."""
     identity = ("schema", "layer", "contract_labels", "scored_contracts", "fixture_sha256",
-                "harness_sha256", "session_host_sha256", "v2_contract_sha256", "policy_sha256")
+                "harness_sha256", "session_host_sha256", "session_builder_sha256", "v2_contract_sha256", "policy_sha256")
     if (base["fixture_sha256"] != digest(FIXTURE)
             or base["v2_contract_sha256"] != digest(V2_CONTRACT)):
         raise ValueError("proxy capture inputs differ from the committed case/scoring contract")

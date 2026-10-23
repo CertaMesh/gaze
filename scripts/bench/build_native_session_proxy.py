@@ -35,7 +35,7 @@ def build(root, output):
         return hashlib.sha256(path.read_bytes()).hexdigest()
     binary = root / "target/release/gaze-native-session-proxy"
     result = {"runtime_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
-              "source_sha256": digest(source), "binary_sha256": digest(binary),
+              "source_sha256": digest(source), "builder_sha256": digest(Path(__file__)), "binary_sha256": digest(binary),
               "runtime_lock_sha256": digest(root / "Cargo.lock"),
               "host_lock_sha256": digest(output / "Cargo.lock"), "command": command,
               "registry_dependencies_pinned_to_runtime": True}

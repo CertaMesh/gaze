@@ -66,6 +66,7 @@ def capture_card(leaks):
             "contract_labels": ["FIRSTNAME", "SURNAME", "EMAIL"], "scored_contracts": ["v2", "v1"],
             "fixture_sha256": bench.digest(bench.FIXTURE), "harness_sha256": bench.digest(bench.Path(bench.__file__)),
             "session_host_sha256": bench.digest(bench.Path(bench.__file__).with_name("native-session-proxy") / "main.rs"),
+            "session_builder_sha256": bench.digest(bench.Path(bench.__file__).with_name("build_native_session_proxy.py")),
             "v2_contract_sha256": bench.digest(bench.V2_CONTRACT), "policy_sha256": "synthetic-policy",
             "cases": rows, "totals": {key: sum(row[key] for row in rows) for key in counts}}
 

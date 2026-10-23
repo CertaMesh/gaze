@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     ];
     let config = ProxyConfig::new(args[1].parse()?, adapters)
-        .with_locale_chain(inputs.locale_chain.as_slice().to_vec())
+        .with_locale_chain(inputs.locale_chain)
         .with_dictionaries(inputs.dictionaries);
     gaze_proxy::server::serve(config, Arc::new(pipeline)).await?;
     Ok(())
