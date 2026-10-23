@@ -296,3 +296,12 @@ def test_owned_identity_is_checked_at_each_original_expanded_position():
                                             {TOKEN: "Maria", second: "Maria"})
     assert not bench.owned_identities_preserved(leaves, [second + " and " + TOKEN], known,
                                                 {TOKEN: "Maria", second: "Maria"})
+
+
+def test_a_wrong_owner_echo_is_not_accepted_or_used_to_hide_forwarded_bytes():
+    raw, clean = [{"text": "Maria"}], [TOKEN]
+    mappings, consistent = bench.checked_document_mappings(raw, clean, {}, {TOKEN: "wrong"})
+    assert mappings == {TOKEN: "Maria"} and not consistent
+    with pytest.raises(bench.AmbiguousAlignment):
+        bench.checked_document_mappings([{"text": "first|middle|last"}],
+            [TOKEN + "|<1234abcd:Name_2>"], {}, {TOKEN: "wrong"})

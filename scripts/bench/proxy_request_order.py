@@ -181,6 +181,17 @@ def document_mappings(raw_leaves, clean_leaves, known=None, owner_facts=None):
     return {token: facts[token] for token in tokens}
 
 
+def checked_document_mappings(raw_leaves, clean_leaves, known, owner_facts):
+    try:
+        return document_mappings(raw_leaves, clean_leaves, known, owner_facts), True
+    except ValueError:
+        if not owner_facts:
+            raise
+        # A broken owner echo must not erase the bytes already forwarded.
+        # Score only if the authored literals and prior seed still prove one mapping.
+        return document_mappings(raw_leaves, clean_leaves, known), False
+
+
 def token_positions(text, mappings):
     positions, cursor, expanded = [], 0, 0
     for match in TOKEN.finditer(text):
@@ -399,14 +410,14 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                 if (selected and restored is not None and len(restored) == len(selected)
                         and all(value.endswith("\n") for value in restored)):
                     owner_facts = {token: value[:-1] for token, value in zip(selected, restored, strict=True)}
-                mappings = document_mappings(case["leaves"], clean_leaves, known, owner_facts)
+                mappings, echo_consistent = checked_document_mappings(case["leaves"], clean_leaves, known, owner_facts)
                 if set(mappings) != set(tokens):
                     raise ValueError("unaccounted upstream token")
                 row["owned_identities_preserved"] = int(owned_identities_preserved(bound["leaves"], clean_leaves, known, mappings))
                 # Echo facts must also reconstruct every authored leaf exactly.
                 # Failed owner responses still leave all forwarded bytes scored.
                 expected = [mappings[token] + "\n" for token in selected] or ["ok"]
-                exact = restored == expected
+                exact = echo_consistent and restored == expected
                 totals = Counter(seed_scores)
                 for leaf, clean in zip(case["leaves"], clean_leaves, strict=True):
                     totals.update(score_leaf(leaf, clean, mappings))
