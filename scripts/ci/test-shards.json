@@ -138,6 +138,7 @@
     "gaze-recognizers::government_id",
     "gaze-recognizers::iban_trailing_group",
     "gaze-recognizers::invariants",
+    "gaze-recognizers::invisible_separators",
     "gaze-recognizers::ip_v6_guard_differential",
     "gaze-recognizers::ip_v6_word_boundary",
     "gaze-recognizers::locale_aware_registry",
