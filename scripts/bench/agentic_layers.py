@@ -51,7 +51,7 @@ import full_name_case_cells as full_name_case
 import credential_code_cells as credential_code
 
 
-GENERATOR_VERSION = 25
+GENERATOR_VERSION = 27
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -4461,8 +4461,8 @@ def _coverage_records(partition: str) -> list[Record]:
 
 
 # The surface prefix each generator version added. Every earlier document stays
-# byte identical, so an older corpus is a filter of the current one, with
-# the v16 BSN label and v18 personal-ID gold corrections reversed.
+# byte identical after reversing explicit contract corrections: the v16 BSN
+# labels, v18 personal-ID gold, and v27 unfinished-record boundary cells.
 GENERATOR_ADDITIONS = {
     4: "adjacent_",
     5: "lookalike_",
@@ -4484,6 +4484,8 @@ GENERATOR_ADDITIONS = {
     23: "credentials_escapes_",
     24: "credentials_separators_",
     25: "credentials_prefixes_",
+    26: "recordids_boundary_unterminated_",
+    27: ("recordids_boundary_private_keys_", "recordids_boundary_quote_dialects_"),
 }
 
 
@@ -4491,7 +4493,17 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
     """The documents of generator `version`, from the current generator's output."""
     if not 3 <= version <= GENERATOR_VERSION:
         raise LayerError(f"generator version {version} cannot be rebuilt from version {GENERATOR_VERSION}")
-    later = tuple(prefix for added, prefix in GENERATOR_ADDITIONS.items() if added > version)
+    records = list(records)
+    if version < 27:
+        # Replay the previous ownership contract exactly. The current corpus
+        # makes raw line breaks record ends and keeps public counterweights
+        # outside unfinished values; these are contract changes, not new gold
+        # inferred from recognizer output.
+        historical = {row.uid: row for partition in {row.partition for row in records}
+                      for row in record_id_boundary.records(sys.modules[__name__], partition, version=26)}
+        records = [historical.get(row.uid, row) for row in records]
+    later = tuple(prefix for added, prefixes in GENERATOR_ADDITIONS.items() if added > version
+                  for prefix in ((prefixes,) if isinstance(prefixes, str) else prefixes))
     selected = [record for record in records if not record.surface.startswith(later)] if later else list(records)
     if version < 18:
         selected = [
@@ -4517,6 +4529,8 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    26: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v26.json"),
+    25: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v25.json"),
     24: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v24.json"),
     23: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v23.json"),
     22: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v22.json"),
