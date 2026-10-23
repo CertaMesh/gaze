@@ -1,0 +1,106 @@
+"""Application wrapper inventory: Unicode Ps/Pi plus ASCII scalar delimiters.
+
+Unicode names define pairs; quotes with multiple established closing conventions
+also have explicit alternatives. These are data producers, not detector output.
+"""
+
+WRAPPERS = (
+    ('(', ')'),  # LEFT PARENTHESIS
+    ('[', ']'),  # LEFT SQUARE BRACKET
+    ('{', '}'),  # LEFT CURLY BRACKET
+    ('«', '»'),  # LEFT-POINTING DOUBLE ANGLE QUOTATION MARK
+    ('༺', '༻'),  # TIBETAN MARK GUG RTAGS GYON
+    ('༼', '༽'),  # TIBETAN MARK ANG KHANG GYON
+    ('᚛', '᚜'),  # OGHAM FEATHER MARK
+    ('‘', '’'),  # LEFT SINGLE QUOTATION MARK
+    ('‚', '’'),  # SINGLE LOW-9 QUOTATION MARK
+    ('‛', '’'),  # SINGLE HIGH-REVERSED-9 QUOTATION MARK
+    ('“', '”'),  # LEFT DOUBLE QUOTATION MARK
+    ('„', '”'),  # DOUBLE LOW-9 QUOTATION MARK
+    ('‟', '”'),  # DOUBLE HIGH-REVERSED-9 QUOTATION MARK
+    ('‹', '›'),  # SINGLE LEFT-POINTING ANGLE QUOTATION MARK
+    ('⁅', '⁆'),  # LEFT SQUARE BRACKET WITH QUILL
+    ('⁽', '⁾'),  # SUPERSCRIPT LEFT PARENTHESIS
+    ('₍', '₎'),  # SUBSCRIPT LEFT PARENTHESIS
+    ('⌈', '⌉'),  # LEFT CEILING
+    ('⌊', '⌋'),  # LEFT FLOOR
+    ('〈', '〉'),  # LEFT-POINTING ANGLE BRACKET
+    ('❨', '❩'),  # MEDIUM LEFT PARENTHESIS ORNAMENT
+    ('❪', '❫'),  # MEDIUM FLATTENED LEFT PARENTHESIS ORNAMENT
+    ('❬', '❭'),  # MEDIUM LEFT-POINTING ANGLE BRACKET ORNAMENT
+    ('❮', '❯'),  # HEAVY LEFT-POINTING ANGLE QUOTATION MARK ORNAMENT
+    ('❰', '❱'),  # HEAVY LEFT-POINTING ANGLE BRACKET ORNAMENT
+    ('❲', '❳'),  # LIGHT LEFT TORTOISE SHELL BRACKET ORNAMENT
+    ('❴', '❵'),  # MEDIUM LEFT CURLY BRACKET ORNAMENT
+    ('⟅', '⟆'),  # LEFT S-SHAPED BAG DELIMITER
+    ('⟦', '⟧'),  # MATHEMATICAL LEFT WHITE SQUARE BRACKET
+    ('⟨', '⟩'),  # MATHEMATICAL LEFT ANGLE BRACKET
+    ('⟪', '⟫'),  # MATHEMATICAL LEFT DOUBLE ANGLE BRACKET
+    ('⟬', '⟭'),  # MATHEMATICAL LEFT WHITE TORTOISE SHELL BRACKET
+    ('⟮', '⟯'),  # MATHEMATICAL LEFT FLATTENED PARENTHESIS
+    ('⦃', '⦄'),  # LEFT WHITE CURLY BRACKET
+    ('⦅', '⦆'),  # LEFT WHITE PARENTHESIS
+    ('⦇', '⦈'),  # Z NOTATION LEFT IMAGE BRACKET
+    ('⦉', '⦊'),  # Z NOTATION LEFT BINDING BRACKET
+    ('⦋', '⦌'),  # LEFT SQUARE BRACKET WITH UNDERBAR
+    ('⦍', '⦐'),  # LEFT SQUARE BRACKET WITH TICK IN TOP CORNER
+    ('⦏', '⦎'),  # LEFT SQUARE BRACKET WITH TICK IN BOTTOM CORNER
+    ('⦑', '⦒'),  # LEFT ANGLE BRACKET WITH DOT
+    ('⦓', '⦔'),  # LEFT ARC LESS-THAN BRACKET
+    ('⦕', '⦖'),  # DOUBLE LEFT ARC GREATER-THAN BRACKET
+    ('⦗', '⦘'),  # LEFT BLACK TORTOISE SHELL BRACKET
+    ('⧘', '⧙'),  # LEFT WIGGLY FENCE
+    ('⧚', '⧛'),  # LEFT DOUBLE WIGGLY FENCE
+    ('⧼', '⧽'),  # LEFT-POINTING CURVED ANGLE BRACKET
+    ('⸂', '⸃'),  # LEFT SUBSTITUTION BRACKET
+    ('⸄', '⸅'),  # LEFT DOTTED SUBSTITUTION BRACKET
+    ('⸉', '⸊'),  # LEFT TRANSPOSITION BRACKET
+    ('⸌', '⸍'),  # LEFT RAISED OMISSION BRACKET
+    ('⸜', '⸝'),  # LEFT LOW PARAPHRASE BRACKET
+    ('⸠', '⸡'),  # LEFT VERTICAL BAR WITH QUILL
+    ('⸢', '⸣'),  # TOP LEFT HALF BRACKET
+    ('⸤', '⸥'),  # BOTTOM LEFT HALF BRACKET
+    ('⸦', '⸧'),  # LEFT SIDEWAYS U BRACKET
+    ('⸨', '⸩'),  # LEFT DOUBLE PARENTHESIS
+    ('⹂', '”'),  # DOUBLE LOW-REVERSED-9 QUOTATION MARK
+    ('〈', '〉'),  # LEFT ANGLE BRACKET
+    ('《', '》'),  # LEFT DOUBLE ANGLE BRACKET
+    ('「', '」'),  # LEFT CORNER BRACKET
+    ('『', '』'),  # LEFT WHITE CORNER BRACKET
+    ('【', '】'),  # LEFT BLACK LENTICULAR BRACKET
+    ('〔', '〕'),  # LEFT TORTOISE SHELL BRACKET
+    ('〖', '〗'),  # LEFT WHITE LENTICULAR BRACKET
+    ('〘', '〙'),  # LEFT WHITE TORTOISE SHELL BRACKET
+    ('〚', '〛'),  # LEFT WHITE SQUARE BRACKET
+    ('〝', '〞'),  # REVERSED DOUBLE PRIME QUOTATION MARK
+    ('﴿', '﴾'),  # ORNATE RIGHT PARENTHESIS
+    ('︗', '︘'),  # PRESENTATION FORM FOR VERTICAL LEFT WHITE LENTICULAR BRACKET
+    ('︵', '︶'),  # PRESENTATION FORM FOR VERTICAL LEFT PARENTHESIS
+    ('︷', '︸'),  # PRESENTATION FORM FOR VERTICAL LEFT CURLY BRACKET
+    ('︹', '︺'),  # PRESENTATION FORM FOR VERTICAL LEFT TORTOISE SHELL BRACKET
+    ('︻', '︼'),  # PRESENTATION FORM FOR VERTICAL LEFT BLACK LENTICULAR BRACKET
+    ('︽', '︾'),  # PRESENTATION FORM FOR VERTICAL LEFT DOUBLE ANGLE BRACKET
+    ('︿', '﹀'),  # PRESENTATION FORM FOR VERTICAL LEFT ANGLE BRACKET
+    ('﹁', '﹂'),  # PRESENTATION FORM FOR VERTICAL LEFT CORNER BRACKET
+    ('﹃', '﹄'),  # PRESENTATION FORM FOR VERTICAL LEFT WHITE CORNER BRACKET
+    ('﹇', '﹈'),  # PRESENTATION FORM FOR VERTICAL LEFT SQUARE BRACKET
+    ('﹙', '﹚'),  # SMALL LEFT PARENTHESIS
+    ('﹛', '﹜'),  # SMALL LEFT CURLY BRACKET
+    ('﹝', '﹞'),  # SMALL LEFT TORTOISE SHELL BRACKET
+    ('（', '）'),  # FULLWIDTH LEFT PARENTHESIS
+    ('［', '］'),  # FULLWIDTH LEFT SQUARE BRACKET
+    ('｛', '｝'),  # FULLWIDTH LEFT CURLY BRACKET
+    ('｟', '｠'),  # FULLWIDTH LEFT WHITE PARENTHESIS
+    ('｢', '｣'),  # HALFWIDTH LEFT CORNER BRACKET
+    ('"', '"'),  # QUOTATION MARK
+    ("'", "'"),  # APOSTROPHE
+    ('`', '`'),  # GRAVE ACCENT
+    ('<', '>'),  # LESS-THAN SIGN
+    ('⹕', '⹖'),  # LEFT SQUARE BRACKET WITH STROKE
+    ('⹗', '⹘'),  # LEFT SQUARE BRACKET WITH DOUBLE STROKE
+    ('⹙', '⹚'),  # TOP HALF LEFT PARENTHESIS
+    ('⹛', '⹜'),  # BOTTOM HALF LEFT PARENTHESIS
+    ('„', '“'),
+    ('‚', '‘'),
+    ('〝', '〟'),
+)

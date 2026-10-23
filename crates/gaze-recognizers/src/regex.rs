@@ -443,7 +443,7 @@ impl RegexDetector {
                             let value_quoted = input[..span.capture.start]
                                 .chars()
                                 .next_back()
-                                .is_some_and(|ch| matches!(ch, '\"' | '\''));
+                                .is_some_and(field_wrapper_opens);
                             let checked =
                                 if self.labelled_value_mode == LabelledValueMode::FieldOwned {
                                     span.span.clone()
@@ -982,11 +982,116 @@ fn public_metadata_assignment_starts(rest: &str) -> bool {
     .is_match(rest)
 }
 
+fn field_wrapper_opens(ch: char) -> bool {
+    static OPEN: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    OPEN.get_or_init(|| Regex::new(r#"\A["'`<\p{Ps}\p{Pi}]\z"#).expect("wrapper categories"))
+        .is_match(ch.encode_utf8(&mut [0; 4]))
+}
+
+fn field_wrapper_closes(open: char, close: char) -> bool {
+    match open {
+        '\u{28}' => matches!(close, '\u{29}'),
+        '\u{5b}' => matches!(close, '\u{5d}'),
+        '\u{7b}' => matches!(close, '\u{7d}'),
+        '\u{ab}' => matches!(close, '\u{bb}'),
+        '\u{f3a}' => matches!(close, '\u{f3b}'),
+        '\u{f3c}' => matches!(close, '\u{f3d}'),
+        '\u{169b}' => matches!(close, '\u{169c}'),
+        '\u{2018}' => matches!(close, '\u{2019}'),
+        '\u{201a}' => matches!(close, '\u{2019}' | '\u{2018}'),
+        '\u{201b}' => matches!(close, '\u{2019}'),
+        '\u{201c}' => matches!(close, '\u{201d}'),
+        '\u{201e}' => matches!(close, '\u{201d}' | '\u{201c}'),
+        '\u{201f}' => matches!(close, '\u{201d}'),
+        '\u{2039}' => matches!(close, '\u{203a}'),
+        '\u{2045}' => matches!(close, '\u{2046}'),
+        '\u{207d}' => matches!(close, '\u{207e}'),
+        '\u{208d}' => matches!(close, '\u{208e}'),
+        '\u{2308}' => matches!(close, '\u{2309}'),
+        '\u{230a}' => matches!(close, '\u{230b}'),
+        '\u{2329}' => matches!(close, '\u{232a}'),
+        '\u{2768}' => matches!(close, '\u{2769}'),
+        '\u{276a}' => matches!(close, '\u{276b}'),
+        '\u{276c}' => matches!(close, '\u{276d}'),
+        '\u{276e}' => matches!(close, '\u{276f}'),
+        '\u{2770}' => matches!(close, '\u{2771}'),
+        '\u{2772}' => matches!(close, '\u{2773}'),
+        '\u{2774}' => matches!(close, '\u{2775}'),
+        '\u{27c5}' => matches!(close, '\u{27c6}'),
+        '\u{27e6}' => matches!(close, '\u{27e7}'),
+        '\u{27e8}' => matches!(close, '\u{27e9}'),
+        '\u{27ea}' => matches!(close, '\u{27eb}'),
+        '\u{27ec}' => matches!(close, '\u{27ed}'),
+        '\u{27ee}' => matches!(close, '\u{27ef}'),
+        '\u{2983}' => matches!(close, '\u{2984}'),
+        '\u{2985}' => matches!(close, '\u{2986}'),
+        '\u{2987}' => matches!(close, '\u{2988}'),
+        '\u{2989}' => matches!(close, '\u{298a}'),
+        '\u{298b}' => matches!(close, '\u{298c}'),
+        '\u{298d}' => matches!(close, '\u{2990}'),
+        '\u{298f}' => matches!(close, '\u{298e}'),
+        '\u{2991}' => matches!(close, '\u{2992}'),
+        '\u{2993}' => matches!(close, '\u{2994}'),
+        '\u{2995}' => matches!(close, '\u{2996}'),
+        '\u{2997}' => matches!(close, '\u{2998}'),
+        '\u{29d8}' => matches!(close, '\u{29d9}'),
+        '\u{29da}' => matches!(close, '\u{29db}'),
+        '\u{29fc}' => matches!(close, '\u{29fd}'),
+        '\u{2e02}' => matches!(close, '\u{2e03}'),
+        '\u{2e04}' => matches!(close, '\u{2e05}'),
+        '\u{2e09}' => matches!(close, '\u{2e0a}'),
+        '\u{2e0c}' => matches!(close, '\u{2e0d}'),
+        '\u{2e1c}' => matches!(close, '\u{2e1d}'),
+        '\u{2e20}' => matches!(close, '\u{2e21}'),
+        '\u{2e22}' => matches!(close, '\u{2e23}'),
+        '\u{2e24}' => matches!(close, '\u{2e25}'),
+        '\u{2e26}' => matches!(close, '\u{2e27}'),
+        '\u{2e28}' => matches!(close, '\u{2e29}'),
+        '\u{2e42}' => matches!(close, '\u{201d}'),
+        '\u{3008}' => matches!(close, '\u{3009}'),
+        '\u{300a}' => matches!(close, '\u{300b}'),
+        '\u{300c}' => matches!(close, '\u{300d}'),
+        '\u{300e}' => matches!(close, '\u{300f}'),
+        '\u{3010}' => matches!(close, '\u{3011}'),
+        '\u{3014}' => matches!(close, '\u{3015}'),
+        '\u{3016}' => matches!(close, '\u{3017}'),
+        '\u{3018}' => matches!(close, '\u{3019}'),
+        '\u{301a}' => matches!(close, '\u{301b}'),
+        '\u{301d}' => matches!(close, '\u{301e}' | '\u{301f}'),
+        '\u{fd3f}' => matches!(close, '\u{fd3e}'),
+        '\u{fe17}' => matches!(close, '\u{fe18}'),
+        '\u{fe35}' => matches!(close, '\u{fe36}'),
+        '\u{fe37}' => matches!(close, '\u{fe38}'),
+        '\u{fe39}' => matches!(close, '\u{fe3a}'),
+        '\u{fe3b}' => matches!(close, '\u{fe3c}'),
+        '\u{fe3d}' => matches!(close, '\u{fe3e}'),
+        '\u{fe3f}' => matches!(close, '\u{fe40}'),
+        '\u{fe41}' => matches!(close, '\u{fe42}'),
+        '\u{fe43}' => matches!(close, '\u{fe44}'),
+        '\u{fe47}' => matches!(close, '\u{fe48}'),
+        '\u{fe59}' => matches!(close, '\u{fe5a}'),
+        '\u{fe5b}' => matches!(close, '\u{fe5c}'),
+        '\u{fe5d}' => matches!(close, '\u{fe5e}'),
+        '\u{ff08}' => matches!(close, '\u{ff09}'),
+        '\u{ff3b}' => matches!(close, '\u{ff3d}'),
+        '\u{ff5b}' => matches!(close, '\u{ff5d}'),
+        '\u{ff5f}' => matches!(close, '\u{ff60}'),
+        '\u{ff62}' => matches!(close, '\u{ff63}'),
+        '\u{60}' => matches!(close, '\u{60}'),
+        '\u{3c}' => matches!(close, '\u{3e}'),
+        '\u{2e55}' => close == '\u{2e56}',
+        '\u{2e57}' => close == '\u{2e58}',
+        '\u{2e59}' => close == '\u{2e5a}',
+        '\u{2e5b}' => close == '\u{2e5c}',
+        _ => close == open,
+    }
+}
+
 fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
     if input[..capture.start]
         .chars()
         .next_back()
-        .is_some_and(|ch| matches!(ch, '\"' | '\''))
+        .is_some_and(field_wrapper_opens)
     {
         return scan_quoted_field_value(input, capture);
     }
@@ -1071,10 +1176,12 @@ fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> Label
 struct EnclosingScalarBoundary {
     end: usize,
     absent_value: bool,
+    doubled_quote: Option<u8>,
 }
 
 fn enclosing_scalar_boundary(
     input: &str,
+    opening: usize,
     start: usize,
     opening_escapes: usize,
 ) -> EnclosingScalarBoundary {
@@ -1083,7 +1190,8 @@ fn enclosing_scalar_boundary(
     // own opening quote and escape bytes. Key-looking content proves nothing.
     let mut enclosing = Vec::new();
     let mut literal_limit = None;
-    let prefix_end = start - 1 - opening_escapes;
+    let mut enclosing_literal = None;
+    let prefix_end = opening - opening_escapes;
     let mut escapes = 0usize;
     let mut at = 0;
     while at < prefix_end {
@@ -1096,6 +1204,7 @@ fn enclosing_scalar_boundary(
         if matches!(byte, b'\n' | b'\r') && escapes.is_multiple_of(2) {
             enclosing.clear();
             literal_limit = None;
+            enclosing_literal = None;
         }
         let apostrophe = byte == b'\''
             && escapes.is_multiple_of(2)
@@ -1121,6 +1230,7 @@ fn enclosing_scalar_boundary(
                 let count = match delimiter {
                     ScalarQuoteDelimiter::Single => 1,
                     ScalarQuoteDelimiter::Triple => 3,
+                    ScalarQuoteDelimiter::DoubledSingle => 2,
                 };
                 let content = opening + count * width;
                 let limit = *literal_limit.get_or_insert_with(|| {
@@ -1134,11 +1244,22 @@ fn enclosing_scalar_boundary(
                 // Prior literal fields use the same delimiter grammar and
                 // enclosure bound as the current value. Their content quotes
                 // cannot fabricate an enclosing JSON string around it.
-                at = scalar_quote_close(input, content, limit, byte, literal_escapes, delimiter)
-                    .map_or_else(
-                        || uncertain_scalar_end(input, content, limit),
-                        |close| close + count * width,
+                let prior_close =
+                    scalar_quote_close(input, content, limit, byte, literal_escapes, delimiter);
+                if apostrophe && prior_close.is_none() {
+                    let limit = serialized_string_end(
+                        input,
+                        content,
+                        input.len(),
+                        enclosing.last().map(|(depth, _)| *depth),
                     );
+                    enclosing_literal =
+                        scalar_quote_close(input, content, limit, byte, literal_escapes, delimiter);
+                }
+                at = prior_close.map_or_else(
+                    || uncertain_scalar_end(input, content, limit),
+                    |close| close + count * width,
+                );
                 escapes = 0;
                 continue;
             }
@@ -1161,9 +1282,29 @@ fn enclosing_scalar_boundary(
     let absent_value = input.as_bytes()[start - 1] == b'"'
         && depth.is_some_and(|depth| opening_escapes <= depth)
         && serialized_context_is_json(input, &enclosing, opening_escapes);
+    // Scan from the enclosing opener, not from the current capture, which
+    // may start halfway through a doubled CSV delimiter. JSON escapes and CSV
+    // doubled quotes are separate encodings at every serialization depth.
+    let end = enclosing.last().map_or(input.len(), |&(depth, opening)| {
+        serialized_string_end(input, opening + depth + 1, input.len(), Some(depth))
+    });
+    // In opaque nested text a same-depth quote can be either the previous
+    // string's close or this private scalar's opener. It cannot bound the
+    // value before its first byte. Resume at the scalar for the larger valid
+    // ownership interpretation; only fully parsed JSON proves absence.
+    let end = if end < start && !absent_value {
+        serialized_string_end(input, start, input.len(), depth)
+    } else {
+        end
+    };
     EnclosingScalarBoundary {
-        end: serialized_string_end(input, start, input.len(), depth),
+        end: enclosing_literal.map_or(end, |literal| literal.min(end)),
         absent_value,
+        doubled_quote: if enclosing_literal.is_some() {
+            Some(b'\'')
+        } else {
+            (depth == Some(opening_escapes) && !absent_value).then_some(b'"')
+        },
     }
 }
 
@@ -1202,18 +1343,33 @@ fn serialized_context_is_json(input: &str, enclosing: &[(usize, usize)], escapes
 fn serialized_string_end(input: &str, start: usize, limit: usize, depth: Option<usize>) -> usize {
     let Some(depth) = depth else { return limit };
     let mut escapes = 0usize;
-    for (offset, byte) in input[start..limit].bytes().enumerate() {
+    let mut at = start;
+    while at < limit {
+        let byte = input.as_bytes()[at];
         if byte == b'\\' {
             escapes += 1;
+            at += 1;
             continue;
         }
-        let at = start + offset;
         if byte == b'"' && (escapes + 1).is_power_of_two() && escapes <= depth {
-            // Exclude the delimiter's entire encoded spelling. Retaining these
-            // bytes keeps every enclosing serialized JSON string parseable.
-            return at - escapes;
+            let opening = at - escapes;
+            let run_end = quote_run_end(input, opening, byte, escapes, limit);
+            let width = escapes + 1;
+            let run = (run_end - opening) / width;
+            if escapes == depth && run >= 2 {
+                // At this depth a pair is CSV content. An odd trailing quote
+                // ends the cell; ambiguous input protects the larger value.
+                if run.is_multiple_of(2) {
+                    at = run_end;
+                    escapes = 0;
+                    continue;
+                }
+                return run_end - width;
+            }
+            return opening;
         }
         escapes = 0;
+        at += 1;
     }
     limit
 }
@@ -1222,6 +1378,7 @@ fn serialized_string_end(input: &str, start: usize, limit: usize, depth: Option<
 enum ScalarQuoteDelimiter {
     Single,
     Triple,
+    DoubledSingle,
 }
 
 fn quote_run_end(input: &str, start: usize, quote: u8, escapes: usize, limit: usize) -> usize {
@@ -1264,6 +1421,10 @@ fn scalar_quote_close(
                     let close = match delimiter {
                         ScalarQuoteDelimiter::Single if run % 2 == 1 => Some(run_end - width),
                         ScalarQuoteDelimiter::Single => None,
+                        ScalarQuoteDelimiter::DoubledSingle if run % 4 == 2 => {
+                            Some(run_end - 2 * width)
+                        }
+                        ScalarQuoteDelimiter::DoubledSingle => None,
                         ScalarQuoteDelimiter::Triple if run > 5 => return None,
                         ScalarQuoteDelimiter::Triple if run >= 3 => Some(run_end - 3 * width),
                         ScalarQuoteDelimiter::Triple => None,
@@ -1304,7 +1465,14 @@ fn uncertain_scalar_end(input: &str, start: usize, limit: usize) -> usize {
 }
 
 fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
-    let quote = input.as_bytes()[capture.start - 1];
+    let opener = input[..capture.start]
+        .chars()
+        .next_back()
+        .expect("wrapper opener");
+    if !matches!(opener, '"' | '\'') {
+        return scan_paired_field_value(input, capture, opener);
+    }
+    let quote = opener as u8;
     let opening_escapes = input[..capture.start - 1]
         .bytes()
         .rev()
@@ -1312,20 +1480,24 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
         .count();
     // Both normal closes and uncertain fallbacks share this hard enclosure
     // boundary. A quote in a later sibling field can never close this value.
-    let enclosing = enclosing_scalar_boundary(input, capture.start, opening_escapes);
+    let enclosing =
+        enclosing_scalar_boundary(input, capture.start - 1, capture.start, opening_escapes);
     let limit = enclosing.end;
     let width = opening_escapes + 1;
     let opening_start = capture.start - width;
     let opening_end = quote_run_end(input, opening_start, quote, opening_escapes, limit);
     let opening_run = (opening_end - opening_start) / width;
+    let doubled_quote = enclosing.doubled_quote == Some(quote);
     let known_empty = enclosing.absent_value
-        || (width.is_power_of_two()
+        || (!doubled_quote
+            && width.is_power_of_two()
             && matches!(opening_run, 2 | 6)
             && !input[opening_end..]
                 .chars()
                 .next()
                 .is_some_and(|ch| ch.is_alphanumeric() || ch == '_'));
     let delimiter = match opening_run {
+        2 if doubled_quote => Some(ScalarQuoteDelimiter::DoubledSingle),
         1 => Some(ScalarQuoteDelimiter::Single),
         3..=5 => Some(ScalarQuoteDelimiter::Triple),
         _ => None,
@@ -1333,6 +1505,7 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
     .filter(|_| width.is_power_of_two());
     let mut start = match delimiter {
         Some(ScalarQuoteDelimiter::Triple) => opening_start + 3 * width,
+        Some(ScalarQuoteDelimiter::DoubledSingle) => opening_start + 2 * width,
         _ => capture.start,
     };
     let mut end = limit;
@@ -1370,6 +1543,59 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
         }),
         rejected: span.is_empty(),
         span,
+    }
+}
+
+fn scan_paired_field_value(
+    input: &str,
+    capture: std::ops::Range<usize>,
+    opener: char,
+) -> LabelledValueScan {
+    let opening = capture.start - opener.len_utf8();
+    let enclosing = enclosing_scalar_boundary(input, opening, capture.start, 0);
+    let mut close = None;
+    let mut at = capture.start;
+    while at < enclosing.end {
+        let ch = input[at..].chars().next().expect("scalar character");
+        if field_wrapper_closes(opener, ch) {
+            let run = input[at..enclosing.end]
+                .chars()
+                .take_while(|next| *next == ch)
+                .count();
+            let run_end = at + run * ch.len_utf8();
+            if run % 2 == 1
+                && !input[run_end..]
+                    .chars()
+                    .next()
+                    .is_some_and(|next| next.is_alphanumeric() || next == '_')
+            {
+                close = Some(run_end - ch.len_utf8());
+                break;
+            }
+            at = run_end;
+        } else {
+            at += ch.len_utf8();
+        }
+    }
+    let end = close.unwrap_or_else(|| uncertain_scalar_end(input, capture.start, enclosing.end));
+    let span = capture.start..end;
+    let capture_end = capture.end.min(end);
+    LabelledValueScan {
+        capture: capture.start..capture_end,
+        extension: capture_end..end,
+        span: span.clone(),
+        reason: close
+            .is_none()
+            .then_some(LabelledValueScanReason::UncertainQuoteBoundary)
+            .or_else(|| {
+                labelled_value_over_limit(&input[span.clone()])
+                    .then_some(LabelledValueScanReason::LimitExceeded)
+            }),
+        repeat_seed: (!span.is_empty()).then_some(gaze_types::LabelledValueRepeatSeed {
+            span: span.clone(),
+            kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
+        }),
+        rejected: span.is_empty(),
     }
 }
 

@@ -43,7 +43,7 @@ and [policy reference](../../reference/policy.md). `complete_labelled_value` is
 available to external rulepacks, not `[[policy.custom_recognizers]]`.
 
 The CRM/HR identifier rules select the typed `field_owned` mode. A label owns
-the complete adjacent value: ASCII-quoted scalars keep every raw Unicode and
+the complete adjacent value: quoted scalars keep every raw Unicode and
 escape byte, while unquoted grouped identifiers stop before another field
 assignment. Each personal field supplies its own token and repeat seed; a public
 field stays outside the prior value. The unquoted-placeholder guard judges that
@@ -59,5 +59,13 @@ An unterminated value ends at the nearest enclosing serialized string close
 or input end. The line break defines the end of that record; escaped line breaks
 remain content. Key-looking assignments and container punctuation stay private.
 An enclosing JSON string keeps its closing quote and remains parseable. Ambiguous
-public-looking text may also be protected. Typographic quotes remain uncharacterized.
+public-looking text may also be protected.
+Unicode opening punctuation (`Ps`/`Pi`), paired brackets, typographic quotes,
+backticks, and ASCII angle wrappers use the same ownership contract. Known
+pairs stop at their matching closer; an unmatched or unknown opener keeps the
+value through the enclosing string or record boundary. Complete CSV-labelled
+cells recognize doubled quotes separately from JSON escapes, including embedded
+quotes inside the private value. SQL literals use their doubled apostrophes.
+Ambiguous quote dialects protect the larger private range, and the manifest
+retains the exact encoded source bytes for restore.
 This opt-in mode leaves the tax/licence/identity scanner described above unchanged.

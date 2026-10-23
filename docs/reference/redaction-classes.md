@@ -138,7 +138,7 @@ output against its committed corpus snapshot.
 
 The three CRM/HR rules protect `custom:customer_id`, `custom:employee_id` and
 `custom:record_id` through the opt-in `field_owned` complete-value scanner.
-It protects whole ASCII-quoted scalars and bounds unquoted grouped values before
+It protects whole quoted scalars and bounds unquoted grouped values before
 following complete field cues (`:`, `=`, `is`, `ist`, `lautet`, or same-line
 whitespace). Terminal unquoted periods/colons remain outside the value; internal
 punctuation and quoted punctuation remain restorable value bytes. Raw JSON retains

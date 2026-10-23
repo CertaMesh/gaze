@@ -47,6 +47,7 @@ import record_id_cells as record_ids
 import record_id_syntax_cells as record_id_syntax
 import record_id_ownership_cells as record_id_ownership
 import record_id_boundary_cells as record_id_boundary
+import record_id_wrapper_cells as record_id_wrappers
 import full_name_case_cells as full_name_case
 import credential_code_cells as credential_code
 
@@ -4485,7 +4486,7 @@ GENERATOR_ADDITIONS = {
     24: "credentials_separators_",
     25: "credentials_prefixes_",
     26: "recordids_boundary_unterminated_",
-    27: ("recordids_boundary_private_keys_", "recordids_boundary_quote_dialects_"),
+    27: ("recordids_boundary_private_keys_", "recordids_boundary_quote_dialects_", "recordids_wrappers_"),
 }
 
 
@@ -4802,6 +4803,7 @@ def generate(partition: str) -> list[Record]:
         + record_id_syntax.records(sys.modules[__name__], partition)
         + record_id_ownership.records(sys.modules[__name__], partition)
         + record_id_boundary.records(sys.modules[__name__], partition)
+        + record_id_wrappers.records(sys.modules[__name__], partition)
         + full_name_case.records(sys.modules[__name__], partition)
         + credential_code.records(sys.modules[__name__], partition)
         + credential_code.review_records(sys.modules[__name__], partition)

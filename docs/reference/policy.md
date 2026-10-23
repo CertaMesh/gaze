@@ -465,7 +465,7 @@ Those limits are audit signals, not reasons to leave a suffix raw.
 
 With `complete_labelled_value = true`, the optional typed
 `labelled_value_mode = "field_owned"` selects label-owned field scanning. It
-protects a complete ASCII-quoted scalar, including Unicode and raw JSON escapes,
+protects a complete quoted scalar, including Unicode and raw JSON escapes,
 and stops unquoted grouped values before an adjacent field assignment. The
 quoted grammar recognizes single/triple delimiters and doubled quotes. Complete
 multiline scalars remain whole; every close search is bounded by its enclosing

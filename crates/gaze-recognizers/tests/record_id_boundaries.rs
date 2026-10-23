@@ -1242,14 +1242,31 @@ fn unterminated_values_own_key_looking_private_suffixes() {
     }
 }
 
-fn check_quote_dialect(pipeline: &Pipeline, mut input: String, mut value: String) {
-    for depth in 0..=9 {
+fn check_quote_dialect(pipeline: &Pipeline, input: String, value: String) {
+    check_quote_dialect_depths(pipeline, input, value, 9);
+}
+
+fn check_quote_dialect_depths(
+    pipeline: &Pipeline,
+    mut input: String,
+    mut value: String,
+    max_depth: usize,
+) {
+    let class = if input.contains("customerId") {
+        "customer_id"
+    } else if input.contains("employeeId") {
+        "employee_id"
+    } else {
+        "record_id"
+    };
+    let class = PiiClass::custom(class).unwrap();
+    for depth in 0..=max_depth {
         let session = Session::new(Scope::Conversation("synthetic-quote-dialect".into())).unwrap();
         let clean = public_clean(pipeline, &session, &input);
         let entries = session.snapshot_entries();
         let entry = entries
             .iter()
-            .find(|entry| entry.raw == value)
+            .find(|entry| entry.raw == value && entry.class == class)
             .unwrap_or_else(|| {
                 panic!("whole private scalar at depth {depth}: {input:?} -> {clean:?}; {entries:?}")
             });
@@ -1616,5 +1633,237 @@ fn cross_class_trim_keeps_repeat_seeds_inside_the_owner() {
                 .unwrap(),
             input
         );
+    }
+}
+
+#[test]
+fn wrapper_and_enclosing_dialects_cover_every_private_byte() {
+    let pipeline = record_pipeline();
+    let wrappers: &[(char, char)] = &[
+        ('\u{28}', '\u{29}'),
+        ('\u{5b}', '\u{5d}'),
+        ('\u{7b}', '\u{7d}'),
+        ('\u{ab}', '\u{bb}'),
+        ('\u{f3a}', '\u{f3b}'),
+        ('\u{f3c}', '\u{f3d}'),
+        ('\u{169b}', '\u{169c}'),
+        ('\u{2018}', '\u{2019}'),
+        ('\u{201a}', '\u{2019}'),
+        ('\u{201b}', '\u{2019}'),
+        ('\u{201c}', '\u{201d}'),
+        ('\u{201e}', '\u{201d}'),
+        ('\u{201f}', '\u{201d}'),
+        ('\u{2039}', '\u{203a}'),
+        ('\u{2045}', '\u{2046}'),
+        ('\u{207d}', '\u{207e}'),
+        ('\u{208d}', '\u{208e}'),
+        ('\u{2308}', '\u{2309}'),
+        ('\u{230a}', '\u{230b}'),
+        ('\u{2329}', '\u{232a}'),
+        ('\u{2768}', '\u{2769}'),
+        ('\u{276a}', '\u{276b}'),
+        ('\u{276c}', '\u{276d}'),
+        ('\u{276e}', '\u{276f}'),
+        ('\u{2770}', '\u{2771}'),
+        ('\u{2772}', '\u{2773}'),
+        ('\u{2774}', '\u{2775}'),
+        ('\u{27c5}', '\u{27c6}'),
+        ('\u{27e6}', '\u{27e7}'),
+        ('\u{27e8}', '\u{27e9}'),
+        ('\u{27ea}', '\u{27eb}'),
+        ('\u{27ec}', '\u{27ed}'),
+        ('\u{27ee}', '\u{27ef}'),
+        ('\u{2983}', '\u{2984}'),
+        ('\u{2985}', '\u{2986}'),
+        ('\u{2987}', '\u{2988}'),
+        ('\u{2989}', '\u{298a}'),
+        ('\u{298b}', '\u{298c}'),
+        ('\u{298d}', '\u{2990}'),
+        ('\u{298f}', '\u{298e}'),
+        ('\u{2991}', '\u{2992}'),
+        ('\u{2993}', '\u{2994}'),
+        ('\u{2995}', '\u{2996}'),
+        ('\u{2997}', '\u{2998}'),
+        ('\u{29d8}', '\u{29d9}'),
+        ('\u{29da}', '\u{29db}'),
+        ('\u{29fc}', '\u{29fd}'),
+        ('\u{2e02}', '\u{2e03}'),
+        ('\u{2e04}', '\u{2e05}'),
+        ('\u{2e09}', '\u{2e0a}'),
+        ('\u{2e0c}', '\u{2e0d}'),
+        ('\u{2e1c}', '\u{2e1d}'),
+        ('\u{2e20}', '\u{2e21}'),
+        ('\u{2e22}', '\u{2e23}'),
+        ('\u{2e24}', '\u{2e25}'),
+        ('\u{2e26}', '\u{2e27}'),
+        ('\u{2e28}', '\u{2e29}'),
+        ('\u{2e42}', '\u{201d}'),
+        ('\u{3008}', '\u{3009}'),
+        ('\u{300a}', '\u{300b}'),
+        ('\u{300c}', '\u{300d}'),
+        ('\u{300e}', '\u{300f}'),
+        ('\u{3010}', '\u{3011}'),
+        ('\u{3014}', '\u{3015}'),
+        ('\u{3016}', '\u{3017}'),
+        ('\u{3018}', '\u{3019}'),
+        ('\u{301a}', '\u{301b}'),
+        ('\u{301d}', '\u{301e}'),
+        ('\u{fd3f}', '\u{fd3e}'),
+        ('\u{fe17}', '\u{fe18}'),
+        ('\u{fe35}', '\u{fe36}'),
+        ('\u{fe37}', '\u{fe38}'),
+        ('\u{fe39}', '\u{fe3a}'),
+        ('\u{fe3b}', '\u{fe3c}'),
+        ('\u{fe3d}', '\u{fe3e}'),
+        ('\u{fe3f}', '\u{fe40}'),
+        ('\u{fe41}', '\u{fe42}'),
+        ('\u{fe43}', '\u{fe44}'),
+        ('\u{fe47}', '\u{fe48}'),
+        ('\u{fe59}', '\u{fe5a}'),
+        ('\u{fe5b}', '\u{fe5c}'),
+        ('\u{fe5d}', '\u{fe5e}'),
+        ('\u{ff08}', '\u{ff09}'),
+        ('\u{ff3b}', '\u{ff3d}'),
+        ('\u{ff5b}', '\u{ff5d}'),
+        ('\u{ff5f}', '\u{ff60}'),
+        ('\u{ff62}', '\u{ff63}'),
+        ('\u{22}', '\u{22}'),
+        ('\u{27}', '\u{27}'),
+        ('\u{60}', '\u{60}'),
+        ('\u{3c}', '\u{3e}'),
+        ('\u{201e}', '\u{201c}'),
+        ('\u{201a}', '\u{2018}'),
+        ('\u{301d}', '\u{301f}'),
+        ('\u{2e55}', '\u{2e56}'),
+        ('\u{2e57}', '\u{2e58}'),
+        ('\u{2e59}', '\u{2e5a}'),
+        ('\u{2e5b}', '\u{2e5c}'),
+    ];
+    let category = regex::Regex::new(r"\A[\p{Ps}\p{Pi}]\z").unwrap();
+    for ch in (0..=0x10ffff).filter_map(char::from_u32) {
+        if category.is_match(ch.encode_utf8(&mut [0; 4])) {
+            assert!(
+                wrappers.iter().any(|(open, _)| *open == ch),
+                "missing Unicode wrapper {ch:?}"
+            );
+        }
+    }
+    let mut checked = 0;
+    for &(open, close) in wrappers {
+        eprintln!("wrapper {open:?} -> {close:?}");
+        for cue in ["customerId", "employeeId", "member_id"] {
+            for shape in ["ZX-482619", "ZX-48\"2619", "ZX-48'2619"] {
+                let value = if open == close {
+                    shape.replace(open, &open.to_string().repeat(2))
+                } else {
+                    shape.to_owned()
+                };
+                let declaration = format!("{cue}={open}{value}{close}");
+                // JSON depths 0..9; every public sibling is independently checked.
+                check_quote_dialect(
+                    &pipeline,
+                    format!("{declaration}\npublic_version=FRAME"),
+                    value.clone(),
+                );
+                checked += 10;
+                for quoted in [false, true] {
+                    let cell = if quoted || declaration.contains([',', '"', '\n', '\r']) {
+                        format!("\"{}\"", declaration.replace('"', "\"\""))
+                    } else {
+                        declaration.clone()
+                    };
+                    let raw_value = if cell.starts_with('"') {
+                        value.replace('"', "\"\"")
+                    } else {
+                        value.clone()
+                    };
+                    let input =
+                        format!("{cell},{}\r\n", if quoted { "\"FRAME\"" } else { "FRAME" });
+                    check_quote_dialect_depths(&pipeline, input, raw_value, 0);
+                    checked += 1;
+                }
+                for input in [
+                    (format!("| {declaration} | FRAME |"), value.clone()),
+                    (
+                        format!("{cue}: {open}{value}{close}\npublic_version: FRAME"),
+                        value.clone(),
+                    ),
+                    (
+                        format!("SELECT '{}', 'FRAME';", declaration.replace('\'', "''")),
+                        value.replace('\'', "''"),
+                    ),
+                ] {
+                    check_quote_dialect_depths(&pipeline, input.0, input.1, 0);
+                    checked += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(checked, wrappers.len() * 3 * 3 * 15);
+    eprintln!("wrapper matrix: {checked} private cases plus {checked} public counterweights");
+}
+
+#[test]
+fn unpaired_wrappers_own_the_value_to_a_record_boundary() {
+    let pipeline = record_pipeline();
+    for (open, _) in [('“', '”'), ('「', '」'), ('`', '`'), ('⟨', '⟩')] {
+        for cue in ["customerId", "employeeId", "member_id"] {
+            check_quote_dialect(
+                &pipeline,
+                format!("{cue}={open}ZX-482619"),
+                "ZX-482619".into(),
+            );
+        }
+    }
+}
+
+#[test]
+fn complete_csv_and_sql_cells_keep_embedded_quote_suffixes() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        for (input, value) in [
+            (
+                format!("\"{cue}=\"\"ZX-482619\"\"\",public\r\n"),
+                "ZX-482619",
+            ),
+            (
+                format!("\"{cue}='ZX-48\"\"2619'\",public\r\n"),
+                "ZX-48\"\"2619",
+            ),
+            (
+                format!("SELECT '{cue}=''ZX-482619''', 'FRAME';"),
+                "ZX-482619",
+            ),
+            (
+                format!("SELECT '{cue}=“ZX-48''''2619”', 'FRAME';"),
+                "ZX-48''''2619",
+            ),
+        ] {
+            check_quote_dialect(&pipeline, input, value.into());
+        }
+    }
+}
+
+#[test]
+fn backtick_and_typographic_wrappers_keep_complete_values() {
+    let pipeline = record_pipeline();
+    for (open, close) in [('`', '`'), ('“', '”'), ('‘', '’'), ('«', '»')] {
+        for value in [
+            format!("ZX-48{close}{close}2619"),
+            format!("ZX-48{close}2619"),
+        ] {
+            check_quote_dialect(
+                &pipeline,
+                format!("customerId={open}{value}{close}\npublic_version=FRAME"),
+                value,
+            );
+        }
+        for cue in ["customerId", "employeeId", "member_id"] {
+            check_quote_dialect(
+                &pipeline,
+                format!("{cue}={open}ZX-482619{close}\npublic_version=FRAME"),
+                "ZX-482619".into(),
+            );
+        }
     }
 }
