@@ -290,7 +290,7 @@ def ascii_wrapper_records(api, partition):
                     rng = api.Rng(api.PARTITION_SEEDS[partition], f'recordids-ascii-wrapper/{family}/{index}/{depth}/{shape}')
                     serial = ('5' if partition == 'dev' else '7') + rng.digits(5)
                     value = ('NX' + serial[:3] + '"' + serial[3:] if shape == 'embedded_quote'
-                             else 'opaque private value' if shape == 'opaque'
+                             else ('amber private value' if partition == 'dev' else 'cobalt private value') if shape == 'opaque'
                              else 'NX' + serial[:3] + '\n' + serial[3:])
                     if opening == closing:
                         value = value.replace(opening, opening * 2)
