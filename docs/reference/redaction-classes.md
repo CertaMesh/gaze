@@ -116,6 +116,8 @@ Definitions: `crates/gaze-recognizers/embedded/core.toml` and `secrets.toml`.
 | `secrets` | `password.hash` | `regex` | Whole bcrypt, PHC Argon2 v19, scrypt/yescrypt, SHA-crypt, MD5-crypt, phpass and Django password encodings, without a field cue | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.95 | 100 |
 | `secrets` | `password.code` | `regex` | Complete nonempty single-line quoted literals after EN/DE password keys; PHP arrays supported; bare keys require code punctuation, preserving line-record ownership; source escapes stay literal | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 | `secrets` | `security_token.code` | `regex` | Complete quoted credential literals after `api_token`, `remember_token`, `security_token`, `access_token`, `auth_token`, `authorization_token`, or `api_key` | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
+| `secrets` | `security_token.bare` | `regex` | Bare GitHub, OpenAI, Anthropic, Slack, and Stripe credential prefixes with bounded issuer alphabets and word boundaries | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.95 | 100 |
+| `secrets` | `security_token.pem` | `regex` | Complete private-key PEM blocks with matching private, RSA, EC, OpenSSH, or encrypted-private labels, including source-escaped newlines | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.95 | 100 |
 <!-- redaction-classes-gate:recognizers:end -->
 
 The three `*.labelled` rows are safe-default `core` rules. Their captured value,
@@ -132,6 +134,50 @@ describes its stop and audit rules. The `redaction_classes_doc` test pins these
 rows and the 54-spec inventory to the loaded rulepack. The
 `bundle-tokenization-drift --verify-ack` gate separately checks the bundled
 output against its committed corpus snapshot.
+
+### Bare credentials and private-key PEM
+
+The setup-default `secrets` bundle protects bare issuer credentials as
+`custom:security_token`. Library callers select this bundle explicitly.
+The rules recognize source spelling without contacting the issuer or checking
+whether a credential can authenticate. Their bounds are a detection envelope,
+not an issuer validity contract.
+
+| Prefix | Suffix alphabet | Suffix length |
+|---|---|---|
+| `ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_` | ASCII letters, digits, underscore | 36 to 251 |
+| `github_pat_` | ASCII letters, digits, underscore | 82 to 244 |
+| `ghs_` with an application identifier and JWT | Identifier of 1 to 64 ASCII letters, digits, underscores or hyphens, then `_eyJ`; three base64url JWT segments | 5 to 2,048 characters after `eyJ`, then two segments of 5 to 2,048 characters |
+| `sk-` | ASCII letters and digits | 32 to 256 |
+| `sk-proj-`, `sk-ant-` | ASCII letters, digits, underscore, hyphen | 32 to 256 |
+| `xoxa-`, `xoxb-`, `xoxp-`, `xoxr-`, `xoxs-` | ASCII letters, digits, hyphen, with alphanumeric first and last characters | 10 to 256 |
+| `sk_live_`, `rk_live_`, `sk_test_`, `rk_test_` | ASCII letters and digits | 24 to 256 |
+
+[GitHub documents its token prefixes](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github)
+and [stateless installation tokens](https://github.blog/changelog/2026-05-15-github-app-installation-tokens-per-request-override-header/).
+The JWT rule protects the full `ghs_APPID_JWT` spelling, including both dots.
+[Anthropic documents `sk-ant-`](https://platform.claude.com/docs/en/get-api-key),
+[Slack documents bot and user prefixes](https://api.slack.com/concepts/token-types),
+and [Stripe documents secret and restricted keys](https://docs.stripe.com/keys).
+[Gitleaks' OpenAI rule](https://github.com/gitleaks/gitleaks/blob/master/cmd/generate/config/rules/openai.go)
+records legacy and project-key alphabets. Gaze uses a broader bounded suffix
+without requiring a watermark or checksum, so invalid credentials with these
+shapes receive the same protection. Unicode word characters and hyphens cannot
+abut either end. JSON separator escapes can establish a boundary. The legacy
+opaque `ghs_` alternative accepts a trailing period only as terminal
+punctuation, so it cannot protect only the first segment of a longer JWT.
+
+The PEM rule owns the BEGIN line, body, and matching END line for `PRIVATE KEY`,
+`RSA PRIVATE KEY`, `EC PRIVATE KEY`, `OPENSSH PRIVATE KEY`, and
+`ENCRYPTED PRIVATE KEY`. It preserves LF, CRLF, JSON-escaped line breaks,
+escaped base64 slashes, and traditional OpenSSL encrypted-PEM headers in one
+restorable token. [RFC 7468](https://www.rfc-editor.org/rfc/rfc7468) defines
+PKCS#8 private-key labels. `PUBLIC KEY` and `CERTIFICATE` blocks remain raw.
+Truncated blocks, mismatched labels, unsupported labels, and prefix tokens
+outside the documented envelope are outside these rules.
+
+`crates/gaze-recognizers/tests/bare_credentials.rs` pins whole-span ownership,
+exact restoration, adjacent credentials, and benign counterexamples.
 
 ### Cue shapes and group separators
 

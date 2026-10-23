@@ -167,6 +167,8 @@ mod tests {
                 "password.hash",
                 "password.code",
                 "security_token.code",
+                "security_token.bare",
+                "security_token.pem",
             ]
         );
         let core = Rulepack::load(RulepackSource::Embedded(embedded("core").expect("core")))
@@ -175,6 +177,8 @@ mod tests {
             recognizer.id.as_str(),
             "security_token.anchored"
                 | "security_token.code"
+                | "security_token.bare"
+                | "security_token.pem"
                 | "password.field"
                 | "password.hash"
                 | "password.code"
