@@ -122,6 +122,30 @@ const BOUNDARY_DECISION: SafetyNetDecision = SafetyNetDecision::Resolve {
 };
 
 impl Pipeline {
+    /// Discover Rule sources before request protection, without learned detectors or nets.
+    /// Output is discarded; staged Rule mappings remain available to every request field.
+    pub fn discover_staged_rule_sources(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        input: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> std::result::Result<(), BoundaryRefusal> {
+        let mut pipeline = self.clone();
+        pipeline.registry = Arc::new(self.registry.deterministic_only());
+        if pipeline.registry.is_empty() {
+            return Ok(());
+        }
+        pipeline.safety_nets.clear();
+        #[cfg(feature = "bundled-recognizers")]
+        {
+            pipeline.safety_net_registry = None;
+        }
+        pipeline
+            .resolve_boundary_text_transaction(transaction, input, locale_chain, dictionaries)
+            .map(|_| ())
+    }
+
     /// Find policy-protected repeats of staged Rule values in raw text coordinates.
     ///
     /// Boundary adapters can expand owned tokens, intersect these spans with the

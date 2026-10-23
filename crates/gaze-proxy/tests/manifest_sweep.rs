@@ -96,6 +96,39 @@ impl gaze::SafetyNet for HeaderNet {
     }
 }
 
+struct RepeatNet;
+impl gaze::SafetyNet for RepeatNet {
+    fn id(&self) -> &str {
+        "synthetic-repeat-net"
+    }
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &[gaze::LocaleTag::Global]
+    }
+    fn check(
+        &self,
+        text: &str,
+        _: gaze::SafetyNetContext<'_>,
+    ) -> Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
+        Ok(
+            regex::Regex::new(r"(?i)(?:maria(?:\s+johanna)?|<[0-9a-f]{8}:Name_[0-9]+>)\s+(?:schneider|<[0-9a-f]{8}:Name_[0-9]+>)(?:\s+(?:maria|<[0-9a-f]{8}:Name_[0-9]+>))?")
+                .unwrap()
+                .find_iter(text)
+                .map(|found| {
+                    gaze::LeakSuspect::new(
+                        found.range(),
+                        PiiClass::Name,
+                        self.id(),
+                        Some(0.95),
+                        gaze::LeakKind::Uncovered,
+                        "synthetic full-name repeat",
+                        None,
+                    )
+                })
+                .collect(),
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 enum Provider {
     OpenAi,
@@ -220,6 +253,28 @@ async fn run_seeded_case(
     copy: &str,
     seed: Option<&str>,
 ) {
+    run_configured_case(
+        provider,
+        stream,
+        source_first,
+        evidence,
+        (source, copy),
+        seed,
+        false,
+    )
+    .await;
+}
+
+async fn run_configured_case(
+    provider: Provider,
+    stream: bool,
+    source_first: bool,
+    evidence: Option<gaze::EvidenceKind>,
+    texts: (&str, &str),
+    seed: Option<&str>,
+    repeat_net: bool,
+) {
+    let (source, copy) = texts;
     let forwarded = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()
         .route("/{*path}", post(capture))
@@ -260,6 +315,9 @@ async fn run_seeded_case(
     let mut builder = Pipeline::builder()
         .recognizer(Header(evidence))
         .rule(DefaultRule::new(Action::Tokenize));
+    if repeat_net {
+        builder = builder.register_safety_net(RepeatNet);
+    }
     if evidence.is_none() {
         builder = builder.register_safety_net(HeaderNet);
     }
@@ -477,7 +535,7 @@ async fn anthropic_partial_overlaps_use_original_fields() {
     check_partial_overlaps(Provider::Anthropic).await;
 }
 
-async fn check_existing_token(provider: Provider) {
+async fn check_existing_token(provider: Provider, repeat_net: bool) {
     for (seed, source, copy) in [
         ("Maria", SOURCE, "Hello {token} schneider"),
         ("Schneider", SOURCE, "Hello maria {token}"),
@@ -496,14 +554,14 @@ async fn check_existing_token(provider: Provider) {
     ] {
         for stream in [false, true] {
             for source_first in [false, true] {
-                run_seeded_case(
+                run_configured_case(
                     provider,
                     stream,
                     source_first,
                     Some(gaze::EvidenceKind::Rule),
-                    source,
-                    copy,
+                    (source, copy),
                     Some(seed),
+                    repeat_net,
                 )
                 .await;
             }
@@ -531,13 +589,26 @@ async fn learned_and_net_existing_tokens_do_not_seed_longer_repeats() {
 
 #[tokio::test]
 async fn openai_existing_token_cannot_hide_suffix() {
-    check_existing_token(Provider::OpenAi).await;
+    check_existing_token(Provider::OpenAi, false).await;
 }
 #[tokio::test]
 async fn gemini_existing_token_cannot_hide_suffix() {
-    check_existing_token(Provider::Gemini).await;
+    check_existing_token(Provider::Gemini, false).await;
 }
 #[tokio::test]
 async fn anthropic_existing_token_cannot_hide_suffix() {
-    check_existing_token(Provider::Anthropic).await;
+    check_existing_token(Provider::Anthropic, false).await;
+}
+
+#[tokio::test]
+async fn openai_rule_discovery_precedes_full_value_net() {
+    check_existing_token(Provider::OpenAi, true).await;
+}
+#[tokio::test]
+async fn gemini_rule_discovery_precedes_full_value_net() {
+    check_existing_token(Provider::Gemini, true).await;
+}
+#[tokio::test]
+async fn anthropic_rule_discovery_precedes_full_value_net() {
+    check_existing_token(Provider::Anthropic, true).await;
 }

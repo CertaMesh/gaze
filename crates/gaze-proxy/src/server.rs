@@ -1377,6 +1377,21 @@ impl<'pipeline, 'context, 'transaction, 'session>
 }
 
 impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
+    fn discover_rule_sources(&mut self, input: &str) -> Result<(), CodecErrorCode> {
+        self.validate_token_shapes(input)?;
+        let expanded = self
+            .transaction
+            .restore_strict_text_bounded(input, DEFAULT_MAX_REQUEST_BYTES)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+        let result = self.pipeline.discover_staged_rule_sources(
+            self.transaction,
+            &expanded,
+            self.locale_chain,
+            self.dictionaries,
+        );
+        self.refused(result)
+    }
+
     fn deterministic_control_would_mutate(&mut self, input: &str) -> Result<bool, CodecErrorCode> {
         self.pipeline
             .deterministic_control_would_mutate(
@@ -3048,19 +3063,19 @@ fn redact_surfaces<'session>(
 ) -> Result<RedactedSurfaces<'session>, ProxyError> {
     let mut transaction = session.begin_transaction();
     let mut texts = Vec::with_capacity(surfaces.len());
-    // Discover rule sources across all leaves without publishing mappings or partial output.
-    for surface in &surfaces {
-        pipeline
-            .resolve_boundary_text_transaction(
-                &mut transaction,
-                surface.text,
-                locale_chain,
-                dictionaries,
-            )
-            .map_err(|refusal| ProxyError::Refused { refusal })?;
-    }
     let mut pseudonymizer =
         PipelineRequestPseudonymizer::new(pipeline, locale_chain, dictionaries, &mut transaction);
+    // Discovery expands owned tokens but runs no learned detectors or nets.
+    for surface in &surfaces {
+        pseudonymizer
+            .discover_rule_sources(surface.text)
+            .map_err(|_| ProxyError::Refused {
+                refusal: pseudonymizer
+                    .refusal
+                    .take()
+                    .unwrap_or_else(|| gaze::ProtectionError::Provenance.into()),
+            })?;
+    }
     for surface in &surfaces {
         texts.push(pseudonymizer.protect(surface.text).map_err(|_| {
             ProxyError::Refused {

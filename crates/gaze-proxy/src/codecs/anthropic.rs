@@ -190,8 +190,10 @@ fn protect_anthropic_request(
     }
     let mut document = parse_json(input, ctx.limits(), CodecPhase::RequestParse)?;
     let mut ledger = CoverageLedger::new(document.occurrence_count);
-    transform_request_root(&mut document.root, input, ctx, &mut ledger, count_tokens)
-        .map_err(|code| request_codec_error(code, CodecPhase::RequestProtection, ctx))?;
+    ctx.discover_rules(|ctx| {
+        transform_request_root(&mut document.root, input, ctx, &mut ledger, count_tokens)
+    })
+    .map_err(|code| request_codec_error(code, CodecPhase::RequestProtection, ctx))?;
     ledger
         .finish()
         .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;

@@ -19,7 +19,9 @@ copies, Gaze keeps the first resolution and adds only one linear scan.
 
 Within a text, sources protect copies before or after them. Proxy requests stage
 all declared mutable JSON strings (message content, tool results, arguments).
-Discovery collects rule sources from the original fields and discards its output.
+Discovery expands owned tokens and collects deterministic Rule sources from the
+original fields. It runs no learned detectors or safety nets and discards its
+output. Full protection and net admission start after discovery is complete.
 Each original field is then protected against the complete request evidence, so
 a short name protected during discovery cannot hide part of a longer repeat.
 For caller-supplied owned tokens, the proxy expands their manifest values in a

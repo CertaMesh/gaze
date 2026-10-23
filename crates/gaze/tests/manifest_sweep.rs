@@ -712,3 +712,44 @@ fn boundary_fragment_audit_failure_preserves_live_and_staged_mappings() {
     drop(transaction);
     assert_eq!(session.snapshot_entries(), live);
 }
+
+#[test]
+fn request_discovery_collects_only_rule_sources_and_accepts_no_rule_pipelines() {
+    let p = pipeline(vec!["LearnedOnly"], Audit::default());
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    p.discover_staged_rule_sources(
+        &mut transaction,
+        "From: Maria Schneider <m@example.invalid>\nLearnedOnly",
+        &[LocaleTag::Global],
+        &DictionaryBundle::default(),
+    )
+    .unwrap();
+    let entries = transaction.snapshot_entries();
+    assert!(entries.iter().any(|entry| entry.raw == "Maria Schneider"));
+    assert!(!entries.iter().any(|entry| entry.raw == "LearnedOnly"));
+    assert_eq!(
+        p.staged_rule_repeat_candidates(&mut transaction, "maria schneider")
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(session.tokens().is_empty());
+
+    let learned = Pipeline::builder()
+        .recognizer(Ner(vec!["LearnedOnly"]))
+        .rule(DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    learned
+        .discover_staged_rule_sources(
+            &mut transaction,
+            "LearnedOnly",
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+        )
+        .unwrap();
+    assert!(transaction.tokens().is_empty());
+}

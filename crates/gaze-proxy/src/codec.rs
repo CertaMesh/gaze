@@ -372,6 +372,12 @@ pub trait RequestPseudonymizer {
     /// Protects one complete decoded logical value against the staged transaction.
     fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode>;
 
+    /// Collects deterministic request sources without publishing protected output.
+    /// Implementations without a dedicated pass retain full protection and may refuse early.
+    fn discover_rule_sources(&mut self, input: &str) -> Result<(), CodecErrorCode> {
+        self.protect(input).map(|_| ())
+    }
+
     /// Probes a bounded routing identifier without learned detectors or shared cache state.
     /// Implementations without a separate deterministic pipeline retain the full isolated
     /// probe, which may refuse more identifiers but never weakens protection.
@@ -439,6 +445,7 @@ pub struct RequestTransformContext<'a> {
     inspection_projection_requested: bool,
     content_block_index: Option<usize>,
     opaque_carrier: Option<OpaqueCarrierLocation>,
+    discovering_rules: bool,
 }
 
 impl<'a> RequestTransformContext<'a> {
@@ -455,6 +462,7 @@ impl<'a> RequestTransformContext<'a> {
             inspection_projection_requested: false,
             content_block_index: None,
             opaque_carrier: None,
+            discovering_rules: false,
         }
     }
 
@@ -502,7 +510,21 @@ impl<'a> RequestTransformContext<'a> {
         self.opaque_carrier
     }
 
+    pub(crate) fn discover_rules<T>(
+        &mut self,
+        visit: impl FnOnce(&mut Self) -> Result<T, CodecErrorCode>,
+    ) -> Result<T, CodecErrorCode> {
+        self.discovering_rules = true;
+        let result = visit(self);
+        self.discovering_rules = false;
+        result
+    }
+
     pub(crate) fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode> {
+        if self.discovering_rules {
+            self.pseudonymizer.discover_rule_sources(input)?;
+            return Ok(input.to_owned());
+        }
         self.pseudonymizer
             .protect_with_prefix_cache_write_mode(input, PrefixCacheWriteMode::Allow)
     }
@@ -512,6 +534,10 @@ impl<'a> RequestTransformContext<'a> {
         &mut self,
         input: &str,
     ) -> Result<String, CodecErrorCode> {
+        if self.discovering_rules {
+            // Immutable probes are checked after mutable Rule discovery is complete.
+            return Ok(input.to_owned());
+        }
         self.pseudonymizer
             .protect_with_prefix_cache_write_mode(input, PrefixCacheWriteMode::Suppress)
     }
