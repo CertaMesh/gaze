@@ -15,7 +15,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("native session capture requires the own-policy Nym arm".into());
     }
     let inputs = gaze_assembly::resolve_policy_inputs(&policy, None, None, None)?;
-    let context = gaze::Context::from_json_str(r#"{"dictionaries":{},"class_map":{},"fields":{}}"#)?;
+    let context =
+        gaze::Context::from_json_str(r#"{"dictionaries":{},"class_map":{},"fields":{}}"#)?;
     let pipeline = gaze_assembly::build_pipeline_builder(
         &policy,
         &context,
