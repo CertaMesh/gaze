@@ -99,9 +99,13 @@ def multiline_records(api, partition):
                 rng = api.Rng(api.PARTITION_SEEDS[partition], f'recordids-unpaired-multiline/{family}/{index}/{shape}')
                 serial = ('5' if partition == 'dev' else '7') + rng.digits(5)
                 value = '\nNX' + serial if shape == 'initial_lf' else 'NX' + serial[:3] + '\n' + serial[3:]
-                for dialect in ('csv_minimal', 'csv_full', 'sql_literal'):
+                for dialect in ('csv_minimal', 'csv_full', 'sql_literal', 'open_cell_json'):
                     declaration = ('metadata: ' + word + '\n' if shape == 'prior_cell_lf' else '') + '{C}=' + opener + value
-                    if dialect.startswith('csv_'):
+                    if dialect == 'open_cell_json':
+                        note = '"' + declaration.replace('"', '""')
+                        template = json.dumps({'note':note,'public_version':'{W}'}, ensure_ascii=False)
+                        raw = encoded_content(value, 0)
+                    elif dialect.startswith('csv_'):
                         template = csv_cell(declaration, dialect == 'csv_full')
                         raw = value.replace('"', '""')
                     else:
