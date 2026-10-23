@@ -4461,8 +4461,8 @@ def _coverage_records(partition: str) -> list[Record]:
 
 
 # The surface prefix each generator version added. Every earlier document stays
-# byte identical, so an older corpus is a filter of the current one, with
-# the v16 BSN label and v18 personal-ID gold corrections reversed.
+# byte identical after reversing explicit contract corrections: the v16 BSN
+# labels, v18 personal-ID gold, and v27 unfinished-record boundary cells.
 GENERATOR_ADDITIONS = {
     4: "adjacent_",
     5: "lookalike_",

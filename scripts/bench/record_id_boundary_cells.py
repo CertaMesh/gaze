@@ -171,6 +171,7 @@ def records(api, partition, *, version=27):
                     ("nbsp_assignment", ";\u00a0private_code=É" + other),
                     ("public_looking", "; public_version=É" + other),
                     ("escaped_record", "\r\nprivate_code=É" + other),
+                    ("quoted_key", '; "private_code": É' + other),
                 ):
                     for shape, depth in (("record", None), ("note", 0), ("payload", 2), ("deep_payload", 9)):
                         if shape == "deep_payload" and index != 0:
@@ -181,7 +182,8 @@ def records(api, partition, *, version=27):
                         public = "5.9." + other
                         surface = f"private_keys_{suffix_name}_{shape}"
                         if depth is None:
-                            template = '{C}: "{V}\npublic_version={W}'
+                            prefix = "format_hint='quote character: \"'; " if index % 2 else ""
+                            template = prefix + '{C}: "{V}\npublic_version={W}'
                         else:
                             marker, public_marker = "GAZE_PRIVATE_VALUE", "GAZE_PUBLIC_VALUE"
                             content = '{C}: "' + marker if shape == "note" else '{"{C}":"' + marker
