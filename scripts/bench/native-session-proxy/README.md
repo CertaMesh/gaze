@@ -47,3 +47,9 @@ its owned token. A baseline source-first control must already forward and have
 exactly the candidate admission's false-positive bytes under both contracts.
 These admissions receive no paired leak credit. The driver verifies that bound
 wire text restores to the authored owner text before scoring.
+
+The v3 observation record uses successful Name/Email owner echoes as mapping
+constraints, then requires those constraints to reconstruct every authored leaf.
+Cross-leaf reused tokens resolve literal-gap ambiguity. Remaining ambiguity fails
+capture. Owned-token identity is checked at every original expanded position;
+extra copies elsewhere do not hide a replaced owned token.

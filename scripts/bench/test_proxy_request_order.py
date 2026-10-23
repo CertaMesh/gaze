@@ -57,12 +57,12 @@ def capture_card(leaks):
     cases = json.loads(bench.FIXTURE.read_text())["cases"]
     rows = [{"provider": provider, "id": case["id"], "attempted": 1, "forwarded": 1,
              "failed_closed": 0, "selected_restore_exact": 1, "alignment_valid": 1,
-             "seed_forwarded": int("seed" in case), "seed_restore_exact": int("seed" in case),
+             "seed_forwarded": int("seed" in case), "seed_restore_exact": int("seed" in case), "owned_identities_preserved": 1,
              "gold_bytes": sum(sum(bench.gold_bytes(leaf)) for leaf in case["leaves"]),
              "leaked_bytes": leaks, "false_positive_bytes_v1": 0, "false_positive_bytes_v2": 0}
             for provider in bench.PROVIDERS for case in cases]
     counts = tuple(key for key in rows[0] if key not in {"provider", "id"})
-    return {"schema": "gaze-proxy-request-order-v2", "layer": "proxy-request-order",
+    return {"schema": "gaze-proxy-request-order-v3", "layer": "proxy-request-order",
             "contract_labels": ["FIRSTNAME", "SURNAME", "EMAIL"], "scored_contracts": ["v2", "v1"],
             "fixture_sha256": bench.digest(bench.FIXTURE), "harness_sha256": bench.digest(bench.Path(bench.__file__)),
             "session_host_sha256": bench.digest(bench.Path(bench.__file__).with_name("native-session-proxy") / "main.rs"),
@@ -103,7 +103,7 @@ def test_admission_fp_is_separate_and_requires_an_existing_pipeline_control():
         return next(item for item in card["cases"] if item["provider"] == "anthropic" and item["id"] == case)
 
     old = row(baseline, "synthetic-0-source_last")
-    old.update(forwarded=0, failed_closed=1, selected_restore_exact=0, alignment_valid=0)
+    old.update(forwarded=0, failed_closed=1, selected_restore_exact=0, alignment_valid=0, owned_identities_preserved=0)
     for card, case in ((baseline, "synthetic-0-source_first"),
                        (candidate, "synthetic-0-source_first"), (candidate, "synthetic-0-source_last")):
         row(card, case).update(false_positive_bytes_v1=1000, false_positive_bytes_v2=1000)
@@ -254,7 +254,7 @@ def test_seeded_admission_uses_an_expanded_owner_control_and_prices_all_fp():
     ids = ["existing-token-given-source_first", "existing-token-given-source_last"]
     for row in baseline["cases"]:
         if row["provider"] == "anthropic" and row["id"] in ids:
-            row.update(forwarded=0, failed_closed=1, selected_restore_exact=0, alignment_valid=0, leaked_bytes=0)
+            row.update(forwarded=0, failed_closed=1, selected_restore_exact=0, alignment_valid=0, owned_identities_preserved=0, leaked_bytes=0)
     for card in [baseline, candidate]:
         for row in card["cases"]:
             if row["provider"] == "anthropic" and row["id"] == "existing-token-given-expanded-source_first":
@@ -273,3 +273,26 @@ def test_seeded_admission_uses_an_expanded_owner_control_and_prices_all_fp():
                             if row["provider"] == "anthropic" and row["id"] == ids[0])]["false_positive_bytes_v2"] += 1
     candidate["totals"]["false_positive_bytes_v2"] += 1
     assert bench.compare(baseline, candidate)["regressions"]
+
+
+def test_document_alignment_uses_independent_owner_echo_and_cross_leaf_reuse():
+    second = "<1234abcd:Name_2>"
+    raw = [{"text": "first|middle|last"}, {"text": "middle|last"}]
+    clean = [TOKEN + "|" + second, second]
+    assert bench.document_mappings(raw, clean) == {TOKEN: "first", second: "middle|last"}
+    assert bench.document_mappings(raw[:1], clean[:1], owner_facts={second: "middle|last"}) == {
+        TOKEN: "first", second: "middle|last"}
+    with pytest.raises(ValueError, match="contradicts"):
+        bench.document_mappings(raw, clean, {TOKEN: "first"}, {TOKEN: "wrong"})
+    with pytest.raises(bench.AmbiguousAlignment):
+        bench.document_mappings(raw[:1], clean[:1])
+
+
+def test_owned_identity_is_checked_at_each_original_expanded_position():
+    second = "<1234abcd:Name_2>"
+    known = {TOKEN: "Maria"}
+    leaves = [{"text": "Maria and Maria", "wire_text": TOKEN + " and Maria"}]
+    assert bench.owned_identities_preserved(leaves, [TOKEN + " and " + second], known,
+                                            {TOKEN: "Maria", second: "Maria"})
+    assert not bench.owned_identities_preserved(leaves, [second + " and " + TOKEN], known,
+                                                {TOKEN: "Maria", second: "Maria"})

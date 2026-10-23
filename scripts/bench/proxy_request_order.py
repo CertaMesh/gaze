@@ -92,6 +92,10 @@ def protected_bytes(raw, clean, mappings):
     return mask
 
 
+class AmbiguousAlignment(ValueError):
+    """The observed literals and known owner mappings do not determine one alignment."""
+
+
 def infer_mappings(raw, clean, known=None):
     """Require one complete literal-gap alignment with consistent reused tokens."""
     known = known or {}
@@ -109,7 +113,7 @@ def infer_mappings(raw, clean, known=None):
         gap = clean[match.end():next_start]
         if (not gap and index + 1 < len(matches)
                 and match.group() not in known and matches[index + 1].group() not in known):
-            raise ValueError("adjacent tokens have no independent byte boundary")
+            raise AmbiguousAlignment("adjacent tokens have no independent byte boundary")
         parts.append((match.group(), gap))
     solutions, mappings = [], {match.group(): known[match.group()] for match in matches if match.group() in known}
     explored = 0
@@ -145,9 +149,56 @@ def infer_mappings(raw, clean, known=None):
     if not solutions:
         raise ValueError("literal-gap alignment has inconsistent or empty token mappings")
     if len(solutions) != 1:
-        raise ValueError("literal gap does not uniquely identify token extent")
+        raise AmbiguousAlignment("literal gap does not uniquely identify token extent")
     protected_bytes(raw, clean, solutions[0])
     return solutions[0]
+
+
+def document_mappings(raw_leaves, clean_leaves, known=None, owner_facts=None):
+    facts = dict(known or {})
+    for token, value in (owner_facts or {}).items():
+        if token in facts and facts[token] != value:
+            raise ValueError("owner echo contradicts the earlier seed mapping")
+        facts[token] = value
+    pending = list(zip(raw_leaves, clean_leaves, strict=True))
+    while pending:
+        remaining, progress = [], False
+        for leaf, clean in pending:
+            try:
+                found = infer_mappings(leaf["text"], clean, facts)
+            except AmbiguousAlignment:
+                remaining.append((leaf, clean))
+                continue
+            for token, value in found.items():
+                if token in facts and facts[token] != value:
+                    raise ValueError("one token has inconsistent source values")
+                facts[token] = value
+            progress = True
+        if remaining and not progress:
+            raise AmbiguousAlignment("document has no unique owner-constrained alignment")
+        pending = remaining
+    tokens = {token for clean in clean_leaves for token in TOKEN.findall(clean)}
+    return {token: facts[token] for token in tokens}
+
+
+def token_positions(text, mappings):
+    positions, cursor, expanded = [], 0, 0
+    for match in TOKEN.finditer(text):
+        expanded += len(text[cursor:match.start()].encode())
+        value = mappings[match.group()]
+        end = expanded + len(value.encode())
+        positions.append((match.group(), expanded, end))
+        expanded, cursor = end, match.end()
+    return positions
+
+
+def owned_identities_preserved(bound_leaves, clean_leaves, known, mappings):
+    for leaf, clean in zip(bound_leaves, clean_leaves, strict=True):
+        expected = token_positions(leaf.get("wire_text", leaf["text"]), known)
+        actual = set(token_positions(clean, mappings))
+        if any(position not in actual for position in expected):
+            return False
+    return True
 
 
 def echoed_tokens(tokens):
@@ -326,7 +377,7 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                 status, reply = request_json(base_url + path, body, **({"session_id": session_id} if session_id else {}))
                 row = {"id": case["id"], "provider": provider, "order": case["order"],
                        "status": status, "attempted": 1, "seed_forwarded": int("seed" in case), "seed_restore_exact": int("seed" in case), "forwarded": 0, "failed_closed": 0,
-                       "selected_restore_exact": 0, "alignment_valid": 0,
+                       "selected_restore_exact": 0, "alignment_valid": 0, "owned_identities_preserved": 0,
                        "gold_bytes": sum(sum(gold_bytes(leaf)) for leaf in case["leaves"]) + seed_scores.get("gold_bytes", 0),
                        "leaked_bytes": 0, "false_positive_bytes_v1": 0, "false_positive_bytes_v2": 0}
                 for metric in ("leaked_bytes", "false_positive_bytes_v1", "false_positive_bytes_v2"):
@@ -341,24 +392,21 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                 if actual_provider != provider or not captured.empty():
                     raise ValueError("unexpected upstream request accounting")
                 row["forwarded"] = 1
-                mappings = {}
                 clean_leaves = leaves(provider, actual)
-                for leaf, clean in zip(case["leaves"], clean_leaves, strict=True):
-                    for token, value in infer_mappings(leaf["text"], clean, known).items():
-                        if token in mappings and mappings[token] != value:
-                            raise ValueError("one token has inconsistent source values")
-                        mappings[token] = value
-                if owner_token is not None and owner_token not in tokens:
-                    raise ValueError("existing owned token identity changed")
+                selected = echoed_tokens(tokens)
+                restored = restored_values(provider, reply) if 200 <= status < 300 else None
+                owner_facts = {}
+                if (selected and restored is not None and len(restored) == len(selected)
+                        and all(value.endswith("\n") for value in restored)):
+                    owner_facts = {token: value[:-1] for token, value in zip(selected, restored, strict=True)}
+                mappings = document_mappings(case["leaves"], clean_leaves, known, owner_facts)
                 if set(mappings) != set(tokens):
                     raise ValueError("unaccounted upstream token")
-                selected = echoed_tokens(tokens)
-                # Even when the owner response fails, forwarded bytes remain scored.
-                exact = False
-                if 200 <= status < 300:
-                    restored = restored_values(provider, reply)
-                    expected = [mappings[token] + "\n" for token in selected] or ["ok"]
-                    exact = restored == expected
+                row["owned_identities_preserved"] = int(owned_identities_preserved(bound["leaves"], clean_leaves, known, mappings))
+                # Echo facts must also reconstruct every authored leaf exactly.
+                # Failed owner responses still leave all forwarded bytes scored.
+                expected = [mappings[token] + "\n" for token in selected] or ["ok"]
+                exact = restored == expected
                 totals = Counter(seed_scores)
                 for leaf, clean in zip(case["leaves"], clean_leaves, strict=True):
                     totals.update(score_leaf(leaf, clean, mappings))
@@ -366,15 +414,15 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                 row["selected_restore_exact"] = int(exact)
                 row["alignment_valid"] = 1
                 rows.append(row)
-    counts = ("attempted", "seed_forwarded", "seed_restore_exact", "forwarded", "failed_closed", "selected_restore_exact", "alignment_valid",
+    counts = ("attempted", "seed_forwarded", "seed_restore_exact", "forwarded", "failed_closed", "selected_restore_exact", "alignment_valid", "owned_identities_preserved",
               "gold_bytes", "leaked_bytes", "false_positive_bytes_v1", "false_positive_bytes_v2")
-    result = {"schema": "gaze-proxy-request-order-v2", "layer": "proxy-request-order", "contract_labels": ["FIRSTNAME", "SURNAME", "EMAIL"],
+    result = {"schema": "gaze-proxy-request-order-v3", "layer": "proxy-request-order", "contract_labels": ["FIRSTNAME", "SURNAME", "EMAIL"],
               "runtime_revision": revision, "scored_contracts": ["v2", "v1"], "v2_contract_sha256": digest(V2_CONTRACT), "fixture_sha256": digest(fixture),
               "harness_sha256": digest(Path(__file__)), "binary_sha256": digest(binary), "policy_sha256": digest(policy), "command": command,
               "session_host_sha256": digest(Path(__file__).with_name("native-session-proxy") / "main.rs"),
               "session_builder_sha256": digest(Path(__file__).with_name("build_native_session_proxy.py")),
               "session_binary_sha256": digest(session_binary) if session_binary else None,
-              "scope": "native nonstream proxy requests; seed requests forwarded, restored and byte-scored; unique source-byte alignment and Name/Email owner echo; other classes priced as request FP bytes; no exported manifest validation",
+              "scope": "native nonstream proxy requests; seed requests forwarded, restored and byte-scored; owner-constrained source-byte alignment, owned-token positions and Name/Email owner echo; other classes priced as request FP bytes; no exported manifest validation",
               "totals": {key: sum(row[key] for row in rows) for key in counts}, "cases": rows}
     output.write_text(json.dumps(result, indent=2) + "\n")
     return result
@@ -402,7 +450,8 @@ def compare(base, candidate):
             if (row["attempted"] != 1 or row["forwarded"] + row["failed_closed"] != 1
                     or row["selected_restore_exact"] > row["forwarded"]
                     or row["alignment_valid"] != row["forwarded"]
-                    or row["seed_forwarded"] != row["seed_restore_exact"]):
+                    or row["seed_forwarded"] != row["seed_restore_exact"]
+                    or row["owned_identities_preserved"] > row["forwarded"]):
                 raise ValueError("proxy capture lacks complete forward/restore accounting")
         totals = {key: sum(row[key] for row in card["cases"]) for key in counts}
         if totals != card["totals"]:
@@ -417,7 +466,8 @@ def compare(base, candidate):
                 or row["failed_closed"] > old["failed_closed"]
                 or row["selected_restore_exact"] < old["selected_restore_exact"]
                 or row["forwarded"] - row["selected_restore_exact"] > old["forwarded"] - old["selected_restore_exact"]
-                or row["alignment_valid"] < old["alignment_valid"]):
+                or row["alignment_valid"] < old["alignment_valid"]
+                or row["owned_identities_preserved"] < old["owned_identities_preserved"]):
             regressions.append([row["provider"], row["id"]])
     paired = [(rows[(row["provider"], row["id"])], row) for row in candidate["cases"]
               if rows[(row["provider"], row["id"])]["forwarded"] and row["forwarded"]]
