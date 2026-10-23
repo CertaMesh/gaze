@@ -25,7 +25,9 @@ output. Full protection and net admission start after discovery is complete.
 Each original field is then protected against the complete request evidence, so
 a short name protected during discovery cannot hide part of a longer repeat.
 For caller-supplied owned tokens, the proxy expands their manifest values in a
-bounded view and maps every eligible Rule-repeat span back onto raw bytes.
+bounded view. Ordinary primary protection sees each original raw gap before
+projection, preserving learned-recognizer context even when no token was supplied.
+The proxy then maps every eligible Rule-repeat span back onto remaining raw bytes.
 Hits remain overlapping until their raw intersections are unioned within each
 gap, including contained hits and chains across several known values. A repeat
 may cross either edge of a token or cover raw text between tokens. Original

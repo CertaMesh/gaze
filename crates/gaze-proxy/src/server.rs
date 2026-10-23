@@ -1442,6 +1442,30 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         prefix_cache_write_mode: PrefixCacheWriteMode,
     ) -> Result<String, CodecErrorCode> {
         self.validate_token_shapes(input)?;
+        let original = self
+            .transaction
+            .restore_strict_text_bounded(input, DEFAULT_MAX_REQUEST_BYTES)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+        let mut tokens = self.transaction.tokens();
+        tokens.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
+        // Run ordinary primary protection on complete original raw gaps first.
+        // Projecting known hits before this step would split the context seen by
+        // learned recognizers even in a leaf with no caller-supplied tokens.
+        let mut prepared = String::with_capacity(input.len());
+        let mut cursor = 0;
+        for range in owned_token_ranges(input, &tokens) {
+            prepared.push_str(
+                &self.protect_unstaged_segment(
+                    &input[cursor..range.start],
+                    prefix_cache_write_mode,
+                )?,
+            );
+            prepared.push_str(&input[range.clone()]);
+            cursor = range.end;
+        }
+        prepared
+            .push_str(&self.protect_unstaged_segment(&input[cursor..], prefix_cache_write_mode)?);
+        let input = prepared.as_str();
         let mut tokens = self.transaction.tokens();
         tokens.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
         let owned = owned_token_ranges(input, &tokens);
@@ -1452,6 +1476,9 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
             .transaction
             .restore_strict_text_bounded(input, DEFAULT_MAX_REQUEST_BYTES)
             .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+        if expanded != original {
+            return Err(CodecErrorCode::ProtectionFailedClosed);
+        }
         let mut gaps = Vec::with_capacity(owned.len() + 1);
         let (mut source_cursor, mut expanded_cursor) = (0, 0);
         for range in &owned {
@@ -1507,10 +1534,7 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
             for (range, hit) in union {
                 let start = source.start + range.start - view.start;
                 let end = source.start + range.end - view.start;
-                output.push_str(&self.protect_unstaged_segment(
-                    &input[gap_cursor..start],
-                    prefix_cache_write_mode,
-                )?);
+                output.push_str(&input[gap_cursor..start]);
                 let token = self
                     .pipeline
                     .tokenize_staged_rule_repeat_fragment(self.transaction, hit, &input[start..end])
@@ -1518,10 +1542,7 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
                 output.push_str(&token);
                 gap_cursor = end;
             }
-            output.push_str(&self.protect_unstaged_segment(
-                &input[gap_cursor..source.end],
-                prefix_cache_write_mode,
-            )?);
+            output.push_str(&input[gap_cursor..source.end]);
             cursor = source.end;
         }
         if self

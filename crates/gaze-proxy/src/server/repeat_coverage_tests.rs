@@ -213,3 +213,81 @@ fn final_coverage_rejects_unprotected_contained_and_chained_occurrences() {
     let protected = boundary.protect(&input).unwrap();
     assert!(boundary.verify_rule_coverage(&protected).is_ok());
 }
+
+#[test]
+fn projection_preserves_complete_primary_ner_context_without_existing_tokens() {
+    struct ContextualNer;
+    impl Recognizer for ContextualNer {
+        fn id(&self) -> &str {
+            "synthetic-contextual-ner"
+        }
+        fn evidence(&self) -> EvidenceKind {
+            EvidenceKind::Learned
+        }
+        fn supported_class(&self) -> &gaze::PiiClass {
+            &gaze::PiiClass::Name
+        }
+        fn token_family(&self) -> &str {
+            "counter"
+        }
+        fn detect(
+            &self,
+            input: &str,
+            _: &DetectContext<'_>,
+        ) -> Result<Vec<Candidate>, gaze_types::DetectError> {
+            if !input.contains("Maria Schneider") {
+                return Ok(vec![]);
+            }
+            Ok(input
+                .match_indices("synthetic_handle")
+                .map(|(start, value)| {
+                    Candidate::new(
+                        start..start + value.len(),
+                        gaze::PiiClass::Name,
+                        self.id(),
+                        1.0,
+                        0,
+                        None,
+                        "counter",
+                        self.id(),
+                        ConflictTier::None,
+                        vec![],
+                    )
+                    .with_evidence(EvidenceKind::Learned)
+                })
+                .collect())
+        }
+    }
+    let pipeline = Pipeline::builder()
+        .recognizer(Header)
+        .recognizer(ContextualNer)
+        .rule(DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap();
+    let dictionaries = DictionaryBundle::default();
+    let locales = [LocaleTag::Global];
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut tx = session.begin_transaction();
+    pipeline
+        .discover_staged_rule_sources(
+            &mut tx,
+            "From: Maria Schneider <m@example.invalid>",
+            &locales,
+            &dictionaries,
+        )
+        .unwrap();
+    let original = "Public Maria Schneider; synthetic_handle";
+    let mut boundary =
+        PipelineRequestPseudonymizer::new(&pipeline, &locales, &dictionaries, &mut tx);
+    let protected = boundary.protect(original).unwrap();
+    boundary.verify_rule_coverage(&protected).unwrap();
+    assert!(
+        !protected.contains("synthetic_handle"),
+        "primary NER lost its context: {protected}"
+    );
+    assert_eq!(tx.restore_strict_text(&protected).unwrap(), original);
+    assert!(pipeline
+        .staged_rule_repeat_candidates(&tx, "synthetic_handle")
+        .unwrap()
+        .is_empty());
+}
