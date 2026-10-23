@@ -18,3 +18,7 @@ comparison-test = [
 
 [tool.uv]
 package = false
+# Presidio's pinned span resolver is required by the comparison contract, but
+# its cryptography <49 bound excludes the security fixes in 50.0.0 and later.
+# The model-free comparison tests exercise the resolver with this override.
+override-dependencies = ["cryptography>=50.0.2,<51"]
