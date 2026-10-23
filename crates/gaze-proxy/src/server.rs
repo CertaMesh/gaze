@@ -2134,7 +2134,7 @@ async fn proxy_inner(
             .map_err(|_| ProxyError::ControlWouldMutate)?;
         residual_scan_model_control(
             &state.pipeline,
-            &session,
+            &redacted.transaction,
             &model,
             state.config.locale_chain(),
             state.config.dictionaries(),
@@ -2154,7 +2154,7 @@ async fn proxy_inner(
                 locale_chain,
                 dictionaries,
                 adapter.name() == "openai",
-                &session,
+                &redacted.transaction,
             )?;
         }
         // A codec-proved adapter must have been routed to the codec branch above. Reaching this
@@ -3055,7 +3055,7 @@ fn residual_scan_request(
     locale_chain: &[LocaleTag],
     dictionaries: &DictionaryBundle,
     model_is_routing_control: bool,
-    routing_session: &Session,
+    routing_transaction: &SessionTransaction<'_>,
 ) -> Result<(), ProxyError> {
     let session =
         Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
@@ -3073,7 +3073,7 @@ fn residual_scan_request(
         match (model_is_routing_control, key.as_str(), value) {
             (true, "model", Value::String(text)) => residual_scan_model_control(
                 pipeline,
-                routing_session,
+                routing_transaction,
                 text,
                 locale_chain,
                 dictionaries,
@@ -3092,7 +3092,7 @@ fn residual_scan_request(
 
 fn residual_scan_model_control(
     pipeline: &Pipeline,
-    routing_session: &Session,
+    routing_transaction: &SessionTransaction<'_>,
     text: &str,
     locale_chain: &[LocaleTag],
     dictionaries: &DictionaryBundle,
@@ -3100,7 +3100,7 @@ fn residual_scan_model_control(
     if crate::codec::is_model_identifier(text) {
         if pipeline
             .deterministic_control_would_mutate(
-                &routing_session.begin_transaction(),
+                routing_transaction,
                 text,
                 locale_chain,
                 dictionaries,
@@ -3112,12 +3112,7 @@ fn residual_scan_model_control(
         return Ok(());
     }
     if pipeline
-        .control_would_mutate(
-            &routing_session.begin_transaction(),
-            text,
-            locale_chain,
-            dictionaries,
-        )
+        .control_would_mutate(routing_transaction, text, locale_chain, dictionaries)
         .map_err(|source| ProxyError::Pipeline { source })?
     {
         return Err(ProxyError::UnsurfacedPii {
@@ -3795,7 +3790,9 @@ mod tests {
             &body,
             &staged.field_paths,
             &[LocaleTag::Global],
-            &DictionaryBundle::default()
+            &DictionaryBundle::default(),
+            false,
+            &staged.transaction,
         )
         .is_err());
         drop(staged);
