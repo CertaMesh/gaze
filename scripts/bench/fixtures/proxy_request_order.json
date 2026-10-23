@@ -422,7 +422,7 @@
             {
               "start": 6,
               "end": 11,
-              "label": "SURNAME"
+              "label": "FIRSTNAME"
             },
             {
               "start": 13,
@@ -457,7 +457,7 @@
             {
               "start": 6,
               "end": 11,
-              "label": "SURNAME"
+              "label": "FIRSTNAME"
             },
             {
               "start": 13,
@@ -647,7 +647,7 @@
             {
               "start": 6,
               "end": 13,
-              "label": "SURNAME"
+              "label": "FIRSTNAME"
             },
             {
               "start": 15,
@@ -687,7 +687,7 @@
             {
               "start": 6,
               "end": 13,
-              "label": "SURNAME"
+              "label": "FIRSTNAME"
             },
             {
               "start": 15,
