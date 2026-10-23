@@ -9,10 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Protect explicitly labelled customer, employee and person/member record identifiers
-  in English/German prose, JSON and logs with exact reversible value capture.
-  Generic record, order, invoice, issue, build and tracking IDs remain outside these rules.
-
 - **Password hashes and code credentials.** The setup-default `secrets` bundle
   protects whole bcrypt, Argon2, scrypt/yescrypt, crypt, phpass and Django
   encodings, including broader crypt/Django salts and hashes in SQL dumps.
@@ -24,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   retain their keys and punctuation. Generic `token` keys remain outside the
   code-field rule; ambiguous password metadata stays fail-closed. Whole Argon2
   encodings no longer split at an inner postal-code candidate (#824).
+- Protect explicitly labelled customer, employee and person/member record identifiers
+  in English/German prose, JSON and logs with exact reversible value capture.
+  Generic record, order, invoice, issue, build and tracking IDs remain outside these rules.
+
 - Plain-text session files on macOS/Linux clear and verify their extended ACL
   before any restore-key bytes are written, including overwrite replacements.
   ACL failures and unsupported platforms (including Windows) refuse
@@ -47,6 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Adjacent format-preserving tokens restore as a complete, unambiguous run,
+  including bounded transaction restores. Live sessions, committed proxy
+  snapshots, and staged validation share one lazy matcher per token map.
+  A new mapping invalidates the cache. Ambiguous runs now return the distinct
+  `AmbiguousTokenRun` error, whose display and debug output contain no tokens
+  or manifest values.
 - Cross-class identifier trimming discards repeat seeds that extend beyond the
   shortened owner, preserving fail-closed validation without refusing valid
   mixed licence and card inputs.
@@ -69,12 +75,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Private and unknown tails retain conservative ownership until an independent
   recognizer supplies existing boundary proof. Unicode groups and complete
   licence connectors retain their original bytes.
-- Adjacent format-preserving tokens restore as a complete, unambiguous run,
-  including bounded transaction restores. Live sessions, committed proxy
-  snapshots, and staged validation share one lazy matcher per token map.
-  A new mapping invalidates the cache. Ambiguous runs now return the distinct
-  `AmbiguousTokenRun` error, whose display and debug output contain no tokens
-  or manifest values.
 - `gaze-proxy` no longer restores a value captured from a JSON document with its
   JSON escapes. A name captured as `Robert \"Bob\" Smith` from a JSON text block
   or JSON tool result now reaches Anthropic `tool_use.input` as
