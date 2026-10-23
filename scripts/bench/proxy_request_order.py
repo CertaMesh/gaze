@@ -6,6 +6,13 @@ case set measures actual forwarded UTF-8 bytes, owner-side token restoration,
 and refusals before forwarding. It makes no latency claim. Run both revisions
 under the bench-machine lease with each revision's gaze setup policy. Inputs
 are synthetic and pinned by their committed fixture hash.
+
+Capture each side with this committed driver:
+  python3 scripts/bench/proxy_request_order.py --runtime-root <checkout> \
+    --binary <checkout>/target/release/gaze --policy <checkout>/target/gate/policy.toml \
+    --output target/proxy-<side>.json
+Compare the captures with --compare target/proxy-base.json target/proxy-candidate.json
+and --output target/proxy-comparison.json. C/A/D/R must also show no regression.
 """
 from __future__ import annotations
 
@@ -65,7 +72,7 @@ def restored_values(provider, body):
 
 
 def protected_bytes(raw, clean, mappings):
-    """Reconstruct exact original bytes and mark only manifest-restored extents."""
+    """Reconstruct exact original bytes and mark token-substituted extents."""
     parts, mask, cursor = [], [], 0
     for match in TOKEN.finditer(clean):
         gap = clean[cursor:match.start()]
@@ -80,6 +87,45 @@ def protected_bytes(raw, clean, mappings):
     if "".join(parts) != raw:
         raise ValueError("proxy output did not restore exactly to the case input")
     return mask
+
+
+def infer_mappings(raw, clean):
+    """Unique literal-gap alignment; refuse adjacent tokens or ambiguous separators."""
+    matches = list(TOKEN.finditer(clean))
+    if not matches:
+        if raw != clean:
+            raise ValueError("token-free leaf changed")
+        return {}
+    prefix = clean[:matches[0].start()]
+    if not raw.startswith(prefix):
+        raise ValueError("protected leaf changed its literal prefix")
+    cursor, result = len(prefix), {}
+    for index, match in enumerate(matches):
+        next_start = matches[index + 1].start() if index + 1 < len(matches) else len(clean)
+        gap = clean[match.end():next_start]
+        if not gap:
+            if index + 1 < len(matches):
+                raise ValueError("adjacent tokens have no independent byte boundary")
+            end = len(raw)
+        else:
+            end = raw.find(gap, cursor)
+            if end < cursor or raw.find(gap, end + 1) >= 0:
+                raise ValueError("literal gap does not uniquely identify token extent")
+        value = raw[cursor:end]
+        if not value or (match.group() in result and result[match.group()] != value):
+            raise ValueError("inconsistent or empty token mapping")
+        result[match.group()] = value
+        cursor = end + len(gap)
+    if cursor != len(raw):
+        raise ValueError("literal-gap alignment left unaccounted bytes")
+    protected_bytes(raw, clean, result)
+    return result
+
+
+def echoed_tokens(tokens):
+    # This layer's gold classes are names and emails. Other classes still count
+    # toward request FP bytes, but are not reflected as model-authored answer text.
+    return [token for token in tokens if re.fullmatch(r"<[0-9a-f]{8}:(?:Name|Email)_\d+>", token)]
 
 
 def gold_bytes(leaf):
@@ -138,7 +184,7 @@ def upstream():
                         "gemini" if self.path.startswith("/v1beta/") else "openai")
             tokens = list(dict.fromkeys(TOKEN.findall("\n".join(leaves(provider, body)))))
             captured.put((provider, body, tokens))
-            encoded = json.dumps(replies(provider, tokens or ["ok"])).encode()
+            encoded = json.dumps(replies(provider, [token + "\n" for token in echoed_tokens(tokens)] or ["ok"])).encode()
             self.send_response(200)
             self.send_header("content-type", "application/json")
             self.send_header("content-length", str(len(encoded)))
@@ -210,7 +256,7 @@ def measure(binary, policy, fixture, output, runtime_root):
                 status, reply = request_json(base_url + path, body)
                 row = {"id": case["id"], "provider": provider, "order": case["order"],
                        "status": status, "attempted": 1, "forwarded": 0, "failed_closed": 0,
-                       "restore_exact": 0, "token_ownership_valid": 0,
+                       "selected_restore_exact": 0, "alignment_valid": 0,
                        "gold_bytes": sum(sum(gold_bytes(leaf)) for leaf in case["leaves"]),
                        "leaked_bytes": 0, "false_positive_bytes_v1": 0, "false_positive_bytes_v2": 0}
                 if captured.empty():
@@ -223,29 +269,35 @@ def measure(binary, policy, fixture, output, runtime_root):
                 if actual_provider != provider or not captured.empty():
                     raise ValueError("unexpected upstream request accounting")
                 row["forwarded"] = 1
-                # A response failure after sending must never hide already-forwarded leaks.
-                if not 200 <= status < 300:
-                    raise ValueError("response failed after forwarding; cannot prove token mappings")
-                restored = restored_values(provider, reply)
-                if not tokens:
-                    if restored != ["ok"]:
-                        raise ValueError("unexpected token-free reply")
-                    restored = []
-                if len(restored) != len(tokens) or any(TOKEN.search(value) for value in restored):
-                    raise ValueError("owner response did not restore every upstream token")
-                mappings = dict(zip(tokens, restored, strict=True))
+                mappings = {}
+                clean_leaves = leaves(provider, actual)
+                for leaf, clean in zip(case["leaves"], clean_leaves, strict=True):
+                    for token, value in infer_mappings(leaf["text"], clean).items():
+                        if token in mappings and mappings[token] != value:
+                            raise ValueError("one token has inconsistent source values")
+                        mappings[token] = value
+                if set(mappings) != set(tokens):
+                    raise ValueError("unaccounted upstream token")
+                selected = echoed_tokens(tokens)
+                # Even when the owner response fails, forwarded bytes remain scored.
+                exact = False
+                if 200 <= status < 300:
+                    restored = restored_values(provider, reply)
+                    expected = [mappings[token] + "\n" for token in selected] or ["ok"]
+                    exact = restored == expected
                 totals = Counter()
-                for leaf, clean in zip(case["leaves"], leaves(provider, actual), strict=True):
+                for leaf, clean in zip(case["leaves"], clean_leaves, strict=True):
                     totals.update(score_leaf(leaf, clean, mappings))
                 row.update(totals)
-                row["restore_exact"] = row["token_ownership_valid"] = 1
+                row["selected_restore_exact"] = int(exact)
+                row["alignment_valid"] = 1
                 rows.append(row)
-    counts = ("attempted", "forwarded", "failed_closed", "restore_exact", "token_ownership_valid",
+    counts = ("attempted", "forwarded", "failed_closed", "selected_restore_exact", "alignment_valid",
               "gold_bytes", "leaked_bytes", "false_positive_bytes_v1", "false_positive_bytes_v2")
-    result = {"schema": "gaze-proxy-request-order-v1", "layer": "proxy-request-order", "contract_labels": ["FIRSTNAME", "SURNAME", "EMAIL"],
+    result = {"schema": "gaze-proxy-request-order-v2", "layer": "proxy-request-order", "contract_labels": ["FIRSTNAME", "SURNAME", "EMAIL"],
               "runtime_revision": revision, "scored_contracts": ["v2", "v1"], "v2_contract_sha256": digest(V2_CONTRACT), "fixture_sha256": digest(fixture),
               "harness_sha256": digest(Path(__file__)), "binary_sha256": digest(binary), "policy_sha256": digest(policy), "command": command,
-              "scope": "native nonstream proxy requests; token ownership via owner-side restore, not exported manifest validation",
+              "scope": "native nonstream proxy requests; unique source-byte alignment and Name/Email owner echo; other classes priced as request FP bytes; no exported manifest validation",
               "totals": {key: sum(row[key] for row in rows) for key in counts}, "cases": rows}
     output.write_text(json.dumps(result, indent=2) + "\n")
     return result
@@ -271,8 +323,8 @@ def compare(base, candidate):
             if any(type(row[key]) is not int or row[key] < 0 for key in counts):
                 raise ValueError("proxy counts must be nonnegative integers")
             if (row["attempted"] != 1 or row["forwarded"] + row["failed_closed"] != 1
-                    or row["restore_exact"] != row["forwarded"]
-                    or row["token_ownership_valid"] != row["forwarded"]):
+                    or row["selected_restore_exact"] > row["forwarded"]
+                    or row["alignment_valid"] != row["forwarded"]):
                 raise ValueError("proxy capture lacks complete forward/restore accounting")
         totals = {key: sum(row[key] for row in card["cases"]) for key in counts}
         if totals != card["totals"]:
@@ -283,8 +335,9 @@ def compare(base, candidate):
         old = rows[(row["provider"], row["id"])]
         if (row["gold_bytes"] != old["gold_bytes"] or row["leaked_bytes"] > old["leaked_bytes"]
                 or row["failed_closed"] > old["failed_closed"]
-                or row["restore_exact"] < old["restore_exact"]
-                or row["token_ownership_valid"] < old["token_ownership_valid"]):
+                or row["selected_restore_exact"] < old["selected_restore_exact"]
+                or row["forwarded"] - row["selected_restore_exact"] > old["forwarded"] - old["selected_restore_exact"]
+                or row["alignment_valid"] < old["alignment_valid"]):
             regressions.append([row["provider"], row["id"]])
     old, new = base["totals"], candidate["totals"]
     leak_drop = old["leaked_bytes"] - new["leaked_bytes"]
@@ -293,7 +346,7 @@ def compare(base, candidate):
         fp_delta = new["false_positive_bytes_" + contract] - old["false_positive_bytes_" + contract]
         improved = ((leak_drop > 0 and fp_delta < leak_drop) or
                     (leak_drop == 0 and fp_delta < 0) or
-                    (leak_drop == 0 and fp_delta == 0 and new["restore_exact"] > old["restore_exact"]))
+                    (leak_drop == 0 and fp_delta == 0 and new["selected_restore_exact"] > old["selected_restore_exact"]))
         verdicts[contract] = {"verdict": "pass" if improved and not regressions else "fail",
                               "leaked_bytes_removed": leak_drop, "false_positive_bytes_added": fp_delta,
                               "net_bytes": leak_drop - fp_delta}

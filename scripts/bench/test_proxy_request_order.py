@@ -56,12 +56,12 @@ def test_authored_gold_and_order_twins_are_independent_of_runtime_output():
 def capture_card(leaks):
     cases = json.loads(bench.FIXTURE.read_text())["cases"]
     rows = [{"provider": provider, "id": case["id"], "attempted": 1, "forwarded": 1,
-             "failed_closed": 0, "restore_exact": 1, "token_ownership_valid": 1,
+             "failed_closed": 0, "selected_restore_exact": 1, "alignment_valid": 1,
              "gold_bytes": sum(sum(bench.gold_bytes(leaf)) for leaf in case["leaves"]),
              "leaked_bytes": leaks, "false_positive_bytes_v1": 0, "false_positive_bytes_v2": 0}
             for provider in bench.PROVIDERS for case in cases]
     counts = tuple(key for key in rows[0] if key not in {"provider", "id"})
-    return {"schema": "gaze-proxy-request-order-v1", "layer": "proxy-request-order",
+    return {"schema": "gaze-proxy-request-order-v2", "layer": "proxy-request-order",
             "contract_labels": ["FIRSTNAME", "SURNAME", "EMAIL"], "scored_contracts": ["v2", "v1"],
             "fixture_sha256": bench.digest(bench.FIXTURE), "harness_sha256": bench.digest(bench.Path(bench.__file__)),
             "v2_contract_sha256": bench.digest(bench.V2_CONTRACT), "policy_sha256": "synthetic-policy",
@@ -98,9 +98,54 @@ def test_native_upstream_echo_preserves_token_order_and_records_real_forwarding(
             path, body = bench.native_request(provider, case)
             status, reply = bench.request_json(url + path, body)
             assert status == 200
-            assert bench.restored_values(provider, reply) == [TOKEN, second]
+            assert bench.restored_values(provider, reply) == [TOKEN + "\n", second + "\n"]
             actual_provider, actual_body, tokens = captured.get_nowait()
             assert actual_provider == provider
             assert bench.leaves(provider, actual_body) == [case["leaves"][0]["text"]]
             assert tokens == [TOKEN, second]
             assert captured.empty()
+
+
+def test_literal_gap_alignment_requires_one_reversible_interpretation():
+    assert bench.infer_mappings("Write to Zoë today.", f"Write to {TOKEN} today.") == {TOKEN: "Zoë"}
+    second = "<1234abcd:Name_2>"
+    with pytest.raises(ValueError, match="adjacent"):
+        bench.infer_mappings("firstsecond", TOKEN + second)
+    with pytest.raises(ValueError, match="uniquely"):
+        bench.infer_mappings("first|middle|last", TOKEN + "|" + second)
+    with pytest.raises(ValueError, match="inconsistent"):
+        bench.infer_mappings("first and second.", TOKEN + " and " + TOKEN + ".")
+
+
+def test_non_gold_classes_are_priced_even_when_not_echoed():
+    token = "<1234abcd:Custom:url_1>"
+    raw = "https://example.invalid/public"
+    assert bench.echoed_tokens([TOKEN, token]) == [TOKEN]
+    assert bench.score_leaf({"text": raw, "gold": []}, token, {token: raw})["false_positive_bytes_v2"] == len(raw)
+
+
+def test_post_forward_response_errors_cannot_hide_request_leaks(monkeypatch, tmp_path):
+    from contextlib import contextmanager
+    binary, policy = tmp_path / "binary", tmp_path / "policy.toml"
+    binary.write_bytes(b"synthetic test executable")
+    policy.write_text('[safety_net]\nbackend="nym"\n')
+    monkeypatch.setattr(bench.subprocess, "check_output", lambda args, **kwargs:
+                        "" if "status" in args else "a" * 40)
+
+    @contextmanager
+    def passthrough(_binary, _policy, upstream_url, _log_path, _root):
+        yield upstream_url, ["synthetic-test-proxy"]
+
+    monkeypatch.setattr(bench, "proxy", passthrough)
+    original_request = bench.request_json
+
+    def fail_after_forward(*args, **kwargs):
+        original_request(*args, **kwargs)  # The native upstream receives the actual request.
+        return 502, {"error": "synthetic-owner-response-failure"}
+
+    monkeypatch.setattr(bench, "request_json", fail_after_forward)
+    result = bench.measure(binary, policy, bench.FIXTURE, tmp_path / "result.json", tmp_path)
+    assert result["totals"]["forwarded"] == result["totals"]["attempted"] == 27
+    assert result["totals"]["failed_closed"] == 0
+    assert result["totals"]["leaked_bytes"] == result["totals"]["gold_bytes"] > 0
+    assert result["totals"]["selected_restore_exact"] == 0
