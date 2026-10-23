@@ -16,16 +16,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let inputs = gaze_assembly::resolve_policy_inputs(&policy, None, None, None)?;
     let context = gaze::Context::from_json_str("{}")?;
-    let pipeline = gaze_assembly::build_pipeline(
+    let pipeline = gaze_assembly::build_pipeline_builder(
         &policy,
         &context,
         &inputs.rulepacks,
         &inputs.locale_chain,
         Some(inputs.ner_threshold),
-    )?;
+    )?
+    .build()?;
+    if pipeline.safety_nets_len() != 0 {
+        return Err("native benchmark builder unexpectedly attached a safety net".into());
+    }
     let model = std::env::var_os("GAZE_NYM_MODEL_DIR").map(PathBuf::from);
     let pipeline =
         gaze_assembly::attach_nym_safety_net(pipeline, &policy, model.as_deref(), None, None)?;
+    if pipeline.safety_nets_len() != 1 {
+        return Err("native benchmark requires exactly one configured Nym net".into());
+    }
     let upstream = url::Url::parse(&args[3])?;
     let adapters: Vec<Arc<dyn ProviderAdapter>> = vec![
         Arc::new(OpenAiAdapter::new(upstream.clone())),
