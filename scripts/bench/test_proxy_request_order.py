@@ -90,6 +90,39 @@ def test_comparison_refuses_missing_cases_or_self_reported_totals():
         bench.compare(baseline, candidate)
 
 
+def test_admission_fp_is_separate_and_requires_an_existing_pipeline_control():
+    baseline, candidate = capture_card(0), capture_card(0)
+
+    def retotal(card):
+        card["totals"] = {key: sum(row[key] for row in card["cases"]) for key in card["totals"]}
+
+    def row(card, case):
+        return next(item for item in card["cases"] if item["provider"] == "anthropic" and item["id"] == case)
+
+    old = row(baseline, "synthetic-0-source_last")
+    old.update(forwarded=0, failed_closed=1, selected_restore_exact=0, alignment_valid=0)
+    for card, case in ((baseline, "synthetic-0-source_first"),
+                       (candidate, "synthetic-0-source_first"), (candidate, "synthetic-0-source_last")):
+        row(card, case).update(false_positive_bytes_v1=1000, false_positive_bytes_v2=1000)
+    retotal(baseline)
+    retotal(candidate)
+    result = bench.compare(baseline, candidate)
+    assert result["paired"]["cases"] == 26
+    assert result["refused_to_forwarded"][0]["preexisting_fp_proven"]
+    # Admission and restore-count gains cannot replace paired byte improvement.
+    assert all(item["verdict"] == "fail" for item in result["contracts"].values())
+    baseline["cases"][0]["leaked_bytes"] = 10
+    retotal(baseline)
+    result = bench.compare(baseline, candidate)
+    assert all(item["net_bytes"] == 10 and item["verdict"] == "pass"
+               for item in result["contracts"].values())
+    row(candidate, "synthetic-0-source_last")["false_positive_bytes_v2"] += 1
+    retotal(candidate)
+    result = bench.compare(baseline, candidate)
+    assert not result["refused_to_forwarded"][0]["preexisting_fp_proven"]
+    assert all(item["verdict"] == "fail" for item in result["contracts"].values())
+
+
 def test_native_upstream_echo_preserves_token_order_and_records_real_forwarding():
     second = "<1234abcd:Name_2>"
     with bench.upstream() as (url, captured):

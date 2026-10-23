@@ -339,7 +339,31 @@ def compare(base, candidate):
                 or row["forwarded"] - row["selected_restore_exact"] > old["forwarded"] - old["selected_restore_exact"]
                 or row["alignment_valid"] < old["alignment_valid"]):
             regressions.append([row["provider"], row["id"]])
-    old, new = base["totals"], candidate["totals"]
+    paired = [(rows[(row["provider"], row["id"])], row) for row in candidate["cases"]
+              if rows[(row["provider"], row["id"])]["forwarded"] and row["forwarded"]]
+    old = {key: sum(before[key] for before, _ in paired) for key in counts}
+    new = {key: sum(after[key] for _, after in paired) for key in counts}
+    transitions = []
+    fixture = {case["id"]: case for case in json.loads(FIXTURE.read_text())["cases"]}
+    for row in candidate["cases"]:
+        previous = rows[(row["provider"], row["id"])]
+        if previous["forwarded"] or not row["forwarded"]:
+            continue
+        # Same authored content, source first: an already-forwarded baseline
+        # control proves the transition's FP is existing pipeline behaviour.
+        twin_id = row["id"].replace("source_last", "source_first")
+        control = rows.get((row["provider"], twin_id))
+        same_content = (twin_id != row["id"] and twin_id in fixture and
+                        sorted(json.dumps(leaf, sort_keys=True) for leaf in fixture[twin_id]["leaves"]) ==
+                        sorted(json.dumps(leaf, sort_keys=True) for leaf in fixture[row["id"]]["leaves"]))
+        proven = bool(same_content and control and control["forwarded"] and
+                      all(control["false_positive_bytes_" + contract] == row["false_positive_bytes_" + contract]
+                          for contract in ("v2", "v1")))
+        transitions.append({"provider": row["provider"], "id": row["id"],
+                            "candidate": row, "base_source_first_control": control,
+                            "preexisting_fp_proven": proven})
+        if not proven:
+            regressions.append([row["provider"], row["id"], "unproven admission FP"])
     leak_drop = old["leaked_bytes"] - new["leaked_bytes"]
     verdicts = {}
     for contract in ("v2", "v1"):
@@ -350,9 +374,11 @@ def compare(base, candidate):
         verdicts[contract] = {"verdict": "pass" if improved and not regressions else "fail",
                               "leaked_bytes_removed": leak_drop, "false_positive_bytes_added": fp_delta,
                               "net_bytes": leak_drop - fp_delta}
-    return {"schema": "gaze-proxy-request-order-comparison-v1", "contracts": verdicts,
+    return {"schema": "gaze-proxy-request-order-comparison-v2", "contracts": verdicts,
             "regressions": regressions,
-            "scope": "supplementary proxy layer only; separate fresh C/A/D/R gain evidence is required",
+            "scope": "paired both-forwarded byte gate; refused-to-forwarded transitions reported separately without byte-gain credit; separate fresh C/A/D/R evidence required",
+            "paired": {"cases": len(paired), "base": old, "candidate": new},
+            "refused_to_forwarded": transitions,
             "base": base["totals"], "candidate": candidate["totals"]}
 
 
