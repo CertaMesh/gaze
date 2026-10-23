@@ -1487,7 +1487,13 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
                     (start < end).then_some((start..end, hit))
                 })
                 .collect::<Vec<_>>();
-            intersections.sort_by_key(|(range, _)| (range.start, std::cmp::Reverse(range.end)));
+            intersections.sort_by(|(left, a), (right, b)| {
+                left.start
+                    .cmp(&right.start)
+                    .then_with(|| right.end.cmp(&left.end))
+                    .then_with(|| a.class.cmp(&b.class))
+                    .then_with(|| a.token_family.cmp(&b.token_family))
+            });
             let mut union: Vec<(std::ops::Range<usize>, &gaze::Candidate)> = Vec::new();
             for (range, hit) in intersections {
                 if let Some((previous, _)) = union.last_mut().filter(|(r, _)| r.end >= range.start)
