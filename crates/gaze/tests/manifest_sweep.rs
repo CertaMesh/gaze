@@ -593,3 +593,122 @@ fn honorific_name_runs_propagate_to_a_later_turn() {
         "{rows:#?}"
     );
 }
+
+#[test]
+fn staged_repeat_query_maps_unicode_without_detection_or_state_changes() {
+    let audit = Audit::default();
+    let p = pipeline(vec!["LearnedOnly"], audit.clone());
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    p.resolve_boundary_text_transaction(
+        &mut transaction,
+        "From: Maria Schneider <m@example.invalid>\nLearnedOnly",
+        &[LocaleTag::Global],
+        &DictionaryBundle::default(),
+    )
+    .unwrap();
+    let staged = transaction.snapshot_entries();
+    let logged = audit.0.lock().unwrap().len();
+    let text = "hi maria\u{200c} schneider; thanks maria; LearnedOnly; https://example.invalid/Maria/Schneider";
+    let hits = p
+        .staged_rule_repeat_candidates(&mut transaction, text)
+        .unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(&text[hits[0].span.clone()], "maria\u{200c} schneider");
+    assert_eq!(hits[0].class, PiiClass::Name);
+    assert_eq!(transaction.snapshot_entries(), staged);
+    assert_eq!(audit.0.lock().unwrap().len(), logged);
+    assert!(session.tokens().is_empty());
+
+    let preserve = Pipeline::builder()
+        .recognizer(Header)
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .unwrap();
+    assert!(preserve
+        .staged_rule_repeat_candidates(&mut transaction, text)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn boundary_repeat_fragments_are_audited_without_becoming_sweep_sources() {
+    let audit = Audit::default();
+    let p = pipeline(vec![], audit.clone());
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    p.resolve_boundary_text_transaction(
+        &mut transaction,
+        "From: Maria Schneider <m@example.invalid>",
+        &[LocaleTag::Global],
+        &DictionaryBundle::default(),
+    )
+    .unwrap();
+    let hit = p
+        .staged_rule_repeat_candidates(&mut transaction, "maria schneider")
+        .unwrap()
+        .remove(0);
+    let token = p
+        .tokenize_staged_rule_repeat_fragment(&mut transaction, &hit, " schneider")
+        .unwrap();
+    assert_eq!(
+        transaction.restore_strict_text(&token).unwrap(),
+        " schneider"
+    );
+    assert!(p
+        .staged_rule_repeat_candidates(&mut transaction, " schneider")
+        .unwrap()
+        .is_empty());
+    let rows = audit.0.lock().unwrap();
+    let entry = rows.last().unwrap();
+    assert_eq!(entry.recognizer_id.as_deref(), Some("manifest_sweep"));
+    assert_eq!(
+        entry.provenance_merged_from.as_deref(),
+        Some("manifest_sweep:token_boundary")
+    );
+    assert_eq!(entry.class, PiiClass::Name);
+    assert_eq!(entry.action, Action::Tokenize);
+}
+
+#[test]
+fn boundary_fragment_audit_failure_preserves_live_and_staged_mappings() {
+    struct RejectBoundary;
+    impl RedactionLogger for RejectBoundary {
+        fn log(&self, entry: &RedactionEntry) -> std::result::Result<(), RedactionLogError> {
+            if entry.provenance_merged_from.as_deref() == Some("manifest_sweep:token_boundary") {
+                return Err(RedactionLogError::Backend(
+                    "synthetic boundary failure".into(),
+                ));
+            }
+            Ok(())
+        }
+    }
+    let p = Pipeline::builder()
+        .recognizer(Header)
+        .rule(DefaultRule::new(Action::Tokenize))
+        .redaction_logger(RejectBoundary)
+        .build()
+        .unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    clean(&p, &session, "From: Maria <m@example.invalid>");
+    let live = session.snapshot_entries();
+    let mut transaction = session.begin_transaction();
+    p.resolve_boundary_text_transaction(
+        &mut transaction,
+        "From: Maria Schneider <m@example.invalid>",
+        &[LocaleTag::Global],
+        &DictionaryBundle::default(),
+    )
+    .unwrap();
+    let staged = transaction.snapshot_entries();
+    let hit = p
+        .staged_rule_repeat_candidates(&mut transaction, "Maria schneider")
+        .unwrap()
+        .remove(0);
+    assert!(p
+        .tokenize_staged_rule_repeat_fragment(&mut transaction, &hit, " schneider")
+        .is_err());
+    assert_eq!(transaction.snapshot_entries(), staged);
+    drop(transaction);
+    assert_eq!(session.snapshot_entries(), live);
+}

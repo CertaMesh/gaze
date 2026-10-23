@@ -1455,62 +1455,45 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
             source_cursor = range.end;
         }
         gaps.push((source_cursor..input.len(), expanded_cursor..expanded.len()));
-        let protected = self.protect_unstaged_segment(&expanded, prefix_cache_write_mode)?;
-        // Projection is valid only for reversible, byte-exact substitution.
-        if self
-            .transaction
-            .restore_strict_text_bounded(&protected, DEFAULT_MAX_REQUEST_BYTES)
-            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?
-            != expanded
-        {
-            return Err(CodecErrorCode::ProtectionFailedClosed);
-        }
-        let entries = self.transaction.snapshot_entries();
-        let mut protected_tokens = self.transaction.tokens();
-        protected_tokens.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
-        let mut protected_spans = Vec::new();
-        let (mut protected_cursor, mut raw_cursor) = (0, 0);
-        for range in owned_token_ranges(&protected, &protected_tokens) {
-            raw_cursor += range.start - protected_cursor;
-            let token = &protected[range.clone()];
-            let entry = entries
-                .iter()
-                .find(|entry| entry.token == token)
-                .ok_or(CodecErrorCode::ProtectionFailedClosed)?;
-            let length = self
-                .transaction
-                .restore_strict_text(token)
-                .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?
-                .len();
-            protected_spans.push((raw_cursor..raw_cursor + length, entry));
-            raw_cursor += length;
-            protected_cursor = range.end;
-        }
-
-        let mut output = String::with_capacity(protected.len());
+        let hits = self
+            .pipeline
+            .staged_rule_repeat_candidates(self.transaction, &expanded)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+        let mut output = String::with_capacity(input.len());
         let mut cursor = 0;
         for (source, view) in gaps {
             output.push_str(&input[cursor..source.start]);
             let mut gap_cursor = source.start;
-            for (span, entry) in &protected_spans {
-                let start = span.start.max(view.start);
-                let end = span.end.min(view.end);
+            for hit in &hits {
+                // A hit wholly within this raw gap is handled by ordinary protection.
+                // Only the expanded view can see repeats crossing its token boundary.
+                if hit.span.start >= view.start && hit.span.end <= view.end {
+                    continue;
+                }
+                let start = hit.span.start.max(view.start);
+                let end = hit.span.end.min(view.end);
                 if start >= end {
                     continue;
                 }
                 let start = source.start + start - view.start;
                 let end = source.start + end - view.start;
-                output.push_str(&input[gap_cursor..start]);
-                // A partial intersection gets its own reversible mapping, without
-                // promoting that fragment to Rule evidence for future sweeps.
+                output.push_str(&self.protect_unstaged_segment(
+                    &input[gap_cursor..start],
+                    prefix_cache_write_mode,
+                )?);
+                // Partial intersections are reversible mappings, without promoting
+                // fragments to Rule evidence for future sweeps.
                 let token = self
-                    .transaction
-                    .tokenize_with_family(&entry.family, &entry.class, &input[start..end])
+                    .pipeline
+                    .tokenize_staged_rule_repeat_fragment(self.transaction, hit, &input[start..end])
                     .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
                 output.push_str(&token);
                 gap_cursor = end;
             }
-            output.push_str(&input[gap_cursor..source.end]);
+            output.push_str(&self.protect_unstaged_segment(
+                &input[gap_cursor..source.end],
+                prefix_cache_write_mode,
+            )?);
             cursor = source.end;
         }
         if self

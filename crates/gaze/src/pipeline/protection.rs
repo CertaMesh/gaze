@@ -122,6 +122,83 @@ const BOUNDARY_DECISION: SafetyNetDecision = SafetyNetDecision::Resolve {
 };
 
 impl Pipeline {
+    /// Find policy-protected repeats of staged Rule values in raw text coordinates.
+    ///
+    /// Boundary adapters can expand owned tokens, intersect these spans with the
+    /// adjacent raw bytes, and preserve the original tokens. This query runs no
+    /// detectors or safety nets and records no evidence or mappings. Learned,
+    /// validator-failed, and safety-net-only entries never seed this matcher.
+    pub fn staged_rule_repeat_candidates(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        text: &str,
+    ) -> Result<Vec<Candidate>> {
+        let Some(matcher) = transaction.sweep_matcher()? else {
+            return Ok(Vec::new());
+        };
+        let normalized = crate::normalize::normalize(text);
+        let context = build_context(None);
+        let hits = matcher
+            .find(&normalized.text)
+            .into_iter()
+            .filter(|hit| {
+                self.resolve_action(&hit.class, &context)
+                    .action
+                    .is_protective()
+            })
+            .collect();
+        crate::sweep::select(hits)
+            .into_iter()
+            .map(|hit| {
+                let mut candidate = hit.candidate();
+                candidate.span = crate::normalize::raw_range(hit.span, &normalized.spans)
+                    .ok_or_else(|| {
+                        clean_to_raw_mapping_error("unmappable boundary repeat geometry")
+                    })?;
+                Ok(candidate)
+            })
+            .collect()
+    }
+
+    /// Tokenize the raw intersection of a Rule repeat and an owned-token boundary.
+    ///
+    /// The fragment keeps the matched class and family and emits a metadata-only
+    /// sweep audit event. It does not become an independent Rule source.
+    pub fn tokenize_staged_rule_repeat_fragment(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        candidate: &Candidate,
+        raw: &str,
+    ) -> Result<String> {
+        if candidate.recognizer_id != crate::sweep::SWEEP_ID
+            || candidate.evidence != crate::EvidenceKind::Rule
+            || !self
+                .resolve_action(&candidate.class, &build_context(None))
+                .action
+                .is_protective()
+        {
+            return Err(Error::UnsupportedActionVariant);
+        }
+        let mut entry = RedactionEntry::new(
+            crate::sweep::SWEEP_ID,
+            candidate.class.clone(),
+            Action::Tokenize,
+            None,
+            DocumentKind::Text,
+            false,
+            ConflictTier::ManifestSweep,
+            crate::redaction_log::current_epoch_ms(),
+            Some(transaction.audit_session_id().to_string()),
+        )
+        .with_recognizer_metadata(Some(crate::sweep::SWEEP_ID.into()), None);
+        entry.provenance_stage = Some(crate::sweep::SWEEP_ID.into());
+        entry.provenance_merged_from = Some("manifest_sweep:token_boundary".into());
+        for logger in &self.redaction_loggers {
+            logger.log(&entry)?;
+        }
+        transaction.tokenize_with_family(&candidate.token_family, &candidate.class, raw)
+    }
+
     /// Protects a text leaf for an outbound boundary such as `gaze-proxy`: the primary pipeline,
     /// then the configured safety nets through the Resolve step
     /// `gaze clean --safety-net-fallback strict` runs, so a net-flagged span becomes a

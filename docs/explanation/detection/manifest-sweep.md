@@ -21,9 +21,14 @@ Within a text, sources protect copies before or after them. Proxy requests stage
 all declared mutable JSON strings (message content, tool results, arguments).
 Discovery collects rule sources from the original fields and discards its output.
 Each original field is then protected against the complete request evidence, so
-an earlier short-name token cannot hide part of a longer repeat. A final proof
-re-protects the original fields and rejects any output that would still change.
-Caller-supplied session tokens retain their exact restore spelling. Mappings commit
+a short name protected during discovery cannot hide part of a longer repeat.
+For caller-supplied owned tokens, the proxy expands their manifest values in a
+bounded view and maps Rule-repeat spans back onto adjacent raw bytes. A repeat
+may cross either edge of a token or cover raw text between tokens. Original
+token identities stay unchanged. New fragments get reversible mappings without
+becoming independent Rule sources. The expanded pass runs no recognizers or nets.
+A final proof re-protects the original fields and rejects output that would still
+change. Caller-supplied session tokens retain their exact restore spelling. Mappings commit
 only after the whole request passes; a failure discards the staged session state.
 This also applies when the response uses SSE: request protection finishes before
 any upstream send.
@@ -130,6 +135,10 @@ sweeps because their evidence is unknown.
 Copies record `recognizer_id = manifest_sweep`, `provenance_stage = manifest_sweep`,
 `decided_by = manifest_sweep` (`ConflictTier::ManifestSweep`), and
 `provenance_merged_from = manifest_sweep:exact`, `:variant`, or `:part` (parts/runs).
+Proxy projections across owned tokens use the matched Rule candidate's class and
+family. Fragment mappings emit metadata-only sweep audit rows with
+`provenance_merged_from = manifest_sweep:token_boundary`. They do not promote the
+fragment to Rule evidence.
 Rows never contain source tokens/values. Daemon overwrites the stage with
 `daemon`; `decided_by` still identifies the sweep.
 
