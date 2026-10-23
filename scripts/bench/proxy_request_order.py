@@ -410,7 +410,20 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                 if (selected and restored is not None and len(restored) == len(selected)
                         and all(value.endswith("\n") for value in restored)):
                     owner_facts = {token: value[:-1] for token, value in zip(selected, restored, strict=True)}
-                mappings, echo_consistent = checked_document_mappings(case["leaves"], clean_leaves, known, owner_facts)
+                try:
+                    mappings, echo_consistent = checked_document_mappings(case["leaves"], clean_leaves, known, owner_facts)
+                except ValueError as error:
+                    # Synthetic fixture inputs only. This is an incomplete diagnostic,
+                    # never a scorecard: keep the actual bytes and constraints that failed.
+                    failure = {"schema": "gaze-proxy-alignment-failure-v1", "complete": False,
+                               "runtime_revision": revision, "fixture_sha256": digest(fixture),
+                               "harness_sha256": digest(Path(__file__)), "provider": provider,
+                               "case": case, "status": status, "clean_leaves": clean_leaves,
+                               "known_seed_mappings": known, "owner_facts": owner_facts,
+                               "owner_reply": reply, "completed_case_rows": rows,
+                               "error": str(error)}
+                    output.with_suffix(".failure.json").write_text(json.dumps(failure, indent=2) + "\n")
+                    raise type(error)(f"{provider}/{case['id']}: {error}") from error
                 if set(mappings) != set(tokens):
                     raise ValueError("unaccounted upstream token")
                 row["owned_identities_preserved"] = int(owned_identities_preserved(bound["leaves"], clean_leaves, known, mappings))

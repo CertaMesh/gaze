@@ -340,3 +340,36 @@ def test_paired_gate_still_rejects_owner_response_failure_for_an_already_forward
     result = bench.compare(baseline, candidate, gate_policy="paired")
     assert result["regressions"]
     assert all(row["verdict"] == "fail" for row in result["contracts"].values())
+
+
+def test_alignment_failure_retains_diagnostics_and_never_writes_a_scorecard(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    binary, policy = tmp_path / "binary", tmp_path / "policy.toml"
+    binary.write_bytes(b"synthetic test executable")
+    policy.write_text('[safety_net]\nbackend="nym"\n')
+    monkeypatch.setattr(bench.subprocess, "check_output", lambda args, **kwargs:
+                        "" if "status" in args else "a" * 40)
+
+    @contextmanager
+    def passthrough(_binary, _policy, upstream_url, _log_path, _root):
+        yield upstream_url, ["synthetic-test-proxy"]
+
+    monkeypatch.setattr(bench, "proxy", passthrough)
+
+    def ambiguous(*_args):
+        raise bench.AmbiguousAlignment("synthetic ambiguous token boundaries")
+
+    monkeypatch.setattr(bench, "checked_document_mappings", ambiguous)
+    case = next(case for case in json.loads(bench.FIXTURE.read_text())["cases"] if "seed" not in case)
+    fixture, output = tmp_path / "fixture.json", tmp_path / "result.json"
+    fixture.write_text(json.dumps({"cases": [case]}))
+    with pytest.raises(bench.AmbiguousAlignment, match="openai/" + case["id"]):
+        bench.measure(binary, policy, fixture, output, tmp_path)
+    assert not output.exists()
+    failure = json.loads(output.with_suffix(".failure.json").read_text())
+    assert failure["complete"] is False
+    assert failure["provider"] == "openai" and failure["case"] == case
+    assert failure["clean_leaves"] == [leaf["text"] for leaf in case["leaves"]]
+    assert failure["completed_case_rows"] == []
+    assert failure["known_seed_mappings"] == failure["owner_facts"] == {}
