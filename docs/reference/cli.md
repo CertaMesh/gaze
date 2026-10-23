@@ -147,7 +147,7 @@ Success:
 Error:
 
 ```json
-{"session_id":"conversation-1","error":"Pipeline","detail":"gaze daemon request failed closed"}
+{"session_id":null,"error":"Pipeline","detail":"gaze daemon request failed closed"}
 ```
 
 Malformed JSON fails closed per line as `JsonMalformed` with `session_id: null`.

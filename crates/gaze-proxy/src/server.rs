@@ -1377,6 +1377,17 @@ impl<'pipeline, 'context, 'transaction, 'session>
 }
 
 impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
+    fn deterministic_control_would_mutate(&mut self, input: &str) -> Result<bool, CodecErrorCode> {
+        self.pipeline
+            .deterministic_control_would_mutate(
+                self.transaction,
+                input,
+                self.locale_chain,
+                self.dictionaries,
+            )
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)
+    }
+
     fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode> {
         self.protect_with_prefix_cache_write_mode(input, PrefixCacheWriteMode::Allow)
     }
@@ -1477,6 +1488,43 @@ impl<'pipeline, 'context> PipelineResponseResidualValidator<'pipeline, 'context>
 }
 
 impl ResponseResidualValidator for PipelineResponseResidualValidator<'_, '_> {
+    fn validate_full_model(
+        &mut self,
+        value: &str,
+        snapshot: &CommittedSessionSnapshot,
+    ) -> Result<(), CodecErrorCode> {
+        let mutated = self
+            .pipeline
+            .snapshot_control_would_mutate(snapshot, value, self.locale_chain, self.dictionaries)
+            .map_err(|_| CodecErrorCode::ProviderOriginPii)?;
+        if mutated {
+            Err(CodecErrorCode::ProviderOriginPii)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_deterministic_model(
+        &mut self,
+        value: &str,
+        snapshot: &CommittedSessionSnapshot,
+    ) -> Result<(), CodecErrorCode> {
+        let mutated = self
+            .pipeline
+            .deterministic_snapshot_control_would_mutate(
+                snapshot,
+                value,
+                self.locale_chain,
+                self.dictionaries,
+            )
+            .map_err(|_| CodecErrorCode::ProviderOriginPii)?;
+        if mutated {
+            Err(CodecErrorCode::ProviderOriginPii)
+        } else {
+            Ok(())
+        }
+    }
+
     fn validate(
         &mut self,
         value: &str,
@@ -2075,6 +2123,23 @@ async fn proxy_inner(
         locale_chain,
         dictionaries,
     )?;
+    if adapter.name() == "gemini" {
+        let model = path
+            .strip_prefix("/v1beta/models/")
+            .and_then(|path| path.rsplit_once(':'))
+            .map(|(model, _)| model)
+            .ok_or(ProxyError::ControlWouldMutate)?;
+        let model = percent_encoding::percent_decode_str(model)
+            .decode_utf8()
+            .map_err(|_| ProxyError::ControlWouldMutate)?;
+        residual_scan_model_control(
+            &state.pipeline,
+            &session,
+            &model,
+            state.config.locale_chain(),
+            state.config.dictionaries(),
+        )?;
+    }
     // The declared coverage policy SELECTS the mechanism that establishes coverage. Reading it
     // here is what keeps the declaration honest: a contract cannot claim a coverage posture the
     // request path never acts on.
@@ -2088,6 +2153,8 @@ async fn proxy_inner(
                 &redacted.field_paths,
                 locale_chain,
                 dictionaries,
+                adapter.name() == "openai",
+                &session,
             )?;
         }
         // A codec-proved adapter must have been routed to the codec branch above. Reaching this
@@ -2126,10 +2193,27 @@ async fn proxy_inner(
 
     let is_sse = content_type.contains("text/event-stream");
     let body = if is_sse {
-        transform_sse(&adapter, &session, &bytes, json_output)?
+        transform_sse(&adapter, &session, &bytes, json_output, &mut |body| {
+            validate_legacy_response_models(
+                &state.pipeline,
+                &session,
+                body,
+                adapter.name(),
+                locale_chain,
+                dictionaries,
+            )
+        })?
     } else {
         let mut response_json: Value =
             serde_json::from_slice(&bytes).map_err(|source| ProxyError::InvalidJson { source })?;
+        validate_legacy_response_models(
+            &state.pipeline,
+            &session,
+            &response_json,
+            adapter.name(),
+            locale_chain,
+            dictionaries,
+        )?;
         restore_surfaces(
             &session,
             adapter.response_pii_surfaces(&mut response_json),
@@ -2645,6 +2729,7 @@ fn map_codec_error(error: CodecError) -> DirectProxyError {
         CodecErrorCode::DuplicateObjectKey => ProxyErrorCode::DuplicateObjectKey,
         CodecErrorCode::InternalCoverageFailure => ProxyErrorCode::InternalCoverageFailure,
         CodecErrorCode::ControlWouldMutate => ProxyErrorCode::ControlWouldMutate,
+        CodecErrorCode::ProviderOriginPii => ProxyErrorCode::ProviderOriginPii,
         CodecErrorCode::OpaqueMediaUninspected => ProxyErrorCode::OpaqueMediaUninspected,
         CodecErrorCode::SignedMutationRequired => ProxyErrorCode::SignedMutationRequired,
         CodecErrorCode::SignedSurfaceMalformed => ProxyErrorCode::SignedSurfaceMalformed,
@@ -2673,7 +2758,6 @@ fn map_codec_error(error: CodecError) -> DirectProxyError {
         }
         CodecErrorCode::ProtectionFailedClosed
         | CodecErrorCode::RestoreFailedClosed
-        | CodecErrorCode::ProviderOriginPii
         | CodecErrorCode::ProviderOriginNumeric
         | CodecErrorCode::TransformedKeyCollision
         | CodecErrorCode::InvalidUtf8
@@ -2926,6 +3010,8 @@ fn residual_scan_request(
     surfaced: &HashSet<String>,
     locale_chain: &[LocaleTag],
     dictionaries: &DictionaryBundle,
+    model_is_routing_control: bool,
+    routing_session: &Session,
 ) -> Result<(), ProxyError> {
     let session =
         Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
@@ -2936,7 +3022,65 @@ fn residual_scan_request(
         locale_chain,
         dictionaries,
     };
-    scan.walk("", "", body, false, true)
+    let Value::Object(root) = body else {
+        return scan.walk("", "", body, false, true);
+    };
+    for (key, value) in root {
+        match (model_is_routing_control, key.as_str(), value) {
+            (true, "model", Value::String(text)) => residual_scan_model_control(
+                pipeline,
+                routing_session,
+                text,
+                locale_chain,
+                dictionaries,
+            )?,
+            _ => scan.walk(
+                key,
+                key,
+                value,
+                CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
+                !key.is_empty() && !key.contains('.') && !key.contains('['),
+            )?,
+        }
+    }
+    Ok(())
+}
+
+fn residual_scan_model_control(
+    pipeline: &Pipeline,
+    routing_session: &Session,
+    text: &str,
+    locale_chain: &[LocaleTag],
+    dictionaries: &DictionaryBundle,
+) -> Result<(), ProxyError> {
+    if crate::codec::is_model_identifier(text) {
+        if pipeline
+            .deterministic_control_would_mutate(
+                &routing_session.begin_transaction(),
+                text,
+                locale_chain,
+                dictionaries,
+            )
+            .map_err(|source| ProxyError::Pipeline { source })?
+        {
+            return Err(ProxyError::ControlWouldMutate);
+        }
+        return Ok(());
+    }
+    if pipeline
+        .control_would_mutate(
+            &routing_session.begin_transaction(),
+            text,
+            locale_chain,
+            dictionaries,
+        )
+        .map_err(|source| ProxyError::Pipeline { source })?
+    {
+        return Err(ProxyError::UnsurfacedPii {
+            field_path: "model".to_string(),
+        });
+    }
+    Ok(())
 }
 
 /// Walk state for the outbound request residual re-scan.
@@ -2985,9 +3129,9 @@ impl RequestResidualScan<'_> {
     /// Recurses the outbound body probing every scalar the adapter did not surface.
     ///
     /// `unambiguous` tracks whether the constructed path can still be compared against adapter
-    /// field paths. A JSON key containing `.` or `[` could make two distinct nodes render the
-    /// same path string, so once such a key is seen the subtree stops trusting path equality and
-    /// probes unconditionally. Extra probing is always safe: a surfaced position is already clean.
+    /// field paths. An empty JSON key or one containing `.` or `[` can make distinct nodes
+    /// render the same path string. Such subtrees stop trusting path equality and are probed
+    /// unconditionally. Extra probing is safe: a surfaced position is already clean.
     fn walk(
         &self,
         path: &str,
@@ -3030,7 +3174,7 @@ impl RequestResidualScan<'_> {
                         key,
                         child,
                         in_carrier_subtree || CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
-                        unambiguous && !key.contains('.') && !key.contains('['),
+                        unambiguous && !key.is_empty() && !key.contains('.') && !key.contains('['),
                     )?;
                 }
             }
@@ -3038,6 +3182,59 @@ impl RequestResidualScan<'_> {
         }
         Ok(())
     }
+}
+
+fn validate_legacy_response_models(
+    pipeline: &Pipeline,
+    session: &Session,
+    body: &Value,
+    provider: &str,
+    locales: &[LocaleTag],
+    dictionaries: &DictionaryBundle,
+) -> Result<(), ProxyError> {
+    let mut models = Vec::new();
+    if let Some(model) = body.get("model") {
+        models.push(model);
+    }
+    // OpenAI Responses lifecycle events carry response metadata in this object.
+    if provider == "openai"
+        && body
+            .get("type")
+            .and_then(Value::as_str)
+            .is_some_and(|kind| kind.starts_with("response."))
+    {
+        if let Some(model) = body
+            .get("response")
+            .and_then(|response| response.get("model"))
+        {
+            models.push(model);
+        }
+    }
+    for model in models {
+        let value = model
+            .as_str()
+            .filter(|value| !value.is_empty())
+            .ok_or(ProxyError::ProviderOriginPii)?;
+        if crate::codec::is_model_identifier(value) {
+            if pipeline
+                .deterministic_control_would_mutate(
+                    &session.begin_transaction(),
+                    value,
+                    locales,
+                    dictionaries,
+                )
+                .map_err(|_| ProxyError::ProviderOriginPii)?
+            {
+                return Err(ProxyError::ProviderOriginPii);
+            }
+        } else if pipeline
+            .control_would_mutate(&session.begin_transaction(), value, locales, dictionaries)
+            .map_err(|_| ProxyError::ProviderOriginPii)?
+        {
+            return Err(ProxyError::ProviderOriginPii);
+        }
+    }
+    Ok(())
 }
 
 /// Restores every surface in its own syntax. `json_output` is the request's
@@ -3131,6 +3328,7 @@ fn transform_sse(
     session: &Session,
     bytes: &[u8],
     json_output: bool,
+    validate_models: &mut impl FnMut(&Value) -> Result<(), ProxyError>,
 ) -> Result<Vec<u8>, ProxyError> {
     let text = std::str::from_utf8(bytes).map_err(|err| ProxyError::SsePartialFrame {
         reason: err.to_string(),
@@ -3168,6 +3366,10 @@ fn transform_sse(
             event_name,
             event,
         });
+    }
+
+    for event in frames.iter().filter_map(|frame| frame.event.as_ref()) {
+        validate_models(&event.data)?;
     }
 
     // Pass 1: the logical text of every stream, in event order.
@@ -3277,10 +3479,12 @@ fn proxy_error_response(err: ProxyError) -> Response {
         ProxyError::AdapterNotFound { .. } => StatusCode::NOT_FOUND,
         ProxyError::BodyTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
         ProxyError::InvalidJson { .. } => StatusCode::BAD_REQUEST,
-        ProxyError::UnsurfacedPii { .. } | ProxyError::Refused { .. } => {
-            StatusCode::UNPROCESSABLE_ENTITY
+        ProxyError::UnsurfacedPii { .. }
+        | ProxyError::ControlWouldMutate
+        | ProxyError::Refused { .. } => StatusCode::UNPROCESSABLE_ENTITY,
+        ProxyError::UpstreamUnreachable { .. } | ProxyError::ProviderOriginPii => {
+            StatusCode::BAD_GATEWAY
         }
-        ProxyError::UpstreamUnreachable { .. } => StatusCode::BAD_GATEWAY,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
     let mut body = serde_json::json!({
@@ -3309,6 +3513,8 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::InvalidJson { .. } => "InvalidJson",
         ProxyError::SsePartialFrame { .. } => "SsePartialFrame",
         ProxyError::UnsurfacedPii { .. } => "UnsurfacedPii",
+        ProxyError::ControlWouldMutate => "ControlWouldMutate",
+        ProxyError::ProviderOriginPii => "ProviderOriginPii",
         ProxyError::UnprovenCoverage => "UnprovenCoverage",
         ProxyError::DirectAdapterMismatch => "DirectAdapterMismatch",
         ProxyError::Refused { .. } => "Refused",

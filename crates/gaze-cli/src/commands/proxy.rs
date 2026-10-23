@@ -262,7 +262,10 @@ fn build_pipeline(
             None,
             None,
         )?;
-        let notices = policy_warnings(&resolved.policy, &resolved.pipeline);
+        let mut notices = policy_warnings(&resolved.policy, &resolved.pipeline);
+        if resolved.policy.ner.is_none() {
+            notices.push(NO_NER_WARNING.to_string());
+        }
         let pipeline = if resolved.policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym {
             let model_dir = std::env::var_os("GAZE_NYM_MODEL_DIR").map(PathBuf::from);
             gaze_assembly::attach_nym_safety_net(
@@ -295,9 +298,11 @@ fn build_pipeline(
         core.into_pipeline(),
         locale_chain,
         gaze::DictionaryBundle::default(),
-        Vec::new(),
+        vec![NO_NER_WARNING.to_string()],
     ))
 }
+
+const NO_NER_WARNING: &str = "warning: no NER model configured: person names are not detected";
 
 fn preflight_policy(config: &DaemonConfig) -> Result<(), CliError> {
     if let Some(path) = &config.policy {
