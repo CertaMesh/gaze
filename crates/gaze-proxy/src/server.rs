@@ -1422,6 +1422,12 @@ impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         self.refused(resolved)
     }
 
+    fn verify_rule_coverage(&mut self, protected: &str) -> Result<(), CodecErrorCode> {
+        self.pipeline
+            .verify_staged_rule_coverage(self.transaction, protected, DEFAULT_MAX_REQUEST_BYTES)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)
+    }
+
     fn validate_token_shapes(&mut self, input: &str) -> Result<(), CodecErrorCode> {
         self.transaction
             .validate_token_shapes(input)
@@ -1437,14 +1443,8 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
     ) -> Result<String, CodecErrorCode> {
         self.validate_token_shapes(input)?;
         let mut tokens = self.transaction.tokens();
-        if tokens.is_empty() {
-            return self.protect_unstaged_segment(input, prefix_cache_write_mode);
-        }
         tokens.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
         let owned = owned_token_ranges(input, &tokens);
-        if owned.is_empty() {
-            return self.protect_unstaged_segment(input, prefix_cache_write_mode);
-        }
 
         // Restore once, with an expansion cap, then retain the correspondence between
         // each raw gap and its expanded coordinates. Existing token bytes are immutable.
@@ -1475,35 +1475,36 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
             .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
         let mut output = String::with_capacity(input.len());
         let mut cursor = 0;
-        let mut hit_cursor = 0;
         for (source, view) in gaps {
             output.push_str(&input[cursor..source.start]);
-            let mut gap_cursor = source.start;
-            while hit_cursor < hits.len() && hits[hit_cursor].span.end <= view.start {
-                hit_cursor += 1;
-            }
-            for hit in hits[hit_cursor..]
+            // Keep every raw intersection, including wholly raw and contained hits.
+            // Union only within a raw gap; owned tokens never enter these ranges.
+            let mut intersections = hits
                 .iter()
-                .take_while(|hit| hit.span.start < view.end)
-            {
-                // A hit wholly within this raw gap is handled by ordinary protection.
-                // Only the expanded view can see repeats crossing its token boundary.
-                if hit.span.start >= view.start && hit.span.end <= view.end {
-                    continue;
+                .filter_map(|hit| {
+                    let start = hit.span.start.max(view.start);
+                    let end = hit.span.end.min(view.end);
+                    (start < end).then_some((start..end, hit))
+                })
+                .collect::<Vec<_>>();
+            intersections.sort_by_key(|(range, _)| (range.start, std::cmp::Reverse(range.end)));
+            let mut union: Vec<(std::ops::Range<usize>, &gaze::Candidate)> = Vec::new();
+            for (range, hit) in intersections {
+                if let Some((previous, _)) = union.last_mut().filter(|(r, _)| r.end >= range.start)
+                {
+                    previous.end = previous.end.max(range.end);
+                } else {
+                    union.push((range, hit));
                 }
-                let start = hit.span.start.max(view.start);
-                let end = hit.span.end.min(view.end);
-                if start >= end {
-                    continue;
-                }
-                let start = source.start + start - view.start;
-                let end = source.start + end - view.start;
+            }
+            let mut gap_cursor = source.start;
+            for (range, hit) in union {
+                let start = source.start + range.start - view.start;
+                let end = source.start + range.end - view.start;
                 output.push_str(&self.protect_unstaged_segment(
                     &input[gap_cursor..start],
                     prefix_cache_write_mode,
                 )?);
-                // Partial intersections are reversible mappings, without promoting
-                // fragments to Rule evidence for future sweeps.
                 let token = self
                     .pipeline
                     .tokenize_staged_rule_repeat_fragment(self.transaction, hit, &input[start..end])
@@ -3085,22 +3086,14 @@ fn redact_surfaces<'session>(
             }
         })?);
     }
-    // Prove against original leaves: a shorter token must not hide a longer repeat.
-    // New sibling spellings may grow the matcher; refuse if final evidence changes output.
-    for (surface, text) in surfaces.iter().zip(&texts) {
-        let reproved = pseudonymizer
-            .protect(surface.text)
+    // Final evidence is complete. Enumerate every overlapping Rule occurrence on
+    // each expanded original and require byte coverage, independently of protection.
+    for text in &texts {
+        pseudonymizer
+            .verify_rule_coverage(text)
             .map_err(|_| ProxyError::Refused {
-                refusal: pseudonymizer
-                    .refusal
-                    .take()
-                    .unwrap_or_else(|| gaze::ProtectionError::Provenance.into()),
-            })?;
-        if &reproved != text {
-            return Err(ProxyError::Refused {
                 refusal: gaze::ProtectionError::Residual.into(),
-            });
-        }
+            })?;
     }
     let mut field_paths = HashSet::new();
     for (surface, text) in surfaces.into_iter().zip(texts) {
@@ -5996,3 +5989,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "server/repeat_coverage_tests.rs"]
+mod repeat_coverage_tests;

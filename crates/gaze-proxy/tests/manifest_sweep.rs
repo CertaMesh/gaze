@@ -646,3 +646,36 @@ async fn gemini_complete_leaf_net_preserves_owned_tokens() {
 async fn anthropic_complete_leaf_net_preserves_owned_tokens() {
     check_complete_net_context(Provider::Anthropic).await;
 }
+
+async fn check_contained_overlap(provider: Provider) {
+    for stream in [false, true] {
+        for source_first in [false, true] {
+            run_configured_case(
+                provider,
+                stream,
+                source_first,
+                Some(gaze::EvidenceKind::Rule),
+                (
+                    "From: Schneider Johanna <m@example.invalid>\nHello.",
+                    "Hello {token} johanna",
+                ),
+                Some("Maria Schneider"),
+                false,
+            )
+            .await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn openai_contained_overlap_covers_all_raw_intersections() {
+    check_contained_overlap(Provider::OpenAi).await;
+}
+#[tokio::test]
+async fn gemini_contained_overlap_covers_all_raw_intersections() {
+    check_contained_overlap(Provider::Gemini).await;
+}
+#[tokio::test]
+async fn anthropic_contained_overlap_covers_all_raw_intersections() {
+    check_contained_overlap(Provider::Anthropic).await;
+}

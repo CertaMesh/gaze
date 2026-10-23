@@ -149,15 +149,16 @@ impl Pipeline {
     /// Find policy-protected repeats of staged Rule values in raw text coordinates.
     ///
     /// Boundary adapters can expand owned tokens, intersect these spans with the
-    /// adjacent raw bytes, and preserve the original tokens. This query runs no
-    /// detectors or safety nets and records no evidence or mappings. Learned,
+    /// adjacent raw bytes, and preserve the original tokens. Hits may overlap and
+    /// are never selected into a non-overlapping cover. This query runs no detectors
+    /// or safety nets and changes no transaction state. Learned,
     /// validator-failed, and safety-net-only entries never seed this matcher.
     pub fn staged_rule_repeat_candidates(
         &self,
-        transaction: &mut SessionTransaction<'_>,
+        transaction: &SessionTransaction<'_>,
         text: &str,
     ) -> Result<Vec<Candidate>> {
-        let Some(matcher) = transaction.sweep_matcher()? else {
+        let Some(matcher) = transaction.sweep_matcher_view()? else {
             return Ok(Vec::new());
         };
         let normalized = crate::normalize::normalize(text);
@@ -170,9 +171,8 @@ impl Pipeline {
                     .action
                     .is_protective()
             })
-            .collect();
-        crate::sweep::select(hits)
-            .into_iter()
+            .collect::<Vec<_>>();
+        hits.into_iter()
             .map(|hit| {
                 let mut candidate = hit.candidate();
                 candidate.span = crate::normalize::raw_range(hit.span, &normalized.spans)
@@ -182,6 +182,56 @@ impl Pipeline {
                 Ok(candidate)
             })
             .collect()
+    }
+
+    /// Prove complete Rule coverage in the expanded original of a protected leaf.
+    ///
+    /// Every eligible occurrence, including overlaps and normalized spellings, must
+    /// have every byte owned by a manifest token. This independently enumerates hits;
+    /// it uses neither candidate selection nor the adapter's projection/union logic.
+    /// No detector, model, mapping, evidence or matcher cache is changed.
+    pub fn verify_staged_rule_coverage(
+        &self,
+        transaction: &SessionTransaction<'_>,
+        protected: &str,
+        max_expanded_bytes: usize,
+    ) -> Result<()> {
+        let original = transaction
+            .restore_strict_text_bounded(protected, max_expanded_bytes)
+            .map_err(|_| ProtectionError::Provenance)?;
+        let mut covered = vec![false; original.len()];
+        let (mut wire_cursor, mut original_cursor) = (0, 0);
+        for range in transaction.restore_token_ranges(protected)? {
+            original_cursor += range.start - wire_cursor;
+            let value = transaction.restore_strict_text(&protected[range.clone()])?;
+            let end = original_cursor + value.len();
+            covered
+                .get_mut(original_cursor..end)
+                .ok_or_else(|| clean_to_raw_mapping_error("invalid owned coverage"))?
+                .fill(true);
+            original_cursor = end;
+            wire_cursor = range.end;
+        }
+        let Some(matcher) = transaction.sweep_matcher_view()? else {
+            return Ok(());
+        };
+        let normalized = crate::normalize::normalize(&original);
+        let context = build_context(None);
+        for hit in matcher.find(&normalized.text) {
+            if !self
+                .resolve_action(&hit.class, &context)
+                .action
+                .is_protective()
+            {
+                continue;
+            }
+            let raw = crate::normalize::raw_range(hit.span, &normalized.spans)
+                .ok_or_else(|| clean_to_raw_mapping_error("unmappable Rule coverage"))?;
+            if !covered[raw].iter().all(|byte| *byte) {
+                return Err(Error::Protection(ProtectionError::Residual));
+            }
+        }
+        Ok(())
     }
 
     /// Tokenize the raw intersection of a Rule repeat and an owned-token boundary.

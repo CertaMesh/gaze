@@ -403,6 +403,12 @@ pub trait RequestPseudonymizer {
         }
     }
 
+    /// Verifies every request-known Rule occurrence in the expanded protected leaf.
+    /// Implementations without Rule discovery have no additional coverage to prove.
+    fn verify_rule_coverage(&mut self, _protected: &str) -> Result<(), CodecErrorCode> {
+        Ok(())
+    }
+
     /// Proves that every Gaze-shaped token belongs to the staged transaction.
     fn validate_token_shapes(&mut self, input: &str) -> Result<(), CodecErrorCode>;
 }
@@ -446,6 +452,7 @@ pub struct RequestTransformContext<'a> {
     content_block_index: Option<usize>,
     opaque_carrier: Option<OpaqueCarrierLocation>,
     discovering_rules: bool,
+    verifying_rules: bool,
 }
 
 impl<'a> RequestTransformContext<'a> {
@@ -463,6 +470,7 @@ impl<'a> RequestTransformContext<'a> {
             content_block_index: None,
             opaque_carrier: None,
             discovering_rules: false,
+            verifying_rules: false,
         }
     }
 
@@ -520,7 +528,21 @@ impl<'a> RequestTransformContext<'a> {
         result
     }
 
+    pub(crate) fn verify_rules<T>(
+        &mut self,
+        visit: impl FnOnce(&mut Self) -> Result<T, CodecErrorCode>,
+    ) -> Result<T, CodecErrorCode> {
+        self.verifying_rules = true;
+        let result = visit(self);
+        self.verifying_rules = false;
+        result
+    }
+
     pub(crate) fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode> {
+        if self.verifying_rules {
+            self.pseudonymizer.verify_rule_coverage(input)?;
+            return Ok(input.to_owned());
+        }
         if self.discovering_rules {
             self.pseudonymizer.discover_rule_sources(input)?;
             return Ok(input.to_owned());

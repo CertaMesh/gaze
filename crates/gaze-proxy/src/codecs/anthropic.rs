@@ -224,34 +224,24 @@ fn protect_anthropic_request(
     let (bytes, mut provenance) = write_document(&document, input)
         .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
     check_request_output_size(input.len(), bytes.len(), ctx)?;
-    // Convergence must be proved from original content, not already-tokenized gaps.
-    let mut reproved_document = parse_json(input, ctx.limits(), CodecPhase::RequestProof)?;
-    let mut final_ledger = CoverageLedger::new(reproved_document.occurrence_count);
-    transform_request_root(
-        &mut reproved_document.root,
-        input,
-        ctx,
-        &mut final_ledger,
-        count_tokens,
-    )
+    // Verify all mutable output leaves after final discovery/protection. The
+    // production boundary expands them and checks every Rule occurrence's bytes;
+    // no protection, candidate selection or projection is rerun as the proof.
+    let mut verified_document = parse_json(&bytes, ctx.limits(), CodecPhase::RequestProof)?;
+    let mut final_ledger = CoverageLedger::new(verified_document.occurrence_count);
+    ctx.verify_rules(|ctx| {
+        transform_request_root(
+            &mut verified_document.root,
+            &bytes,
+            ctx,
+            &mut final_ledger,
+            count_tokens,
+        )
+    })
     .map_err(|code| request_codec_error(code, CodecPhase::RequestProof, ctx))?;
     final_ledger
         .finish()
         .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
-    if !json_semantically_equal(&document.root, &reproved_document.root) {
-        return Err(codec_error(
-            CodecErrorCode::InternalCoverageFailure,
-            CodecPhase::RequestProof,
-        ));
-    }
-    let (reproved, _) = write_document(&reproved_document, input)
-        .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
-    if reproved != bytes {
-        return Err(codec_error(
-            CodecErrorCode::InternalCoverageFailure,
-            CodecPhase::RequestProof,
-        ));
-    }
     let reparsed = parse_json(&bytes, ctx.limits(), CodecPhase::RequestProof)?;
     prove_request_logical_domains(&reparsed.root, reparsed.occurrence_count, ctx)
         .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;

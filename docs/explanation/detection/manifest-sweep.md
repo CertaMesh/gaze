@@ -25,14 +25,19 @@ output. Full protection and net admission start after discovery is complete.
 Each original field is then protected against the complete request evidence, so
 a short name protected during discovery cannot hide part of a longer repeat.
 For caller-supplied owned tokens, the proxy expands their manifest values in a
-bounded view and maps Rule-repeat spans back onto adjacent raw bytes. A repeat
+bounded view and maps every eligible Rule-repeat span back onto raw bytes.
+Hits remain overlapping until their raw intersections are unioned within each
+gap, including contained hits and chains across several known values. A repeat
 may cross either edge of a token or cover raw text between tokens. Original
 token identities stay unchanged. New fragments get reversible mappings without
 becoming independent Rule sources. The expanded Rule pass runs no recognizers or nets. Full-leaf net resolution
 then uses the existing core resolver to protect remaining raw gaps with complete
 context, retaining owned tokens and keeping net values out of Rule propagation.
-A final proof re-protects the original fields and rejects output that would still
-change. Caller-supplied session tokens retain their exact restore spelling. Mappings commit
+A final proof enumerates every eligible overlapping Rule occurrence on each
+expanded original leaf and requires every matched byte to belong to an owned or
+new token. It changes no mappings, evidence or matcher cache, and uses neither
+candidate selection nor the protection projection. Any uncovered byte refuses
+the request. Caller-supplied session tokens retain their exact restore spelling. Mappings commit
 only after the whole request passes; a failure discards the staged session state.
 This also applies when the response uses SSE: request protection finishes before
 any upstream send.

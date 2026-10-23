@@ -610,9 +610,7 @@ fn staged_repeat_query_maps_unicode_without_detection_or_state_changes() {
     let staged = transaction.snapshot_entries();
     let logged = audit.0.lock().unwrap().len();
     let text = "hi maria\u{200c} schneider; thanks maria; LearnedOnly; https://example.invalid/Maria/Schneider";
-    let hits = p
-        .staged_rule_repeat_candidates(&mut transaction, text)
-        .unwrap();
+    let hits = p.staged_rule_repeat_candidates(&transaction, text).unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(&text[hits[0].span.clone()], "maria\u{200c} schneider");
     assert_eq!(hits[0].class, PiiClass::Name);
@@ -626,7 +624,7 @@ fn staged_repeat_query_maps_unicode_without_detection_or_state_changes() {
         .build()
         .unwrap();
     assert!(preserve
-        .staged_rule_repeat_candidates(&mut transaction, text)
+        .staged_rule_repeat_candidates(&transaction, text)
         .unwrap()
         .is_empty());
 }
@@ -645,7 +643,7 @@ fn boundary_repeat_fragments_are_audited_without_becoming_sweep_sources() {
     )
     .unwrap();
     let hit = p
-        .staged_rule_repeat_candidates(&mut transaction, "maria schneider")
+        .staged_rule_repeat_candidates(&transaction, "maria schneider")
         .unwrap()
         .remove(0);
     let token = p
@@ -656,7 +654,7 @@ fn boundary_repeat_fragments_are_audited_without_becoming_sweep_sources() {
         " schneider"
     );
     assert!(p
-        .staged_rule_repeat_candidates(&mut transaction, " schneider")
+        .staged_rule_repeat_candidates(&transaction, " schneider")
         .unwrap()
         .is_empty());
     let rows = audit.0.lock().unwrap();
@@ -702,7 +700,7 @@ fn boundary_fragment_audit_failure_preserves_live_and_staged_mappings() {
     .unwrap();
     let staged = transaction.snapshot_entries();
     let hit = p
-        .staged_rule_repeat_candidates(&mut transaction, "Maria schneider")
+        .staged_rule_repeat_candidates(&transaction, "Maria schneider")
         .unwrap()
         .remove(0);
     assert!(p
@@ -729,7 +727,7 @@ fn request_discovery_collects_only_rule_sources_and_accepts_no_rule_pipelines() 
     assert!(entries.iter().any(|entry| entry.raw == "Maria Schneider"));
     assert!(!entries.iter().any(|entry| entry.raw == "LearnedOnly"));
     assert_eq!(
-        p.staged_rule_repeat_candidates(&mut transaction, "maria schneider")
+        p.staged_rule_repeat_candidates(&transaction, "maria schneider")
             .unwrap()
             .len(),
         1
@@ -812,7 +810,7 @@ fn whole_leaf_net_resolve_preserves_owned_tokens_and_does_not_seed_repeats() {
         "Public Maria; thanks synthetic_handle"
     );
     assert!(p
-        .staged_rule_repeat_candidates(&mut transaction, "synthetic_handle")
+        .staged_rule_repeat_candidates(&transaction, "synthetic_handle")
         .unwrap()
         .is_empty());
     drop(transaction);
