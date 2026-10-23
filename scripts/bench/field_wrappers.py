@@ -1,4 +1,4 @@
-"""Application wrapper inventory: Unicode Ps/Pi plus ASCII scalar delimiters.
+"""Application wrapper inventory: Unicode Ps/Pi plus ASCII delimiters and unfamiliar symbols.
 
 Unicode names define pairs; quotes with multiple established closing conventions
 also have explicit alternatives. These are data producers, not detector output.
@@ -103,4 +103,7 @@ WRAPPERS = (
     ('„', '“'),
     ('‚', '‘'),
     ('〝', '〟'),
+    ('§', '§'),
+    ('🔐', '🔐'),
+    ('⏣', '⏣'),
 )
