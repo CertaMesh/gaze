@@ -125,6 +125,25 @@ existing adapters. It does not support restore. For a one-shot shell flow,
 [`gaze clean` and `gaze restore`](../../../crates/gaze-cli/README.md#restore)
 still exchange a signed `session_blob`.
 
+## Protect caller-known values for one clean request
+
+Attach `context` to the clean frame when your trusted application already knows
+record values the recognizers might miss:
+
+```json
+{"version":1,"op":"clean","session_id":"run-1","text":"Handle Zelmora Quentrix.","context":{"record":{"full_name":"Zelmora Quentrix"}}}
+```
+
+The session must already be open. Legacy clean frames accept the same field.
+Use the [context schema and limits](../../reference/policy.md#caller-known-record-context)
+and a policy that tokenizes or format-preserves every record class. Forward
+only `clean_text` to the model; keep context on the owner side.
+
+Invalid context returns `PolicyConfig` and no output, leaving the session
+unchanged. The envelope is request-local. Values actually matched become rule
+evidence for eligible repeats on later turns; unused values are forgotten.
+See the [runtime contract](../../explanation/daemon/daemon-mode.md#caller-known-record-context).
+
 ## Shut down the daemon
 
 SIGINT and SIGTERM set a shutdown flag. The foreground loop finishes the

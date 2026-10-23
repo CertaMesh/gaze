@@ -282,7 +282,8 @@ Keep raw context away from agents, command arguments and logs.
 Limits: context JSON 4 MiB; encoded record 64 KiB; four object levels; 32 string
 leaves; 256 UTF-8 bytes per value. `record-v2-` dictionary prefix is reserved.
 The envelope still accepts `dictionaries`, `class_map` and `fields`. Record
-context is call-scoped in clean; daemon refuses per-document context.
+context is call-scoped in clean. Daemon clean frames accept the same envelope
+as a request-local `context` object; see the [daemon contract](../explanation/daemon/daemon-mode.md#caller-known-record-context).
 
 ### Class naming rules
 

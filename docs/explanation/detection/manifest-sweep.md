@@ -37,6 +37,7 @@ emitters default to `Learned`.
 | Emitter | Evidence |
 | --- | --- |
 | Bundled/custom regex, dictionary, anchored matches | `Rule` |
+| Caller-known record matches (including daemon request context) | `Rule` |
 | `gaze index` field labels, TokenBridge synthetic detector | `Rule` |
 | NER, GLiNER DOB judge | `Learned` |
 | NER-corroborated house numbers, `address.block.*` growth | `Learned` |
