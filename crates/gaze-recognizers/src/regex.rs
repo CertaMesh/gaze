@@ -983,7 +983,8 @@ fn public_metadata_assignment_starts(rest: &str) -> bool {
 }
 
 fn field_wrapper_opens(ch: char) -> bool {
-    !field_value_char(ch) && !ch.is_whitespace()
+    // These separate unquoted fields; an empty field before one has no value.
+    !field_value_char(ch) && !ch.is_whitespace() && !matches!(ch, ';' | ',' | '|')
 }
 
 fn field_wrapper_closes(open: char, close: char) -> bool {
