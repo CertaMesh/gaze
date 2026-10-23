@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- The setup-default `secrets` bundle protects whole private-key PEM blocks and
+  bare GitHub, OpenAI, Anthropic, Slack, and Stripe credential shapes. PEM
+  protection includes CRLF, JSON-escaped newlines, and traditional encrypted
+  RSA headers. Public-key and certificate blocks remain unchanged. Both rules
+  preserve exact restoration and require no network access.
+
 - Gemini URL model identifiers are decoded and validated before forwarding.
   Previously, that URI segment bypassed request scanning and could carry PII
   to the provider. Strict model identifiers retain deterministic checks; values
@@ -96,6 +102,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `safeguards`, message-level system roles and opaque media remain refused (#814).
 
 ### Changed
+
+- [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
+  0.2.0. Its existing fixture detections remain unchanged.
 
 - **Snapshot contract.** `Session` records each token's source spelling and
   adds `source_spelling` and `restore_strict_decoded_text_with_provenance`. A
