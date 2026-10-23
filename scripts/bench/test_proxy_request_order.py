@@ -238,3 +238,12 @@ def test_seed_binding_requires_a_real_prior_owned_token_and_exact_restore(monkey
     monkeypatch.setattr(bench, "request_json", lambda *args, **kwargs: (400, {}))
     with pytest.raises(ValueError, match="seed request refused"):
         bench.seed_session("http://example.invalid", "openai", case, captured, "synthetic-session")
+
+
+def test_native_session_ids_satisfy_the_transport_uuid4_contract():
+    import uuid
+    for provider in bench.PROVIDERS:
+        value = bench.native_session_id(provider, "synthetic-case")
+        identifier = uuid.UUID(value)
+        assert identifier.version == 4 and identifier.variant == uuid.RFC_4122
+        assert str(identifier) == value

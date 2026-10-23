@@ -275,7 +275,7 @@ def seed_session(base_url, provider, case, captured, session_id):
     path, body = native_request(provider, {"leaves": [seed]})
     status, reply = request_json(base_url + path, body, session_id=session_id)
     if captured.empty():
-        raise ValueError("seed request refused; two-turn capture is unavailable")
+        raise ValueError(f"{provider}/{case['id']}: seed request refused ({status}); two-turn capture is unavailable")
     actual_provider, actual, tokens = captured.get_nowait()
     if actual_provider != provider or not captured.empty() or not 200 <= status < 300:
         raise ValueError("seed request lacked a successful accounted response")
@@ -294,6 +294,10 @@ def seed_session(base_url, provider, case, captured, session_id):
     return bound, known, score_leaf(seed, clean, known), owners[0]
 
 
+def native_session_id(provider, case_id):
+    return str(uuid.UUID(bytes=uuid.uuid5(uuid.NAMESPACE_URL, provider + ":" + case_id).bytes, version=4))
+
+
 def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
     dirty = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no", "--",
                                      "crates", "Cargo.toml", "Cargo.lock"], cwd=runtime_root, text=True)
@@ -309,7 +313,7 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
     with upstream() as (upstream_url, captured), proxy(binary, policy, upstream_url, output.with_suffix(".log"), runtime_root, **({"session_binary": session_binary} if session_binary else {})) as (base_url, command):
         for provider in PROVIDERS:
             for case in cases:
-                session_id = str(uuid.uuid5(uuid.NAMESPACE_URL, provider + ":" + case["id"])) if session_binary is not None else None
+                session_id = native_session_id(provider, case["id"]) if session_binary is not None else None
                 bound, known, seed_scores, owner_token = case, {}, {}, None
                 if "seed" in case:
                     if session_binary is None:
