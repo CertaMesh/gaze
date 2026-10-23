@@ -1486,21 +1486,21 @@
       "id": "existing-token-prefix-source_first",
       "order": "source_first",
       "seed": {
-        "text": "From: ia Schneider <m@example.invalid>\nHello.",
+        "text": "From: Ria Schneider <m@example.invalid>\nHello.",
         "gold": [
           {
             "start": 6,
-            "end": 8,
+            "end": 9,
             "label": "FIRSTNAME"
           },
           {
-            "start": 9,
-            "end": 18,
+            "start": 10,
+            "end": 19,
             "label": "SURNAME"
           },
           {
-            "start": 20,
-            "end": 37,
+            "start": 21,
+            "end": 38,
             "label": "EMAIL"
           }
         ]
@@ -1527,7 +1527,8 @@
           ]
         },
         {
-          "text": "Hello Maria Schneider",
+          "text": "Hello MaRia Schneider",
+          "wire_text": "Hello Ma{seed}",
           "gold": [
             {
               "start": 6,
@@ -1539,21 +1540,20 @@
               "end": 21,
               "label": "SURNAME"
             }
-          ],
-          "wire_text": "Hello Mar{seed}"
+          ]
         },
         {
-          "text": "Public ia Schneider; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "text": "Public Ria Schneider; thanks schneider; see https://example.invalid/Maria/Schneider",
           "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
           "gold": [
             {
               "start": 7,
-              "end": 9,
+              "end": 10,
               "label": "FIRSTNAME"
             },
             {
-              "start": 10,
-              "end": 19,
+              "start": 11,
+              "end": 20,
               "label": "SURNAME"
             }
           ]
@@ -1564,28 +1564,29 @@
       "id": "existing-token-prefix-source_last",
       "order": "source_last",
       "seed": {
-        "text": "From: ia Schneider <m@example.invalid>\nHello.",
+        "text": "From: Ria Schneider <m@example.invalid>\nHello.",
         "gold": [
           {
             "start": 6,
-            "end": 8,
+            "end": 9,
             "label": "FIRSTNAME"
           },
           {
-            "start": 9,
-            "end": 18,
+            "start": 10,
+            "end": 19,
             "label": "SURNAME"
           },
           {
-            "start": 20,
-            "end": 37,
+            "start": 21,
+            "end": 38,
             "label": "EMAIL"
           }
         ]
       },
       "leaves": [
         {
-          "text": "Hello Maria Schneider",
+          "text": "Hello MaRia Schneider",
+          "wire_text": "Hello Ma{seed}",
           "gold": [
             {
               "start": 6,
@@ -1597,21 +1598,20 @@
               "end": 21,
               "label": "SURNAME"
             }
-          ],
-          "wire_text": "Hello Mar{seed}"
+          ]
         },
         {
-          "text": "Public ia Schneider; thanks schneider; see https://example.invalid/Maria/Schneider",
+          "text": "Public Ria Schneider; thanks schneider; see https://example.invalid/Maria/Schneider",
           "wire_text": "Public {seed}; thanks schneider; see https://example.invalid/Maria/Schneider",
           "gold": [
             {
               "start": 7,
-              "end": 9,
+              "end": 10,
               "label": "FIRSTNAME"
             },
             {
-              "start": 10,
-              "end": 19,
+              "start": 11,
+              "end": 20,
               "label": "SURNAME"
             }
           ]

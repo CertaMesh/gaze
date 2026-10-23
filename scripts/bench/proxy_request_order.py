@@ -288,7 +288,7 @@ def seed_session(base_url, provider, case, captured, session_id):
     name = seed["text"].split("From: ", 1)[1].split(" <", 1)[0]
     owners = [token for token, value in known.items() if value == name and ":Name_" in token]
     if len(owners) != 1:
-        raise ValueError("seed did not yield one manifest-owned full name token")
+        raise ValueError(f"{provider}/{case['id']}: seed did not yield one manifest-owned full name token")
     bound = dict(case, leaves=[dict(leaf, wire_text=leaf.get("wire_text", leaf["text"]).replace("{seed}", owners[0]))
                               for leaf in case["leaves"]])
     return bound, known, score_leaf(seed, clean, known), owners[0]
