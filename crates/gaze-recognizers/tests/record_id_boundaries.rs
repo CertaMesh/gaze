@@ -1192,6 +1192,17 @@ boundary_test!(member_unterminated_corpus, "record_id", "unterminated_");
 boundary_test!(customer_private_key_corpus, "customer_id", "private_keys_");
 boundary_test!(employee_private_key_corpus, "employee_id", "private_keys_");
 boundary_test!(member_private_key_corpus, "record_id", "private_keys_");
+boundary_test!(
+    customer_quote_dialect_corpus,
+    "customer_id",
+    "quote_dialects_"
+);
+boundary_test!(
+    employee_quote_dialect_corpus,
+    "employee_id",
+    "quote_dialects_"
+);
+boundary_test!(member_quote_dialect_corpus, "record_id", "quote_dialects_");
 
 #[test]
 fn unterminated_values_own_key_looking_private_suffixes() {
@@ -1228,6 +1239,206 @@ fn unterminated_values_own_key_looking_private_suffixes() {
                 input
             );
         }
+    }
+}
+
+fn check_quote_dialect(pipeline: &Pipeline, mut input: String, mut value: String) {
+    for depth in 0..=9 {
+        let session = Session::new(Scope::Conversation("synthetic-quote-dialect".into())).unwrap();
+        let clean = public_clean(pipeline, &session, &input);
+        let entries = session.snapshot_entries();
+        let entry = entries
+            .iter()
+            .find(|entry| entry.raw == value)
+            .unwrap_or_else(|| {
+                panic!("whole private scalar at depth {depth}: {input:?} -> {clean:?}; {entries:?}")
+            });
+        assert_eq!(
+            clean,
+            input.replacen(&value, &entry.token, 1),
+            "public bytes changed"
+        );
+        let imported = Session::import(session.export().unwrap()).unwrap();
+        assert_eq!(
+            pipeline.restore_strict_text(&imported, &clean).unwrap(),
+            input
+        );
+        let public = input
+            .replace("customerId", "inventory_reference")
+            .replace("employeeId", "inventory_reference")
+            .replace("member_id", "inventory_reference");
+        let public_session = Session::new(Scope::Ephemeral).unwrap();
+        assert_eq!(public_clean(pipeline, &public_session, &public), public);
+        assert!(public_session.snapshot_entries().is_empty());
+        if depth > 0 {
+            let mut parsed: serde_json::Value = serde_json::from_str(&clean).unwrap();
+            for level in 1..=depth {
+                assert_eq!(parsed["public_version"], "'");
+                assert_eq!(parsed["tags"], serde_json::json!(["'", "FRAME"]));
+                if level < depth {
+                    parsed = serde_json::from_str(parsed["note"].as_str().unwrap()).unwrap();
+                }
+            }
+        }
+        input = serde_json::to_string(&serde_json::json!({
+            "note": input, "public_version": "'", "tags": ["'", "FRAME"]
+        }))
+        .unwrap();
+        value = serde_json::to_string(&value).unwrap();
+        value = value[1..value.len() - 1].to_owned();
+    }
+}
+
+#[test]
+fn doubled_quote_dialects_keep_private_suffixes() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        // YAML and SQL use doubled apostrophes; CSV uses doubled double quotes.
+        for (quote, connector) in [('\'', ": "), ('\'', "="), ('"', ": ")] {
+            let value = format!("Q731284{quote}{quote}É842395");
+            check_quote_dialect(
+                &pipeline,
+                format!("{cue}{connector}{quote}{value}{quote}\npublic_version=FRAME"),
+                value,
+            );
+        }
+    }
+}
+
+#[test]
+fn triple_quoted_dialects_preserve_complete_multiline_values() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        for quote in ['\'', '"'] {
+            let delimiter = quote.to_string().repeat(3);
+            for newline in ["\n", "\r\n"] {
+                for value in [
+                    format!("Q731284{newline}É842395"),
+                    format!("{newline}Q731284{quote}É842395{quote}{quote}"),
+                ] {
+                    check_quote_dialect(
+                        &pipeline,
+                        format!("{cue} = {delimiter}{value}{delimiter}\npublic_version=FRAME"),
+                        value,
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn all_quote_closes_stop_before_their_enclosing_serialized_string() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        for quote in ["'", "'''", "\"\"\""] {
+            let value = "Q731284;É842395";
+            let input = serde_json::to_string(&serde_json::json!({
+                "note": format!("{cue}: {quote}{value}"),
+                "public_version": "'", "tags": ["'", "FRAME"]
+            }))
+            .unwrap();
+            check_quote_dialect(&pipeline, input, value.into());
+        }
+    }
+}
+
+#[test]
+fn ambiguous_quote_openings_keep_nonempty_private_ownership() {
+    let pipeline = record_pipeline();
+    for quote in ['\'', '"'] {
+        let value = format!("{quote}Q731284{quote};private_code=É842395");
+        let input = serde_json::to_string(&serde_json::json!({
+            "note": format!("customerId: {quote}{value}"),
+            "public_version": "'", "tags": ["'", "FRAME"]
+        }))
+        .unwrap();
+        let encoded = serde_json::to_string(&value).unwrap();
+        check_quote_dialect(&pipeline, input, encoded[1..encoded.len() - 1].into());
+    }
+}
+
+#[test]
+fn prior_quote_dialects_do_not_supply_false_enclosing_strings() {
+    let pipeline = record_pipeline();
+    for prefix in [
+        "format_hint='''literal '\" character'''; ",
+        "format_hint=\"\"\"literal '\" character\"\"\"; ",
+        "format_hint='literal ''\" character'; ",
+    ] {
+        let value = "Q731284; \"private_code\": É842395";
+        check_quote_dialect(
+            &pipeline,
+            format!("{prefix}customerId: '{value}'\npublic_version=FRAME"),
+            value.into(),
+        );
+    }
+}
+
+#[test]
+fn serialized_record_separators_keep_person_label_evidence() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        for separator in ["\n", "\r\n", "\t", "\\u000a", "\\u000D"] {
+            let value = "Q731284;É842395";
+            check_quote_dialect(
+                &pipeline,
+                format!("format_hint='FRAME'{separator}{cue}='{value}'\npublic_version=FRAME"),
+                value.into(),
+            );
+        }
+    }
+}
+
+#[test]
+fn classified_empty_quoted_fields_preserve_public_structure() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        for delimiter in ["'", "\"", "'''", "\"\"\""] {
+            let mut input = format!("{cue}: {delimiter}{delimiter}\npublic_version=FRAME");
+            for _ in 0..=9 {
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                assert_eq!(public_clean(&pipeline, &session, &input), input);
+                assert!(session.snapshot_entries().is_empty());
+                input = serde_json::to_string(
+                    &serde_json::json!({"note":input,"public_version":"FRAME"}),
+                )
+                .unwrap();
+            }
+        }
+    }
+}
+
+#[test]
+fn enclosing_string_close_cannot_open_an_absent_private_value() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        let mut input = serde_json::to_string(&serde_json::json!({
+            "note": format!("{cue}: "), "public_version": "'", "tags": ["'", "FRAME"]
+        }))
+        .unwrap();
+        for _ in 0..9 {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            assert_eq!(public_clean(&pipeline, &session, &input), input);
+            assert!(session.snapshot_entries().is_empty());
+            input =
+                serde_json::to_string(&serde_json::json!({"note":input,"public_version":"FRAME"}))
+                    .unwrap();
+        }
+    }
+}
+
+#[test]
+fn opaque_nested_text_cannot_prove_a_private_value_absent() {
+    let pipeline = record_pipeline();
+    let value = "Q731284;private_code=É842395";
+    for cue in ["customerId", "employeeId", "member_id"] {
+        let input = serde_json::to_string(&serde_json::json!({
+            "note": format!("format_hint: \"marker; {cue}: \"{value}"),
+            "public_version": "'", "tags": ["'", "FRAME"]
+        }))
+        .unwrap();
+        check_quote_dialect(&pipeline, input, value.into());
     }
 }
 

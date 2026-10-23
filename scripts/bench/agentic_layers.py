@@ -4485,7 +4485,7 @@ GENERATOR_ADDITIONS = {
     24: "credentials_separators_",
     25: "credentials_prefixes_",
     26: "recordids_boundary_unterminated_",
-    27: "recordids_boundary_private_keys_",
+    27: ("recordids_boundary_private_keys_", "recordids_boundary_quote_dialects_"),
 }
 
 
@@ -4502,7 +4502,8 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
         historical = {row.uid: row for partition in {row.partition for row in records}
                       for row in record_id_boundary.records(sys.modules[__name__], partition, version=26)}
         records = [historical.get(row.uid, row) for row in records]
-    later = tuple(prefix for added, prefix in GENERATOR_ADDITIONS.items() if added > version)
+    later = tuple(prefix for added, prefixes in GENERATOR_ADDITIONS.items() if added > version
+                  for prefix in ((prefixes,) if isinstance(prefixes, str) else prefixes))
     selected = [record for record in records if not record.surface.startswith(later)] if later else list(records)
     if version < 18:
         selected = [

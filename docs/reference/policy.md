@@ -467,7 +467,10 @@ With `complete_labelled_value = true`, the optional typed
 `labelled_value_mode = "field_owned"` selects label-owned field scanning. It
 protects a complete ASCII-quoted scalar, including Unicode and raw JSON escapes,
 and stops unquoted grouped values before an adjacent field assignment. The
-unquoted guard judges that entire bounded value. A rejected placeholder leaves
+quoted grammar recognizes single/triple delimiters and doubled quotes. Complete
+multiline scalars remain whole; every close search is bounded by its enclosing
+serialized string. Unclassified quoting retains nonempty private ownership.
+The unquoted guard judges that entire bounded value. A rejected placeholder leaves
 the next cue available for matching. An unterminated value ends at the nearest
 enclosing serialized string close (excluded, with escape depth preserved),
 unescaped LF/CRLF/CR record boundary, or input end. Assignments and container

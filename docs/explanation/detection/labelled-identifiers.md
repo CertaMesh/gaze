@@ -48,6 +48,12 @@ escape byte, while unquoted grouped identifiers stop before another field
 assignment. Each personal field supplies its own token and repeat seed; a public
 field stays outside the prior value. The unquoted-placeholder guard judges that
 complete bounded value, and rejection leaves later cues available for matching.
+Single and triple delimiters recognize doubled quote content and complete
+multiline values. Every close search is bounded by the enclosing serialized
+string; later public apostrophes cannot close the private scalar. Unclassified
+quote runs retain nonempty private ownership through the safe boundary.
+JSON record-separator escapes preserve the following person-label cue. An absent
+value cannot consume the enclosing JSON's later public fields.
 An unterminated value ends at the nearest enclosing serialized string close
 (excluded, with escape depth preserved), unescaped LF/CRLF/CR record boundary,
 or input end. The line break defines the end of that record; escaped line breaks

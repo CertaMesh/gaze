@@ -18,7 +18,7 @@ def fixture():
     return {
         "generator_version": api.GENERATOR_VERSION,
         "producer_sha256": hashlib.sha256((ROOT / "scripts/bench/record_id_boundary_cells.py").read_bytes()).hexdigest(),
-        "selection": "Index 0 all boundary cells plus index 1 uppercase connector cells; both partitions; application-owned UTF-8 gold ranges. Generator v27 includes prior single-quoted public fields and unescaped record line boundaries.",
+        "selection": "Index 0 all boundary cells plus index 1 uppercase connector cells; both partitions; application-owned UTF-8 gold ranges. Generator v27 includes quote dialects, prior quoted public fields, bounded enclosing strings and unescaped record line boundaries.",
         "records": [{"id": row.uid, "family": row.family, "surface": row.surface,
                      "text": row.text, "gold": [{"start": gold.start, "end": gold.end, "label": gold.label}
                                                 for gold in row.gold]} for row in records],

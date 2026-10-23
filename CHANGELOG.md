@@ -64,10 +64,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Labelled customer, employee and member IDs preserve terminal prose punctuation,
   stop at complete next-field cues, and protect raw quoted scalars through nested
-  serialization, initial newlines and tab groups. Nested scalars stop at their own
-  closing quote. Unterminated values end before an enclosing serialized string
+  serialization, initial newlines and tab groups. Single and triple delimiters
+  retain doubled quotes and complete multiline values. Every close search stays
+  inside its enclosing serialized string, preserving later public fields.
+  JSON record-separator escapes retain the following person-label cue.
+  Unterminated values end before an enclosing serialized string
   close, at an unescaped record line break, or at input end. Key-looking private
-  suffixes stay protected, and enclosing JSON remains parseable. Conservative tab prefixes protect repeats
+  suffixes stay protected, and enclosing JSON remains parseable. Unclassified
+  quote runs retain nonempty ownership. Conservative tab prefixes protect repeats
   under unchanged length floors, including later session turns; their public-byte
   cost is disclosed in benchmark evidence.
 - Legacy grouped identifier extensions stop at positively recognized complete

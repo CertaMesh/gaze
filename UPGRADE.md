@@ -65,11 +65,14 @@ evidence, and seed metadata in an older envelope. Whole-value ownership and
 strict restore remain intact. Conservative prefix matches can protect public
 bytes and retain the existing repeat-length floors.
 
-Nested serialized values stop at their own closing quote at every representable
-depth. Unterminated or inconsistent values end at the nearest enclosing serialized
+Single and triple ASCII quote delimiters retain raw content, including doubled
+quotes and complete multiline scalars. Every closing-quote search stops before
+the enclosing serialized string's close at every representable depth.
+Unterminated or inconsistent values end at the nearest enclosing serialized
 string close (excluded, with escape depth preserved), an unescaped LF/CRLF/CR
 record boundary, or input end. Key-looking text and container punctuation inside
-the unfinished value remain private; a following assignment alone is no boundary. Unquoted tab grouping
+the unfinished value remain private; a following assignment alone is no boundary.
+Unclassified quoting keeps nonempty ownership through that safe boundary. Unquoted tab grouping
 retains its existing conservative public-column cost.
 
 ---

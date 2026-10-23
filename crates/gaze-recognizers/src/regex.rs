@@ -1068,61 +1068,239 @@ fn scan_field_owned_value(input: &str, capture: std::ops::Range<usize>) -> Label
     }
 }
 
-fn unterminated_scalar_end(input: &str, start: usize, opening_escapes: usize) -> usize {
+struct EnclosingScalarBoundary {
+    end: usize,
+    absent_value: bool,
+}
+
+fn enclosing_scalar_boundary(
+    input: &str,
+    start: usize,
+    opening_escapes: usize,
+) -> EnclosingScalarBoundary {
     // At each serialization level a delimiter has 2^depth - 1 backslashes.
     // Replay the prefix to find strings enclosing this scalar, excluding its
     // own opening quote and escape bytes. Key-looking content proves nothing.
     let mut enclosing = Vec::new();
-    // A double quote inside a prior single-quoted field is content, not an
-    // enclosing string around a later record value.
-    let mut single_quoted = false;
+    let mut literal_limit = None;
+    let prefix_end = start - 1 - opening_escapes;
     let mut escapes = 0usize;
-    for byte in input[..start - 1 - opening_escapes].bytes() {
+    let mut at = 0;
+    while at < prefix_end {
+        let byte = input.as_bytes()[at];
         if byte == b'\\' {
             escapes += 1;
+            at += 1;
             continue;
         }
         if matches!(byte, b'\n' | b'\r') && escapes.is_multiple_of(2) {
             enclosing.clear();
-            single_quoted = false;
+            literal_limit = None;
         }
-        if byte == b'\'' && escapes.is_multiple_of(2) && enclosing.is_empty() {
-            single_quoted = !single_quoted;
+        let apostrophe = byte == b'\''
+            && escapes.is_multiple_of(2)
+            && !input[..at]
+                .chars()
+                .next_back()
+                .is_some_and(|ch| ch.is_alphanumeric() || ch == '_');
+        let nested_double = byte == b'"'
+            && (escapes + 1).is_power_of_two()
+            && enclosing.last().is_none_or(|(depth, _)| escapes > *depth);
+        if apostrophe || nested_double {
+            let literal_escapes = if apostrophe { 0 } else { escapes };
+            let width = literal_escapes + 1;
+            let opening = at - literal_escapes;
+            let run_end = quote_run_end(input, opening, byte, literal_escapes, prefix_end);
+            let run = (run_end - opening) / width;
+            let delimiter = match run {
+                1 if apostrophe => Some(ScalarQuoteDelimiter::Single),
+                3..=5 => Some(ScalarQuoteDelimiter::Triple),
+                _ => None,
+            };
+            if let Some(delimiter) = delimiter {
+                let count = match delimiter {
+                    ScalarQuoteDelimiter::Single => 1,
+                    ScalarQuoteDelimiter::Triple => 3,
+                };
+                let content = opening + count * width;
+                let limit = *literal_limit.get_or_insert_with(|| {
+                    serialized_string_end(
+                        input,
+                        content,
+                        prefix_end,
+                        enclosing.last().map(|(depth, _)| *depth),
+                    )
+                });
+                // Prior literal fields use the same delimiter grammar and
+                // enclosure bound as the current value. Their content quotes
+                // cannot fabricate an enclosing JSON string around it.
+                at = scalar_quote_close(input, content, limit, byte, literal_escapes, delimiter)
+                    .map_or_else(
+                        || uncertain_scalar_end(input, content, limit),
+                        |close| close + count * width,
+                    );
+                escapes = 0;
+                continue;
+            }
         }
-        if byte == b'"' && !single_quoted && (escapes + 1).is_power_of_two() {
-            while enclosing.last().is_some_and(|depth| *depth > escapes) {
+        if byte == b'"' && (escapes + 1).is_power_of_two() {
+            literal_limit = None;
+            while enclosing.last().is_some_and(|(depth, _)| *depth > escapes) {
                 enclosing.pop();
             }
-            if enclosing.last() == Some(&escapes) {
+            if enclosing.last().is_some_and(|(depth, _)| *depth == escapes) {
                 enclosing.pop();
             } else {
-                enclosing.push(escapes);
+                enclosing.push((escapes, at - escapes));
             }
         }
         escapes = 0;
+        at += 1;
     }
-    let enclosing_depth = enclosing.last().copied();
-    escapes = 0;
-    for (offset, byte) in input[start..].bytes().enumerate() {
+    let depth = enclosing.last().map(|(depth, _)| *depth);
+    let absent_value = input.as_bytes()[start - 1] == b'"'
+        && depth.is_some_and(|depth| opening_escapes <= depth)
+        && serialized_context_is_json(input, &enclosing, opening_escapes);
+    EnclosingScalarBoundary {
+        end: serialized_string_end(input, start, input.len(), depth),
+        absent_value,
+    }
+}
+
+fn serialized_context_is_json(input: &str, enclosing: &[(usize, usize)], escapes: usize) -> bool {
+    if !(escapes + 1).is_power_of_two() || serde_json::from_str::<serde_json::Value>(input).is_err()
+    {
+        return false;
+    }
+    let mut levels = 0;
+    for &(depth, opening) in enclosing.iter().filter(|(depth, _)| *depth < escapes) {
+        if (depth + 1).trailing_zeros() != levels {
+            return false;
+        }
+        let close = serialized_string_end(input, opening + depth + 1, input.len(), Some(depth));
+        let Some(raw) = input.get(opening..close + depth + 1) else {
+            return false;
+        };
+        let mut raw = raw.to_owned();
+        for _ in 0..levels {
+            let Ok(decoded) = serde_json::from_str::<String>(&format!("\"{raw}\"")) else {
+                return false;
+            };
+            raw = decoded;
+        }
+        let Ok(content) = serde_json::from_str::<String>(&raw) else {
+            return false;
+        };
+        if serde_json::from_str::<serde_json::Value>(&content).is_err() {
+            return false;
+        }
+        levels += 1;
+    }
+    levels == (escapes + 1).trailing_zeros()
+}
+
+fn serialized_string_end(input: &str, start: usize, limit: usize, depth: Option<usize>) -> usize {
+    let Some(depth) = depth else { return limit };
+    let mut escapes = 0usize;
+    for (offset, byte) in input[start..limit].bytes().enumerate() {
         if byte == b'\\' {
             escapes += 1;
             continue;
         }
         let at = start + offset;
-        if matches!(byte, b'\n' | b'\r') && escapes.is_multiple_of(2) {
-            return at;
-        }
-        if byte == b'"'
-            && (escapes + 1).is_power_of_two()
-            && enclosing_depth.is_some_and(|depth| escapes <= depth)
-        {
+        if byte == b'"' && (escapes + 1).is_power_of_two() && escapes <= depth {
             // Exclude the delimiter's entire encoded spelling. Retaining these
             // bytes keeps every enclosing serialized JSON string parseable.
             return at - escapes;
         }
         escapes = 0;
     }
-    input.len()
+    limit
+}
+
+#[derive(Clone, Copy)]
+enum ScalarQuoteDelimiter {
+    Single,
+    Triple,
+}
+
+fn quote_run_end(input: &str, start: usize, quote: u8, escapes: usize, limit: usize) -> usize {
+    let width = escapes + 1;
+    let mut end = start;
+    while end.checked_add(width).is_some_and(|next| next <= limit)
+        && input.as_bytes()[end..end + escapes]
+            .iter()
+            .all(|byte| *byte == b'\\')
+        && input.as_bytes()[end + escapes] == quote
+    {
+        end += width;
+    }
+    end
+}
+
+fn scalar_quote_close(
+    input: &str,
+    start: usize,
+    limit: usize,
+    quote: u8,
+    opening_escapes: usize,
+    delimiter: ScalarQuoteDelimiter,
+) -> Option<usize> {
+    let width = opening_escapes + 1;
+    let stride = width.checked_mul(2)?;
+    let mut escapes = 0usize;
+    let mut at = start;
+    while at < limit {
+        let byte = input.as_bytes()[at];
+        if byte == b'\\' {
+            escapes += 1;
+        } else {
+            if byte == quote {
+                let residue = escapes % stride;
+                if residue == opening_escapes {
+                    let run_start = at - opening_escapes;
+                    let run_end = quote_run_end(input, run_start, quote, opening_escapes, limit);
+                    let run = (run_end - run_start) / width;
+                    let close = match delimiter {
+                        ScalarQuoteDelimiter::Single if run % 2 == 1 => Some(run_end - width),
+                        ScalarQuoteDelimiter::Single => None,
+                        ScalarQuoteDelimiter::Triple if run > 5 => return None,
+                        ScalarQuoteDelimiter::Triple if run >= 3 => Some(run_end - 3 * width),
+                        ScalarQuoteDelimiter::Triple => None,
+                    };
+                    if let Some(close) = close {
+                        return (!input[run_end..]
+                            .chars()
+                            .next()
+                            .is_some_and(|ch| ch.is_alphanumeric() || ch == '_'))
+                        .then_some(close);
+                    }
+                    // Doubled delimiters are scalar content (YAML/SQL/CSV).
+                    // A triple-quoted scalar also admits isolated quote pairs.
+                    at = run_end;
+                    escapes = 0;
+                    continue;
+                }
+                if residue != stride - 1 {
+                    return None;
+                }
+            }
+            escapes = 0;
+        }
+        at += 1;
+    }
+    None
+}
+
+fn uncertain_scalar_end(input: &str, start: usize, limit: usize) -> usize {
+    let mut escapes = 0usize;
+    for (offset, byte) in input[start..limit].bytes().enumerate() {
+        if matches!(byte, b'\n' | b'\r') && escapes.is_multiple_of(2) {
+            return start + offset;
+        }
+        escapes = if byte == b'\\' { escapes + 1 } else { 0 };
+    }
+    limit
 }
 
 fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
@@ -1132,58 +1310,60 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
         .rev()
         .take_while(|byte| *byte == b'\\')
         .count();
-    // Each JSON wrapper doubles the escape stride. Distinguish closing and
-    // content quotes by their residues without decoding or a fixed depth limit.
-    // An unterminated scalar requires proof before releasing a suffix.
-    let width = opening_escapes.checked_add(1);
-    let stride = width.and_then(|width| width.checked_mul(2));
-    let mut end = input.len();
+    // Both normal closes and uncertain fallbacks share this hard enclosure
+    // boundary. A quote in a later sibling field can never close this value.
+    let enclosing = enclosing_scalar_boundary(input, capture.start, opening_escapes);
+    let limit = enclosing.end;
+    let width = opening_escapes + 1;
+    let opening_start = capture.start - width;
+    let opening_end = quote_run_end(input, opening_start, quote, opening_escapes, limit);
+    let opening_run = (opening_end - opening_start) / width;
+    let known_empty = enclosing.absent_value
+        || (width.is_power_of_two()
+            && matches!(opening_run, 2 | 6)
+            && !input[opening_end..]
+                .chars()
+                .next()
+                .is_some_and(|ch| ch.is_alphanumeric() || ch == '_'));
+    let delimiter = match opening_run {
+        1 => Some(ScalarQuoteDelimiter::Single),
+        3..=5 => Some(ScalarQuoteDelimiter::Triple),
+        _ => None,
+    }
+    .filter(|_| width.is_power_of_two());
+    let mut start = match delimiter {
+        Some(ScalarQuoteDelimiter::Triple) => opening_start + 3 * width,
+        _ => capture.start,
+    };
+    let mut end = limit;
     let mut reason = Some(LabelledValueScanReason::UncertainQuoteBoundary);
-    if let Some(stride) = stride.filter(|_| width.is_some_and(usize::is_power_of_two)) {
-        let mut escapes = 0usize;
-        for (offset, byte) in input[capture.start..].bytes().enumerate() {
-            if byte == b'\\' {
-                let Some(next) = escapes.checked_add(1) else {
-                    break;
-                };
-                escapes = next;
-                continue;
-            }
-            if byte == quote {
-                let residue = escapes % stride;
-                if residue == opening_escapes {
-                    if input[capture.start + offset + 1..]
-                        .chars()
-                        .next()
-                        .is_some_and(|ch| ch.is_alphanumeric() || ch == '_')
-                    {
-                        break;
-                    }
-                    if let Some(close) = (capture.start + offset).checked_sub(opening_escapes) {
-                        end = close;
-                        reason = None;
-                    }
-                    break;
-                }
-                if residue != stride - 1 {
-                    break;
-                }
-            }
-            escapes = 0;
-        }
+    if known_empty {
+        end = start;
+        reason = None;
+    } else if let Some(close) = delimiter.and_then(|delimiter| {
+        scalar_quote_close(input, start, limit, quote, opening_escapes, delimiter)
+    }) {
+        end = close;
+        reason = None;
     }
     if reason.is_some() {
-        end = unterminated_scalar_end(input, capture.start, opening_escapes);
+        end = uncertain_scalar_end(input, start, limit);
+        if end <= start {
+            // Unclassified opening runs must not turn real private text into
+            // an empty rejected capture. Keep available opening bytes owned.
+            start = opening_start;
+        }
     }
-    let span = capture.start..end;
+    let span = start..end;
+    let capture_end = capture.end.max(start).min(end);
     let repeat_seed = (!span.is_empty()).then_some(gaze_types::LabelledValueRepeatSeed {
         span: span.clone(),
         kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
     });
     LabelledValueScan {
         repeat_seed,
-        capture: capture.start..capture.end.min(end),
-        extension: capture.end.min(end)..end,
+        capture: start..capture_end,
+        extension: capture_end..end,
         reason: reason.or_else(|| {
             labelled_value_over_limit(&input[span.clone()])
                 .then_some(LabelledValueScanReason::LimitExceeded)
@@ -1443,7 +1623,7 @@ mod tests {
     }
 
     #[test]
-    fn field_owned_unterminated_quote_keeps_assignments_until_record_end() {
+    fn field_owned_unterminated_quote_keeps_nonempty_ownership_until_record_end() {
         for opening in ["", "\n", "\r\n"] {
             for delimiter in ["; ", ", ", "\n"] {
                 for suffix in ["dispatch_reference=7", "dispatch_reference={\"kind\":7}"] {
@@ -1454,10 +1634,12 @@ mod tests {
                     let end = input[start..]
                         .find(['\n', '\r'])
                         .map_or(input.len(), |offset| start + offset);
-                    assert_eq!(scan.span, start..end);
+                    let owned_start = if start == end { start - 1 } else { start };
+                    assert_eq!(scan.span, owned_start..end);
+                    assert!(!scan.rejected);
                     assert_eq!(
                         scan.repeat_seed.map(|seed| seed.span),
-                        (start != end).then_some(start..end)
+                        Some(owned_start..end)
                     );
                 }
             }

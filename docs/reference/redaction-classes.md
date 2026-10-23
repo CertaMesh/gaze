@@ -143,6 +143,10 @@ following complete field cues (`:`, `=`, `is`, `ist`, `lautet`, or same-line
 whitespace). Terminal unquoted periods/colons remain outside the value; internal
 punctuation and quoted punctuation remain restorable value bytes. Raw JSON retains
 scalar boundaries through nested serialization without a fixed wrapper limit.
+Single and triple delimiters preserve doubled quote content and complete multiline
+values. Every close search stops before the enclosing serialized string's close;
+an unrelated later apostrophe cannot close the value. Unclassified quote runs
+retain nonempty private ownership through the safe boundary.
 Inconsistent or unclosed values end at the nearest enclosing serialized string
 close (excluded, with escape depth preserved), unescaped LF/CRLF/CR record
 boundary, or input end. Key-looking text and container punctuation stay private;

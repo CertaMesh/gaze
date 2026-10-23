@@ -1,8 +1,12 @@
 """Independent raw field-boundary coverage, including canonical scorer sensitivity."""
 import hashlib
 import json
+import csv
 import re
 import unittest
+import sqlite3
+import tomllib
+from contextlib import closing
 
 import agentic_layers as api
 import gaze_bench_score as score
@@ -10,6 +14,44 @@ import record_id_boundary_cells as cells
 
 
 class RecordIdBoundaryTests(unittest.TestCase):
+    def test_quote_dialects_declare_private_values_and_real_public_siblings(self):
+        for partition in api.PARTITIONS:
+            rows = [r for r in cells.records(api, partition)
+                    if r.surface.startswith("recordids_boundary_quote_dialects_")]
+            self.assertEqual(len(rows), 2790)
+            self.assertEqual({r.layer for r in rows}, {"A", "D", "R"})
+            self.assertEqual({int(re.search(r"json_depth(\d+)", r.surface)[1])
+                              for r in rows if "json_depth" in r.surface}, set(range(1, 10)))
+            for row in rows:
+                self.assertTrue(any(d.label == "public_column" for d in row.decoys))
+                self.assertEqual(bool(row.gold), row.layer != "D")
+                if row.layer == "R":
+                    self.assertEqual(len(row.gold), 2)
+                    self.assertEqual(row.gold[0].value, row.gold[1].value)
+                if row.layer != "R" and "json_depth" in row.surface:
+                    parsed = json.loads(row.text)
+                    while "payload" in parsed:
+                        self.assertIn("public_version", parsed)
+                        parsed = json.loads(parsed["payload"])
+                    self.assertEqual(parsed["tags"], ["'", "FRAME"])
+                    self.assertEqual(parsed["public_version"], "'")
+                if row.layer != "R" and row.surface.endswith("_record"):
+                    if "csv_double" in row.surface:
+                        parsed = next(csv.reader([row.text.split(": ", 1)[1]], skipinitialspace=True))
+                        self.assertIn('"É', parsed[0])
+                        self.assertEqual(len(parsed), 2)
+                    if "toml_" in row.surface or "prefix_triple_" in row.surface:
+                        parsed = tomllib.loads(row.text)
+                        self.assertIn("public_version", parsed)
+                        self.assertEqual(len(row.gold), 0 if row.layer == "D" else 1)
+                    if "sql_single" in row.surface:
+                        field = row.text.split(" SET ", 1)[1].split("=", 1)[0]
+                        with closing(sqlite3.connect(":memory:")) as db:
+                            db.execute(f'CREATE TABLE synthetic_records ("{field}" TEXT, public_version TEXT)')
+                            db.execute('INSERT INTO synthetic_records DEFAULT VALUES')
+                            db.execute(row.text)
+                            self.assertIn("'É", db.execute(f'SELECT "{field}" FROM synthetic_records').fetchone()[0])
+
     def test_rust_fixture_rebuilds_from_current_application_owned_gold(self):
         from write_record_id_boundary_fixture import OUTPUT, fixture
         self.assertEqual(json.loads(OUTPUT.read_text()), fixture())

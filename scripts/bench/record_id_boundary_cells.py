@@ -200,6 +200,79 @@ def records(api, partition, *, version=27):
                         emit("D", family, surface, index, template,
                              {**fields, "C": (public_key, None), "V": (value, "decoy:public_reference")}, language)
 
+            if version >= 27:
+                # Producers declare the whole raw scalar independently of the
+                # scanner. Public siblings and public reference fields retain
+                # their real quote syntax, including later apostrophe values.
+                dialects = [
+                    ("yaml_single", first + "''É" + other, "{C}: '{V}'", "yaml"),
+                    ("sql_single", first + "''É" + other, "{C}='{V}'", "sql"),
+                    ("csv_double", first + '""É' + other, '{C}: "{V}"', "csv"),
+                    ("opaque_prefix", first + ";private_code=É" + other,
+                     'format_hint: "marker; {C}: "{V}', "unfinished"),
+                ]
+                for quote, name in (("'", "literal"), ('"', "basic")):
+                    delimiter = quote * 3
+                    for shape, value in (
+                        ("multiline", first + "\nÉ" + other),
+                        ("initial_lf", "\n" + first + " É" + other),
+                        ("quote_tail", first + quote + "É" + other + quote * 2),
+                    ):
+                        dialects.append((f"toml_{name}_{shape}", value,
+                                         "{C} = " + delimiter + "{V}" + delimiter, "toml"))
+                private_key = first + '; "private_code": É' + other
+                for quote, name in (("'", "single"), ('"', "double")):
+                    dialects.append(("ambiguous_" + name, quote + private_key,
+                                     "{C}: " + quote + "{V}", "unfinished"))
+                    dialects.append(("unfinished_" + name, first + ";É" + other,
+                                     "{C}: " + quote + "{V}", "unfinished"))
+                    delimiter = quote * 3
+                    dialects.append(("prefix_triple_" + name, private_key,
+                                     "format_hint = " + delimiter + "quote '\" marker" + delimiter
+                                     + "\n{C} = '{V}'", "toml"))
+                for dialect, decoded, declaration, kind in dialects:
+                    depths = [None, *range(9)] if index == 0 else [None]
+                    for depth in depths:
+                        value, public = decoded, "6.8." + other
+                        if depth is None:
+                            if kind == "yaml":
+                                template = declaration + "\npublic_version: '{W}'"
+                            elif kind == "sql":
+                                template = "UPDATE synthetic_records SET " + declaration + ", public_version='{W}';"
+                            elif kind == "csv":
+                                template = declaration + ', "{W}"'
+                            else:
+                                template = declaration + '\npublic_version = "{W}"'
+                            shape = "record"
+                        else:
+                            marker, public_marker = "GAZE_DIALECT_VALUE", "GAZE_DIALECT_PUBLIC"
+                            note = declaration.replace("{V}", marker)
+                            payload = json.dumps({"note": note, "public_version": public_marker,
+                                                  "tags": ["'", "FRAME"]}, ensure_ascii=False)
+                            for _ in range(depth):
+                                payload = json.dumps({"payload": payload, "public_version": public_marker},
+                                                     ensure_ascii=False)
+                            template = payload.replace(marker, "{V}").replace(public_marker, "{W}")
+                            value, public = encoded_content(value, depth), encoded_content("'", depth)
+                            shape = f"json_depth{depth + 1}"
+                        fields = {"C": (key, None), "V": (value, LABELS[family]),
+                                  "W": (public, "decoy:public_column")}
+                        surface = f"quote_dialects_{dialect}_{shape}"
+                        emit("A", family, surface, index, template, fields)
+                        emit("R", family, surface, index, "Lookup {V} again.\n" + template, fields)
+                        emit("D", family, surface, index, template,
+                             {**fields, "C": (public_key, None), "V": (value, "decoy:public_reference")})
+
+                for depth in (range(9) if index == 0 else (0,)):
+                    marker = "GAZE_EMPTY_NOTE_PUBLIC"
+                    payload = json.dumps({"note": "{C}: ", "public_version": marker,
+                                          "tags": ["'", "FRAME"]}, ensure_ascii=False)
+                    for _ in range(depth):
+                        payload = json.dumps({"payload": payload, "public_version": marker}, ensure_ascii=False)
+                    emit("D", family, f"quote_dialects_absent_value_json_depth{depth + 1}", index,
+                         payload.replace(marker, "{W}"),
+                         {"C": (key, None), "W": ("'", "decoy:public_column")})
+
             for shape, value in (("unicode", first + "\tÉ" + other),
                                  ("combining", first + "\tE\u0301" + other)):
                 single(family, "tab_group_" + shape, index, value,
