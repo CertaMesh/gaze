@@ -404,9 +404,10 @@ pub trait RequestPseudonymizer {
     }
 
     /// Verifies every request-known Rule occurrence in the expanded protected leaf.
-    /// Implementations without Rule discovery have no additional coverage to prove.
+    /// The default refuses: custom protectors must explicitly supply their proof.
+    /// Implementations without Rule sources can prove their own fixed protection contract.
     fn verify_rule_coverage(&mut self, _protected: &str) -> Result<(), CodecErrorCode> {
-        Ok(())
+        Err(CodecErrorCode::ProtectionFailedClosed)
     }
 
     /// Proves that every Gaze-shaped token belongs to the staged transaction.

@@ -44,6 +44,9 @@ new token. It changes no mappings, evidence or matcher cache, and uses neither
 candidate selection nor the protection projection. Any uncovered byte refuses
 the request. Caller-supplied session tokens retain their exact restore spelling. Mappings commit
 only after the whole request passes; a failure discards the staged session state.
+Custom `RequestPseudonymizer` implementations must supply `verify_rule_coverage`.
+Its default refuses rather than accepting an unproved request. The built-in
+protector supplies the independent byte-coverage invariant above.
 This also applies when the response uses SSE: request protection finishes before
 any upstream send.
 

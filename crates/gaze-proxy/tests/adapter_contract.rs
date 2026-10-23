@@ -131,7 +131,7 @@ impl RequestPseudonymizer for DefaultModePseudonymizer {
 }
 
 #[test]
-fn default_request_pseudonymizer_allows_normal_calls_and_fails_closed_on_suppression() {
+fn default_request_pseudonymizer_requires_suppression_and_coverage_proofs() {
     let mut pseudonymizer = DefaultModePseudonymizer { protect_calls: 0 };
 
     assert_eq!(
@@ -147,6 +147,14 @@ fn default_request_pseudonymizer_allows_normal_calls_and_fails_closed_on_suppres
         Err(CodecErrorCode::ProtectionFailedClosed)
     );
     assert_eq!(pseudonymizer.protect_calls, 1);
+    assert_eq!(
+        pseudonymizer.verify_rule_coverage("synthetic"),
+        Err(CodecErrorCode::ProtectionFailedClosed)
+    );
+    assert_eq!(
+        pseudonymizer.protect_calls, 1,
+        "missing proof must not run protection"
+    );
 }
 
 #[test]

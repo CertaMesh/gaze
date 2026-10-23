@@ -38,6 +38,15 @@ impl RequestPseudonymizer for SyntheticPseudonymizer<'_, '_> {
         self.protect(input)
     }
 
+    fn verify_rule_coverage(&mut self, protected: &str) -> Result<(), CodecErrorCode> {
+        self.validate_token_shapes(protected)?;
+        if protected.contains(EMAIL) {
+            Err(CodecErrorCode::ProtectionFailedClosed)
+        } else {
+            Ok(())
+        }
+    }
+
     fn validate_token_shapes(&mut self, input: &str) -> Result<(), CodecErrorCode> {
         if !input.contains('<') && !input.contains('>') {
             return Ok(());
@@ -98,6 +107,14 @@ impl RequestPseudonymizer for ExpandingPseudonymizer {
         _mode: PrefixCacheWriteMode,
     ) -> Result<String, CodecErrorCode> {
         self.protect(input)
+    }
+
+    fn verify_rule_coverage(&mut self, protected: &str) -> Result<(), CodecErrorCode> {
+        if protected == "EXPAND" {
+            Err(CodecErrorCode::ProtectionFailedClosed)
+        } else {
+            Ok(())
+        }
     }
 
     fn validate_token_shapes(&mut self, _input: &str) -> Result<(), CodecErrorCode> {
@@ -600,6 +617,12 @@ impl RequestPseudonymizer for CountingModePseudonymizer {
             }
         }
         Ok(input.to_owned())
+    }
+
+    fn verify_rule_coverage(&mut self, protected: &str) -> Result<(), CodecErrorCode> {
+        // This fixture has no Rule sources; mutation probes have their own counter.
+        let _ = protected;
+        Ok(())
     }
 
     fn validate_token_shapes(&mut self, _input: &str) -> Result<(), CodecErrorCode> {
@@ -1493,6 +1516,14 @@ impl RequestPseudonymizer for AllDigitOrderIdPseudonymizer {
         _mode: PrefixCacheWriteMode,
     ) -> Result<String, CodecErrorCode> {
         self.protect(input)
+    }
+
+    fn verify_rule_coverage(&mut self, protected: &str) -> Result<(), CodecErrorCode> {
+        if protected.contains(ORDER_ID) {
+            Err(CodecErrorCode::ProtectionFailedClosed)
+        } else {
+            Ok(())
+        }
     }
 
     fn validate_token_shapes(&mut self, _input: &str) -> Result<(), CodecErrorCode> {
