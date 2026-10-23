@@ -1,0 +1,258 @@
+{
+  "contract": "v2; generated contract unchanged across v2/v1/v4",
+  "counts": {
+    "A": {
+      "base": 4953,
+      "candidate": 5035,
+      "added": 150,
+      "removed": 68
+    },
+    "D": {
+      "base": 14952,
+      "candidate": 14952,
+      "added": 0,
+      "removed": 0
+    },
+    "R": {
+      "base": 1385,
+      "candidate": 1535,
+      "added": 150,
+      "removed": 0
+    },
+    "C": {
+      "base": 27004,
+      "candidate": 27011,
+      "added": 25,
+      "removed": 18
+    }
+  },
+  "attribution": [
+    {
+      "layer": "A",
+      "metadata": [
+        {
+          "class": "custom:customer_id",
+          "stage": "primary_pipeline",
+          "source_ids": [
+            "customer_id.labelled"
+          ]
+        }
+      ],
+      "added_bytes": 50
+    },
+    {
+      "layer": "A",
+      "metadata": [
+        {
+          "class": "custom:employee_id",
+          "stage": "primary_pipeline",
+          "source_ids": [
+            "employee_id.labelled"
+          ]
+        }
+      ],
+      "added_bytes": 50
+    },
+    {
+      "layer": "A",
+      "metadata": [
+        {
+          "class": "custom:record_id",
+          "stage": "primary_pipeline",
+          "source_ids": [
+            "record_id.labelled"
+          ]
+        }
+      ],
+      "added_bytes": 50
+    },
+    {
+      "layer": "C",
+      "metadata": [
+        {
+          "class": "custom:customer_id",
+          "stage": "primary_pipeline",
+          "source_ids": [
+            "customer_id.labelled"
+          ]
+        }
+      ],
+      "added_bytes": 16
+    },
+    {
+      "layer": "C",
+      "metadata": [
+        {
+          "class": "custom:record_id",
+          "stage": "primary_pipeline",
+          "source_ids": [
+            "phone.e164.spaced",
+            "record_id.labelled"
+          ]
+        }
+      ],
+      "added_bytes": 3
+    },
+    {
+      "layer": "C",
+      "metadata": [
+        {
+          "class": "custom:record_id",
+          "stage": "primary_pipeline",
+          "source_ids": [
+            "record_id.labelled"
+          ]
+        }
+      ],
+      "added_bytes": 6
+    },
+    {
+      "layer": "R",
+      "metadata": [
+        {
+          "class": "custom:customer_id",
+          "stage": "primary_pipeline",
+          "source_ids": [
+            "customer_id.labelled"
+          ]
+        }
+      ],
+      "added_bytes": 50
+    },
+    {
+      "layer": "R",
+      "metadata": [
+        {
+          "class": "custom:employee_id",
+          "stage": "primary_pipeline",
+          "source_ids": [
+            "employee_id.labelled"
+          ]
+        }
+      ],
+      "added_bytes": 50
+    },
+    {
+      "layer": "R",
+      "metadata": [
+        {
+          "class": "custom:record_id",
+          "stage": "primary_pipeline",
+          "source_ids": [
+            "record_id.labelled"
+          ]
+        }
+      ],
+      "added_bytes": 50
+    }
+  ],
+  "cells": [
+    {
+      "layer": "A",
+      "cell": "A|customer_id|recordids_boundary_tab_group_ambiguous_column|unchecked",
+      "gold_labels": "CUSTOMER_ID",
+      "added_bytes": 50
+    },
+    {
+      "layer": "A",
+      "cell": "A|employee_id|recordids_boundary_tab_group_ambiguous_column|unchecked",
+      "gold_labels": "EMPLOYEE_ID",
+      "added_bytes": 50
+    },
+    {
+      "layer": "A",
+      "cell": "A|record_id|recordids_boundary_tab_group_ambiguous_column|unchecked",
+      "gold_labels": "RECORD_ID",
+      "added_bytes": 50
+    },
+    {
+      "layer": "C",
+      "cell": "holdout",
+      "gold_labels": "BUILDINGNUM,CITY,COUNTRY,FIRSTNAME,NATIONALID,STATE,STREET,SURNAME,ZIP",
+      "added_bytes": 9
+    },
+    {
+      "layer": "C",
+      "cell": "holdout",
+      "gold_labels": "BUILDINGNUM,CITY,FIRSTNAME,NATIONALID,PASSPORTID,STATE,STREET,SURNAME,ZIP",
+      "added_bytes": 7
+    },
+    {
+      "layer": "C",
+      "cell": "holdout",
+      "gold_labels": "DATEOFBIRTH,IDCARDNUM,PHONENUMBER,SURNAME",
+      "added_bytes": 3
+    },
+    {
+      "layer": "C",
+      "cell": "holdout",
+      "gold_labels": "EMAIL,FIRSTNAME,PHONENUMBER",
+      "added_bytes": 3
+    },
+    {
+      "layer": "C",
+      "cell": "holdout",
+      "gold_labels": "FIRSTNAME,IDCARDNUM,PHONENUMBER,SURNAME",
+      "added_bytes": 3
+    },
+    {
+      "layer": "R",
+      "cell": "R|customer_id|recordids_boundary_tab_group_ambiguous_column|unchecked",
+      "gold_labels": "CUSTOMER_ID",
+      "added_bytes": 50
+    },
+    {
+      "layer": "R",
+      "cell": "R|employee_id|recordids_boundary_tab_group_ambiguous_column|unchecked",
+      "gold_labels": "EMPLOYEE_ID",
+      "added_bytes": 50
+    },
+    {
+      "layer": "R",
+      "cell": "R|record_id|recordids_boundary_tab_group_ambiguous_column|unchecked",
+      "gold_labels": "RECORD_ID",
+      "added_bytes": 50
+    }
+  ],
+  "decoys": [
+    {
+      "layer": "A",
+      "kinds": [
+        "outside_explicit_decoys"
+      ],
+      "added_bytes": 30
+    },
+    {
+      "layer": "A",
+      "kinds": [
+        "public_column"
+      ],
+      "added_bytes": 120
+    },
+    {
+      "layer": "C",
+      "kinds": [
+        "outside_explicit_decoys"
+      ],
+      "added_bytes": 25
+    },
+    {
+      "layer": "R",
+      "kinds": [
+        "outside_explicit_decoys"
+      ],
+      "added_bytes": 30
+    },
+    {
+      "layer": "R",
+      "kinds": [
+        "public_column"
+      ],
+      "added_bytes": 120
+    }
+  ],
+  "observation_sha256": {
+    "base": "da28070bc1314d144d9205142ab358a899026b7e107b7d44d908a92d6049b250",
+    "candidate": "c1fab3a105890f9c10f93e207a80d6ad2c2f2b0cbd3160abac5d8479ac660af9"
+  }
+}

@@ -9,11 +9,11 @@
   "artifacts": {
     "scorecard": {
       "file": "scorecard-v4.json",
-      "sha256": "ad7b3c3770a196d7f9d90148f9db15fd733cc4a6c4c2d5655e0761ea9d4ef029"
+      "sha256": "d762655ba94790233c9dc1a49e4d563102511e062b2d85cad3620ad2a903910d"
     },
     "record": {
       "file": "observations-v1.jsonl.gz",
-      "sha256": "ebd9b286b54afbc5e2c69ef7feaeb0d9da8876dfc7cf4d5394ed352446f519d9"
+      "sha256": "c1fab3a105890f9c10f93e207a80d6ad2c2f2b0cbd3160abac5d8479ac660af9"
     }
   },
   "timing_semantics": "inclusive spans; native stages use child process CPU; scoring excludes transport",
@@ -23,28 +23,28 @@
       "contract": "scored-labels-v1",
       "role": "detector",
       "executed": true,
-      "wall_seconds": 30.26447312498931,
-      "cpu_self_seconds": 0.003243000000000107,
-      "cpu_children_seconds": 57.951546,
-      "cpu_seconds": 57.954789
+      "wall_seconds": 169.91799941600766,
+      "cpu_self_seconds": 0.015572999999999837,
+      "cpu_children_seconds": 165.950266,
+      "cpu_seconds": 165.965839
     },
     {
       "stage": "build",
       "contract": "scored-labels-v1",
       "role": "validator",
-      "wall_seconds": 29.06200270797126,
-      "cpu_self_seconds": 0.00259100000000001,
-      "cpu_children_seconds": 55.46394299999999,
-      "cpu_seconds": 55.466533999999996
+      "wall_seconds": 84.15842408395838,
+      "cpu_self_seconds": 0.009810000000000318,
+      "cpu_children_seconds": 146.68309800000003,
+      "cpu_seconds": 146.69290800000002
     },
     {
       "stage": "validator_measurements",
       "contract": "scored-labels-v1",
       "layer": "C",
-      "wall_seconds": 4.616569874924608,
-      "cpu_self_seconds": 0.7753829999999999,
-      "cpu_children_seconds": 2.709243999999998,
-      "cpu_seconds": 3.484626999999998
+      "wall_seconds": 11.107178375008516,
+      "cpu_self_seconds": 1.7215039999999995,
+      "cpu_children_seconds": 6.214598000000024,
+      "cpu_seconds": 7.936102000000023
     },
     {
       "stage": "detection",
@@ -52,8 +52,8 @@
       "layer": "C",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 365.4168371370001,
-      "cpu_seconds": 513.9649440000002,
+      "wall_seconds": 1881.0102642400072,
+      "cpu_seconds": 1888.0041000000092,
       "samples": 2911,
       "cpu_source": "producer_process_clock"
     },
@@ -63,8 +63,8 @@
       "layer": "C",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 0.15084133099999997,
-      "cpu_seconds": 0.15065300000213755,
+      "wall_seconds": 0.5296019309999989,
+      "cpu_seconds": 0.3410860000034601,
       "samples": 2911,
       "cpu_source": "producer_process_clock"
     },
@@ -74,8 +74,8 @@
       "layer": "C",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 2.16325025,
-      "cpu_seconds": 2.163284,
+      "wall_seconds": 3.853790542,
+      "cpu_seconds": 3.642847,
       "samples": 1,
       "cpu_source": "producer_process_clock"
     },
@@ -86,10 +86,10 @@
       "config": "policy-file",
       "repetition": 1,
       "mode": "capture_accounting",
-      "wall_seconds": 1.447994889342226,
-      "cpu_self_seconds": 1.4468820000000235,
+      "wall_seconds": 8.134378290502355,
+      "cpu_self_seconds": 5.353552999999952,
       "cpu_children_seconds": 0.0,
-      "cpu_seconds": 1.4468820000000235
+      "cpu_seconds": 5.353552999999952
     },
     {
       "stage": "layer_capture",
@@ -97,28 +97,28 @@
       "layer": "C",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 531.733428083011,
-      "cpu_self_seconds": 3.5447349999999997,
-      "cpu_children_seconds": 675.974618,
-      "cpu_seconds": 679.5193529999999
+      "wall_seconds": 2740.0408176250057,
+      "cpu_self_seconds": 13.833053999999997,
+      "cpu_children_seconds": 2572.615912,
+      "cpu_seconds": 2586.4489660000004
     },
     {
       "stage": "validator_measurements",
       "contract": "scored-labels-agentic",
       "layer": "A",
-      "wall_seconds": 3.5599822499789298,
-      "cpu_self_seconds": 1.375871,
-      "cpu_children_seconds": 2.0791790000000674,
-      "cpu_seconds": 3.4550500000000675
+      "wall_seconds": 11.06328395800665,
+      "cpu_self_seconds": 3.8020549999999993,
+      "cpu_children_seconds": 6.562952999999652,
+      "cpu_seconds": 10.365007999999651
     },
     {
       "stage": "validator_measurements",
       "contract": "scored-labels-agentic",
       "layer": "R",
-      "wall_seconds": 3.3440741249360144,
-      "cpu_self_seconds": 1.4207270000000003,
-      "cpu_children_seconds": 1.8529589999999416,
-      "cpu_seconds": 3.273685999999942
+      "wall_seconds": 10.948447791975923,
+      "cpu_self_seconds": 3.9910979999999974,
+      "cpu_children_seconds": 6.198375999999826,
+      "cpu_seconds": 10.189473999999823
     },
     {
       "stage": "detection",
@@ -126,9 +126,9 @@
       "layer": "A",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 513.1049340299992,
-      "cpu_seconds": 922.4617060000027,
-      "samples": 10038,
+      "wall_seconds": 2020.336181010006,
+      "cpu_seconds": 2480.164276999993,
+      "samples": 10308,
       "cpu_source": "producer_process_clock"
     },
     {
@@ -137,9 +137,9 @@
       "layer": "A",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 0.3201103390000004,
-      "cpu_seconds": 0.31978300000524174,
-      "samples": 10038,
+      "wall_seconds": 0.9825042749999967,
+      "cpu_seconds": 0.7056459999851397,
+      "samples": 10308,
       "cpu_source": "producer_process_clock"
     },
     {
@@ -148,8 +148,8 @@
       "layer": "A",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 2.140691875,
-      "cpu_seconds": 2.1406349999999996,
+      "wall_seconds": 5.713326583,
+      "cpu_seconds": 5.061263,
       "samples": 1,
       "cpu_source": "producer_process_clock"
     },
@@ -160,10 +160,10 @@
       "config": "policy-file",
       "repetition": 1,
       "mode": "capture_accounting",
-      "wall_seconds": 2.035070097190328,
-      "cpu_self_seconds": 2.0312150000001044,
+      "wall_seconds": 11.064115268061869,
+      "cpu_self_seconds": 6.278497999999804,
       "cpu_children_seconds": 0.0,
-      "cpu_seconds": 2.0312150000001044
+      "cpu_seconds": 6.278497999999804
     },
     {
       "stage": "layer_capture",
@@ -171,10 +171,10 @@
       "layer": "A",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 711.1933690829901,
-      "cpu_self_seconds": 5.869614,
-      "cpu_children_seconds": 1114.5010860000002,
-      "cpu_seconds": 1120.3707000000002
+      "wall_seconds": 2849.9376543749822,
+      "cpu_self_seconds": 17.441006,
+      "cpu_children_seconds": 3148.5066289999995,
+      "cpu_seconds": 3165.9476349999995
     },
     {
       "stage": "detection",
@@ -182,9 +182,9 @@
       "layer": "D",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 312.3675920000001,
-      "cpu_seconds": 639.1426780000008,
-      "samples": 7523,
+      "wall_seconds": 1137.2750721269967,
+      "cpu_seconds": 1500.119536000001,
+      "samples": 7793,
       "cpu_source": "producer_process_clock"
     },
     {
@@ -193,9 +193,9 @@
       "layer": "D",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 0.07541364999999979,
-      "cpu_seconds": 0.0754250000029093,
-      "samples": 7523,
+      "wall_seconds": 0.19354338300000043,
+      "cpu_seconds": 0.15476200001001938,
+      "samples": 7793,
       "cpu_source": "producer_process_clock"
     },
     {
@@ -204,8 +204,8 @@
       "layer": "D",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 2.133744,
-      "cpu_seconds": 2.133651,
+      "wall_seconds": 38.153314542,
+      "cpu_seconds": 5.876673,
       "samples": 1,
       "cpu_source": "producer_process_clock"
     },
@@ -216,10 +216,10 @@
       "config": "policy-file",
       "repetition": 1,
       "mode": "capture_accounting",
-      "wall_seconds": 0.9743742861319333,
-      "cpu_self_seconds": 0.9720110000000766,
+      "wall_seconds": 3.760272178798914,
+      "cpu_self_seconds": 2.689603999999541,
       "cpu_children_seconds": 0.0,
-      "cpu_seconds": 0.9720110000000766
+      "cpu_seconds": 2.689603999999541
     },
     {
       "stage": "layer_capture",
@@ -227,10 +227,10 @@
       "layer": "D",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 424.1933686250122,
-      "cpu_self_seconds": 2.9887940000000004,
-      "cpu_children_seconds": 747.8012229999999,
-      "cpu_seconds": 750.7900169999999
+      "wall_seconds": 1574.108236375032,
+      "cpu_self_seconds": 8.541792999999998,
+      "cpu_children_seconds": 1795.051332000001,
+      "cpu_seconds": 1803.593125000001
     },
     {
       "stage": "detection",
@@ -238,9 +238,9 @@
       "layer": "R",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 554.5918324500002,
-      "cpu_seconds": 1108.702378000003,
-      "samples": 6482,
+      "wall_seconds": 1535.2855237720044,
+      "cpu_seconds": 2464.9741299999973,
+      "samples": 6752,
       "cpu_source": "producer_process_clock"
     },
     {
@@ -249,9 +249,9 @@
       "layer": "R",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 0.2362321399999996,
-      "cpu_seconds": 0.23591499999353172,
-      "samples": 6482,
+      "wall_seconds": 0.516213111000001,
+      "cpu_seconds": 0.44355200001537876,
+      "samples": 6752,
       "cpu_source": "producer_process_clock"
     },
     {
@@ -260,8 +260,8 @@
       "layer": "R",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 2.139473084,
-      "cpu_seconds": 2.139456,
+      "wall_seconds": 2.820662125,
+      "cpu_seconds": 2.681156,
       "samples": 1,
       "cpu_source": "producer_process_clock"
     },
@@ -272,10 +272,10 @@
       "config": "policy-file",
       "repetition": 1,
       "mode": "capture_accounting",
-      "wall_seconds": 1.8801490581827238,
-      "cpu_self_seconds": 1.8776229999999217,
+      "wall_seconds": 4.582851173356175,
+      "cpu_self_seconds": 4.160841000000332,
       "cpu_children_seconds": 0.0,
-      "cpu_seconds": 1.8776229999999217
+      "cpu_seconds": 4.160841000000332
     },
     {
       "stage": "layer_capture",
@@ -283,58 +283,58 @@
       "layer": "R",
       "config": "policy-file",
       "repetition": 1,
-      "wall_seconds": 755.915068167029,
-      "cpu_self_seconds": 5.057041999999999,
-      "cpu_children_seconds": 1304.8716250000002,
-      "cpu_seconds": 1309.9286670000001
+      "wall_seconds": 2073.1086016250774,
+      "cpu_self_seconds": 11.896912,
+      "cpu_children_seconds": 2931.2133910000002,
+      "cpu_seconds": 2943.1103030000004
     },
     {
       "stage": "artifact_write_compress",
       "contract": "scored-labels-v1",
-      "wall_seconds": 1.1845185419078916,
-      "cpu_self_seconds": 1.1813380000000002,
+      "wall_seconds": 1.287372708087787,
+      "cpu_self_seconds": 1.2479629999999986,
       "cpu_children_seconds": 0.0,
-      "cpu_seconds": 1.1813380000000002
+      "cpu_seconds": 1.2479629999999986
     },
     {
       "stage": "artifact_write",
       "contract": "scored-labels-v1",
-      "wall_seconds": 0.01775850006379187,
-      "cpu_self_seconds": 0.017305000000000348,
+      "wall_seconds": 0.019002707907930017,
+      "cpu_self_seconds": 0.018693999999996436,
       "cpu_children_seconds": 0.0,
-      "cpu_seconds": 0.017305000000000348
+      "cpu_seconds": 0.018693999999996436
     },
     {
       "stage": "artifact_write",
       "contract": "scored-labels-v1",
-      "wall_seconds": 0.0005908750463277102,
-      "cpu_self_seconds": 0.0005910000000000082,
+      "wall_seconds": 0.0007011669222265482,
+      "cpu_self_seconds": 0.0007019999999897664,
       "cpu_children_seconds": 0.0,
-      "cpu_seconds": 0.0005910000000000082
+      "cpu_seconds": 0.0007019999999897664
     },
     {
       "stage": "artifact_write",
       "contract": "scored-labels-v1",
-      "wall_seconds": 0.00016258307732641697,
-      "cpu_self_seconds": 0.00016300000000057935,
+      "wall_seconds": 0.00022679101675748825,
+      "cpu_self_seconds": 0.00022700000000952514,
       "cpu_children_seconds": 0.0,
-      "cpu_seconds": 0.00016300000000057935
+      "cpu_seconds": 0.00022700000000952514
     },
     {
       "stage": "artifact_write",
       "contract": "scored-labels-v1",
-      "wall_seconds": 0.0001663330476731062,
-      "cpu_self_seconds": 0.00016700000000113846,
+      "wall_seconds": 0.00018945802003145218,
+      "cpu_self_seconds": 0.00019000000000346517,
       "cpu_children_seconds": 0.0,
-      "cpu_seconds": 0.00016700000000113846
+      "cpu_seconds": 0.00019000000000346517
     },
     {
       "stage": "artifact_write",
       "contract": "scored-labels-v1",
-      "wall_seconds": 0.00015283306129276752,
-      "cpu_self_seconds": 0.00015199999999992997,
+      "wall_seconds": 0.0001545000122860074,
+      "cpu_self_seconds": 0.00015399999999488045,
       "cpu_children_seconds": 0.0,
-      "cpu_seconds": 0.00015199999999992997
+      "cpu_seconds": 0.00015399999999488045
     }
   ]
 }

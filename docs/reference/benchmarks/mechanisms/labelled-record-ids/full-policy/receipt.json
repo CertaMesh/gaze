@@ -5,67 +5,69 @@
   "rust_toolchain": "1.96.0-aarch64-apple-darwin",
   "arms": {
     "base": {
+      "detector_revision": "9cb43a703c729140315d5951304bd5734e1e96f7",
       "capture_exit_code": 4,
       "capture_execution_outcome": "completed",
       "absolute_release_readiness": "failed",
-      "revision": "9a70af36478ef84a6b43c9cc16b14ab302dff8ce",
-      "crates_tree": "fde68b2c8392dccaf013112a36f6a5beb6b5ac23",
+      "revision": "26ab741bedee005a57fbf1c99f694e0e93b6d362",
+      "crates_tree": "24caad760a0da2105b44a7bb09917c2e89ad53a1",
       "binary_sha256": "214b5cdaf97f42865bbd95ab538d55067ef79d062b7df461ef4774c2393be747",
       "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
       "observations": "observations-base.jsonl.gz",
-      "observations_sha256": "9af94cfc9e9e9e5c810d9b629e93d7481083f8ab15c4ecc120ad5458169dd75c",
+      "observations_sha256": "da28070bc1314d144d9205142ab358a899026b7e107b7d44d908a92d6049b250",
       "scorecards": {
         "2": "scorecard-base-v2.json.gz",
         "1": "scorecard-base-v1.json.gz",
         "4": "scorecard-base-v4.json.gz"
       },
       "scorecard_sha256": {
-        "2": "faa4193daa08f0715a95528119ce5d1197d913fbaa9ac571e7a8d5eeeff0da56",
-        "1": "d3ceffc94b7e36359c000fb07041f774eea38590b178a4f894f7d0553e324265",
-        "4": "1cd6fed1a94fd8d2d49a9368ed6b051b9f0e3b5be17b1d311755ed56b846f182"
+        "2": "97a01035ec075e7467f987e2ea755128c65d44312004102e52a298e89538cf62",
+        "1": "3dcc4fcdeea893f73de9f2354c7c821f6b61e3c027425c72e9897089e1777282",
+        "4": "5968bc7ebe2aa3d4596708695937792fbf662f036ed349be2bf6ecdc582ad1c8"
       },
       "scorecard_archive_sha256": {
-        "2": "10db176af5dcb2522b88cfe7c9b88f54d9caf06ac39f021f5541558cede1f4ed",
-        "1": "1c737cb28486ccebee5ad5f114f8bf07e731f81dd0b5b7a17de134dfef103163",
-        "4": "a3df1f3db494a53408114eabf7915c948199e959f0523c39cff47fb2ea775584"
+        "2": "b382b5057ec2191406d50c24f55bb5314b2341bf37fa4b93a6a3f4143be91270",
+        "1": "a5f3bfbbc571ce2e2067e63be9f1ba430111ad9390bd2c71034e20626fac9a2c",
+        "4": "0b43cc18c027d95ba4961907508ddd3bdd8da158d145ab4664b87258deaadd66"
       },
       "captured_scorecard": "captured-scorecard-base.json.gz",
-      "captured_scorecard_uncompressed_sha256": "d3ceffc94b7e36359c000fb07041f774eea38590b178a4f894f7d0553e324265",
+      "captured_scorecard_uncompressed_sha256": "3dcc4fcdeea893f73de9f2354c7c821f6b61e3c027425c72e9897089e1777282",
       "execution_evidence": "run-evidence-base.json",
-      "execution_evidence_sha256": "75a328a9826740954ba23c9511728706ce4727df7d06bc60edc6ee1bcfff96bd",
+      "execution_evidence_sha256": "11039bcf9bfc367e5fa23ff04e537a9e3fdb207623d4b51872f10656c8162156",
       "policy": "policy-base.toml",
       "published_policy_sha256": "9ac5f5fcb6e801982a882ba440e5eaee3a72346e87e620334d3c8de4c4e68e8e",
       "policy_export": "Only the home prefixes of ner.model_dir and safety_net.nym.model_dir are normalized to ~. policy_sha256 binds original capture bytes; published_policy_sha256 binds this portable copy."
     },
     "candidate": {
+      "detector_revision": "1e10fcb6ddf44240feefe8d7e63fb568cf1e5d15",
       "capture_exit_code": 4,
       "capture_execution_outcome": "completed",
       "absolute_release_readiness": "failed",
-      "revision": "d1d03fd3baf8ce55630e55efa0b7d85302467da0",
-      "crates_tree": "632c9a60abd095a636f4d5273d15a2f096160227",
-      "binary_sha256": "b90f6d1eb42f85b4c9e517488750859076e5fd3156eff5b51c2edfe16e1eb6bf",
+      "revision": "1e10fcb6ddf44240feefe8d7e63fb568cf1e5d15",
+      "crates_tree": "7c419f0a78ec806bd7dad03087b4ffe07ca1b8fa",
+      "binary_sha256": "6cd86631e8caee63df260988150342964a62c59f0fa8567e63079915879daf38",
       "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
       "observations": "observations-candidate.jsonl.gz",
-      "observations_sha256": "ebd9b286b54afbc5e2c69ef7feaeb0d9da8876dfc7cf4d5394ed352446f519d9",
+      "observations_sha256": "c1fab3a105890f9c10f93e207a80d6ad2c2f2b0cbd3160abac5d8479ac660af9",
       "scorecards": {
         "2": "scorecard-candidate-v2.json.gz",
         "1": "scorecard-candidate-v1.json.gz",
         "4": "scorecard-candidate-v4.json.gz"
       },
       "scorecard_sha256": {
-        "2": "e9812807e0230fdc62cff0101afae296f6a2b889e8e4315dc2e1206a8ddfdc0b",
-        "1": "ad7b3c3770a196d7f9d90148f9db15fd733cc4a6c4c2d5655e0761ea9d4ef029",
-        "4": "fc5b9dff9e835ddd6bac12349481660a7f2c118ebd6202f87dfc7e587c12ec04"
+        "2": "d4656da0c51147dee60566a390c2d701aafc6d713164f190e02ae86a405b8a61",
+        "1": "d762655ba94790233c9dc1a49e4d563102511e062b2d85cad3620ad2a903910d",
+        "4": "311bbec462681c9aaaeab6ea18d1fec4638e49d7f104bebf6e7eb38038f0d2bc"
       },
       "scorecard_archive_sha256": {
-        "2": "ded6be42239547594e8651c20355c1311c333cf2d49258cb355c1d5ae7825a57",
-        "1": "e5fa63c63ff6721ed0b4fa61a085b249ee9e2f5619b85fe70204dba8cb3eaf3a",
-        "4": "27cc28d9e827d7d55c667a88e15a5f50eede0b54c07b95905e645ee3f68b3891"
+        "2": "aeeb4aa513349a500ad7e59465b303185a636e152936109299c9cc5a560c0545",
+        "1": "58e09627d3e174d94e0742ef489cba20c2aff32301d30a3d10ad8dfe877bd14e",
+        "4": "bf8fca3b4481805f5574e68fb99eb77757de44771b52c78f48b177fd69f9c2ec"
       },
       "captured_scorecard": "captured-scorecard-candidate.json.gz",
-      "captured_scorecard_uncompressed_sha256": "ad7b3c3770a196d7f9d90148f9db15fd733cc4a6c4c2d5655e0761ea9d4ef029",
+      "captured_scorecard_uncompressed_sha256": "d762655ba94790233c9dc1a49e4d563102511e062b2d85cad3620ad2a903910d",
       "execution_evidence": "run-evidence-candidate.json",
-      "execution_evidence_sha256": "0935d9facd0db364a79e58a6db1b0f6716db672737f4f700ccb08061ae6b173b",
+      "execution_evidence_sha256": "751c843bf470d2c430d5e74d5c3c57c938cfb895d1c9da1d98ca37c5cf1a79d7",
       "policy": "policy-candidate.toml",
       "published_policy_sha256": "9ac5f5fcb6e801982a882ba440e5eaee3a72346e87e620334d3c8de4c4e68e8e",
       "policy_export": "Only the home prefixes of ner.model_dir and safety_net.nym.model_dir are normalized to ~. policy_sha256 binds original capture bytes; published_policy_sha256 binds this portable copy."
@@ -77,30 +79,33 @@
     "gate-v4.json"
   ],
   "gate_sha256": {
-    "gate-v2.json": "03f00d3a4330ca1e06f38054cfc467087b471420001183db8a5a07ef91de196d",
-    "gate-v1.json": "9218a750321815798276a26dafc3c7624478ab8ddf17dbc9f509e4a6c968155a",
-    "gate-v4.json": "9218a750321815798276a26dafc3c7624478ab8ddf17dbc9f509e4a6c968155a"
+    "gate-v2.json": "c09b3a5c2d2f917cfc3cfee5872e1802eb1bb47a6ebe0efb9e6b440aa6626071",
+    "gate-v1.json": "544a83d04924bb57d46a843c65fc5086fd87026e8811e3a2006b23d11b0ca036",
+    "gate-v4.json": "544a83d04924bb57d46a843c65fc5086fd87026e8811e3a2006b23d11b0ca036"
   },
   "generator": {
     "generator": "scripts/bench/agentic_layers.py",
-    "generator_version": 25,
+    "generator_version": 26,
     "partition": "test",
     "seed": 2026092602,
     "docs_per_family": 10,
-    "documents": 24040,
+    "documents": 24850,
     "documents_by_layer": {
-      "A": 10037,
-      "D": 7522,
-      "R": 6481
+      "A": 10307,
+      "D": 7792,
+      "R": 6751
     },
-    "corpus_sha256": "133f8452d01fd517c77087e539ba9dc253e30a1886668bfab3e1631cc9ff6c32",
+    "corpus_sha256": "7daf9d5d40fe74152cfa773166b9143e54340f92ad67fd09031d44ea0f941086",
     "synthetic_only": true
   },
+  "baseline_harness": "The baseline capture revision carries only the committed generator extension and its tests over detector main 9cb43a703c729140315d5951304bd5734e1e96f7. crates, Cargo.toml and Cargo.lock match that main commit exactly.",
+  "precision_costs": "precision-costs.json",
+  "precision_costs_sha256": "b6614ed7609953f4f27a3cc0e4d0bbcbb7065c5c3e137e22cfdff5d726af4b82",
   "capture_reconstruction": "Decompress captured-scorecard-<side>.json.gz as scorecard-v4.json beside observations-v1.jsonl.gz and run-evidence.json renamed from the matching retained side files. SHA-256 pins refer to the original capture bytes; scorecard_sha256 pins refer to decompressed JSON; scorecard_archive_sha256 pins refer to deterministic gzip archives.",
   "commands": [
     "gaze setup --non-interactive --force --policy-out target/gate/policy.toml",
     "uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full --seed 20260710 --no-download --release --no-cache --policy <policy> --output-dir <output>",
     "uv run --project scripts/bench python scripts/bench/rescore.py <observations> --expected-sha256 <pinned digest> --scored-labels docs/reference/benchmarks/scored-labels-v2.json --output <scorecard> (omit --scored-labels for v1; use v4 contract for v4)",
-    "uv run --project scripts/bench python scripts/bench/agentic_layers.py gate --base <scorecard> --candidate <scorecard> --output <gate>"
+    "uv run --project scripts/bench python scripts/bench/agentic_layers.py gate --base <scorecard> --candidate <scorecard> --base-record <observations-base> --candidate-record <observations-candidate> --output <gate>"
   ]
 }

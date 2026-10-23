@@ -1,8 +1,8 @@
 {
   "verdict": "pass",
-  "reason": "leaked bytes fell by 197363, FP bytes changed by +307",
+  "reason": "leaked bytes fell by 211133, FP bytes changed by +307",
   "summary": {
-    "leaked_bytes_decrease": 197363,
+    "leaked_bytes_decrease": 211133,
     "false_positive_bytes_increase": 307
   },
   "layers": {
@@ -31,13 +31,13 @@
       "manifest_invalid_candidate": 0
     },
     "A": {
-      "attempted_base": 10037,
-      "attempted_candidate": 10037,
-      "documents_base": 10037,
-      "documents_candidate": 10037,
-      "headline_leaked_base": 82045,
+      "attempted_base": 10307,
+      "attempted_candidate": 10307,
+      "documents_base": 10307,
+      "documents_candidate": 10307,
+      "headline_leaked_base": 86635,
       "headline_leaked_candidate": 10711,
-      "leaked_base": 80840,
+      "leaked_base": 85430,
       "leaked_candidate": 9506,
       "twin_leaked_base": 1205,
       "twin_leaked_candidate": 1205,
@@ -45,20 +45,20 @@
       "false_positive_candidate": 246,
       "failed_closed_base": 0,
       "failed_closed_candidate": 0,
-      "restore_exact_base": 10037,
-      "restore_exact_candidate": 10037,
+      "restore_exact_base": 10307,
+      "restore_exact_candidate": 10307,
       "restore_failures_base": 0,
       "restore_failures_candidate": 0,
-      "manifest_valid_base": 10037,
-      "manifest_valid_candidate": 10037,
+      "manifest_valid_base": 10307,
+      "manifest_valid_candidate": 10307,
       "manifest_invalid_base": 0,
       "manifest_invalid_candidate": 0
     },
     "D": {
-      "attempted_base": 7522,
-      "attempted_candidate": 7522,
-      "documents_base": 7522,
-      "documents_candidate": 7522,
+      "attempted_base": 7792,
+      "attempted_candidate": 7792,
+      "documents_base": 7792,
+      "documents_candidate": 7792,
       "headline_leaked_base": 0,
       "headline_leaked_candidate": 0,
       "leaked_base": 0,
@@ -69,23 +69,23 @@
       "false_positive_candidate": 9515,
       "failed_closed_base": 0,
       "failed_closed_candidate": 0,
-      "restore_exact_base": 7522,
-      "restore_exact_candidate": 7522,
+      "restore_exact_base": 7792,
+      "restore_exact_candidate": 7792,
       "restore_failures_base": 0,
       "restore_failures_candidate": 0,
-      "manifest_valid_base": 7522,
-      "manifest_valid_candidate": 7522,
+      "manifest_valid_base": 7792,
+      "manifest_valid_candidate": 7792,
       "manifest_invalid_base": 0,
       "manifest_invalid_candidate": 0
     },
     "R": {
-      "attempted_base": 6481,
-      "attempted_candidate": 6481,
-      "documents_base": 6481,
-      "documents_candidate": 6481,
-      "headline_leaked_base": 129114,
+      "attempted_base": 6751,
+      "attempted_candidate": 6751,
+      "documents_base": 6751,
+      "documents_candidate": 6751,
+      "headline_leaked_base": 138294,
       "headline_leaked_candidate": 3150,
-      "leaked_base": 129114,
+      "leaked_base": 138294,
       "leaked_candidate": 3150,
       "twin_leaked_base": 0,
       "twin_leaked_candidate": 0,
@@ -93,12 +93,12 @@
       "false_positive_candidate": 593,
       "failed_closed_base": 0,
       "failed_closed_candidate": 0,
-      "restore_exact_base": 6481,
-      "restore_exact_candidate": 6481,
+      "restore_exact_base": 6751,
+      "restore_exact_candidate": 6751,
       "restore_failures_base": 0,
       "restore_failures_candidate": 0,
-      "manifest_valid_base": 6481,
-      "manifest_valid_candidate": 6481,
+      "manifest_valid_base": 6751,
+      "manifest_valid_candidate": 6751,
       "manifest_invalid_base": 0,
       "manifest_invalid_candidate": 0
     }
@@ -158,5 +158,437 @@
       "candidate": 0
     }
   },
-  "config": "policy-file"
+  "config": "policy-file",
+  "leak_diff": {
+    "schema_version": 1,
+    "report_only": true,
+    "scope": "all-ground-truth",
+    "config": "policy-file",
+    "record_sha256": {
+      "base": "1d13bf7529c376b10c9e5d54ba55bca9accf7acfae27b560ebc9b638429f81f7",
+      "candidate": "34693add8202d19332028b088d31a62c86dcdb93a19fd1ef0e397d37a23c8b0b"
+    },
+    "layers": {
+      "A": {
+        "new_exposed_bytes": 0,
+        "newly_protected_bytes": 75924,
+        "net_leaked_bytes": -75924,
+        "documents": 10307,
+        "refusals": {
+          "base": 0,
+          "candidate": 0
+        },
+        "classes": {
+          "AADHAAR": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "BUILDINGNUM": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "CITY": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "STREET": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "ZIPCODE": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "STATE": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "AGE": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "DATEOFBIRTH": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "LICENSEPLATE": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "CUSTOMER_ID": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 25272,
+            "net_leaked_bytes": -25272
+          },
+          "EMPLOYEE_ID": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 25389,
+            "net_leaked_bytes": -25389
+          },
+          "RECORD_ID": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 25263,
+            "net_leaked_bytes": -25263
+          },
+          "BSN": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "CREDITCARDNUMBER": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "CNPJ": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "CPF": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "SECURITYTOKEN": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "PASSWORD": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "EMAIL": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "ETHADDRESS": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "GIVENNAME": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "SURNAME": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "IDCARDNUM": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "NATIONALID": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "SSN": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "TAXNUM": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "IBAN": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "IPADDRESS": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "NHSNUMBER": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "NIR": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "PAN": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "TELEPHONENUM": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "URL": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "VATID": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          }
+        }
+      },
+      "C": {
+        "new_exposed_bytes": 0,
+        "newly_protected_bytes": 65,
+        "net_leaked_bytes": -65,
+        "documents": 2910,
+        "refusals": {
+          "base": 0,
+          "candidate": 0
+        },
+        "classes": {
+          "BUILDINGNUM": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 2,
+            "net_leaked_bytes": -2
+          },
+          "CITY": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "COUNTRY": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "DATEOFBIRTH": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "EMAIL": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "FIRSTNAME": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "STREET": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "SURNAME": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "ZIP": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "AGE": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "PASSWORD": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "TAXNUM": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "PASSPORTID": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "IBAN": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "SECURITYTOKEN": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "STATE": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "COMPANYNAME": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "CREDITCARDNUMBER": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "SSN": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "DRIVERLICENSENUM": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "PHONENUMBER": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 38,
+            "net_leaked_bytes": -38
+          },
+          "NATIONALID": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 18,
+            "net_leaked_bytes": -18
+          },
+          "USERNAME": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "LICENSEPLATENUM": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "IDCARDNUM": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 7,
+            "net_leaked_bytes": -7
+          },
+          "URL": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "TITLE": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "ORGANIZATION": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "REGION": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          }
+        }
+      },
+      "D": {
+        "new_exposed_bytes": 0,
+        "newly_protected_bytes": 0,
+        "net_leaked_bytes": 0,
+        "documents": 7792,
+        "refusals": {
+          "base": 0,
+          "candidate": 0
+        },
+        "classes": {}
+      },
+      "R": {
+        "new_exposed_bytes": 0,
+        "newly_protected_bytes": 135144,
+        "net_leaked_bytes": -135144,
+        "documents": 6751,
+        "refusals": {
+          "base": 0,
+          "candidate": 0
+        },
+        "classes": {
+          "CUSTOMER_ID": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 44990,
+            "net_leaked_bytes": -44990
+          },
+          "EMPLOYEE_ID": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 45182,
+            "net_leaked_bytes": -45182
+          },
+          "RECORD_ID": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 44972,
+            "net_leaked_bytes": -44972
+          },
+          "EMAIL": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "GIVENNAME": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "SURNAME": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "SECURITYTOKEN": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "PASSWORD": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "IBAN": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "TELEPHONENUM": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          },
+          "TAXNUM": {
+            "new_exposed_bytes": 0,
+            "newly_protected_bytes": 0,
+            "net_leaked_bytes": 0
+          }
+        }
+      }
+    },
+    "new_exposure_span_count": 0,
+    "new_exposure_spans": [],
+    "span_limit": 20
+  }
 }

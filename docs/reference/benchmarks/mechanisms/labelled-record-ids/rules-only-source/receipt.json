@@ -5,64 +5,66 @@
   "rust_toolchain": "1.96.0-aarch64-apple-darwin",
   "arms": {
     "base": {
+      "detector_revision": "9cb43a703c729140315d5951304bd5734e1e96f7",
       "capture_exit_code": 4,
       "capture_execution_outcome": "completed",
       "absolute_release_readiness": "failed",
-      "revision": "9a70af36478ef84a6b43c9cc16b14ab302dff8ce",
-      "crates_tree": "fde68b2c8392dccaf013112a36f6a5beb6b5ac23",
+      "revision": "26ab741bedee005a57fbf1c99f694e0e93b6d362",
+      "crates_tree": "24caad760a0da2105b44a7bb09917c2e89ad53a1",
       "binary_sha256": "214b5cdaf97f42865bbd95ab538d55067ef79d062b7df461ef4774c2393be747",
       "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
       "observations": "observations-base.jsonl.gz",
-      "observations_sha256": "8716e8560d68a21b8d48d224d4eef2162ec60c724bd3800e0c3ea8cf82e52511",
+      "observations_sha256": "1d13bf7529c376b10c9e5d54ba55bca9accf7acfae27b560ebc9b638429f81f7",
       "scorecards": {
         "2": "scorecard-base-v2.json.gz",
         "1": "scorecard-base-v1.json.gz",
         "4": "scorecard-base-v4.json.gz"
       },
       "scorecard_sha256": {
-        "2": "6fcf549a336d282042755145ab3b6da7991aa2831b77169efa42715946089962",
-        "1": "08310a2c4db9517e94433bd507ccba6304c1e8d139dc85585e4d8f99f18fddb0",
-        "4": "9e9fb88aefbc10d3803280308bb567c0298f6c9966bebd60605d391819f45103"
+        "2": "81db1f3edc46b320fb68adae68d99382497142d2157ffec319fb9693c3444de7",
+        "1": "39ced2ac4729e4f432077df42ac11fb2e583f4150c7db5a613d7a8911979c3dc",
+        "4": "4dc820a6bc3f6eeb8f2426b494b55351271647e26f1cac53b811a8cbb7633a17"
       },
       "scorecard_archive_sha256": {
-        "2": "6259d72f25be19ae2ebbbaa5acf6d4c77fce38b29f9b7ae362fdd6c026e3df35",
-        "1": "1c1a7cecfc5259df96f204b44bce302f2247ee9413560940b78142878aa898cc",
-        "4": "3070e730f4c8a048aa81e67c0e6d5f147ce93265018c220491d2b778815ba6ba"
+        "2": "5c510259bd320fd2a8d132914958ec45971f7fc03a9fd7eb0ff9283235a0cc6d",
+        "1": "90feb7fcdaaf9e06418daa4548a6a98e6a6aeb60ffb9ace57759ca74e2c81f84",
+        "4": "67bedf51ff759ad82ce1d8f553cb7e8e78dac9a0f14332176ac5d78d0ccd7fcd"
       },
       "captured_scorecard": "captured-scorecard-base.json.gz",
-      "captured_scorecard_uncompressed_sha256": "08310a2c4db9517e94433bd507ccba6304c1e8d139dc85585e4d8f99f18fddb0",
+      "captured_scorecard_uncompressed_sha256": "39ced2ac4729e4f432077df42ac11fb2e583f4150c7db5a613d7a8911979c3dc",
       "execution_evidence": "run-evidence-base.json",
-      "execution_evidence_sha256": "43b2e00b567a71ef14c15742840dca0ac38b04992cf8b7ce2e6ebf032e3d4e9a"
+      "execution_evidence_sha256": "cf548a3a4c9350c9004069037403369f142ab33e57e7196bd4a7e56336ed9991"
     },
     "candidate": {
+      "detector_revision": "1e10fcb6ddf44240feefe8d7e63fb568cf1e5d15",
       "capture_exit_code": 4,
       "capture_execution_outcome": "completed",
       "absolute_release_readiness": "failed",
-      "revision": "d1d03fd3baf8ce55630e55efa0b7d85302467da0",
-      "crates_tree": "632c9a60abd095a636f4d5273d15a2f096160227",
-      "binary_sha256": "b90f6d1eb42f85b4c9e517488750859076e5fd3156eff5b51c2edfe16e1eb6bf",
+      "revision": "1e10fcb6ddf44240feefe8d7e63fb568cf1e5d15",
+      "crates_tree": "7c419f0a78ec806bd7dad03087b4ffe07ca1b8fa",
+      "binary_sha256": "6cd86631e8caee63df260988150342964a62c59f0fa8567e63079915879daf38",
       "policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
       "observations": "observations-candidate.jsonl.gz",
-      "observations_sha256": "d06ca84e9564e1c5f3fff0cae06fcc06a13e9d130cff95ae4ec57a3485a7909f",
+      "observations_sha256": "34693add8202d19332028b088d31a62c86dcdb93a19fd1ef0e397d37a23c8b0b",
       "scorecards": {
         "2": "scorecard-candidate-v2.json.gz",
         "1": "scorecard-candidate-v1.json.gz",
         "4": "scorecard-candidate-v4.json.gz"
       },
       "scorecard_sha256": {
-        "2": "b234124bb4e850ba2785be3d24f8eeaf11a7597f76fdb2bf76133f17f1b0dbf4",
-        "1": "79e5cfb6609218dfa5b70af954b3e274702e831470723913810351b50d0b595b",
-        "4": "27ff1a2d2a8d51d2242d97cbf7d90c7b729138cf75f27ce4aae427ee47a33713"
+        "2": "29010a5a406dc81478d2f7029f6f31168bac31caaa822c7679924d97f8b7086b",
+        "1": "9fdd32deeef994563c1bf4e840387913e08c9dcc348ab0de082d367950924d33",
+        "4": "c82cf01cdeb6b4719a4cffbc7d4393b6c140a2f3c713ab4f3e64fe6348a778be"
       },
       "scorecard_archive_sha256": {
-        "2": "c4d9dfa5dba1d75dfc9ca38605985a7d5b1a094c19dde72a265170b39bc0a942",
-        "1": "221cdda73cd31ee7016213f580d2f08bea974f57f62c1575d7cfa5d2c05d4edc",
-        "4": "eef0ceb415e0fea6fd4abba81804aed3478dc79449d2e634dc70358bb6ce70da"
+        "2": "51c581b9cc7292194988267a4ee17096665c835b2a12d80ba8b3c02667e34fb9",
+        "1": "01d1f4ef63f522454cc86022fde8ab4196bf947f43dea3f559384944960c0e24",
+        "4": "20238c297171e8a7ac0cb8ae9272ce90715668165bb7fa9688e65f640bb70dac"
       },
       "captured_scorecard": "captured-scorecard-candidate.json.gz",
-      "captured_scorecard_uncompressed_sha256": "79e5cfb6609218dfa5b70af954b3e274702e831470723913810351b50d0b595b",
+      "captured_scorecard_uncompressed_sha256": "9fdd32deeef994563c1bf4e840387913e08c9dcc348ab0de082d367950924d33",
       "execution_evidence": "run-evidence-candidate.json",
-      "execution_evidence_sha256": "dd13fd916283ea02d1097e554652dd9a9944b4ee44696063b012d75aad3b7b6d"
+      "execution_evidence_sha256": "4e5bffa1396c44449fd44212319409919c4ae49ffabd1ebcdc5705893e354281"
     }
   },
   "gates": [
@@ -71,23 +73,23 @@
     "gate-v4.json"
   ],
   "gate_sha256": {
-    "gate-v2.json": "473fd0c6c8cd15fc938c09360783c188c3690f4ab6785c63e3245fa3a934e1b9",
-    "gate-v1.json": "f8dbb8096602c240ce1653b4fd0cfb3dd7211d630095a3ac2180f9daf861e490",
-    "gate-v4.json": "f8dbb8096602c240ce1653b4fd0cfb3dd7211d630095a3ac2180f9daf861e490"
+    "gate-v2.json": "d48557d092ae177a1689dc3eaef73ad07a19a4e6ae3178c3a73bf6d4045f8e0f",
+    "gate-v1.json": "ee9f427784a95bb2dabb4c126f224babb1759aa1f3da9b2465bdba5f478f2977",
+    "gate-v4.json": "ee9f427784a95bb2dabb4c126f224babb1759aa1f3da9b2465bdba5f478f2977"
   },
   "generator": {
     "generator": "scripts/bench/agentic_layers.py",
-    "generator_version": 25,
+    "generator_version": 26,
     "partition": "test",
     "seed": 2026092602,
     "docs_per_family": 10,
-    "documents": 24040,
+    "documents": 24850,
     "documents_by_layer": {
-      "A": 10037,
-      "D": 7522,
-      "R": 6481
+      "A": 10307,
+      "D": 7792,
+      "R": 6751
     },
-    "corpus_sha256": "133f8452d01fd517c77087e539ba9dc253e30a1886668bfab3e1631cc9ff6c32",
+    "corpus_sha256": "7daf9d5d40fe74152cfa773166b9143e54340f92ad67fd09031d44ea0f941086",
     "synthetic_only": true
   },
   "policy": "policy.toml",
@@ -95,17 +97,21 @@
   "ner_enabled": false,
   "nym_enabled": false,
   "policy_derivation": {
-    "derived_from_revision": "9a70af36478ef84a6b43c9cc16b14ab302dff8ce",
+    "derived_from_revision": "26ab741bedee005a57fbf1c99f694e0e93b6d362",
+    "detector_revision": "9cb43a703c729140315d5951304bd5734e1e96f7",
     "derived_from_side": "base",
     "source_policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
     "rules_policy_sha256": "95fa3fca183ec3cfce025594e2ab60ae6d67ab410ec167250c8a7102975b6096",
     "transformation": "Remove only the top-level ner and safety_net tables, including their child tables; all other parsed policy values are identical. Candidate full setup policy must match base byte-for-byte before gain comparison."
   },
+  "baseline_harness": "The baseline capture revision carries only the committed generator extension and its tests over detector main 9cb43a703c729140315d5951304bd5734e1e96f7. crates, Cargo.toml and Cargo.lock match that main commit exactly.",
+  "precision_costs": "precision-costs.json",
+  "precision_costs_sha256": "52ce2316b935c7d19101055ec29c793d9f86bc27a6f58f691afbc0bb96a39452",
   "capture_reconstruction": "Decompress captured-scorecard-<side>.json.gz as scorecard-v4.json beside observations-v1.jsonl.gz and run-evidence.json renamed from the matching retained side files. SHA-256 pins refer to the original capture bytes; scorecard_sha256 pins refer to decompressed JSON; scorecard_archive_sha256 pins refer to deterministic gzip archives.",
   "commands": [
     "gaze setup --non-interactive --force --policy-out target/gate/policy.toml",
     "uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full --seed 20260710 --no-download --release --no-cache --policy <policy> --output-dir <output>",
     "uv run --project scripts/bench python scripts/bench/rescore.py <observations> --expected-sha256 <pinned digest> --scored-labels docs/reference/benchmarks/scored-labels-v2.json --output <scorecard> (omit --scored-labels for v1; use v4 contract for v4)",
-    "uv run --project scripts/bench python scripts/bench/agentic_layers.py gate --base <scorecard> --candidate <scorecard> --output <gate>"
+    "uv run --project scripts/bench python scripts/bench/agentic_layers.py gate --base <scorecard> --candidate <scorecard> --base-record <observations-base> --candidate-record <observations-candidate> --output <gate>"
   ]
 }
