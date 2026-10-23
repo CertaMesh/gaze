@@ -359,6 +359,37 @@ def seed_session(base_url, provider, case, captured, session_id):
     return bound, known, score_leaf(seed, clean, known), owners[0]
 
 
+def prove_owner_mappings(base_url, provider, tokens, captured, session_id, known):
+    """Get authoritative constraints without changing the measured target response.
+
+    Each auxiliary request contains one already-owned token. Require its exact
+    identity upstream and a successful single-token owner restore. These proofs
+    supply no target byte or availability credit.
+    """
+    facts, proofs = {}, []
+    for token in echoed_tokens(tokens):
+        if token in known:
+            continue
+        if session_id is None:
+            raise AmbiguousAlignment("single-token owner proof requires session continuity")
+        path, body = native_request(provider, {"leaves": [{"text": token}]})
+        status, reply = request_json(base_url + path, body, session_id=session_id)
+        if captured.empty():
+            raise ValueError("single-token owner proof did not forward")
+        actual_provider, actual, actual_tokens = captured.get_nowait()
+        if (actual_provider != provider or not captured.empty()
+                or leaves(provider, actual) != [token] or actual_tokens != [token]):
+            raise ValueError("single-token owner proof changed its owned token or forwarded raw bytes")
+        restored = restored_values(provider, reply) if 200 <= status < 300 else None
+        if (restored is None or len(restored) != 1 or not restored[0].endswith("\n")
+                or not restored[0][:-1]):
+            raise ValueError("single-token owner proof did not restore successfully")
+        facts[token] = restored[0][:-1]
+        proofs.append({"token": token, "value": facts[token], "status": status,
+                       "forwarded_token_identical": True, "raw_source_bytes_forwarded": 0})
+    return facts, proofs
+
+
 def native_session_id(provider, case_id):
     return str(uuid.UUID(bytes=uuid.uuid5(uuid.NAMESPACE_URL, provider + ":" + case_id).bytes, version=4))
 
@@ -410,8 +441,15 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                 if (selected and restored is not None and len(restored) == len(selected)
                         and all(value.endswith("\n") for value in restored)):
                     owner_facts = {token: value[:-1] for token, value in zip(selected, restored, strict=True)}
+                row["owner_mapping_proofs"] = []
                 try:
-                    mappings, echo_consistent = checked_document_mappings(case["leaves"], clean_leaves, known, owner_facts)
+                    try:
+                        mappings, echo_consistent = checked_document_mappings(case["leaves"], clean_leaves, known, owner_facts)
+                    except AmbiguousAlignment:
+                        proof_facts, row["owner_mapping_proofs"] = prove_owner_mappings(
+                            base_url, provider, tokens, captured, session_id, {**known, **owner_facts})
+                        mappings, echo_consistent = checked_document_mappings(
+                            case["leaves"], clean_leaves, {**known, **proof_facts}, owner_facts)
                 except ValueError as error:
                     # Synthetic fixture inputs only. This is an incomplete diagnostic,
                     # never a scorecard: keep the actual bytes and constraints that failed.
@@ -420,7 +458,8 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                                "harness_sha256": digest(Path(__file__)), "provider": provider,
                                "case": case, "status": status, "clean_leaves": clean_leaves,
                                "known_seed_mappings": known, "owner_facts": owner_facts,
-                               "owner_reply": reply, "completed_case_rows": rows,
+                               "owner_reply": reply, "owner_mapping_proofs": row["owner_mapping_proofs"],
+                               "completed_case_rows": rows,
                                "error": str(error)}
                     output.with_suffix(".failure.json").write_text(json.dumps(failure, indent=2) + "\n")
                     raise type(error)(f"{provider}/{case['id']}: {error}") from error
@@ -447,6 +486,8 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
               "session_builder_sha256": digest(Path(__file__).with_name("build_native_session_proxy.py")),
               "session_binary_sha256": digest(session_binary) if session_binary else None,
               "scope": "native nonstream proxy requests; seed requests forwarded, restored and byte-scored; owner-constrained source-byte alignment, owned-token positions and Name/Email owner echo; other classes priced as request FP bytes; no exported manifest validation",
+              "owner_mapping_proof_requests": sum(len(row.get("owner_mapping_proofs", [])) for row in rows),
+              "owner_mapping_proof_scope": "auxiliary same-session requests forward exactly one existing owned token and restore it alone; no raw source bytes or target byte/restore/availability gain credit",
               "totals": {key: sum(row[key] for row in rows) for key in counts}, "cases": rows}
     output.write_text(json.dumps(result, indent=2) + "\n")
     return result

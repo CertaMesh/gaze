@@ -373,3 +373,103 @@ def test_alignment_failure_retains_diagnostics_and_never_writes_a_scorecard(tmp_
     assert failure["clean_leaves"] == [leaf["text"] for leaf in case["leaves"]]
     assert failure["completed_case_rows"] == []
     assert failure["known_seed_mappings"] == failure["owner_facts"] == {}
+
+
+def test_single_token_owner_proofs_resolve_ambiguity_without_target_restore_credit(monkeypatch):
+    import queue
+
+    first, gap, owned = TOKEN, "<1234abcd:Name_2>", "<1234abcd:Name_3>"
+    raw = [{"text": "Hello maria Schneider", "gold": []}]
+    clean = ["Hello " + first + gap + owned]
+    known = {owned: "Schneider"}
+    with pytest.raises(bench.AmbiguousAlignment):
+        bench.checked_document_mappings(raw, clean, known, {})
+    captured = queue.Queue()
+    actual_owner_values = {first: "maria", gap: " "}
+    calls = []
+
+    def owner_response(_url, body, **kwargs):
+        assert kwargs["session_id"] == "synthetic-owned-session"
+        token = bench.leaves("anthropic", body)[0]
+        calls.append(token)
+        captured.put(("anthropic", body, [token]))
+        return 200, bench.replies("anthropic", [actual_owner_values[token] + "\n"])
+
+    monkeypatch.setattr(bench, "request_json", owner_response)
+    facts, proofs = bench.prove_owner_mappings("synthetic", "anthropic", [first, gap, owned],
+                                              captured, "synthetic-owned-session", known)
+    assert calls == [first, gap]
+    assert facts == actual_owner_values
+    mappings, consistent = bench.checked_document_mappings(raw, clean, {**known, **facts}, {})
+    assert mappings == {**known, **facts} and consistent
+    assert all(proof["forwarded_token_identical"] and proof["raw_source_bytes_forwarded"] == 0 for proof in proofs)
+
+
+
+@pytest.mark.parametrize("failure", ["mutated", "refused", "bad_restore"])
+def test_single_token_owner_proofs_fail_closed(failure, monkeypatch):
+    import queue
+
+    captured = queue.Queue()
+
+    def owner_response(_url, body, **_kwargs):
+        if failure == "refused":
+            return 422, {"error": "synthetic refusal"}
+        actual = bench.native_request("anthropic", {"leaves": [{"text": "raw synthetic bytes"}]})[1] if failure == "mutated" else body
+        captured.put(("anthropic", actual, [TOKEN]))
+        return 502, {"error": "synthetic restore refusal"}
+
+    monkeypatch.setattr(bench, "request_json", owner_response)
+    with pytest.raises(ValueError, match="owner proof"):
+        bench.prove_owner_mappings("synthetic", "anthropic", [TOKEN], captured,
+                                  "synthetic-owned-session", {})
+
+
+def test_supplemental_owner_proofs_do_not_turn_a_target_refusal_into_a_restore(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+    import queue
+
+    binary, policy = tmp_path / "binary", tmp_path / "policy.toml"
+    binary.write_bytes(b"synthetic test executable")
+    policy.write_text('[safety_net]\nbackend="nym"\n')
+    monkeypatch.setattr(bench.subprocess, "check_output", lambda args, **kwargs:
+                        "" if "status" in args else "a" * 40)
+    monkeypatch.setattr(bench, "PROVIDERS", ("anthropic",))
+    captured = queue.Queue()
+    first, tail = TOKEN, "<1234abcd:Name_2>"
+    owner_values = {first: "maria", tail: " Schneider"}
+    raw = "Hello maria Schneider"
+
+    @contextmanager
+    def upstream():
+        yield "synthetic", captured
+
+    @contextmanager
+    def passthrough(*_args, **_kwargs):
+        yield "synthetic", ["synthetic-test-proxy"]
+
+    def owner_response(_url, body, **kwargs):
+        assert kwargs["session_id"]
+        text = bench.leaves("anthropic", body)[0]
+        if text == raw:
+            actual = bench.native_request("anthropic", {"leaves": [{"text": "Hello " + first + tail}]})[1]
+            captured.put(("anthropic", actual, [first, tail]))
+            return 502, {"error": "synthetic original owner refusal"}
+        captured.put(("anthropic", body, [text]))
+        return 200, bench.replies("anthropic", [owner_values[text] + "\n"])
+
+    monkeypatch.setattr(bench, "upstream", upstream)
+    monkeypatch.setattr(bench, "proxy", passthrough)
+    monkeypatch.setattr(bench, "request_json", owner_response)
+    fixture, output = tmp_path / "fixture.json", tmp_path / "result.json"
+    fixture.write_text(json.dumps({"cases": [{"id": "synthetic-owner-refusal", "order": "source_first",
+        "leaves": [{"text": raw, "gold": [{"start": 6, "end": 11, "label": "FIRSTNAME"},
+                                          {"start": 12, "end": 21, "label": "SURNAME"}]}]}]}))
+    result = bench.measure(binary, policy, fixture, output, tmp_path, session_binary=binary)
+    assert result["owner_mapping_proof_requests"] == 2
+    assert result["totals"]["attempted"] == result["totals"]["forwarded"] == 1
+    assert result["totals"]["selected_restore_exact"] == result["totals"]["failed_closed"] == 0
+    assert result["totals"]["leaked_bytes"] == 0
+    assert result["totals"]["false_positive_bytes_v2"] == 1
+    assert result["cases"][0]["status"] == 502
+    assert result["cases"][0]["alignment_valid"] == 1

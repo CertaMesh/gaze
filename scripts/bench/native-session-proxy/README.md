@@ -64,3 +64,14 @@ credit. A base request refusal followed by a candidate owner-response refusal
 is reported as "refused in both arms; stage moved". An owner-response failure
 for a case that already forwarded in base still fails this gate. The response
 validator and its authorized-range contract are unchanged.
+
+When adjacent new tokens remain ambiguous after a failed measured owner response,
+the scorer requests independent owner proofs in the same session. Each proof
+sends exactly one existing Name or Email token and requires the identical token
+upstream and a successful owner restore in isolation. Any refusal, changed token,
+raw forwarded bytes, or remaining ambiguity fails the capture. The returned
+values constrain the original source-byte alignment. Proof requests are recorded
+separately and receive no target byte, restore, availability, or gate credit.
+The measured response's refusal and restoration result remain unchanged. This
+avoids joining unrelated owner echoes during the auxiliary proof and changes no
+response validator or target response format.
