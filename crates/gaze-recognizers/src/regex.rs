@@ -1192,6 +1192,281 @@ struct EnclosingScalarBoundary {
     end: usize,
     absent_value: bool,
     doubled_quote: Option<u8>,
+    record_lines_are_content: bool,
+    own_sql_literal: bool,
+}
+
+fn enclosing_csv_cell(input: &str, anchor: usize) -> Option<(usize, bool)> {
+    let bytes = input.as_bytes();
+    let mut at = 0;
+    while at <= anchor && at < bytes.len() {
+        while at < bytes.len() && matches!(bytes[at], b' ' | b'\t') {
+            at += 1;
+        }
+        if at < bytes.len() && bytes[at] == b'"' {
+            let opening = at;
+            at += 1;
+            let mut close = None;
+            while at < bytes.len() {
+                if bytes[at] == b'"' {
+                    if bytes.get(at + 1) == Some(&b'"') {
+                        at += 2;
+                        continue;
+                    }
+                    close = Some(at);
+                    break;
+                }
+                at += 1;
+            }
+            let end = close.unwrap_or(input.len());
+            let suffix = input
+                .get(end + usize::from(close.is_some())..)?
+                .trim_start_matches([' ', '\t']);
+            let cell_end = suffix
+                .chars()
+                .next()
+                .is_none_or(|ch| matches!(ch, ',' | '\r' | '\n'));
+            if cell_end && opening < anchor && anchor <= end {
+                return Some((end, anchor == end));
+            }
+            if cell_end {
+                at = end + usize::from(close.is_some());
+            } else {
+                at = opening + 1;
+            }
+        }
+        while at < bytes.len() && !matches!(bytes[at], b',' | b'\r' | b'\n') {
+            at += 1;
+        }
+        at += 1;
+    }
+    None
+}
+
+fn json_string_around(input: &str, anchor: usize) -> Option<std::ops::Range<usize>> {
+    let bytes = input.as_bytes();
+    let mut at = 0;
+    while at < bytes.len() {
+        if bytes[at] != b'"' {
+            at += 1;
+            continue;
+        }
+        let start = at;
+        at += 1;
+        while at < bytes.len() {
+            match bytes[at] {
+                b'\\' => at += 2,
+                b'"' => break,
+                _ => at += 1,
+            }
+        }
+        if at >= bytes.len() {
+            return None;
+        }
+        if start < anchor && anchor < at {
+            return Some(start..at + 1);
+        }
+        at += 1;
+    }
+    None
+}
+
+struct ScalarSourceView {
+    text: String,
+    source: Vec<std::ops::Range<usize>>,
+}
+
+impl ScalarSourceView {
+    fn json_string(&self, token: std::ops::Range<usize>) -> Option<Self> {
+        let raw = self.text.get(token.clone())?;
+        let decoded: String = serde_json::from_str(raw).ok()?;
+        let mut source = Vec::with_capacity(decoded.len());
+        let mut at = token.start + 1;
+        while at < token.end - 1 {
+            let end = if self.text.as_bytes()[at] == b'\\' {
+                if self.text.as_bytes().get(at + 1) == Some(&b'u') {
+                    let first = u16::from_str_radix(self.text.get(at + 2..at + 6)?, 16).ok()?;
+                    at + if (0xd800..=0xdbff).contains(&first) {
+                        12
+                    } else {
+                        6
+                    }
+                } else {
+                    at + 2
+                }
+            } else {
+                at + self.text[at..].chars().next()?.len_utf8()
+            };
+            let unit = self.text.get(at..end)?;
+            let width = if unit.starts_with('\\') {
+                serde_json::from_str::<String>(&format!("\"{unit}\""))
+                    .ok()?
+                    .len()
+            } else {
+                unit.len()
+            };
+            let original = self.source.get(at)?.start..self.source.get(end - 1)?.end;
+            source.extend(std::iter::repeat_n(original, width));
+            at = end;
+        }
+        (source.len() == decoded.len()).then_some(Self {
+            text: decoded,
+            source,
+        })
+    }
+}
+
+fn enclosing_sql_literal(input: &str, anchor: usize) -> Option<(usize, bool, bool)> {
+    static SQL: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    if !SQL
+        .get_or_init(|| {
+            Regex::new(r"(?i)\A[ \t\r\n]*(?:select|insert|update|replace|values)\b")
+                .expect("SQL statement prefix")
+        })
+        .is_match(input)
+    {
+        return None;
+    }
+    fn literal(input: &str, anchor: usize, backslash_escapes: bool) -> Option<(usize, bool, bool)> {
+        let bytes = input.as_bytes();
+        let mut at = 0;
+        while at < bytes.len() {
+            if bytes.get(at..at + 2) == Some(b"--") {
+                while at < bytes.len() && !matches!(bytes[at], b'\r' | b'\n') {
+                    at += 1;
+                }
+                continue;
+            }
+            if bytes.get(at..at + 2) == Some(b"/*") {
+                at += 2;
+                while at < bytes.len() && bytes.get(at..at + 2) != Some(b"*/") {
+                    at += 1;
+                }
+                at += 2;
+                continue;
+            }
+            if matches!(bytes[at], b'"' | b'`' | b'[') {
+                let quote = if bytes[at] == b'[' { b']' } else { bytes[at] };
+                at += 1;
+                while at < bytes.len() {
+                    if backslash_escapes && bytes[at] == b'\\' {
+                        at += 2;
+                        continue;
+                    }
+                    if bytes[at] == quote {
+                        if bytes.get(at + 1) == Some(&quote) {
+                            at += 2;
+                            continue;
+                        }
+                        at += 1;
+                        break;
+                    }
+                    at += 1;
+                }
+                continue;
+            }
+            if bytes[at] != b'\'' {
+                at += 1;
+                continue;
+            }
+            let opening = at;
+            at += 1;
+            while at < bytes.len() {
+                if backslash_escapes && bytes[at] == b'\\' {
+                    at += 2;
+                    continue;
+                }
+                if bytes[at] == b'\'' {
+                    if bytes.get(at + 1) == Some(&b'\'') {
+                        at += 2;
+                        continue;
+                    }
+                    if bytes
+                        .get(at + 1)
+                        .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+                    {
+                        at += 1;
+                        continue;
+                    }
+                    break;
+                }
+                at += 1;
+            }
+            let close = at.min(bytes.len());
+            if opening <= anchor && anchor <= close {
+                return Some((close, anchor == close, anchor == opening));
+            }
+            at += 1;
+        }
+        None
+    }
+    [false, true]
+        .into_iter()
+        .filter_map(|escapes| literal(input, anchor, escapes))
+        .max_by_key(|(end, _, _)| *end)
+}
+
+fn encoded_scalar_boundary(input: &str, opening: usize) -> Option<EnclosingScalarBoundary> {
+    let mut view = ScalarSourceView {
+        text: input.to_owned(),
+        source: (0..input.len()).map(|at| at..at + 1).collect(),
+    };
+    loop {
+        let anchor = view
+            .source
+            .iter()
+            .position(|range| range.contains(&opening))?;
+        if let Some((close, absent_value, own_sql_literal)) =
+            enclosing_sql_literal(&view.text, anchor)
+        {
+            let end = view.source.get(close).map_or_else(
+                || view.source.last().map_or(input.len(), |range| range.end),
+                |range| range.start,
+            );
+            return Some(EnclosingScalarBoundary {
+                end,
+                absent_value,
+                own_sql_literal,
+                doubled_quote: (!own_sql_literal).then_some(b'\''),
+                record_lines_are_content: true,
+            });
+        }
+        let csv = enclosing_csv_cell(&view.text, anchor);
+        let json = json_string_around(&view.text, anchor).and_then(|token| {
+            let close = token.end - 1;
+            view.json_string(token).map(|decoded| (close, decoded))
+        });
+        // A doubled CSV quote after a literal backslash can resemble a JSON
+        // string close. Conversely a JSON-escaped quote can resemble a CSV
+        // close. Prefer the enclosing interpretation that retains more value.
+        let closed_json_frame = json.as_ref().is_some_and(|(close, _)| {
+            serde_json::from_str::<serde_json::Value>(&view.text).is_ok()
+                || view.text[close + 1..]
+                    .trim_start_matches([' ', '\t'])
+                    .chars()
+                    .next()
+                    .is_none_or(|ch| matches!(ch, '\r' | '\n'))
+        });
+        if let Some((close, absent_value)) = csv.filter(|(close, _)| {
+            !(*close == view.text.len() && closed_json_frame)
+                && json
+                    .as_ref()
+                    .is_none_or(|(json_close, _)| close > json_close)
+        }) {
+            let end = view
+                .source
+                .get(close)
+                .map_or(input.len(), |range| range.start);
+            return Some(EnclosingScalarBoundary {
+                end,
+                absent_value,
+                own_sql_literal: false,
+                doubled_quote: Some(b'"'),
+                record_lines_are_content: true,
+            });
+        }
+        view = json?.1;
+    }
 }
 
 fn enclosing_scalar_boundary(
@@ -1200,6 +1475,9 @@ fn enclosing_scalar_boundary(
     start: usize,
     opening_escapes: usize,
 ) -> EnclosingScalarBoundary {
+    if let Some(boundary) = encoded_scalar_boundary(input, opening) {
+        return boundary;
+    }
     // At each serialization level a delimiter has 2^depth - 1 backslashes.
     // Replay the prefix to find strings enclosing this scalar, excluding its
     // own opening quote and escape bytes. Key-looking content proves nothing.
@@ -1246,6 +1524,7 @@ fn enclosing_scalar_boundary(
                     ScalarQuoteDelimiter::Single => 1,
                     ScalarQuoteDelimiter::Triple => 3,
                     ScalarQuoteDelimiter::DoubledSingle => 2,
+                    ScalarQuoteDelimiter::DoubledTriple => 6,
                 };
                 let content = opening + count * width;
                 let limit = *literal_limit.get_or_insert_with(|| {
@@ -1303,6 +1582,11 @@ fn enclosing_scalar_boundary(
     let end = enclosing.last().map_or(input.len(), |&(depth, opening)| {
         serialized_string_end(input, opening + depth + 1, input.len(), Some(depth))
     });
+    let enclosing_literal = enclosing_literal.filter(|end| *end >= start);
+    let record_lines_are_content = enclosing_literal.is_some()
+        || enclosing.last().is_some_and(|&(depth, opening)| {
+            depth == 0 && end >= start && quoted_csv_cell_encloses(input, opening, end)
+        });
     // In opaque nested text a same-depth quote can be either the previous
     // string's close or this private scalar's opener. It cannot bound the
     // value before its first byte. Resume at the scalar for the larger valid
@@ -1315,12 +1599,31 @@ fn enclosing_scalar_boundary(
     EnclosingScalarBoundary {
         end: enclosing_literal.map_or(end, |literal| literal.min(end)),
         absent_value,
+        record_lines_are_content,
+        own_sql_literal: false,
         doubled_quote: if enclosing_literal.is_some() {
             Some(b'\'')
         } else {
             (depth == Some(opening_escapes) && !absent_value).then_some(b'"')
         },
     }
+}
+
+fn quoted_csv_cell_encloses(input: &str, opening: usize, close: usize) -> bool {
+    let prefix = input[..opening].trim_end_matches([' ', '\t']);
+    let starts_cell = prefix
+        .chars()
+        .next_back()
+        .is_none_or(|ch| matches!(ch, ',' | '\r' | '\n'));
+    let Some(suffix) = input.get(close..).and_then(|rest| rest.strip_prefix('"')) else {
+        return false;
+    };
+    let suffix = suffix.trim_start_matches([' ', '\t']);
+    starts_cell
+        && suffix
+            .chars()
+            .next()
+            .is_none_or(|ch| matches!(ch, ',' | '\r' | '\n'))
 }
 
 fn serialized_context_is_json(input: &str, enclosing: &[(usize, usize)], escapes: usize) -> bool {
@@ -1394,6 +1697,7 @@ enum ScalarQuoteDelimiter {
     Single,
     Triple,
     DoubledSingle,
+    DoubledTriple,
 }
 
 fn quote_run_end(input: &str, start: usize, quote: u8, escapes: usize, limit: usize) -> usize {
@@ -1440,6 +1744,15 @@ fn scalar_quote_close(
                             Some(run_end - 2 * width)
                         }
                         ScalarQuoteDelimiter::DoubledSingle => None,
+                        ScalarQuoteDelimiter::DoubledTriple
+                            if !run.is_multiple_of(2) || run > 10 =>
+                        {
+                            return None
+                        }
+                        ScalarQuoteDelimiter::DoubledTriple if run >= 6 => {
+                            Some(run_end - 6 * width)
+                        }
+                        ScalarQuoteDelimiter::DoubledTriple => None,
                         ScalarQuoteDelimiter::Triple if run > 5 => return None,
                         ScalarQuoteDelimiter::Triple if run >= 3 => Some(run_end - 3 * width),
                         ScalarQuoteDelimiter::Triple => None,
@@ -1479,6 +1792,14 @@ fn uncertain_scalar_end(input: &str, start: usize, limit: usize) -> usize {
     limit
 }
 
+fn uncertain_field_end(input: &str, start: usize, enclosing: &EnclosingScalarBoundary) -> usize {
+    if enclosing.record_lines_are_content {
+        enclosing.end
+    } else {
+        uncertain_scalar_end(input, start, enclosing.end)
+    }
+}
+
 fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
     let opener = input[..capture.start]
         .chars()
@@ -1501,9 +1822,19 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
     let width = opening_escapes + 1;
     let opening_start = capture.start - width;
     let opening_end = quote_run_end(input, opening_start, quote, opening_escapes, limit);
-    let opening_run = (opening_end - opening_start) / width;
+    let opening_run = if enclosing.own_sql_literal {
+        1
+    } else {
+        (opening_end - opening_start) / width
+    };
     let doubled_quote = enclosing.doubled_quote == Some(quote);
     let known_empty = enclosing.absent_value
+        || (doubled_quote
+            && matches!(opening_run, 4 | 12)
+            && !input[opening_end..]
+                .chars()
+                .next()
+                .is_some_and(|ch| ch.is_alphanumeric() || ch == '_'))
         || (!doubled_quote
             && width.is_power_of_two()
             && matches!(opening_run, 2 | 6)
@@ -1513,6 +1844,9 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
                 .is_some_and(|ch| ch.is_alphanumeric() || ch == '_'));
     let delimiter = match opening_run {
         2 if doubled_quote => Some(ScalarQuoteDelimiter::DoubledSingle),
+        6..=10 if doubled_quote && opening_run.is_multiple_of(2) => {
+            Some(ScalarQuoteDelimiter::DoubledTriple)
+        }
         1 => Some(ScalarQuoteDelimiter::Single),
         3..=5 => Some(ScalarQuoteDelimiter::Triple),
         _ => None,
@@ -1521,8 +1855,10 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
     let mut start = match delimiter {
         Some(ScalarQuoteDelimiter::Triple) => opening_start + 3 * width,
         Some(ScalarQuoteDelimiter::DoubledSingle) => opening_start + 2 * width,
+        Some(ScalarQuoteDelimiter::DoubledTriple) => opening_start + 6 * width,
         _ => capture.start,
     };
+    let known_empty = known_empty || (enclosing.record_lines_are_content && start == limit);
     let mut end = limit;
     let mut reason = Some(LabelledValueScanReason::UncertainQuoteBoundary);
     if known_empty {
@@ -1535,7 +1871,7 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
         reason = None;
     }
     if reason.is_some() {
-        end = uncertain_scalar_end(input, start, limit);
+        end = uncertain_field_end(input, start, &enclosing);
         if end <= start {
             // Unclassified opening runs must not turn real private text into
             // an empty rejected capture. Keep available opening bytes owned.
@@ -1603,7 +1939,7 @@ fn scan_paired_field_value(
             at += ch.len_utf8();
         }
     }
-    let end = close.unwrap_or_else(|| uncertain_scalar_end(input, capture.start, enclosing.end));
+    let end = close.unwrap_or_else(|| uncertain_field_end(input, capture.start, &enclosing));
     let span = capture.start..end;
     let capture_end = capture.end.min(end);
     LabelledValueScan {

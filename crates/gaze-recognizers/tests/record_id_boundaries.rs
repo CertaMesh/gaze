@@ -1886,3 +1886,154 @@ fn unknown_wrappers_and_escaped_markdown_never_reject_owned_values() {
         }
     }
 }
+
+#[test]
+fn multiline_enclosing_cells_keep_unpaired_private_suffixes() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        for opener in ["“", "'", "\"", "§", "`"] {
+            for value in ["ZX-48\n2619", "\nZX-482619"] {
+                let declaration = format!("{cue}={opener}{value}");
+                for quoted in [false, true] {
+                    let input = format!(
+                        "\"{}\",{}\r\n",
+                        declaration.replace('"', "\"\""),
+                        if quoted { "\"FRAME\"" } else { "FRAME" }
+                    );
+                    check_quote_dialect(&pipeline, input, value.into());
+                }
+                let input = format!("SELECT '{}', 'FRAME';", declaration.replace('\'', "''"));
+                check_quote_dialect(&pipeline, input, value.into());
+                let input = format!("\"{}", declaration.replace('"', "\"\""));
+                check_quote_dialect(&pipeline, input, value.into());
+            }
+        }
+    }
+}
+
+#[test]
+fn encoded_triple_scalars_and_empty_cells_preserve_public_syntax() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        for quote in ['\'', '"'] {
+            for width in [1, 3] {
+                let delimiter = quote.to_string().repeat(width);
+                for value in [
+                    String::new(),
+                    format!("ZX-482619{quote}\nÉ731284{quote}{quote}"),
+                ] {
+                    if width == 1 && !value.is_empty() {
+                        continue;
+                    }
+                    let declaration = format!("{cue}={delimiter}{value}{delimiter}");
+                    for (input, raw) in [
+                        (
+                            format!("\"{}\",FRAME\r\n", declaration.replace('"', "\"\"")),
+                            value.replace('"', "\"\""),
+                        ),
+                        (
+                            format!("\"{}\",\"FRAME\"\r\n", declaration.replace('"', "\"\"")),
+                            value.replace('"', "\"\""),
+                        ),
+                        (
+                            format!("SELECT '{}', 'FRAME';", declaration.replace('\'', "''")),
+                            value.replace('\'', "''"),
+                        ),
+                    ] {
+                        if value.is_empty() {
+                            let mut input = input;
+                            for _ in 0..=9 {
+                                let session = Session::new(Scope::Ephemeral).unwrap();
+                                assert_eq!(public_clean(&pipeline, &session, &input), input);
+                                assert!(session.snapshot_entries().is_empty());
+                                input = serde_json::to_string(
+                                    &serde_json::json!({"note":input,"public_version":"FRAME"}),
+                                )
+                                .unwrap();
+                            }
+                        } else {
+                            check_quote_dialect(&pipeline, input, raw);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn csv_parents_ignore_literal_backslashes_and_keep_prior_cell_lines() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        for (opener, closer) in [("'", "'"), ("“", "”"), ("`", "`")] {
+            let value = "ZX-48\\\"2619";
+            let declaration = format!("metadata: FRAME\n{cue}={opener}{value}{closer}");
+            let input = format!("\"{}\",FRAME\r\n", declaration.replace('"', "\"\""));
+            check_quote_dialect(&pipeline, input, value.replace('"', "\"\""));
+            let value = "ZX-48\n2619";
+            let declaration = format!("metadata: FRAME\n{cue}={opener}{value}");
+            let input = format!("FRAME,\"{}\",FRAME\r\n", declaration.replace('"', "\"\""));
+            check_quote_dialect(&pipeline, input, value.into());
+        }
+    }
+}
+
+#[test]
+fn json_escapes_cannot_fabricate_a_csv_cell_close() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        let value = "ZX-48\\\",2619";
+        let input = serde_json::to_string(&format!("{cue}='{value}'")).unwrap();
+        let raw = serde_json::to_string(value).unwrap();
+        check_quote_dialect(&pipeline, input, raw[1..raw.len() - 1].into());
+        let value = "ZX-482619\"";
+        let input = serde_json::to_string(&format!("{cue}='{value}")).unwrap();
+        let raw = serde_json::to_string(value).unwrap();
+        check_quote_dialect(&pipeline, input, raw[1..raw.len() - 1].into());
+    }
+}
+
+#[test]
+fn verified_cells_with_no_private_value_preserve_public_columns() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        for mut input in [
+            format!("\"{cue}=\",FRAME\r\n"),
+            format!("SELECT '{cue}=', 'FRAME';"),
+        ] {
+            for _ in 0..=9 {
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                assert_eq!(public_clean(&pipeline, &session, &input), input);
+                assert!(session.snapshot_entries().is_empty());
+                input = serde_json::to_string(
+                    &serde_json::json!({"note":input,"public_version":"FRAME"}),
+                )
+                .unwrap();
+            }
+        }
+    }
+}
+
+#[test]
+fn sql_literal_dialects_keep_backslash_escaped_private_quotes() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        let value = "ZX-48\\'2619";
+        check_quote_dialect(
+            &pipeline,
+            format!("SELECT '{cue}=“{value}”', 'FRAME';"),
+            value.into(),
+        );
+    }
+}
+
+#[test]
+fn sql_quoted_identifiers_cannot_fabricate_an_absent_private_value() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        for identifier in ["\"quote ' hint\"", "`quote ' hint`", "[quote ' hint]"] {
+            let input = format!("SELECT {identifier}, {cue}='ZX-482619' FROM (SELECT 'FRAME' AS {identifier}, 'FRAME' AS {cue});");
+            check_quote_dialect(&pipeline, input, "ZX-482619".into());
+        }
+    }
+}

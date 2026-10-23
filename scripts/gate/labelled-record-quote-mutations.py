@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove the CSV and wrapper tests fail when their corresponding fix is removed.
+"""Prove quote-boundary tests fail when their corresponding fix is removed.
 
 Run only from a clean signed commit, with no other Cargo work in this checkout.
 Original bytes are restored even when a mutant fails unexpectedly. No stash or
@@ -37,6 +37,9 @@ def main():
          ".filter(|ch| field_wrapper_opens(*ch))",
          ".filter(|_| false)",
          "backtick_and_typographic_wrappers_keep_complete_values", 1),
+        ("cell_lines", "crates/gaze-recognizers/src/regex.rs",
+         "if enclosing.record_lines_are_content {", "if false && enclosing.record_lines_are_content {",
+         "multiline_enclosing_cells_keep_unpaired_private_suffixes", 1),
     ]
     receipt = {"revision": head, "mutants": []}
     for name, source, before, after, test, count in mutants:
@@ -45,6 +48,12 @@ def main():
         text = original.decode()
         assert text.count(before) == count, (name, text.count(before))
         mutant = text.replace(before, after)
+        if name == "csv":
+            # Remove both independent CSV defenses, rather than leaving the
+            # verified-cell parser to mask a regression in the older fallback.
+            parser = "if let Some(boundary) = encoded_scalar_boundary(input, opening) {"
+            assert mutant.count(parser) == 1
+            mutant = mutant.replace(parser, "if let Some(boundary) = encoded_scalar_boundary(input, opening).filter(|_| false) {")
         try:
             path.write_text(mutant)
             command = ["cargo", "test", "-p", "gaze-recognizers", "--test", "record_id_boundaries",
@@ -63,7 +72,7 @@ def main():
             assert path.read_bytes() == original
     assert not git("status", "--porcelain")
     (output / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
-    print(f"Both mutation probes failed behaviorally; original source restored at {head}")
+    print(f"All three mutation probes failed behaviorally; original source restored at {head}")
 
 
 if __name__ == "__main__":

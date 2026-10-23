@@ -82,7 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   retain doubled quotes and complete multiline values. Unicode opening
   punctuation, typographic quotes, paired brackets and backticks preserve whole
   private scalars. Complete CSV cells and enclosing SQL literals distinguish
-  doubled delimiters from JSON escaping. Every close search stays
+  doubled delimiters from JSON escaping. Unpaired scalars inside CSV and SQL
+  literals retain embedded line breaks and literal backslashes. Every close search stays
   inside its enclosing serialized string, preserving later public fields.
   JSON record-separator escapes retain the following person-label cue.
   Unterminated values end before an enclosing serialized string

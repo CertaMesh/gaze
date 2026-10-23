@@ -54,6 +54,10 @@ string; later public apostrophes cannot close the private scalar. Unclassified
 quote runs retain nonempty private ownership through the safe boundary.
 JSON record-separator escapes preserve the following person-label cue. An absent
 value cannot consume the enclosing JSON's later public fields.
+Raw line breaks inside a verified quoted CSV cell or SQL literal stay private
+content, including lines before the personal label. CSV backslashes are literal;
+only doubled quotes escape its delimiter. JSON string layers retain exact source
+ranges while the scanner identifies the enclosing cell.
 An unterminated value ends at the nearest enclosing serialized string close
 (excluded, with escape depth preserved), unescaped LF/CRLF/CR record boundary,
 or input end. The line break defines the end of that record; escaped line breaks
