@@ -30,8 +30,11 @@ projection, preserving learned-recognizer context even when no token was supplie
 The proxy then maps every eligible Rule-repeat span back onto remaining raw bytes.
 Hits remain overlapping until their raw intersections are unioned within each
 gap, including contained hits and chains across several known values. A repeat
-may cross either edge of a token or cover raw text between tokens. Original
-token identities stay unchanged. New fragments get reversible mappings without
+may cross either edge of a token or cover raw text between tokens. Caller-supplied
+token identities stay unchanged. Compatible tokens created during the current
+protection pass can merge with a Rule union before output, preventing needless
+fragmentation in owner responses. Foreign classes and token families remain
+separate. New fragments get reversible mappings without
 becoming independent Rule sources. The expanded Rule pass runs no recognizers or nets. Full-leaf net resolution
 then uses the existing core resolver to protect remaining raw gaps with complete
 context, retaining owned tokens and keeping net values out of Rule propagation.

@@ -300,3 +300,126 @@ fn projection_preserves_complete_primary_ner_context_without_existing_tokens() {
         .unwrap()
         .is_empty());
 }
+
+#[test]
+fn coalesce_unpublished_primary_names_but_keep_caller_owned_identity() {
+    struct Parts;
+    impl Recognizer for Parts {
+        fn id(&self) -> &str {
+            "synthetic-name-parts"
+        }
+        fn evidence(&self) -> EvidenceKind {
+            EvidenceKind::Learned
+        }
+        fn supported_class(&self) -> &gaze::PiiClass {
+            &gaze::PiiClass::Name
+        }
+        fn token_family(&self) -> &str {
+            "counter"
+        }
+        fn detect(
+            &self,
+            input: &str,
+            _: &DetectContext<'_>,
+        ) -> Result<Vec<Candidate>, gaze_types::DetectError> {
+            Ok(input
+                .match_indices("johanna")
+                .map(|(start, value)| {
+                    Candidate::new(
+                        start..start + value.len(),
+                        gaze::PiiClass::Name,
+                        self.id(),
+                        1.0,
+                        0,
+                        None,
+                        "counter",
+                        self.id(),
+                        ConflictTier::None,
+                        vec![],
+                    )
+                    .with_evidence(EvidenceKind::Learned)
+                })
+                .collect())
+        }
+    }
+    let pipeline = Pipeline::builder()
+        .recognizer(Header)
+        .recognizer(Parts)
+        .rule(DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap();
+    let dictionaries = DictionaryBundle::default();
+    let locales = [LocaleTag::Global];
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut tx = session.begin_transaction();
+    for value in ["Maria Schneider", "Schneider Johanna"] {
+        pipeline
+            .discover_staged_rule_sources(
+                &mut tx,
+                &format!("From: {value} <m@example.invalid>"),
+                &locales,
+                &dictionaries,
+            )
+            .unwrap();
+    }
+    let original = "Hello Maria Schneider johanna";
+    let owned = tx
+        .tokenize(&gaze::PiiClass::Name, "Maria Schneider")
+        .unwrap();
+    let mut boundary =
+        PipelineRequestPseudonymizer::new(&pipeline, &locales, &dictionaries, &mut tx);
+    let protected = boundary.protect(original).unwrap();
+    boundary.verify_rule_coverage(&protected).unwrap();
+    assert_eq!(
+        regex::Regex::new(r"<[0-9a-f]{8}:Name_\d+>")
+            .unwrap()
+            .find_iter(&protected)
+            .count(),
+        1,
+        "avoid fragmenting one unpublished Rule union: {protected}"
+    );
+    assert_eq!(
+        boundary
+            .transaction
+            .restore_strict_text(&protected)
+            .unwrap(),
+        original
+    );
+    let input = format!("Hello {owned} johanna");
+    let protected = boundary.protect(&input).unwrap();
+    boundary.verify_rule_coverage(&protected).unwrap();
+    assert!(protected.contains(&owned), "caller-owned token changed");
+    assert_eq!(
+        boundary
+            .transaction
+            .restore_strict_text(&protected)
+            .unwrap(),
+        original
+    );
+}
+
+#[test]
+fn refuse_ambiguous_projection_across_a_caller_owned_empty_value() {
+    let pipeline = pipeline();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut tx = session.begin_transaction();
+    let dictionaries = DictionaryBundle::default();
+    let locales = [LocaleTag::Global];
+    pipeline
+        .discover_staged_rule_sources(
+            &mut tx,
+            "From: Maria Schneider <m@example.invalid>",
+            &locales,
+            &dictionaries,
+        )
+        .unwrap();
+    let empty = tx.tokenize(&gaze::PiiClass::Name, "").unwrap();
+    let input = format!("Hello Maria {empty}Schneider");
+    let mut boundary =
+        PipelineRequestPseudonymizer::new(&pipeline, &locales, &dictionaries, &mut tx);
+    assert!(boundary.protect(&input).is_err());
+    assert!(
+        session.tokens().is_empty(),
+        "refusal published staged mappings"
+    );
+}

@@ -1436,6 +1436,143 @@ impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
 }
 
 impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
+    /// Intermediate primary tokens have not been sent to the caller or provider.
+    /// Merge compatible ones with Rule coverage before they become immutable output.
+    /// Every token supplied in the original leaf remains an uncrossable boundary.
+    fn coalesce_unpublished_rule_tokens(
+        &mut self,
+        input: &str,
+        caller_owned: &HashSet<(usize, usize)>,
+    ) -> Result<String, CodecErrorCode> {
+        let expanded = self
+            .transaction
+            .restore_strict_text_bounded(input, DEFAULT_MAX_REQUEST_BYTES)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+        let entries = self.transaction.snapshot_entries();
+        let mut names = self.transaction.tokens();
+        names.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
+        let mut tokens = Vec::new();
+        let (mut wire_cursor, mut view_cursor) = (0, 0);
+        for wire in owned_token_ranges(input, &names) {
+            let entry = entries
+                .iter()
+                .find(|entry| entry.token == input[wire.clone()])
+                .ok_or(CodecErrorCode::ProtectionFailedClosed)?;
+            view_cursor += wire.start - wire_cursor;
+            let value = self
+                .transaction
+                .restore_strict_text(&input[wire.clone()])
+                .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+            let view = view_cursor..view_cursor + value.len();
+            let immutable = caller_owned.contains(&(wire.start, wire.end));
+            wire_cursor = wire.end;
+            view_cursor = view.end;
+            tokens.push(RuleProjectionToken {
+                wire,
+                view,
+                class: entry.class.clone(),
+                family: entry.family.clone(),
+                immutable,
+            });
+        }
+        let hits = self
+            .pipeline
+            .staged_rule_repeat_candidates(self.transaction, &expanded)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+        let mut groups = std::collections::BTreeMap::<_, Vec<_>>::new();
+        for hit in hits {
+            groups
+                .entry((hit.class.clone(), hit.token_family.clone()))
+                .or_default()
+                .push(hit);
+        }
+        let mut replacements = Vec::new();
+        for hits in groups.values() {
+            let unions =
+                union_rule_ranges(hits.iter().map(|hit| (hit.span.clone(), hit)).collect());
+            let mut parts = Vec::new();
+            for (range, hit) in unions {
+                let blocked = tokens.iter().filter(|token| {
+                    token.immutable || token.class != hit.class || token.family != hit.token_family
+                });
+                let mut cursor = range.start;
+                for token in blocked {
+                    if token.view.end <= cursor || token.view.start >= range.end {
+                        continue;
+                    }
+                    if cursor < token.view.start {
+                        parts.push((cursor..token.view.start, hit));
+                    }
+                    cursor = cursor.max(token.view.end);
+                    if cursor >= range.end {
+                        break;
+                    }
+                }
+                if cursor < range.end {
+                    parts.push((cursor..range.end, hit));
+                }
+            }
+            for (range, hit) in &mut parts {
+                for token in &tokens {
+                    if token.view.start < range.end && token.view.end > range.start {
+                        if token.immutable
+                            || token.class != hit.class
+                            || token.family != hit.token_family
+                        {
+                            return Err(CodecErrorCode::ProtectionFailedClosed);
+                        }
+                        range.start = range.start.min(token.view.start);
+                        range.end = range.end.max(token.view.end);
+                    }
+                }
+            }
+            for (view, hit) in union_rule_ranges(parts) {
+                if tokens.iter().any(|token| {
+                    token.immutable
+                        && token.view.is_empty()
+                        && view.start <= token.view.start
+                        && view.end >= token.view.end
+                }) {
+                    // A zero-width owned value has no unique expanded-to-wire boundary.
+                    return Err(CodecErrorCode::ProtectionFailedClosed);
+                }
+                let start = expanded_boundary_to_wire(view.start, &tokens, expanded.len())
+                    .ok_or(CodecErrorCode::ProtectionFailedClosed)?;
+                let end = expanded_boundary_to_wire(view.end, &tokens, expanded.len())
+                    .ok_or(CodecErrorCode::ProtectionFailedClosed)?;
+                replacements.push((start..end, view, hit.clone()));
+            }
+        }
+        replacements.sort_by_key(|(wire, _, _)| (wire.start, wire.end));
+        if replacements
+            .windows(2)
+            .any(|pair| pair[0].0.end > pair[1].0.start)
+        {
+            return Err(CodecErrorCode::ProtectionFailedClosed);
+        }
+        let mut output = String::with_capacity(input.len());
+        let mut cursor = 0;
+        for (wire, view, hit) in replacements {
+            output.push_str(&input[cursor..wire.start]);
+            if tokens
+                .iter()
+                .any(|token| token.wire == wire && token.view == view)
+            {
+                output.push_str(&input[wire.clone()]);
+                cursor = wire.end;
+                continue;
+            }
+            let token = self
+                .pipeline
+                .tokenize_staged_rule_repeat_fragment(self.transaction, &hit, &expanded[view])
+                .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+            output.push_str(&token);
+            cursor = wire.end;
+        }
+        output.push_str(&input[cursor..]);
+        Ok(output)
+    }
+
     fn protect_preserving_tokens(
         &mut self,
         input: &str,
@@ -1452,6 +1589,7 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         // Projecting known hits before this step would split the context seen by
         // learned recognizers even in a leaf with no caller-supplied tokens.
         let mut prepared = String::with_capacity(input.len());
+        let mut caller_owned = HashSet::new();
         let mut cursor = 0;
         for range in owned_token_ranges(input, &tokens) {
             prepared.push_str(
@@ -1460,101 +1598,72 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
                     prefix_cache_write_mode,
                 )?,
             );
+            let start = prepared.len();
             prepared.push_str(&input[range.clone()]);
+            caller_owned.insert((start, prepared.len()));
             cursor = range.end;
         }
         prepared
             .push_str(&self.protect_unstaged_segment(&input[cursor..], prefix_cache_write_mode)?);
-        let input = prepared.as_str();
-        let mut tokens = self.transaction.tokens();
-        tokens.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
-        let owned = owned_token_ranges(input, &tokens);
-
-        // Restore once, with an expansion cap, then retain the correspondence between
-        // each raw gap and its expanded coordinates. Existing token bytes are immutable.
-        let expanded = self
-            .transaction
-            .restore_strict_text_bounded(input, DEFAULT_MAX_REQUEST_BYTES)
-            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
-        if expanded != original {
-            return Err(CodecErrorCode::ProtectionFailedClosed);
-        }
-        let mut gaps = Vec::with_capacity(owned.len() + 1);
-        let (mut source_cursor, mut expanded_cursor) = (0, 0);
-        for range in &owned {
-            let length = range.start - source_cursor;
-            gaps.push((
-                source_cursor..range.start,
-                expanded_cursor..expanded_cursor + length,
-            ));
-            expanded_cursor += length
-                + self
-                    .transaction
-                    .restore_strict_text(&input[range.clone()])
-                    .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?
-                    .len();
-            source_cursor = range.end;
-        }
-        gaps.push((source_cursor..input.len(), expanded_cursor..expanded.len()));
-        let hits = self
-            .pipeline
-            .staged_rule_repeat_candidates(self.transaction, &expanded)
-            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
-        let mut output = String::with_capacity(input.len());
-        let mut cursor = 0;
-        for (source, view) in gaps {
-            output.push_str(&input[cursor..source.start]);
-            // Keep every raw intersection, including wholly raw and contained hits.
-            // Union only within a raw gap; owned tokens never enter these ranges.
-            let mut intersections = hits
-                .iter()
-                .filter_map(|hit| {
-                    let start = hit.span.start.max(view.start);
-                    let end = hit.span.end.min(view.end);
-                    (start < end).then_some((start..end, hit))
-                })
-                .collect::<Vec<_>>();
-            intersections.sort_by(|(left, a), (right, b)| {
-                left.start
-                    .cmp(&right.start)
-                    .then_with(|| right.end.cmp(&left.end))
-                    .then_with(|| a.class.cmp(&b.class))
-                    .then_with(|| a.token_family.cmp(&b.token_family))
-            });
-            let mut union: Vec<(std::ops::Range<usize>, &gaze::Candidate)> = Vec::new();
-            for (range, hit) in intersections {
-                if let Some((previous, _)) = union.last_mut().filter(|(r, _)| r.end >= range.start)
-                {
-                    previous.end = previous.end.max(range.end);
-                } else {
-                    union.push((range, hit));
-                }
-            }
-            let mut gap_cursor = source.start;
-            for (range, hit) in union {
-                let start = source.start + range.start - view.start;
-                let end = source.start + range.end - view.start;
-                output.push_str(&input[gap_cursor..start]);
-                let token = self
-                    .pipeline
-                    .tokenize_staged_rule_repeat_fragment(self.transaction, hit, &input[start..end])
-                    .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
-                output.push_str(&token);
-                gap_cursor = end;
-            }
-            output.push_str(&input[gap_cursor..source.end]);
-            cursor = source.end;
-        }
+        let prepared = self.coalesce_unpublished_rule_tokens(&prepared, &caller_owned)?;
         if self
             .transaction
-            .restore_strict_text_bounded(&output, DEFAULT_MAX_REQUEST_BYTES)
+            .restore_strict_text_bounded(&prepared, DEFAULT_MAX_REQUEST_BYTES)
             .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?
-            != expanded
+            != original
         {
             return Err(CodecErrorCode::ProtectionFailedClosed);
         }
-        Ok(output)
+        Ok(prepared)
     }
+}
+
+struct RuleProjectionToken {
+    wire: std::ops::Range<usize>,
+    view: std::ops::Range<usize>,
+    class: gaze::PiiClass,
+    family: String,
+    immutable: bool,
+}
+
+fn union_rule_ranges(
+    mut ranges: Vec<(std::ops::Range<usize>, &gaze::Candidate)>,
+) -> Vec<(std::ops::Range<usize>, &gaze::Candidate)> {
+    ranges.sort_by(|(left, a), (right, b)| {
+        left.start
+            .cmp(&right.start)
+            .then_with(|| right.end.cmp(&left.end))
+            .then_with(|| a.class.cmp(&b.class))
+            .then_with(|| a.token_family.cmp(&b.token_family))
+    });
+    let mut union: Vec<(std::ops::Range<usize>, &gaze::Candidate)> = Vec::new();
+    for (range, hit) in ranges {
+        if let Some((previous, _)) = union.last_mut().filter(|(r, _)| r.end >= range.start) {
+            previous.end = previous.end.max(range.end);
+        } else {
+            union.push((range, hit));
+        }
+    }
+    union
+}
+
+fn expanded_boundary_to_wire(
+    position: usize,
+    tokens: &[RuleProjectionToken],
+    length: usize,
+) -> Option<usize> {
+    let (mut wire, mut view) = (0, 0);
+    for token in tokens {
+        if position <= token.view.start {
+            return Some(wire + position - view);
+        }
+        if position < token.view.end {
+            return None;
+        }
+        wire = token.wire.end;
+        view = token.view.end;
+    }
+    (position <= length).then_some(wire + position - view)
 }
 
 /// Locate immutable owned tokens in wire order, preferring the longest at a shared start.
