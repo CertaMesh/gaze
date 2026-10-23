@@ -292,7 +292,7 @@ pub(crate) fn prepare_clean_pipeline(
     ))
 }
 
-fn map_context_error(err: gaze::ContextError) -> CliError {
+pub(crate) fn map_context_error(err: gaze::ContextError) -> CliError {
     match err {
         gaze::ContextError::Io(_) => CliError::PolicyOpen,
         gaze::ContextError::Json(err) => CliError::PolicyConfigDetail(format!(

@@ -106,6 +106,9 @@ pub struct DobJudgeRecognizer {
 }
 
 impl DobJudgeRecognizer {
+    /// Stable registry identity for sharing a resident judge across request pipelines.
+    pub const ID: &'static str = ID;
+
     /// A model-confirmed birth date: a later copy of the same date may be a business date,
     /// so the repeat-value sweep must never spread it. A const, so a test pins it without the
     /// model bundle.

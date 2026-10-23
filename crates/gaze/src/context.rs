@@ -149,6 +149,11 @@ impl Context {
         }
         let strict = serde_json::from_str::<UniqueJsonValue>(raw)
             .map_err(|error| safe_context_json_error(error, raw))?;
+        if !strict.0.is_object() {
+            return Err(safe_json_error(<serde_json::Error as de::Error>::custom(
+                "expected context object",
+            )));
+        }
         if let Value::Object(top) = &strict.0 {
             let has_record = top.contains_key("record");
             let has_field_map = top.contains_key("field_map");
@@ -564,6 +569,16 @@ fn inferred_record_class(key: &str) -> Option<PiiClass> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn context_requires_an_object_even_when_all_fields_have_defaults() {
+        for raw in ["[]", "[{}, {}, {}]", "null", "42", "\"private-value\""] {
+            let error = Context::from_json_str(raw).unwrap_err();
+            assert_eq!(error.to_string(), "failed to parse context JSON");
+            assert!(!format!("{error:?}").contains("private-value"));
+        }
+        assert!(Context::from_json_str("{}").is_ok());
+    }
 
     #[test]
     fn parses_typed_context_envelope() {

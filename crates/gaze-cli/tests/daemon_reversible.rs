@@ -542,3 +542,70 @@ fn context_is_rejected_on_non_clean_operations() {
         "close"
     );
 }
+
+#[test]
+fn context_reuses_clean_dictionary_schema_and_refuses_nonreversible_record_policies() {
+    let (dir, policy) = policy();
+    let name = "Zelmora Quentrix";
+    let mut daemon = Daemon::start(&policy);
+    let response = daemon.request(json!({"session_id":"dictionary-context","text":name,
+        "context":{"dictionaries":{"owner_names":{"terms":[name],"case_sensitive":true}},
+        "class_map":{"owner_names":"name"}}}));
+    assert!(!response["clean_text"].as_str().unwrap().contains(name));
+    assert_eq!(response["tokens"][0]["class"], "Name");
+    let preserve = dir.path().join("preserve.toml");
+    fs::write(
+        &preserve,
+        fs::read_to_string(&policy).unwrap().replace(
+            "class = \"name\"\naction = \"tokenize\"",
+            "class = \"name\"\naction = \"preserve\"",
+        ),
+    )
+    .unwrap();
+    let mut daemon = Daemon::start(&preserve);
+    let response = daemon.request(json!({"session_id":"refused-record","text":name,
+        "context":{"record":{"full_name":name}}}));
+    assert_eq!(response["error"], "PolicyConfig");
+    assert!(response.get("clean_text").is_none());
+    assert_eq!(
+        daemon.request(json!({"version":1,"op":"open","session_id":"refused-record"}))["op"],
+        "open"
+    );
+}
+
+#[test]
+fn context_requests_keep_resident_ner_and_its_learned_evidence_tier() {
+    let (_dir, policy) = policy();
+    fs::write(
+        &policy,
+        format!(
+            "{}\n[ner]\nmodel_dir = \"__gaze_test_fixed_ner\"\n",
+            fs::read_to_string(&policy).unwrap()
+        ),
+    )
+    .unwrap();
+    let mut daemon = Daemon::start(&policy);
+    let first = daemon.request(json!({"session_id":"ner-context","text":"Alice Example"}));
+    assert!(!first["clean_text"]
+        .as_str()
+        .unwrap()
+        .contains("Alice Example"));
+    let contextual = daemon.request(
+        json!({"session_id":"ner-context","text":"Alice Example and Zelmora Quentrix",
+        "context":{"record":{"full_name":"Zelmora Quentrix"}}}),
+    );
+    let cleaned = contextual["clean_text"].as_str().unwrap();
+    assert!(!cleaned.contains("Alice Example"));
+    assert!(!cleaned.contains("Zelmora Quentrix"));
+    let later = daemon
+        .request(json!({"session_id":"ner-context","text":"ALICE EXAMPLE and ZELMORA QUENTRIX"}));
+    let cleaned = later["clean_text"].as_str().unwrap();
+    assert!(
+        cleaned.contains("ALICE EXAMPLE"),
+        "learned evidence must not propagate"
+    );
+    assert!(
+        !cleaned.contains("ZELMORA QUENTRIX"),
+        "caller-known rule evidence must propagate"
+    );
+}

@@ -24,15 +24,15 @@ use crate::pipeline::build::{
 };
 use crate::pipeline::run::{
     clean_overrides_from_options, enforce_safety_net_mode, entry_class_to_string,
-    map_safety_net_pipeline_error, maybe_register_safety_net, policy_nym_was_overridden,
-    safety_net_policy, validate_safety_net_tolerant_gate, wire_ordered_entries, CleanOptions,
-    CORE_EXTENDED_DEPRECATION,
+    map_context_error, map_safety_net_pipeline_error, maybe_register_safety_net,
+    policy_nym_was_overridden, safety_net_policy, validate_safety_net_tolerant_gate,
+    wire_ordered_entries, CleanOptions, CORE_EXTENDED_DEPRECATION,
 };
 use crate::restore::session::restore_pass2_validate;
 use gaze::{
-    Action, ConflictTier, DictionaryBundle, DocumentKind, EmittedTokenSpan, LeakReport, LocaleTag,
-    PiiClass, Policy, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger,
-    Result as GazeResult, Session, SessionSnapshotEntry,
+    Action, ConflictTier, DictionaryBundle, DocumentKind, EmittedTokenSpan, LeakReport, PiiClass,
+    Policy, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, Result as GazeResult,
+    Rulepack, Session, SessionSnapshotEntry, TypedContext,
 };
 use gaze_audit::SqliteLogger;
 
@@ -170,7 +170,8 @@ fn write_json_line<W: Write>(writer: &mut W, response: &DaemonResponse) -> Resul
 struct Daemon {
     pipeline: gaze::Pipeline,
     policy: Policy,
-    locale_chain: Vec<LocaleTag>,
+    locale_chain: gaze::LocaleChain,
+    rulepacks: Vec<Rulepack>,
     dictionaries: DictionaryBundle,
     safety_net_mode: SafetyNetMode,
     safety_net_fallback: SafetyNetFallback,
@@ -221,7 +222,8 @@ impl Daemon {
         Ok(Self {
             pipeline,
             policy: loaded_policy,
-            locale_chain: locale_chain.as_slice().to_vec(),
+            locale_chain,
+            rulepacks: resolved.rulepacks,
             dictionaries,
             safety_net_mode: args.safety_net_limits.safety_net_mode,
             safety_net_fallback: args.safety_net_limits.safety_net_fallback,
@@ -246,7 +248,13 @@ impl Daemon {
             .get("version")
             .and_then(serde_json::Value::as_u64)
             .and_then(|version| u32::try_from(version).ok());
-        let request = match serde_json::from_value::<DaemonRequest>(value) {
+        // Raw context retains duplicate keys and encoded size for the strict shared parser.
+        let parsed = if value.get("context").is_some() {
+            serde_json::from_str::<DaemonRequest>(line)
+        } else {
+            serde_json::from_value::<DaemonRequest>(value)
+        };
+        let request = match parsed {
             Ok(request) if !request.session_id.trim().is_empty() => request,
             Ok(_) => {
                 return DaemonResponse::error_versioned(
@@ -270,10 +278,10 @@ impl Daemon {
         let version = request.version;
         let result = match (request.version, request.op.as_deref()) {
             (None, None) => match request.text {
-                Some(text) => self.clean_request(session_id.clone(), text, false),
+                Some(text) => self.clean_request(session_id.clone(), text, false, request.context),
                 None => return DaemonResponse::error("JsonMalformed", "malformed JSON line"),
             },
-            (Some(1), Some("open")) if request.text.is_none() => {
+            (Some(1), Some("open")) if request.text.is_none() && request.context.0.is_none() => {
                 self.evict_idle_sessions();
                 if self.sessions.contains_key(&session_id) {
                     Err((session_id.clone(), DaemonError::SessionExists))
@@ -288,14 +296,14 @@ impl Daemon {
                 }
             }
             (Some(1), Some("clean")) => match request.text {
-                Some(text) => self.clean_request(session_id.clone(), text, true),
+                Some(text) => self.clean_request(session_id.clone(), text, true, request.context),
                 None => Err((session_id.clone(), DaemonError::ProtocolInvalid)),
             },
-            (Some(1), Some("restore")) => match request.text {
+            (Some(1), Some("restore")) if request.context.0.is_none() => match request.text {
                 Some(text) => self.restore_request(session_id.clone(), text),
                 None => Err((session_id.clone(), DaemonError::ProtocolInvalid)),
             },
-            (Some(1), Some("close")) if request.text.is_none() => {
+            (Some(1), Some("close")) if request.text.is_none() && request.context.0.is_none() => {
                 self.evict_idle_sessions();
                 if self.sessions.remove(&session_id).is_some() {
                     self.lru.retain(|id| id != &session_id);
@@ -328,7 +336,31 @@ impl Daemon {
         session_id: String,
         text: String,
         versioned: bool,
+        context: RequestContext,
     ) -> std::result::Result<DaemonResponse, (String, DaemonError)> {
+        let request_inputs = context
+            .0
+            .map(|raw| {
+                let context = TypedContext::from_json_str(raw.get()).map_err(map_context_error)?;
+                let pipeline = gaze_assembly::pipeline_with_context(
+                    &self.pipeline,
+                    &self.policy,
+                    &context,
+                    &self.rulepacks,
+                    &self.locale_chain,
+                )
+                .map_err(|_| {
+                    CliError::PolicyConfigDetail("invalid context JSON configuration".into())
+                })?;
+                let dictionaries = DictionaryBundle::merge(
+                    self.dictionaries.clone(),
+                    gaze::dictionary_bundle_from_context(&context),
+                );
+                Ok::<_, CliError>((pipeline, dictionaries))
+            })
+            .transpose()
+            .map_err(|error| (session_id.clone(), DaemonError::Cli(error)))?;
+
         if versioned {
             self.touch_session(&session_id)
         } else {
@@ -340,18 +372,21 @@ impl Daemon {
             .get(&session_id)
             .expect("session inserted")
             .session;
+        let (pipeline, dictionaries) = request_inputs
+            .as_ref()
+            .map(|(pipeline, dictionaries)| (pipeline, dictionaries))
+            .unwrap_or((&self.pipeline, &self.dictionaries));
         let policy = safety_net_policy(self.safety_net_mode, self.safety_net_fallback);
-        let (clean_doc, manifest, leak_report) = self
-            .pipeline
+        let (clean_doc, manifest, leak_report) = pipeline
             .clean_with_safety_net_policy_detect_context(
                 session,
                 RawDocument::Text(text),
-                &self.locale_chain,
-                &self.dictionaries,
+                self.locale_chain.as_slice(),
+                dictionaries,
                 policy,
             )
             .map_err(|err| {
-                let cli_error = if self.pipeline.safety_net_count() > 0 {
+                let cli_error = if pipeline.safety_net_count() > 0 {
                     map_safety_net_pipeline_error(err)
                 } else {
                     CliError::Pipeline
@@ -538,7 +573,7 @@ fn clean_options(args: &Args) -> CleanOptions<'_> {
         // A typed context envelope describes one document. The daemon serves many
         // documents across many sessions from one process, so a process-wide
         // `--context-json` would apply one document's context to every session's every
-        // request. That belongs in the per-request protocol frame, not in a flag.
+        // request. The clean frame accepts `context` instead.
         context_json: None,
         audit_db: args.audit_db.as_deref(),
         safety_net: &args.safety_net,
@@ -657,6 +692,18 @@ struct DaemonRequest {
     op: Option<String>,
     session_id: String,
     text: Option<String>,
+    #[serde(default)]
+    context: RequestContext,
+}
+
+#[derive(Default)]
+struct RequestContext(Option<Box<serde_json::value::RawValue>>);
+
+impl<'de> Deserialize<'de> for RequestContext {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // A present null must reach Context::from_json_str and fail closed.
+        Box::<serde_json::value::RawValue>::deserialize(deserializer).map(|raw| Self(Some(raw)))
+    }
 }
 
 #[derive(Serialize)]
