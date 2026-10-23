@@ -13,7 +13,13 @@ pub fn normalize(input: &str) -> NormalizedText {
 
     for (start, ch) in input.char_indices() {
         let end = start + ch.len_utf8();
-        if matches!(ch, '\u{200C}' | '\u{200D}') {
+        // Formatting characters can split an identifier without changing its
+        // visible spelling. Detection sees the joined value; raw_range still
+        // covers every original byte between its first and last character.
+        if matches!(
+            ch,
+            '\u{00AD}' | '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}'
+        ) {
             continue;
         }
 
@@ -55,6 +61,7 @@ fn fullwidth_to_ascii(ch: char) -> char {
         | '\u{205F}'
         | '\u{3000}' => ' ',
         '\u{FF01}'..='\u{FF5E}' => char::from_u32(ch as u32 - 0xFEE0).unwrap_or(ch),
+        '\u{2011}' => '-',
         _ => ch,
     }
 }
