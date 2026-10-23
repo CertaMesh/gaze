@@ -57,6 +57,7 @@ def capture_card(leaks):
     cases = json.loads(bench.FIXTURE.read_text())["cases"]
     rows = [{"provider": provider, "id": case["id"], "attempted": 1, "forwarded": 1,
              "failed_closed": 0, "selected_restore_exact": 1, "alignment_valid": 1,
+             "seed_forwarded": int("seed" in case), "seed_restore_exact": int("seed" in case),
              "gold_bytes": sum(sum(bench.gold_bytes(leaf)) for leaf in case["leaves"]),
              "leaked_bytes": leaks, "false_positive_bytes_v1": 0, "false_positive_bytes_v2": 0}
             for provider in bench.PROVIDERS for case in cases]
@@ -64,6 +65,7 @@ def capture_card(leaks):
     return {"schema": "gaze-proxy-request-order-v2", "layer": "proxy-request-order",
             "contract_labels": ["FIRSTNAME", "SURNAME", "EMAIL"], "scored_contracts": ["v2", "v1"],
             "fixture_sha256": bench.digest(bench.FIXTURE), "harness_sha256": bench.digest(bench.Path(bench.__file__)),
+            "session_host_sha256": bench.digest(bench.Path(bench.__file__).with_name("native-session-proxy") / "main.rs"),
             "v2_contract_sha256": bench.digest(bench.V2_CONTRACT), "policy_sha256": "synthetic-policy",
             "cases": rows, "totals": {key: sum(row[key] for row in rows) for key in counts}}
 
@@ -177,8 +179,11 @@ def test_post_forward_response_errors_cannot_hide_request_leaks(monkeypatch, tmp
         return 502, {"error": "synthetic-owner-response-failure"}
 
     monkeypatch.setattr(bench, "request_json", fail_after_forward)
-    result = bench.measure(binary, policy, bench.FIXTURE, tmp_path / "result.json", tmp_path)
-    expected = len(json.loads(bench.FIXTURE.read_text())["cases"]) * len(bench.PROVIDERS)
+    fixture = tmp_path / "unseeded.json"
+    cases = [case for case in json.loads(bench.FIXTURE.read_text())["cases"] if "seed" not in case]
+    fixture.write_text(json.dumps({"cases": cases}))
+    result = bench.measure(binary, policy, fixture, tmp_path / "result.json", tmp_path)
+    expected = len(cases) * len(bench.PROVIDERS)
     assert result["totals"]["forwarded"] == result["totals"]["attempted"] == expected
     assert result["totals"]["failed_closed"] == 0
     assert result["totals"]["leaked_bytes"] == result["totals"]["gold_bytes"] > 0
@@ -199,3 +204,36 @@ def test_repeated_literal_gaps_use_complete_leaf_and_reused_token_constraints():
 def test_literal_gap_alignment_still_refuses_genuinely_ambiguous_token_extents():
     with pytest.raises(ValueError, match="uniquely"):
         bench.infer_mappings("maria johanna schneider", f"{TOKEN} <1234abcd:Name_2>")
+
+
+def test_seeded_alignment_uses_prior_manifest_values_for_adjacent_tokens():
+    suffix = "<1234abcd:Name_2>"
+    assert bench.infer_mappings("Maria schneider", TOKEN + suffix, {TOKEN: "Maria"}) == {
+        TOKEN: "Maria", suffix: " schneider"}
+    assert bench.infer_mappings("maria Schneider", suffix + TOKEN, {TOKEN: "Schneider"}) == {
+        suffix: "maria ", TOKEN: "Schneider"}
+    with pytest.raises(ValueError, match="inconsistent"):
+        bench.infer_mappings("Maria schneider", TOKEN + suffix, {TOKEN: "Schneider"})
+    with pytest.raises(ValueError, match="adjacent"):
+        bench.infer_mappings("Maria schneider", TOKEN + suffix)
+
+
+def test_seed_binding_requires_a_real_prior_owned_token_and_exact_restore(monkeypatch):
+    import queue
+    email = "<1234abcd:Email_1>"
+    case = next(case for case in json.loads(bench.FIXTURE.read_text())["cases"]
+                if case["id"] == "existing-token-given-source_last")
+    captured = queue.Queue()
+    def seed_reply(url, body, **kwargs):
+        assert kwargs["session_id"] == "synthetic-session"
+        wire = {"messages": [{"content": f"From: {TOKEN} <{email}>\nHello."}]}
+        captured.put(("openai", wire, [TOKEN, email]))
+        return 200, bench.replies("openai", ["Maria\n", "m@example.invalid\n"])
+    monkeypatch.setattr(bench, "request_json", seed_reply)
+    bound, known, scores, token = bench.seed_session("http://example.invalid", "openai", case, captured, "synthetic-session")
+    assert token == TOKEN and known[TOKEN] == "Maria"
+    assert "{seed}" not in json.dumps(bound) and TOKEN in json.dumps(bound)
+    assert scores["gold_bytes"] > 0 and scores["leaked_bytes"] == 0
+    monkeypatch.setattr(bench, "request_json", lambda *args, **kwargs: (400, {}))
+    with pytest.raises(ValueError, match="seed request refused"):
+        bench.seed_session("http://example.invalid", "openai", case, captured, "synthetic-session")

@@ -8,8 +8,10 @@ under the bench-machine lease with each revision's gaze setup policy. Inputs
 are synthetic and pinned by their committed fixture hash.
 
 Capture each side with this committed driver:
+  python3 scripts/bench/build_native_session_proxy.py --runtime-root <checkout> --output <checkout>/target/session-host
   python3 scripts/bench/proxy_request_order.py --runtime-root <checkout> \
     --binary <checkout>/target/release/gaze --policy <checkout>/target/gate/policy.toml \
+    --session-binary <checkout>/target/release/gaze-native-session-proxy \
     --output target/proxy-<side>.json
 Compare the captures with --compare target/proxy-base.json target/proxy-candidate.json
 and --output target/proxy-comparison.json. C/A/D/R must also show no regression.
@@ -32,6 +34,7 @@ import tomllib
 import time
 import urllib.error
 import urllib.request
+import uuid
 
 FIXTURE = Path(__file__).with_name("fixtures") / "proxy_request_order.json"
 TOKEN = re.compile(r"<[0-9a-f]{8}:[^<>]+>")
@@ -89,8 +92,9 @@ def protected_bytes(raw, clean, mappings):
     return mask
 
 
-def infer_mappings(raw, clean):
+def infer_mappings(raw, clean, known=None):
     """Require one complete literal-gap alignment with consistent reused tokens."""
+    known = known or {}
     matches = list(TOKEN.finditer(clean))
     if not matches:
         if raw != clean:
@@ -103,10 +107,11 @@ def infer_mappings(raw, clean):
     for index, match in enumerate(matches):
         next_start = matches[index + 1].start() if index + 1 < len(matches) else len(clean)
         gap = clean[match.end():next_start]
-        if not gap and index + 1 < len(matches):
+        if (not gap and index + 1 < len(matches)
+                and match.group() not in known and matches[index + 1].group() not in known):
             raise ValueError("adjacent tokens have no independent byte boundary")
         parts.append((match.group(), gap))
-    solutions, mappings = [], {}
+    solutions, mappings = [], {match.group(): known[match.group()] for match in matches if match.group() in known}
     explored = 0
 
     def align(index, cursor):
@@ -127,12 +132,12 @@ def infer_mappings(raw, clean):
             if raw.startswith(value, cursor) and raw.startswith(gap, end):
                 align(index + 1, end + len(gap))
             return
-        end = raw.find(gap, cursor + 1) if gap else len(raw)
+        end = raw.find(gap, cursor + 1) if gap or index + 1 < len(parts) else len(raw)
         while end > cursor:
             mappings[token] = raw[cursor:end]
             align(index + 1, end + len(gap))
             del mappings[token]
-            if not gap or len(solutions) > 1:
+            if (not gap and index + 1 == len(parts)) or len(solutions) > 1:
                 break
             end = raw.find(gap, end + 1)
 
@@ -170,9 +175,11 @@ def score_leaf(leaf, clean, mappings):
             "false_positive_bytes_v2": sum(covered is not None and covered not in NEUTRAL_V2 and not expected for expected, covered in zip(gold, protected, strict=True))}
 
 
-def request_json(url, body=None, timeout=180):
+def request_json(url, body=None, timeout=180, session_id=None):
     headers = {"content-type": "application/json", "x-api-key": "synthetic-key",
                "anthropic-version": "2023-06-01"}
+    if session_id is not None:
+        headers["x-gaze-session-id"] = session_id
     request = urllib.request.Request(url, None if body is None else json.dumps(body).encode(), headers)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
@@ -184,7 +191,7 @@ def request_json(url, body=None, timeout=180):
 
 
 def native_request(provider, case):
-    texts = [leaf["text"] for leaf in case["leaves"]]
+    texts = [leaf.get("wire_text", leaf["text"]) for leaf in case["leaves"]]
     if provider == "gemini":
         return "/v1beta/models/gemini-test:generateContent", {
             "contents": [{"role": "user", "parts": [{"text": text}]} for text in texts]}
@@ -226,13 +233,15 @@ def upstream():
 
 
 @contextmanager
-def proxy(binary, policy, upstream_url, log_path, runtime_root):
+def proxy(binary, policy, upstream_url, log_path, runtime_root, session_binary=None):
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
     command = [str(binary), "proxy", "serve", "--bind", f"127.0.0.1:{port}", "--policy", str(policy)]
     for provider in PROVIDERS:
         command.extend(["--upstream-" + provider, upstream_url])
+    if session_binary is not None:
+        command = [str(session_binary), f"127.0.0.1:{port}", str(policy), upstream_url]
     with log_path.open("wb") as log:
         process = subprocess.Popen(command, stdout=log, stderr=log, cwd=runtime_root)
         try:
@@ -260,7 +269,32 @@ def proxy(binary, policy, upstream_url, log_path, runtime_root):
                     process.wait()
 
 
-def measure(binary, policy, fixture, output, runtime_root):
+def seed_session(base_url, provider, case, captured, session_id):
+    """Bind a placeholder only to a token observed in a successful earlier request."""
+    seed = case["seed"]
+    path, body = native_request(provider, {"leaves": [seed]})
+    status, reply = request_json(base_url + path, body, session_id=session_id)
+    if captured.empty():
+        raise ValueError("seed request refused; two-turn capture is unavailable")
+    actual_provider, actual, tokens = captured.get_nowait()
+    if actual_provider != provider or not captured.empty() or not 200 <= status < 300:
+        raise ValueError("seed request lacked a successful accounted response")
+    clean = leaves(provider, actual)[0]
+    known = infer_mappings(seed["text"], clean)
+    selected = echoed_tokens(tokens)
+    if restored_values(provider, reply) != [known[token] + "\n" for token in selected]:
+        raise ValueError("seed did not restore exactly")
+    # The fixture's seed is a header name followed by a fictional email address.
+    name = seed["text"].split("From: ", 1)[1].split(" <", 1)[0]
+    owners = [token for token, value in known.items() if value == name and ":Name_" in token]
+    if len(owners) != 1:
+        raise ValueError("seed did not yield one manifest-owned full name token")
+    bound = dict(case, leaves=[dict(leaf, wire_text=leaf.get("wire_text", leaf["text"]).replace("{seed}", owners[0]))
+                              for leaf in case["leaves"]])
+    return bound, known, score_leaf(seed, clean, known), owners[0]
+
+
+def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
     dirty = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no", "--",
                                      "crates", "Cargo.toml", "Cargo.lock"], cwd=runtime_root, text=True)
     if dirty:
@@ -272,16 +306,24 @@ def measure(binary, policy, fixture, output, runtime_root):
         raise ValueError("capture requires the full own-policy safety-net arm")
     cases = json.loads(fixture.read_text())["cases"]
     rows = []
-    with upstream() as (upstream_url, captured), proxy(binary, policy, upstream_url, output.with_suffix(".log"), runtime_root) as (base_url, command):
+    with upstream() as (upstream_url, captured), proxy(binary, policy, upstream_url, output.with_suffix(".log"), runtime_root, **({"session_binary": session_binary} if session_binary else {})) as (base_url, command):
         for provider in PROVIDERS:
             for case in cases:
-                path, body = native_request(provider, case)
-                status, reply = request_json(base_url + path, body)
+                session_id = str(uuid.uuid5(uuid.NAMESPACE_URL, provider + ":" + case["id"])) if session_binary is not None else None
+                bound, known, seed_scores, owner_token = case, {}, {}, None
+                if "seed" in case:
+                    if session_binary is None:
+                        raise ValueError("two-turn fixtures require --session-binary")
+                    bound, known, seed_scores, owner_token = seed_session(base_url, provider, case, captured, session_id)
+                path, body = native_request(provider, bound)
+                status, reply = request_json(base_url + path, body, **({"session_id": session_id} if session_id else {}))
                 row = {"id": case["id"], "provider": provider, "order": case["order"],
-                       "status": status, "attempted": 1, "forwarded": 0, "failed_closed": 0,
+                       "status": status, "attempted": 1, "seed_forwarded": int("seed" in case), "seed_restore_exact": int("seed" in case), "forwarded": 0, "failed_closed": 0,
                        "selected_restore_exact": 0, "alignment_valid": 0,
-                       "gold_bytes": sum(sum(gold_bytes(leaf)) for leaf in case["leaves"]),
+                       "gold_bytes": sum(sum(gold_bytes(leaf)) for leaf in case["leaves"]) + seed_scores.get("gold_bytes", 0),
                        "leaked_bytes": 0, "false_positive_bytes_v1": 0, "false_positive_bytes_v2": 0}
+                for metric in ("leaked_bytes", "false_positive_bytes_v1", "false_positive_bytes_v2"):
+                    row[metric] = seed_scores.get(metric, 0)
                 if captured.empty():
                     if 200 <= status < 300:
                         raise ValueError("successful request never reached upstream")
@@ -295,10 +337,12 @@ def measure(binary, policy, fixture, output, runtime_root):
                 mappings = {}
                 clean_leaves = leaves(provider, actual)
                 for leaf, clean in zip(case["leaves"], clean_leaves, strict=True):
-                    for token, value in infer_mappings(leaf["text"], clean).items():
+                    for token, value in infer_mappings(leaf["text"], clean, known).items():
                         if token in mappings and mappings[token] != value:
                             raise ValueError("one token has inconsistent source values")
                         mappings[token] = value
+                if owner_token is not None and owner_token not in tokens:
+                    raise ValueError("existing owned token identity changed")
                 if set(mappings) != set(tokens):
                     raise ValueError("unaccounted upstream token")
                 selected = echoed_tokens(tokens)
@@ -308,19 +352,21 @@ def measure(binary, policy, fixture, output, runtime_root):
                     restored = restored_values(provider, reply)
                     expected = [mappings[token] + "\n" for token in selected] or ["ok"]
                     exact = restored == expected
-                totals = Counter()
+                totals = Counter(seed_scores)
                 for leaf, clean in zip(case["leaves"], clean_leaves, strict=True):
                     totals.update(score_leaf(leaf, clean, mappings))
                 row.update(totals)
                 row["selected_restore_exact"] = int(exact)
                 row["alignment_valid"] = 1
                 rows.append(row)
-    counts = ("attempted", "forwarded", "failed_closed", "selected_restore_exact", "alignment_valid",
+    counts = ("attempted", "seed_forwarded", "seed_restore_exact", "forwarded", "failed_closed", "selected_restore_exact", "alignment_valid",
               "gold_bytes", "leaked_bytes", "false_positive_bytes_v1", "false_positive_bytes_v2")
     result = {"schema": "gaze-proxy-request-order-v2", "layer": "proxy-request-order", "contract_labels": ["FIRSTNAME", "SURNAME", "EMAIL"],
               "runtime_revision": revision, "scored_contracts": ["v2", "v1"], "v2_contract_sha256": digest(V2_CONTRACT), "fixture_sha256": digest(fixture),
               "harness_sha256": digest(Path(__file__)), "binary_sha256": digest(binary), "policy_sha256": digest(policy), "command": command,
-              "scope": "native nonstream proxy requests; unique source-byte alignment and Name/Email owner echo; other classes priced as request FP bytes; no exported manifest validation",
+              "session_host_sha256": digest(Path(__file__).with_name("native-session-proxy") / "main.rs"),
+              "session_binary_sha256": digest(session_binary) if session_binary else None,
+              "scope": "native nonstream proxy requests; seed requests forwarded, restored and byte-scored; unique source-byte alignment and Name/Email owner echo; other classes priced as request FP bytes; no exported manifest validation",
               "totals": {key: sum(row[key] for row in rows) for key in counts}, "cases": rows}
     output.write_text(json.dumps(result, indent=2) + "\n")
     return result
@@ -329,7 +375,7 @@ def measure(binary, policy, fixture, output, runtime_root):
 def compare(base, candidate):
     """The transport layer's gain rule; C/A/D/R need their own admitted captures."""
     identity = ("schema", "layer", "contract_labels", "scored_contracts", "fixture_sha256",
-                "harness_sha256", "v2_contract_sha256", "policy_sha256")
+                "harness_sha256", "session_host_sha256", "v2_contract_sha256", "policy_sha256")
     if (base["fixture_sha256"] != digest(FIXTURE)
             or base["v2_contract_sha256"] != digest(V2_CONTRACT)):
         raise ValueError("proxy capture inputs differ from the committed case/scoring contract")
@@ -347,7 +393,8 @@ def compare(base, candidate):
                 raise ValueError("proxy counts must be nonnegative integers")
             if (row["attempted"] != 1 or row["forwarded"] + row["failed_closed"] != 1
                     or row["selected_restore_exact"] > row["forwarded"]
-                    or row["alignment_valid"] != row["forwarded"]):
+                    or row["alignment_valid"] != row["forwarded"]
+                    or row["seed_forwarded"] != row["seed_restore_exact"]):
                 raise ValueError("proxy capture lacks complete forward/restore accounting")
         totals = {key: sum(row[key] for row in card["cases"]) for key in counts}
         if totals != card["totals"]:
@@ -356,7 +403,9 @@ def compare(base, candidate):
     regressions = []
     for row in candidate["cases"]:
         old = rows[(row["provider"], row["id"])]
-        if (row["gold_bytes"] != old["gold_bytes"] or row["leaked_bytes"] > old["leaked_bytes"]
+        if (row["seed_forwarded"] != old["seed_forwarded"]
+                or row["seed_restore_exact"] < old["seed_restore_exact"]
+                or row["gold_bytes"] != old["gold_bytes"] or row["leaked_bytes"] > old["leaked_bytes"]
                 or row["failed_closed"] > old["failed_closed"]
                 or row["selected_restore_exact"] < old["selected_restore_exact"]
                 or row["forwarded"] - row["selected_restore_exact"] > old["forwarded"] - old["selected_restore_exact"]
@@ -410,6 +459,7 @@ def main():
     parser.add_argument("--runtime-root", type=Path)
     parser.add_argument("--binary", type=Path)
     parser.add_argument("--policy", type=Path)
+    parser.add_argument("--session-binary", type=Path)
     parser.add_argument("--fixture", type=Path, default=FIXTURE)
     parser.add_argument("--compare", type=Path, nargs=2, metavar=("BASE", "CANDIDATE"))
     parser.add_argument("--output", type=Path, required=True)
@@ -422,7 +472,7 @@ def main():
         return 0 if all(row["verdict"] == "pass" for row in result["contracts"].values()) else 1
     if not all((args.binary, args.policy, args.runtime_root)):
         parser.error("capture requires --binary, --policy and --runtime-root")
-    result = measure(args.binary.resolve(), args.policy.resolve(), args.fixture, args.output, args.runtime_root.resolve())
+    result = measure(args.binary.resolve(), args.policy.resolve(), args.fixture, args.output, args.runtime_root.resolve(), args.session_binary)
     print(json.dumps(result["totals"], sort_keys=True))
     return 0
 
