@@ -2095,6 +2095,11 @@ async fn proxy_inner(
         CoveragePolicy::CodecProved => return Err(ProxyError::UnprovenCoverage),
     }
 
+    redacted
+        .transaction
+        .commit()
+        .map_err(|source| ProxyError::SessionCommit { source })?;
+
     let upstream_url = upstream_url(adapter.upstream_base(), &uri)?;
     let mut request = state
         .client
@@ -2875,34 +2880,73 @@ const CARRIER_SUBTREE_KEYS: &[&str] = &[
 /// [`Pipeline::redact`] pins. Passing it is what lets locale-gated recognizers
 /// (`postal.de`, `postal.us`, the national phone recognizers) run on proxied traffic at all.
 /// [`residual_scan_request`] MUST be given the same slice.
-fn redact_surfaces(
+fn redact_surfaces<'session>(
     pipeline: &Pipeline,
-    session: &Session,
+    session: &'session Session,
     surfaces: Vec<crate::adapter::PiiSurface<'_>>,
     locale_chain: &[LocaleTag],
     dictionaries: &DictionaryBundle,
-) -> Result<RedactedSurfaces, ProxyError> {
-    let mut redacted = RedactedSurfaces::default();
-    for surface in surfaces {
-        // `gaze clean --safety-net-fallback strict`'s Resolve step, so a net-flagged date becomes
-        // a token here instead of a refusal at admission. Admission stays the final
-        // gate.
-        let text = pipeline
-            .resolve_boundary_text(session, surface.text, locale_chain, dictionaries)
-            .map_err(|refusal| ProxyError::Refused { refusal })?;
-        pipeline
-            .admit_boundary_text(session, &text, locale_chain, dictionaries)
-            .map_err(|refusal| ProxyError::Refused { refusal })?;
-        *surface.text = text;
-        redacted.field_paths.insert(surface.field_path);
+) -> Result<RedactedSurfaces<'session>, ProxyError> {
+    let mut transaction = session.begin_transaction();
+    let mut texts = Vec::with_capacity(surfaces.len());
+    // Discover rule sources across all leaves without publishing mappings or partial output.
+    for surface in &surfaces {
+        texts.push(
+            pipeline
+                .resolve_boundary_text_transaction(
+                    &mut transaction,
+                    surface.text,
+                    locale_chain,
+                    dictionaries,
+                )
+                .map_err(|refusal| ProxyError::Refused { refusal })?,
+        );
     }
-    Ok(redacted)
+    let mut pseudonymizer =
+        PipelineRequestPseudonymizer::new(pipeline, locale_chain, dictionaries, &mut transaction);
+    for text in &mut texts {
+        *text = pseudonymizer
+            .protect(text)
+            .map_err(|_| ProxyError::Refused {
+                refusal: pseudonymizer
+                    .refusal
+                    .take()
+                    .unwrap_or_else(|| gaze::ProtectionError::Provenance.into()),
+            })?;
+    }
+    // A bounded pass must converge. New sibling spellings may grow the matcher; refuse
+    // rather than release an earlier leaf that would change under that final matcher.
+    for text in &texts {
+        let reproved = pseudonymizer
+            .protect(text)
+            .map_err(|_| ProxyError::Refused {
+                refusal: pseudonymizer
+                    .refusal
+                    .take()
+                    .unwrap_or_else(|| gaze::ProtectionError::Provenance.into()),
+            })?;
+        if &reproved != text {
+            return Err(ProxyError::Refused {
+                refusal: gaze::ProtectionError::Residual.into(),
+            });
+        }
+    }
+    let mut field_paths = HashSet::new();
+    for (surface, text) in surfaces.into_iter().zip(texts) {
+        *surface.text = text;
+        field_paths.insert(surface.field_path);
+    }
+    Ok(RedactedSurfaces {
+        field_paths,
+        transaction,
+    })
 }
 
-#[derive(Default)]
-struct RedactedSurfaces {
+struct RedactedSurfaces<'session> {
     /// Every redacted surface's field path, which the residual re-scan skips.
     field_paths: HashSet<String>,
+    /// Published only after the whole request's residual proof succeeds.
+    transaction: SessionTransaction<'session>,
 }
 
 /// Fails closed when the outbound legacy request body carries PII outside every adapter surface.
@@ -3312,6 +3356,7 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::UnprovenCoverage => "UnprovenCoverage",
         ProxyError::DirectAdapterMismatch => "DirectAdapterMismatch",
         ProxyError::Refused { .. } => "Refused",
+        ProxyError::SessionCommit { .. } => "SessionCommit",
         ProxyError::Pipeline { .. } => "Pipeline",
         ProxyError::Server { .. } => "Server",
         ProxyError::DaemonAlreadyRunning { .. } => "DaemonAlreadyRunning",
@@ -3430,7 +3475,7 @@ mod tests {
     }
 
     #[test]
-    fn net_admission_failure_discards_direct_staging_but_retains_legacy_live_mappings() {
+    fn net_admission_failure_discards_direct_and_legacy_staging() {
         struct RejectNet;
         impl gaze::SafetyNet for RejectNet {
             fn id(&self) -> &str {
@@ -3510,10 +3555,48 @@ mod tests {
             &DictionaryBundle::default()
         )
         .is_err());
-        assert_eq!(session.tokens().len(), 1);
+        assert!(session.tokens().is_empty());
+        assert_eq!(first, SYNTHETIC_EMAIL);
+        assert_eq!(second, "reject-this");
+    }
+
+    #[test]
+    fn legacy_residual_failure_discards_the_request_snapshot() {
+        let pipeline = email_pipeline();
+        let session =
+            Session::new(Scope::Conversation("synthetic-repeat-rollback".into())).unwrap();
+        let existing = session
+            .tokenize(&PiiClass::Email, "before@example.invalid")
+            .unwrap();
+        let before = session.snapshot_entries();
+        let adapter =
+            crate::adapters::OpenAiAdapter::new(Url::parse("http://127.0.0.1:1").unwrap());
+        let mut body = serde_json::json!({
+            "model":"gpt-test",
+            "messages":[{"role":"user","content":SYNTHETIC_EMAIL}],
+            "unsupported_carrier":"outside@example.invalid"
+        });
+        let staged = redact_surfaces(
+            &pipeline,
+            &session,
+            adapter.request_pii_surfaces(&mut body),
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+        )
+        .unwrap();
+        assert!(residual_scan_request(
+            &pipeline,
+            &body,
+            &staged.field_paths,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default()
+        )
+        .is_err());
+        drop(staged);
+        assert_eq!(session.snapshot_entries(), before);
         assert_eq!(
-            session.restore_strict_text(&first).unwrap(),
-            SYNTHETIC_EMAIL
+            session.restore_strict(&existing).unwrap(),
+            "before@example.invalid"
         );
     }
 

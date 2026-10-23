@@ -17,12 +17,20 @@ flowchart LR
 A full copy beats an enclosed weaker same-class fragment. Without uncovered
 copies, Gaze keeps the first resolution and adds only one linear scan.
 
-Within a text, sources protect copies before or after them. Across texts,
-sources protect only later texts. Daemon turns run in order. Proxy JSON strings
-(message content, tool results, arguments) are separate texts processed in order:
-a copy in an earlier field than its source can leak. A second proxy pass is a
-follow-up. Whole request bodies avoid chunk cuts; future streaming ingress must
-hold back `(longest value − 1)` bytes.
+Within a text, sources protect copies before or after them. Proxy requests stage
+all declared mutable JSON strings (message content, tool results, arguments)
+before revisiting the protected fields with the request's collected rule sources.
+A final proof rejects a request whose earlier fields would still change. Both
+passes retain existing tokens and their exact restore spelling. Mappings commit
+only after the whole request passes; a failure discards the staged session state.
+This also applies when the response uses SSE: request protection finishes before
+any upstream send.
+
+Across genuinely separate turns, sources protect only later turns. A declaration
+in a later request cannot revoke bytes already sent. Daemon turns still run in
+order. Buffering a complete request does not repair values split across separate
+transport frames or future requests; those need an explicit ingress framing
+contract.
 
 ## What propagates
 
@@ -96,7 +104,7 @@ expands to two scalars but keeps its source span; dotless `ı` does not match `I
 which lowers to `i`.
 
 Known gaps include lowercase/mixed-case lone parts, common-word surnames,
-sub-six-digit runs, earlier proxy fields, model-only sources, honorific names
+sub-six-digit runs, copies in already-sent turns, model-only sources, honorific names
 made solely of common words, and all-caps surnames in mixed-case names.
 `VAN DER BERG` has no distinctive part and relies on NER for changed-case copies.
 

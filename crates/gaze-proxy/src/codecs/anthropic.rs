@@ -136,6 +136,34 @@ impl BodyCodec for AnthropicCountTokensCodec {
     }
 }
 
+fn check_request_output_size(
+    input_bytes: usize,
+    output_bytes: usize,
+    ctx: &RequestTransformContext<'_>,
+) -> Result<(), CodecError> {
+    if output_bytes
+        > ctx
+            .limits()
+            .max_body_bytes()
+            .min(MAX_ANTHROPIC_REQUEST_BODY_BYTES)
+    {
+        return Err(codec_error(
+            CodecErrorCode::BodyLimitExceeded,
+            CodecPhase::RequestProof,
+        ));
+    }
+    if !ctx
+        .limits()
+        .output_within_growth_limit(input_bytes, output_bytes)
+    {
+        return Err(codec_error(
+            CodecErrorCode::GrowthLimitExceeded,
+            CodecPhase::RequestProof,
+        ));
+    }
+    Ok(())
+}
+
 fn protect_anthropic_request(
     input: &[u8],
     ctx: &mut RequestTransformContext<'_>,
@@ -167,32 +195,32 @@ fn protect_anthropic_request(
     ledger
         .finish()
         .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
+    // Enforce growth before another traversal can inspect expanded output.
+    let (collected, _) = write_document(&document, input)
+        .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
+    check_request_output_size(input.len(), collected.len(), ctx)?;
+    drop(collected);
+    // All request leaves have now supplied their rule sources. Revisit the protected
+    // tree before serialization so source-last copies cannot leave raw earlier fields.
+    let mut sweep_ledger = CoverageLedger::new(document.occurrence_count);
+    transform_request_root(
+        &mut document.root,
+        input,
+        ctx,
+        &mut sweep_ledger,
+        count_tokens,
+    )
+    .map_err(|code| request_codec_error(code, CodecPhase::RequestProtection, ctx))?;
+    sweep_ledger
+        .finish()
+        .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
     let expected_signed = collect_signed_slices(&document.root, input)
         .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
     let expected_authorized = collect_authorized_wire_chunks(&document.root)
         .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
     let (bytes, mut provenance) = write_document(&document, input)
         .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
-    if bytes.len()
-        > ctx
-            .limits()
-            .max_body_bytes()
-            .min(MAX_ANTHROPIC_REQUEST_BODY_BYTES)
-    {
-        return Err(codec_error(
-            CodecErrorCode::BodyLimitExceeded,
-            CodecPhase::RequestProof,
-        ));
-    }
-    if !ctx
-        .limits()
-        .output_within_growth_limit(input.len(), bytes.len())
-    {
-        return Err(codec_error(
-            CodecErrorCode::GrowthLimitExceeded,
-            CodecPhase::RequestProof,
-        ));
-    }
+    check_request_output_size(input.len(), bytes.len(), ctx)?;
     let mut reparsed = parse_json(&bytes, ctx.limits(), CodecPhase::RequestProof)?;
     let mut final_ledger = CoverageLedger::new(reparsed.occurrence_count);
     transform_request_root(

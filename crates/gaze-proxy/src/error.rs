@@ -54,6 +54,12 @@ pub enum ProxyError {
     /// Carries the typed [`gaze::ProtectionError`] and suspect classes only, never the text.
     #[error("request refused: {refusal}")]
     Refused { refusal: gaze::BoundaryRefusal },
+    /// The request's staged mappings could not be atomically published.
+    #[error("session commit failed: {source}")]
+    SessionCommit {
+        #[source]
+        source: gaze::SessionTransactionError,
+    },
     #[error("pipeline failed")]
     Pipeline {
         #[source]
