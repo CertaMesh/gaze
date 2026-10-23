@@ -24,13 +24,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(inputs.ner_threshold),
     )?
     .build()?;
-    if pipeline.safety_nets_len() != 0 {
+    if pipeline.safety_net_count() != 0 {
         return Err("native benchmark builder unexpectedly attached a safety net".into());
     }
     let model = std::env::var_os("GAZE_NYM_MODEL_DIR").map(PathBuf::from);
     let pipeline =
         gaze_assembly::attach_nym_safety_net(pipeline, &policy, model.as_deref(), None, None)?;
-    if pipeline.safety_nets_len() != 1 {
+    if pipeline.safety_net_count() != 1 {
         return Err("native benchmark requires exactly one configured Nym net".into());
     }
     let upstream = url::Url::parse(&args[3])?;
