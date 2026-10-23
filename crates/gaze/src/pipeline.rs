@@ -530,16 +530,29 @@ impl Pipeline {
         {
             pipeline.safety_net_registry = None;
         }
+        pipeline.control_would_mutate(transaction, input, locale_chain, dictionaries)
+    }
+
+    /// Probes an immutable control with the full pipeline and captured request evidence.
+    /// Mutations stay in a discarded transaction copy; audit attempts remain enabled.
+    pub fn control_would_mutate(
+        &self,
+        transaction: &SessionTransaction<'_>,
+        input: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<bool> {
         let mut probe = transaction.fork_for_probe();
-        let clean = pipeline
-            .pseudonymize_transaction_with_detect_context_and_prefix_cache_write_mode(
-                &mut probe,
-                RawDocument::Text(input.to_owned()),
-                locale_chain,
-                dictionaries,
-                PrefixCacheWriteMode::Suppress,
-            )?;
-        Ok(!matches!(clean, CleanDocument::Text(text) if text == input))
+        let (clean, spans, report) = self.clean_transaction_with_safety_net_policy_detect_context(
+            &mut probe,
+            RawDocument::Text(input.to_owned()),
+            locale_chain,
+            dictionaries,
+            SafetyNetPolicy::default(),
+        )?;
+        Ok(!matches!(clean, CleanDocument::Text(text) if text == input)
+            || !spans.is_empty()
+            || !report.suspects.is_empty())
     }
 
     /// The deterministic routing-control probe against immutable committed request evidence.
@@ -553,6 +566,24 @@ impl Pipeline {
     ) -> Result<bool> {
         let session = snapshot.session_for_probe();
         self.deterministic_control_would_mutate(
+            &session.begin_transaction(),
+            input,
+            locale_chain,
+            dictionaries,
+        )
+    }
+
+    /// The full control probe against immutable committed request evidence.
+    /// The snapshot remains restore-only; all probe mutations are discarded privately.
+    pub fn snapshot_control_would_mutate(
+        &self,
+        snapshot: &CommittedSessionSnapshot,
+        input: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<bool> {
+        let session = snapshot.session_for_probe();
+        self.control_would_mutate(
             &session.begin_transaction(),
             input,
             locale_chain,

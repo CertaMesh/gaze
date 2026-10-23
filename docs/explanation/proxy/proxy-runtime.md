@@ -121,7 +121,7 @@ protected. The probe uses a discarded copy of staged manifest state and cannot
 publish mappings or reuse prefix-cache state.
 
 Values outside that grammar run the full pipeline, including NER and safety
-nets, and fail closed on a change. Stop sequences, tool names and IDs,
+nets, against the captured request evidence and fail closed on a finding. Stop sequences, tool names and IDs,
 `previous_response_id`, message content, and every other field retain the full
 pipeline. A Gemini request JSON field named `model` also keeps the full pipeline;
 Gemini routes by the model in its URL. The identifier grammar does not prove that a

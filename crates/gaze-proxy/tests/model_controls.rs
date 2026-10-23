@@ -348,28 +348,41 @@ async fn exercise_models(ner: bool, net: bool) {
             }
             _ => unreachable!(),
         };
-        let model = known_body.as_object_mut().unwrap().remove("model");
-        let remaining = known_body.to_string();
-        let payload = model.map_or_else(
-            || remaining.clone(),
-            |model| format!("{{\"model\":{model},{}", &remaining[1..]),
-        );
-        let response = client
-            .post(format!("http://{bind}{known_path}"))
-            .header("x-api-key", "synthetic-key")
-            .header("anthropic-version", "2023-06-01")
-            .header("content-type", "application/json")
-            .body(payload)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(
-            response.status(),
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "{provider}: known rule-backed PII in the model must not reach upstream: {}",
-            response.text().await.unwrap()
-        );
-        assert_eq!(forwarded.lock().await.len(), before);
+        for outside_grammar in [false, true] {
+            let mut known_body = known_body.clone();
+            let known_path = if outside_grammar {
+                if provider == "gemini" {
+                    "/v1beta/models/session-secret%20:generateContent"
+                } else {
+                    known_body["model"] = json!("session-secret ");
+                    known_path
+                }
+            } else {
+                known_path
+            };
+            let model = known_body.as_object_mut().unwrap().remove("model");
+            let remaining = known_body.to_string();
+            let payload = model.map_or_else(
+                || remaining.clone(),
+                |model| format!("{{\"model\":{model},{}", &remaining[1..]),
+            );
+            let response = client
+                .post(format!("http://{bind}{known_path}"))
+                .header("x-api-key", "synthetic-key")
+                .header("anthropic-version", "2023-06-01")
+                .header("content-type", "application/json")
+                .body(payload)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "{provider}: known rule-backed PII in the model must not reach upstream: {}",
+                response.text().await.unwrap()
+            );
+            assert_eq!(forwarded.lock().await.len(), before);
+        }
         proxy.abort();
         upstream_task.abort();
     }
@@ -453,6 +466,7 @@ async fn response_models_keep_deterministic_and_full_fallback_checks() {
                 ("Claudé".to_string(), false),
                 (format!("{}claude-sonnet-5", "x.".repeat(65)), false),
                 ("session-secret".to_string(), false),
+                ("session-secret ".to_string(), false),
             ]
             .into_iter()
             .map(|(model, accepted)| ("model", model, accepted))

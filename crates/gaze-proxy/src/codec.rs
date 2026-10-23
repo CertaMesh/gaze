@@ -411,6 +411,15 @@ pub trait ResponseResidualValidator {
         authorized_output_ranges: &[Range<usize>],
     ) -> Result<(), CodecErrorCode>;
 
+    /// Validates a model outside the identifier grammar using full request evidence.
+    fn validate_full_model(
+        &mut self,
+        value: &str,
+        _snapshot: &CommittedSessionSnapshot,
+    ) -> Result<(), CodecErrorCode> {
+        self.validate(value, &[])
+    }
+
     /// Validates an immutable model identifier with deterministic recognizers only.
     /// The default preserves full validation for implementations without this capability.
     fn validate_deterministic_model(
@@ -593,7 +602,7 @@ impl<'a> ResponseTransformContext<'a> {
             self.residual
                 .validate_deterministic_model(value, self.snapshot)
         } else {
-            self.validate(value, &[])
+            self.residual.validate_full_model(value, self.snapshot)
         }
     }
 

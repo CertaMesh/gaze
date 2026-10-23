@@ -230,6 +230,11 @@ fn routing_control_probe_keeps_rule_manifest_evidence_without_publishing() {
             expected
         );
     }
+    for value in ["CatalogSecret ", "StagedSecret ", "LearnedOnly "] {
+        assert!(p
+            .snapshot_control_would_mutate(&snapshot, value, &[LocaleTag::Global], &dictionaries,)
+            .unwrap());
+    }
     assert_eq!(snapshot.tokens(), tokens_before);
     assert_eq!(session.snapshot_entries(), live_before);
 }

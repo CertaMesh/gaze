@@ -1488,6 +1488,22 @@ impl<'pipeline, 'context> PipelineResponseResidualValidator<'pipeline, 'context>
 }
 
 impl ResponseResidualValidator for PipelineResponseResidualValidator<'_, '_> {
+    fn validate_full_model(
+        &mut self,
+        value: &str,
+        snapshot: &CommittedSessionSnapshot,
+    ) -> Result<(), CodecErrorCode> {
+        let mutated = self
+            .pipeline
+            .snapshot_control_would_mutate(snapshot, value, self.locale_chain, self.dictionaries)
+            .map_err(|_| CodecErrorCode::ProviderOriginPii)?;
+        if mutated {
+            Err(CodecErrorCode::ProviderOriginPii)
+        } else {
+            Ok(())
+        }
+    }
+
     fn validate_deterministic_model(
         &mut self,
         value: &str,
@@ -3032,18 +3048,20 @@ fn residual_scan_model_control(
         }
         return Ok(());
     }
-    let session =
-        Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
-    let scan = RequestResidualScan {
-        pipeline,
-        session,
-        surfaced: &HashSet::new(),
-        locale_chain,
-        dictionaries,
-        model_is_routing_control: false,
-        routing_session,
-    };
-    scan.probe("model", text)
+    if pipeline
+        .control_would_mutate(
+            &routing_session.begin_transaction(),
+            text,
+            locale_chain,
+            dictionaries,
+        )
+        .map_err(|source| ProxyError::Pipeline { source })?
+    {
+        return Err(ProxyError::UnsurfacedPii {
+            field_path: "model".to_string(),
+        });
+    }
+    Ok(())
 }
 
 /// Walk state for the outbound request residual re-scan.
@@ -3200,11 +3218,11 @@ fn validate_legacy_response_models(
             {
                 return Err(ProxyError::ProviderOriginPii);
             }
-        } else {
-            PipelineResponseResidualValidator::new(pipeline, locales, dictionaries)
-                .map_err(|_| ProxyError::ProviderOriginPii)?
-                .validate(value, &[])
-                .map_err(|_| ProxyError::ProviderOriginPii)?;
+        } else if pipeline
+            .control_would_mutate(&session.begin_transaction(), value, locales, dictionaries)
+            .map_err(|_| ProxyError::ProviderOriginPii)?
+        {
+            return Err(ProxyError::ProviderOriginPii);
         }
     }
     Ok(())
