@@ -49,9 +49,10 @@ import record_id_ownership_cells as record_id_ownership
 import record_id_boundary_cells as record_id_boundary
 import full_name_case_cells as full_name_case
 import credential_code_cells as credential_code
+import invisible_separator_cells as invisible_separators
 
 
-GENERATOR_VERSION = 25
+GENERATOR_VERSION = 27
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -4484,6 +4485,7 @@ GENERATOR_ADDITIONS = {
     23: "credentials_escapes_",
     24: "credentials_separators_",
     25: "credentials_prefixes_",
+    27: "invisible_",
 }
 
 
@@ -4517,6 +4519,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    25: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v25.json"),
     24: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v24.json"),
     23: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v23.json"),
     22: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v22.json"),
@@ -4794,6 +4797,7 @@ def generate(partition: str) -> list[Record]:
         + credential_code.source_escape_records(sys.modules[__name__], partition)
         + credential_code.json_separator_records(sys.modules[__name__], partition)
         + credential_code.json_prefix_records(sys.modules[__name__], partition)
+        + invisible_separators.records(sys.modules[__name__], partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)
