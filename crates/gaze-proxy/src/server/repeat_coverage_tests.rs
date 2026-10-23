@@ -74,14 +74,6 @@ fn randomized_overlap_union_restores_and_covers_every_known_value() {
     let pipeline = pipeline();
     let dictionaries = DictionaryBundle::default();
     let locales = [LocaleTag::Global];
-    let words = [
-        "Maria",
-        "Schneider",
-        "Johanna",
-        "Brenner",
-        "Tobias",
-        "Lorena",
-    ];
     let mut random = 0x1c83_aa39_5276_004du64;
     let mut pick = |limit: usize| {
         random ^= random << 13;
@@ -90,6 +82,18 @@ fn randomized_overlap_union_restores_and_covers_every_known_value() {
         random as usize % limit
     };
     for case in 0..4096 {
+        let words = if case % 2 == 0 {
+            [
+                "Maria",
+                "Schneider",
+                "Johanna",
+                "Brenner",
+                "Tobias",
+                "Lorena",
+            ]
+        } else {
+            ["İpek", "Öztürk", "Johanna", "Brenner", "Márton", "Lorena"]
+        };
         let session = Session::new(Scope::Ephemeral).unwrap();
         let mut tx = session.begin_transaction();
         // 1..4 independently known values, with contained, prefix, suffix and
@@ -146,8 +150,13 @@ fn randomized_overlap_union_restores_and_covers_every_known_value() {
         for slot in 0..count {
             let index = slot * 2 + pick(2);
             let word = &word_ranges[index];
-            let start = word.start + pick(2);
-            let end = word.end - pick(2);
+            let boundaries = original[word.clone()]
+                .char_indices()
+                .map(|(offset, _)| word.start + offset)
+                .chain(std::iter::once(word.end))
+                .collect::<Vec<_>>();
+            let start = boundaries[pick(2)];
+            let end = boundaries[boundaries.len() - 1 - pick(2)];
             input.push_str(&original[cursor..start]);
             let token = tx
                 .tokenize(&gaze::PiiClass::Name, &original[start..end])
