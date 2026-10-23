@@ -439,8 +439,10 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
     return result
 
 
-def compare(base, candidate):
+def compare(base, candidate, *, gate_policy="strict"):
     """The transport layer's gain rule; C/A/D/R need their own admitted captures."""
+    if gate_policy not in {"strict", "paired"}:
+        raise ValueError("unknown proxy gate policy")
     identity = ("schema", "layer", "contract_labels", "scored_contracts", "fixture_sha256",
                 "harness_sha256", "session_host_sha256", "session_builder_sha256", "v2_contract_sha256", "policy_sha256")
     if (base["fixture_sha256"] != digest(FIXTURE)
@@ -476,7 +478,8 @@ def compare(base, candidate):
                 or row["gold_bytes"] != old["gold_bytes"] or row["leaked_bytes"] > old["leaked_bytes"]
                 or row["failed_closed"] > old["failed_closed"]
                 or row["selected_restore_exact"] < old["selected_restore_exact"]
-                or row["forwarded"] - row["selected_restore_exact"] > old["forwarded"] - old["selected_restore_exact"]
+                or ((gate_policy == "strict" or old["forwarded"])
+                    and row["forwarded"] - row["selected_restore_exact"] > old["forwarded"] - old["selected_restore_exact"])
                 or row["alignment_valid"] < old["alignment_valid"]
                 or row["owned_identities_preserved"] < old["owned_identities_preserved"]):
             regressions.append([row["provider"], row["id"]])
@@ -516,7 +519,7 @@ def compare(base, candidate):
         transitions.append({"provider": row["provider"], "id": row["id"],
                             "candidate": row, "base_source_first_control": control, "control_id": twin_id, "control_kind": control_kind,
                             "preexisting_fp_proven": proven})
-        if not proven:
+        if not proven and gate_policy == "strict":
             regressions.append([row["provider"], row["id"], "unproven admission FP"])
     leak_drop = old["leaked_bytes"] - new["leaked_bytes"]
     verdicts = {}
@@ -528,7 +531,13 @@ def compare(base, candidate):
         verdicts[contract] = {"verdict": "pass" if improved and not regressions else "fail",
                               "leaked_bytes_removed": leak_drop, "false_positive_bytes_added": fp_delta,
                               "net_bytes": leak_drop - fp_delta}
-    return {"schema": "gaze-proxy-request-order-comparison-v2", "contracts": verdicts,
+    stage_moves = [transition for transition in transitions
+                   if not transition["candidate"]["selected_restore_exact"]]
+    return {"schema": "gaze-proxy-request-order-comparison-v3", "contracts": verdicts,
+            "gate_policy": gate_policy,
+            "refused_in_both_stage_moved": stage_moves,
+            "unproven_admission_fp": [transition for transition in transitions
+                                      if not transition["preexisting_fp_proven"]],
             "regressions": regressions,
             "scope": "paired both-forwarded byte gate; refused-to-forwarded transitions reported separately without byte-gain credit; separate fresh C/A/D/R evidence required",
             "paired": {"cases": len(paired), "base": old, "candidate": new},
@@ -544,11 +553,13 @@ def main():
     parser.add_argument("--session-binary", type=Path)
     parser.add_argument("--fixture", type=Path, default=FIXTURE)
     parser.add_argument("--compare", type=Path, nargs=2, metavar=("BASE", "CANDIDATE"))
+    parser.add_argument("--gate-policy", choices=("strict", "paired"), default="strict",
+                        help="comparison only: paired excludes all newly forwarded cases from gate credit and reports their FP cost separately")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if args.compare:
-        result = compare(*(json.loads(path.read_text()) for path in args.compare))
+        result = compare(*(json.loads(path.read_text()) for path in args.compare), gate_policy=args.gate_policy)
         args.output.write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps(result["contracts"], sort_keys=True))
         return 0 if all(row["verdict"] == "pass" for row in result["contracts"].values()) else 1

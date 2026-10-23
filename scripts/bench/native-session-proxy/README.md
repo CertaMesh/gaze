@@ -53,3 +53,12 @@ constraints, then requires those constraints to reconstruct every authored leaf.
 Cross-leaf reused tokens resolve literal-gap ambiguity. Remaining ambiguity fails
 capture. Owned-token identity is checked at every original expanded position;
 extra copies elsewhere do not hide a replaced owned token.
+
+The default comparison requires proven admission FP controls. An explicitly
+reviewed paired gate uses `--gate-policy paired`: only targets forwarded by
+both arms contribute byte or restore gain. Newly forwarded targets, their full
+FP cost, and missing baseline controls remain separate evidence without gate
+credit. A base request refusal followed by a candidate owner-response refusal
+is reported as "refused in both arms; stage moved". An owner-response failure
+for a case that already forwarded in base still fails this gate. The response
+validator and its authorized-range contract are unchanged.

@@ -305,3 +305,38 @@ def test_a_wrong_owner_echo_is_not_accepted_or_used_to_hide_forwarded_bytes():
     with pytest.raises(bench.AmbiguousAlignment):
         bench.checked_document_mappings([{"text": "first|middle|last"}],
             [TOKEN + "|<1234abcd:Name_2>"], {}, {TOKEN: "wrong"})
+
+
+@pytest.mark.parametrize("candidate_restores", [0, 1])
+def test_explicit_paired_gate_reports_unproven_new_forwarding_without_gain_credit(candidate_restores):
+    baseline, candidate = capture_card(2), capture_card(0)
+    before, after = baseline["cases"][0], candidate["cases"][0]
+    before.update(forwarded=0, failed_closed=1, selected_restore_exact=0,
+                  alignment_valid=0, owned_identities_preserved=0, leaked_bytes=0)
+    after.update(selected_restore_exact=candidate_restores,
+                 false_positive_bytes_v1=10000, false_positive_bytes_v2=10000)
+    for card in (baseline, candidate):
+        card["totals"] = {key: sum(row[key] for row in card["cases"]) for key in card["totals"]}
+    assert bench.compare(baseline, candidate)["regressions"]
+    result = bench.compare(baseline, candidate, gate_policy="paired")
+    assert not result["regressions"]
+    assert result["paired"]["cases"] == len(baseline["cases"]) - 1
+    assert result["paired"]["candidate"]["false_positive_bytes_v2"] == 0
+    assert result["unproven_admission_fp"][0]["candidate"]["false_positive_bytes_v2"] == 10000
+    assert len(result["refused_in_both_stage_moved"]) == 1 - candidate_restores
+    assert all(row["verdict"] == "pass" for row in result["contracts"].values())
+    # New forwarding alone never supplies a byte or restoration gain.
+    for row in baseline["cases"]:
+        row["leaked_bytes"] = 0
+    baseline["totals"]["leaked_bytes"] = 0
+    assert all(row["verdict"] == "fail" for row in
+               bench.compare(baseline, candidate, gate_policy="paired")["contracts"].values())
+
+
+def test_paired_gate_still_rejects_owner_response_failure_for_an_already_forwarded_case():
+    baseline, candidate = capture_card(2), capture_card(0)
+    candidate["cases"][0]["selected_restore_exact"] = 0
+    candidate["totals"]["selected_restore_exact"] -= 1
+    result = bench.compare(baseline, candidate, gate_policy="paired")
+    assert result["regressions"]
+    assert all(row["verdict"] == "fail" for row in result["contracts"].values())
