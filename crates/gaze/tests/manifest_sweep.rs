@@ -161,6 +161,84 @@ fn clean(pipeline: &Pipeline, session: &Session, input: &str) -> String {
     text
 }
 
+#[test]
+fn routing_control_probe_keeps_rule_manifest_evidence_without_publishing() {
+    let audit = Audit::default();
+    let p = pipeline(vec!["LearnedOnly"], audit.clone());
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    clean(
+        &p,
+        &session,
+        "From: CatalogSecret <c@example.invalid>\nLearnedOnly",
+    );
+    let live_before = session.snapshot_entries();
+    let mut transaction = session.begin_transaction();
+    let dictionaries = DictionaryBundle::default();
+    p.pseudonymize_transaction_with_detect_context(
+        &mut transaction,
+        RawDocument::Text("From: StagedSecret <s@example.invalid>".into()),
+        &[LocaleTag::Global],
+        &dictionaries,
+    )
+    .unwrap();
+    let before = transaction.snapshot_entries();
+    let audit_before = audit.0.lock().unwrap().len();
+    assert!(p
+        .deterministic_control_would_mutate(
+            &transaction,
+            "CatalogSecret",
+            &[LocaleTag::Global],
+            &dictionaries,
+        )
+        .unwrap());
+    assert!(p
+        .deterministic_control_would_mutate(
+            &transaction,
+            "StagedSecret",
+            &[LocaleTag::Global],
+            &dictionaries,
+        )
+        .unwrap());
+    assert!(!p
+        .deterministic_control_would_mutate(
+            &transaction,
+            "LearnedOnly",
+            &[LocaleTag::Global],
+            &dictionaries,
+        )
+        .unwrap());
+    assert_eq!(transaction.snapshot_entries(), before);
+    assert_eq!(session.snapshot_entries(), live_before);
+    assert!(audit.0.lock().unwrap().len() > audit_before);
+
+    let snapshot = transaction.commit().unwrap();
+    let tokens_before = snapshot.tokens();
+    let live_before = session.snapshot_entries();
+    for (value, expected) in [
+        ("CatalogSecret", true),
+        ("StagedSecret", true),
+        ("LearnedOnly", false),
+    ] {
+        assert_eq!(
+            p.deterministic_snapshot_control_would_mutate(
+                &snapshot,
+                value,
+                &[LocaleTag::Global],
+                &dictionaries,
+            )
+            .unwrap(),
+            expected
+        );
+    }
+    for value in ["CatalogSecret ", "StagedSecret ", "LearnedOnly "] {
+        assert!(p
+            .snapshot_control_would_mutate(&snapshot, value, &[LocaleTag::Global], &dictionaries,)
+            .unwrap());
+    }
+    assert_eq!(snapshot.tokens(), tokens_before);
+    assert_eq!(session.snapshot_entries(), live_before);
+}
+
 fn tokens(text: &str) -> Vec<String> {
     Regex::new(r"<[0-9a-f]{8}:Name_\d+>")
         .unwrap()

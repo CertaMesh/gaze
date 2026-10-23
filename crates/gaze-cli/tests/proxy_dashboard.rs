@@ -162,7 +162,44 @@ impl Drop for ServeProbe {
 fn serve_without_dashboard_flags_prints_no_dashboard_line_and_serves() {
     let mut probe = ServeProbe::spawn(&[]);
     probe.assert_provider_serving();
-    assert_no_line_containing(&probe.stop_and_collect_stderr(), "gaze dashboard");
+    let stderr = probe.stop_and_collect_stderr();
+    assert_no_line_containing(&stderr, "gaze dashboard");
+    assert_no_ner_warning_once(&stderr);
+}
+
+fn assert_no_ner_warning_once(stderr: &[String]) {
+    assert_eq!(
+        stderr
+            .iter()
+            .filter(|line| line.as_str()
+                == "warning: no NER model configured: person names are not detected")
+            .count(),
+        1,
+        "{stderr:?}"
+    );
+}
+
+#[test]
+fn serve_with_policy_without_ner_warns_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let policy = dir.path().join("policy.toml");
+    std::fs::write(
+        &policy,
+        r#"
+schema_version = "0.1.0"
+[session]
+scope = "ephemeral"
+[policy.rulepacks]
+bundled = ["core"]
+[[rule]]
+kind = "default"
+action = "tokenize"
+"#,
+    )
+    .unwrap();
+    let mut probe = ServeProbe::spawn(&["--policy", policy.to_str().unwrap()]);
+    probe.assert_provider_serving();
+    assert_no_ner_warning_once(&probe.stop_and_collect_stderr());
 }
 
 #[test]

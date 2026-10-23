@@ -2252,7 +2252,7 @@ fn transform_request_root(
         ledger.mark(member.key_occurrence)?;
         match member.key.value.as_str() {
             "model" => {
-                request_nonempty_string_control(&mut member.value, ctx, ledger)?;
+                request_model_control(&mut member.value, ctx, ledger)?;
                 saw_model = true;
             }
             "service_tier" => request_enum_string_control(
@@ -2839,6 +2839,25 @@ fn protect_key(
     ctx.validate_token_shapes(&key.value)?;
     key.value = ctx.protect(&key.value)?;
     Ok(())
+}
+
+fn request_model_control(
+    node: &mut JsonNode,
+    ctx: &mut RequestTransformContext<'_>,
+    ledger: &mut CoverageLedger,
+) -> Result<(), CodecErrorCode> {
+    ledger.mark(node.occurrence)?;
+    let value = string_value(node)?;
+    if value.is_empty() {
+        return Err(CodecErrorCode::UnsupportedRequestSurface);
+    }
+    guard_request_mutable_text(value, ctx)?;
+    ctx.validate_token_shapes(value)?;
+    if ctx.model_control_would_mutate(value)? {
+        Err(CodecErrorCode::ControlWouldMutate)
+    } else {
+        Ok(())
+    }
 }
 
 fn request_string_control(
@@ -3574,7 +3593,7 @@ fn transform_response_root(
                 saw_role = true;
             }
             "model" => {
-                response_nonempty_string_control(&mut member.value, ctx, ledger)?;
+                response_model_control(&mut member.value, ctx, ledger)?;
                 saw_model = true;
             }
             "stop_reason" => {
@@ -3948,6 +3967,20 @@ fn response_string_control(
     };
     guard_mutable_text_response(&value.value)?;
     ctx.validate(&value.value, &[])
+}
+
+fn response_model_control(
+    node: &mut JsonNode,
+    ctx: &mut ResponseTransformContext<'_>,
+    ledger: &mut CoverageLedger,
+) -> Result<(), CodecErrorCode> {
+    ledger.mark(node.occurrence)?;
+    let value = string_value(node)?;
+    if value.is_empty() {
+        return Err(CodecErrorCode::UnsupportedResponseSurface);
+    }
+    guard_mutable_text_response(value)?;
+    ctx.validate_model(value)
 }
 
 fn response_nonempty_string_control(

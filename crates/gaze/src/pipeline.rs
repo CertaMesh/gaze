@@ -35,7 +35,7 @@ use crate::registry::{Candidate, DetectContext, Recognizer, RecognizerRegistry};
 use crate::rule::{Action, Rule, RuleContext};
 use crate::rulepack::RulepackError;
 use crate::safety_net_scan::SafetyNetScanText;
-use crate::session::{RestoreEvent, Session, SessionTransaction};
+use crate::session::{CommittedSessionSnapshot, RestoreEvent, Session, SessionTransaction};
 use crate::spelling::{JsonStringLiterals, SourceSpelling};
 use crate::sweep::{ManifestEvidence, SweepLink, SweepMatcher, SweepSource};
 use crate::types::{CleanDocument, RawDocument, Value};
@@ -508,6 +508,89 @@ impl std::fmt::Debug for Pipeline {
 }
 
 impl Pipeline {
+    /// Tests an immutable routing control using only recognizers that declare rule evidence.
+    ///
+    /// Rules, dictionaries, validators, locale eligibility and policy actions are preserved.
+    /// Learned recognizers and safety nets do not run. The caller must restrict this probe to
+    /// bounded machine identifiers; free text needs the full protection boundary. The probe
+    /// retains rule-backed manifest evidence in an isolated copy of the staged transaction.
+    /// It never publishes caller session state or reuses prefix-cache state.
+    /// Configured loggers still receive metadata-only audit attempts.
+    pub fn deterministic_control_would_mutate(
+        &self,
+        transaction: &SessionTransaction<'_>,
+        input: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<bool> {
+        let mut pipeline = self.clone();
+        pipeline.registry = Arc::new(self.registry.deterministic_only());
+        pipeline.safety_nets.clear();
+        #[cfg(feature = "bundled-recognizers")]
+        {
+            pipeline.safety_net_registry = None;
+        }
+        pipeline.control_would_mutate(transaction, input, locale_chain, dictionaries)
+    }
+
+    /// Probes an immutable control with the full pipeline and captured request evidence.
+    /// Mutations stay in a discarded transaction copy; audit attempts remain enabled.
+    pub fn control_would_mutate(
+        &self,
+        transaction: &SessionTransaction<'_>,
+        input: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<bool> {
+        let mut probe = transaction.fork_for_probe();
+        let (clean, spans, report) = self.clean_transaction_with_safety_net_policy_detect_context(
+            &mut probe,
+            RawDocument::Text(input.to_owned()),
+            locale_chain,
+            dictionaries,
+            SafetyNetPolicy::default(),
+        )?;
+        Ok(!matches!(clean, CleanDocument::Text(text) if text == input)
+            || !spans.is_empty()
+            || !report.suspects.is_empty())
+    }
+
+    /// The deterministic routing-control probe against immutable committed request evidence.
+    /// The snapshot remains restore-only; all probe mutations are discarded privately.
+    pub fn deterministic_snapshot_control_would_mutate(
+        &self,
+        snapshot: &CommittedSessionSnapshot,
+        input: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<bool> {
+        let session = snapshot.session_for_probe();
+        self.deterministic_control_would_mutate(
+            &session.begin_transaction(),
+            input,
+            locale_chain,
+            dictionaries,
+        )
+    }
+
+    /// The full control probe against immutable committed request evidence.
+    /// The snapshot remains restore-only; all probe mutations are discarded privately.
+    pub fn snapshot_control_would_mutate(
+        &self,
+        snapshot: &CommittedSessionSnapshot,
+        input: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<bool> {
+        let session = snapshot.session_for_probe();
+        self.control_would_mutate(
+            &session.begin_transaction(),
+            input,
+            locale_chain,
+            dictionaries,
+        )
+    }
+
     /// The recognizer registry this pipeline detects with: every registered
     /// recognizer by id, the collision-family table, and the member classes a
     /// family token derives its action from.
