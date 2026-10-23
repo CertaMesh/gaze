@@ -18,10 +18,12 @@ A full copy beats an enclosed weaker same-class fragment. Without uncovered
 copies, Gaze keeps the first resolution and adds only one linear scan.
 
 Within a text, sources protect copies before or after them. Proxy requests stage
-all declared mutable JSON strings (message content, tool results, arguments)
-before revisiting the protected fields with the request's collected rule sources.
-A final proof rejects a request whose earlier fields would still change. Both
-passes retain existing tokens and their exact restore spelling. Mappings commit
+all declared mutable JSON strings (message content, tool results, arguments).
+Discovery collects rule sources from the original fields and discards its output.
+Each original field is then protected against the complete request evidence, so
+an earlier short-name token cannot hide part of a longer repeat. A final proof
+re-protects the original fields and rejects any output that would still change.
+Caller-supplied session tokens retain their exact restore spelling. Mappings commit
 only after the whole request passes; a failure discards the staged session state.
 This also applies when the response uses SSE: request protection finishes before
 any upstream send.

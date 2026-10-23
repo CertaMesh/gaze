@@ -107,7 +107,7 @@ def test_admission_fp_is_separate_and_requires_an_existing_pipeline_control():
     retotal(baseline)
     retotal(candidate)
     result = bench.compare(baseline, candidate)
-    assert result["paired"]["cases"] == 26
+    assert result["paired"]["cases"] == len(baseline["cases"]) - 1
     assert result["refused_to_forwarded"][0]["preexisting_fp_proven"]
     # Admission and restore-count gains cannot replace paired byte improvement.
     assert all(item["verdict"] == "fail" for item in result["contracts"].values())
@@ -178,7 +178,8 @@ def test_post_forward_response_errors_cannot_hide_request_leaks(monkeypatch, tmp
 
     monkeypatch.setattr(bench, "request_json", fail_after_forward)
     result = bench.measure(binary, policy, bench.FIXTURE, tmp_path / "result.json", tmp_path)
-    assert result["totals"]["forwarded"] == result["totals"]["attempted"] == 27
+    expected = len(json.loads(bench.FIXTURE.read_text())["cases"]) * len(bench.PROVIDERS)
+    assert result["totals"]["forwarded"] == result["totals"]["attempted"] == expected
     assert result["totals"]["failed_closed"] == 0
     assert result["totals"]["leaked_bytes"] == result["totals"]["gold_bytes"] > 0
     assert result["totals"]["selected_restore_exact"] == 0

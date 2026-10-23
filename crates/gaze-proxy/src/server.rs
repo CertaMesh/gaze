@@ -2975,34 +2975,32 @@ fn redact_surfaces<'session>(
     let mut texts = Vec::with_capacity(surfaces.len());
     // Discover rule sources across all leaves without publishing mappings or partial output.
     for surface in &surfaces {
-        texts.push(
-            pipeline
-                .resolve_boundary_text_transaction(
-                    &mut transaction,
-                    surface.text,
-                    locale_chain,
-                    dictionaries,
-                )
-                .map_err(|refusal| ProxyError::Refused { refusal })?,
-        );
+        pipeline
+            .resolve_boundary_text_transaction(
+                &mut transaction,
+                surface.text,
+                locale_chain,
+                dictionaries,
+            )
+            .map_err(|refusal| ProxyError::Refused { refusal })?;
     }
     let mut pseudonymizer =
         PipelineRequestPseudonymizer::new(pipeline, locale_chain, dictionaries, &mut transaction);
-    for text in &mut texts {
-        *text = pseudonymizer
-            .protect(text)
-            .map_err(|_| ProxyError::Refused {
+    for surface in &surfaces {
+        texts.push(pseudonymizer.protect(surface.text).map_err(|_| {
+            ProxyError::Refused {
                 refusal: pseudonymizer
                     .refusal
                     .take()
                     .unwrap_or_else(|| gaze::ProtectionError::Provenance.into()),
-            })?;
+            }
+        })?);
     }
-    // A bounded pass must converge. New sibling spellings may grow the matcher; refuse
-    // rather than release an earlier leaf that would change under that final matcher.
-    for text in &texts {
+    // Prove against original leaves: a shorter token must not hide a longer repeat.
+    // New sibling spellings may grow the matcher; refuse if final evidence changes output.
+    for (surface, text) in surfaces.iter().zip(&texts) {
         let reproved = pseudonymizer
-            .protect(text)
+            .protect(surface.text)
             .map_err(|_| ProxyError::Refused {
                 refusal: pseudonymizer
                     .refusal

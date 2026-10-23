@@ -200,8 +200,9 @@ fn protect_anthropic_request(
         .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
     check_request_output_size(input.len(), collected.len(), ctx)?;
     drop(collected);
-    // All request leaves have now supplied their rule sources. Revisit the protected
-    // tree before serialization so source-last copies cannot leave raw earlier fields.
+    // Discard discovery output. Original leaves keep longer repeats contiguous even
+    // when discovery protected an overlapping shorter name before finding its source.
+    document = parse_json(input, ctx.limits(), CodecPhase::RequestProtection)?;
     let mut sweep_ledger = CoverageLedger::new(document.occurrence_count);
     transform_request_root(
         &mut document.root,
@@ -221,11 +222,12 @@ fn protect_anthropic_request(
     let (bytes, mut provenance) = write_document(&document, input)
         .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
     check_request_output_size(input.len(), bytes.len(), ctx)?;
-    let mut reparsed = parse_json(&bytes, ctx.limits(), CodecPhase::RequestProof)?;
-    let mut final_ledger = CoverageLedger::new(reparsed.occurrence_count);
+    // Convergence must be proved from original content, not already-tokenized gaps.
+    let mut reproved_document = parse_json(input, ctx.limits(), CodecPhase::RequestProof)?;
+    let mut final_ledger = CoverageLedger::new(reproved_document.occurrence_count);
     transform_request_root(
-        &mut reparsed.root,
-        &bytes,
+        &mut reproved_document.root,
+        input,
         ctx,
         &mut final_ledger,
         count_tokens,
@@ -234,13 +236,13 @@ fn protect_anthropic_request(
     final_ledger
         .finish()
         .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
-    if !json_semantically_equal(&document.root, &reparsed.root) {
+    if !json_semantically_equal(&document.root, &reproved_document.root) {
         return Err(codec_error(
             CodecErrorCode::InternalCoverageFailure,
             CodecPhase::RequestProof,
         ));
     }
-    let (reproved, _) = write_document(&reparsed, &bytes)
+    let (reproved, _) = write_document(&reproved_document, input)
         .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
     if reproved != bytes {
         return Err(codec_error(
@@ -248,6 +250,7 @@ fn protect_anthropic_request(
             CodecPhase::RequestProof,
         ));
     }
+    let reparsed = parse_json(&bytes, ctx.limits(), CodecPhase::RequestProof)?;
     prove_request_logical_domains(&reparsed.root, reparsed.occurrence_count, ctx)
         .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
     provenance.set_occurrence_count(reparsed.occurrence_count);

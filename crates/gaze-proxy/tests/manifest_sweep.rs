@@ -197,6 +197,17 @@ async fn run_case(
     source_first: bool,
     evidence: Option<gaze::EvidenceKind>,
 ) {
+    run_text_case(provider, stream, source_first, evidence, SOURCE, COPY).await;
+}
+
+async fn run_text_case(
+    provider: Provider,
+    stream: bool,
+    source_first: bool,
+    evidence: Option<gaze::EvidenceKind>,
+    source: &str,
+    copy: &str,
+) {
     let forwarded = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()
         .route("/{*path}", post(capture))
@@ -254,9 +265,9 @@ async fn run_case(
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     let texts = if source_first {
-        [SOURCE, COPY, PUBLIC]
+        [source, copy, PUBLIC]
     } else {
-        [COPY, PUBLIC, SOURCE]
+        [copy, PUBLIC, source]
     };
     let request = match provider {
         Provider::OpenAi | Provider::Anthropic => json!({
@@ -285,17 +296,15 @@ async fn run_case(
     assert_eq!(captured.len(), 1);
     for (index, raw) in texts.iter().enumerate() {
         let protected = provider.text(&captured[0], index);
-        if *raw == PUBLIC || (*raw == COPY && evidence != Some(gaze::EvidenceKind::Rule)) {
+        if *raw == PUBLIC || (*raw == copy && evidence != Some(gaze::EvidenceKind::Rule)) {
             assert_eq!(protected, *raw, "{provider:?} counterweight");
         } else {
-            assert!(
-                !protected.to_lowercase().contains("maria"),
-                "{provider:?}: {protected}"
-            );
-            assert!(
-                !protected.to_lowercase().contains("schneider"),
-                "{provider:?}: {protected}"
-            );
+            for part in ["maria", "schneider", "johanna"] {
+                assert!(
+                    !protected.to_lowercase().contains(part),
+                    "{provider:?} stream={stream} source_first={source_first}: {protected}"
+                );
+            }
         }
     }
     let restored = if stream {
@@ -355,4 +364,50 @@ async fn learned_sources_never_propagate_across_request_fields() {
             run_case(provider, false, false, evidence).await;
         }
     }
+}
+
+async fn check_partial_overlaps(provider: Provider) {
+    for (source, copy) in [
+        (
+            SOURCE,
+            "From: Maria <m@example.invalid>\nHello Maria schneider",
+        ),
+        (
+            SOURCE,
+            "From: Schneider <m@example.invalid>\nHello maria Schneider",
+        ),
+        (
+            "From: Maria Johanna Schneider <m@example.invalid>\nHello.",
+            "From: Johanna <m@example.invalid>\nHello maria Johanna schneider",
+        ),
+    ] {
+        for stream in [false, true] {
+            for source_first in [false, true] {
+                run_text_case(
+                    provider,
+                    stream,
+                    source_first,
+                    Some(gaze::EvidenceKind::Rule),
+                    source,
+                    copy,
+                )
+                .await;
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn openai_partial_overlaps_use_original_fields() {
+    check_partial_overlaps(Provider::OpenAi).await;
+}
+
+#[tokio::test]
+async fn gemini_partial_overlaps_use_original_fields() {
+    check_partial_overlaps(Provider::Gemini).await;
+}
+
+#[tokio::test]
+async fn anthropic_partial_overlaps_use_original_fields() {
+    check_partial_overlaps(Provider::Anthropic).await;
 }
