@@ -24,7 +24,7 @@ class WrapperCellsTests(unittest.TestCase):
     def test_genuine_csv_cells_and_private_public_gold(self):
         for partition in api.PARTITIONS:
             rows = cells.records(api, partition)
-            self.assertEqual(len(rows), len(WRAPPERS) * (21 * 3 * 3 + 48) + 1035)
+            self.assertEqual(len(rows), len(WRAPPERS) * (21 * 3 * 3 + 96) + 1629)
             self.assertEqual(len(rows), len({row.uid for row in rows}))
             self.assertEqual({row.family for row in rows}, set(cells.LABELS))
             for row in rows:
@@ -62,7 +62,18 @@ class WrapperCellsTests(unittest.TestCase):
                     parsed = json.loads(text)
                     self.assertEqual(parsed["public_version"], cells.PUBLIC[partition][2])
                     self.assertTrue(parsed["note"].startswith('"'))
-                if "_json_depth" in row.surface or "_ascii_" in row.surface:
+                if "_json_depth" in row.surface or "_ascii_" in row.surface or "_stream_tail_" in row.surface:
+                    if row.surface.endswith('_stream') or '_stream_tail_' in row.surface:
+                        suffix = row.surface.split('_ascii_' if '_ascii_' in row.surface else '_stream_tail_', 1)[1]
+                        depth = int(suffix.split('_')[1])
+                        for _ in range(depth - 1):
+                            parsed = json.loads(text)
+                            self.assertEqual(parsed['public_version'], cells.PUBLIC[partition][2])
+                            text = parsed['note']
+                        self.assertIn('"public_version":"' + cells.PUBLIC[partition][2] + '"', text)
+                        with self.assertRaises(json.JSONDecodeError):
+                            json.loads(text)
+                        continue
                     parsed = json.loads(text)
                     while isinstance(parsed, dict):
                         self.assertEqual(parsed["public_version"], cells.PUBLIC[partition][2])
