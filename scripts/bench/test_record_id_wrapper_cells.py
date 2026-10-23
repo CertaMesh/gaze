@@ -24,7 +24,7 @@ class WrapperCellsTests(unittest.TestCase):
     def test_genuine_csv_cells_and_private_public_gold(self):
         for partition in api.PARTITIONS:
             rows = cells.records(api, partition)
-            self.assertEqual(len(rows), len(WRAPPERS) * 21 * 3 * 3 + 900)
+            self.assertEqual(len(rows), len(WRAPPERS) * 21 * 3 * 3 + 1035)
             self.assertEqual(len(rows), len({row.uid for row in rows}))
             self.assertEqual({row.family for row in rows}, set(cells.LABELS))
             for row in rows:
@@ -58,6 +58,10 @@ class WrapperCellsTests(unittest.TestCase):
                         self.assertEqual(public, cells.PUBLIC[partition][2])
                         if row.gold:
                             self.assertIn(row.gold[-1].value.replace("''", "'"), private)
+                if "_open_cell_json_" in row.surface:
+                    parsed = json.loads(text)
+                    self.assertEqual(parsed["public_version"], cells.PUBLIC[partition][2])
+                    self.assertTrue(parsed["note"].startswith('"'))
                 if "_json_depth" in row.surface:
                     parsed = json.loads(text)
                     while isinstance(parsed, dict):

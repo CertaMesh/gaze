@@ -1453,10 +1453,10 @@ fn encoded_scalar_boundary(input: &str, opening: usize) -> Option<EnclosingScala
                     .as_ref()
                     .is_none_or(|(json_close, _)| close > json_close)
         }) {
-            let end = view
-                .source
-                .get(close)
-                .map_or(input.len(), |range| range.start);
+            let end = view.source.get(close).map_or_else(
+                || view.source.last().map_or(input.len(), |range| range.end),
+                |range| range.start,
+            );
             return Some(EnclosingScalarBoundary {
                 end,
                 absent_value,
