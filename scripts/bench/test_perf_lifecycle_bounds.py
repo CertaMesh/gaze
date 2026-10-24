@@ -6,7 +6,7 @@ import re
 import unittest
 
 import perf_attribution as perf
-from perf_lifecycle_contract import CLOCK_CHECKS, CLOCK_GRAPH, CLOCK_PHASES, RECOGNIZERS, REQUEST_ASSEMBLY, clock_values, violates_check
+from perf_lifecycle_contract import HOOK_AUDIT, HOOK_RELATIONS, CLOCK_CHECKS, CLOCK_GRAPH, CLOCK_PHASES, RECOGNIZERS, REQUEST_ASSEMBLY, clock_values, violates_check
 from test_perf_attribution import trace
 
 
@@ -79,6 +79,31 @@ class BoundTests(unittest.TestCase):
             policy = Path(tmp) / 'policy'
             policy.write_text(POLICY)
             return perf.validate_lifecycle(rows, 1, daemon=daemon, policy=policy, required=True)
+
+    def test_hook_audit_covers_every_clock_and_counter(self):
+        audited = [key for hooks, _, _ in HOOK_AUDIT for key in hooks]
+        self.assertEqual(len(audited), len(set(audited)))
+        self.assertEqual(set(audited), perf.METRICS | perf.COUNTERS | {RECOGNIZERS})
+
+    def test_zero_duration_model_hooks_and_zero_window_views_admit(self):
+        rows = records()
+        for metric in (*rows[1]['metrics'].values(), *rows[1]['recognizers'].values()):
+            metric['ns'] = 0
+        self.admit(rows)
+        for model in ('ner', 'nym'):
+            rows[1]['metrics'][model + '_ort_ns']['invocations'] = 0
+            rows[1]['counters'][model + '_windows'] = 0
+        rows[1]['counters'].update(nym_windows_stable=0, nym_windows_neutral=0)
+        self.admit(rows)
+
+    def test_extra_waits_and_many_windows_per_tokenize_admit(self):
+        rows = records()
+        for model in ('ner', 'nym'):
+            rows[1]['metrics'][model + '_ort_ns']['invocations'] = 3
+            rows[1]['metrics'][model + '_mutex_wait_ns']['invocations'] = 4
+            rows[1]['counters'][model + '_windows'] = 3
+        rows[1]['counters']['nym_windows_stable'] = 3
+        self.admit(rows)
 
     def test_inactive_nym(self):
         rows = records()
@@ -578,6 +603,71 @@ for check in CLOCK_CHECKS:
 for key, phases in CLOCK_PHASES.items():
     for forbidden in {'startup', 'request'} - set(phases):
         setattr(BoundTests, 'test_phase_' + key, phase_test(key, forbidden))
+
+
+# Exact independent record edits supplied by the prerequisite/view review.
+REVIEWER_PREREQUISITES = {
+    "ner-ort-without-mutex": ({"ner_mutex_wait_ns": {"ns": 0, "invocations": 0}}, {}),
+    "nym-ort-without-mutex": ({"nym_mutex_wait_ns": {"ns": 0, "invocations": 0}}, {}),
+    "ner-ort-outnumbers-waits": ({"ner_ort_ns": {"invocations": 2}}, {"ner_windows": 2}),
+    "nym-ort-outnumbers-waits": ({"nym_ort_ns": {"invocations": 2}}, {"nym_windows": 2, "nym_windows_stable": 2}),
+    "ner-ort-without-tokenize": ({"ner_tokenize_ns": {"ns": 0, "invocations": 0}}, {"ner_encodes": 0}),
+    "nym-ort-without-tokenize": ({"nym_tokenize_ns": {"ns": 0, "invocations": 0}}, {}),
+    "nym-stable-window-without-stable-view": ({"nym_stable_ns": {"ns": 0, "invocations": 0}}, {}),
+    "neutral-windows-without-neutral-view": ({"nym_neutral_ns": {"ns": 0, "invocations": 0}},
+                                             {"nym_windows_stable": 0, "nym_windows_neutral": 1}),
+}
+
+
+def reviewer_prerequisite_test(changes):
+    def test(self):
+        rows = records()
+        metrics, counters = changes
+        for key, values in metrics.items():
+            rows[1]["metrics"][key].update(values)
+        rows[1]["counters"].update(counters)
+        with self.assertRaisesRegex(ValueError, 'lifecycle prerequisite mismatch'):
+            self.admit(rows)
+    return test
+
+
+for name, changes in REVIEWER_PREREQUISITES.items():
+    setattr(BoundTests, 'test_reviewer_' + name.replace('-', '_'), reviewer_prerequisite_test(changes))
+
+
+def prerequisite_test(relation, *, isolated):
+    def test(self):
+        rows = records()
+        record = rows[1]
+        # Independent of elapsed time: all hooks are invoked at zero resolution.
+        for metric in (*record['metrics'].values(), *record['recognizers'].values()):
+            metric['ns'] = 0
+        if relation.kind == 'at-least':
+            record['metrics'][relation.trigger]['invocations'] = 2
+            if relation.trigger in ('ner_ort_ns', 'nym_ort_ns'):
+                model = relation.trigger.split('_')[0]
+                record['counters'][model + '_windows'] = 2
+                if model == 'nym':
+                    record['counters']['nym_windows_stable'] = 2
+        else:
+            record['metrics'][relation.prerequisite]['invocations'] = 0
+            if relation.prerequisite == 'ner_tokenize_ns':
+                record['counters']['ner_encodes'] = 0
+            if relation.kind == 'counter-owner':
+                record['counters'].update(nym_windows_stable=0, nym_windows_neutral=0)
+                record['counters'][relation.trigger] = 1
+        # Some direct prerequisites are also implied transitively (ORT -> wait
+        # -> tokenize). Test each alone for mutation proof and with all checks.
+        with patch.object(perf, 'HOOK_RELATIONS', (relation,) if isolated else HOOK_RELATIONS):
+            with self.assertRaisesRegex(ValueError, relation.id if isolated else 'prerequisite'):
+                self.admit(rows)
+    return test
+
+
+for relation in HOOK_RELATIONS:
+    for isolated in (True, False):
+        prefix = 'test_prerequisite_' if isolated else 'test_full_prerequisite_'
+        setattr(BoundTests, prefix + relation.id.replace('-', '_'), prerequisite_test(relation, isolated=isolated))
 
 
 if __name__ == '__main__':

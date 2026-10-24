@@ -330,24 +330,50 @@ class LifecycleTests(unittest.TestCase):
                                     "recognizer-role", config=config, roles={}))
 
     @unittest.skipUnless(os.environ.get("GAZE_ATTRIBUTION_TEST_BINARY"), "requires a locally built timer CLI")
-    def test_real_cli_ner_tuning_without_model_admits(self):
+    def test_real_cli_model_free_policy_matrix_admits(self):
         binary = Path(os.environ["GAZE_ATTRIBUTION_TEST_BINARY"]).resolve()
         proof = json.loads(Path(__file__).with_name("perf-lifecycle-synthetic-proof.json").read_text())
         self.assertEqual(perf.file_sha(binary), proof["timer_binary_sha256"])
-        for tuning in ('threshold=0.3', 'locale="de-DE"'):
-            with self.subTest(tuning=tuning), tempfile.TemporaryDirectory() as tmp:
+        base = ('schema_version="0.1.0"\n[session]\nscope="conversation"\n'
+                '[policy.rulepacks]\nbundled=["core"]\n'
+                '[[rule]]\nkind="default"\naction="tokenize"\n')
+        policies = {
+            'rule': '',
+            'custom-regex': ('[[policy.custom_recognizers]]\nkind="regex"\nname="synthetic-order"\n'
+                             'pattern="SYNTH-[0-9]+"\nclass="custom:order_id"\n'),
+            'ner-threshold': '[ner]\nthreshold=0.3\n',
+            'ner-locale': '[ner]\nlocale="de-DE"\n',
+            'dob-disabled': '[dob_judge]\nenabled=false\n',
+            'nym-inactive': '[safety_net.nym]\nmodel_dir="/synthetic/unused"\n',
+        }
+        for name, settings in policies.items():
+            with self.subTest(policy=name), tempfile.TemporaryDirectory() as tmp:
                 policy = Path(tmp) / "policy.toml"
-                policy.write_text('schema_version="0.1.0"\n[session]\nscope="conversation"\n'
-                                  '[policy.rulepacks]\nbundled=["core"]\n[safety_net]\nbackend="none"\n'
-                                  '[[rule]]\nkind="default"\naction="tokenize"\n[ner]\n' + tuning + '\n')
+                policy.write_text(base + settings)
                 self.assertEqual(perf.policy_models(policy), [])
-                docs = [perf.Document("one", "alice@example.invalid", "synthetic")]
+                text = "SYNTH-123 alice@example.invalid"
+                docs = [perf.Document("one", text, perf.sha(text.encode()))]
                 for one_shot in (True, False):
                     rows = perf.run_pass(binary, policy, docs, warmups=0, dry=True, timeout=30,
                                          per_file=one_shot, require_timers=True)
                     self.assertEqual(len(rows), 1)
                     self.assertEqual(rows[0]["startup_trace"]["metrics"]["model_constructor_ns"]["invocations"], 0)
                     self.assertTrue(all(e["model"] == "none" for e in rows[0]["trace"]["recognizers"].values()))
+                requests = [{"session_id": "synthetic", "text": text},
+                            {"session_id": "synthetic", "text": text, "context": {}}]
+                run = subprocess.run([str(binary), "daemon", "--policy", str(policy)],
+                                     input="".join(json.dumps(r) + "\n" for r in requests),
+                                     capture_output=True, text=True, timeout=30, env=perf.child_environment())
+                self.assertEqual(run.returncode, 0, "daemon failed; diagnostics suppressed")
+                responses = [json.loads(line) for line in run.stdout.splitlines()]
+                self.assertEqual(len(responses), 2)
+                self.assertTrue(all("clean_text" in r and not r.get("error") for r in responses))
+                traces = [json.loads(line[len(perf.PREFIX):]) for line in run.stderr.splitlines()
+                          if line.startswith(perf.PREFIX)]
+                _, admitted = perf.validate_lifecycle(traces, 2, daemon=True, policy=policy, required=True)
+                for key in perf.REQUEST_ASSEMBLY:
+                    self.assertEqual(admitted[0]["metrics"][key]["invocations"], 0)
+                    self.assertEqual(admitted[1]["metrics"][key]["invocations"], 1)
 
     @unittest.skipUnless(os.environ.get("GAZE_ATTRIBUTION_TEST_BINARY"), "requires a locally built timer CLI")
     def test_real_cli_lifecycle_hooks_are_validated_by_runner(self):

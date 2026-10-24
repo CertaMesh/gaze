@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 from perf_lifecycle_contract import CLOCK_CHECKS, REQUEST_ASSEMBLY, OWNERSHIP_CHECKS
-from perf_lifecycle_contract import RECORD_CHECKS
+from perf_lifecycle_contract import HOOK_RELATIONS, RECORD_CHECKS
 import perf_attribution as perf
 
 ROOT = Path(__file__).resolve().parent
@@ -23,6 +23,10 @@ def prove(out: Path) -> dict:
                   ("test_serial_" + check.id.removesuffix("-serial").replace("-", "_")
                    if check.kind == "serial" else "test_parent_" + check.id.replace("-", "_")))
                  for check in CLOCK_CHECKS]
+    for relation in HOOK_RELATIONS:
+        mutations.append((relation.id, source.replace("for relation in HOOK_RELATIONS:",
+                          f"for relation in (r for r in HOOK_RELATIONS if r.id != {relation.id!r}):"),
+                          "test_prerequisite_" + relation.id.replace("-", "_")))
     for check in RECORD_CHECKS:
         mutations.append((check, source.replace("for check in RECORD_CHECKS:",
                           f"for check in (c for c in RECORD_CHECKS if c != {check!r}):"),
@@ -116,6 +120,7 @@ def prove(out: Path) -> dict:
                "parent_checks": sum(c.kind == "parent" for c in CLOCK_CHECKS),
                "ownership_checks": len(OWNERSHIP_CHECKS),
                "record_checks": len(RECORD_CHECKS),
+               "prerequisite_checks": len(HOOK_RELATIONS),
                "parent_test_isolation": "Each parent check alone; serial sums and ancestor edges otherwise imply it. Full graph also rejects every parent witness.",
                "executed_assertion_failures": len(results), "restored_passes": len(results)}
     (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")

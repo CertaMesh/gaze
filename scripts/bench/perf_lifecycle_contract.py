@@ -77,6 +77,81 @@ def violates_record(record: dict, check: str) -> bool:
     raise ValueError("unknown record check")
 
 
+@dataclass(frozen=True)
+class HookRelation:
+    id: str
+    trigger: str
+    prerequisite: str
+    kind: str
+    sites: str
+
+
+# Invocation relations survive zero-resolution clocks and partial failed calls.
+# A failed lock can add a wait without an ORT call; one tokenization can feed
+# several windows. Neither relationship is an equality.
+HOOK_RELATIONS = (
+    HookRelation("ner-ort-wait", "ner_ort_ns", "ner_mutex_wait_ns", "at-least",
+                 "gaze-recognizers/src/ner/backend/ort.rs:132-139: wait drops before ORT starts"),
+    HookRelation("nym-ort-wait", "nym_ort_ns", "nym_mutex_wait_ns", "at-least",
+                 "gaze-recognizers/src/safety_net/nym/ort.rs:230-236: wait drops before ORT starts"),
+    *(HookRelation(f"{model}-{leaf}-tokenize", f"{model}_{leaf}_ns", f"{model}_tokenize_ns", "invoked",
+                   sites)
+      for model, sites in (
+          ("ner", "gaze-recognizers/src/ner/backend/ort.rs:67-89; preparation.rs:13-59: encode precedes inference"),
+          ("nym", "gaze-recognizers/src/safety_net/nym/ort.rs:193-207: tokenize precedes window loop"))
+      for leaf in ("ort", "mutex_wait")),
+    *(HookRelation(f"nym-{view}-window-owner", f"nym_windows_{view}", f"nym_{view}_ns", "counter-owner",
+                   "gaze-types/src/perf.rs:207-212,221-232,317-325: active view selects counter; drop records invocation")
+      for view in ("stable", "neutral")),
+    HookRelation("nym-neutral-stable", "nym_neutral_ns", "nym_stable_ns", "at-least",
+                 "gaze-recognizers/src/safety_net/nym/mod.rs:162-186: stable precedes each neutral view"),
+    HookRelation("safety-model-view", "safety_model_ns", "safety_view_build_ns", "invoked",
+                 "gaze/src/pipeline.rs:1829-1858,1920: scan construction precedes either model call site"),
+)
+
+
+def violates_relation(record: dict, relation: HookRelation) -> bool:
+    invocations = lambda key: record["metrics"][key]["invocations"]
+    trigger = (record["counters"][relation.trigger] if relation.kind == "counter-owner"
+               else invocations(relation.trigger))
+    prerequisite = invocations(relation.prerequisite)
+    return (trigger > prerequisite if relation.kind == "at-least"
+            else trigger > 0 and prerequisite == 0)
+
+
+# Every production clock/counter hook is inventoried here. Repeated call sites
+# share a row only when their co-occurrence guarantee is the same. Constructor
+# cardinalities and duration parents are enforced by the existing admission
+# checks; HOOK_RELATIONS adds the cross-sibling guarantees below.
+HOOK_AUDIT = (
+    (("process_to_ready_ns", "process_to_policy_ns"), "gaze-cli/src/perf.rs:19-20", "Start together, once per startup; policy ends before ready"),
+    (("request_ns",), "gaze-cli/src/perf.rs:56", "Encloses every request; once per Document"),
+    (("daemon_startup_ns",), "gaze-cli/src/commands/daemon.rs:103-127", "Encloses build and attachment; exactly one in daemon startup"),
+    (("pipeline_build_ns", "policy_load_ns"), "gaze-cli/src/pipeline/build.rs:127,158-165", "Build encloses policy load; successful load ends process_to_policy"),
+    (("assembly_ns", "recognizer_construction_ns", "rule_construction_ns"), "gaze-assembly/src/lib.rs:252-292", "Assembly encloses recognizer registration, then model registration, then rules; one of each per successful assembly; daemon rebuild reuses models"),
+    (("nym_attach_ns", "nym_outer_verify_ns"), "gaze-assembly/src/lib.rs:113-150", "Attachment encloses outer verification then Nym constructor; one each for active Nym"),
+    (("model_constructor_ns",), "gaze-recognizers/src/ner/detector.rs:43; dob_judge.rs:118", "Encloses verification, tokenizer and model load; once per active NER/DOB"),
+    (("nym_model_constructor_ns",), "gaze-recognizers/src/safety_net/nym/ort.rs:121-153", "Encloses verification, tokenizer and model load; once for active Nym"),
+    (("bundle_verify_ns",), "gaze-recognizers/src/bundle.rs:31; ner/loader.rs:22", "Enclosed by constructor or outer verification; active Nym verifies twice"),
+    (("tokenizer_load_ns", "model_load_ns"), "gaze-recognizers/src/ner/backend/ort.rs:34-38; dob_judge.rs:123-127; safety_net/nym/ort.rs:135-153", "One serial tokenizer then model load per successful constructor; pooled across models"),
+    (("registry_ns",), "gaze/src/registry.rs:1437", "Encloses serial recognizer calls"),
+    ((RECOGNIZERS, "rules_ns"), "gaze/src/registry.rs:1263; gaze-types/src/perf.rs:281-313", "RecognizerSpan owns candidate totals; Rule drops also add exactly their duration, invocations and candidates to rules_ns"),
+    (("validators_ns",), "gaze-types/src/lib.rs:935-959,1000", "Enclosed by request; validators can run in recognizers, recovery or vetoes; no mandatory recognizer sibling"),
+    (("ner_tokenize_ns", "ner_encodes"), "gaze-recognizers/src/ner/backend/preparation.rs:16-18", "Encode counter increments once inside each tokenize span, even on failure"),
+    (("ner_mutex_wait_ns", "ner_ort_ns", "ner_windows"), "gaze-recognizers/src/ner/backend/ort.rs:132-149", "Wait precedes ORT; ORT owns one window increment; tokenize precedes both; failures can leave extra waits"),
+    (("nym_tokenize_ns", "nym_mutex_wait_ns", "nym_ort_ns", "nym_windows"), "gaze-recognizers/src/safety_net/nym/ort.rs:193-207,230-248", "Tokenize precedes windows; wait precedes each ORT; ORT owns one window increment"),
+    (("nym_stable_ns", "nym_neutral_ns", "nym_windows_stable", "nym_windows_neutral"), "gaze-recognizers/src/safety_net/nym/mod.rs:163,181,185; gaze-types/src/perf.rs:207-232,317-325", "Stable precedes neutral; each view owns its window counter; view counts partition total windows; zero windows permitted"),
+    (("input_bytes",), "gaze/src/pipeline.rs:1218", "Owned by enclosing request, at uncached text entry; not necessarily raw document length"),
+    (("resolve1_ns",), "gaze/src/pipeline.rs:1228", "Enclosed by request after registry; failure may stop before sweep"),
+    (("sweep_ns", "sweep_candidates"), "gaze/src/pipeline.rs:1661,1707", "Sweep owns added-candidate count; may exit without additions"),
+    (("resolve2_ns",), "gaze/src/pipeline.rs:1253,1275,1713", "Optional; inside sweep or later recovery; cannot sum with sweep"),
+    (("safety_view_build_ns",), "gaze/src/safety_net_scan.rs:21", "Request owns scan construction; scan precedes safety model, but model may be skipped"),
+    (("safety_model_ns",), "gaze/src/pipeline.rs:1858,1920", "Request encloses model call after scan construction; Nym views are serial children"),
+    (("manifest_ns",), "gaze/src/pipeline/occurrence.rs:156,210,222,393", "Request encloses ledger allocation, insertion, projection and validation; call counts vary"),
+    (("audit_ns",), "gaze/src/pipeline.rs:1760,3069,3099,3166,3207,3246,3287", "Request encloses optional sink calls; no mandatory candidate, model or manifest sibling"),
+)
+
+
 def active_models(config: dict) -> dict[str, bool]:
     """Mirror RawNerPolicy/parse_dob_judge and CLI safety-net selection."""
     return {"ner": config.get("ner", {}).get("model_dir") is not None,
@@ -261,6 +336,22 @@ def documentation() -> str:
         parents = " + ".join(f"`{key}`" for key in group.parents)
         note = group.hooks + (". " + group.exception if group.exception else "")
         rows.append(f"| {group.id} | {group.phase} | {group.relationship} | {children} | {parents} | {note} |")
+    rows.extend(["", "Cross-hook audit: every production clock and work counter is listed below.",
+                 "These are invocation and ownership guarantees, independent of nanoseconds.",
+                 "Existing phase, constructor, ownership and graph checks enforce the enclosing",
+                 "relations. The following generated prerequisites enforce sibling relations.", "",
+                 "| Hooks / counters | Source call sites | Mandatory co-occurrence / owner |",
+                 "| --- | --- | --- |"])
+    for hooks, sites, guarantee in HOOK_AUDIT:
+        rows.append(f"| {', '.join(f'`{key}`' for key in hooks)} | {sites} | {guarantee} |")
+    rows.extend(["", "| Prerequisite check | Trigger | Required hook | Relation | Source guarantee |",
+                 "| --- | --- | --- | --- | --- |"])
+    for relation in HOOK_RELATIONS:
+        meaning = ("prerequisite invocations >= trigger invocations" if relation.kind == "at-least"
+                   else "positive trigger requires invoked prerequisite")
+        rows.append(f"| {relation.id} | `{relation.trigger}` | `{relation.prerequisite}` | {meaning} | {relation.sites} |")
+    rows.extend(["", "Waits can outnumber ORT calls after failures. Tokenizations need not equal",
+                 "windows. Invoked zero-duration hooks and invoked zero-window views are valid."])
     rows.extend(["", "A startup record must have zero processing durations, invocation/candidate",
                  "counts, work counters and recognizer entries. Daemon context requests may",
                  "emit assembly, recognizer-construction and rule-construction clocks, once each.",

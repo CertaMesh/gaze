@@ -23,7 +23,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from perf_lifecycle_contract import RECORD_CHECKS, violates_record, active_models, OWNERSHIP_CHECKS, violates_ownership, CLOCK_CHECKS, CLOCK_PHASES, REQUEST_ASSEMBLY, STARTUP_CLOCKS, violates_check
+from perf_lifecycle_contract import HOOK_RELATIONS, violates_relation, RECORD_CHECKS, violates_record, active_models, OWNERSHIP_CHECKS, violates_ownership, CLOCK_CHECKS, CLOCK_PHASES, REQUEST_ASSEMBLY, STARTUP_CLOCKS, violates_check
 
 SPEC = "gaze-perf-attribution-v2"
 
@@ -104,6 +104,9 @@ def validate_lifecycle(traces: list[dict], requests: int, *, daemon: bool, polic
         for check in RECORD_CHECKS:
             if violates_record(record, check):
                 raise ValueError(f"lifecycle record mismatch: {check}")
+        for relation in HOOK_RELATIONS:
+            if violates_relation(record, relation):
+                raise ValueError(f"lifecycle prerequisite mismatch: {relation.id}")
     startup = traces[0]
     def inv(trace, key):
         return trace["metrics"].get(key, {}).get("invocations", 0)
