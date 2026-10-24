@@ -894,3 +894,25 @@ async fn unsupported_large_owned_carrier_preserves_admission_and_rejects_raw_pri
         }
     }
 }
+
+#[tokio::test]
+async fn unsupported_adjacent_large_owned_carriers_with_public_suffixes_admit() {
+    let seed = "X".repeat(2048);
+    for suffix in [".", "42", "https://example.invalid/public", "\u{3000}."] {
+        let carrier = format!("{}{suffix}", "{token}".repeat(1025));
+        for provider in [Provider::OpenAi, Provider::Gemini] {
+            for stream in [false, true] {
+                run_configured_case(
+                    provider,
+                    stream,
+                    false,
+                    Some(gaze::EvidenceKind::Rule),
+                    ("ordinary source", "ordinary text", Some((&carrier, false))),
+                    Some(&seed),
+                    false,
+                )
+                .await;
+            }
+        }
+    }
+}
