@@ -165,7 +165,7 @@ its timer bookkeeping, so this aggregate bound conservatively includes that
 small overhead. Tokenizer + model durations must also fit within the constructors
 alone. No aggregate constructor duration is charged to the wrong sibling.
 
-The phase and containment tables below are generated from
+The phase table and clock graph below are generated from
 `perf_lifecycle_contract.py`, which validation imports directly. Refresh with
 `python scripts/bench/perf_lifecycle_contract.py`; verify with `--check`.
 
@@ -189,39 +189,30 @@ The phase and containment tables below are generated from
 | `daemon_startup_ns` | startup | Daemon entry through setup, before the request loop |
 | `request_ns` | request | One-shot processing after startup, or one daemon handle_line call |
 
-Each row below requires the sum of the children to fit within the sum of
-the parents. Only the daemon build bound is conditional on daemon mode.
+The hook graph below declares serial children (sum <= parent capacity) or
+overlapping children (each <= parent capacity, with no sum). Admission
+checks every parent edge and every serial sum. A parent capacity containing
+multiple clocks pools their durations; it is not a new measured clock.
+Only daemon-build is conditional on daemon mode.
 
-| Bound | Serial children | Inclusive parents |
-| --- | --- | --- |
-| policy-ready | `process_to_policy_ns` | `process_to_ready_ns` |
-| policy-load | `policy_load_ns` | `process_to_policy_ns` |
-| pipeline | `policy_load_ns` + `assembly_ns` | `pipeline_build_ns` |
-| ready | `pipeline_build_ns` + `nym_attach_ns` | `process_to_ready_ns` |
-| daemon-ready | `daemon_startup_ns` | `process_to_ready_ns` |
-| daemon-build | `pipeline_build_ns` + `nym_attach_ns` | `daemon_startup_ns` |
-| assembly | `recognizer_construction_ns` + `rule_construction_ns` + `model_constructor_ns` | `assembly_ns` |
-| nym-attach | `nym_outer_verify_ns` + `nym_model_constructor_ns` | `nym_attach_ns` |
-| constructor-loads | `tokenizer_load_ns` + `model_load_ns` | `model_constructor_ns` + `nym_model_constructor_ns` |
-| constructor-leaves | `bundle_verify_ns` + `tokenizer_load_ns` + `model_load_ns` | `model_constructor_ns` + `nym_model_constructor_ns` + `nym_outer_verify_ns` |
-| rules | `rules_ns` | `request_ns` |
-| registry | `registry_ns` | `request_ns` |
-| validators | `validators_ns` | `request_ns` |
-| ner_tokenize | `ner_tokenize_ns` | `request_ns` |
-| ner_ort | `ner_ort_ns` | `request_ns` |
-| ner_mutex_wait | `ner_mutex_wait_ns` | `request_ns` |
-| resolve1 | `resolve1_ns` | `request_ns` |
-| sweep | `sweep_ns` | `request_ns` |
-| resolve2 | `resolve2_ns` | `request_ns` |
-| safety_view_build | `safety_view_build_ns` | `request_ns` |
-| safety_model | `safety_model_ns` | `request_ns` |
-| nym_tokenize | `nym_tokenize_ns` | `request_ns` |
-| nym_ort | `nym_ort_ns` | `request_ns` |
-| nym_mutex_wait | `nym_mutex_wait_ns` | `request_ns` |
-| nym_stable | `nym_stable_ns` | `request_ns` |
-| nym_neutral | `nym_neutral_ns` | `request_ns` |
-| manifest | `manifest_ns` | `request_ns` |
-| audit | `audit_ns` | `request_ns` |
+| Group | Relationship | Children | Parent capacity | Hook sites and exceptions |
+| --- | --- | --- | --- | --- |
+| ready-build | serial | `pipeline_build_ns` + `nym_attach_ns` | `process_to_ready_ns` | pipeline/run.rs: prepare_clean_pipeline; cli/perf.rs: Document::from_env |
+| ready-policy | serial | `process_to_policy_ns` + `assembly_ns` + `nym_attach_ns` | `process_to_ready_ns` | pipeline/build.rs: policy_loaded before assembly; pipeline/run.rs: Nym after build. pipeline_build overlaps process_to_policy; use two alternative serial groups |
+| ready-daemon | overlapping | `daemon_startup_ns` | `process_to_ready_ns` | commands/daemon.rs: run; cli/perf.rs: ready. daemon_startup overlaps the policy prefix and contains pipeline construction |
+| policy-load | overlapping | `policy_load_ns` | `process_to_policy_ns` | pipeline/build.rs: resolve_pipeline_builder |
+| pipeline | serial | `policy_load_ns` + `assembly_ns` | `pipeline_build_ns` | pipeline/build.rs: resolve_pipeline and resolve_pipeline_builder |
+| daemon-build | serial | `pipeline_build_ns` + `nym_attach_ns` | `daemon_startup_ns` | commands/daemon.rs: run and Daemon::new |
+| assembly | serial | `recognizer_construction_ns` + `model_constructor_ns` + `rule_construction_ns` | `assembly_ns` | gaze-assembly/lib.rs: build_pipeline_builder_inner |
+| nym-attach | serial | `nym_outer_verify_ns` + `nym_model_constructor_ns` | `nym_attach_ns` | gaze-assembly/lib.rs: attach_nym_safety_net |
+| constructor-loads | serial | `tokenizer_load_ns` + `model_load_ns` | `model_constructor_ns` + `nym_model_constructor_ns` | ner/detector.rs; ner/backend/ort.rs; dob_judge.rs; safety_net/nym/ort.rs. leaf totals pool NER, DOB and Nym constructors; no per-constructor leaf split exists |
+| constructor-leaves | serial | `bundle_verify_ns` + `tokenizer_load_ns` + `model_load_ns` | `model_constructor_ns` + `nym_model_constructor_ns` + `nym_outer_verify_ns` | ner/loader.rs; bundle.rs; gaze-assembly/lib.rs; constructor hooks above. bundle_verify also includes Nym outer verification; load-only group excludes that capacity |
+| request-sweep | serial | `registry_ns` + `resolve1_ns` + `sweep_ns` + `safety_view_build_ns` + `safety_model_ns` + `manifest_ns` + `audit_ns` | `request_ns` | pipeline.rs: redact_text_with_manifest_uncached, sweep_repeat_values, run_safety_nets_in_context, log_*; pipeline/occurrence.rs: Ledger; safety_net_scan.rs: new. resolve2 partly runs inside sweep and partly afterwards; never sum sweep + resolve2 |
+| request-resolve | serial | `registry_ns` + `resolve1_ns` + `resolve2_ns` + `safety_view_build_ns` + `safety_model_ns` + `manifest_ns` + `audit_ns` | `request_ns` | pipeline.rs: recovery::plan at sweep, house-number and address-piece sites. alternative serial group accounts for resolve2 without double counting sweep |
+| request-overlap | overlapping | `validators_ns` | `request_ns` | gaze-types/lib.rs: ValidatorKind. validators run inside recognizers, registry vetoes, recovery and other request work |
+| registry | serial | `rules_ns` + `ner_tokenize_ns` + `ner_mutex_wait_ns` + `ner_ort_ns` | `registry_ns` | registry.rs: detect_candidate_pool/detect_declared; perf.rs: RecognizerSpan; ner/backend/preparation.rs and ort.rs. rules sums rule-evidence recognizers; NER is learned evidence; validators may overlap both |
+| nym-views | serial | `nym_stable_ns` + `nym_neutral_ns` | `safety_model_ns` | pipeline.rs: run_safety_nets_in_context; safety_net/nym/mod.rs: check_with_neutral_and_telemetry |
+| nym-inference | serial | `nym_tokenize_ns` + `nym_mutex_wait_ns` + `nym_ort_ns` | `nym_stable_ns` + `nym_neutral_ns` | safety_net/nym/ort.rs: score_pieces and run_window. leaf totals pool both serial views; the protocol does not split leaves by view |
 
 All metrics belong exclusively to their declared phase. A startup record
 must have zero processing durations, invocation/candidate counts, work
@@ -267,12 +258,16 @@ builds. Do not pass that flag to an unpatched old revision.
 The model-free Python tests use fake daemon protocols to prove lifecycle and request pairing, old-binary fallback, schema rejection, identical-binary refusal, privacy, provenance, exact ordered source-tree identity, percentiles and the quiet-host gate. `GAZE_ATTRIBUTION_TEST_BINARY` enables a synthetic test of actual CLI hooks through the runner. `cli_pipe` compares clean text, manifest,
 entries and safety disposition byte for byte with capture disabled/enabled from
 the same initial session snapshot, and verifies exact restore for each fixture. The capture includes construction as well as processing.
-No new Rust test binary is introduced. Nonzero witnesses cover each declared
-bound and each child/parent edge, plus every wrong-phase placement. Run
-`perf_lifecycle_mutation.py --out <directory>` after committing: it removes each
-bound and phase/recognizer/work guard in an isolated Python copy, requires one
-executed assertion failure, then requires that same test to pass after restore.
-Its receipt pins the mutation and restored test counts; logs retain each result.
+Nonzero witnesses cover every parent edge, serial group and wrong-phase
+placement. Each serial witness violates exactly one sum while all parent edges
+still fit. Each parent witness is rejected by the full graph. Parent mutation
+tests also exercise that edge alone through lifecycle admission, because the
+serial sum or an ancestor edge would otherwise reject the same record.
+
+After committing, run `perf_lifecycle_mutation.py --out <directory>`. It removes
+each parent check, serial sum and phase/recognizer/work guard in an isolated
+Python copy. Each mutation must fail one executed assertion, then pass the same
+test after restoration. The receipt pins both counts; logs retain every result.
 
 
 For a synthetic comparison across separate feature-off and timer executables, run

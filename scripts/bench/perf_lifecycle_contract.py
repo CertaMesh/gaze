@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Declared clock phases and inclusive bounds; also generates the guide's tables."""
+"""Declared hook graph, admission checks, and generated guide tables."""
 from dataclasses import dataclass
 from pathlib import Path
 import argparse
@@ -33,28 +33,111 @@ CLOCK_PHASES = {**dict.fromkeys(STARTUP_CLOCKS, "startup"),
 
 
 @dataclass(frozen=True)
-class Bound:
+class ClockGroup:
+    id: str
+    phase: str
+    parents: tuple[str, ...]
+    children: tuple[str, ...]
+    relationship: str
+    hooks: str
+    exception: str = ""
+    daemon_only: bool = False
+
+
+# Aggregate clocks need pooled parents: the protocol does not retain which
+# constructor/view contributed each leaf. Alternative groups express partial
+# overlaps without treating inclusive clocks as disjoint intervals.
+CLOCK_GRAPH = (
+    ClockGroup("ready-build", "startup", ("process_to_ready_ns",),
+               ("pipeline_build_ns", "nym_attach_ns"), "serial",
+               "pipeline/run.rs: prepare_clean_pipeline; cli/perf.rs: Document::from_env"),
+    ClockGroup("ready-policy", "startup", ("process_to_ready_ns",),
+               ("process_to_policy_ns", "assembly_ns", "nym_attach_ns"), "serial",
+               "pipeline/build.rs: policy_loaded before assembly; pipeline/run.rs: Nym after build",
+               "pipeline_build overlaps process_to_policy; use two alternative serial groups"),
+    ClockGroup("ready-daemon", "startup", ("process_to_ready_ns",),
+               ("daemon_startup_ns",), "overlapping",
+               "commands/daemon.rs: run; cli/perf.rs: ready",
+               "daemon_startup overlaps the policy prefix and contains pipeline construction"),
+    ClockGroup("policy-load", "startup", ("process_to_policy_ns",),
+               ("policy_load_ns",), "overlapping", "pipeline/build.rs: resolve_pipeline_builder"),
+    ClockGroup("pipeline", "startup", ("pipeline_build_ns",),
+               ("policy_load_ns", "assembly_ns"), "serial",
+               "pipeline/build.rs: resolve_pipeline and resolve_pipeline_builder"),
+    ClockGroup("daemon-build", "startup", ("daemon_startup_ns",),
+               ("pipeline_build_ns", "nym_attach_ns"), "serial",
+               "commands/daemon.rs: run and Daemon::new", daemon_only=True),
+    ClockGroup("assembly", "startup", ("assembly_ns",),
+               ("recognizer_construction_ns", "model_constructor_ns", "rule_construction_ns"),
+               "serial", "gaze-assembly/lib.rs: build_pipeline_builder_inner"),
+    ClockGroup("nym-attach", "startup", ("nym_attach_ns",),
+               ("nym_outer_verify_ns", "nym_model_constructor_ns"), "serial",
+               "gaze-assembly/lib.rs: attach_nym_safety_net"),
+    ClockGroup("constructor-loads", "startup", ("model_constructor_ns", "nym_model_constructor_ns"),
+               ("tokenizer_load_ns", "model_load_ns"), "serial",
+               "ner/detector.rs; ner/backend/ort.rs; dob_judge.rs; safety_net/nym/ort.rs",
+               "leaf totals pool NER, DOB and Nym constructors; no per-constructor leaf split exists"),
+    ClockGroup("constructor-leaves", "startup",
+               ("model_constructor_ns", "nym_model_constructor_ns", "nym_outer_verify_ns"),
+               ("bundle_verify_ns", "tokenizer_load_ns", "model_load_ns"), "serial",
+               "ner/loader.rs; bundle.rs; gaze-assembly/lib.rs; constructor hooks above",
+               "bundle_verify also includes Nym outer verification; load-only group excludes that capacity"),
+    ClockGroup("request-sweep", "request", ("request_ns",),
+               ("registry_ns", "resolve1_ns", "sweep_ns", "safety_view_build_ns", "safety_model_ns",
+                "manifest_ns", "audit_ns"), "serial",
+               "pipeline.rs: redact_text_with_manifest_uncached, sweep_repeat_values, run_safety_nets_in_context, log_*; "
+               "pipeline/occurrence.rs: Ledger; safety_net_scan.rs: new",
+               "resolve2 partly runs inside sweep and partly afterwards; never sum sweep + resolve2"),
+    ClockGroup("request-resolve", "request", ("request_ns",),
+               ("registry_ns", "resolve1_ns", "resolve2_ns", "safety_view_build_ns", "safety_model_ns",
+                "manifest_ns", "audit_ns"), "serial",
+               "pipeline.rs: recovery::plan at sweep, house-number and address-piece sites",
+               "alternative serial group accounts for resolve2 without double counting sweep"),
+    ClockGroup("request-overlap", "request", ("request_ns",),
+               ("validators_ns",), "overlapping", "gaze-types/lib.rs: ValidatorKind",
+               "validators run inside recognizers, registry vetoes, recovery and other request work"),
+    ClockGroup("registry", "request", ("registry_ns",),
+               ("rules_ns", "ner_tokenize_ns", "ner_mutex_wait_ns", "ner_ort_ns"), "serial",
+               "registry.rs: detect_candidate_pool/detect_declared; perf.rs: RecognizerSpan; "
+               "ner/backend/preparation.rs and ort.rs",
+               "rules sums rule-evidence recognizers; NER is learned evidence; validators may overlap both"),
+    ClockGroup("nym-views", "request", ("safety_model_ns",),
+               ("nym_stable_ns", "nym_neutral_ns"), "serial",
+               "pipeline.rs: run_safety_nets_in_context; safety_net/nym/mod.rs: check_with_neutral_and_telemetry"),
+    ClockGroup("nym-inference", "request", ("nym_stable_ns", "nym_neutral_ns"),
+               ("nym_tokenize_ns", "nym_mutex_wait_ns", "nym_ort_ns"), "serial",
+               "safety_net/nym/ort.rs: score_pieces and run_window",
+               "leaf totals pool both serial views; the protocol does not split leaves by view"),
+)
+
+
+@dataclass(frozen=True)
+class ClockCheck:
     id: str
     phase: str
     children: tuple[str, ...]
     parents: tuple[str, ...]
-    daemon_only: bool = False
+    kind: str
+    daemon_only: bool
 
 
-BOUNDS = (
-    Bound("policy-ready", "startup", ("process_to_policy_ns",), ("process_to_ready_ns",)),
-    Bound("policy-load", "startup", ("policy_load_ns",), ("process_to_policy_ns",)),
-    Bound("pipeline", "startup", ("policy_load_ns", "assembly_ns"), ("pipeline_build_ns",)),
-    Bound("ready", "startup", ("pipeline_build_ns", "nym_attach_ns"), ("process_to_ready_ns",)),
-    Bound("daemon-ready", "startup", ("daemon_startup_ns",), ("process_to_ready_ns",)),
-    Bound("daemon-build", "startup", ("pipeline_build_ns", "nym_attach_ns"), ("daemon_startup_ns",), True),
-    Bound("assembly", "startup", ("recognizer_construction_ns", "rule_construction_ns", "model_constructor_ns"), ("assembly_ns",)),
-    Bound("nym-attach", "startup", ("nym_outer_verify_ns", "nym_model_constructor_ns"), ("nym_attach_ns",)),
-    Bound("constructor-loads", "startup", ("tokenizer_load_ns", "model_load_ns"), ("model_constructor_ns", "nym_model_constructor_ns")),
-    Bound("constructor-leaves", "startup", ("bundle_verify_ns", "tokenizer_load_ns", "model_load_ns"),
-          ("model_constructor_ns", "nym_model_constructor_ns", "nym_outer_verify_ns")),
-    *(Bound(key.removesuffix("_ns"), "request", (key,), ("request_ns",)) for key in PROCESSING_CLOCKS),
-)
+def clock_checks():
+    edges = set()
+    for group in CLOCK_GRAPH:
+        for child in group.children:
+            edge = (group.phase, child, group.parents, group.daemon_only)
+            if edge not in edges:
+                edges.add(edge)
+                yield ClockCheck(f"{group.id}-parent-{child}", group.phase, (child,),
+                                 group.parents, "parent", group.daemon_only)
+        if group.relationship == "serial":
+            yield ClockCheck(f"{group.id}-serial", group.phase, group.children,
+                             group.parents, "serial", group.daemon_only)
+        elif group.relationship != "overlapping":
+            raise ValueError(f"unknown clock relationship: {group.relationship}")
+
+
+CLOCK_CHECKS = tuple(clock_checks())
 
 
 def documentation() -> str:
@@ -63,13 +146,18 @@ def documentation() -> str:
     for key, description in STARTUP_CLOCKS.items():
         rows.append(f"| `{key}` | startup | {description} |")
     rows.append("| `request_ns` | request | One-shot processing after startup, or one daemon handle_line call |")
-    rows.extend(["", "Each row below requires the sum of the children to fit within the sum of",
-                 "the parents. Only the daemon build bound is conditional on daemon mode.", "",
-                 "| Bound | Serial children | Inclusive parents |", "| --- | --- | --- |"])
-    for bound in BOUNDS:
-        children = " + ".join(f"`{key}`" for key in bound.children)
-        parents = " + ".join(f"`{key}`" for key in bound.parents)
-        rows.append(f"| {bound.id} | {children} | {parents} |")
+    rows.extend(["", "The hook graph below declares serial children (sum <= parent capacity) or",
+                 "overlapping children (each <= parent capacity, with no sum). Admission",
+                 "checks every parent edge and every serial sum. A parent capacity containing",
+                 "multiple clocks pools their durations; it is not a new measured clock.",
+                 "Only daemon-build is conditional on daemon mode.", "",
+                 "| Group | Relationship | Children | Parent capacity | Hook sites and exceptions |",
+                 "| --- | --- | --- | --- | --- |"])
+    for group in CLOCK_GRAPH:
+        children = " + ".join(f"`{key}`" for key in group.children)
+        parents = " + ".join(f"`{key}`" for key in group.parents)
+        note = group.hooks + (". " + group.exception if group.exception else "")
+        rows.append(f"| {group.id} | {group.relationship} | {children} | {parents} | {note} |")
     rows.extend(["", "All metrics belong exclusively to their declared phase. A startup record",
                  "must have zero processing durations, invocation/candidate counts, work",
                  "counters and recognizer entries. Request records must have zero startup",

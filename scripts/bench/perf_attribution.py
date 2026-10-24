@@ -23,7 +23,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from perf_lifecycle_contract import BOUNDS, CLOCK_PHASES, STARTUP_CLOCKS
+from perf_lifecycle_contract import CLOCK_CHECKS, CLOCK_PHASES, STARTUP_CLOCKS
 
 SPEC = "gaze-perf-attribution-v2"
 
@@ -89,12 +89,12 @@ def validate_lifecycle(traces: list[dict], requests: int, *, daemon: bool, polic
                 raise ValueError("duration without an invocation")
         if record["phase"] == "startup" and (any(record["counters"].values()) or record["recognizers"]):
             raise ValueError("misattributed startup processing")
-        for bound in BOUNDS:
-            if bound.phase != record["phase"] or (bound.daemon_only and not daemon):
+        for check in CLOCK_CHECKS:
+            if check.phase != record["phase"] or (check.daemon_only and not daemon):
                 continue
             ns = lambda key: record["metrics"].get(key, {}).get("ns", 0)
-            if sum(map(ns, bound.children)) > sum(map(ns, bound.parents)):
-                raise ValueError(f"lifecycle duration attribution mismatch: {bound.id}")
+            if sum(map(ns, check.children)) > sum(map(ns, check.parents)):
+                raise ValueError(f"lifecycle duration attribution mismatch: {check.id}")
         if record["phase"] == "request" and any(
                 metric["ns"] > record["metrics"].get("request_ns", {}).get("ns", 0)
                 for metric in record["recognizers"].values()):

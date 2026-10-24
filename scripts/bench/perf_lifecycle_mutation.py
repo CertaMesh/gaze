@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 
-from perf_lifecycle_contract import BOUNDS
+from perf_lifecycle_contract import CLOCK_CHECKS
 import perf_attribution as perf
 
 ROOT = Path(__file__).resolve().parent
@@ -17,9 +17,11 @@ ROOT = Path(__file__).resolve().parent
 
 def prove(out: Path) -> dict:
     source = (ROOT / "perf_attribution.py").read_text()
-    mutations = [(bound.id, source.replace("for bound in BOUNDS:",
-                  f"for bound in (b for b in BOUNDS if b.id != {bound.id!r}):"),
-                  "test_bound_" + bound.id.replace("-", "_")) for bound in BOUNDS]
+    mutations = [(check.id, source.replace("for check in CLOCK_CHECKS:",
+                  f"for check in (c for c in CLOCK_CHECKS if c.id != {check.id!r}):"),
+                  ("test_serial_" + check.id.removesuffix("-serial").replace("-", "_")
+                   if check.kind == "serial" else "test_parent_" + check.id.replace("-", "_")))
+                 for check in CLOCK_CHECKS]
     mutations.extend([
         ("clock-phase", source.replace('CLOCK_PHASES[key] != record["phase"]', 'False'),
          "test_phase_registry_ns"),
@@ -65,6 +67,9 @@ def prove(out: Path) -> dict:
                "contract_sha256": hashlib.sha256((ROOT / "perf_lifecycle_contract.py").read_bytes()).hexdigest(),
                "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                "mutations": results, "mutation_count": len(results),
+               "serial_sum_checks": sum(c.kind == "serial" for c in CLOCK_CHECKS),
+               "parent_checks": sum(c.kind == "parent" for c in CLOCK_CHECKS),
+               "parent_test_isolation": "Each parent check alone; serial sums and ancestor edges otherwise imply it. Full graph also rejects every parent witness.",
                "executed_assertion_failures": len(results), "restored_passes": len(results)}
     (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
     return receipt
