@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "timed": false,
+  "plain_binary_sha256": "4958d97d4cd16797c3ad38a8932176daea562f787a4494ab45c036149d25c721",
+  "timer_binary_sha256": "8d3b13d0222c235e7c100bed4810126f41aee050af50ed7d5da876e2044b30b9",
+  "normalization": "Only eight-hex session prefixes inside declared ordinary tokens become 00000000. Within-mode clean bytes, token spelling/index, mapping values, stats/disposition and daemon manifest spans are otherwise exact. The Rust fixed-snapshot test compares byte-for-byte without normalization.",
+  "modes": {
+    "one-shot": {
+      "fixtures": 7,
+      "exact_restores": 21,
+      "semantic_sha256": [
+        "04bc0cf07623b0df3656f127a4df30b0ba3aabe36c810e75218140d956964096",
+        "baaad0374154d362e6e14ea130f689d1fa3b4fed2051cc46e3b61b81bcc3cd15",
+        "8efda6476ed38f2a275fa29a4923938be5e4596757ccbb118b36c586b26d60ea",
+        "bf8e56f1842adf28b9937772a457988582b932a58e06bcac9fe18fc7153dd4bc",
+        "9011c36439f72a3be232576ae00f5bed6afbe32b85b1af38ba5326aec76d56a8",
+        "52dbf2e3800b5323239eea0e0c7653d237ddf3932929019dede9f24d45e2db4b",
+        "e8b1e11856c55f791de8973c7b03ee6a59ac24135b16a71ecd6398c5ab69e951"
+      ],
+      "identical": true
+    },
+    "daemon": {
+      "fixtures": 7,
+      "exact_restores": 21,
+      "semantic_sha256": [
+        "61354e08b2395b58121ccbeb7f964950876f4b1c69c64f4b64bcd30aea26081e",
+        "f76b5fdcdc53a83e67565e27370c5e934d77e55d9622749321988f76800cd629",
+        "46ba2970bc629b0ee5f37825acc87dc8d95d3d31b133feb977ad46e7d2ecc838",
+        "4f51352a01c8084709baeecce730e2de492071456c17e381f2ba1780dc1b3090",
+        "c7fda63694f66adadfe682353957aa31092002abfa743ca15bce2de17163c78d",
+        "4fc9f518e632f5c75b97703bd28243f6f8dbebe2ed4cfd14bc302a5f97a64efb",
+        "51d9b9db133622ed2908899cb527722d3f298bba5047f9f63f4b2e3950c23b92"
+      ],
+      "identical": true
+    }
+  },
+  "runtime_source_commit": "e1744ec1d533af669797c88c14e2494c0f98c450",
+  "rust_toolchain": "1.96.0",
+  "fixed_snapshot_test": {
+    "name": "attribution_capture_preserves_pipe_fixture_bytes_and_restore",
+    "passed": true,
+    "fixtures": 7,
+    "normalization": null
+  },
+  "default_cli_test": {
+    "name": "attribution_default_build_ignores_opt_in",
+    "executed": 1,
+    "passed": 1
+  },
+  "disabled_macro_test": {
+    "name": "perf::disabled_tests::disabled_macros_erase_arguments",
+    "executed": 1,
+    "passed": 1
+  },
+  "python_tests": {
+    "executed": 20,
+    "passed": 20,
+    "skipped": 0,
+    "real_cli_test": "test_real_cli_lifecycle_hooks_are_validated_by_runner"
+  },
+  "mutation": {
+    "source_commit": "e1744ec1d533af669797c88c14e2494c0f98c450",
+    "hook": "assembly_ns",
+    "mutation_assertion_failed": true,
+    "mutated_runner_tests": 1,
+    "restored_runner_tests": 1,
+    "restored_runner_passed": true,
+    "source_restored_exactly": true,
+    "assertion": "AssertionError: real CLI lifecycle admission failed: required lifecycle hook missing"
+  }
+}

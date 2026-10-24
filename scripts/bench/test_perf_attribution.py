@@ -128,6 +128,7 @@ class PrivacyTests(unittest.TestCase):
     def test_unknown_fields_and_raw_ids_are_rejected(self):
         base = trace()
         for bad_trace in [{**base, "text": "private"}, {**base, "recognizers": {"private": {"ns": 1}}},
+                      {**base, "recognizers": {"a" * 64: {"ns": 1, "invocations": 1, "candidates": 0}}},
                       {**base, "metrics": {"private": {"ns": 1}}},
                       {**base, "counters": {"input_bytes": "private"}}]:
             with self.assertRaisesRegex(ValueError, "contents suppressed"):
@@ -146,11 +147,14 @@ class ReceiptTests(unittest.TestCase):
             policy = root / "policy.toml"
             policy.write_text("# fixed policy")
             docs = [perf.Document(str(i), "never copied", "digest") for i in range(400)]
+            corpus = [perf.Document(str(i), "different corpus bytes", "other") for i in range(150)]
+            def pinned_documents(revision, subdir, seed, *, tree=False):
+                return "a" * 40, docs if tree else corpus
             def run(binary, policy, documents, **kwargs):
                 return [{"id": d.id, "input_bytes": len(d.text), "e2e_ns": 100 if binary == a.resolve() else 120,
                          "trace": None} for d in documents]
             with patch.object(perf, "commit", return_value="a" * 40), \
-                 patch.object(perf, "documents", return_value=("a" * 40, docs)), \
+                 patch.object(perf, "documents", side_effect=pinned_documents), \
                  patch.object(perf, "model_inventory", return_value=[]), \
                  patch.object(perf, "policy_models", return_value=[]), \
                  patch.object(perf, "host", return_value={"load": [0, 0, 0]}), \
@@ -166,6 +170,10 @@ class ReceiptTests(unittest.TestCase):
             one, daemon = (receipt["arms"][name] for name in ("source-tree", "source-tree-daemon"))
             self.assertEqual(one["input_sha256"], daemon["input_sha256"])
             self.assertEqual(one["input_bytes"], daemon["input_bytes"])
+            self.assertEqual(len(one["runs"][0]["sides"]["a"]), 400)
+            self.assertEqual(len(daemon["runs"][0]["sides"]["a"]), 400)
+            self.assertEqual(len(receipt["arms"]["common"]["runs"][0]["sides"]["a"]), 150)
+            self.assertNotEqual(one["input_sha256"], receipt["arms"]["common"]["input_sha256"])
             self.assertEqual(receipt["policies"]["source-tree"], receipt["policies"]["source-tree-daemon"])
             self.assertNotIn("never copied", out.read_text())
             for arm in receipt["arms"].values():

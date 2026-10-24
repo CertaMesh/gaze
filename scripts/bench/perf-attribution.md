@@ -105,7 +105,7 @@ receipt. Do not derive performance claims from a failed gate.
 ## Timer builds and privacy
 
 Build `gaze-cli` with `--features perf-timers`; the feature is default-off across
-core, recognizers and shared types. Default builds expand the instrumentation
+core, assembly, recognizers and shared types. Default builds expand the instrumentation
 macros to no-ops: no clock, TLS, identity allocation, environment lookup or diagnostic IO from the instrumentation.
 An instrumented CLI additionally needs `GAZE_PERF=1` to collect startup and requests. It
 writes one startup `GAZE_PERF {json}` record and one record per request to stderr.
