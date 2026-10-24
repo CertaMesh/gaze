@@ -402,4 +402,11 @@ mod tests {
         let text = &result.content[0].as_text().unwrap().text;
         assert_eq!(text, "manifest-persistence-failed");
     }
+    #[test]
+    fn resource_limit_returns_stable_error_class() {
+        let result = dispatch_error_to_tool_result(DispatchError::ResourceLimit);
+        assert_eq!(result.is_error, Some(true));
+        assert_eq!(result.content.len(), 1);
+        assert_eq!(result.content[0].as_text().unwrap().text, "resource_limit");
+    }
 }

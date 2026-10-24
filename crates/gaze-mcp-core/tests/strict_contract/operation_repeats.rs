@@ -365,7 +365,7 @@ async fn expanded_operation_budget_is_aggregate_and_rolls_back() {
     let session = Session::new(Scope::Ephemeral).unwrap();
     let (registry, seen) = capture(json!("public"));
     let store = Store::default();
-    let limit = 2 * 1024 * 1024;
+    let limit = 16 * (2 * 1024 * 1024);
     dispatch(
         &registry,
         &store,
@@ -585,23 +585,6 @@ async fn every_observed_rule_failure_refuses_without_partial_operation_state() {
 }
 
 #[tokio::test]
-async fn shrinking_owned_values_do_not_bypass_the_input_text_budget() {
-    let pipeline = repeat_pipeline(EvidenceKind::Rule);
-    let session = Session::new(Scope::Ephemeral).unwrap();
-    let token = session.tokenize(&PiiClass::Name, "").unwrap();
-    let before = session.snapshot_entries();
-    let (registry, seen) = capture(json!([]));
-    let payload = json!([token.repeat((2 * 1024 * 1024) / token.len() + 1)]);
-    assert!(
-        dispatch(&registry, &Store::default(), &pipeline, &session, payload)
-            .await
-            .is_err()
-    );
-    assert_eq!(*seen.lock().unwrap(), Value::Null);
-    assert_eq!(session.snapshot_entries(), before);
-}
-
-#[tokio::test]
 async fn overlapping_rule_values_preserve_owned_tokens_from_different_classes() {
     let pipeline = repeat_pipeline(EvidenceKind::Rule);
     for response in [false, true] {
@@ -765,4 +748,225 @@ async fn large_owned_counterweight_spaced_response() {
 #[tokio::test]
 async fn large_owned_counterweight_adjacent_response() {
     large_owned_counterweight(true, true).await;
+}
+
+async fn assert_unchanged_operation(
+    response: bool,
+    session: &Session,
+    pipeline: &gaze::Pipeline,
+    payload: Value,
+) {
+    let before = session.snapshot_entries();
+    let expected = restore(session, &payload);
+    let (registry, seen) = capture(if response {
+        payload.clone()
+    } else {
+        json!("public")
+    });
+    let store = Store::default();
+    let result = dispatch(
+        &registry,
+        &store,
+        pipeline,
+        session,
+        if response {
+            json!("public")
+        } else {
+            payload.clone()
+        },
+    )
+    .await
+    .expect("base-admitted operation below expansion budget must succeed");
+    let actual = if response {
+        result.payload
+    } else {
+        seen.lock().unwrap().clone()
+    };
+    assert_eq!(actual, payload, "wire must stay byte-identical to base");
+    assert_eq!(restore(session, &actual), expected);
+    assert_eq!(
+        session.snapshot_entries(),
+        before,
+        "public bytes must not mint a mapping"
+    );
+    assert_eq!(*store.events.lock().unwrap(), vec!["begin", "finish"]);
+}
+async fn public_input_above_two_mib(response: bool) {
+    let pipeline = repeat_pipeline(EvidenceKind::Rule);
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    assert_unchanged_operation(
+        response,
+        &session,
+        &pipeline,
+        json!(".".repeat(2 * 1024 * 1024 + 1)),
+    )
+    .await;
+}
+#[tokio::test]
+async fn public_input_above_two_mib_arguments() {
+    public_input_above_two_mib(false).await;
+}
+#[tokio::test]
+async fn public_input_above_two_mib_response() {
+    public_input_above_two_mib(true).await;
+}
+#[tokio::test]
+async fn shrinking_owned_values_above_two_mib_are_admitted_in_both_directions() {
+    let pipeline = repeat_pipeline(EvidenceKind::Rule);
+    for response in [false, true] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let token = session.tokenize(&PiiClass::Name, ".").unwrap();
+        let wire = format!("{token}{}", ".".repeat(2 * 1024 * 1024 + 1 - token.len()));
+        assert_eq!(wire.len(), 2 * 1024 * 1024 + 1);
+        assert_unchanged_operation(response, &session, &pipeline, json!(wire)).await;
+    }
+}
+async fn whitespace_gap(response: bool) {
+    let pipeline = repeat_pipeline(EvidenceKind::Rule);
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let tokens = seed(
+        &pipeline,
+        &session,
+        &["Maria", "Schneider", "Maria Schneider"],
+    )
+    .await;
+    for whitespace in [" ", "  ", "\t", "\u{2003}"] {
+        assert_unchanged_operation(
+            response,
+            &session,
+            &pipeline,
+            json!(format!("{}{whitespace}{}", tokens[0], tokens[1])),
+        )
+        .await;
+    }
+}
+#[tokio::test]
+async fn whitespace_gap_arguments() {
+    whitespace_gap(false).await;
+}
+#[tokio::test]
+async fn whitespace_gap_response() {
+    whitespace_gap(true).await;
+}
+#[tokio::test]
+async fn non_whitespace_interior_gap_is_still_protected_in_both_directions() {
+    let pipeline = repeat_pipeline(EvidenceKind::Rule);
+    for response in [false, true] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let tokens = seed(
+            &pipeline,
+            &session,
+            &["Maria", "Schneider", "Maria van Schneider"],
+        )
+        .await;
+        let payload = json!(format!("{} van {}", tokens[0], tokens[1]));
+        let (registry, seen) = capture(if response {
+            payload.clone()
+        } else {
+            json!("public")
+        });
+        let result = dispatch(
+            &registry,
+            &Store::default(),
+            &pipeline,
+            &session,
+            if response { json!("public") } else { payload },
+        )
+        .await
+        .unwrap();
+        let actual = if response {
+            result.payload
+        } else {
+            seen.lock().unwrap().clone()
+        };
+        assert!(!actual.as_str().unwrap().contains("van"));
+        assert_eq!(restore(&session, &actual), json!("Maria van Schneider"));
+    }
+}
+async fn expansion_boundary(response: bool, aggregate: bool) {
+    let pipeline = repeat_pipeline(EvidenceKind::Rule);
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let raw = "X".repeat(1024 * 1024 - 1);
+    let token = session.tokenize(&PiiClass::Name, &raw).unwrap();
+    for pad in [31, 32, 33] {
+        let (payload, expected) = if aggregate {
+            (
+                json!([
+                    token.repeat(16),
+                    format!("{}{}", token.repeat(16), ".".repeat(pad))
+                ]),
+                json!([
+                    raw.repeat(16),
+                    format!("{}{}", raw.repeat(16), ".".repeat(pad))
+                ]),
+            )
+        } else {
+            (
+                json!(format!("{}{}", token.repeat(32), ".".repeat(pad))),
+                json!(format!("{}{}", raw.repeat(32), ".".repeat(pad))),
+            )
+        };
+        let before = session.snapshot_entries();
+        let cache = session.prefix_cache_entry_count();
+        let (registry, seen) = capture(if response {
+            payload.clone()
+        } else {
+            json!("public")
+        });
+        let store = Store::default();
+        let result = dispatch(
+            &registry,
+            &store,
+            &pipeline,
+            &session,
+            if response {
+                json!("public")
+            } else {
+                payload.clone()
+            },
+        )
+        .await;
+        if pad <= 32 {
+            let output = result.expect("expansion at or below 32 MiB must succeed");
+            let actual = if response {
+                output.payload
+            } else {
+                seen.lock().unwrap().clone()
+            };
+            assert_eq!(actual, payload);
+            assert_eq!(restore(&session, &actual), expected);
+            assert_eq!(*store.events.lock().unwrap(), vec!["begin", "finish"]);
+        } else {
+            assert!(matches!(result.unwrap_err(), DispatchError::ResourceLimit));
+            assert_eq!(
+                *store.events.lock().unwrap(),
+                if response {
+                    vec!["begin", "fail"]
+                } else {
+                    vec![]
+                }
+            );
+            if !response {
+                assert_eq!(*seen.lock().unwrap(), Value::Null);
+            }
+        }
+        assert_eq!(session.snapshot_entries(), before);
+        assert_eq!(session.prefix_cache_entry_count(), cache);
+    }
+}
+#[tokio::test]
+async fn expansion_boundary_single_leaf_arguments() {
+    expansion_boundary(false, false).await;
+}
+#[tokio::test]
+async fn expansion_boundary_single_leaf_response() {
+    expansion_boundary(true, false).await;
+}
+#[tokio::test]
+async fn expansion_boundary_two_leaves_arguments() {
+    expansion_boundary(false, true).await;
+}
+#[tokio::test]
+async fn expansion_boundary_two_leaves_response() {
+    expansion_boundary(true, true).await;
 }
