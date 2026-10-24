@@ -213,3 +213,23 @@ def test_new_hit_gap_counterweights_keep_whitespace_outside_gold():
             assert text[start:end].decode() in row["seed_names"][:3]
             mask[start:end] = b"\x01" * (end - start)
         assert bytes(byte for byte, private in zip(text, mask) if not private).decode().isspace()
+
+
+def test_empty_owned_admission_counterweights_cover_both_wire_boundaries():
+    rows = [row for row in arm.fixture() if row["id"].startswith("public-empty-owned-")]
+    assert len(rows) == 2
+    assert {row["direction"] for row in rows} == {"arguments", "response"}
+    for row in rows:
+        assert row["layer"] == "D" and row["category"] == "text"
+        assert row["seed_names"] == ["Maria", ""]
+        assert row["payload"]["items"] == ["{{owned_1}}Maria", "Maria{{owned_1}}"]
+        assert row["expanded"] == {"items": ["Maria", "Maria"], "count": 17}
+        owned = entry(raw="Maria")
+        empty = entry(token="<deadbeef:Name_2>", raw="")
+        wire = {"items": [empty["token"] + owned["token"], owned["token"] + empty["token"]], "count": 17}
+        assert arm.masks(row["expanded"], wire, {owned["token"]: owned, empty["token"]: empty}) == {
+            ("items", 0): ["name"] * 5, ("items", 1): ["name"] * 5}
+        entries = {owned["token"]: owned, empty["token"]: empty}
+        arm.verify_owned_identity(row["payload"], wire, entries, row["seed_names"])
+        with pytest.raises(ValueError, match="caller-owned token identity changed"):
+            arm.verify_owned_identity(row["payload"], {"items": [owned["token"], owned["token"]], "count": 17}, entries, row["seed_names"])

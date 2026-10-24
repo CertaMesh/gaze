@@ -1118,7 +1118,7 @@ async fn empty_owned_markers(response: bool, shape: usize) {
     let tokens = seed(
         &pipeline,
         &session,
-        &["Maria", "Schneider", "Maria Schneider"],
+        &["Maria", "Schneider", "Maria Schneider", "MariaSchneider"],
     )
     .await;
     let empty = session.tokenize(&PiiClass::Name, "").unwrap();
@@ -1147,6 +1147,11 @@ async fn empty_owned_markers(response: bool, shape: usize) {
             format!("{} {empty} {}", tokens[0], tokens[1]),
             format!("{} {empty} {}", tokens[0], tokens[1]),
             "Maria  Schneider",
+        ),
+        5 => (
+            format!("Maria{empty}{empty}Schneider"),
+            format!("{}{empty}{empty}{}", tokens[0], tokens[1]),
+            "MariaSchneider",
         ),
         _ => unreachable!(),
     };
@@ -1231,4 +1236,13 @@ async fn empty_owned_inside_whitespace_gap_arguments() {
 #[tokio::test]
 async fn empty_owned_inside_whitespace_gap_response() {
     empty_owned_markers(true, 4).await;
+}
+
+#[tokio::test]
+async fn empty_owned_inside_rule_hit_arguments() {
+    empty_owned_markers(false, 5).await;
+}
+#[tokio::test]
+async fn empty_owned_inside_rule_hit_response() {
+    empty_owned_markers(true, 5).await;
 }

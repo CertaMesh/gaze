@@ -210,7 +210,10 @@ pub(super) fn cover_rule_repeats(
         }
         for (range, hit) in &mut parts {
             for token in &tokens {
-                if token.view.start < range.end && token.view.end > range.start {
+                if !token.view.is_empty()
+                    && token.view.start < range.end
+                    && token.view.end > range.start
+                {
                     if token.immutable
                         || token.class != hit.class
                         || token.family != hit.token_family
@@ -223,20 +226,32 @@ pub(super) fn cover_rule_repeats(
             }
         }
         for (view, hit) in union_rule_ranges(parts) {
-            if tokens.iter().any(|token| {
-                token.immutable
-                    && token.view.is_empty()
-                    && view.start <= token.view.start
-                    && view.end >= token.view.end
-            }) {
-                // A zero-width owned value has no unique expanded-to-wire boundary.
-                return Err(ProtectionError::Provenance.into());
+            // Empty owned values are wire markers. Split at interior markers,
+            // then place starts after boundary markers and ends before them.
+            // No replacement may consume a marker or change its wire position.
+            let mut start = view.start;
+            for end in tokens
+                .iter()
+                .filter(|token| {
+                    token.view.is_empty()
+                        && view.start < token.view.start
+                        && token.view.start < view.end
+                })
+                .map(|token| token.view.start)
+                .chain(std::iter::once(view.end))
+            {
+                if start == end {
+                    continue;
+                }
+                let wire_start =
+                    expanded_boundary_to_wire(start, &tokens, expanded.len(), RuleRangeEdge::Start)
+                        .ok_or(ProtectionError::Provenance)?;
+                let wire_end =
+                    expanded_boundary_to_wire(end, &tokens, expanded.len(), RuleRangeEdge::End)
+                        .ok_or(ProtectionError::Provenance)?;
+                replacements.push((wire_start..wire_end, start..end, hit.clone()));
+                start = end;
             }
-            let start = expanded_boundary_to_wire(view.start, &tokens, expanded.len())
-                .ok_or(ProtectionError::Provenance)?;
-            let end = expanded_boundary_to_wire(view.end, &tokens, expanded.len())
-                .ok_or(ProtectionError::Provenance)?;
-            replacements.push((start..end, view, hit.clone()));
         }
     }
     replacements.sort_by_key(|(wire, _, _)| (wire.start, wire.end));
@@ -297,13 +312,27 @@ fn union_rule_ranges(
     union
 }
 
+enum RuleRangeEdge {
+    Start,
+    End,
+}
+
 fn expanded_boundary_to_wire(
     position: usize,
     tokens: &[RuleProjectionToken],
     length: usize,
+    edge: RuleRangeEdge,
 ) -> Option<usize> {
     let (mut wire, mut view) = (0, 0);
     for token in tokens {
+        if position == token.view.start
+            && token.view.is_empty()
+            && matches!(edge, RuleRangeEdge::Start)
+        {
+            wire = token.wire.end;
+            view = token.view.end;
+            continue;
+        }
         if position <= token.view.start {
             return Some(wire + position - view);
         }

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "contract": "mcp-operation-order-v4",
+  "contract": "mcp-operation-order-v5",
   "test": "scripts/bench/test_mcp_operation_order.py",
   "cases": [
     {
@@ -5254,6 +5254,102 @@
           "span": [
             32,
             39
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-empty-owned-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        ""
+      ],
+      "payload": {
+        "items": [
+          "{{owned_1}}Maria",
+          "Maria{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria",
+          "Maria"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-empty-owned-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        ""
+      ],
+      "payload": {
+        "items": [
+          "{{owned_1}}Maria",
+          "Maria{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria",
+          "Maria"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            0,
+            5
           ],
           "class": "Name"
         }
