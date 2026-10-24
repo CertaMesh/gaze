@@ -53,16 +53,17 @@
     "passed": 1
   },
   "python_tests": {
-    "executed": 210,
-    "passed": 210,
+    "executed": 251,
+    "passed": 251,
     "skipped": 0,
     "real_cli_tests": [
       "test_real_cli_lifecycle_hooks_are_validated_by_runner",
       "test_real_daemon_context_assembly_is_admitted",
-      "test_real_cli_ner_tuning_without_model_admits"
+      "test_real_cli_model_free_policy_matrix_admits",
+      "test_real_empty_and_repeated_zero_candidate_requests_admit"
     ],
-    "attribution_tests": 28,
-    "bound_tests": 182,
+    "attribution_tests": 29,
+    "bound_tests": 222,
     "duration_bounds": 57,
     "child_parent_edge_tests": 42,
     "forbidden_phase_tests": 34,
@@ -74,7 +75,9 @@
     "ownership_checks": 8,
     "reviewer_round_four_ownership_witness_tests": 2,
     "record_checks": 7,
-    "reviewer_round_five_invocation_witness_tests": 2
+    "reviewer_round_five_invocation_witness_tests": 2,
+    "prerequisite_checks": 14,
+    "reviewer_prerequisite_witnesses": 8
   },
   "mutation": {
     "source_commit": "e1744ec1d533af669797c88c14e2494c0f98c450",
@@ -88,14 +91,14 @@
   },
   "source_identity_base": "764d98903e8e1e6a6a71486c5c31f6c43041ef38",
   "containment_mutation": {
-    "runner_sha256": "b1b8f73d32d915cb806e794118071db695fe33d774a7139e358984359d2900ba",
-    "runner_source_sha256": "4ae03e33ed70588cb7bc850f9efa22b9c965d5261e25df523b40d82063d723c0",
-    "contract_sha256": "ff4807e88d1736af8d6093c147cc775276499a1e8810d030fcf871b0d2f4ed9b",
+    "runner_sha256": "2a50fded38b6d2aa35e782187ad212e5108b224299895df8a25a7cc291b79421",
+    "runner_source_sha256": "788b30b8ea52e13222b7d896c87935f41c8b40701c02d079eb89c0aeacaec0ff",
+    "contract_sha256": "6e05eb6824ffdc545bab94c4c4cc0d34022a210f0244442f16681fb9643085b6",
     "test_sha256": {
-      "test_perf_attribution.py": "a95006a5314faf7f6562d1c098201c1face3bbfd3e87049e735c7650ddb35f60",
-      "test_perf_lifecycle_bounds.py": "45a7651d99d2c4d1120f69fae46147b97a85aa4cbffbdb7c2096ca7bdf3f4dd5"
+      "test_perf_attribution.py": "44c4bc3689e9c920af301ab800475cb17b9d665738ae46bb964c4f3a197eea5d",
+      "test_perf_lifecycle_bounds.py": "fbf4a9ed37b450aaf5fbbccc866295a91b28c5f4b52832b0348bbc0caf258900"
     },
-    "source_commit": "c7b8cd571cffe6cb0f90c7d32da3b8a8e6558c6e",
+    "source_commit": "ee9727ef7e90ba9cb37de89d266c8d0c5563f5a1",
     "mutations": [
       {
         "check": "ready-build-parent-pipeline_build_ns",
@@ -440,6 +443,90 @@
         "restored_tests_passed": 1
       },
       {
+        "check": "ner-ort-wait",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_ner_ort_wait",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym-ort-wait",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_nym_ort_wait",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "ner-ort-tokenize",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_ner_ort_tokenize",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "ner-mutex_wait-tokenize",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_ner_mutex_wait_tokenize",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym-ort-tokenize",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_nym_ort_tokenize",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym-mutex_wait-tokenize",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_nym_mutex_wait_tokenize",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym-stable-window-owner",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_nym_stable_window_owner",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym-neutral-window-owner",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_nym_neutral_window_owner",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym-neutral-stable",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_nym_neutral_stable",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "resolve1-registry",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_resolve1_registry",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "sweep-resolve1",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_sweep_resolve1",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "resolve2-sweep",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_resolve2_sweep",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "sweep-added-resolve2",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_sweep_added_resolve2",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "safety-model-view",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_safety_model_view",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
         "check": "metric-candidates",
         "test": "test_perf_lifecycle_bounds.BoundTests.test_metric_candidates",
         "mutated_assertions_failed": 1,
@@ -620,14 +707,15 @@
         "restored_tests_passed": 1
       }
     ],
-    "mutation_count": 87,
+    "mutation_count": 101,
     "serial_sum_checks": 15,
     "parent_checks": 42,
     "ownership_checks": 8,
     "record_checks": 7,
+    "prerequisite_checks": 14,
     "parent_test_isolation": "Each parent check alone; serial sums and ancestor edges otherwise imply it. Full graph also rejects every parent witness.",
-    "executed_assertion_failures": 87,
-    "restored_passes": 87
+    "executed_assertion_failures": 101,
+    "restored_passes": 101
   },
   "timer_cli_tests": {
     "executed": 2,
@@ -664,15 +752,15 @@
     "current_rust_gates": "Exact-head CI is required; this revision changes only Python, its generated guide, and proof data.",
     "public_text_scrub": {
       "passed": true,
-      "guide_sha256": "f7bb7d9dea392a0a3eb09dd5ae8b69ba74505943249f0e6500378b6894165134",
-      "checked_implementation_commit": "c7b8cd571cffe6cb0f90c7d32da3b8a8e6558c6e",
+      "guide_sha256": "5ff3b9140ce0411d854275dea1067f2f184d8f1d64e7e576c08763ce5d8cc3f2",
+      "checked_implementation_commit": "ee9727ef7e90ba9cb37de89d266c8d0c5563f5a1",
       "command": "cargo run -p xtask -- scrub-public-text scripts/bench/perf-attribution.md"
     },
     "python_suite": {
       "passed": true,
-      "tests": 210,
+      "tests": 251,
       "skipped": 0,
-      "checked_implementation_commit": "c7b8cd571cffe6cb0f90c7d32da3b8a8e6558c6e"
+      "checked_implementation_commit": "ee9727ef7e90ba9cb37de89d266c8d0c5563f5a1"
     },
     "runtime_source_unchanged_since": "6fd3b19df66d8bfd68170a90337148a111039dac"
   },
@@ -725,7 +813,7 @@
       }
     ]
   },
-  "admission_source_commit": "c7b8cd571cffe6cb0f90c7d32da3b8a8e6558c6e",
+  "admission_source_commit": "ee9727ef7e90ba9cb37de89d266c8d0c5563f5a1",
   "diagnostic_source_sha256": "c6d302210776dc23ed3c8a0220a1387a8214a3b906971dcdee7d45c7e769c289",
   "recognizer_ownership": {
     "checks": [
@@ -771,5 +859,154 @@
     "nym-views",
     "sweep-counter-owner",
     "parent-invocations"
-  ]
+  ],
+  "cross_hook_audit": {
+    "hook_rows": 25,
+    "checks": [
+      {
+        "id": "ner-ort-wait",
+        "trigger": "ner_ort_ns",
+        "prerequisite": "ner_mutex_wait_ns",
+        "kind": "at-least",
+        "source": "gaze-recognizers/src/ner/backend/ort.rs:132-139: wait drops before ORT starts"
+      },
+      {
+        "id": "nym-ort-wait",
+        "trigger": "nym_ort_ns",
+        "prerequisite": "nym_mutex_wait_ns",
+        "kind": "at-least",
+        "source": "gaze-recognizers/src/safety_net/nym/ort.rs:230-236: wait drops before ORT starts"
+      },
+      {
+        "id": "ner-ort-tokenize",
+        "trigger": "ner_ort_ns",
+        "prerequisite": "ner_tokenize_ns",
+        "kind": "invoked",
+        "source": "gaze-recognizers/src/ner/backend/ort.rs:67-89; preparation.rs:13-59: encode precedes inference"
+      },
+      {
+        "id": "ner-mutex_wait-tokenize",
+        "trigger": "ner_mutex_wait_ns",
+        "prerequisite": "ner_tokenize_ns",
+        "kind": "invoked",
+        "source": "gaze-recognizers/src/ner/backend/ort.rs:67-89; preparation.rs:13-59: encode precedes inference"
+      },
+      {
+        "id": "nym-ort-tokenize",
+        "trigger": "nym_ort_ns",
+        "prerequisite": "nym_tokenize_ns",
+        "kind": "invoked",
+        "source": "gaze-recognizers/src/safety_net/nym/ort.rs:193-207: tokenize precedes window loop"
+      },
+      {
+        "id": "nym-mutex_wait-tokenize",
+        "trigger": "nym_mutex_wait_ns",
+        "prerequisite": "nym_tokenize_ns",
+        "kind": "invoked",
+        "source": "gaze-recognizers/src/safety_net/nym/ort.rs:193-207: tokenize precedes window loop"
+      },
+      {
+        "id": "nym-stable-window-owner",
+        "trigger": "nym_windows_stable",
+        "prerequisite": "nym_stable_ns",
+        "kind": "counter-owner",
+        "source": "gaze-types/src/perf.rs:207-212,221-232,317-325: active view selects counter; drop records invocation"
+      },
+      {
+        "id": "nym-neutral-window-owner",
+        "trigger": "nym_windows_neutral",
+        "prerequisite": "nym_neutral_ns",
+        "kind": "counter-owner",
+        "source": "gaze-types/src/perf.rs:207-212,221-232,317-325: active view selects counter; drop records invocation"
+      },
+      {
+        "id": "nym-neutral-stable",
+        "trigger": "nym_neutral_ns",
+        "prerequisite": "nym_stable_ns",
+        "kind": "at-least",
+        "source": "gaze-recognizers/src/safety_net/nym/mod.rs:162-186: stable precedes each neutral view"
+      },
+      {
+        "id": "resolve1-registry",
+        "trigger": "resolve1_ns",
+        "prerequisite": "registry_ns",
+        "kind": "at-least",
+        "source": "gaze/src/pipeline.rs:1224-1230: each first resolution follows one registry call"
+      },
+      {
+        "id": "sweep-resolve1",
+        "trigger": "sweep_ns",
+        "prerequisite": "resolve1_ns",
+        "kind": "at-least",
+        "source": "gaze/src/pipeline.rs:1228-1240,1652-1661: each sweep follows first resolution"
+      },
+      {
+        "id": "resolve2-sweep",
+        "trigger": "resolve2_ns",
+        "prerequisite": "sweep_ns",
+        "kind": "invoked",
+        "source": "gaze/src/pipeline.rs:1231-1275,1713: second resolution is inside or after sweep"
+      },
+      {
+        "id": "sweep-added-resolve2",
+        "trigger": "sweep_candidates",
+        "prerequisite": "resolve2_ns",
+        "kind": "counter-owner",
+        "source": "gaze/src/pipeline.rs:1707-1713: positive additions always start second resolution"
+      },
+      {
+        "id": "safety-model-view",
+        "trigger": "safety_model_ns",
+        "prerequisite": "safety_view_build_ns",
+        "kind": "invoked",
+        "source": "gaze/src/pipeline.rs:1829-1858,1920: scan construction precedes either model call site"
+      }
+    ],
+    "reviewer_witnesses": [
+      "ner-ort-without-mutex",
+      "nym-ort-without-mutex",
+      "ner-ort-outnumbers-waits",
+      "nym-ort-outnumbers-waits",
+      "ner-ort-without-tokenize",
+      "nym-ort-without-tokenize",
+      "nym-stable-window-without-stable-view",
+      "neutral-windows-without-neutral-view"
+    ],
+    "independent_prerequisite_witnesses": 14,
+    "full_admission_prerequisite_witnesses": 14,
+    "zero_duration_and_zero_window_views_admit": true,
+    "extra_waits_and_multiple_windows_per_tokenize_admit": true
+  },
+  "model_free_policy_matrix": {
+    "timed": false,
+    "policies": [
+      "rule",
+      "custom-regex",
+      "ner-threshold",
+      "ner-locale",
+      "dob-disabled",
+      "nym-inactive"
+    ],
+    "modes": [
+      "one-shot",
+      "daemon",
+      "daemon-absent-and-empty-context"
+    ],
+    "combinations": 18,
+    "passed": 18,
+    "binary_sha256": "378ec04cf7eb373893963a69b771f89487d8b24224a9e8d50837bcad324b0af6",
+    "test": "test_real_cli_model_free_policy_matrix_admits"
+  },
+  "pipeline_early_paths": {
+    "timed": false,
+    "real_cli_test": "test_real_empty_and_repeated_zero_candidate_requests_admit",
+    "real_empty_daemon_and_repeated_zero_candidate_requests_admit": true,
+    "empty_recognizer_map_admits": true,
+    "empty_one_shot": "CLI refuses empty stdin before processing; not a lifecycle refusal",
+    "zero_configured_recognizers": "CLI assembly refuses NoRecognizers before processing; registry timer starts before inspecting entries",
+    "optimization_gating": "pipeline.rs:2009-2034 gates safety nets only",
+    "cache": "prefix_cache is compatibility-only; pipeline.rs:1195-1205 always rescans",
+    "source_call_paths": "pipeline.rs:1224-1275,1707-1713; registry.rs:1437",
+    "binary_sha256": "378ec04cf7eb373893963a69b771f89487d8b24224a9e8d50837bcad324b0af6"
+  }
 }
