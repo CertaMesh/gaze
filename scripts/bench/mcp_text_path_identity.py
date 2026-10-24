@@ -26,6 +26,7 @@ NATIVE_FILES = frozenset({
 NATIVE_PREFIXES = ("crates/gaze-mcp-core/", "scripts/bench/native-mcp-operation/", "docs/reference/benchmarks/gates/mcp-operation-order/")
 GOLDEN = "scripts/bench/fixtures/evidence/mcp_route_v1.golden.json"
 CI_REGISTRY = "scripts/ci/full-inputs.json"
+DOCUMENT_MCP_TESTS = "crates/gaze-document/src/mcp/mod.rs"
 EVIDENCE_PREFIX = "docs/reference/benchmarks/gates/mcp-operation-order/"
 EVIDENCE_NAMES = frozenset({"README.md", "authority-and-cleanup.json", "base-native.json.gz",
     "base-v1.scorecard.json", "base-v2.scorecard.json", "candidate-native.json.gz",
@@ -46,7 +47,14 @@ def _tree(revision):
 
 
 def _allowed(path):
-    return path in NATIVE_FILES or path.startswith(NATIVE_PREFIXES) or path in {GOLDEN, CI_REGISTRY}
+    return path in NATIVE_FILES or path.startswith(NATIVE_PREFIXES) or path in {GOLDEN, CI_REGISTRY, DOCUMENT_MCP_TESTS}
+
+
+def _document_tests_only(before, after):
+    marker = b"#[cfg(test)]\nmod tests {"
+    a, b = before.split(marker, 1), after.split(marker, 1)
+    if len(a) != 2 or len(b) != 2 or a[0] != b[0]:
+        raise ValueError("document MCP production code changed")
 
 
 def _ci_registry_only(before, after):
@@ -84,6 +92,8 @@ def build(base, candidate):
         _golden_only(_blob(a[GOLDEN][2]), _blob(b[GOLDEN][2]))
     if CI_REGISTRY in changed:
         _ci_registry_only(_blob(a[CI_REGISTRY][2]), _blob(b[CI_REGISTRY][2]))
+    if DOCUMENT_MCP_TESTS in changed:
+        _document_tests_only(_blob(a[DOCUMENT_MCP_TESTS][2]), _blob(b[DOCUMENT_MCP_TESTS][2]))
     for path in changed:
         if path in NATIVE_FILES and path in a:
             raise ValueError("native allowlist unexpectedly overlaps a base text input: " + path)
@@ -134,12 +144,15 @@ def build(base, candidate):
             "allowed_changed_paths": changed, "native_exact_paths": sorted(NATIVE_FILES), "native_prefixes": list(NATIVE_PREFIXES),
             "rmcp_counter_fixture": {"path": GOLDEN, "scope": "rmcp evidence only; sole change is source events 1 to 3"},
             "ci_registry_exception": {"path": CI_REGISTRY, "scope": "only the twelve new native evidence path declarations"},
+            "document_test_exception": {"path": DOCUMENT_MCP_TESTS, "scope": "only cfg(test) assertions; production prefix must be byte-identical",
+                "base_sha256": hashlib.sha256(_blob(a[DOCUMENT_MCP_TESTS][2])).hexdigest(),
+                "candidate_sha256": hashlib.sha256(_blob(b[DOCUMENT_MCP_TESTS][2])).hexdigest()},
             "generator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
 
 
 def verify(record, candidate=None):
     replay = build(record["base_revision"], candidate or record["candidate_revision"])
-    for field in ("kind", "text_layers", "fresh_text_capture", "protected_files", "protected_file_count", "generator_sha256"):
+    for field in ("kind", "text_layers", "fresh_text_capture", "protected_files", "protected_file_count", "generator_sha256", "document_test_exception"):
         if replay[field] != record[field]:
             raise ValueError("text path-identity record differs: " + field)
     return replay

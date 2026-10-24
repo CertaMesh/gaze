@@ -437,9 +437,7 @@ fn protect_json(
         remaining_input = remaining_input
             .checked_sub(text.len())
             .ok_or(gaze::ProtectionError::Provenance)?;
-        let view = transaction
-            .restore_strict_text_bounded(text, remaining)
-            .map_err(|_| gaze::ProtectionError::Provenance)?;
+        let view = rule_coverage::expand_owned_bounded(transaction, text, remaining)?;
         remaining -= view.len();
         if !view.is_empty() {
             expanded.push(view);
@@ -492,9 +490,7 @@ fn verify_json_rule_coverage(
     value: &serde_json::Value,
 ) -> Result<(), gaze::ProtectionError> {
     visit_text(value, &mut |text| {
-        pipeline
-            .verify_staged_rule_coverage(transaction, text, rule_coverage::MAX_OPERATION_TEXT_BYTES)
-            .map_err(|_| gaze::ProtectionError::Residual)
+        rule_coverage::verify_rule_coverage(pipeline, transaction, text)
     })
 }
 
@@ -518,16 +514,19 @@ fn protect_json_leaves(
     use serde_json::Value as JsonValue;
     match value {
         JsonValue::String(text) => {
-            let expected = transaction
-                .restore_strict_text_bounded(text, rule_coverage::MAX_OPERATION_TEXT_BYTES)
-                .map_err(|_| gaze::ProtectionError::Provenance)?;
+            let expected = rule_coverage::expand_owned_bounded(
+                transaction,
+                text,
+                rule_coverage::MAX_OPERATION_TEXT_BYTES,
+            )?;
             let primary = pipeline.protect_text_transaction(transaction, text, context)?;
             let protected =
                 rule_coverage::cover_rule_repeats(pipeline, transaction, text, &primary)?;
-            if transaction
-                .restore_strict_text_bounded(&protected, rule_coverage::MAX_OPERATION_TEXT_BYTES)
-                .map_err(|_| gaze::ProtectionError::Provenance)?
-                != expected
+            if rule_coverage::expand_owned_bounded(
+                transaction,
+                &protected,
+                rule_coverage::MAX_OPERATION_TEXT_BYTES,
+            )? != expected
             {
                 return Err(gaze::ProtectionError::Provenance);
             }

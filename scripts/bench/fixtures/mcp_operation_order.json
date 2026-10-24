@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "contract": "mcp-operation-order-v1",
+  "contract": "mcp-operation-order-v2",
   "test": "scripts/bench/test_mcp_operation_order.py",
   "cases": [
     {
@@ -672,20 +672,20 @@
       ]
     },
     {
-      "id": "declared-mária-brenner-arguments",
+      "id": "declared-m\u00e1ria-brenner-arguments",
       "layer": "A",
       "category": "text",
       "direction": "arguments",
       "seed_names": [],
       "payload": {
         "items": [
-          "From: Mária Brenner <alice@example.invalid>"
+          "From: M\u00e1ria Brenner <alice@example.invalid>"
         ],
         "count": 17
       },
       "expanded": {
         "items": [
-          "From: Mária Brenner <alice@example.invalid>"
+          "From: M\u00e1ria Brenner <alice@example.invalid>"
         ],
         "count": 17
       },
@@ -715,20 +715,20 @@
       ]
     },
     {
-      "id": "declared-mária-brenner-response",
+      "id": "declared-m\u00e1ria-brenner-response",
       "layer": "A",
       "category": "text",
       "direction": "response",
       "seed_names": [],
       "payload": {
         "items": [
-          "From: Mária Brenner <alice@example.invalid>"
+          "From: M\u00e1ria Brenner <alice@example.invalid>"
         ],
         "count": 17
       },
       "expanded": {
         "items": [
-          "From: Mária Brenner <alice@example.invalid>"
+          "From: M\u00e1ria Brenner <alice@example.invalid>"
         ],
         "count": 17
       },
@@ -758,25 +758,25 @@
       ]
     },
     {
-      "id": "repeat-mária-brenner-last-arguments",
+      "id": "repeat-m\u00e1ria-brenner-last-arguments",
       "layer": "R",
       "category": "text",
       "direction": "arguments",
       "seed_names": [],
       "payload": {
         "items": [
-          "hello mária brenner",
+          "hello m\u00e1ria brenner",
           [
-            "From: Mária Brenner <alice@example.invalid>"
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
           ]
         ],
         "count": 17
       },
       "expanded": {
         "items": [
-          "hello mária brenner",
+          "hello m\u00e1ria brenner",
           [
-            "From: Mária Brenner <alice@example.invalid>"
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
           ]
         ],
         "count": 17
@@ -820,25 +820,25 @@
       ]
     },
     {
-      "id": "repeat-mária-brenner-last-response",
+      "id": "repeat-m\u00e1ria-brenner-last-response",
       "layer": "R",
       "category": "text",
       "direction": "response",
       "seed_names": [],
       "payload": {
         "items": [
-          "hello mária brenner",
+          "hello m\u00e1ria brenner",
           [
-            "From: Mária Brenner <alice@example.invalid>"
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
           ]
         ],
         "count": 17
       },
       "expanded": {
         "items": [
-          "hello mária brenner",
+          "hello m\u00e1ria brenner",
           [
-            "From: Mária Brenner <alice@example.invalid>"
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
           ]
         ],
         "count": 17
@@ -882,7 +882,7 @@
       ]
     },
     {
-      "id": "repeat-mária-brenner-first-arguments",
+      "id": "repeat-m\u00e1ria-brenner-first-arguments",
       "layer": "R",
       "category": "text",
       "direction": "arguments",
@@ -890,18 +890,18 @@
       "payload": {
         "items": [
           [
-            "From: Mária Brenner <alice@example.invalid>"
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
           ],
-          "hello mária brenner"
+          "hello m\u00e1ria brenner"
         ],
         "count": 17
       },
       "expanded": {
         "items": [
           [
-            "From: Mária Brenner <alice@example.invalid>"
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
           ],
-          "hello mária brenner"
+          "hello m\u00e1ria brenner"
         ],
         "count": 17
       },
@@ -944,7 +944,7 @@
       ]
     },
     {
-      "id": "repeat-mária-brenner-first-response",
+      "id": "repeat-m\u00e1ria-brenner-first-response",
       "layer": "R",
       "category": "text",
       "direction": "response",
@@ -952,18 +952,18 @@
       "payload": {
         "items": [
           [
-            "From: Mária Brenner <alice@example.invalid>"
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
           ],
-          "hello mária brenner"
+          "hello m\u00e1ria brenner"
         ],
         "count": 17
       },
       "expanded": {
         "items": [
           [
-            "From: Mária Brenner <alice@example.invalid>"
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
           ],
-          "hello mária brenner"
+          "hello m\u00e1ria brenner"
         ],
         "count": 17
       },
@@ -2170,6 +2170,214 @@
           "path": [
             "items",
             3
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "bare-filename-lowercase-arguments",
+      "layer": "D",
+      "category": "code",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "scan_1.png invoice_20250111.pdf"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "scan_1.png invoice_20250111.pdf"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "bare-filename-capital-arguments",
+      "layer": "D",
+      "category": "code",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "Scan_1.png doc_v2.png"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Scan_1.png doc_v2.png"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "repeat-with-bare-filename-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "scan_1.png Scan_1.png"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "scan_1.png Scan_1.png"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "bare-filename-lowercase-response",
+      "layer": "D",
+      "category": "code",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "scan_1.png invoice_20250111.pdf"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "scan_1.png invoice_20250111.pdf"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "bare-filename-capital-response",
+      "layer": "D",
+      "category": "code",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "Scan_1.png doc_v2.png"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Scan_1.png doc_v2.png"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "repeat-with-bare-filename-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "scan_1.png Scan_1.png"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "scan_1.png Scan_1.png"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
           ],
           "span": [
             23,

@@ -615,3 +615,65 @@ async fn overlapping_rule_values_preserve_owned_tokens_from_different_classes() 
         }
     }
 }
+
+#[tokio::test]
+async fn bare_filenames_survive_operation_discovery_and_rule_proof() {
+    for response in [false, true] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let pipeline = repeat_pipeline(EvidenceKind::Rule);
+        let payload = json!([
+            "scan_1.png Scan_1.png invoice_20250111.pdf doc_v2.png",
+            "hello maria schneider",
+            {"later": source("Maria Schneider")}
+        ]);
+        let (registry, seen) = capture(if response {
+            payload.clone()
+        } else {
+            json!("public")
+        });
+        let output = dispatch(
+            &registry,
+            &Store::default(),
+            &pipeline,
+            &session,
+            if response {
+                json!("public")
+            } else {
+                payload.clone()
+            },
+        )
+        .await
+        .unwrap();
+        let protected = if response {
+            output.payload
+        } else {
+            seen.lock().unwrap().clone()
+        };
+        assert_eq!(protected[0], payload[0]);
+        assert!(!protected[1].as_str().unwrap().contains("maria schneider"));
+        assert_eq!(restore(&session, &protected), payload);
+    }
+}
+
+#[tokio::test]
+async fn rule_coverage_crosses_literal_bare_identifier_boundaries() {
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let payload =
+        json!(["hello maria scan_1 schneider", {"later": source("Maria scan_1 Schneider")}]);
+    let (registry, seen) = capture(json!("public"));
+    dispatch(
+        &registry,
+        &Store::default(),
+        &repeat_pipeline(EvidenceKind::Rule),
+        &session,
+        payload.clone(),
+    )
+    .await
+    .unwrap();
+    let protected = seen.lock().unwrap().clone();
+    assert!(!protected[0]
+        .as_str()
+        .unwrap()
+        .contains("maria scan_1 schneider"));
+    assert_eq!(restore(&session, &protected), payload);
+}

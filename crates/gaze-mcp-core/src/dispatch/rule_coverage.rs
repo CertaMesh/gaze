@@ -4,8 +4,89 @@ use std::collections::HashSet;
 /// Aggregate expanded original text budget for one argument or response operation.
 pub(super) const MAX_OPERATION_TEXT_BYTES: usize = 2 * 1024 * 1024;
 
+/// Broad bare identifiers are literal text, not session claims. Bound each owned
+/// expansion before allocation while retaining strict checks on other spellings.
+pub(super) fn expand_owned_bounded(
+    transaction: &SessionTransaction<'_>,
+    input: &str,
+    limit: usize,
+) -> Result<String, ProtectionError> {
+    gaze::token_shape::validate_restore_shapes(input).map_err(|_| ProtectionError::Provenance)?;
+    let mut output = String::new();
+    let mut cursor = 0;
+    for bare in gaze::token_shape::pattern()
+        .find_iter(input)
+        .filter(|found| {
+            gaze::token_shape::is_bare_identifier(found.as_str())
+                && !transaction.contains_token(found.as_str())
+        })
+    {
+        let gap = transaction
+            .restore_strict_text_bounded(&input[cursor..bare.start()], limit - output.len())
+            .map_err(|_| ProtectionError::Provenance)?;
+        let size = output
+            .len()
+            .checked_add(gap.len())
+            .and_then(|n| n.checked_add(bare.len()))
+            .filter(|n| *n <= limit)
+            .ok_or(ProtectionError::Provenance)?;
+        output
+            .try_reserve(size - output.len())
+            .map_err(|_| ProtectionError::Provenance)?;
+        output.push_str(&gap);
+        output.push_str(bare.as_str());
+        cursor = bare.end();
+    }
+    let tail = transaction
+        .restore_strict_text_bounded(&input[cursor..], limit - output.len())
+        .map_err(|_| ProtectionError::Provenance)?;
+    output.push_str(&tail);
+    Ok(output)
+}
+
+/// Enumerate all Rule hits independently of projection and candidate selection.
+pub(super) fn verify_rule_coverage(
+    pipeline: &Pipeline,
+    transaction: &SessionTransaction<'_>,
+    protected: &str,
+) -> Result<(), ProtectionError> {
+    let original = expand_owned_bounded(transaction, protected, MAX_OPERATION_TEXT_BYTES)?;
+    let mut covered = vec![false; original.len()];
+    let (mut wire_cursor, mut raw_cursor) = (0, 0);
+    for range in owned_token_ranges(protected, &transaction.tokens()) {
+        raw_cursor += range.start - wire_cursor;
+        let value = transaction
+            .restore_strict_text(&protected[range.clone()])
+            .map_err(|_| ProtectionError::Provenance)?;
+        let end = raw_cursor
+            .checked_add(value.len())
+            .ok_or(ProtectionError::Provenance)?;
+        covered
+            .get_mut(raw_cursor..end)
+            .ok_or(ProtectionError::Provenance)?
+            .fill(true);
+        raw_cursor = end;
+        wire_cursor = range.end;
+    }
+    if raw_cursor + protected.len() - wire_cursor != original.len() {
+        return Err(ProtectionError::Provenance);
+    }
+    for hit in pipeline
+        .staged_rule_repeat_candidates(transaction, &original)
+        .map_err(|_| ProtectionError::Provenance)?
+    {
+        if !covered
+            .get(hit.span)
+            .is_some_and(|bytes| bytes.iter().all(|byte| *byte))
+        {
+            return Err(ProtectionError::Residual);
+        }
+    }
+    Ok(())
+}
+
 /// Project every Rule hit, including overlaps, without replacing caller-owned tokens.
-/// Compatible intermediate tokens may merge before publication. The final core bitmap
+/// Compatible intermediate tokens may merge before publication. The final bitmap
 /// proof is deliberately separate from this projection.
 pub(super) fn cover_rule_repeats(
     pipeline: &Pipeline,
@@ -19,9 +100,7 @@ pub(super) fn cover_rule_repeats(
         .into_iter()
         .map(|range| original[range].to_owned())
         .collect::<HashSet<_>>();
-    let expanded = transaction
-        .restore_strict_text_bounded(input, MAX_OPERATION_TEXT_BYTES)
-        .map_err(|_| ProtectionError::Provenance)?;
+    let expanded = expand_owned_bounded(transaction, input, MAX_OPERATION_TEXT_BYTES)?;
     let entries = transaction.snapshot_entries();
     let mut tokens = Vec::new();
     let (mut wire_cursor, mut view_cursor) = (0, 0);

@@ -302,3 +302,9 @@ re-proves that the gate goes red when a gate is removed.
 Transport: `gaze-mcp-rmcp`. User-input protection: `gaze-proxy`.
 
 Full dispatch, audit, and threat contracts: [MCP runtime](../../docs/explanation/mcp/mcp-runtime.md). Correlation fields, manifest lifecycle, failure variants, and authorization audit: [Metrics](../../docs/reference/metrics.md#7-mcp-chokepoint-observability-gaze-mcp-core).
+
+Broad bare identifiers such as `scan_1.png` remain literal text. Malformed or
+foreign placeholders fail before tool invocation with `Protection(Provenance)`.
+This deliberate fail-closed change replaces adopter-specific errors that could
+previously occur after invocation and an open audit call. No tool or filesystem
+access occurs for those rejected arguments.
