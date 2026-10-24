@@ -504,6 +504,9 @@ impl Daemon {
             return self.v2_open(session_id, request_id, projection_id, digest);
         }
         let seq = r.counter("request_seq")?;
+        r.string("daemon_epoch")?;
+        r.string("session_epoch")?;
+        r.string("pipeline_id")?;
         if self.sessions.contains_key(&session_id) {
             return Err(Failure::ProtocolInvalid);
         }
@@ -614,6 +617,7 @@ impl Daemon {
             },
             self.v2.limits.v2_response_frame_bytes,
         )?;
+        let manifest_bytes = session.manifest_allocation_bytes();
         let live = Live {
             session,
             session_epoch: epoch,
@@ -625,7 +629,7 @@ impl Daemon {
             opening_digest: digest,
             opening: response.clone(),
             receipt: None,
-            manifest_bytes: 0,
+            manifest_bytes,
             last_seen: Instant::now(),
         };
         if self
@@ -696,7 +700,6 @@ impl Daemon {
         if live.revision == MAX_COUNTER || live.generation == MAX_COUNTER {
             return Err(Failure::CacheCapacity);
         }
-        let inventory = inventory(r, live, op == "resync", limits)?;
         let inputs =
             r.0.get("context")
                 .map(|raw| {
@@ -717,13 +720,27 @@ impl Daemon {
                     Ok::<_, Failure>((pipeline, dictionaries))
                 })
                 .transpose()?;
+        let inventory = inventory(r, live, op == "resync", limits)?;
         let (pipeline, dictionaries) = inputs
             .as_ref()
             .map(|(p, d)| (p, d))
             .unwrap_or((&self.pipeline, &self.dictionaries));
         let policy = safety_net_policy(self.safety_net_mode, self.safety_net_fallback);
         let (other_bytes, other_manifests) = self.v2.bytes_except(id);
+        check_stage(
+            limits,
+            live,
+            &inventory,
+            &[],
+            live.manifest_bytes,
+            other_bytes,
+            other_manifests,
+            0,
+        )?;
         let mut transaction = live.session.begin_transaction();
+        transaction
+            .set_manifest_byte_limit(limits.session_manifest_bytes)
+            .map_err(|_| Failure::CacheCapacity)?;
         transaction.enable_deterministic_sweep();
         let initial = transaction.semantic_revision();
         let mut results = None;
@@ -739,7 +756,13 @@ impl Daemon {
                         dictionaries,
                         policy,
                     )
-                    .map_err(|_| Failure::Pipeline)?;
+                    .map_err(|error| {
+                        if matches!(error, gaze::Error::SessionCapacity) {
+                            Failure::CacheCapacity
+                        } else {
+                            Failure::Pipeline
+                        }
+                    })?;
                 self.logger
                     .log_safety_net_report(&report, &live.session, DocumentKind::Text)
                     .map_err(|_| Failure::Pipeline)?;
@@ -819,7 +842,10 @@ impl Daemon {
             other_manifests,
             response.get().len(),
         )?;
-        transaction.commit().map_err(|_| Failure::CacheConflict)?;
+        transaction.commit().map_err(|error| match error {
+            gaze::SessionTransactionError::CapacityExceeded => Failure::CacheCapacity,
+            _ => Failure::CacheConflict,
+        })?;
         let live = self.v2.sessions.get_mut(id).expect("validated session");
         live.blocks = inventory;
         live.revision += 1;

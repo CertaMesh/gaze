@@ -238,6 +238,10 @@ fn invalid_protocol_objects_never_fall_back_to_v1() {
     let mut duplicate = base.to_string();
     duplicate.insert_str(1, "\"request_id\":\"duplicate\",");
     assert_error(&raw(&mut d, &duplicate), "ProtocolInvalid");
+    let nested_duplicate = base
+        .to_string()
+        .replace("\"id\":\"leaf-a\"", "\"id\":\"leaf-a\",\"id\":\"leaf-b\"");
+    assert_error(&raw(&mut d, &nested_duplicate), "ProtocolInvalid");
     let mut duplicate_version = base.to_string();
     duplicate_version.insert_str(1, "\"version\":1,");
     assert_error(&raw(&mut d, &duplicate_version), "ProtocolInvalid");
@@ -596,4 +600,153 @@ fn v1_response_fixtures_remain_byte_exact_and_large_escaped_restore_is_accepted(
         serde_json::to_string(&close).unwrap(),
         r#"{"version":1,"op":"close","session_id":"legacy"}"#
     );
+}
+
+#[test]
+fn context_is_validated_on_every_request_and_does_not_carry_unmatched_values() {
+    let mut d = daemon();
+    let opened = open(&mut d, "conversation-a");
+    let mut request = clean_request(&opened, vec![block("leaf-a", "ordinary text")]);
+    request["context"] = json!({"record":{"full_name":"Zelmora Quentrix"}});
+    let first = send(&mut d, request);
+    assert_eq!(first["op"], "clean_blocks");
+    let second = clean(&mut d, &first, vec![block("leaf-a", "Zelmora Quentrix")]);
+    assert_eq!(
+        second["blocks"][0]["clean_text"], "Zelmora Quentrix",
+        "unmatched context is request-scoped"
+    );
+    let mut request = clean_request(&second, vec![block("leaf-a", "Zelmora Quentrix")]);
+    request["context"] = json!({"record":{"full_name":"Zelmora Quentrix"}});
+    let third = send(&mut d, request);
+    assert!(!third["blocks"][0]["clean_text"]
+        .as_str()
+        .unwrap()
+        .contains("Zelmora"));
+    let fourth = clean(&mut d, &third, vec![block("leaf-a", "Zelmora Quentrix")]);
+    assert_eq!(
+        fourth["blocks"][0]["clean_text"], third["blocks"][0]["clean_text"],
+        "matched evidence stays in the manifest"
+    );
+    let base = clean_request(&fourth, vec![block("leaf-a", "Zelmora Quentrix")]);
+    for context in [
+        r#"{"record":{"full_name":"Zelmora Quentrix","full_name":"Velmora Xantrix"}}"#.to_string(),
+        format!(
+            "{{{}\"record\":{{\"full_name\":\"Zelmora Quentrix\"}}}}",
+            " ".repeat(4 * 1024 * 1024)
+        ),
+        "null".into(),
+    ] {
+        let mut frame = base.to_string();
+        frame.insert_str(1, &format!("\"context\":{context},"));
+        let response = raw(&mut d, &frame);
+        assert_error(&response, "PolicyConfig");
+        assert!(!response.to_string().contains("Zelmora"));
+    }
+}
+
+#[test]
+fn bounded_request_and_response_edges_and_nonterminal_real_v2_frame_ceiling() {
+    let mut d = daemon();
+    let frame = opening("conversation-a").to_string();
+    d.v2.limits.v2_request_frame_bytes = frame.len();
+    let opened = raw(&mut d, &frame);
+    assert_eq!(opened["op"], "open");
+    assert_error(&raw(&mut d, &format!("{frame} ")), "CacheCapacity");
+    d.v2.limits = Limits::default();
+    let frame = format!(
+        "{}{}",
+        opening("too-large").to_string(),
+        " ".repeat(64 * 1024 * 1024)
+    );
+    assert_error(&raw(&mut d, &frame), "CacheCapacity");
+    open(&mut d, "still-live");
+    let small = json!({"value":"\u{0001}"});
+    let exact = serde_json::to_string(&small).unwrap().len();
+    assert!(encode(&small, exact).is_ok());
+    assert_eq!(
+        encode(&small, exact - 1).err(),
+        Some(Failure::CacheCapacity)
+    );
+}
+
+#[test]
+fn manifest_growth_and_empty_inventory_refuse_even_without_new_text() {
+    let mut d = daemon();
+    let opened = open(&mut d, "conversation-a");
+    let first = clean(
+        &mut d,
+        &opened,
+        vec![block("leaf-a", "alice@example.invalid")],
+    );
+    let old = d.v2.sessions["conversation-a"].session.snapshot_entries();
+    d.v2.limits.session_manifest_bytes = 512;
+    assert_error(
+        &send(&mut d, clean_request(&first, vec![])),
+        "CacheCapacity",
+    );
+    assert_eq!(
+        d.v2.sessions["conversation-a"].session.snapshot_entries(),
+        old
+    );
+    assert_eq!(d.v2.sessions["conversation-a"].next_seq, 2);
+}
+
+#[test]
+fn shared_session_cap_evicts_whole_namespaces_across_protocols() {
+    let mut d = daemon();
+    d.session_cap = 1;
+    let first = open(&mut d, "conversation-a");
+    assert_eq!(
+        send(
+            &mut d,
+            json!({"version":1,"op":"open","session_id":"legacy"})
+        )["op"],
+        "open"
+    );
+    assert!(!d.v2.contains("conversation-a"));
+    assert_error(
+        &send(&mut d, clean_request(&first, vec![])),
+        "SessionMissing",
+    );
+    open(&mut d, "conversation-b");
+    assert!(!d.sessions.contains_key("legacy"));
+}
+
+struct BrokenNet;
+impl gaze::SafetyNet for BrokenNet {
+    fn id(&self) -> &str {
+        "synthetic-broken"
+    }
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &[]
+    }
+    fn check(
+        &self,
+        _: &str,
+        _: gaze::SafetyNetContext<'_>,
+    ) -> std::result::Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
+        Err(gaze::SafetyNetError::Runtime {
+            message: "synthetic outage".into(),
+        })
+    }
+}
+
+#[test]
+fn model_health_uncertainty_never_replays_a_clean_receipt() {
+    let mut d = daemon();
+    let opened = open(&mut d, "conversation-a");
+    let request = clean_request(&opened, vec![block("leaf-a", "alice@example.invalid")]);
+    let cleaned = send(&mut d, request.clone());
+    d.pipeline = gaze::Pipeline::builder()
+        .register_safety_net(BrokenNet)
+        .rule(gaze::DefaultRule::new(Action::Preserve))
+        .build()
+        .unwrap();
+    assert_error(&send(&mut d, request), "CacheConflict");
+    let mut resync = operation(&cleaned, "resync");
+    resync["blocks"] = json!([block("leaf-a", "alice@example.invalid")]);
+    let response = send(&mut d, resync);
+    assert!(response.get("error").is_some());
+    assert!(response.get("blocks").is_none());
+    assert_eq!(d.v2.sessions["conversation-a"].next_seq, 2);
 }

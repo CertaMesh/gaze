@@ -317,12 +317,14 @@ impl RestoreAssessment {
 #[non_exhaustive]
 pub enum SessionTransactionError {
     GenerationConflict,
+    CapacityExceeded,
 }
 
 impl fmt::Display for SessionTransactionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::GenerationConflict => "session_generation_conflict",
+            Self::CapacityExceeded => "session_capacity_exceeded",
         })
     }
 }
@@ -338,6 +340,8 @@ pub struct SessionTransaction<'session> {
     identity: Arc<SessionIdentity>,
     captured_generation: u64,
     staged: SessionState,
+    manifest_limit: Option<usize>,
+    capacity_exceeded: bool,
 }
 
 /// Immutable restore-only state returned by a successful transaction commit.
@@ -514,6 +518,11 @@ impl Session {
         Self::new(scope)
     }
 
+    /// Conservative allocation charge of the current manifest.
+    pub fn manifest_allocation_bytes(&self) -> usize {
+        manifest_allocation_bytes(&self.state_snapshot())
+    }
+
     /// Capture the current complete immutable state for isolated mutation.
     pub fn begin_transaction(&self) -> SessionTransaction<'_> {
         let state = self.state_snapshot();
@@ -522,6 +531,8 @@ impl Session {
             identity: Arc::clone(&self.identity),
             captured_generation: state.generation,
             staged: (*state).clone(),
+            manifest_limit: None,
+            capacity_exceeded: false,
         }
     }
 
@@ -1061,12 +1072,60 @@ impl<'session> SessionTransaction<'session> {
         manifest_allocation_bytes(&self.staged)
     }
 
+    /// Bound staged manifest growth before allocating new mapping payloads.
+    /// The host must also budget the original state and pipeline work buffers.
+    pub fn set_manifest_byte_limit(&mut self, limit: usize) -> Result<()> {
+        self.manifest_limit = Some(limit);
+        self.ensure_manifest_room(0)
+    }
+
+    fn ensure_manifest_room(&mut self, addition: usize) -> Result<()> {
+        if let Some(limit) = self.manifest_limit {
+            let current = self.manifest_allocation_bytes();
+            // A hash-table growth can coexist with its old allocation. Reserve
+            // twice the current charge plus all new payload copies and buckets.
+            let projected = if addition == 0 {
+                current
+            } else {
+                current.saturating_mul(2).saturating_add(addition)
+            };
+            if projected > limit {
+                self.capacity_exceeded = true;
+                return Err(Error::SessionCapacity);
+            }
+        }
+        Ok(())
+    }
+
+    fn reserve_mapping(&mut self, family: &str, class: &PiiClass, raw: &str) -> Result<()> {
+        if self.manifest_limit.is_none() {
+            return Ok(());
+        }
+        let existing = self
+            .staged
+            .token_by_value
+            .keys()
+            .any(|key| key.family == family && key.class == *class && key.raw == raw);
+        if existing {
+            return self.ensure_manifest_room(0);
+        }
+        self.ensure_manifest_room(
+            raw.len()
+                .saturating_mul(6)
+                .saturating_add(family.len().saturating_mul(4))
+                .saturating_add(class.class_name().len().saturating_mul(8))
+                .saturating_add(8192),
+        )
+    }
+
     pub(crate) fn fork_for_probe(&self) -> Self {
         Self {
             session: self.session,
             identity: Arc::clone(&self.identity),
             captured_generation: self.captured_generation,
             staged: self.staged.clone(),
+            manifest_limit: self.manifest_limit,
+            capacity_exceeded: self.capacity_exceeded,
         }
     }
 
@@ -1103,6 +1162,7 @@ impl<'session> SessionTransaction<'session> {
         spelling: SourceSpelling,
     ) -> Result<String> {
         class.validate_custom_name()?;
+        self.reserve_mapping(family, class, raw)?;
         let prefix = hex::encode(self.identity.session_hex);
         Ok(
             intern_mapping_in_state(&mut self.staged, family, class, raw, spelling, |index| {
@@ -1119,6 +1179,24 @@ impl<'session> SessionTransaction<'session> {
         raw: &str,
         evidence: ManifestEvidence,
     ) {
+        let family_name = family.unwrap_or(DEFAULT_COUNTER_FAMILY);
+        let exists = self
+            .staged
+            .evidence_by_value
+            .keys()
+            .any(|key| key.family == family_name && key.class == *class && key.raw == raw);
+        if !exists
+            && self
+                .ensure_manifest_room(
+                    raw.len()
+                        .saturating_mul(2)
+                        .saturating_add(family_name.len().saturating_mul(2))
+                        .saturating_add(8192),
+                )
+                .is_err()
+        {
+            return;
+        }
         record_evidence_in_state(&mut self.staged, family, class, raw, evidence);
     }
 
@@ -1149,6 +1227,7 @@ impl<'session> SessionTransaction<'session> {
         spelling: SourceSpelling,
     ) -> Result<String> {
         class.validate_custom_name()?;
+        self.reserve_mapping(DEFAULT_COUNTER_FAMILY, class, raw)?;
         let prefix = hex::encode(self.identity.session_hex);
         Ok(intern_mapping_in_state(
             &mut self.staged,
@@ -1299,6 +1378,13 @@ impl<'session> SessionTransaction<'session> {
     pub fn commit(
         mut self,
     ) -> std::result::Result<CommittedSessionSnapshot, SessionTransactionError> {
+        if self.capacity_exceeded
+            || self
+                .manifest_limit
+                .is_some_and(|limit| self.manifest_allocation_bytes() > limit)
+        {
+            return Err(SessionTransactionError::CapacityExceeded);
+        }
         let mut boundary = self
             .session
             .state
@@ -1672,9 +1758,22 @@ fn manifest_allocation_bytes(state: &SessionState) -> usize {
         )
         .chain(state.json_spelled.iter().map(String::capacity))
         .fold(0usize, usize::saturating_add);
+    let restore = state
+        .restore_matcher_cache
+        .matcher
+        .get()
+        .and_then(|matcher| matcher.as_ref().ok())
+        .and_then(Option::as_ref)
+        .map_or(0, aho_corasick::AhoCorasick::memory_usage);
+    let sweep = state
+        .sweep_matcher_cache
+        .as_ref()
+        .map_or(0, |matcher| matcher.allocation_bytes());
     std::mem::size_of::<SessionState>()
         .saturating_add(tables)
         .saturating_add(keys)
+        .saturating_add(restore)
+        .saturating_add(sweep)
 }
 
 fn snapshot_entries_from_state(state: &SessionState) -> Vec<SessionSnapshotEntry> {
@@ -4925,5 +5024,68 @@ mod repeat_query_purity_tests {
         ));
         assert_eq!(tx.snapshot_entries(), entries);
         assert_eq!(tx.staged.evidence_by_value, evidence);
+    }
+    #[test]
+    fn staged_manifest_budget_refuses_before_mapping_growth_and_commit() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        transaction.set_manifest_byte_limit(1024).unwrap();
+        assert!(matches!(
+            transaction.tokenize(&PiiClass::Name, "Synthetic Exampleton"),
+            Err(Error::SessionCapacity)
+        ));
+        assert!(transaction.snapshot_entries().is_empty());
+        assert!(matches!(
+            transaction.commit(),
+            Err(SessionTransactionError::CapacityExceeded)
+        ));
+        assert!(session.snapshot_entries().is_empty());
+    }
+
+    #[test]
+    fn semantic_stamp_tracks_evidence_promotions_without_minting_and_ignores_noops() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        let initial = transaction.semantic_revision();
+        let token = transaction
+            .tokenize(&PiiClass::Name, "Synthetic Exampleton")
+            .unwrap();
+        assert!(transaction.semantic_revision() > initial);
+        transaction.record_evidence(
+            None,
+            &PiiClass::Name,
+            "Synthetic Exampleton",
+            ManifestEvidence::Learned,
+        );
+        let learned = transaction.semantic_revision();
+        transaction.record_evidence(
+            None,
+            &PiiClass::Name,
+            "Synthetic Exampleton",
+            ManifestEvidence::Pattern,
+        );
+        assert!(transaction.semantic_revision() > learned);
+        assert_eq!(
+            transaction
+                .tokenize(&PiiClass::Name, "Synthetic Exampleton")
+                .unwrap(),
+            token
+        );
+        let stable = transaction.semantic_revision();
+        transaction.record_evidence(
+            None,
+            &PiiClass::Name,
+            "Synthetic Exampleton",
+            ManifestEvidence::Pattern,
+        );
+        transaction.record_evidence(
+            None,
+            &PiiClass::Name,
+            "Synthetic Exampleton",
+            ManifestEvidence::Learned,
+        );
+        assert_eq!(transaction.semantic_revision(), stable);
+        transaction.commit().unwrap();
+        assert_eq!(session.begin_transaction().semantic_revision(), stable);
     }
 }

@@ -299,6 +299,21 @@ pub enum ManifestSweepError {
 }
 
 impl SweepMatcher {
+    pub(crate) fn allocation_bytes(&self) -> usize {
+        let sources = self.sources.capacity() * std::mem::size_of::<SweepSource>()
+            + self
+                .sources
+                .iter()
+                .map(|s| s.family.capacity() + s.raw.capacity() + s.class.class_name().len())
+                .sum::<usize>();
+        let matcher = |value: &Option<(AhoCorasick, Vec<(usize, SweepLink)>)>| {
+            value.as_ref().map_or(0, |(ac, meta)| {
+                ac.memory_usage() + meta.capacity() * std::mem::size_of::<(usize, SweepLink)>()
+            })
+        };
+        std::mem::size_of::<Self>() + sources + matcher(&self.folded) + matcher(&self.exact)
+    }
+
     /// Returns `None` when no source yields a pattern.
     pub(crate) fn build(
         sources: impl IntoIterator<Item = SweepSource>,
