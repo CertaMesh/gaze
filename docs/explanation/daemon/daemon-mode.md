@@ -47,6 +47,43 @@ Invalid JSON syntax returns unversioned `JsonMalformed`. A syntactically valid
 version 1 object with missing or wrongly typed fields returns versioned
 `ProtocolInvalid`, including when `session_id` is empty.
 
+## Input resource limits
+
+The daemon bounds raw wire frames before converting bytes to UTF-8 or parsing
+JSON. The cap is 160 MiB (167772160 bytes), derived with checked arithmetic as
+16 times `gaze clean`'s existing 10 MiB input cap. It includes JSON syntax and
+context, excludes LF, and counts CR in a CRLF ending. This resource limit adds
+a refusal for oversized frames that earlier versions accepted.
+
+Overflow emits exactly one unversioned `FrameTooLarge` error with a null
+`session_id`. Its detail contains only fixed text and the numeric byte limit.
+The daemon then closes input without processing further frames or draining an
+unbounded line to find LF. Already queued valid frames keep their order.
+
+The queue has a separate 160 MiB byte budget, derived from the same checked
+16-times input cap. A packed buffer stores UTF-8 frames with one LF delimiter
+each, including empty frames, without per-frame allocation overhead. The
+reader acquires byte credits before copying a frame into the queue. Processing
+returns those credits as soon as it takes the frame. A frame that does not fit
+the remaining credits waits; an empty queue always admits a frame at the cap
+plus its one-byte delimiter.
+
+Reader and queue buffers together retain at most the 160 MiB frame cap plus
+the 160 MiB queue budget, a fixed stdin read buffer, and constant bookkeeping
+(including the extra delimiter byte for a frame at the cap). Each allocation's
+requested capacity is bounded. This does not bound allocator overhead, model
+memory, session storage, the frame under processing, decoded JSON, or response
+size.
+
+A batch within the queue budget can finish writing before reading stdout, as
+in earlier versions. The queue introduces backpressure only beyond that budget:
+the reader waits until processing makes room, without dropping, reordering, or
+refusing frames. Larger batch clients should read stdout concurrently with
+stdin writes to avoid a wait cycle when both stdio pipes fill.
+
+An EOF tail without LF is still processed. Invalid UTF-8 still closes input
+silently after earlier valid frames, matching the previous reader.
+
 ## Caller-known record context
 
 Both legacy clean frames and version 1 `clean` frames accept an optional typed
