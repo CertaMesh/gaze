@@ -859,3 +859,21 @@ async fn unsupported_owned_copies_allow_only_whitespace_between_covered_spans() 
         }
     }
 }
+
+#[tokio::test]
+async fn unsupported_large_owned_carrier_preserves_admission_and_rejects_raw_private_byte() {
+    let seed = "X".repeat(2048);
+    let safe = "{token} ".repeat(1025);
+    let private = format!("{}{token} S {token} {}", "{token} ".repeat(512), "{token} ".repeat(512), token="{token}");
+    for provider in [Provider::OpenAi, Provider::Gemini] {
+        for stream in [false, true] {
+            for (source, carrier, reject) in [
+                ("ordinary source".to_owned(), safe.as_str(), false),
+                (format!("From: {seed} S {seed} <m@example.invalid>"), private.as_str(), true),
+            ] {
+                run_configured_case(provider, stream, false, Some(gaze::EvidenceKind::Rule),
+                    (&source, "ordinary text", Some((carrier, reject))), Some(&seed), false).await;
+            }
+        }
+    }
+}
