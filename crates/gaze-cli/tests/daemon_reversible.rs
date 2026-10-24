@@ -102,7 +102,7 @@ fn versioned_session_round_trips_two_calls_compaction_and_tool_json() {
         "SessionExists"
     );
     assert_eq!(
-        daemon.request(json!({"version":2,"op":"restore","session_id":"run-a","text":"x"}))
+        daemon.request(json!({"version":3,"op":"restore","session_id":"run-a","text":"x"}))
             ["error"],
         "ProtocolVersion"
     );
@@ -307,7 +307,7 @@ fn rejected_requests_never_echo_fictional_pii_session_ids() {
             "SessionMissing",
         ),
         (
-            json!({"version":2,"op":"restore","session_id":v1_id,"text":"x"}),
+            json!({"version":3,"op":"restore","session_id":v1_id,"text":"x"}),
             Some(2),
             "ProtocolVersion",
         ),

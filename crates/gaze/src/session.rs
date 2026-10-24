@@ -212,6 +212,8 @@ struct RestoreMatcherCache {
 #[derive(Clone)]
 struct SessionState {
     generation: u64,
+    semantic_revision: u64,
+    deterministic_sweep: bool,
     next_by_class: HashMap<PiiClass, usize>,
     token_by_value: HashMap<TokenKey, String>,
     value_by_token: HashMap<String, String>,
@@ -229,6 +231,8 @@ impl SessionState {
     fn empty() -> Self {
         Self {
             generation: 0,
+            semantic_revision: 0,
+            deterministic_sweep: false,
             next_by_class: HashMap::new(),
             token_by_value: HashMap::new(),
             value_by_token: HashMap::new(),
@@ -1036,6 +1040,27 @@ impl Session {
 }
 
 impl<'session> SessionTransaction<'session> {
+    /// Monotonic change stamp covering mappings, counters, spelling and evidence.
+    /// Unlike the commit generation this does not advance on a semantic no-op.
+    pub fn semantic_revision(&self) -> u64 {
+        self.staged.semantic_revision
+    }
+
+    /// Use canonical source ordering for request-complete, staged protection.
+    /// Legacy sessions retain their original sweep ordering.
+    pub fn enable_deterministic_sweep(&mut self) {
+        if !self.staged.deterministic_sweep {
+            self.staged.deterministic_sweep = true;
+            self.staged.sweep_matcher_cache = None;
+        }
+    }
+
+    /// Conservative manifest allocation charge, excluding shared identity and
+    /// pipeline work buffers. Hosts separately reserve staging and matcher space.
+    pub fn manifest_allocation_bytes(&self) -> usize {
+        manifest_allocation_bytes(&self.staged)
+    }
+
     pub(crate) fn fork_for_probe(&self) -> Self {
         Self {
             session: self.session,
@@ -1395,6 +1420,10 @@ where
         .checked_add(1)
         .expect("session token counter exhausted");
     let token = build(next);
+    state.semantic_revision = state
+        .semantic_revision
+        .checked_add(1)
+        .expect("semantic revision exhausted");
     state.next_by_class.insert(class.clone(), next);
     state.token_by_value.insert(key, token.clone());
     state.value_by_token.insert(token.clone(), raw.to_string());
@@ -1584,12 +1613,16 @@ fn record_evidence_in_state(
     if previous.is_some_and(ManifestEvidence::propagates) != next.propagates() {
         state.sweep_matcher_cache = None;
     }
+    state.semantic_revision = state
+        .semantic_revision
+        .checked_add(1)
+        .expect("semantic revision exhausted");
     state.evidence_by_value.insert(key, next);
     true
 }
 
 fn build_sweep_matcher(state: &SessionState) -> Result<Option<Arc<SweepMatcher>>> {
-    let sources = state
+    let mut sources = state
         .evidence_by_value
         .iter()
         .filter(|(_, evidence)| evidence.propagates())
@@ -1597,8 +1630,51 @@ fn build_sweep_matcher(state: &SessionState) -> Result<Option<Arc<SweepMatcher>>
             family: key.family.clone(),
             class: key.class.clone(),
             raw: key.raw.clone(),
-        });
+        })
+        .collect::<Vec<_>>();
+    if state.deterministic_sweep {
+        sources.sort_by(|a, b| (&a.family, &a.class, &a.raw).cmp(&(&b.family, &b.class, &b.raw)));
+    }
     Ok(SweepMatcher::build(sources)?.map(Arc::new))
+}
+
+fn manifest_allocation_bytes(state: &SessionState) -> usize {
+    // Charge hash buckets above their payload size, plus allocator alignment.
+    let tables = state
+        .token_by_value
+        .capacity()
+        .saturating_mul(256)
+        .saturating_add(state.value_by_token.capacity().saturating_mul(128))
+        .saturating_add(state.evidence_by_value.capacity().saturating_mul(256))
+        .saturating_add(state.next_by_class.capacity().saturating_mul(128))
+        .saturating_add(state.json_spelled.capacity().saturating_mul(64));
+    let keys = state
+        .token_by_value
+        .iter()
+        .map(|(key, token)| {
+            key.raw
+                .capacity()
+                .saturating_add(key.family.capacity())
+                .saturating_add(key.class.class_name().len())
+                .saturating_add(token.capacity())
+        })
+        .chain(state.evidence_by_value.keys().map(|key| {
+            key.raw
+                .capacity()
+                .saturating_add(key.family.capacity())
+                .saturating_add(key.class.class_name().len())
+        }))
+        .chain(
+            state
+                .value_by_token
+                .iter()
+                .map(|(token, raw)| token.capacity().saturating_add(raw.capacity())),
+        )
+        .chain(state.json_spelled.iter().map(String::capacity))
+        .fold(0usize, usize::saturating_add);
+    std::mem::size_of::<SessionState>()
+        .saturating_add(tables)
+        .saturating_add(keys)
 }
 
 fn snapshot_entries_from_state(state: &SessionState) -> Vec<SessionSnapshotEntry> {

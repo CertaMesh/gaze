@@ -37,6 +37,7 @@ use gaze::{
 use gaze_audit::SqliteLogger;
 
 mod input;
+mod v2;
 
 const DEFAULT_PROCESS_IDLE_TIMEOUT_SECS: u64 = 1_800;
 const DEFAULT_SESSION_IDLE_TIMEOUT_SECS: u64 = 3_600;
@@ -182,6 +183,7 @@ struct Daemon {
     safety_net_fallback: SafetyNetFallback,
     logger: Arc<DaemonLogger>,
     sessions: HashMap<String, SessionEntry>,
+    v2: v2::Registry,
     lru: VecDeque<String>,
     session_cap: usize,
     session_idle_timeout: Duration,
@@ -234,6 +236,7 @@ impl Daemon {
             safety_net_fallback: args.safety_net_limits.safety_net_fallback,
             logger,
             sessions: HashMap::new(),
+            v2: v2::Registry::new().map_err(|_| CliError::Pipeline)?,
             lru: VecDeque::new(),
             session_cap: args.session_cap,
             session_idle_timeout: Duration::from_secs(args.session_idle_timeout),
@@ -243,6 +246,9 @@ impl Daemon {
     }
 
     fn handle_line(&mut self, line: &str) -> DaemonResponse {
+        if v2::is_v2(line) {
+            return DaemonResponse::V2(self.handle_v2(line));
+        }
         #[cfg(feature = "perf-timers")]
         let _perf = crate::perf::Document::from_env();
         // Keep context opaque so only the shared parser applies its depth and size limits.
@@ -288,6 +294,13 @@ impl Daemon {
                 )
             }
         };
+        if self.v2.contains(&request.session_id) {
+            return DaemonResponse::error_versioned(
+                request.version,
+                "ProtocolInvalid",
+                "invalid daemon request",
+            );
+        }
         let session_id = request.session_id.clone();
         let version = request.version;
         let result = match (request.version, request.op.as_deref()) {
@@ -481,15 +494,7 @@ impl Daemon {
             self.lru.push_back(session_id.to_string());
             return Ok(());
         }
-        while self.sessions.len() >= self.session_cap {
-            if let Some(evicted) = self.lru.pop_front() {
-                if let Some(entry) = self.sessions.remove(&evicted) {
-                    self.log_eviction(&entry, "lru");
-                }
-            } else {
-                break;
-            }
-        }
+        self.make_session_room();
         let session = Session::from_policy(&self.policy).map_err(|_| DaemonError::Invariant)?;
         self.sessions.insert(
             session_id.to_string(),
@@ -503,6 +508,7 @@ impl Daemon {
     }
 
     fn evict_idle_sessions(&mut self) {
+        self.v2.evict_idle(self.session_idle_timeout);
         let now = Instant::now();
         let mut expired = self
             .sessions
@@ -727,6 +733,7 @@ impl<'de> Deserialize<'de> for RequestContext {
 #[derive(Serialize)]
 #[serde(untagged)]
 enum DaemonResponse {
+    V2(Box<serde_json::value::RawValue>),
     Clean {
         #[serde(skip_serializing_if = "Option::is_none")]
         version: Option<u32>,
