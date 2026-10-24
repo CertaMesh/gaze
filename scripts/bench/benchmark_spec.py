@@ -122,8 +122,9 @@ def descriptor_digest(rows) -> str:
     """Hash only canonical, value-free document descriptors; exclude subject validators."""
     keys = ("id", "utf8_bytes", "language", "region", "source_dataset",
             "negative_category", "cell", "gold", "layer")
-    return digest(sorted(({key: row[key] for key in keys} for row in rows),
-                         key=lambda row: row["id"]))
+    descriptors = [{**{key: row[key] for key in keys}, "gold": sorted(row["gold"])}
+                   for row in rows]
+    return digest(sorted(descriptors, key=lambda row: row["id"]))
 
 
 def measuring_inputs(root: Path) -> dict:

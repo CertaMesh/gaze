@@ -44,6 +44,8 @@ def main():
          'test_runtime_drift_refuses_resolve_capture_replay_and_admission', 4),
         ('canonical_descriptors', CERT, "if populations[layer].get('descriptors_sha256') != specs.descriptor_digest(descriptors):",
          'if False:', 'test_canonical_descriptors_bind_every_arm', 28),
+        ('canonical_gold_order', SPEC, '"gold": sorted(row["gold"])', '"gold": row["gold"]',
+         'test_canonical_gold_order_survives_scored_excluded_partition', 1),
         ('capture_contract', CERT, "            or any(block.get(key) != canonical[key] for key in\n"
          "                   ('id', 'version', 'file_sha256', 'excluded_labels', 'neutral_prediction_classes'))", '',
          'test_reviewer_contract_specific_capture_refuses_even_if_repinned', 2),

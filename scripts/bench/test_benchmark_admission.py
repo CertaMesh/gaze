@@ -358,3 +358,13 @@ print(json.dumps({'credit':sum(c.end-c.start for c in credits),'code':code}))
                                capture_output=True, text=True, check=True)
     value = json.loads(completed.stdout)
     assert value == {'credit': credit, 'code': 'benchmark_runtime_mismatch'}
+
+
+def test_canonical_gold_order_survives_scored_excluded_partition():
+    from dataclasses import replace
+    doc = score.Document('synthetic-mixed', 'XY', 'en', 'US', 'synthetic',
+                         (score.Span(0, 1, 'X'), score.Span(1, 2, 'Y')))
+    contract = replace(score.SCORED_LABEL_CONTRACT_V1, version=2,
+                       scored_labels=frozenset({'Y'}), excluded_labels=frozenset({'X'}))
+    filtered = score.apply_scored_label_contract([doc], contract)[0]
+    assert specs.population([doc], 'A') == specs.population([filtered], 'A')
