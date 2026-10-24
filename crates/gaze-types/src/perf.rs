@@ -38,7 +38,7 @@ macro_rules! perf_recognizer {
 #[macro_export]
 macro_rules! perf_recognizer {
     ($id:expr, $evidence:expr) => {
-        $crate::perf::RecognizerSpan::new($id, $evidence == $crate::EvidenceKind::Rule)
+        $crate::perf::RecognizerSpan::new($id, $evidence)
     };
 }
 #[cfg(not(feature = "perf-timers"))]
@@ -73,6 +73,14 @@ mod enabled {
         pub candidates: u64,
     }
 
+    #[derive(Debug, Serialize)]
+    pub struct RecognizerMetric {
+        #[serde(flatten)]
+        pub metric: Metric,
+        pub evidence: &'static str,
+        pub model: &'static str,
+    }
+
     #[derive(Debug, Default, Serialize)]
     pub struct Record {
         pub schema: u32,
@@ -83,7 +91,7 @@ mod enabled {
         pub metrics: BTreeMap<&'static str, Metric>,
         pub counters: BTreeMap<&'static str, u64>,
         /// Opaque encounter-order ordinals; declared IDs never leave process memory.
-        pub recognizers: BTreeMap<String, Metric>,
+        pub recognizers: BTreeMap<String, RecognizerMetric>,
     }
 
     thread_local! {
@@ -108,7 +116,7 @@ mod enabled {
         pub fn with_identity(phase: &'static str, ordinal: u64) -> Self {
             let previous = ACTIVE.with(|slot| {
                 slot.replace(Some(Record {
-                    schema: 2,
+                    schema: 3,
                     phase,
                     ordinal,
                     ..Record::default()
@@ -232,10 +240,17 @@ mod enabled {
         id: Option<String>,
         start: Option<Instant>,
         candidates: u64,
-        rule: bool,
+        evidence: crate::EvidenceKind,
+        model: &'static str,
     }
     impl RecognizerSpan {
-        pub fn new(id: &str, rule: bool) -> Self {
+        pub fn new(id: &str, evidence: crate::EvidenceKind) -> Self {
+            let model = match (evidence, id) {
+                (crate::EvidenceKind::Rule, _) => "none",
+                (_, crate::NER_RECOGNIZER_ID) => "ner",
+                (_, "dob.gliner") => "dob",
+                _ => "other",
+            };
             let active = ACTIVE.with(|slot| slot.borrow().is_some());
             let id = active.then(|| {
                 IDENTIFIERS.with(|ids| {
@@ -248,7 +263,8 @@ mod enabled {
                 id,
                 start: active.then(Instant::now),
                 candidates: 0,
-                rule,
+                evidence,
+                model,
             }
         }
         pub fn candidates(&mut self, count: usize) {
@@ -261,11 +277,32 @@ mod enabled {
                 let ns = start.elapsed().as_nanos().min(u64::MAX as u128) as u64;
                 ACTIVE.with(|slot| {
                     if let Some(record) = slot.borrow_mut().as_mut() {
-                        let metric = record.recognizers.entry(id).or_default();
+                        let entry =
+                            record
+                                .recognizers
+                                .entry(id)
+                                .or_insert_with(|| RecognizerMetric {
+                                    metric: Metric::default(),
+                                    evidence: match self.evidence {
+                                        crate::EvidenceKind::Rule => "rule",
+                                        crate::EvidenceKind::Learned => "learned",
+                                    },
+                                    model: self.model,
+                                });
+                        if entry.evidence
+                            != match self.evidence {
+                                crate::EvidenceKind::Rule => "rule",
+                                crate::EvidenceKind::Learned => "learned",
+                            }
+                            || entry.model != self.model
+                        {
+                            entry.model = "other";
+                        }
+                        let metric = &mut entry.metric;
                         metric.ns += ns;
                         metric.invocations += 1;
                         metric.candidates += self.candidates;
-                        if self.rule {
+                        if self.evidence == crate::EvidenceKind::Rule {
                             let rules = record.metrics.entry("rules_ns").or_default();
                             rules.ns += ns;
                             rules.invocations += 1;
@@ -294,13 +331,38 @@ mod enabled {
     mod tests {
         use super::*;
         #[test]
+        fn model_roles_are_value_free_and_unknown_learned_roles_stay_visible() {
+            let capture = Capture::new();
+            for id in [
+                crate::NER_RECOGNIZER_ID,
+                "dob.gliner",
+                "private learned recognizer",
+            ] {
+                let _span = RecognizerSpan::new(id, crate::EvidenceKind::Learned);
+            }
+            let record = capture.finish();
+            assert_eq!(record.schema, 3);
+            let models: std::collections::BTreeSet<_> = record
+                .recognizers
+                .values()
+                .map(|entry| {
+                    assert_eq!(entry.evidence, "learned");
+                    entry.model
+                })
+                .collect();
+            assert_eq!(models, ["dob", "ner", "other"].into_iter().collect());
+            assert_eq!(record.metrics["rules_ns"].invocations, 0);
+        }
+
+        #[test]
         fn captures_are_isolated_and_identifiers_never_escape() {
             let outer = Capture::new();
             count("input_bytes", 3);
             let inner = Capture::new();
             {
                 let _timer = Span::new("registry_ns");
-                let mut rule = RecognizerSpan::new("private recognizer id", true);
+                let mut rule =
+                    RecognizerSpan::new("private recognizer id", crate::EvidenceKind::Rule);
                 rule.candidates(2);
             }
             let record = inner.finish();
@@ -309,7 +371,10 @@ mod enabled {
             assert!(key.starts_with('r'));
             assert!(key[1..].parse::<u64>().is_ok());
             assert!(!key.contains("private"));
-            assert_eq!(rule.candidates, 2);
+            assert_eq!(rule.metric.candidates, 2);
+            assert_eq!(rule.evidence, "rule");
+            assert_eq!(rule.model, "none");
+            assert_eq!(rule.metric.ns, record.metrics["rules_ns"].ns);
             assert_eq!(outer.finish().counters["input_bytes"], 3);
         }
     }

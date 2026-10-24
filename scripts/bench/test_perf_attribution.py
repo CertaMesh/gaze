@@ -21,7 +21,7 @@ def trace(phase="request", ordinal=1, *, daemon=False, models=0, nym=False, dob=
                        "nym_outer_verify_ns": int(nym), "tokenizer_load_ns": models,
                        "model_load_ns": models, "bundle_verify_ns": models + int(nym)}.items():
             metrics[key] = {"ns": 0, "invocations": n, "candidates": 0}
-    return {"schema": 2, "phase": phase, "ordinal": ordinal, "metrics": metrics, "counters": {}, "recognizers": {}}
+    return {"schema": 3, "phase": phase, "ordinal": ordinal, "metrics": metrics, "counters": {}, "recognizers": {}}
 
 
 def fake_script(*, timers=True):
@@ -123,7 +123,7 @@ class SummaryTests(unittest.TestCase):
             rows = perf.run_pass(binary, Path(tmp) / "policy", [perf.Document("one", "text", "digest")],
                                  warmups=1, dry=True, timeout=5, per_file=True)
             self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0]["trace"]["schema"], 2)
+            self.assertEqual(rows[0]["trace"]["schema"], 3)
             self.assertIsNone(rows[0]["e2e_ns"])
 
 
@@ -415,7 +415,7 @@ class ChildEnvironmentTests(unittest.TestCase):
             self.assertEqual(receipt["model_inventory"], perf.model_inventory([pinned]))
             for arm in receipt["arms"].values():
                 for rows in arm["runs"][0]["sides"].values():
-                    self.assertTrue(all(row["trace"]["schema"] == 2 for row in rows))
+                    self.assertTrue(all(row["trace"]["schema"] == 3 for row in rows))
             environments = [json.loads(line) for line in journal.read_text().splitlines()]
             self.assertGreater(len(environments), 2)
             for environment in environments:

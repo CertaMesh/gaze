@@ -23,7 +23,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from perf_lifecycle_contract import CLOCK_CHECKS, CLOCK_PHASES, REQUEST_ASSEMBLY, STARTUP_CLOCKS, violates_check
+from perf_lifecycle_contract import OWNERSHIP_CHECKS, violates_ownership, CLOCK_CHECKS, CLOCK_PHASES, REQUEST_ASSEMBLY, STARTUP_CLOCKS, violates_check
 
 SPEC = "gaze-perf-attribution-v2"
 
@@ -45,14 +45,20 @@ COUNTERS = {"input_bytes", "ner_encodes", "ner_windows", "sweep_candidates", "ny
 
 
 def validate_trace(trace: dict) -> dict:
-    """Reject diagnostics outside the numeric-only protocol before writing a receipt."""
+    """Reject diagnostics outside the value-free protocol before writing a receipt."""
     def metric(value, *, recognizer=False):
+        if recognizer:
+            return (isinstance(value, dict)
+                    and set(value) == {"ns", "invocations", "candidates", "evidence", "model"}
+                    and value["evidence"] in ("rule", "learned")
+                    and value["model"] in ("none", "ner", "dob", "other")
+                    and all(type(value[k]) is int and value[k] >= 0
+                            for k in ("ns", "invocations", "candidates")))
         return (isinstance(value, dict) and "ns" in value
                 and set(value) <= {"ns", "invocations", "candidates"}
-                and (not recognizer or len(value) == 3)
                 and all(type(number) is int and number >= 0 for number in value.values()))
     valid = (isinstance(trace, dict) and set(trace) == {"schema", "phase", "ordinal", "metrics", "counters", "recognizers"}
-             and type(trace["schema"]) is int and trace["schema"] == 2
+             and type(trace["schema"]) is int and trace["schema"] == 3
              and trace["phase"] in ("startup", "request")
              and type(trace["ordinal"]) is int and trace["ordinal"] >= 0
              and isinstance(trace["metrics"], dict) and set(trace["metrics"]) <= METRICS
@@ -118,7 +124,13 @@ def validate_lifecycle(traces: list[dict], requests: int, *, daemon: bool, polic
     verifications = constructors + int(net)
     if inv(startup, "bundle_verify_ns") != verifications or inv(startup, "nym_attach_ns") != int(net):
         raise ValueError("bundle verification attribution mismatch")
+    roles = {}
     for trace in traces[1:]:
+        for check in OWNERSHIP_CHECKS:
+            if violates_ownership(trace, check, config=config, roles=roles):
+                raise ValueError(f"lifecycle recognizer ownership mismatch: {check}")
+        roles.update((key, (entry["evidence"], entry["model"]))
+                     for key, entry in trace["recognizers"].items())
         forbidden = LIFECYCLE - REQUEST_ASSEMBLY
         if inv(trace, "request_ns") != 1 or any(inv(trace, key) for key in forbidden):
             raise ValueError("misattributed request work")

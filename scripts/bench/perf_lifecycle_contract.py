@@ -49,6 +49,36 @@ def violates_check(record: dict, check) -> bool:
             else any(ns > capacity for ns in children))
 
 
+OWNERSHIP_CHECKS = ("rule-owner-ns", "rule-owner-invocations", "rule-owner-candidates",
+                    "ner-owner-capacity", "recognizer-role", "stable-recognizer-role")
+
+
+def violates_ownership(record: dict, check: str, *, config: dict, roles: dict) -> bool:
+    entries = record["recognizers"]
+    if check.startswith("rule-owner-"):
+        field = check.removeprefix("rule-owner-")
+        return record["metrics"].get("rules_ns", {}).get(field, 0) != sum(
+            entry[field] for entry in entries.values() if entry["evidence"] == "rule")
+    if check == "ner-owner-capacity":
+        owners = [entry for entry in entries.values() if entry["model"] == "ner"]
+        leaves = sum(record["metrics"].get(key, {}).get("ns", 0) for key in
+                     ("ner_tokenize_ns", "ner_mutex_wait_ns", "ner_ort_ns"))
+        return leaves > sum(entry["ns"] for entry in owners)
+    if check == "recognizer-role":
+        for model in ("ner", "dob"):
+            count = sum(entry["model"] == model for entry in entries.values())
+            setting = config.get("ner" if model == "ner" else "dob_judge", {})
+            if count > int(bool(setting) and setting.get("enabled", True)):
+                return True
+        return any((entry["evidence"], entry["model"]) not in
+                   {("rule", "none"), ("learned", "ner"), ("learned", "dob")}
+                   for entry in entries.values())
+    if check == "stable-recognizer-role":
+        return any(key in roles and roles[key] != (entry["evidence"], entry["model"])
+                   for key, entry in entries.items())
+    raise ValueError("unknown recognizer ownership check")
+
+
 @dataclass(frozen=True)
 class ClockGroup:
     id: str
@@ -125,8 +155,8 @@ CLOCK_GRAPH = (
     ClockGroup("recognizer-work", "request", (RECOGNIZERS,),
                ("rules_ns", "ner_tokenize_ns", "ner_mutex_wait_ns", "ner_ort_ns"), "serial",
                "perf.rs: RecognizerSpan::drop; ner/backend/preparation.rs and ort.rs",
-               "rules is the exact rule-evidence subset; serial NER leaves belong to learned evidence. "
-               "The protocol cannot identify the NER ordinal, so these disjoint durations use the pooled recognizer capacity"),
+               "necessary aggregate bound; the ownership checks below additionally enforce exact Rule totals "
+               "and containment within the single declared NER ordinal"),
     ClockGroup("nym-views", "request", ("safety_model_ns",),
                ("nym_stable_ns", "nym_neutral_ns"), "serial",
                "pipeline.rs: run_safety_nets_in_context; safety_net/nym/mod.rs: check_with_neutral_and_telemetry"),
@@ -190,7 +220,24 @@ def documentation() -> str:
                  "counts, work counters and recognizer entries. Daemon context requests may",
                  "emit assembly, recognizer-construction and rule-construction clocks, once each.",
                  "One-shot requests cannot emit those clocks. All request records must have",
-                 "zero model initialization and other startup-only durations and counts.",
+                 "zero model initialization and other startup-only durations and counts.", "",
+                 "Schema 3 recognizer entries contain fixed `evidence` (`rule` or `learned`)",
+                 "and `model` (`none`, `ner`, `dob`, `other`) labels, never declared IDs or input values.",
+                 "Admission requires `rules_ns` duration, invocations and candidates to equal the",
+                 "corresponding sums of Rule entries. Learned entries never contribute to rules.",
+                 "The three serial NER leaves must fit the single NER entry; they cannot borrow",
+                 "DOB capacity. At most one NER and one DOB ordinal are allowed, only when configured.",
+                 "Other learned recognizers, contradictory labels and ordinal role changes across",
+                 "requests refuse admission. These checks are linear in the emitted entries.",
+                 "",
+                 "| Ownership check | Requirement |",
+                 "| --- | --- |",
+                 "| rule-owner-ns | Exact Rule duration sum |",
+                 "| rule-owner-invocations | Exact Rule invocation sum |",
+                 "| rule-owner-candidates | Exact Rule candidate sum |",
+                 "| ner-owner-capacity | Serial NER leaves fit the NER ordinal |",
+                 "| recognizer-role | Configured single NER/DOB; other learned roles refused |",
+                 "| stable-recognizer-role | One role per ordinal across the capture |",
                  "<!-- END GENERATED CLOCK CONTRACT -->"])
     return "\n".join(rows)
 

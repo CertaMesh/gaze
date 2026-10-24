@@ -34,9 +34,10 @@ def records(*, daemon=False):
                        'manifest_ns': 10, 'audit_ns': 10, 'rules_ns': 10}.items():
         request['metrics'][key]['ns'] = value
     request['recognizers'] = {
-        'r1': {'ns': 10, 'invocations': 1, 'candidates': 1},
-        'r2': {'ns': 10, 'invocations': 1, 'candidates': 1},
+        'r1': {'ns': 10, 'invocations': 1, 'candidates': 1, 'evidence': 'rule', 'model': 'none'},
+        'r2': {'ns': 10, 'invocations': 1, 'candidates': 1, 'evidence': 'learned', 'model': 'ner'},
     }
+    request['metrics']['rules_ns'].update(invocations=1, candidates=1)
     if daemon:
         for key, value in {'assembly_ns': 100, 'recognizer_construction_ns': 20,
                            'rule_construction_ns': 20}.items():
@@ -121,6 +122,120 @@ class BoundTests(unittest.TestCase):
         rows = records()
         rows[1]['metrics']['rules_ns']['ns'] = 50
         with self.assertRaises(ValueError):
+            self.admit(rows)
+
+    def test_reviewer_ner_cannot_borrow_another_recognizer(self):
+        rows = records()
+        rows[1]['recognizers']['r3'] = dict(rows[1]['recognizers']['r2'], model='dob')
+        rows[1]['metrics']['ner_tokenize_ns']['ns'] = 13
+        with self.assertRaisesRegex(ValueError, 'ner-owner-capacity'):
+            self.admit(rows)
+
+    def test_reviewer_rules_must_equal_rule_spans(self):
+        rows = records()
+        rows[1]['metrics']['rules_ns']['ns'] = 11
+        with self.assertRaisesRegex(ValueError, 'rule-owner-ns'):
+            self.admit(rows)
+
+    def test_rule_owner_invocations(self):
+        rows = records()
+        rows[1]['metrics']['rules_ns']['invocations'] = 2
+        with self.assertRaisesRegex(ValueError, 'rule-owner-invocations'):
+            self.admit(rows)
+
+    def test_rule_owner_candidates(self):
+        rows = records()
+        rows[1]['metrics']['rules_ns']['candidates'] = 2
+        with self.assertRaisesRegex(ValueError, 'rule-owner-candidates'):
+            self.admit(rows)
+
+    def test_ner_owner_serial_nonzero_leaves(self):
+        rows = records()
+        for key in ('ner_tokenize_ns', 'ner_mutex_wait_ns', 'ner_ort_ns'):
+            rows[1]['metrics'][key]['ns'] = 4
+        self.assertEqual(violated_checks(rows, daemon=False), ['recognizer-work-serial'])
+        # Extra Rule capacity keeps the aggregate bound satisfied while NER alone overflows.
+        rows[1]['recognizers']['r3'] = dict(rows[1]['recognizers']['r1'], ns=10)
+        rows[1]['metrics']['rules_ns'].update(ns=20, invocations=2, candidates=2)
+        # Pool is 30, rules + NER is 32; raise only the DOB capacity to make pooling pass.
+        rows[1]['recognizers']['r4'] = dict(rows[1]['recognizers']['r2'], ns=10, model='dob')
+        self.assertEqual(violated_checks(rows, daemon=False), [])
+        with self.assertRaisesRegex(ValueError, 'ner-owner-capacity'):
+            self.admit(rows)
+
+    def test_recognizer_role(self):
+        rows = records()
+        rows[1]['recognizers']['r3'] = dict(rows[1]['recognizers']['r2'], model='other')
+        with self.assertRaisesRegex(ValueError, 'recognizer-role'):
+            self.admit(rows)
+
+    def test_stable_recognizer_role(self):
+        rows = records(daemon=True)
+        import copy
+        second = copy.deepcopy(rows[1])
+        second['ordinal'] = 2
+        second['recognizers']['r1'], second['recognizers']['r2'] = (
+            second['recognizers']['r2'], second['recognizers']['r1'])
+        rows.append(second)
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = Path(tmp) / 'policy'
+            policy.write_text(POLICY)
+            with self.assertRaisesRegex(ValueError, 'stable-recognizer-role'):
+                perf.validate_lifecycle(rows, 2, daemon=True, policy=policy, required=True)
+
+    def test_invalid_and_duplicate_model_roles_refuse(self):
+        for evidence, model in (('learned', 'none'), ('rule', 'ner'), ('learned', 'other')):
+            rows = records()
+            rows[1]['recognizers']['r3'] = dict(rows[1]['recognizers']['r2'], evidence=evidence, model=model)
+            # Other guards are independently covered: exercise this admission guard alone.
+            with patch.object(perf, 'OWNERSHIP_CHECKS', ('recognizer-role',)):
+                with self.assertRaisesRegex(ValueError, 'recognizer-role'):
+                    self.admit(rows)
+        for model in ('ner', 'dob'):
+            rows = records()
+            for ordinal in ('r3', 'r4'):
+                rows[1]['recognizers'][ordinal] = dict(rows[1]['recognizers']['r2'], model=model)
+            with self.assertRaisesRegex(ValueError, 'recognizer-role'):
+                self.admit(rows)
+
+    def test_ner_only_ner_nym_and_ner_nym_dob_shapes_admit(self):
+        for nym, dob in ((False, False), (True, False), (True, True)):
+            for daemon in (False, True):
+                rows = records(daemon=daemon)
+                startup = rows[0]
+                models = 1 + int(dob)
+                counts = {'model_constructor_ns': models, 'nym_model_constructor_ns': int(nym),
+                          'nym_outer_verify_ns': int(nym), 'nym_attach_ns': int(nym),
+                          'bundle_verify_ns': models + 2 * int(nym),
+                          'model_load_ns': models + int(nym), 'tokenizer_load_ns': models + int(nym)}
+                for key, count in counts.items():
+                    startup['metrics'][key]['invocations'] = count
+                    if not count:
+                        startup['metrics'][key]['ns'] = 0
+                if dob:
+                    rows[1]['recognizers']['r3'] = dict(rows[1]['recognizers']['r2'], model='dob')
+                with tempfile.TemporaryDirectory() as tmp:
+                    policy = Path(tmp) / 'policy'
+                    policy.write_text('[ner]\nenabled=true\n' + ('[dob_judge]\nenabled=true\n' if dob else '')
+                                      + ('[safety_net]\nbackend="nym"\n' if nym else ''))
+                    perf.validate_lifecycle(rows, 1, daemon=daemon, policy=policy, required=True)
+
+    def test_unconfigured_models_refuse(self):
+        rows = records()
+        with patch.object(perf, 'OWNERSHIP_CHECKS', ('recognizer-role',)):
+            # Keep model constructor checks out of this role-specific unit.
+            from perf_lifecycle_contract import violates_ownership
+            self.assertTrue(violates_ownership(rows[1], 'recognizer-role', config={}, roles={}))
+
+    def test_missing_or_unexpected_role_metadata_refuses(self):
+        for field, value in (('evidence', 'private'), ('model', 'private'), ('model', 1)):
+            rows = records()
+            rows[1]['recognizers']['r1'][field] = value
+            with self.assertRaisesRegex(ValueError, 'invalid timer metadata'):
+                self.admit(rows)
+        rows = records()
+        del rows[1]['recognizers']['r1']['evidence']
+        with self.assertRaisesRegex(ValueError, 'invalid timer metadata'):
             self.admit(rows)
 
     def test_daemon_context_assembly_is_admitted(self):
@@ -215,13 +330,13 @@ class BoundTests(unittest.TestCase):
 
     def test_startup_recognizers_are_refused(self):
         rows = records()
-        rows[0]['recognizers'] = {'r1': {'ns': 1, 'invocations': 1, 'candidates': 1}}
+        rows[0]['recognizers'] = {'r1': {'ns': 1, 'invocations': 1, 'candidates': 1, 'evidence': 'rule', 'model': 'none'}}
         with self.assertRaisesRegex(ValueError, 'startup processing'):
             self.admit(rows)
 
     def test_nonzero_clock_requires_invocation(self):
         rows = records()
-        rows[1]['metrics']['rules_ns']['invocations'] = 0
+        rows[1]['metrics']['registry_ns']['invocations'] = 0
         with self.assertRaisesRegex(ValueError, 'without an invocation'):
             self.admit(rows)
 
@@ -242,8 +357,9 @@ def serial_test(group):
         for key, value in SERIAL_CHANGES[group.id].items():
             set_clock(record, key, value)
         self.assertEqual(violated_checks(rows, daemon=daemon), [group.id + '-serial'])
-        with self.assertRaisesRegex(ValueError, group.id + '-serial$'):
-            self.admit(rows, daemon=daemon)
+        with patch.object(perf, 'OWNERSHIP_CHECKS', ()):
+            with self.assertRaisesRegex(ValueError, group.id + '-serial$'):
+                self.admit(rows, daemon=daemon)
     return test
 
 
@@ -267,7 +383,7 @@ def parent_test(check, *, isolated):
             # Serial sums imply their individual edges. Exercise each redundant
             # parent check alone through real lifecycle admission so a mutation
             # cannot hide behind a serial sum (or another ancestor edge).
-            with patch.object(perf, 'CLOCK_CHECKS', (check,)):
+            with patch.object(perf, 'CLOCK_CHECKS', (check,)), patch.object(perf, 'OWNERSHIP_CHECKS', ()):
                 with self.assertRaisesRegex(ValueError, re.escape(check.id) + '$'):
                     self.admit(rows, daemon=parent_daemon(check))
         else:

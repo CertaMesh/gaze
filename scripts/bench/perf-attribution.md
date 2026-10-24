@@ -115,7 +115,7 @@ write does not change protection behavior.
 
 Schema **2** adds `phase` (`startup` or `request`) and a process-local `ordinal`.
 Startup is ordinal 0. Requests count from 1, including warmups. The runner rejects
-schema 1, partial traces, missing hooks, wrong ordinals, processing clocks in
+schemas 1 and 2, partial traces, missing hooks, wrong ordinals, processing clocks in
 startup, and model initialization attached to request records. Nym timer backports must
 include both split clocks below; aggregate-only Nym traces are refused. Old executables that emit no records retain unknown stage
 costs. `--binary-kind-a local-timer`, `--binary-kind-b local-timer`, and
@@ -214,7 +214,7 @@ check each ordinal; serial groups sum them. As a parent, it pools their duration
 | request-assembly | request | serial | `recognizer_construction_ns` + `rule_construction_ns` | `assembly_ns` | commands/daemon.rs: clean_request; gaze-assembly/lib.rs: pipeline_with_context. context rebuilds recognizers and rules; resident NER, Nym and DOB handles are reused |
 | request-overlap | request | overlapping | `validators_ns` | `request_ns` | gaze-types/lib.rs: ValidatorKind. validators run inside recognizers, registry vetoes, recovery and other request work |
 | registry-recognizers | request | serial | `recognizers[*]` | `registry_ns` | registry.rs: detect_candidate_pool/detect_declared; perf.rs: RecognizerSpan. built-in clean runs recognizers serially inside registry |
-| recognizer-work | request | serial | `rules_ns` + `ner_tokenize_ns` + `ner_mutex_wait_ns` + `ner_ort_ns` | `recognizers[*]` | perf.rs: RecognizerSpan::drop; ner/backend/preparation.rs and ort.rs. rules is the exact rule-evidence subset; serial NER leaves belong to learned evidence. The protocol cannot identify the NER ordinal, so these disjoint durations use the pooled recognizer capacity |
+| recognizer-work | request | serial | `rules_ns` + `ner_tokenize_ns` + `ner_mutex_wait_ns` + `ner_ort_ns` | `recognizers[*]` | perf.rs: RecognizerSpan::drop; ner/backend/preparation.rs and ort.rs. necessary aggregate bound; the ownership checks below additionally enforce exact Rule totals and containment within the single declared NER ordinal |
 | nym-views | request | serial | `nym_stable_ns` + `nym_neutral_ns` | `safety_model_ns` | pipeline.rs: run_safety_nets_in_context; safety_net/nym/mod.rs: check_with_neutral_and_telemetry |
 | nym-inference | request | serial | `nym_tokenize_ns` + `nym_mutex_wait_ns` + `nym_ort_ns` | `nym_stable_ns` + `nym_neutral_ns` | safety_net/nym/ort.rs: score_pieces and run_window. leaf totals pool both serial views; the protocol does not split leaves by view |
 
@@ -223,6 +223,24 @@ counts, work counters and recognizer entries. Daemon context requests may
 emit assembly, recognizer-construction and rule-construction clocks, once each.
 One-shot requests cannot emit those clocks. All request records must have
 zero model initialization and other startup-only durations and counts.
+
+Schema 3 recognizer entries contain fixed `evidence` (`rule` or `learned`)
+and `model` (`none`, `ner`, `dob`, `other`) labels, never declared IDs or input values.
+Admission requires `rules_ns` duration, invocations and candidates to equal the
+corresponding sums of Rule entries. Learned entries never contribute to rules.
+The three serial NER leaves must fit the single NER entry; they cannot borrow
+DOB capacity. At most one NER and one DOB ordinal are allowed, only when configured.
+Other learned recognizers, contradictory labels and ordinal role changes across
+requests refuse admission. These checks are linear in the emitted entries.
+
+| Ownership check | Requirement |
+| --- | --- |
+| rule-owner-ns | Exact Rule duration sum |
+| rule-owner-invocations | Exact Rule invocation sum |
+| rule-owner-candidates | Exact Rule candidate sum |
+| ner-owner-capacity | Serial NER leaves fit the NER ordinal |
+| recognizer-role | Configured single NER/DOB; other learned roles refused |
+| stable-recognizer-role | One role per ordinal across the capture |
 <!-- END GENERATED CLOCK CONTRACT -->
 
 `pipeline_build_ns` includes `policy_load_ns` and `assembly_ns`. Nym attaches
@@ -253,11 +271,11 @@ end to end. `perf-timers-v0.16.0.patch` applies directly to the v0.16.0 tag with
 cherry-picking implementation commits. It includes the earlier v1 timer layer
 and document-only boundaries, adapted to that version's recognizer return path
 and one-shot clean path. That historical patch alone is incompatible with this
-v2 runner. Backport the current schema-2 protocol and lifecycle hooks to the tag
+v2 runner. Backport the current schema-3 protocol and lifecycle hooks to the tag
 before building in an isolated Anvil checkout with `--features perf-timers`.
 Use `--binary-kind-a local-timer --timer-patch-a <adapted-v2-patch>` for that side.
 The receipt records the adapted patch hash alongside its binary hash. For a
-revision already containing schema 2, `--build-timers` enables it during automatic
+revision already containing schema 3, `--build-timers` enables it during automatic
 builds. Do not pass that flag to an unpatched old revision.
 
 ## Plumbing validation

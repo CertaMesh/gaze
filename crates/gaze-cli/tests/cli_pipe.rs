@@ -6376,7 +6376,7 @@ fn attribution_cli_opt_in_emits_only_metadata() {
         .collect();
     assert_eq!(rows.len(), 2);
     let startup: Value = serde_json::from_str(rows[0]).unwrap();
-    assert_eq!(startup["schema"], 2);
+    assert_eq!(startup["schema"], 3);
     assert_eq!(startup["phase"], "startup");
     assert_eq!(startup["ordinal"], 0);
     for key in [
@@ -6391,7 +6391,7 @@ fn attribution_cli_opt_in_emits_only_metadata() {
         assert_eq!(startup["metrics"][key]["invocations"], 1, "{key}");
     }
     let trace: Value = serde_json::from_str(rows[1]).unwrap();
-    assert_eq!(trace["schema"], 2);
+    assert_eq!(trace["schema"], 3);
     assert_eq!(trace["phase"], "request");
     assert_eq!(trace["ordinal"], 1);
     assert_eq!(trace["metrics"]["request_ns"]["invocations"], 1);

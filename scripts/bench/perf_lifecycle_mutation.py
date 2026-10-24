@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 
-from perf_lifecycle_contract import CLOCK_CHECKS, REQUEST_ASSEMBLY
+from perf_lifecycle_contract import CLOCK_CHECKS, REQUEST_ASSEMBLY, OWNERSHIP_CHECKS
 import perf_attribution as perf
 
 ROOT = Path(__file__).resolve().parent
@@ -22,6 +22,18 @@ def prove(out: Path) -> dict:
                   ("test_serial_" + check.id.removesuffix("-serial").replace("-", "_")
                    if check.kind == "serial" else "test_parent_" + check.id.replace("-", "_")))
                  for check in CLOCK_CHECKS]
+    ownership_tests = {
+        "rule-owner-ns": "test_reviewer_rules_must_equal_rule_spans",
+        "rule-owner-invocations": "test_rule_owner_invocations",
+        "rule-owner-candidates": "test_rule_owner_candidates",
+        "ner-owner-capacity": "test_ner_owner_serial_nonzero_leaves",
+        "recognizer-role": "test_recognizer_role",
+        "stable-recognizer-role": "test_stable_recognizer_role",
+    }
+    for check in OWNERSHIP_CHECKS:
+        mutations.append((check, source.replace("for check in OWNERSHIP_CHECKS:",
+                          f"for check in (c for c in OWNERSHIP_CHECKS if c != {check!r}):"),
+                          ownership_tests[check]))
     mutations.extend([
         ("clock-phase", source.replace('record["phase"] not in CLOCK_PHASES[key]', 'False'),
          "test_phase_registry_ns"),
@@ -74,6 +86,7 @@ def prove(out: Path) -> dict:
                "mutations": results, "mutation_count": len(results),
                "serial_sum_checks": sum(c.kind == "serial" for c in CLOCK_CHECKS),
                "parent_checks": sum(c.kind == "parent" for c in CLOCK_CHECKS),
+               "ownership_checks": len(OWNERSHIP_CHECKS),
                "parent_test_isolation": "Each parent check alone; serial sums and ancestor edges otherwise imply it. Full graph also rejects every parent witness.",
                "executed_assertion_failures": len(results), "restored_passes": len(results)}
     (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
