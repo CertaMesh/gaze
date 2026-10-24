@@ -753,3 +753,40 @@ fn model_health_uncertainty_never_replays_a_clean_receipt() {
     assert!(response.get("blocks").is_none());
     assert_eq!(d.v2.sessions["conversation-a"].next_seq, 2);
 }
+
+#[test]
+fn individual_state_budgets_refuse_before_commit() {
+    let mut d = daemon();
+    open(&mut d, "conversation-a");
+    let live = &d.v2.sessions["conversation-a"];
+    let inventory = vec![RawBlock {
+        id: "leaf-a".into(),
+        sha256: hash("benign"),
+        text: "benign".into(),
+    }];
+    for name in ["cache", "manifest", "global-manifest", "global-state"] {
+        let mut limits = Limits::default();
+        match name {
+            "cache" => limits.session_cache_bytes = 1,
+            "manifest" => limits.session_manifest_bytes = 1,
+            "global-manifest" => limits.global_manifest_bytes = 1,
+            "global-state" => limits.global_v2_state_bytes = 1,
+            _ => unreachable!(),
+        }
+        assert_eq!(
+            check_stage(limits, live, &inventory, &[], 1000, 0, 0, 0),
+            Err(Failure::CacheCapacity),
+            "{name}"
+        );
+    }
+    let opened = serde_json::from_str::<Value>(live.opening.get()).unwrap();
+    let r: Object =
+        serde_json::from_str(&clean_request(&opened, vec![block("leaf-a", "benign")]).to_string())
+            .unwrap();
+    let mut limits = Limits::default();
+    limits.session_cache_bytes = 1;
+    assert_eq!(
+        super::inventory(&r, live, false, limits).err(),
+        Some(Failure::CacheCapacity)
+    );
+}

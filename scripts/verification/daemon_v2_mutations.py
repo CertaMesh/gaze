@@ -17,6 +17,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[2]
 CLI = "crates/gaze-cli/src/commands/daemon/v2.rs"
 CORE = "crates/gaze/src/session.rs"
+DAEMON = "crates/gaze-cli/src/commands/daemon.rs"
 PREFIX = "commands::daemon::v2::tests::"
 
 # Each substitution removes one admission, invalidation, or recovery guard.
@@ -40,6 +41,15 @@ PROBES = [
     ("stabilization", CLI, 'before == transaction.semantic_revision()', "true", "late_last_block_revisits_earlier_text_and_oversize_inventory_never_partially_commits"),
     ("restore-generation", CLI, 'r.counter("minimum_manifest_generation")? > live.generation', "false", "restore_limits_generation_and_unknown_tokens_fail_closed"),
     ("manifest-reservation", CORE, 'if projected > limit {', 'if false {', "session::tests::staged_manifest_budget_refuses_before_mapping_growth_and_commit"),
+    ("v1-isolation", DAEMON, 'self.v2.contains(&request.session_id)', "false", "invalid_protocol_objects_never_fall_back_to_v1"),
+    ("counter-bound", CLI, 'value > MAX_COUNTER', "false", "invalid_protocol_objects_never_fall_back_to_v1"),
+    ("payload-cache", CLI, 'raw_bytes(&blocks) > limits.session_cache_bytes', "false", "individual_state_budgets_refuse_before_commit"),
+    ("session-cache", CLI, 'cache > limits.session_cache_bytes', "false", "individual_state_budgets_refuse_before_commit"),
+    ("session-manifest", CLI, 'manifest > limits.session_manifest_bytes', "false", "individual_state_budgets_refuse_before_commit"),
+    ("global-state", CLI, 'state > limits.global_v2_state_bytes', "false", "individual_state_budgets_refuse_before_commit"),
+    ("pass-count", CLI, '0..limits.stabilization_passes', "0..8", "capacity_failures_are_atomic_and_do_not_consume_sequences"),
+    ("deterministic-source", CORE, 'if state.deterministic_sweep {', 'if false {', "session::tests::deterministic_transaction_sweep_has_stable_equal_span_family_order"),
+
 ]
 
 
@@ -58,7 +68,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--only", help="one probe name")
     options = parser.parse_args()
-    subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", CLI, CORE], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", CLI, CORE, DAEMON], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
     evidence = ROOT / "target/daemon-v2-mutations"
     evidence.mkdir(parents=True, exist_ok=True)
     probes = [p for p in PROBES if options.only is None or p[0] == options.only]
@@ -94,7 +104,7 @@ def main():
                 path.write_text(original)
     finally:
         (evidence / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", CLI, CORE], cwd=ROOT, check=True)
+    subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", CLI, CORE, DAEMON], cwd=ROOT, check=True)
 
 
 if __name__ == "__main__":
