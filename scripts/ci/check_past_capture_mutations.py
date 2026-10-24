@@ -32,6 +32,12 @@ BINDINGS = {
 PROBES = [(name, SOURCE, old, 'False', f'{TEST}::test_each_binding_guard_rejects_independently[{name}]')
           for name, old in BINDINGS.items()]
 PROBES += [
+    ('full-population', SOURCE, "original = certification.full_record(record, card['benchmark_spec'])", "original = header['scorecard']",
+     f'{TEST}::test_renderer_admission_requires_full_canonical_capture[sampled]'),
+    ('canonical-release', SOURCE, "if (header.get('capture_protocol') != specs.CANONICAL_CAPTURE\n"
+     "                or original.get('capture_protocol') != specs.CANONICAL_CAPTURE\n"
+     "                or original['scoring']['scored_label_contract']['version'] != 1):", 'if False:',
+     f'{TEST}::test_renderer_admission_requires_full_canonical_capture[cross_check]'),
     ('history-tag', 'scripts/bench/benchmark_history.py',
      "or header['scorecard']['release_capture'].get('release_tag') == job['version']", 'or True',
      f'{TEST}::test_history_subject_rejects_another_tag_at_the_same_revision'),

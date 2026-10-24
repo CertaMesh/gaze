@@ -633,7 +633,7 @@ schemas, canonical document descriptors, measuring runtime, and execution protoc
 is preserved under its content hash. The
 [previous admission specification](../../docs/reference/benchmarks/specifications/d0010b6f71ecd9481700895eb439448fc166a76f9a6c31168f2b746125fdb2f0.json)
 binds the effective validation vocabulary and executing-source admission checks.
-The [current admission specification](../../docs/reference/benchmarks/specifications/1345dd9d46177a001142619fcd19a7e86d49a2090efae75b67512b36cd4123f3.json)
+The [current admission specification](../../docs/reference/benchmarks/specifications/0635170f7142114d6b666e65945a194c0041cfa61e685dfee6f6c3c9bc56900b.json)
 also binds the qualified runtime and canonical document descriptors.
 Both previous manifests remain archived under their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
@@ -944,7 +944,8 @@ still execute fresh through the existing driver.
 Keep `release-capture-key.json`, `run-evidence.json`, the original capture
 scorecard, and its observation record together. These private files bind the
 original measurement revision and time. Renderers admit replay only after
-checking those bindings and reconstructing the metrics. Derived contract
+checking those bindings and reconstructing the metrics. Release admission requires
+a full C/A/D/R population from a canonical capture. Derived contract
 scorecards use the original capture's execution evidence. Publication does not
 re-inventory the publication checkout or restamp a measurement. Freeze the
 measurement checkout before generating publication changes in another checkout.

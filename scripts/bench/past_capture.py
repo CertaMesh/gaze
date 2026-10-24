@@ -163,6 +163,11 @@ def admit(card, path, *, version=None):
         from dataclasses import replace
         import benchmark_certification as certification
         root = Path(__file__).resolve().parents[2]
+        original = certification.full_record(record, card['benchmark_spec'])
+        if (header.get('capture_protocol') != specs.CANONICAL_CAPTURE
+                or original.get('capture_protocol') != specs.CANONICAL_CAPTURE
+                or original['scoring']['scored_label_contract']['version'] != 1):
+            raise ValueError('noncanonical_release_capture')
         contract = certification._contract(root, contract_row['version'], card['benchmark_spec'])
         contract = replace(contract, path=contract_row['file'])
         if records.rescore(record, contract, max_workers=1) != card:

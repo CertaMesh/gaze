@@ -448,3 +448,27 @@ def test_history_subject_rejects_another_tag_at_the_same_revision(tmp_path):
     subject = history.subject_identity(header)
     assert history.subject_matches(record, {'version': 'v0.17.0', 'subject': subject})
     assert not history.subject_matches(record, {'version': 'v0.16.0', 'subject': subject})
+
+
+@pytest.mark.parametrize('damage', ['sampled', 'cross_check'])
+def test_renderer_admission_requires_full_canonical_capture(tmp_path, damage):
+    path, record, key = bound_capture(tmp_path)
+    header, rows = records._read(record)
+    original = header['scorecard']
+    if damage == 'sampled':
+        original['parameters']['profile'] = 'sampled'
+        key['execution']['parameters']['profile'] = 'sampled'
+    else:
+        header['capture_protocol'] = {'version': 1, 'mode': 'cross-check'}
+        original['capture_protocol'] = header['capture_protocol']
+        key['execution']['capture_protocol'] = header['capture_protocol']
+    original['release_capture'] = past_capture.provenance(key)
+    original['capture_cache'] = cache.provenance(key)
+    records._write_rows(record, [header, *rows])
+    card = records.rescore(record, records.score.SCORED_LABEL_CONTRACT_V1, max_workers=1)
+    path.write_text(json.dumps(card))
+    past_capture.write_key(path.parent, key)
+    with stages.session(path.parent / 'run-evidence.json', scorecard=path, record=record) as evidence:
+        evidence.cache = {'status': 'hit', 'key_sha256': cache.key_digest(key)}
+    with pytest.raises(ValueError, match='unverified_release_capture'):
+        past_capture.admit(card, path, version='v0.17.0')
