@@ -12,9 +12,9 @@
     "pre_arm_load_checks": [
       {
         "arm": "base",
-        "utc": "2026-10-24T04:59:30.609103+00:00",
-        "load_1m": 4.33251953125,
-        "memory_free_percent": 85,
+        "utc": "2026-10-24T06:10:46.333186+00:00",
+        "load_1m": 6.07421875,
+        "memory_free_percent": 86,
         "required_load_below": 12,
         "required_memory_at_least": 60,
         "allowed": true,
@@ -22,8 +22,8 @@
       },
       {
         "arm": "candidate",
-        "utc": "2026-10-24T04:59:49.752487+00:00",
-        "load_1m": 4.732421875,
+        "utc": "2026-10-24T06:11:01.740588+00:00",
+        "load_1m": 5.9345703125,
         "memory_free_percent": 86,
         "required_load_below": 12,
         "required_memory_at_least": 60,
@@ -38,5 +38,16 @@
     "condition": "No crate or file on the C/A/D/R text path changed; per-file hashes prove unchanged by construction",
     "fresh_capture": false
   },
-  "namespace_scope": "Explicit orchestrator ruling: expand only current-session mappings; other namespaces retain exactly the base literal-text behavior, validation stage and error type. An opaque-carrier contract is a follow-up."
+  "namespace_scope": "Explicit orchestrator ruling: expand only current-session mappings; other namespaces retain exactly the base literal-text behavior, validation stage and error type. An opaque-carrier contract is a follow-up.",
+  "availability_counterweights": {
+    "test_source": "crates/gaze-mcp-core/tests/strict_contract/operation_repeats.rs",
+    "base_revision": "f7a794f5668864d3c4336aaa878c6896e92fc009",
+    "candidate_revision": "b5066c7689d697144a3b257a8a86f45cbadc40b9",
+    "base_admitted": 4,
+    "candidate_admitted": 4,
+    "token_only_wire": true,
+    "exact_restore": true,
+    "restored_2_mib_cap_failures": 4,
+    "above_16x_expansion_budget": "DispatchError::ResourceLimit in argument and response operations; staged state rolled back"
+  }
 }
