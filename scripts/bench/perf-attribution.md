@@ -116,7 +116,7 @@ write does not change protection behavior.
 Schema **3** includes `phase` (`startup` or `request`), a process-local `ordinal`,
 and fixed recognizer evidence/model labels.
 Startup is ordinal 0. Requests count from 1, including warmups. The runner rejects
-schemas 1 and 2, partial traces, missing hooks, wrong ordinals, processing clocks in
+schemas 1 and 2, partial traces, missing required keys/prerequisites, wrong ordinals, processing clocks in
 startup, and model initialization attached to request records. Nym timer backports must
 include both split clocks below; aggregate-only Nym traces are refused. Old executables that emit no records retain unknown stage
 costs. `--binary-kind-a local-timer`, `--binary-kind-b local-timer`, and
@@ -407,6 +407,11 @@ Hook-regression detection is the snapshot gate's job. It detects changes to the
 observed counts or shape on these fixtures; it cannot detect timing-only changes,
 hooks moved along paths with identical observations, unexercised branches, or model
 hooks. The admission validator does not claim exhaustive single-hook detection.
+After committing, `perf_snapshot_mutation.py --out <directory>` disables the
+sweep span, input_bytes count and RecognizerSpan in Rust one at a time. It requires
+an executed snapshot assertion failure for each and a restored pass, records the
+source hashes, and restores every edited file byte for byte. Run it in a clean
+Anvil worktree with a granted machine slot.
 
 `test_perf_hook_deletion.py` separately probes admission by erasing inventoried
 outputs from retained real CLI records. It includes the source-faithful omission

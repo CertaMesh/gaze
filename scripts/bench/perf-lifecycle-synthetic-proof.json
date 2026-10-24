@@ -53,8 +53,8 @@
     "passed": 1
   },
   "python_tests": {
-    "executed": 259,
-    "passed": 259,
+    "executed": 264,
+    "passed": 264,
     "skipped": 0,
     "real_cli_tests": [
       "test_real_cli_lifecycle_hooks_are_validated_by_runner",
@@ -63,7 +63,7 @@
       "test_real_empty_and_repeated_zero_candidate_requests_admit"
     ],
     "attribution_tests": 29,
-    "bound_tests": 225,
+    "bound_tests": 228,
     "duration_bounds": 57,
     "child_parent_edge_tests": 42,
     "forbidden_phase_tests": 34,
@@ -78,7 +78,8 @@
     "reviewer_round_five_invocation_witness_tests": 2,
     "prerequisite_checks": 15,
     "reviewer_prerequisite_witnesses": 8,
-    "hook_deletion_tests": 5
+    "hook_deletion_tests": 7,
+    "context_checks": 3
   },
   "mutation": {
     "source_commit": "e1744ec1d533af669797c88c14e2494c0f98c450",
@@ -92,14 +93,15 @@
   },
   "source_identity_base": "764d98903e8e1e6a6a71486c5c31f6c43041ef38",
   "containment_mutation": {
-    "runner_sha256": "2a50fded38b6d2aa35e782187ad212e5108b224299895df8a25a7cc291b79421",
-    "runner_source_sha256": "788b30b8ea52e13222b7d896c87935f41c8b40701c02d079eb89c0aeacaec0ff",
-    "contract_sha256": "6e05eb6824ffdc545bab94c4c4cc0d34022a210f0244442f16681fb9643085b6",
+    "runner_sha256": "6e627452e1c476647384cbff0dc56340c1f390bd501fb7685cf33fa302b8fb91",
+    "runner_source_sha256": "94233e7f323c8c5dfe2c64f5336548bb0997c507dea5cb661b12200efc9f4dc5",
+    "contract_sha256": "b1cc5540eee84da85ba38e51618b4cf9f0c695080a9fcc712af45150b0f9deb7",
     "test_sha256": {
       "test_perf_attribution.py": "44c4bc3689e9c920af301ab800475cb17b9d665738ae46bb964c4f3a197eea5d",
-      "test_perf_lifecycle_bounds.py": "fbf4a9ed37b450aaf5fbbccc866295a91b28c5f4b52832b0348bbc0caf258900"
+      "test_perf_lifecycle_bounds.py": "2feaebb1529d75913577279389951386ca5a25d2ce176b2f2fb8b45cc3f588cf",
+      "test_perf_hook_deletion.py": "ff543aa39cf9966abc88bb0a70cd9ea5eed0c31ea6358fca287856546fd44068"
     },
-    "source_commit": "ee9727ef7e90ba9cb37de89d266c8d0c5563f5a1",
+    "source_commit": "813d4c318419aabf9b3e38f4a2e7d3c26bec9da0",
     "mutations": [
       {
         "check": "ready-build-parent-pipeline_build_ns",
@@ -510,6 +512,12 @@
         "restored_tests_passed": 1
       },
       {
+        "check": "manifest-sweep",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_manifest_sweep",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
         "check": "resolve2-sweep",
         "test": "test_perf_lifecycle_bounds.BoundTests.test_prerequisite_resolve2_sweep",
         "mutated_assertions_failed": 1,
@@ -566,6 +574,30 @@
       {
         "check": "parent-invocations",
         "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_invocations",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nonempty-input-work",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_nonempty_input_work",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "no-net-audit-input",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_no_net_audit_input",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "no-net-audit-manifest",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_no_net_audit_manifest",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "sweep-only-resolve2",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_sweep_only_resolve2",
         "mutated_assertions_failed": 1,
         "restored_tests_passed": 1
       },
@@ -708,15 +740,27 @@
         "restored_tests_passed": 1
       }
     ],
-    "mutation_count": 101,
+    "mutation_count": 106,
     "serial_sum_checks": 15,
     "parent_checks": 42,
     "ownership_checks": 8,
-    "record_checks": 7,
-    "prerequisite_checks": 14,
+    "context_checks": 3,
+    "record_checks": 8,
+    "prerequisite_checks": 15,
     "parent_test_isolation": "Each parent check alone; serial sums and ancestor edges otherwise imply it. Full graph also rejects every parent witness.",
-    "executed_assertion_failures": 101,
-    "restored_passes": 101
+    "executed_assertion_failures": 106,
+    "restored_passes": 106,
+    "hook_deletion_sweep": {
+      "source_sha256": "0d6bc63174bd85ca840460a11eb8a8b91239e6f9d876a24e220ccb77b6388b1e",
+      "fixture_sha256": "7178a07a158cc67e60601bc6e7464c3b5e8b8e14e3dc1422288110e8fac13960",
+      "result_sha256": "89a48ba315ef5b568192248c13d3de32f0910bec25c26a9cd3116f46fc69a16f",
+      "cases": 14,
+      "counts": {
+        "refused": 873,
+        "undetectable": 39,
+        "not-fired": 912
+      }
+    }
   },
   "timer_cli_tests": {
     "executed": 2,
@@ -750,18 +794,18 @@
       "rust_and_cargo_sources_unchanged_since_fast_check": false
     },
     "historical_note": "The old fast-check receipt predates the schema-3 metadata Rust change and is not current proof. No exact-head fast pass is claimed.",
-    "current_rust_gates": "Exact-head CI is required; this revision changes only Python, its generated guide, and proof data.",
+    "current_rust_gates": "Adds only a Rust integration test/module and committed JSON fixtures; all non-test Rust and Cargo inputs remain unchanged since runtime_source_commit. Focused cli_pipe timer clippy and snapshot test pass; exact-head CI is required.",
     "public_text_scrub": {
-      "passed": true,
-      "guide_sha256": "5ff3b9140ce0411d854275dea1067f2f184d8f1d64e7e576c08763ce5d8cc3f2",
-      "checked_implementation_commit": "ee9727ef7e90ba9cb37de89d266c8d0c5563f5a1",
-      "command": "cargo run -p xtask -- scrub-public-text scripts/bench/perf-attribution.md"
+      "guide_sha256": "1cb7013fc704d8c979aeaed2cfa677380fdc05ea2f2113effa2cdcb1d9225758",
+      "exit": 0,
+      "source_commit": "813d4c318419aabf9b3e38f4a2e7d3c26bec9da0"
     },
     "python_suite": {
       "passed": true,
-      "tests": 251,
+      "tests": 264,
       "skipped": 0,
-      "checked_implementation_commit": "ee9727ef7e90ba9cb37de89d266c8d0c5563f5a1"
+      "checked_implementation_commit": "813d4c318419aabf9b3e38f4a2e7d3c26bec9da0",
+      "binary_sha256": "378ec04cf7eb373893963a69b771f89487d8b24224a9e8d50837bcad324b0af6"
     },
     "runtime_source_unchanged_since": "6fd3b19df66d8bfd68170a90337148a111039dac"
   },
@@ -814,7 +858,7 @@
       }
     ]
   },
-  "admission_source_commit": "ee9727ef7e90ba9cb37de89d266c8d0c5563f5a1",
+  "admission_source_commit": "813d4c318419aabf9b3e38f4a2e7d3c26bec9da0",
   "diagnostic_source_sha256": "c6d302210776dc23ed3c8a0220a1387a8214a3b906971dcdee7d45c7e769c289",
   "recognizer_ownership": {
     "checks": [
@@ -1012,23 +1056,375 @@
   },
   "hook_deletion_sweep": {
     "fixture_sha256": "7178a07a158cc67e60601bc6e7464c3b5e8b8e14e3dc1422288110e8fac13960",
-    "source_sha256": "701eeedb1f39524fac0cb7fa728e5d5222bfa197bb4b12e6d3951d652a0c75fb",
+    "source_sha256": "0d6bc63174bd85ca840460a11eb8a8b91239e6f9d876a24e220ccb77b6388b1e",
     "cases": 14,
     "partial_error_cases": 1,
     "inventory_hooks": 42,
     "counts": {
-      "refused": 858,
-      "undetectable": 40,
-      "not-fired": 898
+      "refused": 873,
+      "undetectable": 39,
+      "not-fired": 912
     },
-    "unobservable_source_reasons": {
-      "input_bytes": "pipeline.rs:1218; registry.rs:1264-1265: empty text contributes zero, and candidate counts precede geometry/score/veto admission; positive NER windows or sweep additions do require bytes",
+    "final_head_receipt": "Run perf_lifecycle_mutation.py and perf_snapshot_mutation.py after the final commit. Their receipts bind exact HEAD; implementation receipts here remain pinned to their source commits.",
+    "source_faithful_recognizer_omission": true,
+    "admission_limits": {
+      "recognizers[*]": "RecognizerSpan::drop creates dynamic entries and Rule totals together; schema 3 has no independent mandatory recognizer cardinality (perf.rs:274-313)",
+      "input_bytes": "Without NER windows, sweep additions or no-net audit, anonymous candidate counts do not prove nonempty geometry (registry.rs:1264-1265)",
       "validators_ns": "registry.rs:1264-1265; validator_veto.rs:23-48; gaze-types/src/perf.rs:291-300: anonymous candidate totals precede filtering and carry no validator kind; Rule includes unvalidated custom regexes",
       "resolve2_ns": "pipeline.rs:1250-1284,1707-1713: optional street/address recovery or sweep; positive sweep_candidates does require it",
-      "sweep_candidates": "pipeline.rs:1707-1713: zero additions are valid; resolve2 can instead come from street/address recovery",
-      "manifest_ns": "pipeline.rs:1231-1326; occurrence.rs:156: errors may end after sweep but before Ledger::new; scan-only paths at pipeline.rs:1034,1079 can invoke safety nets without a ledger; schema 3 has no success flag",
+      "sweep_candidates": "When NER or address_blocks is active, resolve2 can instead come from street/address recovery (pipeline.rs:1250-1284)",
+      "manifest_ns": "Without no-net audit, errors may end before Ledger::new; scan-only Nym paths can audit without a ledger (pipeline.rs:1034,1079,1326)",
       "audit_ns": "pipeline.rs:3067-3072,3097-3102: sink calls are conditional on a logger; no independent sink-call counter"
+    }
+  },
+  "invocation_snapshot_gate": {
+    "test": "perf_invocation_snapshot::attribution_invocation_snapshot_covers_model_free_inventory",
+    "ci_filter": "cli shard: binary_id(=gaze-cli::cli_pipe), cargo nextest --workspace --all-features",
+    "cases": 8,
+    "records": 20,
+    "snapshot_sha256": "ad23adb4803d3a063283ee0600456c18acbe7adcdcf0dfc20450cd0999cfa8e2",
+    "inventory": {
+      "model_free": [
+        "assembly_ns",
+        "audit_ns",
+        "daemon_startup_ns",
+        "input_bytes",
+        "manifest_ns",
+        "pipeline_build_ns",
+        "policy_load_ns",
+        "process_to_policy_ns",
+        "process_to_ready_ns",
+        "recognizer_construction_ns",
+        "recognizers[*]",
+        "registry_ns",
+        "request_ns",
+        "resolve1_ns",
+        "resolve2_ns",
+        "rule_construction_ns",
+        "rules_ns",
+        "sweep_candidates",
+        "sweep_ns",
+        "validators_ns"
+      ],
+      "model_only": [
+        "bundle_verify_ns",
+        "model_constructor_ns",
+        "model_load_ns",
+        "ner_encodes",
+        "ner_mutex_wait_ns",
+        "ner_ort_ns",
+        "ner_tokenize_ns",
+        "ner_windows",
+        "nym_attach_ns",
+        "nym_model_constructor_ns",
+        "nym_mutex_wait_ns",
+        "nym_neutral_ns",
+        "nym_ort_ns",
+        "nym_outer_verify_ns",
+        "nym_stable_ns",
+        "nym_tokenize_ns",
+        "nym_windows",
+        "nym_windows_neutral",
+        "nym_windows_stable",
+        "safety_model_ns",
+        "safety_view_build_ns",
+        "tokenizer_load_ns"
+      ]
     },
-    "final_head_receipt": "Run perf_lifecycle_mutation.py after committing; its receipt binds the exact HEAD, source and fixture hashes. The containment_mutation object below is retained historical evidence."
+    "excluded_fields": [
+      "ns"
+    ],
+    "scope": "Model-free fixture count/shape regression gate. Timing-only changes, moves with identical observations, unexercised paths and model hooks are outside the snapshot. Python admission checks do not claim exhaustive single-hook detection.",
+    "rust_mutations": {
+      "source_commit": "813d4c318419aabf9b3e38f4a2e7d3c26bec9da0",
+      "test": "perf_invocation_snapshot::attribution_invocation_snapshot_covers_model_free_inventory",
+      "timed": false,
+      "mutations": [
+        {
+          "name": "sweep-span",
+          "file": "crates/gaze/src/pipeline.rs",
+          "original_sha256": "0fdf1861c934e8363c0b3bd37809fa3bbfeaecd2c56797d3e1f454cd080ec2df",
+          "mutant_sha256": "09c5866b98b9b0316833c885b6ec3bbe314df915f6ddea1a4251ffb0718a9345",
+          "restored_sha256": "0fdf1861c934e8363c0b3bd37809fa3bbfeaecd2c56797d3e1f454cd080ec2df",
+          "mutated": {
+            "command": [
+              "anvil",
+              "run",
+              "--",
+              "env",
+              "CARGO_BUILD_JOBS=2",
+              "nice",
+              "-n",
+              "10",
+              "cargo",
+              "test",
+              "--locked",
+              "-p",
+              "gaze-cli",
+              "--features",
+              "perf-timers",
+              "--test",
+              "cli_pipe",
+              "perf_invocation_snapshot::attribution_invocation_snapshot_covers_model_free_inventory",
+              "--",
+              "--exact",
+              "--nocapture"
+            ],
+            "memory_free_percent": 64,
+            "memory_floor_percent": 30,
+            "exit": 101
+          },
+          "restored": {
+            "command": [
+              "anvil",
+              "run",
+              "--",
+              "env",
+              "CARGO_BUILD_JOBS=2",
+              "nice",
+              "-n",
+              "10",
+              "cargo",
+              "test",
+              "--locked",
+              "-p",
+              "gaze-cli",
+              "--features",
+              "perf-timers",
+              "--test",
+              "cli_pipe",
+              "perf_invocation_snapshot::attribution_invocation_snapshot_covers_model_free_inventory",
+              "--",
+              "--exact",
+              "--nocapture"
+            ],
+            "memory_free_percent": 65,
+            "memory_floor_percent": 30,
+            "exit": 0
+          },
+          "snapshot_assertion_failed": true,
+          "source_restored_exactly": true
+        },
+        {
+          "name": "input-bytes",
+          "file": "crates/gaze/src/pipeline.rs",
+          "original_sha256": "0fdf1861c934e8363c0b3bd37809fa3bbfeaecd2c56797d3e1f454cd080ec2df",
+          "mutant_sha256": "d26734ae04be007c0daa947168561c5796d01c5870359ef9114d4c61d313556a",
+          "restored_sha256": "0fdf1861c934e8363c0b3bd37809fa3bbfeaecd2c56797d3e1f454cd080ec2df",
+          "mutated": {
+            "command": [
+              "anvil",
+              "run",
+              "--",
+              "env",
+              "CARGO_BUILD_JOBS=2",
+              "nice",
+              "-n",
+              "10",
+              "cargo",
+              "test",
+              "--locked",
+              "-p",
+              "gaze-cli",
+              "--features",
+              "perf-timers",
+              "--test",
+              "cli_pipe",
+              "perf_invocation_snapshot::attribution_invocation_snapshot_covers_model_free_inventory",
+              "--",
+              "--exact",
+              "--nocapture"
+            ],
+            "memory_free_percent": 65,
+            "memory_floor_percent": 30,
+            "exit": 101
+          },
+          "restored": {
+            "command": [
+              "anvil",
+              "run",
+              "--",
+              "env",
+              "CARGO_BUILD_JOBS=2",
+              "nice",
+              "-n",
+              "10",
+              "cargo",
+              "test",
+              "--locked",
+              "-p",
+              "gaze-cli",
+              "--features",
+              "perf-timers",
+              "--test",
+              "cli_pipe",
+              "perf_invocation_snapshot::attribution_invocation_snapshot_covers_model_free_inventory",
+              "--",
+              "--exact",
+              "--nocapture"
+            ],
+            "memory_free_percent": 64,
+            "memory_floor_percent": 30,
+            "exit": 0
+          },
+          "snapshot_assertion_failed": true,
+          "source_restored_exactly": true
+        },
+        {
+          "name": "recognizer-span",
+          "file": "crates/gaze/src/registry.rs",
+          "original_sha256": "bd980df9b7d430b8bb71322aaefae8c73de60b3640d97d6ce6da6f3c78593fff",
+          "mutant_sha256": "87e7b56dead903623a136feb541018b016c748ce9fcc70fc88efa2c5ab4e84c2",
+          "restored_sha256": "bd980df9b7d430b8bb71322aaefae8c73de60b3640d97d6ce6da6f3c78593fff",
+          "mutated": {
+            "command": [
+              "anvil",
+              "run",
+              "--",
+              "env",
+              "CARGO_BUILD_JOBS=2",
+              "nice",
+              "-n",
+              "10",
+              "cargo",
+              "test",
+              "--locked",
+              "-p",
+              "gaze-cli",
+              "--features",
+              "perf-timers",
+              "--test",
+              "cli_pipe",
+              "perf_invocation_snapshot::attribution_invocation_snapshot_covers_model_free_inventory",
+              "--",
+              "--exact",
+              "--nocapture"
+            ],
+            "memory_free_percent": 64,
+            "memory_floor_percent": 30,
+            "exit": 101
+          },
+          "restored": {
+            "command": [
+              "anvil",
+              "run",
+              "--",
+              "env",
+              "CARGO_BUILD_JOBS=2",
+              "nice",
+              "-n",
+              "10",
+              "cargo",
+              "test",
+              "--locked",
+              "-p",
+              "gaze-cli",
+              "--features",
+              "perf-timers",
+              "--test",
+              "cli_pipe",
+              "perf_invocation_snapshot::attribution_invocation_snapshot_covers_model_free_inventory",
+              "--",
+              "--exact",
+              "--nocapture"
+            ],
+            "memory_free_percent": 65,
+            "memory_floor_percent": 30,
+            "exit": 0
+          },
+          "snapshot_assertion_failed": true,
+          "source_restored_exactly": true
+        }
+      ],
+      "baseline": {
+        "command": [
+          "anvil",
+          "run",
+          "--",
+          "env",
+          "CARGO_BUILD_JOBS=2",
+          "nice",
+          "-n",
+          "10",
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "gaze-cli",
+          "--features",
+          "perf-timers",
+          "--test",
+          "cli_pipe",
+          "perf_invocation_snapshot::attribution_invocation_snapshot_covers_model_free_inventory",
+          "--",
+          "--exact",
+          "--nocapture"
+        ],
+        "memory_free_percent": 64,
+        "memory_floor_percent": 30,
+        "exit": 0
+      }
+    },
+    "same_environment_runtime_bytes": {
+      "baseline": "ce76d104",
+      "same_build_environment": true,
+      "test_sources_restored_exactly": true,
+      "binaries": {
+        "timers": {
+          "baseline_sha256": "94bc31c5038c038d38eba69e56f98e79d9af66cb9bef56e1a223b5a9eba4e267",
+          "candidate_sha256": "94bc31c5038c038d38eba69e56f98e79d9af66cb9bef56e1a223b5a9eba4e267",
+          "identical": true
+        },
+        "plain": {
+          "baseline_sha256": "4447aa983ecbfc16a6b9645a00f87c8b554052e4a31156a96842ef7a1b524646",
+          "candidate_sha256": "4447aa983ecbfc16a6b9645a00f87c8b554052e4a31156a96842ef7a1b524646",
+          "identical": true
+        }
+      }
+    },
+    "fresh_binary_parity": {
+      "schema": 1,
+      "timed": false,
+      "plain_binary_sha256": "4447aa983ecbfc16a6b9645a00f87c8b554052e4a31156a96842ef7a1b524646",
+      "timer_binary_sha256": "94bc31c5038c038d38eba69e56f98e79d9af66cb9bef56e1a223b5a9eba4e267",
+      "normalization": "Only eight-hex session prefixes inside declared ordinary tokens become 00000000. Within-mode clean bytes, token spelling/index, mapping values, stats/disposition and daemon manifest spans are otherwise exact. The Rust fixed-snapshot test compares byte-for-byte without normalization.",
+      "modes": {
+        "one-shot": {
+          "fixtures": 7,
+          "exact_restores": 21,
+          "semantic_sha256": [
+            "04bc0cf07623b0df3656f127a4df30b0ba3aabe36c810e75218140d956964096",
+            "baaad0374154d362e6e14ea130f689d1fa3b4fed2051cc46e3b61b81bcc3cd15",
+            "8efda6476ed38f2a275fa29a4923938be5e4596757ccbb118b36c586b26d60ea",
+            "bf8e56f1842adf28b9937772a457988582b932a58e06bcac9fe18fc7153dd4bc",
+            "9011c36439f72a3be232576ae00f5bed6afbe32b85b1af38ba5326aec76d56a8",
+            "52dbf2e3800b5323239eea0e0c7653d237ddf3932929019dede9f24d45e2db4b",
+            "e8b1e11856c55f791de8973c7b03ee6a59ac24135b16a71ecd6398c5ab69e951"
+          ],
+          "identical": true
+        },
+        "daemon": {
+          "fixtures": 7,
+          "exact_restores": 21,
+          "semantic_sha256": [
+            "61354e08b2395b58121ccbeb7f964950876f4b1c69c64f4b64bcd30aea26081e",
+            "f76b5fdcdc53a83e67565e27370c5e934d77e55d9622749321988f76800cd629",
+            "46ba2970bc629b0ee5f37825acc87dc8d95d3d31b133feb977ad46e7d2ecc838",
+            "4f51352a01c8084709baeecce730e2de492071456c17e381f2ba1780dc1b3090",
+            "c7fda63694f66adadfe682353957aa31092002abfa743ca15bce2de17163c78d",
+            "4fc9f518e632f5c75b97703bd28243f6f8dbebe2ed4cfd14bc302a5f97a64efb",
+            "51d9b9db133622ed2908899cb527722d3f298bba5047f9f63f4b2e3950c23b92"
+          ],
+          "identical": true
+        }
+      }
+    },
+    "retained_runtime_binary_hashes_reverified": true,
+    "focused_clippy": {
+      "passed": true,
+      "package": "gaze-cli",
+      "features": "perf-timers",
+      "target": "cli_pipe"
+    }
   }
 }

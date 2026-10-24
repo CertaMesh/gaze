@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 
 from perf_hook_deletion import BASE_POLICY, CUSTOM_POLICY
-from perf_lifecycle_contract import HOOK_AUDIT, RECOGNIZERS
+from perf_lifecycle_contract import HOOK_AUDIT
 from perf_attribution import child_environment, PREFIX, validate_trace
 
 ROOT = Path(__file__).resolve().parents[2]
