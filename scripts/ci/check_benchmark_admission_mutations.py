@@ -139,6 +139,11 @@ def main():
          '    return repo_root / "target/debug/examples/clean_for_bench"',
          'test_cargo_returned_artifact_wins_over_retained_default_path', 1),
     ])
+    certification_source = (ROOT / CERT).read_text()
+    build_start = certification_source.index('    try:\n        stages.validate_execution(captured,')
+    build_end = certification_source.index("    block = captured['scoring']['scored_label_contract']", build_start)
+    mutations.append(('capture_build_qualification', CERT, certification_source[build_start:build_end], '',
+                      'test_reviewer_skip_build_retained_binary_cannot_certify', 1))
     if args.only:
         if set(args.only) - {row[0] for row in mutations}:
             raise SystemExit('unknown_mutation')

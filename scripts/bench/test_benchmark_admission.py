@@ -458,8 +458,10 @@ def test_validation_adapter_required_at_every_boundary(tmp_path, evidence, locat
     else:
         (header if location == 'header' else header['scorecard']).pop('response_validation')
         records._write_rows(rp, [header, *obs])
-    with pytest.raises(cert.CertificationError, match='^response_validation_mismatch$'):
+    with pytest.raises(ValueError) as refused:
         cert.admit_capture(cp, rp, evidence['benchmark_spec'], ROOT)
+    assert isinstance(refused.value, cert.CertificationError)
+    assert str(refused.value) == 'response_validation_mismatch'
 
 
 @pytest.mark.parametrize('version,declared,allowed', [
