@@ -58,7 +58,7 @@ def load_cases(fixture=FIXTURE):
         seed = {"text": seed_text, "gold": [
             {"start": 6, "end": 6 + len(name), "label": "FIRSTNAME"},
             {"start": 8 + len(name), "end": 25 + len(name), "label": "EMAIL"}]}
-        wire = "{seed} " * shape["copies"]
+        wire = ("{seed}" + shape.get("separator", " ")) * shape["copies"] + shape.get("suffix", "")
         if shape["private_byte"]:
             middle = shape["copies"] // 2
             wire = "{seed} " * middle + "S " + "{seed} " * (shape["copies"] - middle)
@@ -474,7 +474,8 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                 scored_leaves = observation_leaves(case)
                 bound_leaves = observation_leaves(bound)
                 row = {"id": case["id"], "provider": provider, "order": case["order"],
-                       "status": status, "attempted": 1, "seed_forwarded": int("seed" in case), "seed_restore_exact": int("seed" in case), "forwarded": 0, "failed_closed": 0,
+                       "status": status, "error_code": reply.get("error") if isinstance(reply, dict) else None,
+                       "resource_limit_refusals": 0, "attempted": 1, "seed_forwarded": int("seed" in case), "seed_restore_exact": int("seed" in case), "forwarded": 0, "failed_closed": 0,
                        "selected_restore_exact": 0, "alignment_valid": 0, "owned_identities_preserved": 0,
                        "seed_leaked_bytes": seed_scores.get("leaked_bytes", 0), "target_leaked_bytes": 0,
                        "seed_false_positive_bytes_v1": seed_scores.get("false_positive_bytes_v1", 0),
@@ -487,6 +488,7 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                     if 200 <= status < 300:
                         raise ValueError("successful request never reached upstream")
                     row["failed_closed"] = 1
+                    row["resource_limit_refusals"] = int(status == 413 and row["error_code"] == "ResidualExpansionLimitExceeded")
                     rows.append(row)
                     continue
                 actual_provider, actual, tokens = captured.get_nowait()
@@ -541,7 +543,7 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                 row["selected_restore_exact"] = int(exact)
                 row["alignment_valid"] = 1
                 rows.append(row)
-    counts = ("attempted", "seed_forwarded", "seed_restore_exact", "forwarded", "failed_closed", "selected_restore_exact", "alignment_valid", "owned_identities_preserved",
+    counts = ("attempted", "resource_limit_refusals", "seed_forwarded", "seed_restore_exact", "forwarded", "failed_closed", "selected_restore_exact", "alignment_valid", "owned_identities_preserved",
               "gold_bytes", "leaked_bytes", "false_positive_bytes_v1", "false_positive_bytes_v2")
     result = {"schema": "gaze-proxy-request-order-v3", "layer": "proxy-request-order", "contract_labels": ["FIRSTNAME", "SURNAME", "EMAIL"],
               "runtime_revision": revision, "scored_contracts": ["v2", "v1"], "v2_contract_sha256": digest(V2_CONTRACT), "fixture_sha256": digest(fixture),
@@ -590,9 +592,18 @@ def compare(base, candidate, *, gate_policy="strict"):
     rows = { (row["provider"], row["id"]): row for row in base["cases"] }
     regressions = []
     leak_refusals = []
+    resource_refusals = []
     for row in candidate["cases"]:
         old = rows[(row["provider"], row["id"])]
         leak_refused = False
+        resource_refused = False
+        for observed in (old, row):
+            resource_count = observed.get("resource_limit_refusals", 0)
+            if (type(resource_count) is not int or resource_count not in (0, 1)
+                    or resource_count > observed["failed_closed"]
+                    or (resource_count and (observed.get("status") != 413
+                        or observed.get("error_code") != "ResidualExpansionLimitExceeded"))):
+                raise ValueError("invalid typed resource-limit refusal evidence")
         if gate_policy == "leak-to-refusal":
             for observed in (old, row):
                 seed = observed.get("seed_leaked_bytes")
@@ -600,7 +611,11 @@ def compare(base, candidate, *, gate_policy="strict"):
                 if (type(seed) is not int or type(target) is not int or min(seed, target) < 0
                         or seed + target != observed["leaked_bytes"]):
                     raise ValueError("leak-to-refusal requires separate seed and target byte evidence")
-            leak_refused = bool(old["forwarded"] and row["failed_closed"]
+            resource_refused = bool(old["forwarded"] and row.get("resource_limit_refusals", 0))
+            if resource_refused:
+                resource_refusals.append({"provider": row["provider"], "id": row["id"],
+                                          "base": old, "candidate": row})
+            leak_refused = bool(not resource_refused and old["forwarded"] and row["failed_closed"]
                                 and old["target_leaked_bytes"] > 0
                                 and row["target_leaked_bytes"] == 0
                                 and row["seed_leaked_bytes"] <= old["seed_leaked_bytes"])
@@ -612,12 +627,12 @@ def compare(base, candidate, *, gate_policy="strict"):
         if (row["seed_forwarded"] != old["seed_forwarded"]
                 or row["seed_restore_exact"] < old["seed_restore_exact"]
                 or row["gold_bytes"] != old["gold_bytes"] or row["leaked_bytes"] > old["leaked_bytes"]
-                or (not leak_refused and row["failed_closed"] > old["failed_closed"])
-                or (not leak_refused and row["selected_restore_exact"] < old["selected_restore_exact"])
-                or ((gate_policy == "strict" or (old["forwarded"] and not leak_refused))
+                or (not (leak_refused or resource_refused) and row["failed_closed"] > old["failed_closed"])
+                or (not (leak_refused or resource_refused) and row["selected_restore_exact"] < old["selected_restore_exact"])
+                or ((gate_policy == "strict" or (old["forwarded"] and not (leak_refused or resource_refused)))
                     and row["forwarded"] - row["selected_restore_exact"] > old["forwarded"] - old["selected_restore_exact"])
-                or (not leak_refused and row["alignment_valid"] < old["alignment_valid"])
-                or (not leak_refused and row["owned_identities_preserved"] < old["owned_identities_preserved"])):
+                or (not (leak_refused or resource_refused) and row["alignment_valid"] < old["alignment_valid"])
+                or (not (leak_refused or resource_refused) and row["owned_identities_preserved"] < old["owned_identities_preserved"])):
             regressions.append([row["provider"], row["id"]])
     paired = [(rows[(row["provider"], row["id"])], row) for row in candidate["cases"]
               if rows[(row["provider"], row["id"])]["forwarded"] and row["forwarded"]]
@@ -662,7 +677,7 @@ def compare(base, candidate, *, gate_policy="strict"):
     verdicts = {}
     for contract in ("v2", "v1"):
         seed_fp_cost = 0
-        for transition in leak_refusals:
+        for transition in leak_refusals + resource_refusals:
             key = "seed_false_positive_bytes_" + contract
             before, after = transition["base"].get(key), transition["candidate"].get(key)
             if (type(before) is not int or type(after) is not int or min(before, after) < 0
@@ -682,12 +697,13 @@ def compare(base, candidate, *, gate_policy="strict"):
     return {"schema": "gaze-proxy-request-order-comparison-v3", "contracts": verdicts,
             "gate_policy": gate_policy,
             "leak_to_refused": leak_refusals,
+            "resource_limit_transitions": resource_refusals,
             "refusal_target_bytes_stopped": refusal_byte_drop,
             "refused_in_both_stage_moved": stage_moves,
             "unproven_admission_fp": [transition for transition in transitions
                                       if not transition["preexisting_fp_proven"]],
             "regressions": regressions,
-            "scope": "both-forwarded byte gate; leak-to-refusal policy additionally credits only proven stopped target leaks and charges seed FP increases; admissions reported separately without gain credit; separate C/A/D/R certification required",
+            "scope": "both-forwarded byte gate; leak-to-refusal credits only proven stopped target leaks, allows separately typed resource-limit refusals without byte credit, and charges seed FP increases; admissions reported separately without gain credit; separate C/A/D/R certification required",
             "paired": {"cases": len(paired), "base": old, "candidate": new},
             "refused_to_forwarded": transitions,
             "base": base["totals"], "candidate": candidate["totals"]}

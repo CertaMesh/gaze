@@ -576,7 +576,44 @@ def test_large_owned_carriers_have_exact_independent_gold_and_small_wire():
 def test_large_carriers_are_scoped_to_the_repaired_legacy_path():
     cases = bench.load_cases()
     assert sum(provider in case.get("providers", bench.PROVIDERS)
-               for provider in bench.PROVIDERS for case in cases) == 169
-    for case in cases[-2:]:
+               for provider in bench.PROVIDERS for case in cases) == 177
+    for case in cases[-6:]:
         assert case["providers"] == ["openai", "gemini"]
         assert "ResponseBodyLimitExceeded" in case["provider_exclusion_reason"]
+
+
+def test_adjacent_owned_public_suffix_counterweights_have_zero_private_bytes():
+    cases = [case for case in bench.load_cases() if case["id"].startswith("unsupported-adjacent-owned-")]
+    assert len(cases) == 4
+    for case in cases:
+        leaf = case["leaves"][-1]
+        clean = leaf["wire_text"].replace("{seed}", TOKEN)
+        score = bench.score_leaf(leaf, clean, {TOKEN: "X" * 2048})
+        assert score["leaked_bytes"] == 0
+        assert score["false_positive_bytes_v1"] == score["false_positive_bytes_v2"] == 0
+        assert len(clean) < 20000
+
+
+def test_resource_limit_exception_is_typed_separate_and_gets_no_leak_credit():
+    base = capture_card(leaks=1)
+    candidate = json.loads(json.dumps(base))
+    row = candidate["cases"][0]
+    row.update(status=413, error_code="ResidualExpansionLimitExceeded", resource_limit_refusals=1,
+               forwarded=0, failed_closed=1, selected_restore_exact=0, alignment_valid=0,
+               owned_identities_preserved=0, leaked_bytes=0, seed_leaked_bytes=0, target_leaked_bytes=0)
+    for card in (base, candidate):
+        for item in card["cases"]:
+            item.setdefault("resource_limit_refusals", 0)
+            item.setdefault("seed_leaked_bytes", 0)
+            item.setdefault("seed_false_positive_bytes_v1", 0)
+            item.setdefault("seed_false_positive_bytes_v2", 0)
+            item.setdefault("target_leaked_bytes", item["leaked_bytes"])
+        card["totals"] = {key: sum(item[key] for item in card["cases"]) for key in card["totals"]}
+    result = bench.compare(base, candidate, gate_policy="leak-to-refusal")
+    assert len(result["resource_limit_transitions"]) == 1
+    assert not result["leak_to_refused"]
+    assert result["refusal_target_bytes_stopped"] == 0
+    assert not result["regressions"]
+    row["error_code"] = "UnprovenCoverage"
+    with pytest.raises(ValueError, match="typed resource-limit"):
+        bench.compare(base, candidate, gate_policy="leak-to-refusal")

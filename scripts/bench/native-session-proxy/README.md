@@ -89,7 +89,8 @@ ruling. Each newly refused target must have positive raw target leaked bytes
 in the fresh base capture. Seed leaks cannot justify a target refusal. Every
 accepted transition is listed as `leak -> refused`, with credit limited to the
 base target bytes stopped. Refusals remain a separate count. Refusing a target
-that did not leak in base fails, as does any other byte, seed, restore or
+that did not leak in base fails unless it is the separately typed resource
+limit described below, as does any other byte, seed, restore or
 ownership regression outside those justified transitions. Refused targets
 supply no false-positive reduction credit. Increases in a refused target's seed
 false positives still count as cost. Successful rows retain their exact wire
@@ -99,8 +100,8 @@ available unchanged in policy.
 
 Immutable-carrier Rule coverage permits an uncovered gap only when it contains
 whitespace between two covered spans of the same occurrence. Leading or trailing
-gaps refuse. Every uncovered non-whitespace byte, including punctuation, digits,
-and zero-width characters, refuses. The native cases include a fully owned
+gaps refuse. Every uncovered non-whitespace byte in a Rule occurrence, including punctuation,
+digits, and zero-width characters, refuses. The native cases include a fully owned
 name repeated across a public separator and a private interior name between
 owned copies. The mutable protector keeps its existing, stronger byte coverage.
 
@@ -113,21 +114,22 @@ a raw private `S` between two owned values and declares the longer header name
 in mutable content. Their target leak counts must be zero and one byte,
 respectively, when the carrier forwards unchanged.
 
-Residual Rule checking borrows manifest values once and stores token occurrences
-as symbolic slices. It materializes raw non-whitespace gaps with enough context
-for the longest request-known value, including Unicode spelling expansion.
-Window edges retain whole whitespace-delimited runs so word boundaries, URL
-exclusions, and compound-name growth stay unchanged. Whitespace-only raw gaps
-need no materialization because sweep patterns trim their endpoints and compound
-names end on letters. Materialization occurs one window at a time. Work depends
-on wire gaps, known-value lengths, and their boundary runs. There is no separate
-2 MiB expanded-leaf cap. Each context walk and materialized window instead has
-a work limit of `8 * (wire_leaf_bytes + 3 * longest_manifest_value_bytes)`.
-The factor three covers Unicode spelling expansion. Eight covers two contexts
-of four-byte scalars. A boundary run beyond this limit returns
-`UnprovenCoverage`; fully owned carriers with only public whitespace never
-materialize a window or consume this budget. The existing wire request and
-sweep-pattern limits remain in effect.
+Residual Rule checking fully expands owned tokens, then runs the real Rule
+matcher against complete text. This preserves distant URL exclusions and
+compound-name growth. Adjacent-token controls append public punctuation, digits,
+a URL, or Unicode whitespace; their raw target leak counts remain zero.
+
+Each immutable leaf has a separate expansion resource limit: by default, 16 times
+`ProxyConfig::body_limit_bytes` (32 MiB with the default 2 MiB body cap).
+`ProxyConfig::residual_expansion_limit_bytes` overrides that limit. The proxy
+checks the complete expanded size before allocating the text and ownership mask.
+Larger leaves return HTTP 413 `ResidualExpansionLimitExceeded`, independently of
+coverage. The approved `leak-to-refusal` policy records these transitions in
+`resource_limit_transitions` and `resource_limit_refusals`, with no byte or restore
+gain credit. Seed false-positive increases still count. This is the sole resource
+exception to the positive-base-leak rule; coverage refusals still require proof
+of a base leak. Strict and ordinary paired policies retain their refusal gates.
+The cap bounds expanded input, not peak process memory or concurrency.
 
 Discarded probe transactions preserve mappings and session state. They do not
 suppress audit attempts: `control_would_mutate` retains one audit attempt on
