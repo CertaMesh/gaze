@@ -593,3 +593,226 @@ fn honorific_name_runs_propagate_to_a_later_turn() {
         "{rows:#?}"
     );
 }
+
+#[test]
+fn staged_repeat_query_maps_unicode_without_detection_or_state_changes() {
+    let audit = Audit::default();
+    let p = pipeline(vec!["LearnedOnly"], audit.clone());
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    p.resolve_boundary_text_transaction(
+        &mut transaction,
+        "From: Maria Schneider <m@example.invalid>\nLearnedOnly",
+        &[LocaleTag::Global],
+        &DictionaryBundle::default(),
+    )
+    .unwrap();
+    let staged = transaction.snapshot_entries();
+    let logged = audit.0.lock().unwrap().len();
+    let text = "hi maria\u{200c} schneider; thanks maria; LearnedOnly; https://example.invalid/Maria/Schneider";
+    let hits = p.staged_rule_repeat_candidates(&transaction, text).unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(&text[hits[0].span.clone()], "maria\u{200c} schneider");
+    assert_eq!(hits[0].class, PiiClass::Name);
+    assert_eq!(transaction.snapshot_entries(), staged);
+    assert_eq!(audit.0.lock().unwrap().len(), logged);
+    assert!(session.tokens().is_empty());
+
+    let preserve = Pipeline::builder()
+        .recognizer(Header)
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .unwrap();
+    assert!(preserve
+        .staged_rule_repeat_candidates(&transaction, text)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn boundary_repeat_fragments_are_audited_without_becoming_sweep_sources() {
+    let audit = Audit::default();
+    let p = pipeline(vec![], audit.clone());
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    p.resolve_boundary_text_transaction(
+        &mut transaction,
+        "From: Maria Schneider <m@example.invalid>",
+        &[LocaleTag::Global],
+        &DictionaryBundle::default(),
+    )
+    .unwrap();
+    let hit = p
+        .staged_rule_repeat_candidates(&transaction, "maria schneider")
+        .unwrap()
+        .remove(0);
+    let token = p
+        .tokenize_staged_rule_repeat_fragment(&mut transaction, &hit, " schneider")
+        .unwrap();
+    assert_eq!(
+        transaction.restore_strict_text(&token).unwrap(),
+        " schneider"
+    );
+    assert!(p
+        .staged_rule_repeat_candidates(&transaction, " schneider")
+        .unwrap()
+        .is_empty());
+    let rows = audit.0.lock().unwrap();
+    let entry = rows.last().unwrap();
+    assert_eq!(entry.recognizer_id.as_deref(), Some("manifest_sweep"));
+    assert_eq!(
+        entry.provenance_merged_from.as_deref(),
+        Some("manifest_sweep:token_boundary")
+    );
+    assert_eq!(entry.class, PiiClass::Name);
+    assert_eq!(entry.action, Action::Tokenize);
+}
+
+#[test]
+fn boundary_fragment_audit_failure_preserves_live_and_staged_mappings() {
+    struct RejectBoundary;
+    impl RedactionLogger for RejectBoundary {
+        fn log(&self, entry: &RedactionEntry) -> std::result::Result<(), RedactionLogError> {
+            if entry.provenance_merged_from.as_deref() == Some("manifest_sweep:token_boundary") {
+                return Err(RedactionLogError::Backend(
+                    "synthetic boundary failure".into(),
+                ));
+            }
+            Ok(())
+        }
+    }
+    let p = Pipeline::builder()
+        .recognizer(Header)
+        .rule(DefaultRule::new(Action::Tokenize))
+        .redaction_logger(RejectBoundary)
+        .build()
+        .unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    clean(&p, &session, "From: Maria <m@example.invalid>");
+    let live = session.snapshot_entries();
+    let mut transaction = session.begin_transaction();
+    p.resolve_boundary_text_transaction(
+        &mut transaction,
+        "From: Maria Schneider <m@example.invalid>",
+        &[LocaleTag::Global],
+        &DictionaryBundle::default(),
+    )
+    .unwrap();
+    let staged = transaction.snapshot_entries();
+    let hit = p
+        .staged_rule_repeat_candidates(&transaction, "Maria schneider")
+        .unwrap()
+        .remove(0);
+    assert!(p
+        .tokenize_staged_rule_repeat_fragment(&mut transaction, &hit, " schneider")
+        .is_err());
+    assert_eq!(transaction.snapshot_entries(), staged);
+    drop(transaction);
+    assert_eq!(session.snapshot_entries(), live);
+}
+
+#[test]
+fn request_discovery_collects_only_rule_sources_and_accepts_no_rule_pipelines() {
+    let p = pipeline(vec!["LearnedOnly"], Audit::default());
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    p.discover_staged_rule_sources(
+        &mut transaction,
+        "From: Maria Schneider <m@example.invalid>\nLearnedOnly",
+        &[LocaleTag::Global],
+        &DictionaryBundle::default(),
+    )
+    .unwrap();
+    let entries = transaction.snapshot_entries();
+    assert!(entries.iter().any(|entry| entry.raw == "Maria Schneider"));
+    assert!(!entries.iter().any(|entry| entry.raw == "LearnedOnly"));
+    assert_eq!(
+        p.staged_rule_repeat_candidates(&transaction, "maria schneider")
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(session.tokens().is_empty());
+
+    let learned = Pipeline::builder()
+        .recognizer(Ner(vec!["LearnedOnly"]))
+        .rule(DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    learned
+        .discover_staged_rule_sources(
+            &mut transaction,
+            "LearnedOnly",
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+        )
+        .unwrap();
+    assert!(transaction.tokens().is_empty());
+}
+
+#[test]
+fn whole_leaf_net_resolve_preserves_owned_tokens_and_does_not_seed_repeats() {
+    struct ContextNet;
+    impl SafetyNet for ContextNet {
+        fn id(&self) -> &str {
+            "synthetic-context-net"
+        }
+        fn supported_locales(&self) -> &[LocaleTag] {
+            &[LocaleTag::Global]
+        }
+        fn check(
+            &self,
+            text: &str,
+            _: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            if text.contains(":Name_") {
+                if let Some(start) = text.find("synthetic_handle") {
+                    return Ok(vec![LeakSuspect::new(
+                        start..start + 16,
+                        PiiClass::Custom("username".into()),
+                        self.id(),
+                        Some(0.95),
+                        LeakKind::Uncovered,
+                        "synthetic handle",
+                        None,
+                    )]);
+                }
+            }
+            Ok(vec![])
+        }
+    }
+    let p = Pipeline::builder()
+        .recognizer(Header)
+        .register_safety_net(ContextNet)
+        .rule(DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let token = session.tokenize(&PiiClass::Name, "Maria").unwrap();
+    let input = format!("Public {token}; thanks synthetic_handle");
+    let mut transaction = session.begin_transaction();
+    let dictionaries = DictionaryBundle::default();
+    let context = ProtectionContext::strict(&[LocaleTag::Global], &dictionaries);
+    let before = transaction.snapshot_entries();
+    assert!(p
+        .resolve_staged_owned_text(&mut transaction, &input, context, 1)
+        .is_err());
+    assert_eq!(transaction.snapshot_entries(), before);
+    let clean = p
+        .resolve_staged_owned_text(&mut transaction, &input, context, 1024)
+        .unwrap();
+    assert!(clean.contains(&token));
+    assert!(!clean.contains("synthetic_handle"));
+    assert_eq!(
+        transaction.restore_strict_text(&clean).unwrap(),
+        "Public Maria; thanks synthetic_handle"
+    );
+    assert!(p
+        .staged_rule_repeat_candidates(&transaction, "synthetic_handle")
+        .unwrap()
+        .is_empty());
+    drop(transaction);
+    assert_eq!(session.tokens(), vec![token]);
+}

@@ -331,6 +331,11 @@ mod tests {
             self.protect(input)
         }
 
+        fn verify_rule_coverage(&mut self, _protected: &str) -> Result<(), CodecErrorCode> {
+            // This inspection fixture has no Rule sources or substitutions.
+            Ok(())
+        }
+
         fn validate_token_shapes(&mut self, _input: &str) -> Result<(), CodecErrorCode> {
             Ok(())
         }
