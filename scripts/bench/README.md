@@ -620,3 +620,118 @@ uv run --project scripts/bench python -m unittest discover -s scripts/bench
 
 CI does not download models or run either benchmark profile. The authoritative
 full model run and baseline/error-bucket analysis belong to A6.
+
+## Freeze the benchmark specification
+
+`benchmark_spec.py` resolves a portable manifest whose `gaze-benchmark-v1:<sha256>`
+ID hashes the measuring inputs. It binds the full corpus digest, generated
+corpus and generator version, seed, scored-label contracts, measuring source
+bytes, record schemas, expected document inventories, and execution protocol.
+`benchmark-protocol.json` declares that protocol. Binary, policy, models, host,
+and measured Git revision remain subject provenance. Changing those subject
+inputs does not itself change the benchmark specification.
+
+Resolve the manifest without running detection:
+
+```bash
+uv run --project scripts/bench python scripts/bench/benchmark_spec.py \
+  --dataset target/bench-data/dataiku-en-de/test.parquet \
+  --seed 20260710 --output target/benchmark-spec.json
+```
+
+Both capture drivers attach this manifest to new scorecards. Observation
+headers bind its ID; re-scoring preserves it. `agentic_layers.py gate` refuses
+different specification IDs with `benchmark_spec_mismatch`. Legacy records
+remain readable with their original metrics, but an unproven specification
+cannot certify a candidate or become a row under the current specification.
+Archived comparisons between legacy artifacts remain available for their
+original ledgers. They do not establish current-specification evidence.
+
+## Certify the integrated candidate
+
+`benchmark_certification.py` checks a manifest against an explicit candidate
+commit and required mechanism list. It verifies pinned files, the complete
+C/A/D/R document inventories, both v2 and v1 replays, gate results, mechanism
+policy deltas, and the same integrated candidate binary for every mechanism.
+A sampled population, missing contract, stale candidate, missing mechanism,
+or failed gate refuses certification. This command does not schedule merges
+or admit incremental evaluation.
+
+The JSON manifest has this structure. Replace every placeholder with measured
+evidence. All file pins are relative to the manifest directory and contain
+`file` and `sha256` fields. A scorecard pin hashes its stored bytes, including
+compression when present.
+
+```json
+{
+  "schema_version": 1,
+  "kind": "full-benchmark-certification",
+  "candidate": "<exact integrated commit>",
+  "benchmark_spec": "<resolved manifest object>",
+  "gain": {
+    "base": {"record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}},
+    "candidate": {"record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}}
+  },
+  "mechanisms": {
+    "<required mechanism>": {
+      "base": {"record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}},
+      "candidate": {"record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}},
+      "policy_delta": "<pin>"
+    }
+  }
+}
+```
+
+```bash
+uv run --project scripts/bench python scripts/bench/benchmark_certification.py \
+  target/certification.json --candidate "$(git rev-parse HEAD)" \
+  --required-mechanism nym-safety-net
+```
+
+Repeat `--required-mechanism` for every policy delta required by the change.
+Declare that list during review; the checker requires exactly those entries.
+A pass binds the exact integrated commit and the certification manifest hash.
+The full release benchmark remains a separate release requirement.
+
+## Resume release history off the PR path
+
+`benchmark_history.py` writes a plan and an independent ledger under an explicit
+output directory. It leaves all committed per-version history ledgers intact.
+The default selection is the current and previous release. `--older` adds
+optional older subjects. An older failure records `unavailable` and cannot
+block a complete required pair. This is an explicit batch command; it does
+not install a background scheduler.
+
+The plan contains the resolved `benchmark_spec` object, `current` and `previous`
+version strings, and a `releases` array. Each release has these fields:
+
+- `version`: the displayed release, such as `v0.18.0`.
+- `args`: an argument array for `rescore_past_release.py`, including
+  `--release-root`, `--binary`, `--binary-profile`, `--configs`,
+  `--agentic-layers`, and the subject's policy and model options. Do not include
+  output, sampling, or independent contract-capture flags.
+- `subject`: the pinned `revision`, `binary_sha256`, `policy_sha256`, and
+  `model_bundles` array from the intended subject. These fields must equal the
+  captured provenance. They prevent a resumed job from accepting another
+  subject at the same local paths.
+
+First inspect the plan without inference. Then execute only missing jobs:
+
+```bash
+uv run --project scripts/bench python scripts/bench/benchmark_history.py \
+  target/history-plan.json --output target/history-current-spec
+uv run --project scripts/bench python scripts/bench/benchmark_history.py \
+  target/history-plan.json --output target/history-current-spec --execute
+# Run older backfills separately, outside the PR critical path.
+uv run --project scripts/bench python scripts/bench/benchmark_history.py \
+  target/history-plan.json --output target/history-current-spec --execute --older
+```
+
+Each release is captured once. Every contract comes from that record. Resume
+verifies the saved artifact hashes, record population, specification, and subject
+pin before skipping a completed job. A changed specification requires another
+output directory. `history.json` retains original evidence hashes;
+`history.md` renders measured and unavailable rows through the history renderer.
+Only a complete current/previous pair under one specification satisfies the
+synchronous history requirement. Optional older rows keep their original
+specification and provenance. Never copy their metrics into a new specification.
