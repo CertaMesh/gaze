@@ -476,24 +476,32 @@ def test_supplemental_owner_proofs_do_not_turn_a_target_refusal_into_a_restore(t
 
 
 @pytest.mark.parametrize("target_leak", [0, 7])
-def test_leak_to_refusal_ruling_requires_raw_target_leak_in_base(target_leak):
+@pytest.mark.parametrize("seed_fp_cost", [0, 8])
+def test_leak_to_refusal_ruling_requires_raw_target_leak_in_base(target_leak, seed_fp_cost):
     baseline, candidate = capture_card(0), capture_card(0)
-    before, after = baseline["cases"][0], candidate["cases"][0]
+    index = next(i for i, row in enumerate(baseline["cases"]) if row["seed_forwarded"])
+    before, after = baseline["cases"][index], candidate["cases"][index]
     before.update(leaked_bytes=target_leak, seed_leaked_bytes=0, target_leaked_bytes=target_leak)
     after.update(forwarded=0, failed_closed=1, selected_restore_exact=0,
                  alignment_valid=0, owned_identities_preserved=0,
-                 seed_leaked_bytes=0, target_leaked_bytes=0)
+                 seed_leaked_bytes=0, target_leaked_bytes=0,
+                 seed_false_positive_bytes_v1=seed_fp_cost, seed_false_positive_bytes_v2=seed_fp_cost,
+                 false_positive_bytes_v1=seed_fp_cost, false_positive_bytes_v2=seed_fp_cost)
     for card in (baseline, candidate):
         for row in card["cases"]:
             row.setdefault("seed_leaked_bytes", 0)
             row.setdefault("target_leaked_bytes", row["leaked_bytes"])
+            row.setdefault("seed_false_positive_bytes_v1", 0)
+            row.setdefault("seed_false_positive_bytes_v2", 0)
         card["totals"] = {key: sum(row[key] for row in card["cases"]) for key in card["totals"]}
     result = bench.compare(baseline, candidate, gate_policy="leak-to-refusal")
     assert bool(result["regressions"]) == (target_leak == 0)
     assert len(result["leak_to_refused"]) == int(target_leak > 0)
-    assert all(row["verdict"] == ("pass" if target_leak else "fail")
+    assert all(row["verdict"] == ("pass" if target_leak > seed_fp_cost else "fail")
                for row in result["contracts"].values())
     assert result["contracts"]["v2"]["leaked_bytes_removed"] == target_leak
+
+    assert result["contracts"]["v2"]["false_positive_bytes_added"] == (seed_fp_cost if target_leak else 0)
 
 
 def test_seed_leak_does_not_justify_a_new_target_refusal():
@@ -508,6 +516,8 @@ def test_seed_leak_does_not_justify_a_new_target_refusal():
         for row in card["cases"]:
             row.setdefault("seed_leaked_bytes", 0)
             row.setdefault("target_leaked_bytes", row["leaked_bytes"])
+            row.setdefault("seed_false_positive_bytes_v1", 0)
+            row.setdefault("seed_false_positive_bytes_v2", 0)
         card["totals"] = {key: sum(row[key] for row in card["cases"]) for key in card["totals"]}
     result = bench.compare(baseline, candidate, gate_policy="leak-to-refusal")
     assert result["regressions"]

@@ -441,6 +441,8 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                        "status": status, "attempted": 1, "seed_forwarded": int("seed" in case), "seed_restore_exact": int("seed" in case), "forwarded": 0, "failed_closed": 0,
                        "selected_restore_exact": 0, "alignment_valid": 0, "owned_identities_preserved": 0,
                        "seed_leaked_bytes": seed_scores.get("leaked_bytes", 0), "target_leaked_bytes": 0,
+                       "seed_false_positive_bytes_v1": seed_scores.get("false_positive_bytes_v1", 0),
+                       "seed_false_positive_bytes_v2": seed_scores.get("false_positive_bytes_v2", 0),
                        "gold_bytes": sum(sum(gold_bytes(leaf)) for leaf in case["leaves"]) + seed_scores.get("gold_bytes", 0),
                        "leaked_bytes": 0, "false_positive_bytes_v1": 0, "false_positive_bytes_v2": 0}
                 for metric in ("leaked_bytes", "false_positive_bytes_v1", "false_positive_bytes_v2"):
@@ -486,6 +488,10 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                     raise type(error)(f"{provider}/{case['id']}: {error}") from error
                 if set(mappings) != set(tokens):
                     raise ValueError("unaccounted upstream token")
+                # Authored synthetic inputs only: retain the exact observation and proven
+                # constraints so a new leak-to-refusal transition can be independently rescored.
+                row["observed_leaves"] = clean_leaves
+                row["proved_mappings"] = mappings
                 row["owned_identities_preserved"] = int(owned_identities_preserved(bound_leaves, clean_leaves, known, mappings))
                 # Echo facts must also reconstruct every authored leaf exactly.
                 # Failed owner responses still leave all forwarded bytes scored.
@@ -619,13 +625,22 @@ def compare(base, candidate, *, gate_policy="strict"):
     leak_drop = old["leaked_bytes"] - new["leaked_bytes"] + refusal_byte_drop
     verdicts = {}
     for contract in ("v2", "v1"):
-        fp_delta = new["false_positive_bytes_" + contract] - old["false_positive_bytes_" + contract]
+        seed_fp_cost = 0
+        for transition in leak_refusals:
+            key = "seed_false_positive_bytes_" + contract
+            before, after = transition["base"].get(key), transition["candidate"].get(key)
+            if (type(before) is not int or type(after) is not int or min(before, after) < 0
+                    or before > transition["base"]["false_positive_bytes_" + contract]
+                    or after > transition["candidate"]["false_positive_bytes_" + contract]):
+                raise ValueError("leak-to-refusal requires separate seed false-positive evidence")
+            seed_fp_cost += max(0, after - before)
+        fp_delta = new["false_positive_bytes_" + contract] - old["false_positive_bytes_" + contract] + seed_fp_cost
         improved = ((leak_drop > 0 and fp_delta < leak_drop) or
                     (leak_drop == 0 and fp_delta < 0) or
                     (leak_drop == 0 and fp_delta == 0 and new["selected_restore_exact"] > old["selected_restore_exact"]))
         verdicts[contract] = {"verdict": "pass" if improved and not regressions else "fail",
                               "leaked_bytes_removed": leak_drop, "false_positive_bytes_added": fp_delta,
-                              "net_bytes": leak_drop - fp_delta}
+                              "net_bytes": leak_drop - fp_delta, "refusal_seed_fp_cost": seed_fp_cost}
     stage_moves = [transition for transition in transitions
                    if not transition["candidate"]["selected_restore_exact"]]
     return {"schema": "gaze-proxy-request-order-comparison-v3", "contracts": verdicts,
@@ -636,7 +651,7 @@ def compare(base, candidate, *, gate_policy="strict"):
             "unproven_admission_fp": [transition for transition in transitions
                                       if not transition["preexisting_fp_proven"]],
             "regressions": regressions,
-            "scope": "paired both-forwarded byte gate; refused-to-forwarded transitions reported separately without byte-gain credit; separate fresh C/A/D/R evidence required",
+            "scope": "both-forwarded byte gate; leak-to-refusal policy additionally credits only proven stopped target leaks and charges seed FP increases; admissions reported separately without gain credit; separate C/A/D/R certification required",
             "paired": {"cases": len(paired), "base": old, "candidate": new},
             "refused_to_forwarded": transitions,
             "base": base["totals"], "candidate": candidate["totals"]}
@@ -651,7 +666,7 @@ def main():
     parser.add_argument("--fixture", type=Path, default=FIXTURE)
     parser.add_argument("--compare", type=Path, nargs=2, metavar=("BASE", "CANDIDATE"))
     parser.add_argument("--gate-policy", choices=("strict", "paired", "leak-to-refusal"), default="strict",
-                        help="comparison only: paired excludes all newly forwarded cases from gate credit and reports their FP cost separately")
+                        help="comparison only: paired excludes new admissions; leak-to-refusal also permits proven unsafe target refusals")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)

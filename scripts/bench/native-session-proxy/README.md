@@ -91,5 +91,8 @@ accepted transition is listed as `leak -> refused`, with credit limited to the
 base target bytes stopped. Refusals remain a separate count. Refusing a target
 that did not leak in base fails, as does any other byte, seed, restore or
 ownership regression outside those justified transitions. Refused targets
-supply no false-positive reduction credit. The default strict comparison and
-the both-forwarded paired comparison remain available unchanged in policy.
+supply no false-positive reduction credit. Increases in a refused target's seed
+false positives still count as cost. Successful rows retain their exact wire
+leaves and proven mappings so reviewers can re-score each stopped leak.
+The default strict comparison and the both-forwarded paired comparison remain
+available unchanged in policy.
