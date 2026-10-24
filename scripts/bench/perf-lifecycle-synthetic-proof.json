@@ -53,19 +53,23 @@
     "passed": 1
   },
   "python_tests": {
-    "executed": 160,
-    "passed": 160,
+    "executed": 179,
+    "passed": 179,
     "skipped": 0,
-    "real_cli_test": "test_real_cli_lifecycle_hooks_are_validated_by_runner",
-    "attribution_tests": 25,
-    "bound_tests": 135,
-    "duration_bounds": 51,
-    "child_parent_edge_tests": 38,
+    "real_cli_tests": [
+      "test_real_cli_lifecycle_hooks_are_validated_by_runner",
+      "test_real_daemon_context_assembly_is_admitted"
+    ],
+    "attribution_tests": 26,
+    "bound_tests": 153,
+    "duration_bounds": 57,
+    "child_parent_edge_tests": 42,
     "forbidden_phase_tests": 34,
-    "serial_sum_checks": 13,
-    "parent_checks": 38,
-    "full_graph_parent_witness_tests": 38,
-    "reviewer_round_two_witness_tests": 3
+    "serial_sum_checks": 15,
+    "parent_checks": 42,
+    "full_graph_parent_witness_tests": 42,
+    "reviewer_round_two_witness_tests": 3,
+    "reviewer_round_three_recognizer_witness_tests": 3
   },
   "mutation": {
     "source_commit": "e1744ec1d533af669797c88c14e2494c0f98c450",
@@ -79,10 +83,10 @@
   },
   "source_identity_base": "764d98903e8e1e6a6a71486c5c31f6c43041ef38",
   "containment_mutation": {
-    "runner_sha256": "44724c8fbc3118fd10a3a467306c637ecf4ed93730cc48a41a24b54fb37acf7c",
-    "runner_source_sha256": "c9f908551f333296ed3c9068556353671eddb75037ff08f7cb046ae00eb0cb27",
-    "contract_sha256": "a520cd53cae74d8a08015ce5ba9a22621c830f92f58ae015d10fac5e0b9cff2b",
-    "source_commit": "09a73b47c44894228bc065c3144e546bf4d8f2ea",
+    "runner_sha256": "9d4b5bd919ef6a904ef9fe6dc9e8dc9d6320a748aa68826dfe9c19739011d05a",
+    "runner_source_sha256": "97fefbfbbabf06dfdf78c6914cef32a6c903bc7720b56bcd2260c04d5ba79da6",
+    "contract_sha256": "6994e70cd211f59137e8793db72126b6893716df8d2358da51d9e6f01f89370f",
+    "source_commit": "05f904ea7c7e526156cecad74b60225e7552bc94",
     "mutations": [
       {
         "check": "ready-build-parent-pipeline_build_ns",
@@ -253,6 +257,12 @@
         "restored_tests_passed": 1
       },
       {
+        "check": "request-sweep-parent-assembly_ns",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_request_sweep_parent_assembly_ns",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
         "check": "request-sweep-parent-registry_ns",
         "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_request_sweep_parent_registry_ns",
         "mutated_assertions_failed": 1,
@@ -313,38 +323,68 @@
         "restored_tests_passed": 1
       },
       {
+        "check": "request-assembly-parent-recognizer_construction_ns",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_request_assembly_parent_recognizer_construction_ns",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "request-assembly-parent-rule_construction_ns",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_request_assembly_parent_rule_construction_ns",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "request-assembly-serial",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_serial_request_assembly",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
         "check": "request-overlap-parent-validators_ns",
         "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_request_overlap_parent_validators_ns",
         "mutated_assertions_failed": 1,
         "restored_tests_passed": 1
       },
       {
-        "check": "registry-parent-rules_ns",
-        "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_registry_parent_rules_ns",
+        "check": "registry-recognizers-parent-recognizers[*]",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_registry_recognizers_parent_recognizers[*]",
         "mutated_assertions_failed": 1,
         "restored_tests_passed": 1
       },
       {
-        "check": "registry-parent-ner_tokenize_ns",
-        "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_registry_parent_ner_tokenize_ns",
+        "check": "registry-recognizers-serial",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_serial_registry_recognizers",
         "mutated_assertions_failed": 1,
         "restored_tests_passed": 1
       },
       {
-        "check": "registry-parent-ner_mutex_wait_ns",
-        "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_registry_parent_ner_mutex_wait_ns",
+        "check": "recognizer-work-parent-rules_ns",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_recognizer_work_parent_rules_ns",
         "mutated_assertions_failed": 1,
         "restored_tests_passed": 1
       },
       {
-        "check": "registry-parent-ner_ort_ns",
-        "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_registry_parent_ner_ort_ns",
+        "check": "recognizer-work-parent-ner_tokenize_ns",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_recognizer_work_parent_ner_tokenize_ns",
         "mutated_assertions_failed": 1,
         "restored_tests_passed": 1
       },
       {
-        "check": "registry-serial",
-        "test": "test_perf_lifecycle_bounds.BoundTests.test_serial_registry",
+        "check": "recognizer-work-parent-ner_mutex_wait_ns",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_recognizer_work_parent_ner_mutex_wait_ns",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "recognizer-work-parent-ner_ort_ns",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_recognizer_work_parent_ner_ort_ns",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "recognizer-work-serial",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_serial_recognizer_work",
         "mutated_assertions_failed": 1,
         "restored_tests_passed": 1
       },
@@ -397,8 +437,8 @@
         "restored_tests_passed": 1
       },
       {
-        "check": "recognizer",
-        "test": "test_perf_lifecycle_bounds.BoundTests.test_recognizer_bound",
+        "check": "request-assembly-counts",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_request_assembly_hooks_are_complete_and_once_each",
         "mutated_assertions_failed": 1,
         "restored_tests_passed": 1
       },
@@ -419,14 +459,32 @@
         "test": "test_perf_lifecycle_bounds.BoundTests.test_nonzero_clock_requires_invocation",
         "mutated_assertions_failed": 1,
         "restored_tests_passed": 1
+      },
+      {
+        "check": "one-shot-phase-assembly_ns",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_one_shot_phase_assembly_ns",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "one-shot-phase-recognizer_construction_ns",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_one_shot_phase_recognizer_construction_ns",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "one-shot-phase-rule_construction_ns",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_one_shot_phase_rule_construction_ns",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
       }
     ],
-    "mutation_count": 56,
-    "serial_sum_checks": 13,
-    "parent_checks": 38,
+    "mutation_count": 65,
+    "serial_sum_checks": 15,
+    "parent_checks": 42,
     "parent_test_isolation": "Each parent check alone; serial sums and ancestor edges otherwise imply it. Full graph also rejects every parent witness.",
-    "executed_assertion_failures": 56,
-    "restored_passes": 56
+    "executed_assertion_failures": 65,
+    "restored_passes": 65
   },
   "timer_cli_tests": {
     "executed": 2,
@@ -457,5 +515,28 @@
     "anvil_fast_passing_and_current_at_checked_commit": true,
     "python_only_graph_revision": "09a73b47c44894228bc065c3144e546bf4d8f2ea",
     "rust_and_cargo_sources_unchanged_since_fast_check": true
+  },
+  "daemon_context_admission": {
+    "timed": false,
+    "test": "test_real_daemon_context_assembly_is_admitted",
+    "binary_sha256": "983af9b74f089949d5cf23be65828197863fd2d9de20171e7f7bfaeacaac7d3a",
+    "policy_sha256": "b7132fd8e1215af696e2413590b6f5150451d62bbdeab4216376eabb4ffed5ce",
+    "records_sha256": "2f277fce0ac1d35b67f99f3b773310b5ce58ec42aa72bdd466df2db2ce27188e",
+    "requests": 2,
+    "admitted_records": 3,
+    "models": "none",
+    "request_assembly_invocations": [
+      {
+        "assembly_ns": 0,
+        "recognizer_construction_ns": 0,
+        "rule_construction_ns": 0
+      },
+      {
+        "assembly_ns": 1,
+        "recognizer_construction_ns": 1,
+        "rule_construction_ns": 1
+      }
+    ],
+    "input": "Two safe-text daemon requests in one session, the second with an empty context object."
   }
 }
