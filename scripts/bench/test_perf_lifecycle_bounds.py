@@ -193,6 +193,7 @@ class BoundTests(unittest.TestCase):
     def test_nym_windows(self):
         rows = records()
         rows[1]['metrics']['nym_ort_ns']['invocations'] = 2
+        rows[1]['metrics']['nym_mutex_wait_ns']['invocations'] = 2
         with self.assertRaisesRegex(ValueError, 'nym-windows'):
             self.admit(rows)
 
