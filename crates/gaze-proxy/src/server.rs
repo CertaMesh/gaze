@@ -4120,6 +4120,50 @@ mod tests {
         assert!(session.snapshot_entries().is_empty());
     }
 
+    #[test]
+    fn residual_owned_names_with_only_a_public_separator_do_not_refuse() {
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::new("Person Synthetic", PiiClass::Name).unwrap())
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let owned = session
+            .tokenize(&PiiClass::Name, "Synthetic Person")
+            .unwrap();
+        let carrier = format!("{owned} {owned}");
+        let adapter =
+            crate::adapters::OpenAiAdapter::new(Url::parse("http://127.0.0.1:1").unwrap());
+        let mut body = serde_json::json!({
+            "model":"gpt-test",
+            "messages":[{"role":"user","content":"Person Synthetic"}],
+            "unsupported_carrier":carrier
+        });
+        let dictionaries = DictionaryBundle::default();
+        let staged = redact_surfaces(
+            &pipeline,
+            &session,
+            adapter.request_pii_surfaces(&mut body),
+            &[LocaleTag::Global],
+            &dictionaries,
+        )
+        .unwrap();
+        let result = residual_scan_request(
+            &pipeline,
+            &body,
+            &staged.field_paths,
+            &[LocaleTag::Global],
+            &dictionaries,
+            true,
+            &staged.transaction,
+        );
+        assert!(
+            result.is_ok(),
+            "all name letters are owned; only a public separator remains: {result:?}"
+        );
+        assert_eq!(body["unsupported_carrier"], carrier);
+    }
+
     const DIRECT_REQUEST_BODY: &[u8] = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":"synthetic request"}]}"#;
     const DIRECT_SSE_REQUEST_BODY: &[u8] = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":"synthetic request"}],"stream":true}"#;
     const DIRECT_JSON_RESPONSE: &[u8] = br#"{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{"type":"text","text":"synthetic response"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}"#;
