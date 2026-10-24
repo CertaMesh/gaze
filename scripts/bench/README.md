@@ -816,3 +816,44 @@ output directory. `history.json` retains original evidence hashes;
 Only a complete current/previous pair under one specification satisfies the
 synchronous history requirement. Optional older rows keep their original
 specification and provenance. Never copy their metrics into a new specification.
+
+
+### Response-validation adapters
+
+Every capture writes `response_validation` in the observation header and original
+scorecard. The observation cache key includes the same adapter. It records the
+manifest actions and composite source-ID mode used to accept responses.
+Certification requires the current adapter for every gain and mechanism arm.
+Missing or incompatible adapters refuse with `response_validation_mismatch`.
+
+`rescore_past_release.py --manifest-actions tokenize` supports the manifest
+protocol shipped by v0.14.0. It cannot certify an integrated candidate. History
+jobs must declare `response_validation` explicitly for each release, alongside
+`subject` and `args`. `benchmark_spec.RELEASE_PROTOCOLS` lists the supported
+release protocols: v0.14.0 uses `LEGACY_VALIDATION`; v0.15.0, v0.15.1, v0.16.0,
+v0.17.0, and v0.18.0 use `CURRENT_VALIDATION`. Unknown releases refuse until their
+protocol is registered. Current and previous releases each use their own declared
+protocol. History rows retain and display the verified adapter on resume.
+
+The CLI audit covers `--manifest-actions`, `--cross-check`, `--scored-labels`,
+and `--agentic-scored-labels` in the full capture drivers. The generated-only
+`agentic_layers.py measure` driver also records `--split-composite-source-ids`.
+Its `--vocabulary-root` selects the release vocabulary whose commit is recorded
+as `binary_commit`; generated-only evidence cannot certify a full population.
+Other CLI options select inputs, populations, execution budgets, or outputs.
+
+Run the synthetic runner regressions without a benchmark capture:
+
+```sh
+anvil run -- uv run --project scripts/bench python -m pytest scripts/bench/test_benchmark_admission.py -q
+```
+
+After committing the changes, run the admission mutations:
+
+```sh
+anvil run -- uv run --project scripts/bench python scripts/ci/check_benchmark_admission_mutations.py
+```
+
+Each mutation removes one binding and requires an executed assertion failure.
+`target/mutation-admission-receipts.json` pins the committed baseline and every
+mutation log. No detector benchmark runs during these checks.

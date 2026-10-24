@@ -5915,6 +5915,8 @@ def _measure(args: argparse.Namespace) -> None:
         corpus_sha256=prepared.manifest["corpus_sha256"], binary=args.binary.resolve(),
         extra_documents=[record.to_document() for record in generate(PUBLISHED_PARTITION)],
         layer_contract=prepared.contract,
+        capture_protocol=benchmark_spec.capture_protocol(args),
+        response_validation=benchmark_spec.response_validation(args),
     )
     layers = runner.measure_agentic_layers(
         prepared=prepared,
@@ -5935,6 +5937,8 @@ def _measure(args: argparse.Namespace) -> None:
     result = {
         "schema_version": score.SCORECARD_SCHEMA_VERSION,
         "measured": args.label,
+        "capture_protocol": benchmark_spec.capture_protocol(args),
+        "response_validation": benchmark_spec.response_validation(args),
         "gaze": score.git_metadata(repo_root),
         "binary_sha256": writer.binary_sha256,
         "binary_commit": score.git_metadata(vocabulary_root),

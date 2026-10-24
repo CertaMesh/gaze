@@ -1849,7 +1849,7 @@ def render_spec_history(state: Mapping[str, Any]) -> str:
     """Render one backfill selection without borrowing legacy metric identities."""
     spec = benchmark_spec.validate(state["benchmark_spec"])
     lines = [f"Benchmark specification: `{spec['id']}`", "",
-             "| Release | Requirement | Status | Evidence |", "| --- | --- | --- | --- |"]
+             "| Release | Requirement | Status | Validation adapter | Evidence |", "| --- | --- | --- | --- | --- |"]
     for version, row in state['releases'].items():
         status = row['status']
         if status == 'available' and row.get('benchmark_spec_id') != spec['id']:
@@ -1858,7 +1858,13 @@ def render_spec_history(state: Mapping[str, Any]) -> str:
         if reason not in ('', 'not_measured', 'specification_unproven', 'measurement_refused', 'evidence_invalid'):
             raise RenderError('invalid_history_status')
         evidence = ', '.join(f"`{name}`" for name in row.get('artifacts', {})) if status == 'available' else '—'
-        lines.append(f"| {version} | {'required' if row['required'] else 'optional'} | {status}{': ' + reason if reason else ''} | {evidence} |")
+        adapter = '—'
+        if status == 'available':
+            validation = row.get('response_validation')
+            if validation != benchmark_spec.RELEASE_PROTOCOLS.get(version) or validation is None:
+                raise RenderError('release_protocol_mismatch')
+            adapter = 'current' if validation == benchmark_spec.CURRENT_VALIDATION else 'legacy tokenize'
+        lines.append(f"| {version} | {'required' if row['required'] else 'optional'} | {status}{': ' + reason if reason else ''} | {adapter} | {evidence} |")
     for number in (2, 1):
         lines += ['', f'Gate contract v{number}', '',
                   '| Release | Layer | Leaked B | All-gold leaked B | FP B | Refused | Exact restores | Valid manifests |',

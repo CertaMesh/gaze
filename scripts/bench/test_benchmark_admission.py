@@ -142,7 +142,8 @@ def test_canonical_descriptors_bind_every_arm(tmp_path, evidence, pair_name, sid
 
 def plan_and_measure(root, evidence):
     header, _ = records._read(root / 'candidate/observations-v1.jsonl.gz')
-    jobs = [dict(version=v, args=[], subject=history.subject_identity(header))
+    jobs = [dict(version=v, args=[], subject=history.subject_identity(header),
+                 response_validation=specs.CURRENT_VALIDATION)
             for v in ('v0.18.0', 'v0.17.0', 'v0.16.0')]
     plan = dict(benchmark_spec=evidence['benchmark_spec'], current='v0.18.0', previous='v0.17.0', releases=jobs)
     def measure(job, folder, spec):
@@ -193,7 +194,7 @@ def test_history_shares_canonical_gold_admission(tmp_path, evidence):
     assert all(row['status'] == 'unavailable' for row in state['releases'].values())
 
 
-def produced_capture(tmp_path, monkeypatch, evidence, producer, flags):
+def produced_capture(tmp_path, monkeypatch, evidence, producer, flags, response_factory=None):
     """Run the actual producer and writer; replace only dataset/subject execution."""
     from test_agentic_layers import _success_response
     source = tmp_path / 'candidate'
@@ -218,7 +219,15 @@ def produced_capture(tmp_path, monkeypatch, evidence, producer, flags):
     def synthetic_responses(*args, **kwargs):
         kwargs.setdefault('replay_responses', {doc.uid: _success_response(doc) for doc in args[3]})
         return real_run(*args, **kwargs)
-    monkeypatch.setattr(score, 'run_config', synthetic_responses)
+    if response_factory is None:
+        monkeypatch.setattr(score, 'run_config', synthetic_responses)
+    else:
+        by_id = {doc.uid: doc for docs in documents.values() for doc in docs}
+        process = mock.MagicMock()
+        process.__enter__.return_value = process
+        process.message_deadline = 0
+        process.exchange.side_effect = lambda request: response_factory(by_id[request['fixture_id']])
+        monkeypatch.setattr(score, 'BenchSubprocess', lambda *a, **k: process)
     monkeypatch.setattr(score, 'collect_validator_measurements', measurements)
     monkeypatch.setattr(score, 'git_metadata', lambda root: {'revision': REVISION, 'dirty': False})
     monkeypatch.setattr(past.subprocess, 'run', lambda *a, **k: SimpleNamespace(stdout=''))
@@ -368,3 +377,159 @@ def test_canonical_gold_order_survives_scored_excluded_partition():
                        scored_labels=frozenset({'Y'}), excluded_labels=frozenset({'X'}))
     filtered = score.apply_scored_label_contract([doc], contract)[0]
     assert specs.population([doc], 'A') == specs.population([filtered], 'A')
+
+
+def attach_produced(root, evidence, folder, pair_name, side):
+    pair = evidence['gain'] if pair_name == 'gain' else evidence['mechanisms']['synthetic']
+    arm = pair[side]
+    rp, cp = folder / 'observations-v1.jsonl.gz', folder / 'capture.json'
+    arm['record'] = {'file': str(rp.relative_to(root)), 'sha256': identity.file_digest(rp)}
+    arm['capture'] = {'file': str(cp.relative_to(root)), 'sha256': identity.file_digest(cp)}
+    for n, pin in arm['contracts'].items():
+        path = root / pin['file']
+        path.write_text(json.dumps(records.rescore(rp, cert._contract(ROOT, int(n), evidence['benchmark_spec']), max_workers=1)))
+        pin['sha256'] = identity.file_digest(path)
+
+
+@pytest.mark.parametrize('pair_name,side', [('gain', 'base'), ('gain', 'candidate'),
+                                         ('mechanism', 'base'), ('mechanism', 'candidate')])
+def test_reviewer_legacy_manifest_runner_cannot_certify(tmp_path, evidence, monkeypatch, pair_name, side):
+    from test_agentic_layers import _success_response
+    from bench_subprocess import ProducerFailure
+    def response(doc):
+        value = _success_response(doc)
+        if doc.spans:
+            value['clean_text'] = '[REDACTED:email]'
+            value['final_protection_trace'] = [dict(raw_start=0, raw_end=len(doc.text.encode()),
+                **{'class': 'email'}, action='redact', provenance=dict(stage='safety_net',
+                decision='redact', source_ids=['synthetic:email']))]
+            value['restore']['exact'] = False
+        return value
+    # Same synthetic subject is refused by the current production validator.
+    with monkeypatch.context() as mp:
+        with pytest.raises(ProducerFailure):
+            produced_capture(tmp_path, mp, evidence, 'release', [], response)
+    shutil.rmtree(tmp_path / 'produced')
+    folder = produced_capture(tmp_path, monkeypatch, evidence, 'release', ['--manifest-actions', 'tokenize'], response)
+    header, _ = records._read(folder / 'observations-v1.jsonl.gz')
+    assert header['capture_protocol'] == specs.CANONICAL_CAPTURE
+    assert header['response_validation'] == specs.LEGACY_VALIDATION
+    assert header['scorecard']['response_validation'] == specs.LEGACY_VALIDATION
+    assert json.loads((folder / 'capture.json').read_text())['response_validation'] == specs.LEGACY_VALIDATION
+    attach_produced(tmp_path, evidence, folder, pair_name, side)
+    with pytest.raises(cert.CertificationError, match='^response_validation_mismatch$'):
+        check(evidence, tmp_path)
+
+
+@pytest.mark.parametrize('producer', ['current', 'release'])
+@pytest.mark.parametrize('flag', ['canonical', 'cross-check', 'scored-labels', 'agentic-scored-labels', 'manifest-actions'])
+def test_actual_producers_bind_every_validation_flag(tmp_path, evidence, monkeypatch, producer, flag):
+    if producer == 'current' and flag == 'manifest-actions':
+        return  # The current runner deliberately exposes no legacy manifest adapter.
+    flags = {'canonical': [], 'cross-check': ['--cross-check'],
+             'scored-labels': ['--cross-check', '--scored-labels', 'docs/reference/benchmarks/scored-labels-v2.json'],
+             'agentic-scored-labels': ['--cross-check', '--agentic-scored-labels', 'docs/reference/benchmarks/scored-labels-v2.json'],
+             'manifest-actions': ['--manifest-actions', 'tokenize']}[flag]
+    folder = produced_capture(tmp_path, monkeypatch, evidence, producer, flags)
+    rp, cp = folder / 'observations-v1.jsonl.gz', folder / 'capture.json'
+    header, _ = records._read(rp)
+    expected = specs.LEGACY_VALIDATION if flag == 'manifest-actions' else specs.CURRENT_VALIDATION
+    assert header['response_validation'] == expected
+    assert header['scorecard']['response_validation'] == expected
+    assert json.loads(cp.read_text())['response_validation'] == expected
+    if flag == 'canonical':
+        assert cert.admit_capture(cp, rp, evidence['benchmark_spec'], ROOT)
+    else:
+        code = 'response_validation_mismatch' if flag == 'manifest-actions' else 'noncanonical_capture'
+        with pytest.raises(cert.CertificationError, match=f'^{code}$'):
+            cert.admit_capture(cp, rp, evidence['benchmark_spec'], ROOT)
+
+
+@pytest.mark.parametrize('location', ['header', 'original', 'capture'])
+def test_validation_adapter_required_at_every_boundary(tmp_path, evidence, location):
+    arm = evidence['gain']['candidate']
+    rp, cp = tmp_path / arm['record']['file'], tmp_path / arm['capture']['file']
+    header, obs = records._read(rp)
+    if location == 'capture':
+        card = json.loads(cp.read_text())
+        card.pop('response_validation')
+        cp.write_text(json.dumps(card))
+    else:
+        (header if location == 'header' else header['scorecard']).pop('response_validation')
+        records._write_rows(rp, [header, *obs])
+    with pytest.raises(cert.CertificationError, match='^response_validation_mismatch$'):
+        cert.admit_capture(cp, rp, evidence['benchmark_spec'], ROOT)
+
+
+@pytest.mark.parametrize('version,declared,allowed', [
+    ('v0.14.0', specs.LEGACY_VALIDATION, True),
+    ('v0.14.0', specs.CURRENT_VALIDATION, False),
+    ('v0.17.0', specs.CURRENT_VALIDATION, True),
+    ('v0.18.0', specs.CURRENT_VALIDATION, True),
+    ('v0.17.0', specs.LEGACY_VALIDATION, False),
+    ('v0.18.0', specs.LEGACY_VALIDATION, False),
+    ('v0.18.0', None, False),
+    ('v9.0.0', specs.CURRENT_VALIDATION, False)])
+def test_history_declares_release_protocol(version, declared, allowed):
+    job = dict(version=version, response_validation=declared)
+    if allowed:
+        assert history.release_validation(job) == declared
+    else:
+        with pytest.raises(history.HistoryError, match='^release_protocol_mismatch$'):
+            history.release_validation(job)
+
+
+@pytest.mark.parametrize('version', ['v0.18.0', 'v0.17.0', 'v0.14.0'])
+def test_history_binds_declared_adapter_to_actual_record(tmp_path, evidence, monkeypatch, version):
+    folder = produced_capture(tmp_path, monkeypatch, evidence, 'release', ['--manifest-actions', 'tokenize'])
+    rp = folder / 'observations-v1.jsonl.gz'
+    for n in (1, 2):
+        (folder / f'scorecard-v{n}.json').write_text(json.dumps(records.rescore(rp,
+            cert._contract(ROOT, n, evidence['benchmark_spec']), max_workers=1)))
+    header, _ = records._read(rp)
+    validation = specs.LEGACY_VALIDATION if version == 'v0.14.0' else specs.CURRENT_VALIDATION
+    job = dict(version=version, subject=history.subject_identity(header), response_validation=validation)
+    row = dict(status='available', benchmark_spec_id=evidence['benchmark_spec']['id'], job_sha256=identity.digest(job),
+        artifacts={p.name: identity.file_digest(p) for p in folder.iterdir() if p.name in
+                   ('capture.json', 'observations-v1.jsonl.gz', 'scorecard-v1.json', 'scorecard-v2.json')})
+    assert history.verified(row, folder, evidence['benchmark_spec'], job) == (version == 'v0.14.0')
+
+
+def test_history_measure_refuses_adapter_before_subject(tmp_path, monkeypatch):
+    monkeypatch.setattr(past, 'run', mock.Mock(side_effect=AssertionError('subject capture started')))
+    job = dict(version='v0.18.0', response_validation=specs.CURRENT_VALIDATION,
+        args=['--release-root', str(tmp_path), '--binary', 'unused', '--binary-profile', 'debug',
+              '--configs', 'policy-file', '--agentic-layers', '--manifest-actions', 'tokenize'])
+    with pytest.raises(history.HistoryError, match='^release_protocol_mismatch$'):
+        history.measure(job, tmp_path / 'history', {})
+
+
+@pytest.mark.parametrize('flag', ['manifest-actions', 'split-composite-source-ids'])
+def test_generated_runner_records_validation_flags(tmp_path, evidence, monkeypatch, flag):
+    import agentic_layers as agentic
+    from test_agentic_layers import _success_response
+    prepared = specs.full_inputs(ROOT)['prepared']
+    docs = {doc.uid: doc for doc in (*prepared.identifiers, *prepared.lookalikes, *prepared.repeats)}
+    process = mock.MagicMock()
+    process.__enter__.return_value = process
+    process.message_deadline = 0
+    process.exchange.side_effect = lambda request: _success_response(docs[request['fixture_id']])
+    monkeypatch.setattr(score, 'BenchSubprocess', lambda *a, **k: process)
+    monkeypatch.setattr(score, 'validator_probe_binary', lambda root: tmp_path / 'candidate/synthetic-binary')
+    monkeypatch.setattr(score, 'collect_validator_measurements', lambda probe, documents, ids: {
+        'schema_version': 1, 'validator_recognizers': [], 'validator_kinds_by_class': {}, 'documents': {
+            doc.uid: {'gold_validation': [dict(start=s.start, end=s.end, label=s.label, applicable=False,
+                validator_passed=None) for s in (*doc.spans, *doc.excluded_spans)], 'predictions': None} for doc in documents}})
+    monkeypatch.setattr(score, 'git_metadata', lambda root: {'revision': REVISION, 'dirty': False})
+    monkeypatch.setattr(agentic, 'prepare', lambda *a: prepared)
+    monkeypatch.setattr(agentic, 'generate', lambda *a: [SimpleNamespace(to_document=lambda doc=doc: doc) for doc in docs.values()])
+    output = tmp_path / 'generated/capture.json'
+    flags = ['--manifest-actions', 'tokenize'] if flag == 'manifest-actions' else ['--split-composite-source-ids']
+    assert agentic.main(['measure', '--binary', str(tmp_path / 'candidate/synthetic-binary'),
+        '--config', 'policy-file', '--label', 'synthetic', '--output', str(output), *flags]) == 0
+    header, _ = records._read(output.with_name('observations-v1.jsonl.gz'))
+    expected = specs.LEGACY_VALIDATION if flag == 'manifest-actions' else {**specs.CURRENT_VALIDATION,
+                                                                       'split_composite_source_ids': True}
+    assert header['response_validation'] == expected
+    assert header['scorecard']['response_validation'] == expected
+    assert json.loads(output.read_text())['response_validation'] == expected

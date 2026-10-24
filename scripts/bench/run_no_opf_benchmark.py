@@ -958,6 +958,7 @@ def observation_cache_key(
         "record_schema_version": records.SCHEMA_VERSION,
         "benchmark_spec_id": benchmark_spec_id,
         "capture_protocol": benchmark_spec.capture_protocol(args),
+        "response_validation": benchmark_spec.response_validation(args),
         **source_identity,
         "cargo_lock_sha256": score.sha256_file(repo_root / "Cargo.lock"),
         "cargo_config_sha256": {
@@ -1551,6 +1552,7 @@ def _run(args: argparse.Namespace) -> int:
         corpus_sha256=dataset_report["integrity"]["sha256"], binary=binary,
         extra_documents=extra_documents,
         capture_protocol=benchmark_spec.capture_protocol(args),
+        response_validation=benchmark_spec.response_validation(args),
         layer_contract=agentic_prepared.contract if agentic_prepared is not None else None,
     )
     if cache_key is not None and record_writer.binary_sha256 != cache_key["binary_sha256"]:
@@ -1635,6 +1637,7 @@ def _run(args: argparse.Namespace) -> int:
         }
 
     candidate["capture_protocol"] = benchmark_spec.capture_protocol(args)
+    candidate["response_validation"] = benchmark_spec.response_validation(args)
     candidate["benchmark_spec"] = spec
     candidate["cache_replay"] = False
     if cache_key is not None:

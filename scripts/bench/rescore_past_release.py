@@ -236,6 +236,7 @@ def run(args: argparse.Namespace) -> Path:
             if prepared is not None else []
         ),
         capture_protocol=benchmark_spec.capture_protocol(args),
+        response_validation=benchmark_spec.response_validation(args),
         layer_contract=prepared.contract if prepared is not None else None,
     )
     environment = runner.build_no_opf_environment(os.environ)
@@ -326,6 +327,7 @@ def run(args: argparse.Namespace) -> Path:
             "C": agentic.gold_validity_digest(documents, measurements)
         }
     card["capture_protocol"] = benchmark_spec.capture_protocol(args)
+    card["response_validation"] = benchmark_spec.response_validation(args)
     card["benchmark_spec"] = benchmark_spec.resolve(
         HARNESS_ROOT, corpus_sha256=dataset_report["integrity"]["sha256"], seed=args.seed,
         available=original_available, prepared=prepared,

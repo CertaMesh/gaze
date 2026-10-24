@@ -414,6 +414,7 @@ class RecordWriter:
         extra_documents: Sequence[score.Document] = (),
         layer_contract: score.ScoredLabelContract | None = None,
         capture_protocol: Mapping | None = None,
+        response_validation: Mapping | None = None,
     ) -> None:
         self.documents = {document.uid: document for document in (*available, *extra_documents)}
         if len(self.documents) != len(available) + len(extra_documents):
@@ -428,6 +429,7 @@ class RecordWriter:
         self.binary_sha256 = score.sha256_file(self.binary) if self.binary is not None else None
         self.layer_contract = layer_contract
         self.capture_protocol = copy.deepcopy(capture_protocol)
+        self.response_validation = copy.deepcopy(response_validation)
         self.layer_measurements: dict[str, Mapping[str, object]] = {}
         self.rows: list[dict[str, object]] = []
         # None until the first trace item: whether the producer emits lineage.
@@ -498,6 +500,7 @@ class RecordWriter:
         header = {
             **({"benchmark_spec_id": spec_id} if spec_id is not None else {}),
             "capture_protocol": self.capture_protocol,
+            "response_validation": self.response_validation,
             "kind": "header",
             "schema_version": self.schema_version,
             "corpus_sha256": self.corpus_sha256,

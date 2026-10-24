@@ -164,7 +164,8 @@ def capture(folder, docs, spec, protect, policy, revision=REVISION):
     writer = records.RecordWriter(docs['C'], main_measurements, corpus_sha256='d' * 64,
                                   binary=binary, extra_documents=[doc for doc in all_docs if doc not in docs['C']],
                                   layer_contract=agentic.load_contract(ROOT),
-                                  capture_protocol=specs.CANONICAL_CAPTURE)
+                                  capture_protocol=specs.CANONICAL_CAPTURE,
+                                  response_validation=specs.CURRENT_VALIDATION)
     runs = {}
     for layer, documents in docs.items():
         responses = {}
@@ -195,6 +196,7 @@ def capture(folder, docs, spec, protect, policy, revision=REVISION):
                               'model_bundles': [], 'policy_dependencies': {'files': {}}},
         'runs': [runs['C']], 'benchmark_spec': spec,
         'capture_protocol': specs.CANONICAL_CAPTURE,
+        'response_validation': specs.CURRENT_VALIDATION,
         'layers': {'generator': spec['inputs']['generator'],
                    'scored_label_contract': score.scored_label_contract_report(layer_contract, [doc for layer in ('A', 'D', 'R') for doc in docs[layer]]),
                    'gold_validity': {'C': agentic.gold_validity_digest(docs['C'], main_measurements)},
@@ -315,7 +317,7 @@ def test_legacy_history_and_scorecards_keep_original_metrics():
 def test_history_selection_defaults_to_required_pair(tmp_path):
     spec = specs.resolve(**inputs(measuring_root(tmp_path / 'measuring')))
     plan = {'benchmark_spec': spec, 'current': 'v0.18.0', 'previous': 'v0.17.0',
-            'releases': [{'version': v, 'args': []} for v in ('v0.18.0', 'v0.17.0', 'v0.16.0')]}
+            'releases': [{'version': v, 'args': [], 'response_validation': specs.CURRENT_VALIDATION} for v in ('v0.18.0', 'v0.17.0', 'v0.16.0')]}
     state = history.run(plan, tmp_path / 'history')
     assert set(state['releases']) == {'v0.18.0', 'v0.17.0'}
     assert not state['required_complete']
@@ -327,7 +329,7 @@ def test_history_selection_defaults_to_required_pair(tmp_path):
 def test_history_resume_verifies_pins_and_older_failure_does_not_block(tmp_path, evidence):
     spec = evidence['benchmark_spec']
     plan = {'benchmark_spec': spec, 'current': 'v0.18.0', 'previous': 'v0.17.0',
-            'releases': [{'version': v, 'args': []} for v in ('v0.18.0', 'v0.17.0', 'v0.16.0')]}
+            'releases': [{'version': v, 'args': [], 'response_validation': specs.CURRENT_VALIDATION} for v in ('v0.18.0', 'v0.17.0', 'v0.16.0')]}
     source_header, _ = records._read(tmp_path / 'candidate/observations-v1.jsonl.gz')
     subject = history.subject_identity(source_header)
     for job in plan['releases']:
@@ -566,7 +568,7 @@ def test_certificate_cannot_hide_record_dependency_difference(tmp_path, evidence
 @pytest.mark.parametrize('admission', ['first', 'resume'])
 def test_history_mixed_subject_artifacts_are_unavailable(tmp_path, evidence, artifact, admission):
     header, _ = records._read(tmp_path / 'candidate/observations-v1.jsonl.gz')
-    job = {'version': 'v0.18.0', 'args': [], 'subject': history.subject_identity(header)}
+    job = {'version': 'v0.18.0', 'args': [], 'response_validation': specs.CURRENT_VALIDATION, 'subject': history.subject_identity(header)}
     other = {**job, 'version': 'v0.17.0'}
     plan = {'benchmark_spec': evidence['benchmark_spec'], 'current': job['version'],
             'previous': other['version'], 'releases': [job, other]}
@@ -710,7 +712,7 @@ def test_history_verification_binds_each_contract_to_subject(tmp_path, evidence,
     name = f'scorecard-v{number}.json'
     shutil.copyfile(tmp_path / 'base' / name, folder / name)
     header, _ = records._read(folder / 'observations-v1.jsonl.gz')
-    job = {'version': 'v0.18.0', 'args': [], 'subject': history.subject_identity(header)}
+    job = {'version': 'v0.18.0', 'args': [], 'response_validation': specs.CURRENT_VALIDATION, 'subject': history.subject_identity(header)}
     row = {'status': 'available', 'benchmark_spec_id': evidence['benchmark_spec']['id'],
            'job_sha256': capture_identity.digest(job), 'artifacts': {
                name: capture_identity.file_digest(folder / name) for name in

@@ -30,6 +30,24 @@ class SpecError(ValueError):
 
 QUALIFIED_RUNTIME = {"implementation": "cpython", "python": "3.13", "unicode": "15.1.0", "pyarrow": "23.0.1"}
 CANONICAL_CAPTURE = {"version": 1, "mode": "canonical-once"}
+CURRENT_VALIDATION = {"version": 1, "manifest_replacing_actions": ["redact", "tokenize"],
+                      "split_composite_source_ids": False}
+LEGACY_VALIDATION = {**CURRENT_VALIDATION, "manifest_replacing_actions": ["tokenize"]}
+# Only releases whose protocol predates manifest redactions may use this adapter.
+RELEASE_PROTOCOLS = {
+    "v0.14.0": LEGACY_VALIDATION,
+    "v0.15.0": CURRENT_VALIDATION,
+    "v0.15.1": CURRENT_VALIDATION,
+    "v0.16.0": CURRENT_VALIDATION,
+    "v0.17.0": CURRENT_VALIDATION,
+    "v0.18.0": CURRENT_VALIDATION,
+}
+
+
+def response_validation(args) -> dict:
+    return {"version": 1,
+            "manifest_replacing_actions": sorted(getattr(args, "manifest_actions", "tokenize,redact").split(",")),
+            "split_composite_source_ids": getattr(args, "split_composite_source_ids", False)}
 
 
 def runtime_identity() -> dict:

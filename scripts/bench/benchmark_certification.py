@@ -98,13 +98,18 @@ def _contract(root: Path, number: int, spec: dict):
 
 
 def admit_capture(capture_path: Path, record_path: Path, spec: dict, harness: Path,
-                  revision: str | None = None) -> dict:
+                  revision: str | None = None, *,
+                  response_validation: dict = specs.CURRENT_VALIDATION) -> dict:
     """Admit execution once and bind its subject, metadata and metrics to the record."""
     original = full_record(record_path, spec, revision)
     captured = bench_json.load(capture_path)
     specs.require_same(captured, original)
     stages.validate_execution(captured, capture_path, record_path)
     header, _ = records._read(record_path)
+    if (header.get('response_validation') != response_validation
+            or original.get('response_validation') != response_validation
+            or captured.get('response_validation') != response_validation):
+        raise CertificationError('response_validation_mismatch')
     canonical = score.scored_label_contract_report(score.SCORED_LABEL_CONTRACT_V1, ())
     block = original['scoring']['scored_label_contract']
     if (header.get('capture_protocol') != specs.CANONICAL_CAPTURE

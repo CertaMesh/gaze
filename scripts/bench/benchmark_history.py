@@ -47,6 +47,13 @@ def selection(plan: dict, older: bool) -> list[dict]:
         [row for row in jobs if row['version'] not in versions] if older else [])
 
 
+def release_validation(job: dict) -> dict:
+    expected = specs.RELEASE_PROTOCOLS.get(job['version'])
+    if expected is None or job.get('response_validation') != expected:
+        raise HistoryError('release_protocol_mismatch')
+    return expected
+
+
 def subject_identity(header: dict) -> dict:
     card = header['scorecard']
     return {'revision': card['gaze']['revision'], 'binary_sha256': header.get('binary_sha256'),
@@ -68,6 +75,7 @@ def verified(row: dict, folder: Path, spec: dict, job: dict, *, dataset: Path | 
             or row.get('job_sha256') != digest(job)):
         return False
     try:
+        validation = release_validation(job)
         artifacts = row['artifacts']
         required = {'capture.json', 'observations-v1.jsonl.gz', 'scorecard-v1.json', 'scorecard-v2.json'}
         if not required <= set(artifacts):
@@ -77,7 +85,8 @@ def verified(row: dict, folder: Path, spec: dict, job: dict, *, dataset: Path | 
                 return False
         specs.require_current(spec, past.HARNESS_ROOT, dataset=dataset)
         record = folder / 'observations-v1.jsonl.gz'
-        certification.admit_capture(folder / 'capture.json', record, spec, past.HARNESS_ROOT)
+        certification.admit_capture(folder / 'capture.json', record, spec, past.HARNESS_ROOT,
+                                    response_validation=validation)
         for number in (2, 1):
             certification.admit_scorecard(folder / f'scorecard-v{number}.json', record,
                                          number, spec, past.HARNESS_ROOT)
@@ -99,6 +108,7 @@ def scored_rows(folder: Path, spec: dict) -> dict:
     return result
 
 def measure(job: dict, folder: Path, spec: dict) -> dict:
+    validation = release_validation(job)
     argv = job['args']
     if (not isinstance(argv, list) or not all(isinstance(arg, str) for arg in argv)
             or any(arg.split('=')[0] in {'--output', '--max-documents', '--cross-check',
@@ -110,9 +120,12 @@ def measure(job: dict, folder: Path, spec: dict) -> dict:
     if (not args.agentic_layers or args.max_documents is not None or args.cross_check
             or args.scored_labels is not None or args.agentic_scored_labels is not None):
         raise HistoryError('partial_population')
+    if specs.response_validation(args) != validation:
+        raise HistoryError('release_protocol_mismatch')
     past.run(args)
     record = folder / 'observations-v1.jsonl.gz'
-    certification.full_record(record, spec)
+    certification.admit_capture(output, record, spec, past.HARNESS_ROOT,
+                                response_validation=validation)
     if not subject_matches(record, job):
         raise HistoryError('subject_identity_mismatch')
     # One subject execution; contracts are derived exclusively from its record.
@@ -159,6 +172,7 @@ def run(plan: dict, output: Path, *, execute: bool = False, older: bool = False,
                 raise HistoryError('evidence_invalid')
             row['contracts'] = scored_rows(folder, spec)
             row['subject'] = job['subject']
+            row['response_validation'] = release_validation(job)
         except (OSError, ValueError, KeyError, TypeError, score.ResponseValidationError):
             state['releases'][version] = {'status': 'unavailable', 'reason': 'evidence_invalid', 'required': False}
     for job in jobs:
@@ -183,6 +197,7 @@ def run(plan: dict, output: Path, *, execute: bool = False, older: bool = False,
             try:
                 row['contracts'] = scored_rows(folder, spec)
                 row['subject'] = job['subject']
+                row['response_validation'] = release_validation(job)
             except (OSError, ValueError, KeyError, TypeError, score.ResponseValidationError):
                 row = {'status': 'unavailable', 'reason': 'evidence_invalid', 'required': required}
         state['releases'][version] = row
