@@ -626,10 +626,14 @@ full model run and baseline/error-bucket analysis belong to A6.
 `benchmark_spec.py` resolves a portable manifest whose `gaze-benchmark-v1:<sha256>`
 ID hashes the measuring inputs. It binds the full corpus digest, generated
 corpus and generator version, seed, scored-label contracts, measuring source
-bytes, record schemas, expected document inventories, and execution protocol.
+bytes, the effective source-ID vocabulary used by response validation, record
+schemas, expected document inventories, and execution protocol.
 `benchmark-protocol.json` declares that protocol. The
 [initial full-population manifest](../../docs/reference/benchmarks/specifications/ae74d9a02195d3c60b5fe8bc8b0eb984e6926f390fad0ad624958e86577d9edb.json)
-is committed under its content hash. Preserve old manifests when the specification changes. Binary, policy, models, host,
+is preserved under its content hash. The
+[current admission specification](../../docs/reference/benchmarks/specifications/d0010b6f71ecd9481700895eb439448fc166a76f9a6c31168f2b746125fdb2f0.json)
+includes the effective validation vocabulary and executing-source admission checks.
+Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
 inputs does not itself change the benchmark specification.
 
@@ -649,12 +653,50 @@ cannot certify a candidate or become a row under the current specification.
 Archived comparisons between legacy artifacts remain available for their
 original ledgers. They do not establish current-specification evidence.
 
+### Measuring input boundaries
+
+The full C/A/D/R path reads these measuring inputs. `benchmark_spec.py` binds
+them before certification and history admission.
+
+| Reader | Runtime input | Binding |
+| --- | --- | --- |
+| `dataiku_en_de_gaze_bench.load_documents` | Pinned Dataiku parquet | Verified dataset hash and composite corpus digest |
+| `run_no_opf_benchmark.load_negative_documents` | Committed negative JSONL | Composite corpus digest and full document inventory |
+| `agentic_layers.prepare` | Generator Python, cue vocabulary JSON, generated-label contract | Source hashes, vocabulary file hash, generated corpus digest, and contract hash |
+| `gaze_bench_score.load_committed_source_id_vocabulary` | Embedded recognizer IDs, collision families, builtin IDs, and model IDs in TOML | Sorted effective vocabulary from the same loader |
+| `scorecard_record` | Trace-lineage vocabulary JSON and record schema | File hash and readable schema versions |
+| Scorer and replay | Scored-label contracts, Python modules, `pyproject.toml`, and `uv.lock` | Contract hashes and complete source-file membership with hashes |
+| Capture drivers | `benchmark-protocol.json` and execution parameters | Protocol fields, profile, seed, warmups, and repetitions |
+
+Binary and validator executables, policies, policy dependency files, model
+checksum manifests, model bundles, and observation-environment values are subject
+inputs. Their identities belong to capture provenance and the comparison gate.
+The TOML vocabulary above is a measuring input even when declared next to a
+subject model or detector. Changes to other detector TOML fields do not change
+the specification.
+
+Retained records, scorecards, cache entries, policy deltas, and execution receipts
+are evidence inputs. Admission verifies their pins and semantic bindings.
+The optional dictionary-sequence extension has its own retained generator
+identity and is outside this full C/A/D/R certification protocol.
+
 ## Certify the integrated candidate
 
 `benchmark_certification.py` checks a manifest against an explicit candidate
 commit and required mechanism list. It verifies pinned files, the complete
 C/A/D/R document inventories, both v2 and v1 replays, gate results, mechanism
 policy deltas, and the same integrated candidate binary for every mechanism.
+Before replay, the checker resolves the full specification from the executing
+checkout and canonical corpus. Changed source files, added or removed files,
+changed vocabulary, or a different protocol refuse with `harness_spec_mismatch`.
+The checker reconstructs both contract scorecards and gates those reconstructed
+objects. Supplied cards must match every reconstructed field, including policy
+dependencies and model bundles.
+
+The canonical Dataiku holdout must be readable. If it lives outside the default
+harness cache, pass `--dataset /path/to/test.parquet` to certification or history.
+Admission reads the corpus without running detection or downloading data.
+
 A sampled population, missing contract, stale candidate, missing mechanism,
 or failed gate refuses certification. This command does not schedule merges
 or admit incremental evaluation.
@@ -732,7 +774,9 @@ uv run --project scripts/bench python scripts/bench/benchmark_history.py \
 
 Each release is captured once. Every contract comes from that record. Resume
 verifies the saved artifact hashes, record population, specification, and subject
-pin before skipping a completed job. A changed specification requires another
+pin before skipping a completed job. It binds the original capture and both
+contract scorecards to that record, then reconstructs their metrics and provenance.
+A mixed set from different subjects stays unavailable on first admission and resume. A changed specification requires another
 output directory. `history.json` retains original evidence hashes;
 `history.md` renders measured and unavailable rows through the history renderer.
 Only a complete current/previous pair under one specification satisfies the
