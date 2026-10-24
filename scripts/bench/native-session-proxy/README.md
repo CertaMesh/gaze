@@ -75,3 +75,21 @@ separately and receive no target byte, restore, availability, or gate credit.
 The measured response's refusal and restoration result remain unchanged. This
 avoids joining unrelated owner echoes during the auxiliary proof and changes no
 response validator or target response format.
+
+Unsupported-carrier fixtures send a nested string under `unsupported_carrier`,
+separately from mutable message content. The observation includes that exact
+upstream leaf in its real wire position; authored gold and all benign bytes
+are scored there too. Plain repeats, existing-token remainders and contained
+overlaps have code, URL, public-word and lowercase-part counterweights.
+Anthropic's codec already rejects unknown fields; its rows remain fail-closed
+controls for this legacy OpenAI/Gemini repair.
+
+The opt-in `--gate-policy leak-to-refusal` applies the reviewed immutable-carrier
+ruling. Each newly refused target must have positive raw target leaked bytes
+in the fresh base capture. Seed leaks cannot justify a target refusal. Every
+accepted transition is listed as `leak -> refused`, with credit limited to the
+base target bytes stopped. Refusals remain a separate count. Refusing a target
+that did not leak in base fails, as does any other byte, seed, restore or
+ownership regression outside those justified transitions. Refused targets
+supply no false-positive reduction credit. The default strict comparison and
+the both-forwarded paired comparison remain available unchanged in policy.

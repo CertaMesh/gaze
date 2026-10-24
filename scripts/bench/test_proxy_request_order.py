@@ -473,3 +473,59 @@ def test_supplemental_owner_proofs_do_not_turn_a_target_refusal_into_a_restore(t
     assert result["totals"]["false_positive_bytes_v2"] == 1
     assert result["cases"][0]["status"] == 502
     assert result["cases"][0]["alignment_valid"] == 1
+
+
+@pytest.mark.parametrize("target_leak", [0, 7])
+def test_leak_to_refusal_ruling_requires_raw_target_leak_in_base(target_leak):
+    baseline, candidate = capture_card(0), capture_card(0)
+    before, after = baseline["cases"][0], candidate["cases"][0]
+    before.update(leaked_bytes=target_leak, seed_leaked_bytes=0, target_leaked_bytes=target_leak)
+    after.update(forwarded=0, failed_closed=1, selected_restore_exact=0,
+                 alignment_valid=0, owned_identities_preserved=0,
+                 seed_leaked_bytes=0, target_leaked_bytes=0)
+    for card in (baseline, candidate):
+        for row in card["cases"]:
+            row.setdefault("seed_leaked_bytes", 0)
+            row.setdefault("target_leaked_bytes", row["leaked_bytes"])
+        card["totals"] = {key: sum(row[key] for row in card["cases"]) for key in card["totals"]}
+    result = bench.compare(baseline, candidate, gate_policy="leak-to-refusal")
+    assert bool(result["regressions"]) == (target_leak == 0)
+    assert len(result["leak_to_refused"]) == int(target_leak > 0)
+    assert all(row["verdict"] == ("pass" if target_leak else "fail")
+               for row in result["contracts"].values())
+    assert result["contracts"]["v2"]["leaked_bytes_removed"] == target_leak
+
+
+def test_seed_leak_does_not_justify_a_new_target_refusal():
+    baseline, candidate = capture_card(0), capture_card(0)
+    index = next(i for i, row in enumerate(baseline["cases"]) if row["seed_forwarded"])
+    before, after = baseline["cases"][index], candidate["cases"][index]
+    before.update(leaked_bytes=7, seed_leaked_bytes=7, target_leaked_bytes=0)
+    after.update(leaked_bytes=7, seed_leaked_bytes=7, target_leaked_bytes=0,
+                 forwarded=0, failed_closed=1, selected_restore_exact=0,
+                 alignment_valid=0, owned_identities_preserved=0)
+    for card in (baseline, candidate):
+        for row in card["cases"]:
+            row.setdefault("seed_leaked_bytes", 0)
+            row.setdefault("target_leaked_bytes", row["leaked_bytes"])
+        card["totals"] = {key: sum(row[key] for row in card["cases"]) for key in card["totals"]}
+    result = bench.compare(baseline, candidate, gate_policy="leak-to-refusal")
+    assert result["regressions"]
+    assert not result["leak_to_refused"]
+
+
+@pytest.mark.parametrize("provider", bench.PROVIDERS)
+def test_unsupported_carrier_is_sent_and_scored_in_its_actual_wire_position(provider):
+    case = {"leaves": [{"text": "private", "gold": [], "carrier": "unsupported"},
+                        {"text": "public", "gold": []}]}
+    _, body = bench.native_request(provider, case)
+    assert body["unsupported_carrier"] == {"nested": ["private"]}
+    assert bench.leaves(provider, body) == ["public", "private"]
+    assert [leaf["text"] for leaf in bench.observation_leaves(case)] == ["public", "private"]
+    private = {"text": "Maria", "gold": [{"start": 0, "end": 5, "label": "FIRSTNAME"}]}
+    assert bench.score_leaf(private, "Maria", {})["leaked_bytes"] == 5
+
+
+def test_leak_refusal_policy_requires_complete_split_byte_evidence():
+    with pytest.raises(ValueError, match="separate seed and target"):
+        bench.compare(capture_card(1), capture_card(0), gate_policy="leak-to-refusal")

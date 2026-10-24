@@ -49,8 +49,17 @@ def digest(path):
 
 def leaves(provider, body):
     if provider == "gemini":
-        return [item["parts"][0]["text"] for item in body["contents"]]
-    return [item["content"] for item in body["messages"]]
+        texts = [item["parts"][0]["text"] for item in body["contents"]]
+    else:
+        texts = [item["content"] for item in body["messages"]]
+    if "unsupported_carrier" in body:
+        texts.append(body["unsupported_carrier"]["nested"][0])
+    return texts
+
+
+def observation_leaves(case):
+    """Wire traversal order: mutable leaves first, then the unsupported carrier."""
+    return sorted(case["leaves"], key=lambda leaf: leaf.get("carrier") == "unsupported")
 
 
 def replies(provider, texts):
@@ -253,13 +262,22 @@ def request_json(url, body=None, timeout=180, session_id=None):
 
 
 def native_request(provider, case):
-    texts = [leaf.get("wire_text", leaf["text"]) for leaf in case["leaves"]]
+    texts = [leaf.get("wire_text", leaf["text"]) for leaf in case["leaves"]
+             if leaf.get("carrier") != "unsupported"]
+    carriers = [leaf.get("wire_text", leaf["text"]) for leaf in case["leaves"]
+                if leaf.get("carrier") == "unsupported"]
+    if len(carriers) > 1:
+        raise ValueError("one unsupported carrier per request")
     if provider == "gemini":
-        return "/v1beta/models/gemini-test:generateContent", {
+        path, body = "/v1beta/models/gemini-test:generateContent", {
             "contents": [{"role": "user", "parts": [{"text": text}]} for text in texts]}
-    path = "/v1/messages" if provider == "anthropic" else "/v1/chat/completions"
-    return path, {"model": "gpt-test", "max_tokens": 256,
-                  "messages": [{"role": "user", "content": text} for text in texts]}
+    else:
+        path = "/v1/messages" if provider == "anthropic" else "/v1/chat/completions"
+        body = {"model": "gpt-test", "max_tokens": 256,
+                "messages": [{"role": "user", "content": text} for text in texts]}
+    if carriers:
+        body["unsupported_carrier"] = {"nested": [carriers[0]]}
+    return path, body
 
 
 @contextmanager
@@ -417,9 +435,12 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                     bound, known, seed_scores, owner_token = seed_session(base_url, provider, case, captured, session_id)
                 path, body = native_request(provider, bound)
                 status, reply = request_json(base_url + path, body, **({"session_id": session_id} if session_id else {}))
+                scored_leaves = observation_leaves(case)
+                bound_leaves = observation_leaves(bound)
                 row = {"id": case["id"], "provider": provider, "order": case["order"],
                        "status": status, "attempted": 1, "seed_forwarded": int("seed" in case), "seed_restore_exact": int("seed" in case), "forwarded": 0, "failed_closed": 0,
                        "selected_restore_exact": 0, "alignment_valid": 0, "owned_identities_preserved": 0,
+                       "seed_leaked_bytes": seed_scores.get("leaked_bytes", 0), "target_leaked_bytes": 0,
                        "gold_bytes": sum(sum(gold_bytes(leaf)) for leaf in case["leaves"]) + seed_scores.get("gold_bytes", 0),
                        "leaked_bytes": 0, "false_positive_bytes_v1": 0, "false_positive_bytes_v2": 0}
                 for metric in ("leaked_bytes", "false_positive_bytes_v1", "false_positive_bytes_v2"):
@@ -444,12 +465,12 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                 row["owner_mapping_proofs"] = []
                 try:
                     try:
-                        mappings, echo_consistent = checked_document_mappings(case["leaves"], clean_leaves, known, owner_facts)
+                        mappings, echo_consistent = checked_document_mappings(scored_leaves, clean_leaves, known, owner_facts)
                     except AmbiguousAlignment:
                         proof_facts, row["owner_mapping_proofs"] = prove_owner_mappings(
                             base_url, provider, tokens, captured, session_id, {**known, **owner_facts})
                         mappings, echo_consistent = checked_document_mappings(
-                            case["leaves"], clean_leaves, {**known, **proof_facts}, owner_facts)
+                            scored_leaves, clean_leaves, {**known, **proof_facts}, owner_facts)
                 except ValueError as error:
                     # Synthetic fixture inputs only. This is an incomplete diagnostic,
                     # never a scorecard: keep the actual bytes and constraints that failed.
@@ -465,15 +486,16 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
                     raise type(error)(f"{provider}/{case['id']}: {error}") from error
                 if set(mappings) != set(tokens):
                     raise ValueError("unaccounted upstream token")
-                row["owned_identities_preserved"] = int(owned_identities_preserved(bound["leaves"], clean_leaves, known, mappings))
+                row["owned_identities_preserved"] = int(owned_identities_preserved(bound_leaves, clean_leaves, known, mappings))
                 # Echo facts must also reconstruct every authored leaf exactly.
                 # Failed owner responses still leave all forwarded bytes scored.
                 expected = [mappings[token] + "\n" for token in selected] or ["ok"]
                 exact = echo_consistent and restored == expected
                 totals = Counter(seed_scores)
-                for leaf, clean in zip(case["leaves"], clean_leaves, strict=True):
+                for leaf, clean in zip(scored_leaves, clean_leaves, strict=True):
                     totals.update(score_leaf(leaf, clean, mappings))
                 row.update(totals)
+                row["target_leaked_bytes"] = row["leaked_bytes"] - row["seed_leaked_bytes"]
                 row["selected_restore_exact"] = int(exact)
                 row["alignment_valid"] = 1
                 rows.append(row)
@@ -495,7 +517,7 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
 
 def compare(base, candidate, *, gate_policy="strict"):
     """The transport layer's gain rule; C/A/D/R need their own admitted captures."""
-    if gate_policy not in {"strict", "paired"}:
+    if gate_policy not in {"strict", "paired", "leak-to-refusal"}:
         raise ValueError("unknown proxy gate policy")
     identity = ("schema", "layer", "contract_labels", "scored_contracts", "fixture_sha256",
                 "harness_sha256", "session_host_sha256", "session_builder_sha256", "v2_contract_sha256", "policy_sha256")
@@ -525,17 +547,35 @@ def compare(base, candidate, *, gate_policy="strict"):
             raise ValueError("proxy totals differ from case evidence")
     rows = { (row["provider"], row["id"]): row for row in base["cases"] }
     regressions = []
+    leak_refusals = []
     for row in candidate["cases"]:
         old = rows[(row["provider"], row["id"])]
+        leak_refused = False
+        if gate_policy == "leak-to-refusal":
+            for observed in (old, row):
+                seed = observed.get("seed_leaked_bytes")
+                target = observed.get("target_leaked_bytes")
+                if (type(seed) is not int or type(target) is not int or min(seed, target) < 0
+                        or seed + target != observed["leaked_bytes"]):
+                    raise ValueError("leak-to-refusal requires separate seed and target byte evidence")
+            leak_refused = bool(old["forwarded"] and row["failed_closed"]
+                                and old["target_leaked_bytes"] > 0
+                                and row["target_leaked_bytes"] == 0
+                                and row["seed_leaked_bytes"] <= old["seed_leaked_bytes"])
+            if leak_refused:
+                leak_refusals.append({"provider": row["provider"], "id": row["id"],
+                                      "transition": "leak -> refused",
+                                      "base_target_leaked_bytes": old["target_leaked_bytes"],
+                                      "base": old, "candidate": row})
         if (row["seed_forwarded"] != old["seed_forwarded"]
                 or row["seed_restore_exact"] < old["seed_restore_exact"]
                 or row["gold_bytes"] != old["gold_bytes"] or row["leaked_bytes"] > old["leaked_bytes"]
-                or row["failed_closed"] > old["failed_closed"]
-                or row["selected_restore_exact"] < old["selected_restore_exact"]
-                or ((gate_policy == "strict" or old["forwarded"])
+                or (not leak_refused and row["failed_closed"] > old["failed_closed"])
+                or (not leak_refused and row["selected_restore_exact"] < old["selected_restore_exact"])
+                or ((gate_policy == "strict" or (old["forwarded"] and not leak_refused))
                     and row["forwarded"] - row["selected_restore_exact"] > old["forwarded"] - old["selected_restore_exact"])
-                or row["alignment_valid"] < old["alignment_valid"]
-                or row["owned_identities_preserved"] < old["owned_identities_preserved"]):
+                or (not leak_refused and row["alignment_valid"] < old["alignment_valid"])
+                or (not leak_refused and row["owned_identities_preserved"] < old["owned_identities_preserved"])):
             regressions.append([row["provider"], row["id"]])
     paired = [(rows[(row["provider"], row["id"])], row) for row in candidate["cases"]
               if rows[(row["provider"], row["id"])]["forwarded"] and row["forwarded"]]
@@ -575,7 +615,8 @@ def compare(base, candidate, *, gate_policy="strict"):
                             "preexisting_fp_proven": proven})
         if not proven and gate_policy == "strict":
             regressions.append([row["provider"], row["id"], "unproven admission FP"])
-    leak_drop = old["leaked_bytes"] - new["leaked_bytes"]
+    refusal_byte_drop = sum(item["base_target_leaked_bytes"] for item in leak_refusals)
+    leak_drop = old["leaked_bytes"] - new["leaked_bytes"] + refusal_byte_drop
     verdicts = {}
     for contract in ("v2", "v1"):
         fp_delta = new["false_positive_bytes_" + contract] - old["false_positive_bytes_" + contract]
@@ -589,6 +630,8 @@ def compare(base, candidate, *, gate_policy="strict"):
                    if not transition["candidate"]["selected_restore_exact"]]
     return {"schema": "gaze-proxy-request-order-comparison-v3", "contracts": verdicts,
             "gate_policy": gate_policy,
+            "leak_to_refused": leak_refusals,
+            "refusal_target_bytes_stopped": refusal_byte_drop,
             "refused_in_both_stage_moved": stage_moves,
             "unproven_admission_fp": [transition for transition in transitions
                                       if not transition["preexisting_fp_proven"]],
@@ -607,7 +650,7 @@ def main():
     parser.add_argument("--session-binary", type=Path)
     parser.add_argument("--fixture", type=Path, default=FIXTURE)
     parser.add_argument("--compare", type=Path, nargs=2, metavar=("BASE", "CANDIDATE"))
-    parser.add_argument("--gate-policy", choices=("strict", "paired"), default="strict",
+    parser.add_argument("--gate-policy", choices=("strict", "paired", "leak-to-refusal"), default="strict",
                         help="comparison only: paired excludes all newly forwarded cases from gate credit and reports their FP cost separately")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
