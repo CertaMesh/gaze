@@ -23,7 +23,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from perf_lifecycle_contract import CLOCK_CHECKS, CLOCK_PHASES, STARTUP_CLOCKS
+from perf_lifecycle_contract import CLOCK_CHECKS, CLOCK_PHASES, REQUEST_ASSEMBLY, STARTUP_CLOCKS, violates_check
 
 SPEC = "gaze-perf-attribution-v2"
 
@@ -83,7 +83,8 @@ def validate_lifecycle(traces: list[dict], requests: int, *, daemon: bool, polic
         raise ValueError("lifecycle trace attribution mismatch")
     for record in traces:
         for key, metric in record["metrics"].items():
-            if CLOCK_PHASES[key] != record["phase"] and any(metric.values()):
+            one_shot_assembly = not daemon and record["phase"] == "request" and key in REQUEST_ASSEMBLY
+            if (record["phase"] not in CLOCK_PHASES[key] or one_shot_assembly) and any(metric.values()):
                 raise ValueError("misattributed clock phase")
             if metric["ns"] and not metric.get("invocations", 0):
                 raise ValueError("duration without an invocation")
@@ -92,13 +93,8 @@ def validate_lifecycle(traces: list[dict], requests: int, *, daemon: bool, polic
         for check in CLOCK_CHECKS:
             if check.phase != record["phase"] or (check.daemon_only and not daemon):
                 continue
-            ns = lambda key: record["metrics"].get(key, {}).get("ns", 0)
-            if sum(map(ns, check.children)) > sum(map(ns, check.parents)):
+            if violates_check(record, check):
                 raise ValueError(f"lifecycle duration attribution mismatch: {check.id}")
-        if record["phase"] == "request" and any(
-                metric["ns"] > record["metrics"].get("request_ns", {}).get("ns", 0)
-                for metric in record["recognizers"].values()):
-            raise ValueError("recognizer duration exceeds request")
     startup = traces[0]
     def inv(trace, key):
         return trace["metrics"].get(key, {}).get("invocations", 0)
@@ -123,8 +119,12 @@ def validate_lifecycle(traces: list[dict], requests: int, *, daemon: bool, polic
     if inv(startup, "bundle_verify_ns") != verifications or inv(startup, "nym_attach_ns") != int(net):
         raise ValueError("bundle verification attribution mismatch")
     for trace in traces[1:]:
-        if inv(trace, "request_ns") != 1 or any(inv(trace, key) for key in LIFECYCLE):
+        forbidden = LIFECYCLE - REQUEST_ASSEMBLY
+        if inv(trace, "request_ns") != 1 or any(inv(trace, key) for key in forbidden):
             raise ValueError("misattributed request work")
+        assembly_counts = {inv(trace, key) for key in REQUEST_ASSEMBLY}
+        if assembly_counts not in ({0}, {1}):
+            raise ValueError("request assembly hook attribution mismatch")
     return startup, traces[1:]
 
 

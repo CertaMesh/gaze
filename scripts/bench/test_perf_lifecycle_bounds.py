@@ -2,10 +2,11 @@
 from pathlib import Path
 from unittest.mock import patch
 import tempfile
+import re
 import unittest
 
 import perf_attribution as perf
-from perf_lifecycle_contract import CLOCK_CHECKS, CLOCK_GRAPH, CLOCK_PHASES
+from perf_lifecycle_contract import CLOCK_CHECKS, CLOCK_GRAPH, CLOCK_PHASES, RECOGNIZERS, REQUEST_ASSEMBLY, clock_values, violates_check
 from test_perf_attribution import trace
 
 
@@ -25,14 +26,21 @@ def records(*, daemon=False):
         startup['metrics'][key]['ns'] = value
     request = trace()
     request['metrics'].update({key: {'ns': 1, 'invocations': 1} for key, phase in CLOCK_PHASES.items()
-                               if phase == 'request'})
+                               if phase == ('request',)})
     for key, value in {'request_ns': 1000, 'registry_ns': 100, 'safety_model_ns': 100,
                        'nym_stable_ns': 40, 'nym_neutral_ns': 40, 'nym_tokenize_ns': 10,
                        'nym_mutex_wait_ns': 10, 'nym_ort_ns': 10, 'resolve1_ns': 10,
                        'sweep_ns': 10, 'resolve2_ns': 10, 'safety_view_build_ns': 10,
-                       'manifest_ns': 10, 'audit_ns': 10}.items():
+                       'manifest_ns': 10, 'audit_ns': 10, 'rules_ns': 10}.items():
         request['metrics'][key]['ns'] = value
-    request['recognizers'] = {'r1': {'ns': 1, 'invocations': 1, 'candidates': 1}}
+    request['recognizers'] = {
+        'r1': {'ns': 10, 'invocations': 1, 'candidates': 1},
+        'r2': {'ns': 10, 'invocations': 1, 'candidates': 1},
+    }
+    if daemon:
+        for key, value in {'assembly_ns': 100, 'recognizer_construction_ns': 20,
+                           'rule_construction_ns': 20}.items():
+            request['metrics'][key] = {'ns': value, 'invocations': 1}
     return [startup, request]
 
 
@@ -49,7 +57,9 @@ SERIAL_CHANGES = {
     'constructor-leaves': {'bundle_verify_ns': 171},
     'request-sweep': {'sweep_ns': 761},
     'request-resolve': {'resolve2_ns': 761},
-    'registry': {'rules_ns': 98},
+    'request-assembly': {'recognizer_construction_ns': 81},
+    'registry-recognizers': {RECOGNIZERS: 60},
+    'recognizer-work': {'rules_ns': 18},
     'nym-views': {'nym_stable_ns': 60, 'nym_neutral_ns': 41},
     'nym-inference': {'nym_tokenize_ns': 30, 'nym_mutex_wait_ns': 30, 'nym_ort_ns': 21},
 }
@@ -58,8 +68,7 @@ SERIAL_CHANGES = {
 def violated_checks(rows, *, daemon):
     return [check.id for check in CLOCK_CHECKS
             if not (check.daemon_only and not daemon)
-            and sum(rows[int(check.phase == 'request')]['metrics'][k]['ns'] for k in check.children)
-            > sum(rows[int(check.phase == 'request')]['metrics'][k]['ns'] for k in check.parents)]
+            and violates_check(rows[int(check.phase == 'request')], check)]
 
 
 class BoundTests(unittest.TestCase):
@@ -75,24 +84,51 @@ class BoundTests(unittest.TestCase):
                 self.admit(records(daemon=daemon), daemon=daemon)
 
     def test_graph_covers_every_clock_and_only_its_own_phase(self):
-        roots = {'process_to_ready_ns', 'request_ns'}
-        self.assertEqual({k for g in CLOCK_GRAPH for k in g.children}, set(CLOCK_PHASES) - roots)
+        roots = {'startup': 'process_to_ready_ns', 'request': 'request_ns'}
         self.assertEqual(len({g.id for g in CLOCK_GRAPH}), len(CLOCK_GRAPH))
         self.assertEqual(len({c.id for c in CLOCK_CHECKS}), len(CLOCK_CHECKS))
+        phases = {**CLOCK_PHASES, RECOGNIZERS: ('request',)}
         for group in CLOCK_GRAPH:
             self.assertTrue(group.hooks)
             self.assertTrue(set(group.children).isdisjoint(group.parents))
-            self.assertTrue(all(CLOCK_PHASES[k] == group.phase for k in (*group.children, *group.parents)))
-        # Every metric reaches its phase root; no detached subgraph or cycle.
-        parents = {k: set() for k in CLOCK_PHASES}
-        for group in CLOCK_GRAPH:
-            for child in group.children:
-                parents[child].update(group.parents)
-        def ancestors(key, path):
-            self.assertNotIn(key, path)
-            return {key} | set().union(*(ancestors(p, path | {key}) for p in parents[key]))
-        for key, phase in CLOCK_PHASES.items():
-            self.assertIn('request_ns' if phase == 'request' else 'process_to_ready_ns', ancestors(key, set()))
+            self.assertTrue(all(group.phase in phases[k] for k in (*group.children, *group.parents)))
+        for phase, root in roots.items():
+            parents = {k: set() for k, allowed in phases.items() if phase in allowed}
+            for group in CLOCK_GRAPH:
+                if group.phase == phase:
+                    for child in group.children:
+                        parents[child].update(group.parents)
+            def ancestors(key, path):
+                self.assertNotIn(key, path)
+                return {key} | set().union(*(ancestors(p, path | {key}) for p in parents[key]))
+            for key in parents:
+                self.assertIn(root, ancestors(key, set()))
+
+    def test_reviewer_recognizer_outside_registry(self):
+        rows = records()
+        rows[1]['recognizers']['r1']['ns'] = 900
+        with self.assertRaises(ValueError):
+            self.admit(rows)
+
+    def test_reviewer_serial_recognizers_outside_request(self):
+        rows = records()
+        for metric in rows[1]['recognizers'].values():
+            metric['ns'] = 700
+        with self.assertRaises(ValueError):
+            self.admit(rows)
+
+    def test_reviewer_rules_outside_recognizer_total(self):
+        rows = records()
+        rows[1]['metrics']['rules_ns']['ns'] = 50
+        with self.assertRaises(ValueError):
+            self.admit(rows)
+
+    def test_daemon_context_assembly_is_admitted(self):
+        rows = records(daemon=True)
+        for key, ns in {'assembly_ns': 100, 'recognizer_construction_ns': 50,
+                        'rule_construction_ns': 10}.items():
+            rows[1]['metrics'][key] = {'ns': ns, 'invocations': 1}
+        self.admit(rows, daemon=True)
 
     def test_reviewer_startup_serial_witness(self):
         rows = records()
@@ -138,8 +174,38 @@ class BoundTests(unittest.TestCase):
     def test_recognizer_bound(self):
         rows = records()
         rows[1]['recognizers']['r1']['ns'] = 1001
-        with self.assertRaisesRegex(ValueError, 'recognizer duration'):
+        with self.assertRaisesRegex(ValueError, 'registry-recognizers'):
             self.admit(rows)
+
+    def test_one_shot_request_assembly_is_refused(self):
+        rows = records()
+        for key in REQUEST_ASSEMBLY:
+            rows[1]['metrics'][key] = {'ns': 0, 'invocations': 1}
+        with self.assertRaisesRegex(ValueError, 'clock phase'):
+            self.admit(rows)
+
+    def test_request_assembly_hooks_are_complete_and_once_each(self):
+        for key in REQUEST_ASSEMBLY:
+            for count in (0, 2):
+                rows = records(daemon=True)
+                rows[1]['metrics'][key]['invocations'] = count
+                for clock in REQUEST_ASSEMBLY:
+                    rows[1]['metrics'][clock]['ns'] = 0
+                with self.assertRaisesRegex(ValueError, 'request assembly hook'):
+                    self.admit(rows, daemon=True)
+
+    def test_resident_models_cannot_initialize_in_daemon_requests(self):
+        for key in perf.LIFECYCLE - REQUEST_ASSEMBLY:
+            rows = records(daemon=True)
+            rows[1]['metrics'][key] = {'ns': 1, 'invocations': 1}
+            with self.assertRaisesRegex(ValueError, 'clock phase'):
+                self.admit(rows, daemon=True)
+
+    def test_request_model_invocations_are_refused_even_at_zero_duration(self):
+        rows = records(daemon=True)
+        rows[1]['metrics']['model_load_ns'] = {'ns': 0, 'invocations': 1}
+        with self.assertRaisesRegex(ValueError, 'clock phase'):
+            self.admit(rows, daemon=True)
 
     def test_startup_work_counters_are_refused(self):
         rows = records()
@@ -160,13 +226,21 @@ class BoundTests(unittest.TestCase):
             self.admit(rows)
 
 
+def set_clock(record, key, value):
+    if key == RECOGNIZERS:
+        for metric in record['recognizers'].values():
+            metric['ns'] = value
+    else:
+        record['metrics'].setdefault(key, {'ns': 0, 'invocations': 1})['ns'] = value
+
+
 def serial_test(group):
     def test(self):
         daemon = group.daemon_only
         rows = records(daemon=daemon)
         record = rows[int(group.phase == 'request')]
         for key, value in SERIAL_CHANGES[group.id].items():
-            record['metrics'][key]['ns'] = value
+            set_clock(record, key, value)
         self.assertEqual(violated_checks(rows, daemon=daemon), [group.id + '-serial'])
         with self.assertRaisesRegex(ValueError, group.id + '-serial$'):
             self.admit(rows, daemon=daemon)
@@ -174,14 +248,15 @@ def serial_test(group):
 
 
 def parent_daemon(check):
-    return check.daemon_only or "daemon_startup_ns" in check.children
+    return (check.daemon_only or "daemon_startup_ns" in check.children
+            or (check.phase == 'request' and any(k in REQUEST_ASSEMBLY for k in check.children)))
 
 
 def parent_witness(check):
     rows = records(daemon=parent_daemon(check))
     record = rows[int(check.phase == 'request')]
-    capacity = sum(record['metrics'][key]['ns'] for key in check.parents)
-    record['metrics'][check.children[0]]['ns'] = capacity + 1
+    capacity = sum(ns for key in check.parents for ns in clock_values(record, key))
+    set_clock(record, check.children[0], capacity + 1)
     return rows
 
 
@@ -193,7 +268,7 @@ def parent_test(check, *, isolated):
             # parent check alone through real lifecycle admission so a mutation
             # cannot hide behind a serial sum (or another ancestor edge).
             with patch.object(perf, 'CLOCK_CHECKS', (check,)):
-                with self.assertRaisesRegex(ValueError, check.id + '$'):
+                with self.assertRaisesRegex(ValueError, re.escape(check.id) + '$'):
                     self.admit(rows, daemon=parent_daemon(check))
         else:
             with self.assertRaises(ValueError):
@@ -204,10 +279,25 @@ def parent_test(check, *, isolated):
 def phase_test(key, phase):
     def test(self):
         rows = records()
-        rows[int(phase == 'startup')]['metrics'][key] = {'ns': 1, 'invocations': 1}
+        rows[int(phase == 'request')]['metrics'][key] = {'ns': 1, 'invocations': 1}
         with self.assertRaisesRegex(ValueError, 'clock phase'):
             self.admit(rows)
     return test
+
+
+def one_shot_assembly_phase_test(key):
+    def test(self):
+        for field in ('ns', 'invocations', 'candidates'):
+            rows = records()
+            rows[1]['metrics'][key] = {'ns': 0, 'invocations': 0, 'candidates': 0}
+            rows[1]['metrics'][key][field] = 1
+            with self.assertRaisesRegex(ValueError, 'clock phase'):
+                self.admit(rows)
+    return test
+
+
+for key in REQUEST_ASSEMBLY:
+    setattr(BoundTests, 'test_one_shot_phase_' + key, one_shot_assembly_phase_test(key))
 
 
 for group in CLOCK_GRAPH:
@@ -218,8 +308,9 @@ for check in CLOCK_CHECKS:
         name = check.id.replace('-', '_')
         setattr(BoundTests, 'test_parent_' + name, parent_test(check, isolated=True))
         setattr(BoundTests, 'test_full_graph_' + name, parent_test(check, isolated=False))
-for key, phase in CLOCK_PHASES.items():
-    setattr(BoundTests, 'test_phase_' + key, phase_test(key, phase))
+for key, phases in CLOCK_PHASES.items():
+    for forbidden in {'startup', 'request'} - set(phases):
+        setattr(BoundTests, 'test_phase_' + key, phase_test(key, forbidden))
 
 
 if __name__ == '__main__':

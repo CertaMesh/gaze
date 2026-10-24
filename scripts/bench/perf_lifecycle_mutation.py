@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 
-from perf_lifecycle_contract import CLOCK_CHECKS
+from perf_lifecycle_contract import CLOCK_CHECKS, REQUEST_ASSEMBLY
 import perf_attribution as perf
 
 ROOT = Path(__file__).resolve().parent
@@ -23,10 +23,10 @@ def prove(out: Path) -> dict:
                    if check.kind == "serial" else "test_parent_" + check.id.replace("-", "_")))
                  for check in CLOCK_CHECKS]
     mutations.extend([
-        ("clock-phase", source.replace('CLOCK_PHASES[key] != record["phase"]', 'False'),
+        ("clock-phase", source.replace('record["phase"] not in CLOCK_PHASES[key]', 'False'),
          "test_phase_registry_ns"),
-        ("recognizer", source.replace('if record["phase"] == "request" and any(', 'if False and any('),
-         "test_recognizer_bound"),
+        ("request-assembly-counts", source.replace('if assembly_counts not in ({0}, {1}):', 'if False:'),
+         "test_request_assembly_hooks_are_complete_and_once_each"),
         ("startup-work", source.replace('if record["phase"] == "startup" and (any(', 'if False and (any('),
          "test_startup_work_counters_are_refused"),
         ("startup-recognizers", source.replace('if record["phase"] == "startup" and (any(', 'if False and (any('),
@@ -34,6 +34,11 @@ def prove(out: Path) -> dict:
         ("invocation", source.replace('if metric["ns"] and not metric.get("invocations", 0):', 'if False:'),
          "test_nonzero_clock_requires_invocation"),
     ])
+    for key in sorted(REQUEST_ASSEMBLY):
+        mutations.append(("one-shot-phase-" + key,
+                          source.replace('and key in REQUEST_ASSEMBLY',
+                                         f'and key in (REQUEST_ASSEMBLY - {{{key!r}}})'),
+                          "test_one_shot_phase_" + key))
     results = []
     out.mkdir(parents=True, exist_ok=True)
     for name, mutated, test in mutations:

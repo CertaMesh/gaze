@@ -28,8 +28,25 @@ PROCESSING_CLOCKS = (
     "safety_model_ns", "nym_tokenize_ns", "nym_ort_ns", "nym_mutex_wait_ns", "nym_stable_ns",
     "nym_neutral_ns", "manifest_ns", "audit_ns",
 )
-CLOCK_PHASES = {**dict.fromkeys(STARTUP_CLOCKS, "startup"),
-                **dict.fromkeys((*PROCESSING_CLOCKS, "request_ns"), "request")}
+REQUEST_ASSEMBLY = frozenset(("assembly_ns", "recognizer_construction_ns", "rule_construction_ns"))
+CLOCK_PHASES = {**dict.fromkeys(STARTUP_CLOCKS, ("startup",)),
+                **dict.fromkeys((*PROCESSING_CLOCKS, "request_ns"), ("request",))}
+CLOCK_PHASES.update(dict.fromkeys(REQUEST_ASSEMBLY, ("startup", "request")))
+RECOGNIZERS = "recognizers[*]"
+
+
+def clock_values(record: dict, key: str) -> tuple[int, ...]:
+    """Expand recognizer ordinals without treating their total as an emitted metric."""
+    if key == RECOGNIZERS:
+        return tuple(metric["ns"] for metric in record["recognizers"].values())
+    return (record["metrics"].get(key, {}).get("ns", 0),)
+
+
+def violates_check(record: dict, check) -> bool:
+    children = [ns for key in check.children for ns in clock_values(record, key)]
+    capacity = sum(ns for key in check.parents for ns in clock_values(record, key))
+    return (sum(children) > capacity if check.kind == "serial"
+            else any(ns > capacity for ns in children))
 
 
 @dataclass(frozen=True)
@@ -83,24 +100,33 @@ CLOCK_GRAPH = (
                "ner/loader.rs; bundle.rs; gaze-assembly/lib.rs; constructor hooks above",
                "bundle_verify also includes Nym outer verification; load-only group excludes that capacity"),
     ClockGroup("request-sweep", "request", ("request_ns",),
-               ("registry_ns", "resolve1_ns", "sweep_ns", "safety_view_build_ns", "safety_model_ns",
+               ("assembly_ns", "registry_ns", "resolve1_ns", "sweep_ns", "safety_view_build_ns", "safety_model_ns",
                 "manifest_ns", "audit_ns"), "serial",
                "pipeline.rs: redact_text_with_manifest_uncached, sweep_repeat_values, run_safety_nets_in_context, log_*; "
                "pipeline/occurrence.rs: Ledger; safety_net_scan.rs: new",
                "resolve2 partly runs inside sweep and partly afterwards; never sum sweep + resolve2"),
     ClockGroup("request-resolve", "request", ("request_ns",),
-               ("registry_ns", "resolve1_ns", "resolve2_ns", "safety_view_build_ns", "safety_model_ns",
+               ("assembly_ns", "registry_ns", "resolve1_ns", "resolve2_ns", "safety_view_build_ns", "safety_model_ns",
                 "manifest_ns", "audit_ns"), "serial",
                "pipeline.rs: recovery::plan at sweep, house-number and address-piece sites",
                "alternative serial group accounts for resolve2 without double counting sweep"),
+    ClockGroup("request-assembly", "request", ("assembly_ns",),
+               ("recognizer_construction_ns", "rule_construction_ns"), "serial",
+               "commands/daemon.rs: clean_request; gaze-assembly/lib.rs: pipeline_with_context",
+               "context rebuilds recognizers and rules; resident NER, Nym and DOB handles are reused",
+               daemon_only=True),
     ClockGroup("request-overlap", "request", ("request_ns",),
                ("validators_ns",), "overlapping", "gaze-types/lib.rs: ValidatorKind",
                "validators run inside recognizers, registry vetoes, recovery and other request work"),
-    ClockGroup("registry", "request", ("registry_ns",),
+    ClockGroup("registry-recognizers", "request", ("registry_ns",),
+               (RECOGNIZERS,), "serial",
+               "registry.rs: detect_candidate_pool/detect_declared; perf.rs: RecognizerSpan",
+               "built-in clean runs recognizers serially inside registry"),
+    ClockGroup("recognizer-work", "request", (RECOGNIZERS,),
                ("rules_ns", "ner_tokenize_ns", "ner_mutex_wait_ns", "ner_ort_ns"), "serial",
-               "registry.rs: detect_candidate_pool/detect_declared; perf.rs: RecognizerSpan; "
-               "ner/backend/preparation.rs and ort.rs",
-               "rules sums rule-evidence recognizers; NER is learned evidence; validators may overlap both"),
+               "perf.rs: RecognizerSpan::drop; ner/backend/preparation.rs and ort.rs",
+               "rules is the exact rule-evidence subset; serial NER leaves belong to learned evidence. "
+               "The protocol cannot identify the NER ordinal, so these disjoint durations use the pooled recognizer capacity"),
     ClockGroup("nym-views", "request", ("safety_model_ns",),
                ("nym_stable_ns", "nym_neutral_ns"), "serial",
                "pipeline.rs: run_safety_nets_in_context; safety_net/nym/mod.rs: check_with_neutral_and_telemetry"),
@@ -144,24 +170,27 @@ def documentation() -> str:
     rows = ["<!-- BEGIN GENERATED CLOCK CONTRACT -->",
             "| Metric | Phase | Boundary |", "| --- | --- | --- |"]
     for key, description in STARTUP_CLOCKS.items():
-        rows.append(f"| `{key}` | startup | {description} |")
+        rows.append(f"| `{key}` | {' or '.join(CLOCK_PHASES[key])} | {description} |")
     rows.append("| `request_ns` | request | One-shot processing after startup, or one daemon handle_line call |")
     rows.extend(["", "The hook graph below declares serial children (sum <= parent capacity) or",
                  "overlapping children (each <= parent capacity, with no sum). Admission",
                  "checks every parent edge and every serial sum. A parent capacity containing",
                  "multiple clocks pools their durations; it is not a new measured clock.",
-                 "Only daemon-build is conditional on daemon mode.", "",
-                 "| Group | Relationship | Children | Parent capacity | Hook sites and exceptions |",
-                 "| --- | --- | --- | --- | --- |"])
+                 "Daemon-build and request-assembly apply only in daemon mode.",
+                 "`recognizers[*]` expands to each emitted recognizer ordinal. Parent edges",
+                 "check each ordinal; serial groups sum them. As a parent, it pools their durations.", "",
+                 "| Group | Phase | Relationship | Children | Parent capacity | Hook sites and exceptions |",
+                 "| --- | --- | --- | --- | --- | --- |"])
     for group in CLOCK_GRAPH:
         children = " + ".join(f"`{key}`" for key in group.children)
         parents = " + ".join(f"`{key}`" for key in group.parents)
         note = group.hooks + (". " + group.exception if group.exception else "")
-        rows.append(f"| {group.id} | {group.relationship} | {children} | {parents} | {note} |")
-    rows.extend(["", "All metrics belong exclusively to their declared phase. A startup record",
-                 "must have zero processing durations, invocation/candidate counts, work",
-                 "counters and recognizer entries. Request records must have zero startup",
-                 "durations and counts. Each recognizer duration must fit within request_ns.",
+        rows.append(f"| {group.id} | {group.phase} | {group.relationship} | {children} | {parents} | {note} |")
+    rows.extend(["", "A startup record must have zero processing durations, invocation/candidate",
+                 "counts, work counters and recognizer entries. Daemon context requests may",
+                 "emit assembly, recognizer-construction and rule-construction clocks, once each.",
+                 "One-shot requests cannot emit those clocks. All request records must have",
+                 "zero model initialization and other startup-only durations and counts.",
                  "<!-- END GENERATED CLOCK CONTRACT -->"])
     return "\n".join(rows)
 

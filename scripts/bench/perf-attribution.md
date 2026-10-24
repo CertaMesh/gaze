@@ -116,7 +116,7 @@ write does not change protection behavior.
 Schema **2** adds `phase` (`startup` or `request`) and a process-local `ordinal`.
 Startup is ordinal 0. Requests count from 1, including warmups. The runner rejects
 schema 1, partial traces, missing hooks, wrong ordinals, processing clocks in
-startup, and lifecycle work attached to request records. Nym timer backports must
+startup, and model initialization attached to request records. Nym timer backports must
 include both split clocks below; aggregate-only Nym traces are refused. Old executables that emit no records retain unknown stage
 costs. `--binary-kind-a local-timer`, `--binary-kind-b local-timer`, and
 `--build-timers` require the full protocol; a missing trace is an error.
@@ -176,9 +176,9 @@ The phase table and clock graph below are generated from
 | `process_to_policy_ns` | startup | First operation in main through policy load and overrides |
 | `policy_load_ns` | startup | CLI policy load and overrides, including the policy-less default |
 | `pipeline_build_ns` | startup | CLI policy resolution through PipelineBuilder::build |
-| `assembly_ns` | startup | build_pipeline_builder_inner, including NER and DOB constructors |
-| `recognizer_construction_ns` | startup | Recognizer registration before model registration |
-| `rule_construction_ns` | startup | Policy action rule construction after model registration |
+| `assembly_ns` | startup or request | build_pipeline_builder_inner, including NER and DOB constructors |
+| `recognizer_construction_ns` | startup or request | Recognizer registration before model registration |
+| `rule_construction_ns` | startup or request | Policy action rule construction after model registration |
 | `nym_attach_ns` | startup | Nym outer verification, constructor and checked attachment |
 | `model_constructor_ns` | startup | NER and DOB constructors, including their children |
 | `nym_model_constructor_ns` | startup | Nym constructor, including its children |
@@ -193,31 +193,36 @@ The hook graph below declares serial children (sum <= parent capacity) or
 overlapping children (each <= parent capacity, with no sum). Admission
 checks every parent edge and every serial sum. A parent capacity containing
 multiple clocks pools their durations; it is not a new measured clock.
-Only daemon-build is conditional on daemon mode.
+Daemon-build and request-assembly apply only in daemon mode.
+`recognizers[*]` expands to each emitted recognizer ordinal. Parent edges
+check each ordinal; serial groups sum them. As a parent, it pools their durations.
 
-| Group | Relationship | Children | Parent capacity | Hook sites and exceptions |
-| --- | --- | --- | --- | --- |
-| ready-build | serial | `pipeline_build_ns` + `nym_attach_ns` | `process_to_ready_ns` | pipeline/run.rs: prepare_clean_pipeline; cli/perf.rs: Document::from_env |
-| ready-policy | serial | `process_to_policy_ns` + `assembly_ns` + `nym_attach_ns` | `process_to_ready_ns` | pipeline/build.rs: policy_loaded before assembly; pipeline/run.rs: Nym after build. pipeline_build overlaps process_to_policy; use two alternative serial groups |
-| ready-daemon | overlapping | `daemon_startup_ns` | `process_to_ready_ns` | commands/daemon.rs: run; cli/perf.rs: ready. daemon_startup overlaps the policy prefix and contains pipeline construction |
-| policy-load | overlapping | `policy_load_ns` | `process_to_policy_ns` | pipeline/build.rs: resolve_pipeline_builder |
-| pipeline | serial | `policy_load_ns` + `assembly_ns` | `pipeline_build_ns` | pipeline/build.rs: resolve_pipeline and resolve_pipeline_builder |
-| daemon-build | serial | `pipeline_build_ns` + `nym_attach_ns` | `daemon_startup_ns` | commands/daemon.rs: run and Daemon::new |
-| assembly | serial | `recognizer_construction_ns` + `model_constructor_ns` + `rule_construction_ns` | `assembly_ns` | gaze-assembly/lib.rs: build_pipeline_builder_inner |
-| nym-attach | serial | `nym_outer_verify_ns` + `nym_model_constructor_ns` | `nym_attach_ns` | gaze-assembly/lib.rs: attach_nym_safety_net |
-| constructor-loads | serial | `tokenizer_load_ns` + `model_load_ns` | `model_constructor_ns` + `nym_model_constructor_ns` | ner/detector.rs; ner/backend/ort.rs; dob_judge.rs; safety_net/nym/ort.rs. leaf totals pool NER, DOB and Nym constructors; no per-constructor leaf split exists |
-| constructor-leaves | serial | `bundle_verify_ns` + `tokenizer_load_ns` + `model_load_ns` | `model_constructor_ns` + `nym_model_constructor_ns` + `nym_outer_verify_ns` | ner/loader.rs; bundle.rs; gaze-assembly/lib.rs; constructor hooks above. bundle_verify also includes Nym outer verification; load-only group excludes that capacity |
-| request-sweep | serial | `registry_ns` + `resolve1_ns` + `sweep_ns` + `safety_view_build_ns` + `safety_model_ns` + `manifest_ns` + `audit_ns` | `request_ns` | pipeline.rs: redact_text_with_manifest_uncached, sweep_repeat_values, run_safety_nets_in_context, log_*; pipeline/occurrence.rs: Ledger; safety_net_scan.rs: new. resolve2 partly runs inside sweep and partly afterwards; never sum sweep + resolve2 |
-| request-resolve | serial | `registry_ns` + `resolve1_ns` + `resolve2_ns` + `safety_view_build_ns` + `safety_model_ns` + `manifest_ns` + `audit_ns` | `request_ns` | pipeline.rs: recovery::plan at sweep, house-number and address-piece sites. alternative serial group accounts for resolve2 without double counting sweep |
-| request-overlap | overlapping | `validators_ns` | `request_ns` | gaze-types/lib.rs: ValidatorKind. validators run inside recognizers, registry vetoes, recovery and other request work |
-| registry | serial | `rules_ns` + `ner_tokenize_ns` + `ner_mutex_wait_ns` + `ner_ort_ns` | `registry_ns` | registry.rs: detect_candidate_pool/detect_declared; perf.rs: RecognizerSpan; ner/backend/preparation.rs and ort.rs. rules sums rule-evidence recognizers; NER is learned evidence; validators may overlap both |
-| nym-views | serial | `nym_stable_ns` + `nym_neutral_ns` | `safety_model_ns` | pipeline.rs: run_safety_nets_in_context; safety_net/nym/mod.rs: check_with_neutral_and_telemetry |
-| nym-inference | serial | `nym_tokenize_ns` + `nym_mutex_wait_ns` + `nym_ort_ns` | `nym_stable_ns` + `nym_neutral_ns` | safety_net/nym/ort.rs: score_pieces and run_window. leaf totals pool both serial views; the protocol does not split leaves by view |
+| Group | Phase | Relationship | Children | Parent capacity | Hook sites and exceptions |
+| --- | --- | --- | --- | --- | --- |
+| ready-build | startup | serial | `pipeline_build_ns` + `nym_attach_ns` | `process_to_ready_ns` | pipeline/run.rs: prepare_clean_pipeline; cli/perf.rs: Document::from_env |
+| ready-policy | startup | serial | `process_to_policy_ns` + `assembly_ns` + `nym_attach_ns` | `process_to_ready_ns` | pipeline/build.rs: policy_loaded before assembly; pipeline/run.rs: Nym after build. pipeline_build overlaps process_to_policy; use two alternative serial groups |
+| ready-daemon | startup | overlapping | `daemon_startup_ns` | `process_to_ready_ns` | commands/daemon.rs: run; cli/perf.rs: ready. daemon_startup overlaps the policy prefix and contains pipeline construction |
+| policy-load | startup | overlapping | `policy_load_ns` | `process_to_policy_ns` | pipeline/build.rs: resolve_pipeline_builder |
+| pipeline | startup | serial | `policy_load_ns` + `assembly_ns` | `pipeline_build_ns` | pipeline/build.rs: resolve_pipeline and resolve_pipeline_builder |
+| daemon-build | startup | serial | `pipeline_build_ns` + `nym_attach_ns` | `daemon_startup_ns` | commands/daemon.rs: run and Daemon::new |
+| assembly | startup | serial | `recognizer_construction_ns` + `model_constructor_ns` + `rule_construction_ns` | `assembly_ns` | gaze-assembly/lib.rs: build_pipeline_builder_inner |
+| nym-attach | startup | serial | `nym_outer_verify_ns` + `nym_model_constructor_ns` | `nym_attach_ns` | gaze-assembly/lib.rs: attach_nym_safety_net |
+| constructor-loads | startup | serial | `tokenizer_load_ns` + `model_load_ns` | `model_constructor_ns` + `nym_model_constructor_ns` | ner/detector.rs; ner/backend/ort.rs; dob_judge.rs; safety_net/nym/ort.rs. leaf totals pool NER, DOB and Nym constructors; no per-constructor leaf split exists |
+| constructor-leaves | startup | serial | `bundle_verify_ns` + `tokenizer_load_ns` + `model_load_ns` | `model_constructor_ns` + `nym_model_constructor_ns` + `nym_outer_verify_ns` | ner/loader.rs; bundle.rs; gaze-assembly/lib.rs; constructor hooks above. bundle_verify also includes Nym outer verification; load-only group excludes that capacity |
+| request-sweep | request | serial | `assembly_ns` + `registry_ns` + `resolve1_ns` + `sweep_ns` + `safety_view_build_ns` + `safety_model_ns` + `manifest_ns` + `audit_ns` | `request_ns` | pipeline.rs: redact_text_with_manifest_uncached, sweep_repeat_values, run_safety_nets_in_context, log_*; pipeline/occurrence.rs: Ledger; safety_net_scan.rs: new. resolve2 partly runs inside sweep and partly afterwards; never sum sweep + resolve2 |
+| request-resolve | request | serial | `assembly_ns` + `registry_ns` + `resolve1_ns` + `resolve2_ns` + `safety_view_build_ns` + `safety_model_ns` + `manifest_ns` + `audit_ns` | `request_ns` | pipeline.rs: recovery::plan at sweep, house-number and address-piece sites. alternative serial group accounts for resolve2 without double counting sweep |
+| request-assembly | request | serial | `recognizer_construction_ns` + `rule_construction_ns` | `assembly_ns` | commands/daemon.rs: clean_request; gaze-assembly/lib.rs: pipeline_with_context. context rebuilds recognizers and rules; resident NER, Nym and DOB handles are reused |
+| request-overlap | request | overlapping | `validators_ns` | `request_ns` | gaze-types/lib.rs: ValidatorKind. validators run inside recognizers, registry vetoes, recovery and other request work |
+| registry-recognizers | request | serial | `recognizers[*]` | `registry_ns` | registry.rs: detect_candidate_pool/detect_declared; perf.rs: RecognizerSpan. built-in clean runs recognizers serially inside registry |
+| recognizer-work | request | serial | `rules_ns` + `ner_tokenize_ns` + `ner_mutex_wait_ns` + `ner_ort_ns` | `recognizers[*]` | perf.rs: RecognizerSpan::drop; ner/backend/preparation.rs and ort.rs. rules is the exact rule-evidence subset; serial NER leaves belong to learned evidence. The protocol cannot identify the NER ordinal, so these disjoint durations use the pooled recognizer capacity |
+| nym-views | request | serial | `nym_stable_ns` + `nym_neutral_ns` | `safety_model_ns` | pipeline.rs: run_safety_nets_in_context; safety_net/nym/mod.rs: check_with_neutral_and_telemetry |
+| nym-inference | request | serial | `nym_tokenize_ns` + `nym_mutex_wait_ns` + `nym_ort_ns` | `nym_stable_ns` + `nym_neutral_ns` | safety_net/nym/ort.rs: score_pieces and run_window. leaf totals pool both serial views; the protocol does not split leaves by view |
 
-All metrics belong exclusively to their declared phase. A startup record
-must have zero processing durations, invocation/candidate counts, work
-counters and recognizer entries. Request records must have zero startup
-durations and counts. Each recognizer duration must fit within request_ns.
+A startup record must have zero processing durations, invocation/candidate
+counts, work counters and recognizer entries. Daemon context requests may
+emit assembly, recognizer-construction and rule-construction clocks, once each.
+One-shot requests cannot emit those clocks. All request records must have
+zero model initialization and other startup-only durations and counts.
 <!-- END GENERATED CLOCK CONTRACT -->
 
 `pipeline_build_ns` includes `policy_load_ns` and `assembly_ns`. Nym attaches
@@ -226,8 +231,10 @@ after that CLI builder returns, so `nym_attach_ns` belongs to
 stdin reading and initial session creation. Daemon startup excludes input wait.
 The request clock includes clean response construction; daemon wire serialization
 runs after `handle_line` and belongs only to end-to-end latency. A daemon request
-with a context may construct request-specific recognizers; these context-free
-benchmark arms send no context, so their lifecycle validation refuses that work.
+with a context constructs request-specific recognizers and rules, even when the
+context is empty. Admission includes that assembly in the request clock and checks
+its serial children. Resident NER, Nym and DOB models remain initialized at startup.
+The benchmark arms send no context.
 
 No speedup or regression follows from adding these clocks. Controlled paired
 measurements need the benchmark-machine lease and a quiet host.
@@ -265,7 +272,7 @@ tests also exercise that edge alone through lifecycle admission, because the
 serial sum or an ancestor edge would otherwise reject the same record.
 
 After committing, run `perf_lifecycle_mutation.py --out <directory>`. It removes
-each parent check, serial sum and phase/recognizer/work guard in an isolated
+each parent check, serial sum and phase, assembly-count and startup-work guard in an isolated
 Python copy. Each mutation must fail one executed assertion, then pass the same
 test after restoration. The receipt pins both counts; logs retain every result.
 

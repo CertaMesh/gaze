@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -326,6 +327,34 @@ class LifecycleTests(unittest.TestCase):
                     self.fail(f"real CLI lifecycle admission failed: {error}")
                 self.assertEqual(len(rows), 3)
                 self.assertTrue(all(r["trace"]["metrics"]["request_ns"]["invocations"] == 1 for r in rows))
+
+    @unittest.skipUnless(os.environ.get("GAZE_ATTRIBUTION_TEST_BINARY"), "requires a locally built timer CLI")
+    def test_real_daemon_context_assembly_is_admitted(self):
+        binary = Path(os.environ["GAZE_ATTRIBUTION_TEST_BINARY"]).resolve()
+        proof = json.loads(Path(__file__).with_name("perf-lifecycle-synthetic-proof.json").read_text())
+        self.assertEqual(perf.file_sha(binary), proof["timer_binary_sha256"])
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = Path(tmp) / "policy.toml"
+            policy.write_text('schema_version="0.1.0"\n[session]\nscope="conversation"\n'
+                              '[policy.rulepacks]\nbundled=["core"]\n[safety_net]\nbackend="none"\n'
+                              '[[rule]]\nkind="default"\naction="tokenize"\n')
+            requests = [{"session_id": "review", "text": "safe text"},
+                        {"session_id": "review", "text": "safe text", "context": {}}]
+            run = subprocess.run([str(binary), "daemon", "--policy", str(policy)],
+                                 input="".join(json.dumps(r) + "\n" for r in requests),
+                                 capture_output=True, text=True, timeout=30, env=perf.child_environment())
+            self.assertEqual(run.returncode, 0, "daemon failed; diagnostics suppressed")
+            responses = [json.loads(line) for line in run.stdout.splitlines()]
+            self.assertEqual(len(responses), 2)
+            self.assertTrue(all("clean_text" in r and not r.get("error") for r in responses))
+            traces = [json.loads(line[len(perf.PREFIX):]) for line in run.stderr.splitlines()
+                      if line.startswith(perf.PREFIX)]
+            _, admitted = perf.validate_lifecycle(traces, 2, daemon=True, policy=policy, required=True)
+            for key in perf.REQUEST_ASSEMBLY:
+                self.assertEqual(admitted[0]["metrics"].get(key, {}).get("invocations", 0), 0)
+                self.assertEqual(admitted[1]["metrics"][key]["invocations"], 1)
+                self.assertGreater(admitted[1]["metrics"][key]["ns"], 0)
+
 
 
 class FrozenPolicyTests(unittest.TestCase):
