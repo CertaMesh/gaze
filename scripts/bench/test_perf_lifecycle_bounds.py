@@ -235,6 +235,10 @@ class BoundTests(unittest.TestCase):
                         startup['metrics'][key]['ns'] = 0
                 if dob:
                     rows[1]['recognizers']['r3'] = dict(rows[1]['recognizers']['r2'], model='dob')
+                if not nym:
+                    for key in ('safety_model_ns', 'safety_view_build_ns', 'nym_stable_ns',
+                                'nym_neutral_ns', 'nym_tokenize_ns', 'nym_mutex_wait_ns', 'nym_ort_ns'):
+                        rows[1]['metrics'][key].update(ns=0, invocations=0)
                 with tempfile.TemporaryDirectory() as tmp:
                     policy = Path(tmp) / 'policy'
                     policy.write_text('[ner]\nenabled=true\n' + ('[dob_judge]\nenabled=true\n' if dob else '')
