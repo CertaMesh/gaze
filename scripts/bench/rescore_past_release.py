@@ -51,6 +51,7 @@ import dataiku_en_de_gaze_bench as dataiku  # noqa: E402
 import agentic_layers as agentic  # noqa: E402
 import gaze_bench_score as score  # noqa: E402
 import scorecard_record as records  # noqa: E402
+import benchmark_spec  # noqa: E402
 import run_no_opf_benchmark as runner  # noqa: E402
 
 HARNESS_ROOT = Path(__file__).resolve().parents[2]
@@ -322,6 +323,11 @@ def run(args: argparse.Namespace) -> Path:
         card["layers"]["gold_validity"] = {
             "C": agentic.gold_validity_digest(documents, measurements)
         }
+    card["benchmark_spec"] = benchmark_spec.resolve(
+        HARNESS_ROOT, corpus_sha256=dataset_report["integrity"]["sha256"], seed=args.seed,
+        available=original_available, prepared=prepared,
+        profile=card["parameters"]["profile"], warmups=args.warmups, repetitions=1,
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     card["observation_record"] = record_writer.write(
         output.with_name("observations-v1.jsonl.gz"), card, add_reference=True
@@ -334,7 +340,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         print(f"rescore_past_release: wrote {run(parse_args(argv))}")
         return 0
-    except (PastReleaseError, runner.CandidateError, score.ScoredLabelContractError) as error:
+    except (PastReleaseError, runner.CandidateError, score.ScoredLabelContractError, benchmark_spec.SpecError) as error:
         sys.stderr.write(f"rescore_past_release: {error}\n")
         return 2
 

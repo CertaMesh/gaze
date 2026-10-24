@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import benchmark_spec
+
 import argparse
 import copy
 from concurrent.futures import ProcessPoolExecutor
@@ -488,7 +490,9 @@ class RecordWriter:
             }
             for document in sorted(self.documents.values(), key=lambda item: item.uid)
         ]
+        spec_id = benchmark_spec.identity(scorecard)
         header = {
+            **({"benchmark_spec_id": spec_id} if spec_id is not None else {}),
             "kind": "header",
             "schema_version": self.schema_version,
             "corpus_sha256": self.corpus_sha256,
@@ -650,6 +654,12 @@ def _read(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
         raise RecordError("unknown record row")
     _check_lineage(header, observations)
     card = header["scorecard"]
+    try:
+        spec_id = benchmark_spec.identity(card)
+        if header.get("benchmark_spec_id") != spec_id:
+            raise benchmark_spec.SpecError("benchmark_spec_mismatch")
+    except benchmark_spec.SpecError as error:
+        raise RecordError(error.code) from error
     recorded_corpus = (
         card["dataset"]["integrity"]["sha256"]
         if card.get("runs") else card["layers"]["generator"]["corpus_sha256"]

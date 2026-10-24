@@ -148,6 +148,8 @@ class CaptureIdentityTests(unittest.TestCase):
             (root / "docs/reference/benchmarks").mkdir(parents=True)
             paths = {name: root / name for name in ("detector", "validator", "dataset", "negative", "Cargo.lock")}
             paths["spec"] = root / "docs/reference/benchmarks/README.md"
+            paths["protocol"] = root / runner.benchmark_spec.PROTOCOL
+            paths["protocol"].parent.mkdir(parents=True)
             for path in paths.values():
                 path.write_bytes(b"synthetic")
             model = root / "model"

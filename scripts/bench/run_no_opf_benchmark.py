@@ -22,6 +22,7 @@ from typing import Any, Mapping, Sequence
 
 import agentic_layers as agentic
 import benchmark_cache
+import benchmark_spec
 import capture_identity
 import dataiku_en_de_gaze_bench as dataiku
 import gaze_bench_score as score
@@ -903,6 +904,7 @@ def observation_cache_key(
     binary: Path,
     validator_probe: Path,
     davlan_model: Path,
+    benchmark_spec_id: str | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
     source_identity, reason = source_tree_identity(repo_root)
     if source_identity is None:
@@ -916,7 +918,8 @@ def observation_cache_key(
         files = {"detector_binary": binary, "validator_binary": validator_probe,
                  "dataset": repo_path(repo_root, args.dataset),
                  "negative_corpus": repo_path(repo_root, args.negative_corpus),
-                 "benchmark_spec": repo_root / "docs/reference/benchmarks/README.md"}
+                 "benchmark_spec": repo_root / "docs/reference/benchmarks/README.md",
+                 "benchmark_protocol": repo_root / benchmark_spec.PROTOCOL}
         models = {}
         policy = None
         if policy_path:
@@ -953,6 +956,7 @@ def observation_cache_key(
         "effective_inputs": inputs,
         "binary_sha256": inputs["files"]["detector_binary"],
         "record_schema_version": records.SCHEMA_VERSION,
+        "benchmark_spec_id": benchmark_spec_id,
         **source_identity,
         "cargo_lock_sha256": score.sha256_file(repo_root / "Cargo.lock"),
         "cargo_config_sha256": {
@@ -1452,6 +1456,11 @@ def _run(args: argparse.Namespace) -> int:
         raise CandidateError(str(error)) from error
 
     metadata, dataset_report = composite_dataset_report(dataiku_report, negative_report)
+    spec = benchmark_spec.resolve(
+        repo_root, corpus_sha256=dataset_report["integrity"]["sha256"], seed=args.seed,
+        available=original_available_documents, prepared=agentic_prepared,
+        profile=args.profile, warmups=args.warmups, repetitions=args.measured_repetitions,
+    )
     profile = "release" if args.release else "debug"
     with stages.measure("build", role="detector", executed=not args.skip_build):
         binary = (
@@ -1485,6 +1494,7 @@ def _run(args: argparse.Namespace) -> int:
             agentic_prepared=agentic_prepared, document_ids=[document.uid for document in documents],
             threshold=effective_threshold, source_environment=source_environment,
             binary=binary, validator_probe=validator_probe, davlan_model=davlan_model,
+            benchmark_spec_id=spec["id"],
         )
 
     bypass = ("explicit_no_cache" if args.no_cache else "unbound_skip_build" if args.skip_build
@@ -1511,6 +1521,7 @@ def _run(args: argparse.Namespace) -> int:
                     agentic_prepared.contract if agentic_prepared else None,
                     max_workers=args.score_jobs,
                 )
+                benchmark_spec.require_same(candidate, {"benchmark_spec": spec})
                 if read_key()[0] != cache_key:
                     raise records.RecordError("effective inputs changed during cache verification")
             except (records.RecordError, OSError, ValueError):
@@ -1620,6 +1631,7 @@ def _run(args: argparse.Namespace) -> int:
             "C": agentic.gold_validity_digest(documents, validator_measurements)
         }
 
+    candidate["benchmark_spec"] = spec
     candidate["cache_replay"] = False
     if cache_key is not None:
         candidate["capture_cache"] = benchmark_cache.provenance(cache_key)
@@ -1635,6 +1647,9 @@ def _run(args: argparse.Namespace) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         return run(parse_args(argv))
+    except benchmark_spec.SpecError as error:
+        print(f"ERROR [{error.code}]", file=sys.stderr)
+        return 2
     except RunnerError as error:
         print(f"ERROR [{error.code}]: {error}", file=sys.stderr)
         return 2
