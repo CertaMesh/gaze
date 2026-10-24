@@ -26,7 +26,7 @@ short, PII, history, 2k-token, and 10k-token driver texts.
 Run the proof with the pinned local holdout and both release producers:
 
 ```sh
-uv run --project scripts/bench python scripts/bench/inference_reuse_proof.py equivalence \
+uv run --project scripts/bench --python 3.13 python scripts/bench/inference_reuse_proof.py equivalence \
   --base ../inference-reuse-base/target/release/examples/clean_for_bench \
   --candidate target/release/examples/clean_for_bench \
   --policy scripts/bench/fixtures/inference_reuse.toml \
@@ -44,7 +44,7 @@ Run it again with `scripts/bench/fixtures/policy_equivalence.toml` and omit
 Commit the implementation, then run:
 
 ```sh
-uv run --project scripts/bench python scripts/bench/mutate_inference_reuse_keys.py \
+uv run --project scripts/bench --python 3.13 python scripts/bench/mutate_inference_reuse_keys.py \
   --output target/inference-reuse-mutations
 ```
 

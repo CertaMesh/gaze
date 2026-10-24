@@ -15,6 +15,7 @@ import threading
 import time
 
 import agentic_layers as agentic
+import benchmark_spec
 from bench_subprocess import BenchSubprocess
 import dataiku_en_de_gaze_bench as dataiku
 import gaze_bench_score as score
@@ -321,6 +322,7 @@ def main():
     parser.add_argument('--per-layer', type=int, default=24)
     parser.add_argument('--runs', type=int, default=5)
     args = parser.parse_args()
+    benchmark_spec.require_runtime()
     if args.mode == 'equivalence':
         if args.dataset is None or args.per_layer < 2 or args.per_layer % 2:
             parser.error('equivalence needs --dataset and a positive even --per-layer')
