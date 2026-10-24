@@ -279,6 +279,37 @@ async fn run_configured_case(
     seed: Option<&str>,
     repeat_net: bool,
 ) {
+    run_options_case(
+        provider,
+        stream,
+        source_first,
+        evidence,
+        texts,
+        seed,
+        CaseOptions {
+            repeat_net,
+            ..CaseOptions::default()
+        },
+    )
+    .await;
+}
+
+#[derive(Default)]
+struct CaseOptions {
+    repeat_net: bool,
+    expansion_limit_bytes: Option<usize>,
+    resource_refusal: bool,
+}
+
+async fn run_options_case(
+    provider: Provider,
+    stream: bool,
+    source_first: bool,
+    evidence: Option<gaze::EvidenceKind>,
+    texts: (&str, &str, Option<(&str, bool)>),
+    seed: Option<&str>,
+    options: CaseOptions,
+) {
     let (source, copy, unsupported) = texts;
     let forwarded = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()
@@ -316,11 +347,12 @@ async fn run_configured_case(
             "/v1/messages",
         ),
     };
-    let config = ProxyConfig::new(bind, vec![adapter]);
+    let mut config = ProxyConfig::new(bind, vec![adapter]);
+    config.residual_expansion_limit_bytes = options.expansion_limit_bytes;
     let mut builder = Pipeline::builder()
         .recognizer(Header(evidence))
         .rule(DefaultRule::new(Action::Tokenize));
-    if repeat_net {
+    if options.repeat_net {
         builder = builder.register_safety_net(RepeatNet);
     }
     if evidence.is_none() {
@@ -409,6 +441,20 @@ async fn run_configured_case(
         .unwrap();
     let status = response.status();
     let reply = response.text().await.unwrap();
+    if options.resource_refusal {
+        assert_eq!(status, reqwest::StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(
+            serde_json::from_str::<Value>(&reply).unwrap(),
+            json!({"error": "ResidualExpansionLimitExceeded"})
+        );
+        assert!(
+            forwarded.lock().await.is_empty(),
+            "resource refusal reached upstream"
+        );
+        proxy_task.abort();
+        upstream_task.abort();
+        return;
+    }
     if unsupported_text.as_ref().is_some_and(|(_, reject)| *reject) {
         assert!(
             !status.is_success(),
@@ -913,6 +959,47 @@ async fn unsupported_adjacent_large_owned_carriers_with_public_suffixes_admit() 
                 )
                 .await;
             }
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "explicit 32 MiB expansion resource measurement"]
+async fn unsupported_default_cap_sized_carrier_admits() {
+    let seed = "X".repeat(2048);
+    let carrier = "{token}".repeat(16384);
+    run_configured_case(
+        Provider::OpenAi,
+        false,
+        false,
+        Some(gaze::EvidenceKind::Rule),
+        ("ordinary source", "ordinary text", Some((&carrier, false))),
+        Some(&seed),
+        false,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn unsupported_carrier_one_byte_above_configured_expansion_cap_has_resource_error() {
+    let seed = "X".repeat(128);
+    let carrier = format!("{}.", "{token}".repeat(32));
+    for provider in [Provider::OpenAi, Provider::Gemini] {
+        for stream in [false, true] {
+            run_options_case(
+                provider,
+                stream,
+                false,
+                Some(gaze::EvidenceKind::Rule),
+                ("ordinary source", "ordinary text", Some((&carrier, false))),
+                Some(&seed),
+                CaseOptions {
+                    expansion_limit_bytes: Some(4096),
+                    resource_refusal: true,
+                    ..CaseOptions::default()
+                },
+            )
+            .await;
         }
     }
 }
