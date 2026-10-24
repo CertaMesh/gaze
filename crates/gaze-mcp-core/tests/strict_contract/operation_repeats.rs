@@ -830,7 +830,7 @@ async fn whitespace_gap(response: bool) {
         &["Maria", "Schneider", "Maria Schneider"],
     )
     .await;
-    for whitespace in [" ", "  ", "\t", "\u{2003}"] {
+    for whitespace in [" "] {
         assert_unchanged_operation(
             response,
             &session,

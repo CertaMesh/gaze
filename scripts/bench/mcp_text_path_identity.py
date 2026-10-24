@@ -26,7 +26,29 @@ NATIVE_FILES = frozenset({
 NATIVE_PREFIXES = ("crates/gaze-mcp-core/", "scripts/bench/native-mcp-operation/", "docs/reference/benchmarks/gates/mcp-operation-order/")
 # Documentation changes do not alter text inference. Keep their exact hashes
 # in the record so the explicit exception remains reviewable and replayable.
-DOCUMENTATION_FILES = frozenset({"CHANGELOG.md", "docs/explanation/mcp/mcp-runtime.md"})
+DOCUMENTATION_FILES = frozenset({"CHANGELOG.md", "docs/explanation/mcp/mcp-runtime.md", "crates/gaze-mcp-rmcp/README.md"})
+RMCP_FRONTEND = "crates/gaze-mcp-rmcp/src/frontend.rs"
+RMCP_RESOURCE_ARM = '''        DispatchError::ResourceLimit => {
+            CallToolResult::error(vec![ContentBlock::text("resource_limit")])
+        }
+'''
+RMCP_RESOURCE_TEST = '''    #[test]
+    fn resource_limit_returns_stable_error_class() {
+        let result = dispatch_error_to_tool_result(DispatchError::ResourceLimit);
+        assert_eq!(result.is_error, Some(true));
+        assert_eq!(result.content.len(), 1);
+        assert_eq!(result.content[0].as_text().unwrap().text, "resource_limit");
+    }
+'''
+
+
+def _rmcp_resource_limit_only(before, after):
+    if after.count(RMCP_RESOURCE_ARM) != 1 or after.count(RMCP_RESOURCE_TEST) != 1:
+        raise ValueError("rmcp resource-limit mapping or assertion missing")
+    if after.replace(RMCP_RESOURCE_ARM, "").replace(RMCP_RESOURCE_TEST, "") != before:
+        raise ValueError("rmcp changed beyond the resource-limit mapping and test")
+
+
 GOLDEN = "scripts/bench/fixtures/evidence/mcp_route_v1.golden.json"
 CI_REGISTRY = "scripts/ci/full-inputs.json"
 EVIDENCE_PREFIX = "docs/reference/benchmarks/gates/mcp-operation-order/"
@@ -49,7 +71,7 @@ def _tree(revision):
 
 
 def _allowed(path):
-    return path in NATIVE_FILES or path in DOCUMENTATION_FILES or path.startswith(NATIVE_PREFIXES) or path in {GOLDEN, CI_REGISTRY}
+    return path in NATIVE_FILES or path in DOCUMENTATION_FILES or path.startswith(NATIVE_PREFIXES) or path in {GOLDEN, CI_REGISTRY, RMCP_FRONTEND}
 
 
 def _ci_registry_only(before, after):
@@ -83,6 +105,8 @@ def build(base, candidate):
         raise ValueError("text-path or unclassified files changed: " + ", ".join(forbidden))
     # The only changed pre-existing benchmark fixture is rmcp route evidence,
     # not the C/A/D/R corpus. Check its exact permitted edit, rather than skip it.
+    if RMCP_FRONTEND in changed:
+        _rmcp_resource_limit_only(_blob(a[RMCP_FRONTEND][2]).decode(), _blob(b[RMCP_FRONTEND][2]).decode())
     if GOLDEN in changed:
         _golden_only(_blob(a[GOLDEN][2]), _blob(b[GOLDEN][2]))
     if CI_REGISTRY in changed:
@@ -93,6 +117,9 @@ def build(base, candidate):
     documentation_changes = [{"path": path, "base_sha256": hashlib.sha256(_blob(a[path][2])).hexdigest(),
                               "candidate_sha256": hashlib.sha256(_blob(b[path][2])).hexdigest()}
                              for path in changed if path in DOCUMENTATION_FILES]
+    transport_changes = [{"path": path, "base_sha256": hashlib.sha256(_blob(a[path][2])).hexdigest(),
+                          "candidate_sha256": hashlib.sha256(_blob(b[path][2])).hexdigest()}
+                         for path in changed if path == RMCP_FRONTEND]
     protected = sorted(path for path in a.keys() | b.keys() if not _allowed(path))
     digests, records = {}, []
     process = subprocess.Popen(["git", "cat-file", "--batch"], cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -136,7 +163,7 @@ def build(base, candidate):
                 raise ValueError("text module imports an excluded native module: " + path)
     return {"schema_version": 1, "kind": "mcp-text-path-identity", "base_revision": base, "candidate_revision": candidate,
             "text_layers": {layer: "unchanged_by_construction" for layer in ("C", "A", "D", "R")},
-            "fresh_text_capture": False, "documentation_changes": documentation_changes, "protected_files": records, "protected_file_count": len(records),
+            "fresh_text_capture": False, "documentation_changes": documentation_changes, "transport_changes": transport_changes, "protected_files": records, "protected_file_count": len(records),
             "allowed_changed_paths": changed, "native_exact_paths": sorted(NATIVE_FILES), "native_prefixes": list(NATIVE_PREFIXES),
             "rmcp_counter_fixture": {"path": GOLDEN, "scope": "rmcp evidence only; sole change is source events 1 to 3"},
             "ci_registry_exception": {"path": CI_REGISTRY, "scope": "only the twelve new native evidence path declarations"},
@@ -145,7 +172,7 @@ def build(base, candidate):
 
 def verify(record, candidate=None):
     replay = build(record["base_revision"], candidate or record["candidate_revision"])
-    for field in ("kind", "text_layers", "fresh_text_capture", "protected_files", "protected_file_count", "generator_sha256", "documentation_changes"):
+    for field in ("kind", "text_layers", "fresh_text_capture", "protected_files", "protected_file_count", "generator_sha256", "documentation_changes", "transport_changes"):
         if replay[field] != record[field]:
             raise ValueError("text path-identity record differs: " + field)
     return replay

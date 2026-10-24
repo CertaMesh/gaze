@@ -60,7 +60,7 @@ def test_ci_registry_exception_only_adds_native_evidence_paths():
 
 
 def test_documentation_exceptions_are_exact_and_recorded():
-    assert proof.DOCUMENTATION_FILES == {"CHANGELOG.md", "docs/explanation/mcp/mcp-runtime.md"}
+    assert proof.DOCUMENTATION_FILES == {"CHANGELOG.md", "docs/explanation/mcp/mcp-runtime.md", "crates/gaze-mcp-rmcp/README.md"}
     assert all(proof._allowed(path) for path in proof.DOCUMENTATION_FILES)
     assert not proof._allowed("docs/reference/benchmarks/README.md")
     assert not proof._allowed("docs/unclassified.md")
@@ -68,4 +68,18 @@ def test_documentation_exceptions_are_exact_and_recorded():
     assert record["documentation_changes"] == []
     record["documentation_changes"] = [{"path": "CHANGELOG.md", "candidate_sha256": "0" * 64}]
     with pytest.raises(ValueError, match="record differs: documentation_changes"):
+        proof.verify(record)
+
+
+def test_rmcp_transport_exception_only_admits_resource_limit_arm_and_test():
+    before = "runtime\n}\n"
+    after = proof.RMCP_RESOURCE_ARM + "runtime\n" + proof.RMCP_RESOURCE_TEST + "}\n"
+    proof._rmcp_resource_limit_only(before, after)
+    with pytest.raises(ValueError, match="beyond"):
+        proof._rmcp_resource_limit_only(before, after.replace("runtime", "changed"))
+    with pytest.raises(ValueError, match="missing"):
+        proof._rmcp_resource_limit_only(before, after.replace(proof.RMCP_RESOURCE_ARM, ""))
+    record = proof.build("HEAD", "HEAD")
+    record["transport_changes"] = [{"path": proof.RMCP_FRONTEND, "candidate_sha256": "0" * 64}]
+    with pytest.raises(ValueError, match="record differs: transport_changes"):
         proof.verify(record)

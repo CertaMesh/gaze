@@ -41,7 +41,7 @@ pub enum DispatchError {
     /// The entry point does not match the registered request contract.
     #[error("request mode rejected")]
     RequestMode,
-    /// Aggregate input or restored expansion exceeded the MCP operation budget.
+    /// Aggregate restored expansion exceeded the MCP operation budget.
     #[error("MCP operation resource limit exceeded")]
     ResourceLimit,
     /// Strict boundary failure, containing class-only diagnostics.
@@ -435,11 +435,7 @@ fn protect_json(
     // literal must never acquire ownership from an earlier discovery leaf.
     let mut expanded = Vec::new();
     let mut remaining = rule_coverage::MAX_OPERATION_EXPANDED_BYTES;
-    let mut remaining_input = rule_coverage::MAX_OPERATION_INPUT_BYTES;
     visit_text(value, &mut |text| {
-        remaining_input = remaining_input
-            .checked_sub(text.len())
-            .ok_or(DispatchError::ResourceLimit)?;
         let view = rule_coverage::expand_owned_bounded(transaction, text, remaining)?;
         remaining -= view.len();
         if !view.is_empty() {

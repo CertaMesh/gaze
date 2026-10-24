@@ -358,6 +358,9 @@ fn dispatch_error_to_tool_result(err: DispatchError) -> CallToolResult {
         | DispatchError::Redaction(_) => {
             CallToolResult::error(vec![ContentBlock::text("redaction-failed")])
         }
+        DispatchError::ResourceLimit => {
+            CallToolResult::error(vec![ContentBlock::text("resource_limit")])
+        }
         DispatchError::ResponseSerialization(_) => {
             CallToolResult::error(vec![ContentBlock::text("response-serialization-failed")])
         }

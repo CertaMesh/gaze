@@ -153,10 +153,12 @@ sources. Existing owned tokens keep their identities; overlapping Rule matches c
 adjacent raw bytes without rewriting those tokens. An independent final Rule coverage
 proof runs before commit or release. Failed protection discards staged mappings.
 
-Each operation accepts at most 2 MiB of aggregate original decoded UTF-8 text.
-Full owned-token expansion has a separate budget of 16 times that input cap,
-currently 32 MiB. Both budgets count all string leaves together. Exceeding either
-budget returns `DispatchError::ResourceLimit`, with no input bytes in the error.
+Each operation has a 32 MiB full owned-token expansion budget, derived as
+16 times the existing 2 MiB sizing constant. It counts all restored string leaves
+together, including literal input bytes. Decoded input has no separate size cap.
+Exceeding the expansion budget returns `DispatchError::ResourceLimit`, with no
+input bytes in the error. Whitespace-only interior gaps between owned spans count
+as covered without new mappings; other uncovered bytes still require protection.
 Unknown or forged tokens retain their existing protection errors. Full expansion
 and the real Rule matcher still run within the budget. Transports must also bound
 wire input and JSON structure. Separate dispatches remain separate operations,

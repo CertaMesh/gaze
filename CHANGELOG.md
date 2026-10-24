@@ -49,10 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - MCP owned-token operations retain full expansion and Rule coverage up to
-  16 times the 2 MiB input cap, currently 32 MiB. Leak-free arguments and
-  responses above the former 2 MiB expansion cap now succeed. Input or expansion
-  budget exhaustion returns the distinct `DispatchError::ResourceLimit` and
-  discards staged changes instead of reporting a token provenance failure.
+  16 times the existing 2 MiB sizing constant, currently 32 MiB. Leak-free arguments and
+  responses above the former 2 MiB expansion cap now succeed, including decoded
+  input above 2 MiB. Only expansion budget exhaustion returns the distinct `DispatchError::ResourceLimit` and
+  discards staged changes instead of reporting a token provenance failure. The rmcp
+  adapter returns the stable `resource_limit` error class. Whitespace-only interior
+  gaps between owned spans stay literal and create no PII mapping.
 
 - Proxy routing model identifiers such as `claude-sonnet-4-5` no longer fail
   because NER or a safety net classifies them as personal data. Strict ASCII

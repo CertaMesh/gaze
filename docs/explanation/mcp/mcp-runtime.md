@@ -37,17 +37,21 @@ before returning. `tests/chokepoint_ordering.rs` pins the order.
 
 ## Operation resource budgets
 
-Arguments and protected responses are separate operations. Each operation admits
-2 MiB of aggregate decoded input text across all string leaves. Full expansion
-of owned tokens has a budget of 16 times that input cap, currently 32 MiB.
+Arguments and protected responses are separate operations. Full expansion of owned
+tokens has an aggregate budget of 16 times the existing 2 MiB sizing constant,
+currently 32 MiB across all string leaves, including literal input bytes. There
+is no separate decoded-input cap.
 The runtime expands the complete text and applies the real Rule matcher before
 commit or release. It does not truncate text or skip coverage to fit the budget.
 
-Exceeding either budget returns the distinct `DispatchError::ResourceLimit`.
+Exceeding the expansion budget returns the distinct `DispatchError::ResourceLimit`.
 This error contains no input values and discards the operation's staged state.
 An argument limit failure occurs before `begin_call` or tool invocation. A protected
 response limit failure writes `fail_call` before returning and releases no response.
 Token provenance and restore failures retain `DispatchError::Protection`.
+The rmcp adapter maps this budget refusal to the stable `resource_limit` text
+class with `isError: true`. Whitespace-only interior gaps between owned spans
+count as covered in projection and final proof without minting new mappings.
 
 ## Type-level seal
 

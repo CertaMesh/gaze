@@ -2,9 +2,9 @@ use super::DispatchError;
 use gaze::{Candidate, PiiClass, Pipeline, ProtectionError, SessionTransaction};
 use std::collections::HashSet;
 
-/// Aggregate decoded input cap for one argument or response operation.
+/// Existing MCP sizing constant used to derive the full expansion budget.
 pub(super) const MAX_OPERATION_INPUT_BYTES: usize = 2 * 1024 * 1024;
-/// Full restored text budget, derived from the MCP operation input cap.
+/// Aggregate full restored text budget; decoded input has no separate cap.
 pub(super) const MAX_OPERATION_EXPANDED_BYTES: usize = 16 * MAX_OPERATION_INPUT_BYTES;
 
 /// Expand only exact current-session mappings. Other namespaces remain literal,
@@ -55,6 +55,7 @@ pub(super) fn verify_rule_coverage(
 ) -> Result<(), DispatchError> {
     let original = expand_owned_bounded(transaction, protected, MAX_OPERATION_EXPANDED_BYTES)?;
     let mut covered = vec![false; original.len()];
+    let mut owned_spans = Vec::new();
     let (mut wire_cursor, mut raw_cursor) = (0, 0);
     for range in owned_token_ranges(protected, &transaction.tokens())? {
         raw_cursor += range.start - wire_cursor;
@@ -68,11 +69,20 @@ pub(super) fn verify_rule_coverage(
             .get_mut(raw_cursor..end)
             .ok_or(ProtectionError::Provenance)?
             .fill(true);
+        owned_spans.push(raw_cursor..end);
         raw_cursor = end;
         wire_cursor = range.end;
     }
     if raw_cursor + protected.len() - wire_cursor != original.len() {
         return Err(ProtectionError::Provenance.into());
+    }
+    // Rebuild interior-gap coverage from actual output ownership, independently
+    // of the projection's selections. Outer or non-whitespace bytes stay raw.
+    for pair in owned_spans.windows(2) {
+        let gap = pair[0].end..pair[1].start;
+        if original[gap.clone()].chars().all(char::is_whitespace) {
+            covered[gap].fill(true);
+        }
     }
     for hit in pipeline
         .staged_rule_repeat_candidates(transaction, &original)
@@ -178,6 +188,16 @@ pub(super) fn cover_rule_repeats(
             }
         }
         for (view, hit) in union_rule_ranges(parts) {
+            // A public whitespace gap between two owned spans needs no token.
+            if tokens.windows(2).any(|pair| {
+                let gap = pair[0].view.end..pair[1].view.start;
+                gap.start <= view.start
+                    && view.end <= gap.end
+                    && expanded[gap].chars().all(char::is_whitespace)
+            }) {
+                continue;
+            }
+
             if tokens.iter().any(|token| {
                 token.immutable
                     && token.view.is_empty()
@@ -348,5 +368,86 @@ mod tests {
                 .len(),
             1
         );
+    }
+    struct Names;
+    impl gaze::Recognizer for Names {
+        fn id(&self) -> &str {
+            "synthetic-names"
+        }
+        fn evidence(&self) -> gaze::EvidenceKind {
+            gaze::EvidenceKind::Rule
+        }
+        fn supported_class(&self) -> &gaze::PiiClass {
+            &gaze::PiiClass::Name
+        }
+        fn token_family(&self) -> &str {
+            "name"
+        }
+        fn detect(
+            &self,
+            input: &str,
+            _: &gaze::DetectContext<'_>,
+        ) -> Result<Vec<gaze::Candidate>, gaze_types::DetectError> {
+            Ok(regex::Regex::new(r"Maria(?: van)? Schneider")
+                .unwrap()
+                .find_iter(input)
+                .map(|found| {
+                    gaze::Candidate::new(
+                        found.range(),
+                        gaze::PiiClass::Name,
+                        self.id(),
+                        1.0,
+                        0,
+                        None,
+                        "name",
+                        "synthetic",
+                        gaze::ConflictTier::None,
+                        vec![],
+                    )
+                })
+                .collect())
+        }
+    }
+    #[test]
+    fn final_proof_covers_only_whitespace_interior_gaps_independently_of_projection() {
+        let pipeline = gaze::Pipeline::builder()
+            .recognizer(Names)
+            .rule(gaze::ClassRule::new(
+                gaze::PiiClass::Name,
+                gaze::Action::Tokenize,
+            ))
+            .rule(gaze::DefaultRule::new(gaze::Action::Preserve))
+            .build()
+            .unwrap();
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let first = session.tokenize(&gaze::PiiClass::Name, "Maria").unwrap();
+        let last = session
+            .tokenize(&gaze::PiiClass::Name, "Schneider")
+            .unwrap();
+        let mut transaction = session.begin_transaction();
+        pipeline
+            .discover_staged_rule_sources(
+                &mut transaction,
+                "Maria Schneider; Maria van Schneider",
+                &[gaze::LocaleTag::Global],
+                super::super::default_dictionaries(),
+            )
+            .unwrap();
+        for gap in [" ", "  ", "\t", "\u{2003}"] {
+            super::verify_rule_coverage(&pipeline, &transaction, &format!("{first}{gap}{last}"))
+                .unwrap();
+        }
+        assert!(matches!(
+            super::verify_rule_coverage(&pipeline, &transaction, &format!("{first} van {last}")),
+            Err(super::DispatchError::Protection(
+                gaze::ProtectionError::Residual
+            ))
+        ));
+        assert!(matches!(
+            super::verify_rule_coverage(&pipeline, &transaction, "Maria Schneider"),
+            Err(super::DispatchError::Protection(
+                gaze::ProtectionError::Residual
+            ))
+        ));
     }
 }
