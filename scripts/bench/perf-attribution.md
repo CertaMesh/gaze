@@ -199,12 +199,13 @@ Published v0.16.0/v0.17.0 executables have no timer protocol and are measured on
 end to end. `perf-timers-v0.16.0.patch` applies directly to the v0.16.0 tag without
 cherry-picking implementation commits. It includes the earlier v1 timer layer
 and document-only boundaries, adapted to that version's recognizer return path
-and one-shot clean path. Apply it in an isolated Anvil checkout, build with
-`--features perf-timers`, and label the resulting binary as a local timer build.
-Use `--binary-kind-a local-timer --timer-patch-a <patch>` for the patched side.
-The receipt records the patch hash alongside its binary hash. For a later revision containing
-this feature, `--build-timers` enables it during automatic builds. Do not pass
-that flag to an unpatched old revision.
+and one-shot clean path. That historical patch alone is incompatible with this
+v2 runner. Backport the current schema-2 protocol and lifecycle hooks to the tag
+before building in an isolated Anvil checkout with `--features perf-timers`.
+Use `--binary-kind-a local-timer --timer-patch-a <adapted-v2-patch>` for that side.
+The receipt records the adapted patch hash alongside its binary hash. For a
+revision already containing schema 2, `--build-timers` enables it during automatic
+builds. Do not pass that flag to an unpatched old revision.
 
 ## Plumbing validation
 
