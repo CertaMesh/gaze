@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Update Tokio from 1.52.3 to 1.54.1 to fix RustSec advisory
+  RUSTSEC-2026-0386, an I/O safety defect in the `AsyncFd` constructors.
+  Gaze does not use `AsyncFd`.
+
 - `gaze daemon` bounds each raw JSONL frame at 160 MiB before UTF-8 conversion
   or JSON parsing. Oversized frames now receive one value-free `FrameTooLarge`
   error, then input closes without draining the line. A separate 160 MiB
