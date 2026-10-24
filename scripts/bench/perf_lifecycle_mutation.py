@@ -37,6 +37,7 @@ def prove(out: Path) -> dict:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "perf_attribution.py").write_text(mutated)
+            (root / "perf_lifecycle_contract.py").write_bytes((ROOT / "perf_lifecycle_contract.py").read_bytes())
             env = {**os.environ, "PYTHONPATH": str(root) + os.pathsep + str(ROOT),
                    "PYTHONDONTWRITEBYTECODE": "1"}
             selected = f"test_perf_lifecycle_bounds.BoundTests.{test}"
