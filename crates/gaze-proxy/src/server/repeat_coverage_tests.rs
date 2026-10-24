@@ -106,6 +106,7 @@ fn randomized_overlap_union_restores_and_covers_every_known_value() {
             pipeline
                 .discover_staged_rule_sources(
                     &mut tx,
+                    // fixture-cited(crates/gaze-proxy/src/server/repeat_coverage_tests.rs:server::repeat_coverage_tests::randomized_overlap_union_restores_and_covers_every_known_value)
                     &format!("From: {value} <m@example.invalid>"),
                     &locales,
                     &dictionaries,
@@ -203,6 +204,7 @@ fn final_coverage_rejects_unprotected_contained_and_chained_occurrences() {
         pipeline
             .discover_staged_rule_sources(
                 &mut tx,
+                // fixture-cited(crates/gaze-proxy/src/server/repeat_coverage_tests.rs:server::repeat_coverage_tests::final_coverage_rejects_unprotected_contained_and_chained_occurrences)
                 &format!("From: {value} <m@example.invalid>"),
                 &locales,
                 &dictionaries,
@@ -280,6 +282,7 @@ fn projection_preserves_complete_primary_ner_context_without_existing_tokens() {
     pipeline
         .discover_staged_rule_sources(
             &mut tx,
+            // fixture-cited(crates/gaze-proxy/src/server/repeat_coverage_tests.rs:server::repeat_coverage_tests::projection_preserves_complete_primary_ner_context_without_existing_tokens)
             "From: Maria Schneider <m@example.invalid>",
             &locales,
             &dictionaries,
@@ -356,6 +359,7 @@ fn coalesce_unpublished_primary_names_but_keep_caller_owned_identity() {
         pipeline
             .discover_staged_rule_sources(
                 &mut tx,
+                // fixture-cited(crates/gaze-proxy/src/server/repeat_coverage_tests.rs:server::repeat_coverage_tests::coalesce_unpublished_primary_names_but_keep_caller_owned_identity)
                 &format!("From: {value} <m@example.invalid>"),
                 &locales,
                 &dictionaries,
@@ -408,6 +412,7 @@ fn refuse_ambiguous_projection_across_a_caller_owned_empty_value() {
     pipeline
         .discover_staged_rule_sources(
             &mut tx,
+            // fixture-cited(crates/gaze-proxy/src/server/repeat_coverage_tests.rs:server::repeat_coverage_tests::refuse_ambiguous_projection_across_a_caller_owned_empty_value)
             "From: Maria Schneider <m@example.invalid>",
             &locales,
             &dictionaries,
