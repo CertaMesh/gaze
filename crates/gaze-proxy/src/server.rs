@@ -3272,28 +3272,34 @@ fn residual_scan_request(
     body: &Value,
     model_is_routing_control: bool,
 ) -> Result<(), ProxyError> {
-    let Value::Object(root) = body else {
-        return scan.walk("", "", body, false, true);
-    };
-    for (key, value) in root {
-        match (model_is_routing_control, key.as_str(), value) {
-            (true, "model", Value::String(text)) => residual_scan_model_control(
-                scan.pipeline,
-                scan.transaction,
-                text,
-                scan.locale_chain,
-                scan.dictionaries,
-            )?,
-            _ => scan.walk(
-                key,
-                key,
-                value,
-                CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
-                !key.is_empty() && !key.contains('.') && !key.contains('['),
-            )?,
+    let limit_bytes = scan.expansion_limit_bytes;
+    let mut remaining_bytes = limit_bytes;
+    // Charge every expanded leaf before any expansion, normalization or matching.
+    scan.visit_request(body, model_is_routing_control, &mut |_, text, control| {
+        if !control {
+            remaining_bytes = remaining_bytes
+                .checked_sub(scan.expanded_len(text)?)
+                .ok_or(ProxyError::ResidualExpansionLimitExceeded { limit_bytes })?;
         }
-    }
-    Ok(())
+        Ok(())
+    })?;
+    scan.visit_request(
+        body,
+        model_is_routing_control,
+        &mut |path, text, control| {
+            if control {
+                residual_scan_model_control(
+                    scan.pipeline,
+                    scan.transaction,
+                    text,
+                    scan.locale_chain,
+                    scan.dictionaries,
+                )
+            } else {
+                scan.probe(path, text)
+            }
+        },
+    )
 }
 
 fn residual_scan_model_control(
@@ -3356,10 +3362,7 @@ struct RequestResidualScan<'a, 'session> {
 }
 
 impl RequestResidualScan<'_, '_> {
-    /// Every overlapping Rule hit needs owned non-whitespace bytes. Only internal
-    /// whitespace gaps between covered spans are allowed. Unknown token-looking text
-    /// stays literal: only exact tokens in this captured request contribute ownership.
-    fn rule_repeats_are_covered(&self, text: &str) -> Result<bool, ProxyError> {
+    fn expanded_len(&self, text: &str) -> Result<usize, ProxyError> {
         let entries = self.transaction.snapshot_entries();
         let values: HashMap<_, _> = entries
             .iter()
@@ -3386,6 +3389,20 @@ impl RequestResidualScan<'_, '_> {
             .checked_add(text.len() - cursor)
             .filter(|length| *length <= limit_bytes)
             .ok_or_else(limit_error)?;
+        Ok(expanded_len)
+    }
+
+    /// Every overlapping Rule hit needs owned non-whitespace bytes. Only internal
+    /// whitespace gaps between covered spans are allowed. Unknown token-looking text
+    /// stays literal: only exact tokens in this captured request contribute ownership.
+    fn rule_repeats_are_covered(&self, text: &str) -> Result<bool, ProxyError> {
+        let expanded_len = self.expanded_len(text)?;
+        let entries = self.transaction.snapshot_entries();
+        let values: HashMap<_, _> = entries
+            .iter()
+            .map(|entry| (entry.token.as_str(), entry.raw.as_str()))
+            .collect();
+        let ranges = owned_token_ranges(text, &self.transaction.tokens());
         let mut expanded = String::with_capacity(expanded_len);
         let mut covered = Vec::with_capacity(expanded_len);
         let mut cursor = 0;
@@ -3433,7 +3450,32 @@ impl RequestResidualScan<'_, '_> {
         })
     }
 
-    /// Recurses the outbound body probing every scalar the adapter did not surface.
+    fn visit_request(
+        &self,
+        body: &Value,
+        model_is_routing_control: bool,
+        visit: &mut dyn FnMut(&str, &str, bool) -> Result<(), ProxyError>,
+    ) -> Result<(), ProxyError> {
+        let Value::Object(root) = body else {
+            return self.walk("", "", body, false, true, visit);
+        };
+        for (key, value) in root {
+            match (model_is_routing_control, key.as_str(), value) {
+                (true, "model", Value::String(text)) => visit(key, text, true)?,
+                _ => self.walk(
+                    key,
+                    key,
+                    value,
+                    CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
+                    !key.is_empty() && !key.contains('.') && !key.contains('['),
+                    visit,
+                )?,
+            }
+        }
+        Ok(())
+    }
+
+    /// Recurses the outbound body visiting every scalar the adapter did not surface.
     ///
     /// `unambiguous` tracks whether the constructed path can still be compared against adapter
     /// field paths. An empty JSON key or one containing `.` or `[` can make distinct nodes
@@ -3446,16 +3488,17 @@ impl RequestResidualScan<'_, '_> {
         value: &Value,
         in_carrier_subtree: bool,
         unambiguous: bool,
+        visit: &mut dyn FnMut(&str, &str, bool) -> Result<(), ProxyError>,
     ) -> Result<(), ProxyError> {
         match value {
             Value::String(text) => {
                 if !(unambiguous && self.surfaced.contains(path)) {
-                    self.probe(path, text)?;
+                    visit(path, text, false)?;
                 }
             }
             Value::Number(number) => {
                 if in_carrier_subtree || !NON_CARRIER_NUMERIC_KEYS.contains(&leaf_key) {
-                    self.probe(path, &number.to_string())?;
+                    visit(path, &number.to_string(), false)?;
                 }
             }
             Value::Array(items) => {
@@ -3466,6 +3509,7 @@ impl RequestResidualScan<'_, '_> {
                         item,
                         in_carrier_subtree,
                         unambiguous,
+                        visit,
                     )?;
                 }
             }
@@ -3482,6 +3526,7 @@ impl RequestResidualScan<'_, '_> {
                         child,
                         in_carrier_subtree || CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
                         unambiguous && !key.is_empty() && !key.contains('.') && !key.contains('['),
+                        visit,
                     )?;
                 }
             }
@@ -4241,9 +4286,44 @@ mod tests {
             proxy_error_name(&ProxyError::ResidualExpansionLimitExceeded { limit_bytes: 1024 }),
             "ResidualExpansionLimitExceeded"
         );
-        config.residual_expansion_limit_bytes = Some(1025);
+        config.request_residual_expansion_limit_bytes = Some(1025);
         scan.expansion_limit_bytes = config.residual_expansion_limit();
         assert!(scan.rule_repeats_are_covered(&above).unwrap());
+        assert_eq!(transaction.snapshot_entries(), before);
+        assert_eq!(session.prefix_cache_entry_count(), 0);
+    }
+
+    #[test]
+    fn request_expansion_preflight_precedes_coverage_matching() {
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::new("X+", PiiClass::Name).unwrap())
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        pipeline
+            .redact(&session, gaze::RawDocument::Text("X".repeat(128)))
+            .unwrap();
+        let transaction = session.begin_transaction();
+        let before = transaction.snapshot_entries();
+        let body = serde_json::json!({"a": "X", "b": [{"c": before[0].token.repeat(8)}]});
+        // The first leaf would fail coverage. The total must refuse before probing it.
+        let result = residual_scan_request(
+            RequestResidualScan {
+                pipeline: &pipeline,
+                transaction: &transaction,
+                expansion_limit_bytes: 1024,
+                surfaced: &HashSet::new(),
+                locale_chain: &[LocaleTag::Global],
+                dictionaries: &DictionaryBundle::default(),
+            },
+            &body,
+            false,
+        );
+        assert!(matches!(
+            result,
+            Err(ProxyError::ResidualExpansionLimitExceeded { limit_bytes: 1024 })
+        ));
         assert_eq!(transaction.snapshot_entries(), before);
         assert_eq!(session.prefix_cache_entry_count(), 0);
     }

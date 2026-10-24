@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Immutable proxy request leaves share one expansion budget across the request.
+  The proxy checks the combined size before expansion or Rule matching, so
+  splitting a carrier across leaves cannot bypass the resource cap. The default
+  remains 16 times the body cap, or 32 MiB. Embedding applications can override
+  `ProxyConfig::request_residual_expansion_limit_bytes`. An oversized total
+  returns the distinct HTTP 413 `ResidualExpansionLimitExceeded` without PII
+  coverage or benchmark gain credit (#876).
+
 - Gemini URL model identifiers are decoded and validated before forwarding.
   Previously, that URI segment bypassed request scanning and could carry PII
   to the provider. Strict model identifiers retain deterministic checks; values

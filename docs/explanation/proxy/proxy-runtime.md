@@ -21,17 +21,19 @@ uncovered whitespace gap is allowed only inside the same occurrence, between two
 owned spans. Uncovered private bytes produce `UnsurfacedPii` (HTTP 422), and the
 request never reaches the provider.
 
-Full expansion has a separate resource limit per immutable leaf. The default is
+Full expansion has a separate resource budget shared by all immutable leaves in
+one request. The default is
 16 times `ProxyConfig::body_limit_bytes`: the default 2 MiB request cap permits
-32 MiB of expanded UTF-8. The proxy checks the expanded length before allocating
-its text or ownership mask. A larger expansion returns
+32 MiB of expanded UTF-8 in total, including literal bytes in probed leaves. The
+proxy preflights the total with checked arithmetic before expanding any leaf,
+allocating its ownership mask, or running the Rule matcher. A larger total returns
 `ResidualExpansionLimitExceeded` (HTTP 413), even when every private byte is
 already owned. This resource refusal is distinct from a coverage finding and is
 counted separately in native gate reports. The cap limits input to the matcher;
 normalization, match metadata, and concurrent requests require additional memory.
 
 Embedding applications can override the cap with
-`ProxyConfig::residual_expansion_limit_bytes = Some(bytes)`. `None` retains the
+`ProxyConfig::request_residual_expansion_limit_bytes = Some(bytes)`. `None` retains the
 16-times-body-cap default. The standalone CLI uses the default. This setting does
 not change the direct Anthropic codec's limits or response validation.
 

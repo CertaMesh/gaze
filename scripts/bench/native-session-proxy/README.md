@@ -119,11 +119,11 @@ matcher against complete text. This preserves distant URL exclusions and
 compound-name growth. Adjacent-token controls append public punctuation, digits,
 a URL, or Unicode whitespace; their raw target leak counts remain zero.
 
-Each immutable leaf has a separate expansion resource limit: by default, 16 times
+All immutable leaves in one request share an expansion resource budget of 16 times
 `ProxyConfig::body_limit_bytes` (32 MiB with the default 2 MiB body cap).
-`ProxyConfig::residual_expansion_limit_bytes` overrides that limit. The proxy
-checks the complete expanded size before allocating the text and ownership mask.
-Larger leaves return HTTP 413 `ResidualExpansionLimitExceeded`, independently of
+`ProxyConfig::request_residual_expansion_limit_bytes` overrides that budget. The
+proxy preflights the combined expanded size before allocating any expanded text
+or ownership mask, normalizing, or matching. Larger totals return HTTP 413 `ResidualExpansionLimitExceeded`, independently of
 coverage. The approved `leak-to-refusal` policy records these transitions in
 `resource_limit_transitions` and `resource_limit_refusals`, with no byte or restore
 gain credit. Seed false-positive increases still count. This is the sole resource

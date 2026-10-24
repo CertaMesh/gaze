@@ -299,6 +299,8 @@ struct CaseOptions {
     repeat_net: bool,
     expansion_limit_bytes: Option<usize>,
     resource_refusal: bool,
+    carrier_copies: Option<usize>,
+    nested_carriers: bool,
 }
 
 async fn run_options_case(
@@ -348,7 +350,7 @@ async fn run_options_case(
         ),
     };
     let mut config = ProxyConfig::new(bind, vec![adapter]);
-    config.residual_expansion_limit_bytes = options.expansion_limit_bytes;
+    config.request_residual_expansion_limit_bytes = options.expansion_limit_bytes;
     let mut builder = Pipeline::builder()
         .recognizer(Header(evidence))
         .rule(DefaultRule::new(Action::Tokenize));
@@ -428,7 +430,12 @@ async fn run_options_case(
     let unsupported_text =
         unsupported.map(|(text, reject)| (text.replace("{token}", &token), reject));
     if let Some((text, _)) = &unsupported_text {
-        request["unsupported_carrier"] = json!({"nested": [text]});
+        let leaves = vec![text; options.carrier_copies.unwrap_or(1)];
+        request["unsupported_carrier"] = if options.nested_carriers {
+            json!({"nested": [{"branch": [leaves]}]})
+        } else {
+            json!({"nested": leaves})
+        };
     }
     let response = client
         .post(format!("http://{bind}{path}"))
@@ -482,8 +489,11 @@ async fn run_options_case(
     );
     let captured = forwarded.lock().await.clone();
     assert_eq!(captured.len(), 1);
-    if let Some((text, _)) = &unsupported_text {
-        assert_eq!(captured[0]["unsupported_carrier"]["nested"][0], *text);
+    if unsupported_text.is_some() {
+        assert_eq!(
+            captured[0]["unsupported_carrier"],
+            request["unsupported_carrier"]
+        );
     }
     for (index, raw) in texts.iter().enumerate() {
         let protected = provider.text(&captured[0], index);
@@ -967,7 +977,7 @@ async fn unsupported_adjacent_large_owned_carriers_with_public_suffixes_admit() 
 #[ignore = "explicit 32 MiB expansion resource measurement"]
 async fn unsupported_default_cap_sized_carrier_admits() {
     let seed = "X".repeat(2048);
-    let carrier = "{token}".repeat(16384);
+    let carrier = format!("{}{}", "{token}".repeat(16383), ".".repeat(2036));
     run_configured_case(
         Provider::OpenAi,
         false,
@@ -1000,6 +1010,88 @@ async fn unsupported_carrier_one_byte_above_configured_expansion_cap_has_resourc
                 },
             )
             .await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn reviewer_default_aggregate() {
+    let seed = "X".repeat(2048);
+    let carrier = "{token}".repeat(8192);
+    run_options_case(
+        Provider::OpenAi,
+        false,
+        false,
+        Some(gaze::EvidenceKind::Rule),
+        ("ordinary source", "ordinary text", Some((&carrier, false))),
+        Some(&seed),
+        CaseOptions {
+            carrier_copies: Some(4),
+            resource_refusal: true,
+            ..CaseOptions::default()
+        },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn reviewer_aggregate_leaf_budget() {
+    let seed = "X".repeat(128);
+    let carrier = "{token}".repeat(32);
+    for provider in [Provider::OpenAi, Provider::Gemini] {
+        for stream in [false, true] {
+            run_options_case(
+                provider,
+                stream,
+                false,
+                Some(gaze::EvidenceKind::Rule),
+                ("ordinary source", "ordinary text", Some((&carrier, false))),
+                Some(&seed),
+                CaseOptions {
+                    expansion_limit_bytes: Some(4096),
+                    carrier_copies: Some(128),
+                    nested_carriers: true,
+                    resource_refusal: true,
+                    ..CaseOptions::default()
+                },
+            )
+            .await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn unsupported_carrier_aggregate_budget_boundaries() {
+    let seed = "X".repeat(128);
+    let carrier = "{token}".repeat(16);
+    // Two 2 KiB expanded leaves plus three immutable `role: "user"` leaves.
+    let expanded_request_bytes = 4096 + 12;
+    for provider in [Provider::OpenAi, Provider::Gemini] {
+        for stream in [false, true] {
+            for nested_carriers in [false, true] {
+                for (limit, resource_refusal) in [
+                    (expanded_request_bytes + 1, false),
+                    (expanded_request_bytes, false),
+                    (expanded_request_bytes - 1, true),
+                ] {
+                    run_options_case(
+                        provider,
+                        stream,
+                        false,
+                        Some(gaze::EvidenceKind::Rule),
+                        ("ordinary source", "ordinary text", Some((&carrier, false))),
+                        Some(&seed),
+                        CaseOptions {
+                            expansion_limit_bytes: Some(limit),
+                            carrier_copies: Some(2),
+                            nested_carriers,
+                            resource_refusal,
+                            ..CaseOptions::default()
+                        },
+                    )
+                    .await;
+                }
+            }
         }
     }
 }

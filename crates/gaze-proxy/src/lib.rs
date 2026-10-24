@@ -74,10 +74,10 @@ pub struct ProxyConfig {
     pub adapters: Vec<Arc<dyn ProviderAdapter>>,
     pub session_ttl: Duration,
     pub body_limit_bytes: u64,
-    /// Maximum expanded bytes in each immutable legacy request leaf. `None` uses
-    /// sixteen times `body_limit_bytes` (32 MiB with the default body cap).
+    /// Maximum combined expanded bytes across all immutable legacy request leaves.
+    /// `None` uses sixteen times `body_limit_bytes` (32 MiB with the default body cap).
     /// Exceeding this resource limit returns HTTP 413, independently of PII coverage.
-    pub residual_expansion_limit_bytes: Option<usize>,
+    pub request_residual_expansion_limit_bytes: Option<usize>,
     pub(crate) locale_chain: LocaleChain,
     pub(crate) dictionaries: DictionaryBundle,
     pub(crate) direct_anthropic: Option<Arc<AnthropicAdapter>>,
@@ -91,7 +91,7 @@ impl ProxyConfig {
             adapters,
             session_ttl: Duration::from_secs(30 * 60),
             body_limit_bytes: 2 * 1024 * 1024,
-            residual_expansion_limit_bytes: None,
+            request_residual_expansion_limit_bytes: None,
             locale_chain: default_locale_chain(),
             dictionaries: DictionaryBundle::default(),
             direct_anthropic: None,
@@ -116,7 +116,7 @@ impl ProxyConfig {
             adapters: vec![dynamic],
             session_ttl: Duration::from_secs(30 * 60),
             body_limit_bytes: 2 * 1024 * 1024,
-            residual_expansion_limit_bytes: None,
+            request_residual_expansion_limit_bytes: None,
             locale_chain: default_locale_chain(),
             dictionaries: DictionaryBundle::default(),
             direct_anthropic: Some(adapter),
@@ -125,9 +125,10 @@ impl ProxyConfig {
     }
 
     pub(crate) fn residual_expansion_limit(&self) -> usize {
-        self.residual_expansion_limit_bytes.unwrap_or_else(|| {
-            usize::try_from(self.body_limit_bytes.saturating_mul(16)).unwrap_or(usize::MAX)
-        })
+        self.request_residual_expansion_limit_bytes
+            .unwrap_or_else(|| {
+                usize::try_from(self.body_limit_bytes.saturating_mul(16)).unwrap_or(usize::MAX)
+            })
     }
 
     /// Sets the locale chain every detection pass on this proxy runs under.
