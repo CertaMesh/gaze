@@ -364,6 +364,7 @@ name = "gaze-bench"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "packaging" },
     { name = "pyarrow" },
 ]
 
@@ -377,7 +378,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pyarrow", specifier = "==23.0.1" }]
+requires-dist = [
+    { name = "packaging", specifier = "==26.2" },
+    { name = "pyarrow", specifier = "==23.0.1" },
+]
 
 [package.metadata.requires-dev]
 comparison-test = [

@@ -20,6 +20,23 @@ release blockers are merged. Read the local-development workflow before
 isolation, service startup or full verification. Do not reset a divergent local
 `main` or change remote refs to satisfy a source check.
 
+Before these gates, run the competitor metadata check and retain its aggregate:
+
+```sh
+uv run --project scripts/bench --locked python scripts/bench/compare/freshness.py \
+  --report docs/reference/benchmarks/comparison.json \
+  --output target/competitor-freshness.json
+```
+
+Review every finding, including unknown freshness after source/network failures.
+Record exact pins, release dates and the UTC check date with the comparison.
+Use `compare/render.py --freshness target/competitor-freshness.json` when
+rendering the comparison page. An incompatible latest driver keeps an explicitly
+old measured row. Qualify new pins in a separate reviewed PR with new subject
+identities; never upgrade a package or model inside a measurement. Untagged
+models remain visibly unversioned. A partial `--source` check does not cover the
+aggregate inventory. See the comparison README for optional scheduled checks.
+
 1. Confirm the working tree is clean and `HEAD` is the intended remote-main merge.
 2. Confirm all open PRs marked as `v0.X.0-final` blockers are merged.
 3. Confirm the workspace version pin matches the about-to-tag version in the

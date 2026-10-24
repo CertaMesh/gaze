@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Competitor freshness aggregate (not measurement evidence)",
+  "type": "object",
+  "required": ["schema", "checked_on", "inputs", "selection", "comparison_sha256", "rows"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "gaze-competitor-freshness-v1"},
+    "checked_on": {"type": "string", "format": "date"},
+    "inputs": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "selection": {"type": ["array", "null"], "items": {"type": "string"}},
+    "comparison_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "rows": {"type": "array", "items": {"$ref": "#/$defs/row"}}
+  },
+  "$defs": {
+    "release": {
+      "type": "object",
+      "required": ["version", "release_date"],
+      "properties": {
+        "version": {"type": "string"},
+        "release_date": {"type": ["string", "null"], "format": "date"},
+        "tag": {"type": "string"},
+        "incompatible_reason": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "row": {
+      "type": "object",
+      "required": ["key", "kind", "name", "pinned_version", "consumers", "driver_constraint", "checked_on", "pinned", "latest_stable", "status", "finding", "source_url"],
+      "properties": {
+        "key": {"type": "string"},
+        "kind": {"enum": ["pypi", "github", "huggingface", "opaque"]},
+        "name": {"type": "string"},
+        "pinned_version": {"type": "string"},
+        "consumers": {"type": "array", "items": {"type": "string"}},
+        "driver_constraint": {"type": ["object", "null"]},
+        "tag_prefix": {"type": "string"},
+        "commit_pin": {"type": "boolean"},
+        "checked_on": {"type": "string", "format": "date"},
+        "pinned": {"$ref": "#/$defs/release"},
+        "latest_stable": {"anyOf": [{"$ref": "#/$defs/release"}, {"type": "null"}]},
+        "status": {"enum": ["current", "update-unverified", "incompatible-latest", "missing", "network-failure", "source-failure", "no-stable-release", "unversioned"]},
+        "finding": {"type": ["string", "null"]},
+        "source_url": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    }
+  }
+}
