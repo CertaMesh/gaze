@@ -55,7 +55,8 @@ quote runs retain nonempty private ownership through the safe boundary.
 JSON record-separator escapes preserve the following person-label cue. An absent
 value cannot consume the enclosing JSON's later public fields.
 Raw line breaks inside a verified quoted CSV cell or SQL literal stay private
-content, including lines before the personal label. CSV backslashes are literal;
+content, including lines before the personal label. An earlier record can
+precede the SQL statement. CSV backslashes are literal;
 only doubled quotes escape its delimiter. JSON string layers retain exact source
 ranges while the scanner identifies the enclosing cell.
 An unterminated value ends at the nearest enclosing serialized string close

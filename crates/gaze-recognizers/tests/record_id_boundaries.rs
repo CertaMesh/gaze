@@ -2082,6 +2082,67 @@ fn multiline_enclosing_cells_keep_unpaired_private_suffixes() {
 }
 
 #[test]
+fn multiline_sql_after_prior_records_keeps_entire_private_values_and_repeats() {
+    let pipeline = record_pipeline();
+    for cue in ["customerId", "employeeId", "member_id"] {
+        let class = PiiClass::custom(if cue == "customerId" {
+            "customer_id"
+        } else if cue == "employeeId" {
+            "employee_id"
+        } else {
+            "record_id"
+        })
+        .unwrap();
+        for open in ["“", "'", "\"", "§", "`"] {
+            for value in ["NX512\n345", "\nNX512345", "NX512\"\n345"] {
+                let value = if matches!(open, "'" | "\"") {
+                    value.replace(open, &open.repeat(2))
+                } else {
+                    value.to_owned()
+                };
+                let raw = value.replace('\'', "''");
+                let declaration = format!("metadata: FRAME\n{cue}={open}{value}");
+                let sql = format!("SELECT '{}', 'FRAME';", declaration.replace('\'', "''"));
+                for record_end in ["\n", "\r\n", "\r"] {
+                    let mut input = format!(
+                        "public_version='VALUES'{record_end}Lookup {raw} again.{record_end}{sql}"
+                    );
+                    let mut raw = raw.clone();
+                    for depth in 0..=9 {
+                        let session =
+                            Session::new(Scope::Conversation("synthetic-prior-sql-record".into()))
+                                .unwrap();
+                        let clean = public_clean(&pipeline, &session, &input);
+                        let entries = session.snapshot_entries();
+                        let entry = entries.iter().find(|entry| entry.raw == raw && entry.class == class).unwrap_or_else(|| panic!("whole private scalar at SQL depth{depth}: {input:?} -> {clean:?}; {entries:?}"));
+                        assert_eq!(
+                            clean,
+                            input.replace(&raw, &entry.token),
+                            "public bytes changed"
+                        );
+                        let imported = Session::import(session.export().unwrap()).unwrap();
+                        assert_eq!(
+                            pipeline.restore_strict_text(&imported, &clean).unwrap(),
+                            input
+                        );
+                        let public = input.replace(cue, "inventory_reference");
+                        let public_session = Session::new(Scope::Ephemeral).unwrap();
+                        assert_eq!(public_clean(&pipeline, &public_session, &public), public);
+                        assert!(public_session.snapshot_entries().is_empty());
+                        input = serde_json::to_string(
+                            &serde_json::json!({"note":input,"public_version":"FRAME"}),
+                        )
+                        .unwrap();
+                        let encoded = serde_json::to_string(&raw).unwrap();
+                        raw = encoded[1..encoded.len() - 1].to_owned();
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn encoded_triple_scalars_and_empty_cells_preserve_public_syntax() {
     let pipeline = record_pipeline();
     for cue in ["customerId", "employeeId", "member_id"] {

@@ -50,6 +50,9 @@ def main():
         ("prior_repeat_escape", "crates/gaze-recognizers/src/regex.rs",
          "        // repeat) cannot open an enclosing JSON string.\n        if bytes[at] == b'\\\\' {", "        // repeat) cannot open an enclosing JSON string.\n        if false && bytes[at] == b'\\\\' {",
          "escaped_quotes_in_earlier_repeats_cannot_invent_json_enclosures", 1),
+        ("sql_record_scope", "crates/gaze-recognizers/src/regex.rs",
+         'r"(?i)(?:\\A|[\\r\\n])[ \\t]*(?:select|insert|update|replace|values)\\b"', 'r"(?i)\\A[ \\t\\r\\n]*(?:select|insert|update|replace|values)\\b"',
+         "multiline_sql_after_prior_records_keeps_entire_private_values_and_repeats", 1),
     ]
     receipt = {"revision": head, "mutants": []}
     for name, source, before, after, test, count in mutants:
@@ -82,7 +85,7 @@ def main():
             assert path.read_bytes() == original
     assert not git("status", "--porcelain")
     (output / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
-    print(f"All six mutation probes failed behaviorally; original source restored at {head}")
+    print(f"All seven mutation probes failed behaviorally; original source restored at {head}")
 
 
 if __name__ == "__main__":

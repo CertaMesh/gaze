@@ -1462,15 +1462,10 @@ fn scan_json_encoded_wrapper(
 
 fn enclosing_sql_literal(input: &str, anchor: usize) -> Option<(usize, bool, bool)> {
     static SQL: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    if !SQL
-        .get_or_init(|| {
-            Regex::new(r"(?i)\A[ \t\r\n]*(?:select|insert|update|replace|values)\b")
-                .expect("SQL statement prefix")
-        })
-        .is_match(input)
-    {
-        return None;
-    }
+    let statements = SQL.get_or_init(|| {
+        Regex::new(r"(?i)(?:\A|[\r\n])[ \t]*(?:select|insert|update|replace|values)\b")
+            .expect("SQL statement record prefix")
+    });
     fn literal(input: &str, anchor: usize, backslash_escapes: bool) -> Option<(usize, bool, bool)> {
         let bytes = input.as_bytes();
         let mut at = 0;
@@ -1544,9 +1539,18 @@ fn enclosing_sql_literal(input: &str, anchor: usize) -> Option<(usize, bool, boo
         }
         None
     }
-    [false, true]
-        .into_iter()
-        .filter_map(|escapes| literal(input, anchor, escapes))
+    // A tool result can include prose or an earlier raw-value repeat before
+    // the SQL record. Start its lexer at each statement, preserving literal
+    // lines before the field cue instead of resetting at those content lines.
+    statements
+        .find_iter(&input[..anchor])
+        .flat_map(|statement| {
+            let start = statement.start();
+            [false, true].into_iter().filter_map(move |escapes| {
+                literal(&input[start..], anchor - start, escapes)
+                    .map(|(end, absent, own)| (start + end, absent, own))
+            })
+        })
         .max_by_key(|(end, _, _)| *end)
 }
 
