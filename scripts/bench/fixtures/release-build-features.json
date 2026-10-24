@@ -1,0 +1,186 @@
+[
+  {
+    "tag": "v0.14.0",
+    "revision": "616e8a10b957961f9f7dcb745610afa978783c3a",
+    "manifest_sha256": "035cfa68e3ff7e484e318fc83083c9f1317eaf212d595fb2654362ea88f5fe74",
+    "source_sha256": "2f90d4c2d54a27b76d7b7c1f9a79229378a7ade961a8f78d098a3758e7cb6f13",
+    "features": {
+      "default": [
+        "phone-parser"
+      ],
+      "phone-parser": [
+        "dep:phonenumber",
+        "gaze-types/phone-parser"
+      ],
+      "safety-net": [],
+      "safety-net-openai": [
+        "safety-net"
+      ],
+      "safety-net-kiji": [
+        "safety-net"
+      ],
+      "runtime-tract": [
+        "safety-net-kiji",
+        "dep:tract-onnx"
+      ],
+      "runtime-candle": [
+        "safety-net-kiji",
+        "dep:candle-core",
+        "dep:candle-onnx"
+      ],
+      "test-support": [
+        "safety-net"
+      ]
+    },
+    "configs": [
+      "rule-floor-core",
+      "rule-floor-extended",
+      "pass2-ner",
+      "full-stack-kiji-resolve",
+      "full-stack-opf-resolve",
+      "pass3-kiji",
+      "pass3-opf",
+      "pass3-locale-aware"
+    ]
+  },
+  {
+    "tag": "v0.15.0",
+    "revision": "5127788b089f0f6f4e3b8bcf176503953744be01",
+    "manifest_sha256": "f23d161ebcd94ce7b20182aa0becbdbc38837243315b33c58fb02d8491a0a070",
+    "source_sha256": "fa1c412c3a0cbdcd09c9a1b637de47dd76ec9ff5a829f1f6aaffe75de1170b13",
+    "features": {
+      "default": [
+        "phone-parser"
+      ],
+      "phone-parser": [
+        "dep:phonenumber",
+        "gaze-types/phone-parser"
+      ],
+      "safety-net": [],
+      "safety-net-openai": [
+        "safety-net"
+      ],
+      "safety-net-nym": [
+        "safety-net"
+      ],
+      "test-support": [
+        "safety-net"
+      ]
+    },
+    "configs": [
+      "policy-file",
+      "rule-floor-core",
+      "rule-floor-extended",
+      "pass2-ner",
+      "full-stack-opf-resolve",
+      "full-stack-nym-resolve",
+      "full-stack-nym-redact",
+      "pass3-opf"
+    ]
+  },
+  {
+    "tag": "v0.15.1",
+    "revision": "4927f7c0a862ece2cdcd8c00df34538a510d008e",
+    "manifest_sha256": "9065a12427e9420077ebcee7ac232fb42a71473d282bba50b7a2f4a37df0436e",
+    "source_sha256": "fa1c412c3a0cbdcd09c9a1b637de47dd76ec9ff5a829f1f6aaffe75de1170b13",
+    "features": {
+      "default": [
+        "phone-parser"
+      ],
+      "phone-parser": [
+        "dep:phonenumber",
+        "gaze-types/phone-parser"
+      ],
+      "safety-net": [],
+      "safety-net-openai": [
+        "safety-net"
+      ],
+      "safety-net-nym": [
+        "safety-net"
+      ],
+      "test-support": [
+        "safety-net"
+      ]
+    },
+    "configs": [
+      "policy-file",
+      "rule-floor-core",
+      "rule-floor-extended",
+      "pass2-ner",
+      "full-stack-opf-resolve",
+      "full-stack-nym-resolve",
+      "full-stack-nym-redact",
+      "pass3-opf"
+    ]
+  },
+  {
+    "tag": "v0.16.0",
+    "revision": "5a7dac0fa198f20a628ed6b7fa2b5c9d41a91eb0",
+    "manifest_sha256": "1b4278e573b339780ac19ad3e2f5315e09c11f0f6b8d762513426fb62592db1d",
+    "source_sha256": "6a01a4451ce59aca1d4210d4c64c20d860b194b879914dbbff311835e3946beb",
+    "features": {
+      "default": [
+        "phone-parser"
+      ],
+      "phone-parser": [
+        "dep:phonenumber",
+        "gaze-types/phone-parser"
+      ],
+      "safety-net": [],
+      "safety-net-openai": [
+        "safety-net"
+      ],
+      "safety-net-nym": [
+        "safety-net"
+      ],
+      "test-support": [
+        "safety-net"
+      ]
+    },
+    "configs": [
+      "policy-file",
+      "rule-floor-core",
+      "rule-floor-extended",
+      "pass2-ner",
+      "full-stack-opf-resolve",
+      "full-stack-nym-resolve",
+      "full-stack-nym-redact",
+      "pass3-opf"
+    ]
+  },
+  {
+    "tag": "v0.17.0",
+    "revision": "8a19d8c64a007a990ab5efc8a22d33f08bbe9f11",
+    "manifest_sha256": "a3c89462bf6a81255dc5a0d2f44d20edbe62128362e1a2ea627a9894136e9e07",
+    "source_sha256": "bdc3cf8c5ce0fd451a4fe0393dd37bf9e8760dd4239db86cb428873f4e5f1b8f",
+    "features": {
+      "default": [
+        "phone-parser"
+      ],
+      "phone-parser": [
+        "dep:phonenumber",
+        "gaze-types/phone-parser"
+      ],
+      "safety-net": [],
+      "safety-net-openai": [
+        "safety-net"
+      ],
+      "safety-net-nym": [
+        "safety-net"
+      ],
+      "test-support": [
+        "safety-net"
+      ]
+    },
+    "configs": [
+      "policy-file",
+      "rule-floor-core",
+      "rule-floor-extended",
+      "pass2-ner",
+      "full-stack-opf-resolve",
+      "full-stack-nym-resolve",
+      "full-stack-nym-redact",
+      "pass3-opf"
+    ]
+  }
+]

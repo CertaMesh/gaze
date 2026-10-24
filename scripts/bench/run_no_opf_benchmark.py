@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import subject_build
 import stage_timing as stages
 
 import argparse
@@ -22,6 +23,7 @@ from typing import Any, Mapping, Sequence
 
 import agentic_layers as agentic
 import benchmark_cache
+import benchmark_spec
 import capture_identity
 import dataiku_en_de_gaze_bench as dataiku
 import gaze_bench_score as score
@@ -903,6 +905,7 @@ def observation_cache_key(
     binary: Path,
     validator_probe: Path,
     davlan_model: Path,
+    benchmark_spec_id: str | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
     source_identity, reason = source_tree_identity(repo_root)
     if source_identity is None:
@@ -916,7 +919,8 @@ def observation_cache_key(
         files = {"detector_binary": binary, "validator_binary": validator_probe,
                  "dataset": repo_path(repo_root, args.dataset),
                  "negative_corpus": repo_path(repo_root, args.negative_corpus),
-                 "benchmark_spec": repo_root / "docs/reference/benchmarks/README.md"}
+                 "benchmark_spec": repo_root / "docs/reference/benchmarks/README.md",
+                 "benchmark_protocol": repo_root / benchmark_spec.PROTOCOL}
         models = {}
         policy = None
         if policy_path:
@@ -953,6 +957,9 @@ def observation_cache_key(
         "effective_inputs": inputs,
         "binary_sha256": inputs["files"]["detector_binary"],
         "record_schema_version": records.SCHEMA_VERSION,
+        "benchmark_spec_id": benchmark_spec_id,
+        "capture_protocol": benchmark_spec.capture_protocol(args),
+        "response_validation": benchmark_spec.response_validation(args),
         **source_identity,
         "cargo_lock_sha256": score.sha256_file(repo_root / "Cargo.lock"),
         "cargo_config_sha256": {
@@ -976,6 +983,8 @@ def observation_cache_key(
         "profile": args.profile,
         "max_documents": args.quick_documents if args.profile == "quick" else None,
         "release": args.release,
+        "build_features": subject_build.required_features(
+            ("policy-file",) if policy_path else tuple(score.DEFAULT_CONFIGS)),
         "warmups": args.warmups,
         "measured_repetitions": args.measured_repetitions,
         "hardware": platform.platform() + "; " + platform.processor(),
@@ -1327,6 +1336,7 @@ def run(args: argparse.Namespace) -> int:
 
 
 def _run(args: argparse.Namespace) -> int:
+    benchmark_spec.require_runtime()
     repo_root = Path(__file__).resolve().parents[2]
     source_environment = dict(os.environ)
     if args.compare_baseline is not None:
@@ -1452,18 +1462,21 @@ def _run(args: argparse.Namespace) -> int:
         raise CandidateError(str(error)) from error
 
     metadata, dataset_report = composite_dataset_report(dataiku_report, negative_report)
+    spec = benchmark_spec.resolve(
+        repo_root, corpus_sha256=dataset_report["integrity"]["sha256"], seed=args.seed,
+        available=original_available_documents, prepared=agentic_prepared,
+        profile=args.profile, warmups=args.warmups, repetitions=args.measured_repetitions,
+    )
     profile = "release" if args.release else "debug"
     with stages.measure("build", role="detector", executed=not args.skip_build):
-        binary = (
-            Path(os.environ.get("CARGO_TARGET_DIR", str(repo_root / "target")))
-            / profile / "examples/clean_for_bench"
-            if args.skip_build
-            else dataiku.build_binary(
-                repo_root,
-                ("policy-file",) if policy_path else tuple(score.DEFAULT_CONFIGS),
-                release=args.release,
-            )
-        )
+        if args.skip_build:
+            binary = (Path(os.environ.get("CARGO_TARGET_DIR", str(repo_root / "target")))
+                      / profile / "examples/clean_for_bench")
+            build_receipt = subject_build.unqualified("skip_build")
+        else:
+            binary, build_receipt = subject_build.build(
+                repo_root, ("policy-file",) if policy_path else tuple(score.DEFAULT_CONFIGS),
+                release=args.release, builder=subject_build.cargo_build_binary)
     if not binary.is_file():
         raise CandidateError(f"benchmark binary is missing: {binary}")
     validator_probe = (
@@ -1485,10 +1498,13 @@ def _run(args: argparse.Namespace) -> int:
             agentic_prepared=agentic_prepared, document_ids=[document.uid for document in documents],
             threshold=effective_threshold, source_environment=source_environment,
             binary=binary, validator_probe=validator_probe, davlan_model=davlan_model,
+            benchmark_spec_id=spec["id"],
         )
 
     bypass = ("explicit_no_cache" if args.no_cache else "unbound_skip_build" if args.skip_build
               else "fresh_performance_required" if args.performance_gating else None)
+    if build_receipt["mode"] != "producer-build":
+        bypass = "unqualified_subject_build"
     if bypass is None:
         cache_key, bypass = read_key()
     if evidence is not None:
@@ -1511,6 +1527,8 @@ def _run(args: argparse.Namespace) -> int:
                     agentic_prepared.contract if agentic_prepared else None,
                     max_workers=args.score_jobs,
                 )
+                benchmark_spec.require_same(candidate, {"benchmark_spec": spec})
+                subject_build.validate(candidate, score.sha256_file(binary))
                 if read_key()[0] != cache_key:
                     raise records.RecordError("effective inputs changed during cache verification")
             except (records.RecordError, OSError, ValueError):
@@ -1537,6 +1555,8 @@ def _run(args: argparse.Namespace) -> int:
         original_available_documents, complete_validator_measurements,
         corpus_sha256=dataset_report["integrity"]["sha256"], binary=binary,
         extra_documents=extra_documents,
+        capture_protocol=benchmark_spec.capture_protocol(args),
+        response_validation=benchmark_spec.response_validation(args),
         layer_contract=agentic_prepared.contract if agentic_prepared is not None else None,
     )
     if cache_key is not None and record_writer.binary_sha256 != cache_key["binary_sha256"]:
@@ -1620,6 +1640,10 @@ def _run(args: argparse.Namespace) -> int:
             "C": agentic.gold_validity_digest(documents, validator_measurements)
         }
 
+    candidate["subject_build"] = build_receipt
+    candidate["capture_protocol"] = benchmark_spec.capture_protocol(args)
+    candidate["response_validation"] = benchmark_spec.response_validation(args)
+    candidate["benchmark_spec"] = spec
     candidate["cache_replay"] = False
     if cache_key is not None:
         candidate["capture_cache"] = benchmark_cache.provenance(cache_key)
@@ -1635,6 +1659,9 @@ def _run(args: argparse.Namespace) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         return run(parse_args(argv))
+    except benchmark_spec.SpecError as error:
+        print(f"ERROR [{error.code}]", file=sys.stderr)
+        return 2
     except RunnerError as error:
         print(f"ERROR [{error.code}]: {error}", file=sys.stderr)
         return 2
