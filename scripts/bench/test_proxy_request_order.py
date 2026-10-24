@@ -539,3 +539,14 @@ def test_unsupported_carrier_is_sent_and_scored_in_its_actual_wire_position(prov
 def test_leak_refusal_policy_requires_complete_split_byte_evidence():
     with pytest.raises(ValueError, match="separate seed and target"):
         bench.compare(capture_card(1), capture_card(0), gate_policy="leak-to-refusal")
+
+
+def test_unsupported_cases_do_not_double_count_identical_wire_requests():
+    seen = set()
+    for case in json.loads(bench.FIXTURE.read_text())["cases"]:
+        if not any(leaf.get("carrier") == "unsupported" for leaf in case["leaves"]):
+            continue
+        _, body = bench.native_request("openai", case)
+        signature = (json.dumps(body, sort_keys=True), json.dumps(case.get("seed"), sort_keys=True))
+        assert signature not in seen, case["id"]
+        seen.add(signature)
