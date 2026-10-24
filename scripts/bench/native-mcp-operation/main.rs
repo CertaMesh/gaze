@@ -73,7 +73,7 @@ struct Case {
     payload: Value,
     seed_names: Vec<String>,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 enum Direction {
     Arguments,
@@ -97,6 +97,22 @@ fn replace_owned(value: &mut Value, tokens: &[String]) {
             }
         }
         _ => {}
+    }
+}
+fn restore_json(session: &gaze::Session, value: &Value) -> Result<Value, gaze::RestoreError> {
+    match value {
+        Value::String(text) => session.restore_strict_text(text).map(Value::String),
+        Value::Array(values) => values
+            .iter()
+            .map(|value| restore_json(session, value))
+            .collect::<Result<Vec<_>, _>>()
+            .map(Value::Array),
+        Value::Object(values) => values
+            .iter()
+            .map(|(key, value)| Ok((key.clone(), restore_json(session, value)?)))
+            .collect::<Result<serde_json::Map<_, _>, _>>()
+            .map(Value::Object),
+        other => Ok(other.clone()),
     }
 }
 fn hex(bytes: &[u8]) -> String {
@@ -181,10 +197,15 @@ async fn run_case(
     if imported.snapshot_entries() != session.snapshot_entries() {
         return Err("export/import changed mappings".into());
     }
+    let target = match case.direction {
+        Direction::Arguments => seen.lock().unwrap().clone(),
+        Direction::Response => response.clone(),
+    };
+    let restored = restore_json(&imported, &target).ok();
     let audit = store.0.lock().unwrap();
     Ok(
-        json!({"id":case.id,"phase":"target","error":error,"tool_args":seen.lock().unwrap().clone(),"response":response,
-        "snapshot_hex":hex(&snapshot),"audit":{"begin":audit.begin,"finish":audit.finish,"fail":audit.fail,"args":audit.args,"call":audit.call,"snapshot":audit.snapshot}}),
+        json!({"id":case.id,"phase":"target","error":error,"tool_args":seen.lock().unwrap().clone(),"response":response,"response_wire":serde_json::to_string(&response)?,
+        "snapshot_hex":hex(&snapshot),"restored":restored,"audit":{"begin":audit.begin,"finish":audit.finish,"fail":audit.fail,"args":audit.args,"call":audit.call,"snapshot":audit.snapshot}}),
     )
 }
 #[tokio::main]

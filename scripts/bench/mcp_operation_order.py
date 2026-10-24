@@ -46,6 +46,14 @@ def fixture():
     return rows
 
 
+def canonical_class(value):
+    if isinstance(value, str) and value in {"Name", "Email", "Organization", "Location"}:
+        return value.lower()
+    if isinstance(value, dict) and set(value) == {"Custom"} and isinstance(value["Custom"], str) and value["Custom"]:
+        return "custom:" + value["Custom"].lower()
+    raise ValueError("invalid manifest class")
+
+
 def entries_from_snapshot(encoded):
     """Verify the actual signed owner manifest, independently of the Rust reporter."""
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -66,8 +74,9 @@ def entries_from_snapshot(encoded):
         token = entry["token"]
         if token in entries or not TOKEN.fullmatch(token) or not token.startswith("<" + prefix + ":"):
             raise ValueError("duplicate or foreign manifest token")
-        if not isinstance(entry["raw"], str) or not isinstance(entry["class"], str) or not isinstance(entry["family"], str):
+        if not isinstance(entry["raw"], str) or not isinstance(entry["family"], str):
             raise ValueError("invalid manifest entry")
+        canonical_class(entry["class"])
         if entry.get("spelling", "plain") != "plain":
             raise ValueError("unsupported manifest source spelling")
         entries[token] = entry
@@ -82,7 +91,7 @@ def leaf_mask(original, protected, entries):
         entry = entries[match.group()]
         parts.extend((gap, entry["raw"]))
         owners.extend([None] * len(gap.encode()))
-        owners.extend([entry["class"].lower()] * len(entry["raw"].encode()))
+        owners.extend([canonical_class(entry["class"])] * len(entry["raw"].encode()))
         cursor = match.end()
     tail = protected[cursor:]
     parts.append(tail)
@@ -147,7 +156,9 @@ def validate_audit(record):
     audit = record["audit"]
     if (audit["begin"], audit["finish"], audit["fail"]) != (1, 1, 0) or audit["args"] != record["tool_args"]:
         raise ValueError("incomplete or inconsistent manifest call")
-    wire = json.dumps(record["response"], ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+    wire = record["response_wire"].encode()
+    if json.loads(wire) != record["response"]:
+        raise ValueError("response wire differs from released value")
     snapshot = audit["snapshot"]
     preimage = audit["call"].encode() + b"\0" + ulid_bytes(audit["call"]) + b"\0" + wire
     if snapshot != {"locator": "inline-sha256:" + audit["call"], "sha256_hex": hashlib.sha256(preimage).hexdigest(), "byte_len": len(wire)}:
@@ -183,6 +194,7 @@ def score_case(case, record, neutral=()):
     protected = record["tool_args"] if case["direction"] == "arguments" else record["response"]
     try:
         coverage = masks(case["expanded"], protected, entries)
+        masks(case["expanded"], record["restored"], {})
         verify_owned_identity(case.get("payload", case["expanded"]), protected, entries, case.get("seed_names", []))
     except (ValueError, KeyError, TypeError):
         result["restore_failed"] = 1

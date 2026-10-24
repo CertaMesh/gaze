@@ -25,8 +25,17 @@ def record(protected, entries):
     call = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
     response = []
     wire = b"[]"
-    return {"id": "synthetic", "phase": "target", "error": None, "tool_args": protected, "response": response,
-            "snapshot_hex": snapshot(entries), "audit": {"begin": 1, "finish": 1, "fail": 0, "args": protected,
+    mapping = {item["token"]: item["raw"] for item in entries}
+    def restored(value):
+        if isinstance(value, str):
+            return arm.TOKEN.sub(lambda match: mapping[match.group()], value)
+        if isinstance(value, list):
+            return [restored(item) for item in value]
+        if isinstance(value, dict):
+            return {key: restored(item) for key, item in value.items()}
+        return value
+    return {"id": "synthetic", "phase": "target", "error": None, "tool_args": protected, "response": response, "response_wire": "[]",
+            "snapshot_hex": snapshot(entries), "restored": restored(protected), "audit": {"begin": 1, "finish": 1, "fail": 0, "args": protected,
             "call": call, "snapshot": {"locator": "inline-sha256:" + call, "byte_len": len(wire),
             "sha256_hex": hashlib.sha256(call.encode() + b"\0" + arm.ulid_bytes(call) + b"\0" + wire).hexdigest()}}}
 
@@ -95,9 +104,9 @@ def test_fixture_extents_are_utf8_boundaries_and_cover_all_layers_and_controls()
 
 def test_neutral_predictions_and_refusals_remain_visible():
     data = {"id": "synthetic", "direction": "arguments", "expanded": ["public"], "gold": []}
-    observed = record(["<deadbeef:Name_1>"], [entry(raw="public", cls="Credential")])
+    observed = record(["<deadbeef:Name_1>"], [entry(raw="public", cls={"Custom": "password"})])
     assert arm.score_case(data, observed)["false_positive"] == 6
-    assert arm.score_case(data, observed, {"credential"})["false_positive"] == 0
+    assert arm.score_case(data, observed, {"custom:password"})["false_positive"] == 0
     assert arm.score_case(data, {"id": "synthetic", "phase": "seed", "error": "seed failed"})["refused"] == 1
 
 
@@ -124,3 +133,9 @@ def test_owned_identity_cannot_be_replaced_by_an_equivalent_new_token():
     with pytest.raises(ValueError, match="identity"):
         arm.verify_owned_identity("hello {{owned_0}}", "hello <deadbeef:Name_2>", entries, ["Maria Schneider"])
     arm.verify_owned_identity("hello {{owned_0}}", "hello <deadbeef:Name_1>", {"<deadbeef:Name_1>": entry()}, ["Maria Schneider"])
+
+
+def test_runtime_restore_failure_is_not_hidden_by_a_good_mapping_oracle():
+    observed = record(["hello <deadbeef:Name_1>"], [entry()])
+    observed["restored"] = None
+    assert arm.score_case(case(), observed)["restore_failed"] == 1
