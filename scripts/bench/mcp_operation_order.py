@@ -337,7 +337,7 @@ def capture(runtime_root, binary, policy, build_evidence):
     dirty = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], cwd=runtime_root)
     if after_revision != revision or dirty or identity() != specification or digest(binary) != expected["binary_sha256"] or digest(policy) != policy_sha256:
         raise ValueError("MCP capture artifacts changed during execution")
-    return {"specification": specification, "contracts": {k: v["identity"] for k, v in contracts().items()}, "model_files": model_files, "host_registry_lock": build["runtime_lock_sha256"], "runtime_revision": revision, "host_build": build, "binary_sha256": digest(binary), "policy_sha256": policy_sha256, "machine": platform.platform(), "records": records, "scores": score(rows, records)}
+    return {"specification": specification, "contracts": {k: v["identity"] for k, v in contracts().items()}, "model_files": model_files, "host_registry_lock": build["runtime_lock_sha256"], "runtime_revision": revision, "host_build": build, "binary_sha256": digest(binary), "policy_sha256": policy_sha256, "policy_document": policy.read_bytes().decode("utf-8"), "machine": platform.platform(), "records": records, "scores": score(rows, records)}
 
 
 if __name__ == "__main__":
