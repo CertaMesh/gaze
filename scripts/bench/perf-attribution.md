@@ -250,7 +250,7 @@ relations. The following generated prerequisites enforce sibling relations.
 | `safety_view_build_ns` | gaze/src/safety_net_scan.rs:21 | Request owns scan construction; scan precedes safety model, but model may be skipped |
 | `safety_model_ns` | gaze/src/pipeline.rs:1858,1920 | Request encloses model call after scan construction; Nym views are serial children |
 | `manifest_ns` | gaze/src/pipeline/occurrence.rs:156,210,222,393 | Request encloses ledger allocation, insertion, projection and validation; call counts vary |
-| `audit_ns` | gaze/src/pipeline.rs:1760,3069,3099,3166,3207,3246,3287 | Request encloses optional sink calls; no mandatory candidate, model or manifest sibling |
+| `audit_ns` | gaze/src/pipeline.rs:1760,3069,3099,3166,3207,3246,3287 | Optional sink; no-net CLI clean audit implies nonempty input and ledger allocation; scan-only Nym paths are exempt |
 
 | Prerequisite check | Trigger | Required hook | Relation | Source guarantee |
 | --- | --- | --- | --- | --- |
@@ -276,6 +276,11 @@ Pipeline prerequisites are directional: later work requires earlier work,
 not the reverse. Empty text/candidate sets still enter registry, first
 resolution and sweep (pipeline.rs:1224-1240; registry.rs:1437), while
 manifest work requires an invoked sweep. Second resolution remains optional.
+With no safety net, positive CLI clean audit requires nonzero input_bytes
+and an invoked manifest hook: admitted geometry and Ledger::new precede
+primary/veto/residual audit (pipeline.rs:1326-1523). With neither NER
+nor address_blocks enabled, resolve2 requires positive sweep_candidates;
+the street/address recovery alternatives cannot run in that policy.
 Positive NER windows or sweep additions require positive input_bytes:
 NER windows use nonempty ranges (ner/backend/preparation.rs:60-84), and
 sweep matches reject empty spans (gaze/src/sweep.rs:379). Raw candidate
@@ -374,26 +379,52 @@ each parent check, serial sum and phase, assembly-count and startup-work guard i
 Python copy. Each mutation must fail one executed assertion, then pass the same
 test after restoration. The receipt pins both counts; logs retain every result.
 
-`test_perf_hook_deletion.py` separately erases every inventoried metric and counter
-and each recognizer's numeric output from retained real CLI records. Its fixed
-synthetic inputs cover empty text, zero candidates, repeat-value additions,
-daemon context assembly, NER, Nym and DOB construction. All hooks must be exercised.
-The seven missing-sweep negatives refuse, and real partial-error prefixes admit.
-To replay the full admission sweep, run:
+The Rust test `perf_invocation_snapshot::attribution_invocation_snapshot_covers_model_free_inventory`
+(in `cli_pipe`) drives the timer CLI with capture enabled over committed model-free
+fixtures: one-shot and daemon calls, context/no context, email, a validator, empty
+input, an empty-regex error and an anchored custom regex whose repeated value adds
+a sweep candidate. It compares every metric's invocations/candidates, all counters,
+and every recognizer ordinal, evidence/model label, invocation and candidate count
+against `crates/gaze-cli/tests/fixtures/perf-invocations.json`. Only `ns` is excluded.
+The `cli` workspace shard runs `cli_pipe` with `--all-features`, including this test.
+
+Coverage uses `perf-hook-inventory.json`, generated from `HOOK_AUDIT`; the Python
+suite rejects a stale inventory or fixture projection. Every model-free hook must
+fire in the Rust test. New inventory hooks default to model-free and fail coverage
+until exercised. The explicit model-only boundary is NER/Nym/DOB constructors,
+bundle/tokenizer/model loading, NER/Nym inference leaves and counters, and safety-net
+scan/model/view hooks. These require local model bundles and are not exercised by
+this model-free CI snapshot. Existing Python admission rules and retained model
+records still cover their schema, ownership and prerequisite guarantees.
+
+Regenerate deliberately after reviewing a legitimate invocation change:
+
+```sh
+uv run --project scripts/bench python scripts/bench/perf_invocation_snapshot.py --binary <timer-binary>
+```
+
+Hook-regression detection is the snapshot gate's job. It detects changes to the
+observed counts or shape on these fixtures; it cannot detect timing-only changes,
+hooks moved along paths with identical observations, unexercised branches, or model
+hooks. The admission validator does not claim exhaustive single-hook detection.
+
+`test_perf_hook_deletion.py` separately probes admission by erasing inventoried
+outputs from retained real CLI records. It includes the source-faithful omission
+of the single RecognizerSpan hook: all dynamic entries and their coupled rule totals
+disappear together. Admission can accept that omission because the protocol carries
+no independent recognizer cardinality; the Rust snapshot rejects it. This diagnostic
+also covers local model records, seven missing-sweep negatives and real partial-error
+prefixes. Replay without loading models:
 
 ```sh
 uv run --project scripts/bench python scripts/bench/perf_hook_deletion.py --out target/hook-deletions.json
 ```
 
 Add `--capture <timer-binary>` to recapture with the retained, hash-verified new
-binary and local models. This is an untimed diagnostic, with no latency claims.
-Each admitted deletion includes a source reason. Schema 3 cannot distinguish all
-optional outputs from missing instrumentation: it carries neither success status
-nor validator identities. A record may legitimately end before manifest work or
-have no configured audit sink. Positive NER windows or sweep additions do require
-nonzero input bytes. Positive sweep additions also require second resolution;
-street and address recovery can invoke that resolution without sweep additions.
-`UNOBSERVABLE` in the sweep lists each remaining limit and its source sites.
+binary and local models. This is untimed. `ADMISSION_LIMITS` describes remaining
+ambiguities only after contextual checks: no-net audit implies nonempty input and
+manifest work; resolve2 implies sweep additions when both NER and address blocks
+are inactive. Real empty/error prefixes and model scan-only paths remain admissible.
 
 
 For a synthetic comparison across separate feature-off and timer executables, run

@@ -80,6 +80,45 @@ class BoundTests(unittest.TestCase):
             policy.write_text(POLICY)
             return perf.validate_lifecycle(rows, 1, daemon=daemon, policy=policy, required=True)
 
+    def contextual_case(self, name):
+        import json
+        from perf_hook_deletion import FIXTURE
+        cases = json.loads(FIXTURE.read_text())["cases"]
+        case = next(c for c in cases if c["id"] == name)
+        return case
+
+    def contextual_admit(self, case, rows):
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = Path(tmp) / 'policy'
+            policy.write_text(case['policy'])
+            return perf.validate_lifecycle(rows, len(rows) - 1, daemon=True, policy=policy, required=True)
+
+    def test_no_net_audit_input(self):
+        import copy
+        case = self.contextual_case('ordinary-2')
+        self.contextual_admit(case, case['records'])
+        rows = copy.deepcopy(case['records'])
+        rows[1]['counters']['input_bytes'] = 0
+        with self.assertRaisesRegex(ValueError, 'no-net-audit-input'):
+            self.contextual_admit(case, rows)
+
+    def test_no_net_audit_manifest(self):
+        import copy
+        case = self.contextual_case('ordinary-2')
+        rows = copy.deepcopy(case['records'])
+        rows[1]['metrics']['manifest_ns'].update(ns=0, invocations=0, candidates=0)
+        with self.assertRaisesRegex(ValueError, 'no-net-audit-manifest'):
+            self.contextual_admit(case, rows)
+
+    def test_sweep_only_resolve2(self):
+        import copy
+        case = self.contextual_case('repeat-sweep-1')
+        self.contextual_admit(case, case['records'])
+        rows = copy.deepcopy(case['records'])
+        rows[1]['counters']['sweep_candidates'] = 0
+        with self.assertRaisesRegex(ValueError, 'sweep-only-resolve2'):
+            self.contextual_admit(case, rows)
+
     def test_hook_audit_covers_every_clock_and_counter(self):
         audited = [key for hooks, _, _ in HOOK_AUDIT for key in hooks]
         self.assertEqual(len(audited), len(set(audited)))

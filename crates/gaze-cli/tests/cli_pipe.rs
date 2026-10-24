@@ -17,6 +17,10 @@ use serde_json::{json, Value};
 use serial_test::file_serial;
 use tempfile::tempdir;
 
+#[cfg(feature = "perf-timers")]
+#[path = "support/perf_invocation_snapshot.rs"]
+mod perf_invocation_snapshot;
+
 use gaze::{PiiClass, Scope, Session};
 use gaze_audit::{
     build_audit_query_sql, AuditFilter, PresentColumns, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,

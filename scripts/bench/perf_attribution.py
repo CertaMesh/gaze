@@ -23,7 +23,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from perf_lifecycle_contract import HOOK_RELATIONS, violates_relation, RECORD_CHECKS, violates_record, active_models, OWNERSHIP_CHECKS, violates_ownership, CLOCK_CHECKS, CLOCK_PHASES, REQUEST_ASSEMBLY, STARTUP_CLOCKS, violates_check
+from perf_lifecycle_contract import CONTEXT_CHECKS, violates_context, HOOK_RELATIONS, violates_relation, RECORD_CHECKS, violates_record, active_models, OWNERSHIP_CHECKS, violates_ownership, CLOCK_CHECKS, CLOCK_PHASES, REQUEST_ASSEMBLY, STARTUP_CLOCKS, violates_check
 
 SPEC = "gaze-perf-attribution-v2"
 
@@ -132,6 +132,9 @@ def validate_lifecycle(traces: list[dict], requests: int, *, daemon: bool, polic
         raise ValueError("bundle verification attribution mismatch")
     roles = {}
     for trace in traces[1:]:
+        for check in CONTEXT_CHECKS:
+            if violates_context(trace, check, config=config):
+                raise ValueError(f"lifecycle contextual mismatch: {check}")
         for check in OWNERSHIP_CHECKS:
             if violates_ownership(trace, check, config=config, roles=roles):
                 raise ValueError(f"lifecycle recognizer ownership mismatch: {check}")

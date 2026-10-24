@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 import perf_attribution as perf
-from perf_hook_deletion import FIXTURE, INPUTS, MODEL_INPUT, SWEEP_INPUTS, UNOBSERVABLE, sweep
+from perf_hook_deletion import FIXTURE, INPUTS, MODEL_INPUT, SWEEP_INPUTS, ADMISSION_LIMITS, sweep
 from perf_lifecycle_contract import HOOK_AUDIT
 
 
@@ -31,10 +31,27 @@ class HookDeletionTests(unittest.TestCase):
         self.assertEqual({r["hook"] for r in result["deletions"]}, hooks)
         self.assertEqual({r["hook"] for r in result["deletions"] if r["status"] != "not-fired"}, hooks)
         unobservable = {r["hook"] for r in result["deletions"] if r["status"] == "undetectable"}
-        self.assertLessEqual(unobservable, set(UNOBSERVABLE))
+        self.assertLessEqual(unobservable, set(ADMISSION_LIMITS))
         for row in result["deletions"]:
             if row["hook"] in ("sweep_ns", "registry_ns", "resolve1_ns") and row["record"] == 1:
                 self.assertEqual(row["status"], "refused", row)
+
+    def test_generated_model_free_inventory_and_fixtures_are_current(self):
+        from perf_invocation_snapshot import FIXTURES, inventory, fixtures
+        self.assertEqual(json.loads((FIXTURES / 'perf-hook-inventory.json').read_text()), inventory())
+        self.assertEqual(json.loads((FIXTURES / 'perf-invocation-cases.json').read_text()), fixtures())
+
+    def test_source_faithful_recognizer_omission_is_bounded_admission_limit(self):
+        from perf_hook_deletion import deletions
+        from perf_lifecycle_contract import RECOGNIZERS
+        case = self.fixture['cases'][2]
+        mutation = next(row for row in deletions(case['records'])
+                        if row[0] == RECOGNIZERS and row[1] == 'all-with-rule-totals' and row[2] == 1)
+        rows = mutation[-1]
+        self.assertTrue(mutation[3])
+        self.assertEqual(rows[1]['recognizers'], {})
+        self.assertFalse(any(rows[1]['metrics']['rules_ns'].values()))
+        self.admit(case, rows)
 
     def test_reviewer_missing_sweep_on_seven_real_successful_inputs(self):
         for case in self.fixture["cases"][:7]:

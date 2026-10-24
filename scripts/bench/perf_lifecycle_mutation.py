@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 from perf_lifecycle_contract import CLOCK_CHECKS, REQUEST_ASSEMBLY, OWNERSHIP_CHECKS
-from perf_lifecycle_contract import HOOK_RELATIONS, RECORD_CHECKS
+from perf_lifecycle_contract import HOOK_RELATIONS, RECORD_CHECKS, CONTEXT_CHECKS
 import perf_attribution as perf
 
 ROOT = Path(__file__).resolve().parent
@@ -30,6 +30,10 @@ def prove(out: Path) -> dict:
     for check in RECORD_CHECKS:
         mutations.append((check, source.replace("for check in RECORD_CHECKS:",
                           f"for check in (c for c in RECORD_CHECKS if c != {check!r}):"),
+                          "test_" + check.replace("-", "_")))
+    for check in CONTEXT_CHECKS:
+        mutations.append((check, source.replace("for check in CONTEXT_CHECKS:",
+                          f"for check in (c for c in CONTEXT_CHECKS if c != {check!r}):"),
                           "test_" + check.replace("-", "_")))
     ownership_tests = {
         "inactive-nym": "test_inactive_nym",
@@ -120,6 +124,7 @@ def prove(out: Path) -> dict:
                "serial_sum_checks": sum(c.kind == "serial" for c in CLOCK_CHECKS),
                "parent_checks": sum(c.kind == "parent" for c in CLOCK_CHECKS),
                "ownership_checks": len(OWNERSHIP_CHECKS),
+               "context_checks": len(CONTEXT_CHECKS),
                "record_checks": len(RECORD_CHECKS),
                "prerequisite_checks": len(HOOK_RELATIONS),
                "parent_test_isolation": "Each parent check alone; serial sums and ancestor edges otherwise imply it. Full graph also rejects every parent witness.",

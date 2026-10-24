@@ -25,14 +25,15 @@ SWEEP_INPUTS = ("SYNTH-123", "prefix SYNTH-123")
 CUSTOM_POLICY = ('[[policy.custom_recognizers]]\nkind="regex"\nname="synthetic-order"\n'
                  'class="custom:order_id"\npattern="^SYNTH-[0-9]+$"\n')
 
-# These outputs have no independent, mandatory downstream count in schema 3.
-# Do not turn their absence into an invented success/error or input-length flag.
-UNOBSERVABLE = {
-    "input_bytes": "pipeline.rs:1218; registry.rs:1264-1265: empty text contributes zero, and candidate counts precede geometry/score/veto admission; positive NER windows or sweep additions do require bytes",
+# Residual admission limits, AFTER policy-aware guarantees are checked.
+# Hook-regression detection belongs to the committed CLI invocation snapshot.
+ADMISSION_LIMITS = {
+    RECOGNIZERS: "RecognizerSpan::drop creates dynamic entries and Rule totals together; schema 3 has no independent mandatory recognizer cardinality (perf.rs:274-313)",
+    "input_bytes": "Without NER windows, sweep additions or no-net audit, anonymous candidate counts do not prove nonempty geometry (registry.rs:1264-1265)",
     "validators_ns": "registry.rs:1264-1265; validator_veto.rs:23-48; gaze-types/src/perf.rs:291-300: anonymous candidate totals precede filtering and carry no validator kind; Rule includes unvalidated custom regexes",
     "resolve2_ns": "pipeline.rs:1250-1284,1707-1713: optional street/address recovery or sweep; positive sweep_candidates does require it",
-    "sweep_candidates": "pipeline.rs:1707-1713: zero additions are valid; resolve2 can instead come from street/address recovery",
-    "manifest_ns": "pipeline.rs:1231-1326; occurrence.rs:156: errors may end after sweep but before Ledger::new; scan-only paths at pipeline.rs:1034,1079 can invoke safety nets without a ledger; schema 3 has no success flag",
+    "sweep_candidates": "When NER or address_blocks is active, resolve2 can instead come from street/address recovery (pipeline.rs:1250-1284)",
+    "manifest_ns": "Without no-net audit, errors may end before Ledger::new; scan-only Nym paths can audit without a ledger (pipeline.rs:1034,1079,1326)",
     "audit_ns": "pipeline.rs:3067-3072,3097-3102: sink calls are conditional on a logger; no independent sink-call counter",
 }
 
@@ -60,6 +61,15 @@ def deletions(records):
                         output.update(ns=0, invocations=0, candidates=0)
                     yield key, target, index, active, sites + ": " + guarantee, mutant
 
+        # One real producer: disabling perf_recognizer! removes every dynamic
+        # entry AND the coupled rules aggregate, rather than leaving zero entries.
+        mutant = copy.deepcopy(records)
+        changed = mutant[index]
+        active = bool(changed["recognizers"])
+        changed["recognizers"] = {}
+        changed["metrics"]["rules_ns"].update(ns=0, invocations=0, candidates=0)
+        yield RECOGNIZERS, "all-with-rule-totals", index, active, "gaze/src/registry.rs:1263; gaze-types/src/perf.rs:274-313", mutant
+
 
 def sweep(fixture: dict) -> dict:
     results = []
@@ -78,7 +88,7 @@ def sweep(fixture: dict) -> dict:
                     status, reason = "refused", str(error)
                 else:
                     status = "undetectable" if active else "not-fired"
-                    reason = UNOBSERVABLE.get(key) if active else source
+                    reason = ADMISSION_LIMITS.get(key) if active else source
                     if reason is None:
                         raise AssertionError(f"unclassified hook deletion: {case['id']} / {index} / {key}")
                 results.append({"case": case["id"], "record": index, "hook": key,

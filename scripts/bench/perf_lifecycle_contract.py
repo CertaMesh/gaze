@@ -82,6 +82,29 @@ def violates_record(record: dict, check: str) -> bool:
     raise ValueError("unknown record check")
 
 
+CONTEXT_CHECKS = ("no-net-audit-input", "no-net-audit-manifest", "sweep-only-resolve2")
+
+
+def violates_context(record: dict, check: str, *, config: dict) -> bool:
+    metrics, counters = record["metrics"], record["counters"]
+    active = active_models(config)
+    # CLI clean (including daemon clean) with no safety net: primary/veto/residual
+    # audit follows admitted nonempty geometry and Ledger::new. Scan-only model
+    # audit can precede the ledger, so it does not license this implication.
+    no_net = config.get("safety_net", {}).get("backend", "none") == "none"
+    if check == "no-net-audit-input":
+        return no_net and metrics["audit_ns"]["invocations"] > 0 and counters["input_bytes"] == 0
+    if check == "no-net-audit-manifest":
+        return no_net and metrics["audit_ns"]["invocations"] > 0 and metrics["manifest_ns"]["invocations"] == 0
+    if check == "sweep-only-resolve2":
+        # The two post-sweep alternatives require NER street identity or the
+        # opt-in address grammar. Without either, only positive sweep additions
+        # enter resolve2 (pipeline.rs:1250-1284,1707-1713).
+        return (not active["ner"] and not config.get("address_blocks", {}).get("enabled", False)
+                and metrics["resolve2_ns"]["invocations"] > 0 and counters["sweep_candidates"] == 0)
+    raise ValueError("unknown contextual check")
+
+
 @dataclass(frozen=True)
 class HookRelation:
     id: str
@@ -163,7 +186,7 @@ HOOK_AUDIT = (
     (("safety_view_build_ns",), "gaze/src/safety_net_scan.rs:21", "Request owns scan construction; scan precedes safety model, but model may be skipped"),
     (("safety_model_ns",), "gaze/src/pipeline.rs:1858,1920", "Request encloses model call after scan construction; Nym views are serial children"),
     (("manifest_ns",), "gaze/src/pipeline/occurrence.rs:156,210,222,393", "Request encloses ledger allocation, insertion, projection and validation; call counts vary"),
-    (("audit_ns",), "gaze/src/pipeline.rs:1760,3069,3099,3166,3207,3246,3287", "Request encloses optional sink calls; no mandatory candidate, model or manifest sibling"),
+    (("audit_ns",), "gaze/src/pipeline.rs:1760,3069,3099,3166,3207,3246,3287", "Optional sink; no-net CLI clean audit implies nonempty input and ledger allocation; scan-only Nym paths are exempt"),
 )
 
 
@@ -371,6 +394,11 @@ def documentation() -> str:
                  "not the reverse. Empty text/candidate sets still enter registry, first",
                  "resolution and sweep (pipeline.rs:1224-1240; registry.rs:1437), while",
                  "manifest work requires an invoked sweep. Second resolution remains optional.",
+                 "With no safety net, positive CLI clean audit requires nonzero input_bytes",
+                 "and an invoked manifest hook: admitted geometry and Ledger::new precede",
+                 "primary/veto/residual audit (pipeline.rs:1326-1523). With neither NER",
+                 "nor address_blocks enabled, resolve2 requires positive sweep_candidates;",
+                 "the street/address recovery alternatives cannot run in that policy.",
                  "Positive NER windows or sweep additions require positive input_bytes:",
                  "NER windows use nonempty ranges (ner/backend/preparation.rs:60-84), and",
                  "sweep matches reject empty spans (gaze/src/sweep.rs:379). Raw candidate",
