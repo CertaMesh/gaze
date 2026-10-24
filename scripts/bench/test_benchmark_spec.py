@@ -672,3 +672,44 @@ def test_current_spec_loads_negative_corpus_content(tmp_path):
     assert after['inputs']['population'] == before['inputs']['population']
     assert after['inputs']['corpus_sha256'] != before['inputs']['corpus_sha256']
     assert after['id'] != before['id']
+
+
+@pytest.mark.parametrize('field', ['gaze', 'parameters', 'runner_provenance'])
+def test_capture_binds_subject_metadata_to_record(tmp_path, evidence, field):
+    arm = evidence['gain']['candidate']
+    path = tmp_path / arm['capture']['file']
+    card = json.loads(path.read_text())
+    if field == 'gaze':
+        card[field]['revision'] = 'f' * 40
+    elif field == 'parameters':
+        card[field]['policy_sha256'] = 'f' * 64
+    else:
+        card[field]['policy_dependencies']['files']['dictionary:terms'] = 'f' * 64
+    path.write_text(json.dumps(card))
+    arm['capture']['sha256'] = capture_identity.file_digest(path)
+    with pytest.raises(cert.CertificationError, match='^capture_record_mismatch$'):
+        cert.admit_capture(path, tmp_path / arm['record']['file'], evidence['benchmark_spec'], ROOT)
+
+
+def test_capture_metrics_are_reconstructed_even_when_header_and_capture_agree(tmp_path, evidence):
+    arm = evidence['gain']['candidate']
+    def corrupt(header):
+        header['scorecard']['runs'][0]['metrics']['utf8_bytes']['leaked'] += 1
+    rewrite_arm(tmp_path, arm, corrupt)
+    with pytest.raises(cert.CertificationError, match='^capture_record_mismatch$'):
+        cert.admit_capture(tmp_path / arm['capture']['file'], tmp_path / arm['record']['file'],
+                           evidence['benchmark_spec'], ROOT)
+
+
+@pytest.mark.parametrize('number', [1, 2])
+def test_history_verification_binds_each_contract_to_subject(tmp_path, evidence, number):
+    folder = tmp_path / 'candidate'
+    name = f'scorecard-v{number}.json'
+    shutil.copyfile(tmp_path / 'base' / name, folder / name)
+    header, _ = records._read(folder / 'observations-v1.jsonl.gz')
+    job = {'version': 'v0.18.0', 'args': [], 'subject': history.subject_identity(header)}
+    row = {'status': 'available', 'benchmark_spec_id': evidence['benchmark_spec']['id'],
+           'job_sha256': capture_identity.digest(job), 'artifacts': {
+               name: capture_identity.file_digest(folder / name) for name in
+               ('capture.json', 'observations-v1.jsonl.gz', 'scorecard-v1.json', 'scorecard-v2.json')}}
+    assert not history.verified(row, folder, evidence['benchmark_spec'], job)
