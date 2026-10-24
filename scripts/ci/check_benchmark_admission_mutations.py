@@ -5,6 +5,7 @@ Run from a prepared Anvil worktree. Logs and the exact baseline SHA are written
 under target/. No detector, Cargo command, or benchmark capture is executed.
 """
 
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -22,6 +23,9 @@ HISTORY = 'scripts/bench/benchmark_history.py'
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--only", action="append", help="run a named mutation; repeat to select several")
+    args = parser.parse_args()
     if subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True).strip():
         raise SystemExit('mutation_requires_clean_committed_tree')
     head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
@@ -80,12 +84,16 @@ def main():
         ('release_protocol_declaration', HISTORY, "if expected is None or job.get('response_validation') != expected:", 'if False:', 'test_history_declares_release_protocol', 5),
         ('history_record_validation', HISTORY, "        certification.admit_capture(folder / 'capture.json', record, spec, past.HARNESS_ROOT,\n                                    response_validation=validation)", '        pass', 'test_history_binds_declared_adapter_to_actual_record', 2),
         ('history_cli_validation', HISTORY, 'if specs.response_validation(args) != validation:', 'if False:', 'test_history_measure_refuses_adapter_before_subject', 1),
-        ('retained_history_adapter', HISTORY, "            row['response_validation'] = release_validation(job)\n", '', 'test_history_rows_rederive_validation_adapter[True]', 1),
-        ('selected_history_adapter', HISTORY, "                row['response_validation'] = release_validation(job)\n", '', 'test_history_rows_rederive_validation_adapter[False]', 1),
+        ('retained_history_adapter', HISTORY, "\n            row['response_validation'] = release_validation(job)\n", '', 'test_history_rows_rederive_validation_adapter[True]', 1),
+        ('selected_history_adapter', HISTORY, "\n                row['response_validation'] = release_validation(job)\n", '', 'test_history_rows_rederive_validation_adapter[False]', 1),
         ('render_history_adapter', 'scripts/bench/render_benchmark_doc.py', "if validation != benchmark_spec.RELEASE_PROTOCOLS.get(version) or validation is None:", 'if False:', 'test_history_renderer_refuses_wrong_adapter', 1),
         ('optional_history', HISTORY, optional_source[optional_start:optional_end], '',
          'test_default_resume_revalidates_optional_rows_without_backfill', 3),
     ]
+    if args.only:
+        if set(args.only) - {row[0] for row in mutations}:
+            raise SystemExit('unknown_mutation')
+        mutations = [row for row in mutations if row[0] in args.only]
     receipts = []
     for name, filename, before, after, selector, failures, *expression in mutations:
         path = ROOT / filename
