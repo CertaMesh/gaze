@@ -54,6 +54,13 @@ def test_ci_registry_exception_only_adds_native_evidence_paths():
     after = copy.deepcopy(before)
     after["paths"] = sorted(after["paths"] + [proof.EVIDENCE_PREFIX + name for name in proof.EVIDENCE_NAMES])
     proof._ci_registry_only(json.dumps(before), json.dumps(after))
+    legacy = copy.deepcopy(after)
+    legacy["paths"].remove(proof.EVIDENCE_PREFIX + "whitespace-diagnostic.json")
+    proof._ci_registry_only(json.dumps(before), json.dumps(legacy))
+    partial = copy.deepcopy(after)
+    partial["paths"].remove(proof.EVIDENCE_PREFIX + "gate.json")
+    with pytest.raises(ValueError, match="beyond"):
+        proof._ci_registry_only(json.dumps(before), json.dumps(partial))
     after["gate_readers"]["gate"] = "changed"
     with pytest.raises(ValueError, match="beyond"):
         proof._ci_registry_only(json.dumps(before), json.dumps(after))

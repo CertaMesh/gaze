@@ -55,7 +55,7 @@ EVIDENCE_PREFIX = "docs/reference/benchmarks/gates/mcp-operation-order/"
 EVIDENCE_NAMES = frozenset({"README.md", "authority-and-cleanup.json", "base-native.json.gz",
     "base-v1.scorecard.json", "base-v2.scorecard.json", "candidate-native.json.gz",
     "candidate-v1.scorecard.json", "candidate-v2.scorecard.json", "gate.json",
-    "native-comparison.json", "space-diagnostic.json", "text-path-identity.json.gz"})
+    "native-comparison.json", "space-diagnostic.json", "text-path-identity.json.gz", "whitespace-diagnostic.json"})
 
 
 def _tree(revision):
@@ -75,10 +75,13 @@ def _allowed(path):
 
 
 def _ci_registry_only(before, after):
-    a, b = json.loads(before), json.loads(after)
-    a["paths"] = sorted(set(a["paths"]) | {EVIDENCE_PREFIX + name for name in EVIDENCE_NAMES})
-    if a != b:
-        raise ValueError("CI registry changed beyond the native evidence path declarations")
+    # The measured runtime may predate the optional diagnostic publication.
+    for names in (EVIDENCE_NAMES, EVIDENCE_NAMES - {"whitespace-diagnostic.json"}):
+        a, b = json.loads(before), json.loads(after)
+        a["paths"] = sorted(set(a["paths"]) | {EVIDENCE_PREFIX + name for name in names})
+        if a == b:
+            return
+    raise ValueError("CI registry changed beyond the native evidence path declarations")
 
 
 def _golden_only(before, after):
@@ -166,7 +169,7 @@ def build(base, candidate):
             "fresh_text_capture": False, "documentation_changes": documentation_changes, "transport_changes": transport_changes, "protected_files": records, "protected_file_count": len(records),
             "allowed_changed_paths": changed, "native_exact_paths": sorted(NATIVE_FILES), "native_prefixes": list(NATIVE_PREFIXES),
             "rmcp_counter_fixture": {"path": GOLDEN, "scope": "rmcp evidence only; sole change is source events 1 to 3"},
-            "ci_registry_exception": {"path": CI_REGISTRY, "scope": "only the twelve new native evidence path declarations"},
+            "ci_registry_exception": {"path": CI_REGISTRY, "scope": "only the native evidence path declarations, with an optional whitespace diagnostic"},
             "generator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
 
 

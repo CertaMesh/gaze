@@ -8,30 +8,34 @@
     "serial_use_of_one_copy_set": true,
     "copies_hash_verified_and_deleted": true,
     "local_approval_record_sha256": "71d463a1f55aa5f2632f3c8a7f1e35f9c69cb01aad8b5773cd8c26c71bd6c3ca",
-    "standing_recapture_authority": "Explicit orchestrator ruling: load_1m < 12 and memory_free_percent >= 60 before each arm",
+    "standing_recapture_authority": "Explicit resource correction: heavy job 2 alongside #773; memory free >=30%, or >=20% while Splash runs, regardless of load; record load and memory before each arm",
     "pre_arm_load_checks": [
       {
         "arm": "base",
-        "utc": "2026-10-24T06:40:36.368139+00:00",
-        "load_1m": 5.2890625,
-        "memory_free_percent": 85,
-        "required_load_below": 12,
-        "required_memory_at_least": 60,
+        "utc": "2026-10-24T09:03:03.516263+00:00",
+        "load_1m": 8.69482421875,
+        "memory_free_percent": 32,
+        "required_memory_at_least": 30,
+        "splash_running": false,
+        "load_is_gate": false,
+        "heavy_job": 2,
         "allowed": true,
         "nice": 10
       },
       {
         "arm": "candidate",
-        "utc": "2026-10-24T06:40:52.439272+00:00",
-        "load_1m": 5.93896484375,
-        "memory_free_percent": 86,
-        "required_load_below": 12,
-        "required_memory_at_least": 60,
+        "utc": "2026-10-24T09:03:53.472026+00:00",
+        "load_1m": 8.2705078125,
+        "memory_free_percent": 33,
+        "required_memory_at_least": 30,
+        "splash_running": false,
+        "load_is_gate": false,
+        "heavy_job": 2,
         "allowed": true,
         "nice": 10
       }
     ],
-    "captured_specification": "mcp-operation-order-v3"
+    "captured_specification": "mcp-operation-order-v4"
   },
   "text_reuse": {
     "authority": "Explicit orchestrator ruling, same source-identity rule as PR #869",
@@ -42,7 +46,7 @@
   "availability_counterweights": {
     "test_source": "crates/gaze-mcp-core/tests/strict_contract/operation_repeats.rs",
     "base_revision": "f7a794f5668864d3c4336aaa878c6896e92fc009",
-    "candidate_revision": "6ba82c9684ad87b7c2fc8014abdba262fba83d86",
+    "candidate_revision": "91e0515f29e78290616971d12248d9aef9e758f0",
     "base_admitted": 4,
     "candidate_admitted": 4,
     "token_only_wire": true,
@@ -50,7 +54,7 @@
     "restored_2_mib_cap_failures": 4,
     "above_16x_expansion_budget": "DispatchError::ResourceLimit in argument and response operations; staged state rolled back"
   },
-  "regression_proof": {
+  "prior_round_regression_proof": {
     "candidate_revision": "6ba82c9684ad87b7c2fc8014abdba262fba83d86",
     "tests_committed_first": true,
     "mutation_probes": [
@@ -150,5 +154,100 @@
     "boundaries": "single leaf and two-leaf aggregate; 32 MiB minus one and exact admitted, plus one refused; both directions",
     "public_input": "2097153 periods and shrinking-owned-token input admitted unchanged in arguments and responses",
     "whitespace": "Rule-seeded Maria/Schneider/full-name pair retains wire with no new entry; independent proof rejects non-whitespace gaps"
+  },
+  "regression_proof": {
+    "candidate_revision": "91e0515f29e78290616971d12248d9aef9e758f0",
+    "tests_committed_first": true,
+    "mutation_probes": [
+      {
+        "name": "revert-new-hit-gaps",
+        "exit": 101,
+        "executed_assertion_failures": 4,
+        "failed_tests": [
+          "operation_repeats::new_hit_whitespace_variants_arguments",
+          "operation_repeats::new_hit_whitespace_variants_response",
+          "operation_repeats::review_new_hit_gap_arguments",
+          "operation_repeats::review_new_hit_gap_response"
+        ],
+        "log_sha256": "49e936b676b4bb2409afc4ba2a9f2261ed7b25c4c515293c6fdef2b431b4f51b"
+      }
+    ],
+    "suite_counts": {
+      "core-tests": {
+        "completed_tests": 96,
+        "literal_ok_lines": 95,
+        "log_sha256": "4bb96ab66ffb83906a449958f5ad81ed9edaf261c8091dd0cb92d552bbc99c03",
+        "regression_literal_ok_names": [
+          "dispatch::rule_coverage::tests::final_proof_covers_only_whitespace_interior_gaps_independently_of_projection",
+          "operation_repeats::expansion_boundary_single_leaf_arguments",
+          "operation_repeats::expansion_boundary_single_leaf_response",
+          "operation_repeats::expansion_boundary_two_leaves_arguments",
+          "operation_repeats::expansion_boundary_two_leaves_response",
+          "operation_repeats::large_owned_counterweight_adjacent_arguments",
+          "operation_repeats::large_owned_counterweight_adjacent_response",
+          "operation_repeats::large_owned_counterweight_spaced_arguments",
+          "operation_repeats::large_owned_counterweight_spaced_response",
+          "operation_repeats::new_hit_whitespace_variants_arguments",
+          "operation_repeats::new_hit_whitespace_variants_response",
+          "operation_repeats::non_whitespace_interior_gap_is_still_protected_in_both_directions",
+          "operation_repeats::public_input_above_two_mib_arguments",
+          "operation_repeats::public_input_above_two_mib_response",
+          "operation_repeats::review_new_hit_gap_arguments",
+          "operation_repeats::review_new_hit_gap_response",
+          "operation_repeats::shrinking_owned_values_above_two_mib_are_admitted_in_both_directions",
+          "operation_repeats::whitespace_gap_arguments",
+          "operation_repeats::whitespace_gap_response"
+        ]
+      },
+      "rmcp-tests": {
+        "completed_tests": 41,
+        "literal_ok_lines": 41,
+        "log_sha256": "2033f70b3f856efc2265862038a38ce1419f2bd26631b50dcd55f7befc900131",
+        "regression_literal_ok_names": []
+      },
+      "token-bridge-tests": {
+        "completed_tests": 110,
+        "literal_ok_lines": 110,
+        "log_sha256": "b24013388ee5cda67d4b374cde21d58543b1cae2630c37d0b6d9734748542912",
+        "regression_literal_ok_names": [
+          "custom_class_internal_whitespace_divergence_finds_the_hit",
+          "from_raw_collapses_internal_whitespace_for_custom_class"
+        ]
+      },
+      "document-mcp-tests": {
+        "completed_tests": 15,
+        "literal_ok_lines": 15,
+        "log_sha256": "fd7e3e86c6ae409a0c7aa18ff3ad63bce9df9b54ebc6b78be2e21aba999a8d5c",
+        "regression_literal_ok_names": []
+      },
+      "document-stdio-tests": {
+        "completed_tests": 1,
+        "literal_ok_lines": 1,
+        "log_sha256": "24227006b443b5f0a051c5040b901c37558cb0343fbfef07f54420045be8729b",
+        "regression_literal_ok_names": []
+      }
+    },
+    "python_evidence_tests": 28,
+    "whitespace": "Exact owned-part wire and no new projection mapping across six whitespace variants, raw-first, owned-first, and two three-part chains in both directions. Variant discovery is primed with an already-owned wire; unused normalized discovery entries are out of scope.",
+    "native_counterweights": 48
+  },
+  "whitespace_disclosure": {
+    "gold_oracle_scorer_unchanged": true,
+    "scored_leaked_bytes": {
+      "base": 40,
+      "candidate": 6
+    },
+    "non_whitespace_leaked_bytes": {
+      "base": 32,
+      "candidate": 0
+    },
+    "remaining_scored_bytes": "six ASCII spaces in public gaps between emitted owned spans; R gold includes them in Name spans",
+    "diagnostic": "whitespace-diagnostic.json",
+    "native_counterweights": {
+      "attempts": 48,
+      "leaked": 0,
+      "false_positive": 0,
+      "refused": 0
+    }
   }
 }

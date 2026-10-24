@@ -34,3 +34,19 @@ def test_publication_refuses_a_policy_digest_mismatch_or_unclassified_private_pa
     original["records"][0]["synthetic"] = "/Users/private/unclassified"
     with pytest.raises(ValueError, match="path remains"):
         publish.public_capture(original)
+
+
+def test_uncovered_diagnostic_distinguishes_public_spaces_from_raw_name_bytes(monkeypatch):
+    from test_mcp_operation_order import entry, record
+    for gap, expected in [(" ", True), (" van ", False)]:
+        text = "Maria" + gap + "Schneider"
+        case = {"id": "synthetic", "direction": "arguments", "expanded": [text],
+                "gold": [{"path": [0], "span": [0, len(text.encode())], "class": "Name"}]}
+        observed = record(["<deadbeef:Name_1>" + gap + "<deadbeef:Name_2>"],
+                          [entry(raw="Maria"), entry(token="<deadbeef:Name_2>", raw="Schneider")])
+        monkeypatch.setattr(publish.mcp, "fixture", lambda: [case])
+        rows = publish.uncovered_gold_bytes({"records": [observed]})
+        assert bytes(row["byte"] for row in rows).decode() == gap
+        assert all(row["gap_is_whitespace"] == expected for row in rows)
+        assert all(row["owned_before"] and row["owned_after"] for row in rows)
+        assert publish.mcp.score_case(case, observed)["leaked"] == len(gap.encode())

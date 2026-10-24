@@ -1,13 +1,13 @@
 # MCP operation ordering evidence
 
 The native operation arm passes both scored-label contracts v2 and v1. Across
-50 attempted operations per side, annotated leaked bytes fall from 40 to 0.
+98 attempted operations per side, annotated leaked bytes fall from 40 to 6.
 False positives, refusals, exact restores, and valid manifests do not change.
 This is a finite capture of real `PiiEnvelope::dispatch`, not a completeness or
 latency claim.
 
 The base runtime is `f7a794f5668864d3c4336aaa878c6896e92fc009`. The measured
-candidate is `6ba82c9684ad87b7c2fc8014abdba262fba83d86`. Each runtime built the
+candidate is `91e0515f29e78290616971d12248d9aef9e758f0`. Each runtime built the
 same committed host against its own libraries and lockfile, then ran its own
 `gaze setup` policy. Those policies were byte-identical. Both model bundles
 have identical hashes and remained unchanged around both captures.
@@ -20,19 +20,29 @@ counts refer to completed operations. Refused attempts remain in the population.
 | Layer | Attempts per side | Leaked bytes | False-positive bytes | Refusals | Exact restores | Valid manifests |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | A | 6 | 0 → 0 | 0 → 0 | 0 → 0 | 6 → 6 | 6 → 6 |
-| D | 20 | 0 → 0 | 180 → 180 | 2 → 2 | 18 → 18 | 18 → 18 |
-| R | 24 | 40 → 0 | 40 → 40 | 4 → 4 | 20 → 20 | 20 → 20 |
-| Total | 50 | 40 → 0 | 220 → 220 | 6 → 6 | 44 → 44 | 44 → 44 |
+| D | 68 | 0 → 0 | 180 → 180 | 2 → 2 | 66 → 66 | 66 → 66 |
+| R | 24 | 40 → 6 | 40 → 40 | 4 → 4 | 20 → 20 | 20 → 20 |
+| Total | 98 | 40 → 6 | 220 → 220 | 6 → 6 | 92 → 92 | 92 → 92 |
 
 No case becomes newly refused. Restore failures and invalid manifests are zero
-on both sides. The net annotated byte gain is 40 under each contract.
+on both sides. The net annotated byte gain is 34 under each contract.
 
-The 40 annotated bytes include 8 ASCII spaces and 32 other UTF-8 bytes. Two
-cases exposed only one space each. The separate diagnostic preserves that
-distinction. The frozen fixture and both scoring contracts were not changed
-after either v3 capture. Native specification `mcp-operation-order-v3` includes
+Non-whitespace leaked bytes fall from 32 to 0. The six remaining scored bytes
+are ASCII spaces in public gaps between emitted owned spans. The runtime keeps
+these spaces public by design under the interior-whitespace ruling. The R gold
+still labels them as part of the Name span. Gold, oracle, and scorer are unchanged.
+[The per-byte diagnostic](whitespace-diagnostic.json) identifies every space and
+verifies token ownership on both sides.
+
+All 48 new counterweights have zero leaks, false positives, and refusals on both
+sides. The frozen fixture and both scored contracts were unchanged after either
+v4 capture. Native specification `mcp-operation-order-v4` includes the existing
 bare-filename and other-namespace counterweights, plus repeats beside both.
-It supersedes earlier captures; both arms were recaptured together on v3.
+The new cases cover public whitespace beside newly protected name parts, across
+six whitespace variants, both directions, and three-part chains. Seed headers
+quote each name so the production recognizer supplies Rule evidence for
+single-name parts. Both arms were recaptured together on v4.
+
 
 ## Large owned-token compatibility
 
@@ -58,7 +68,17 @@ Single-leaf and two-leaf tests assert admission at 32 MiB minus one and exactly
 32 MiB, then refusal one byte over, with rollback and manifest checks.
 Mutation probes restore the decoded-input cap, gap projection, gap proof, and
 missing rmcp mapping. Each produces executed assertion failures after the tests
-were committed. These tests supplement the unchanged 50-case native specification.
+were committed. The new committed regressions preserve exact owned-part wire and add no
+projection mapping for ASCII space, NBSP, thin space, tab, CR/LF, and mixed
+whitespace. They cover raw-first and owned-first shapes and three-part chains
+in both directions. Reverting the projection fix after committing the tests
+produces four executed equality assertion failures.
+
+Unused discovery entries for normalized spellings are outside this projection
+contract. The variant tests prime those entries using an already-owned wire,
+then check that the mixed raw/owned operation adds no mapping. The native
+specification measures all 48 variants as false-positive counterweights.
+
 
 ## Text layers are unchanged by construction
 
@@ -77,7 +97,9 @@ The only changed existing benchmark fixture is rmcp route evidence. Its sole
 change is the verified recognizer-event count from 1 to 3 for discovery. It is
 not part of the C/A/D/R text corpus. The checker rejects any broader fixture
 edit or unclassified file change. The CI input registry separately admits
-exactly the twelve new native evidence paths, with no other registry change.
+the thirteen native evidence paths, including the per-byte whitespace diagnostic.
+It rejects any other registry change and admits the measured runtime's original
+twelve-path registry before the diagnostic was added.
 Document MCP and token-bridge code and tests match the base exactly. Apart from
 the explicitly checked rmcp error mapping, crates outside MCP core are unchanged.
 
@@ -128,9 +150,11 @@ archives are replayable without the private paths.
 
 The original orchestrator and load-coordinator GO approved leak-only captures
 alongside #773, outside bench-machine, at nice 10. The standing recapture ruling
-requires `load_1m < 12` and `memory_free_percent >= 60`, checked before each arm.
-Base recorded `load_1m=5.29` and `memory_free_percent=85`.
-Candidate recorded `load_1m=5.94` and `memory_free_percent=86`. The runs used
+allows heavy job 2 alongside #773 when memory free is at least 30%,
+or at least 20% while Splash runs. Load is recorded before each arm and does not
+gate these captures.
+Base recorded `load_1m=8.69` and `memory_free_percent=32`.
+Candidate recorded `load_1m=8.27` and `memory_free_percent=33`. The runs used
 worker-owned model copies with distinct file identities from the installed
 bundles. The same immutable copy set served the two arms serially. Hashes were
 checked before and after each capture, then all private copies were deleted.

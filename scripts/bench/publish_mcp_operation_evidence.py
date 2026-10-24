@@ -78,6 +78,40 @@ def space_diagnostic(card):
     return total
 
 
+def uncovered_gold_bytes(card):
+    """Describe scored raw bytes without changing coverage or gold."""
+    rows = []
+    for case, record in zip(mcp.fixture(), card["records"], strict=True):
+        if not mcp.score_case(case, record)["restore_exact"]:
+            continue
+        entries = mcp.entries_from_snapshot(record["snapshot_hex"])
+        wire = record["tool_args"] if case["direction"] == "arguments" else record["response"]
+        ownership = mcp.masks(case["expanded"], wire, entries)
+        gold = {path: [False] * len(mask) for path, mask in ownership.items()}
+        for span in case["gold"]:
+            start, end = span["span"]
+            gold[tuple(span["path"])][start:end] = [True] * (end - start)
+        for path, mask in ownership.items():
+            text = case["expanded"]
+            for edge in path:
+                text = text[edge]
+            raw = text.encode()
+            for offset, (private, owner) in enumerate(zip(gold[path], mask, strict=True)):
+                if not private or owner is not None:
+                    continue
+                start, end = offset, offset + 1
+                while start > 0 and mask[start - 1] is None:
+                    start -= 1
+                while end < len(mask) and mask[end] is None:
+                    end += 1
+                gap = raw[start:end].decode()
+                rows.append({"case": case["id"], "path": list(path), "byte_offset": offset,
+                             "byte": raw[offset], "gap": gap, "gap_is_whitespace": gap.isspace(),
+                             "owned_before": start > 0 and mask[start - 1] is not None,
+                             "owned_after": end < len(mask) and mask[end] is not None})
+    return rows
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", type=Path, required=True)
@@ -97,4 +131,8 @@ if __name__ == "__main__":
     write_json(args.output_dir / "text-path-identity.json.gz", identity, True)
     write_json(args.output_dir / "native-comparison.json", mcp.compare(*public))
     write_json(args.output_dir / "space-diagnostic.json", {"scope": "diagnostic only; both frozen contracts unchanged", "base": space_diagnostic(public[0]), "candidate": space_diagnostic(public[1])})
+    write_json(args.output_dir / "whitespace-diagnostic.json", {
+        "scope": "diagnostic only; gold, oracle, and both scored contracts unchanged",
+        "diagnostic": {"base": space_diagnostic(public[0]), "candidate": space_diagnostic(public[1])},
+        "candidate_uncovered_gold": uncovered_gold_bytes(public[1])})
     print(json.dumps({"published": True, "observations_unchanged": True, "private_paths_removed": True}))

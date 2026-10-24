@@ -8,9 +8,9 @@
     "D": "unchanged_by_construction",
     "R": "unchanged_by_construction"
   },
-  "path_identity_sha256": "c8cb570a3d12a67feeb2960e107e1a3f017ae49b8f42279eb7b9f09270bc50bb",
+  "path_identity_sha256": "e873a89681cdc3ad17d5d3b962092d709a95554dd2be64e0e23660e1a549c732",
   "protected_file_count": 2002,
-  "publication_revision": "6ba82c9684ad87b7c2fc8014abdba262fba83d86",
+  "publication_revision": "91e0515f29e78290616971d12248d9aef9e758f0",
   "reuse_authority": "Explicit orchestrator ruling: same source-identity reuse rule as PR #869",
   "contracts": {
     "v2": {
@@ -18,9 +18,9 @@
       "native": {
         "pass": true,
         "regressions": [],
-        "leaked_removed": 40,
+        "leaked_removed": 34,
         "false_positive_added": 0,
-        "net_bytes": 40,
+        "net_bytes": 34,
         "base": {
           "A": {
             "leaked": 0,
@@ -37,9 +37,9 @@
             "false_positive": 180,
             "refused": 2,
             "dispatch_failed": 2,
-            "restore_exact": 18,
+            "restore_exact": 66,
             "restore_failed": 0,
-            "manifest_valid": 18,
+            "manifest_valid": 66,
             "manifest_invalid": 0
           },
           "R": {
@@ -69,13 +69,13 @@
             "false_positive": 180,
             "refused": 2,
             "dispatch_failed": 2,
-            "restore_exact": 18,
+            "restore_exact": 66,
             "restore_failed": 0,
-            "manifest_valid": 18,
+            "manifest_valid": 66,
             "manifest_invalid": 0
           },
           "R": {
-            "leaked": 0,
+            "leaked": 6,
             "false_positive": 40,
             "refused": 4,
             "dispatch_failed": 4,
@@ -91,9 +91,9 @@
             "false_positive": 0,
             "refused": 0,
             "dispatch_failed": 0,
-            "restore_exact": 4,
+            "restore_exact": 52,
             "restore_failed": 0,
-            "manifest_valid": 4,
+            "manifest_valid": 52,
             "manifest_invalid": 0
           },
           "code": {
@@ -123,9 +123,9 @@
             "false_positive": 0,
             "refused": 0,
             "dispatch_failed": 0,
-            "restore_exact": 4,
+            "restore_exact": 52,
             "restore_failed": 0,
-            "manifest_valid": 4,
+            "manifest_valid": 52,
             "manifest_invalid": 0
           },
           "code": {
@@ -156,9 +156,9 @@
       "native": {
         "pass": true,
         "regressions": [],
-        "leaked_removed": 40,
+        "leaked_removed": 34,
         "false_positive_added": 0,
-        "net_bytes": 40,
+        "net_bytes": 34,
         "base": {
           "A": {
             "leaked": 0,
@@ -175,9 +175,9 @@
             "false_positive": 180,
             "refused": 2,
             "dispatch_failed": 2,
-            "restore_exact": 18,
+            "restore_exact": 66,
             "restore_failed": 0,
-            "manifest_valid": 18,
+            "manifest_valid": 66,
             "manifest_invalid": 0
           },
           "R": {
@@ -207,13 +207,13 @@
             "false_positive": 180,
             "refused": 2,
             "dispatch_failed": 2,
-            "restore_exact": 18,
+            "restore_exact": 66,
             "restore_failed": 0,
-            "manifest_valid": 18,
+            "manifest_valid": 66,
             "manifest_invalid": 0
           },
           "R": {
-            "leaked": 0,
+            "leaked": 6,
             "false_positive": 40,
             "refused": 4,
             "dispatch_failed": 4,
@@ -229,9 +229,9 @@
             "false_positive": 0,
             "refused": 0,
             "dispatch_failed": 0,
-            "restore_exact": 4,
+            "restore_exact": 52,
             "restore_failed": 0,
-            "manifest_valid": 4,
+            "manifest_valid": 52,
             "manifest_invalid": 0
           },
           "code": {
@@ -261,9 +261,9 @@
             "false_positive": 0,
             "refused": 0,
             "dispatch_failed": 0,
-            "restore_exact": 4,
+            "restore_exact": 52,
             "restore_failed": 0,
-            "manifest_valid": 4,
+            "manifest_valid": 52,
             "manifest_invalid": 0
           },
           "code": {
