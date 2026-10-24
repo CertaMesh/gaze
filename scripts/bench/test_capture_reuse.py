@@ -136,7 +136,7 @@ class CaptureIdentityTests(unittest.TestCase):
                 hardware = hardware.replace("Flags: synthetic", "Flags: changed")
                 self.assertNotEqual(identity.native_runtime({"detector": library}), original)
 
-    def test_reusable_base_cannot_bypass_existing_fresh_release_admission(self):
+    def test_unverified_base_capture_cannot_bypass_release_admission(self):
         with self.assertRaisesRegex(renderer.RenderError, "run evidence"):
             renderer.history_entry_from_scorecard(
                 {"capture_cache": {}, "cache_replay": False}, version="v0.1.0", machine="synthetic",
