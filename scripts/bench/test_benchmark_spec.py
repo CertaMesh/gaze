@@ -292,7 +292,9 @@ def test_legacy_history_and_scorecards_keep_original_metrics():
     before = copy.deepcopy(ledger)
     render.validate_history(ledger)
     assert ledger == before
-    assert all('benchmark_spec' not in row for row in ledger['releases'])
+    legacy = [row for row in ledger['releases'] if render.version_sort_key(row['version']) <= render.version_sort_key('v0.17.0')]
+    assert legacy
+    assert all('benchmark_spec' not in row for row in legacy)
     fixture = ROOT / 'scripts/bench/fixtures/record-once.jsonl.gz'
     replay = records.rescore(fixture, score.SCORED_LABEL_CONTRACT_V1, max_workers=1)
     replay.pop('observation_record')
@@ -409,7 +411,9 @@ def test_certificate_refuses_untrusted_evidence(tmp_path, evidence, mutation):
             card_path = tmp_path / arm['contracts'][str(number)]['file']
             card_path.write_text(json.dumps(records.rescore(path, contract, max_workers=1)))
             arm['contracts'][str(number)]['sha256'] = capture_identity.file_digest(card_path)
-    with pytest.raises(cert.CertificationError):
+    expected = {'spec': 'invalid_certification_evidence', 'artifact': 'evidence_integrity',
+                'mechanism_binary': 'mechanism_binary_mismatch', 'failed_gate': 'gate_refused'}
+    with pytest.raises(cert.CertificationError, match='^' + expected[mutation] + '$'):
         cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION, required_mechanisms=('synthetic',))
 
 
