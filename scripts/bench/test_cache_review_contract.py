@@ -58,6 +58,8 @@ class CacheReviewTests(unittest.TestCase):
             (root / '.cargo/config.toml').write_text('[build]\njobs=2\n')
             (cargo_home / 'config.toml').write_text('[net]\noffline=true\n')
             (root / 'docs/reference/benchmarks').mkdir(parents=True)
+            (root / 'scripts/bench').mkdir(parents=True)
+            (root / runner.benchmark_spec.PROTOCOL).write_text('synthetic protocol')
             for name in ('policy.toml', 'dataset', 'negative', 'detector', 'validator', 'docs/reference/benchmarks/README.md'):
                 (root / name).write_text('')
             policy_sha = score.sha256_file(root / 'policy.toml')
@@ -70,12 +72,13 @@ class CacheReviewTests(unittest.TestCase):
                               contract=SimpleNamespace(sha256='8'*64), manifest={'corpus_sha256':'9'*64}),
                           document_ids=['synthetic-one'], threshold=0.5,
                           source_environment={'RUSTFLAGS':'synthetic-flags', 'CARGO_HOME':str(cargo_home)},
-                          binary=root/'detector', validator_probe=root/'validator', davlan_model=root/'model')
+                          binary=root/'detector', validator_probe=root/'validator', davlan_model=root/'model',
+                          benchmark_spec_id='synthetic-spec')
             with mock.patch.object(runner, 'source_tree_identity', side_effect=lambda _: (dict(identity), None)), \
                  mock.patch.object(runner.capture_identity, 'native_runtime', return_value={'fixture': True}):
                 key, reason = runner.observation_cache_key(**inputs)
                 self.assertIsNone(reason)
-                expected = dict(identity, policy_sha256=policy_sha, seed=inputs['args'].seed,
+                expected = dict(identity, benchmark_spec_id='synthetic-spec', policy_sha256=policy_sha, seed=inputs['args'].seed,
                                 corpus_sha256='5'*64, scored_labels_sha256='6'*64,
                                 agentic_scored_labels_sha256='8'*64,
                                 model_bundle_sha256={'synthetic':'7'*64}, release=True,
@@ -90,6 +93,7 @@ class CacheReviewTests(unittest.TestCase):
                 record.write_bytes(b'synthetic observation')
                 cache.store(root/'cache', key, record)
                 mutations = {
+                    'benchmark_spec_id': lambda x: x.update(benchmark_spec_id='changed-spec'),
                     'policy_sha256': lambda x: x.update(policy_sha256='a'*64),
                     'seed': lambda x: setattr(x['args'], 'seed', x['args'].seed+1),
                     'corpus_sha256': lambda x: x.update(corpus_sha256='a'*64),

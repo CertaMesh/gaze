@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import benchmark_spec
+
 import argparse
 import copy
 from concurrent.futures import ProcessPoolExecutor
@@ -411,6 +413,7 @@ class RecordWriter:
         binary: Path | None = None,
         extra_documents: Sequence[score.Document] = (),
         layer_contract: score.ScoredLabelContract | None = None,
+        capture_protocol: Mapping | None = None,
     ) -> None:
         self.documents = {document.uid: document for document in (*available, *extra_documents)}
         if len(self.documents) != len(available) + len(extra_documents):
@@ -424,6 +427,7 @@ class RecordWriter:
         self.binary = binary.resolve() if binary is not None else None
         self.binary_sha256 = score.sha256_file(self.binary) if self.binary is not None else None
         self.layer_contract = layer_contract
+        self.capture_protocol = copy.deepcopy(capture_protocol)
         self.layer_measurements: dict[str, Mapping[str, object]] = {}
         self.rows: list[dict[str, object]] = []
         # None until the first trace item: whether the producer emits lineage.
@@ -488,7 +492,12 @@ class RecordWriter:
             }
             for document in sorted(self.documents.values(), key=lambda item: item.uid)
         ]
+        spec_id = benchmark_spec.identity(scorecard)
+        if spec_id is not None:
+            benchmark_spec.require_runtime(scorecard["benchmark_spec"])
         header = {
+            **({"benchmark_spec_id": spec_id} if spec_id is not None else {}),
+            "capture_protocol": self.capture_protocol,
             "kind": "header",
             "schema_version": self.schema_version,
             "corpus_sha256": self.corpus_sha256,
@@ -650,6 +659,14 @@ def _read(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
         raise RecordError("unknown record row")
     _check_lineage(header, observations)
     card = header["scorecard"]
+    try:
+        spec_id = benchmark_spec.identity(card)
+        if spec_id is not None:
+            benchmark_spec.require_runtime(card["benchmark_spec"])
+        if header.get("benchmark_spec_id") != spec_id:
+            raise benchmark_spec.SpecError("benchmark_spec_mismatch")
+    except benchmark_spec.SpecError as error:
+        raise RecordError(error.code) from error
     recorded_corpus = (
         card["dataset"]["integrity"]["sha256"]
         if card.get("runs") else card["layers"]["generator"]["corpus_sha256"]

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "capture": "one value-free observation record per subject; replay every contract",
+  "layers": [
+    "C",
+    "A",
+    "D",
+    "R"
+  ],
+  "gated_contracts": [
+    2,
+    1
+  ],
+  "document_order": "stratified_sample with declared seed; generated published partition",
+  "validation": "typed response, exact restore, valid manifest, validator census",
+  "manifest_adapters": {
+    "current": [
+      "tokenize",
+      "redact"
+    ],
+    "pre-v0.15": [
+      "tokenize"
+    ]
+  },
+  "mechanism_results": "explicit required policy deltas, re-derived under both gate contracts",
+  "canonical_capture": {
+    "version": 1,
+    "mode": "canonical-once",
+    "corpus_contract": "all-corpus-labels-v1",
+    "generated_contract": "committed generated-label contract"
+  }
+}
