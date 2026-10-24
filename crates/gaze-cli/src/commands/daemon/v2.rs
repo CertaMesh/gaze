@@ -836,6 +836,20 @@ impl Daemon {
             envelope: Envelope<'a>,
             blocks: &'a [BlockResult],
         }
+        let manifest_bytes = transaction.manifest_allocation_bytes();
+        let staged_bytes = check_stage(
+            limits,
+            live,
+            &inventory,
+            &results,
+            manifest_bytes,
+            other_bytes,
+            other_manifests,
+            0,
+        )?;
+        let response_limit = limits
+            .v2_response_frame_bytes
+            .min(limits.global_v2_state_bytes.saturating_sub(staged_bytes) / 2);
         let mut current = self.v2.current(live);
         current.conversation_revision += 1;
         current.manifest_generation = generation;
@@ -852,9 +866,8 @@ impl Daemon {
                 },
                 blocks: &results,
             },
-            limits.v2_response_frame_bytes,
+            response_limit,
         )?;
-        let manifest_bytes = transaction.manifest_allocation_bytes();
         check_stage(
             limits,
             live,
@@ -916,6 +929,21 @@ impl Daemon {
             envelope: Envelope<'a>,
             text: &'a str,
         }
+        let staged_bytes = self
+            .v2
+            .bytes_except(id)
+            .0
+            .saturating_add(live.bytes())
+            .saturating_add(transaction.manifest_allocation_bytes().saturating_mul(2))
+            .saturating_add(text.capacity())
+            .saturating_add(512);
+        let response_limit = self.v2.limits.v2_response_frame_bytes.min(
+            self.v2
+                .limits
+                .global_v2_state_bytes
+                .saturating_sub(staged_bytes)
+                / 2,
+        );
         let mut current = self.v2.current(live);
         current.next_request_seq = seq + 1;
         let response = encode(
@@ -930,7 +958,7 @@ impl Daemon {
                 },
                 text: &text,
             },
-            self.v2.limits.v2_response_frame_bytes,
+            response_limit,
         )?;
         if self
             .v2
@@ -1145,7 +1173,7 @@ fn check_stage(
     other: usize,
     other_manifests: usize,
     response: usize,
-) -> Result<()> {
+) -> Result<usize> {
     let cache = raw_bytes(inventory).saturating_add(result_bytes(results));
     // Old and staged manifests coexist. Reserve another manifest-sized charge
     // for matcher/index state, and two encoded responses (outgoing + receipt).
@@ -1166,7 +1194,7 @@ fn check_stage(
     {
         return Err(Failure::CacheCapacity);
     }
-    Ok(())
+    Ok(state)
 }
 
 fn validate_result(
