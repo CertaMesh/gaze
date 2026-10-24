@@ -131,7 +131,7 @@ def main():
          'test_subject_build_receipt_binds_execution[configs]', 1),
         ('build_source_recheck', 'scripts/bench/subject_build.py',
          'elif before != after or before.get("dirty") is not False:', 'elif False:',
-         'test_producer_build_refuses_unqualified_source_or_target', 2, 'not target'),
+         'test_producer_build_refuses_unqualified_source_or_target', 2, 'dirty or changed'),
         ('build_target_environment', 'scripts/bench/subject_build.py',
          'if os.environ.get("CARGO_TARGET_DIR") is not None:', 'if False:',
          'test_producer_build_refuses_unqualified_source_or_target[target]', 1),
