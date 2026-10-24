@@ -2,7 +2,9 @@
 
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+
+use super::reuse::{self, InferenceRequest, View, WindowKey};
 
 use gaze_types::nym::NymOperatingPoint;
 use gaze_types::SafetyNetError;
@@ -101,6 +103,7 @@ impl NymConfig {
 /// Loaded tokenizer and ORT session.
 pub(crate) struct NymOrtBackend {
     config: NymConfig,
+    generation: u64,
     tokenizer: tokenizers::Tokenizer,
     session: Mutex<ort::session::Session>,
     bos: u32,
@@ -166,6 +169,7 @@ impl NymOrtBackend {
         drop(model_load);
         Ok(Self {
             config,
+            generation: reuse::model_generation(),
             tokenizer,
             session: Mutex::new(session),
             bos,
@@ -177,13 +181,23 @@ impl NymOrtBackend {
         &self.config.operating_point
     }
 
-    pub(crate) fn infer(&self, clean: &str) -> Result<Vec<NymSpan>, SafetyNetError> {
-        let scores = self.score_pieces(clean)?;
+    pub(crate) fn infer_view(
+        &self,
+        clean: &str,
+        view: View,
+    ) -> Result<Vec<NymSpan>, SafetyNetError> {
+        let scores = self.score_pieces_view(clean, view)?;
         decode_pieces(clean, &scores.0, &scores.1, &self.config.operating_point)
     }
 
     /// Tokenizes `clean` and scores every piece: `(char offsets, per-piece scores)`.
+    #[cfg(feature = "test-support")]
     pub(crate) fn score_pieces(&self, clean: &str) -> Result<ScoredPieces, SafetyNetError> {
+        self.score_pieces_view(clean, View::Stable)
+    }
+
+    fn score_pieces_view(&self, clean: &str, view: View) -> Result<ScoredPieces, SafetyNetError> {
+        let _request = InferenceRequest::if_absent();
         if clean.len() > self.config.max_input_bytes {
             return Err(SafetyNetError::InputTooLarge {
                 limit: self.config.max_input_bytes,
@@ -204,7 +218,45 @@ impl NymOrtBackend {
         check_char_coverage(&chars, &offsets)?;
         let mut merger = RowMerger::new(ids.len());
         for window in plan_windows(ids.len()) {
-            let probs = self.run_window(&ids[window.clone()])?;
+            let window_ids = &ids[window.clone()];
+            let (start, end) = offsets[window.clone()]
+                .iter()
+                .fold((chars.len(), 0), |(start, end), &(a, b)| {
+                    (start.min(a), end.max(b))
+                });
+            let bytes = chars[start..end].iter().collect::<String>();
+            let key = WindowKey::new(
+                self.generation,
+                &self.config.operating_point,
+                view,
+                bytes,
+                window_ids,
+            );
+            let probs = match reuse::get(&key) {
+                Some(rows) => {
+                    #[cfg(feature = "test-support")]
+                    if reuse::verification_enabled() {
+                        let fresh = self.run_window(window_ids)?;
+                        if !rows
+                            .iter()
+                            .flatten()
+                            .map(|p| p.to_bits())
+                            .eq(fresh.iter().flatten().map(|p| p.to_bits()))
+                        {
+                            return Err(SafetyNetError::InvalidOutput {
+                                message: "Nym reused window differs from fresh inference".into(),
+                            });
+                        }
+                        reuse::verified_window();
+                    }
+                    rows
+                }
+                None => {
+                    let rows = Arc::new(self.run_window(window_ids)?);
+                    reuse::insert(key, Arc::clone(&rows));
+                    rows
+                }
+            };
             merger.add_window(window, &probs);
         }
         let scores = merger.finish()?.iter().map(PieceScore::from_row).collect();
