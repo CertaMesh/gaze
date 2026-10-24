@@ -222,9 +222,10 @@ class LifecycleTests(unittest.TestCase):
             wrong = copy.deepcopy(good)
             wrong[1]["metrics"]["policy_load_ns"] = {"ns": 1, "invocations": 1}
             cases.append(wrong)
-            wrong = copy.deepcopy(good)
-            wrong[0]["metrics"]["policy_load_ns"]["ns"] = 100
-            cases.append(wrong)
+            for key in ("policy_load_ns", "daemon_startup_ns", "nym_attach_ns", "model_constructor_ns", "bundle_verify_ns"):
+                wrong = copy.deepcopy(good)
+                wrong[0]["metrics"][key]["ns"] = 100
+                cases.append(wrong)
             for records in cases:
                 with self.subTest(records=records), self.assertRaises(ValueError):
                     perf.validate_lifecycle(records, 1, daemon=True, policy=policy, required=True)
