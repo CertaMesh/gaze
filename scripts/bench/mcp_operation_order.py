@@ -2,12 +2,11 @@
 """Capture and compare synthetic MCP operations through each revision's real dispatch.
 
 This arm supplements C/A/D/R; it never substitutes flattened text for dispatch.
-Benchmark-machine approval is required before capture. Inputs and the independent
+Load-coordinator approval is required before capture. Inputs and the independent
 byte oracle are frozen by hash. Run base first with its own gaze setup policy.
 """
 from __future__ import annotations
 import argparse
-from collections import Counter
 import hashlib
 import json
 import os
@@ -15,6 +14,7 @@ from pathlib import Path
 import platform
 import re
 import subprocess
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(__file__).with_name("fixtures") / "mcp_operation_order.json"
@@ -289,6 +289,17 @@ def compare(base, candidate):
     return _compare_totals(base, candidate)
 
 
+def verify_policy_bundle_paths(policy, directories):
+    data = tomllib.loads(Path(policy).read_text())
+    selected = {
+        "GAZE_NER_MODEL_DIR": data.get("ner", {}).get("model_dir"),
+        "GAZE_NYM_MODEL_DIR": data.get("safety_net", {}).get("nym", {}).get("model_dir"),
+    }
+    for name, actual in selected.items():
+        if not isinstance(actual, str) or Path(actual).resolve() != Path(directories[name]).resolve():
+            raise ValueError("setup policy does not select the declared isolated bundle: " + name)
+
+
 def capture(runtime_root, binary, policy, build_evidence):
     runtime_root, binary, policy = runtime_root.resolve(), binary.resolve(), policy.resolve()
     build = json.loads(build_evidence.read_text())
@@ -298,6 +309,7 @@ def capture(runtime_root, binary, policy, build_evidence):
         raise ValueError("host provenance differs from capture artifacts")
     # Require explicit isolated copies rather than guessing a shared live bundle.
     model_files = {}
+    verify_policy_bundle_paths(policy, os.environ)
     for name in ("GAZE_NER_MODEL_DIR", "GAZE_NYM_MODEL_DIR"):
         folder = Path(os.environ[name]).resolve()
         if not folder.is_dir():

@@ -37,11 +37,15 @@ same host source against each runtime's exact libraries and lockfile. Measure
 base first. Host compilation/API failure is unsupported, never zero-leak success.
 
 ```sh
-# Run in each selected runtime checkout; these commands execute inference.
-cargo run -p gaze-cli -- setup --non-interactive --force --policy-out target/gate/policy.toml
+# Run in each selected runtime checkout. These commands execute inference.
+# Use the same worker-owned copy paths for the two serial arms.
+mcp_model_root=/path/to/approved-private-model-root
+export GAZE_NER_MODEL_DIR="$mcp_model_root/gaze/models/davlan-mbert-ner-hrl"
+export GAZE_NYM_MODEL_DIR="$mcp_model_root/gaze/models/nym-small-int8"
+XDG_DATA_HOME="$mcp_model_root" cargo run -p gaze-cli -- setup \
+  --non-interactive --force --policy-out target/gate/policy.toml
 python3 /path/to/committed/scripts/bench/build_native_mcp_operation.py \
   --runtime-root "$PWD" --output target/mcp-host
-# Set GAZE_NER_MODEL_DIR and GAZE_NYM_MODEL_DIR to coordinator-approved isolated copies.
 uv run --project scripts/bench --group comparison-test python \
   /path/to/committed/scripts/bench/mcp_operation_order.py \
   --runtime-root "$PWD" --binary target/release/gaze-native-mcp-operation \

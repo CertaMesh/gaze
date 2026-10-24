@@ -176,3 +176,13 @@ def test_gate_replays_observations_instead_of_trusting_saved_scores(monkeypatch)
     tampered["host_build"]["runtime_revision"] = "different"
     with pytest.raises(ValueError, match="provenance"):
         arm.compare(card, tampered)
+
+
+def test_policy_must_load_the_models_whose_private_copies_are_hashed(tmp_path):
+    policy = tmp_path / "policy.toml"
+    ner, nym = tmp_path / "ner", tmp_path / "nym"
+    policy.write_text(f'[ner]\nmodel_dir = "{ner}"\n[safety_net.nym]\nmodel_dir = "{nym}"\n')
+    directories = {"GAZE_NER_MODEL_DIR": ner, "GAZE_NYM_MODEL_DIR": nym}
+    arm.verify_policy_bundle_paths(policy, directories)
+    with pytest.raises(ValueError, match="declared isolated bundle"):
+        arm.verify_policy_bundle_paths(policy, {**directories, "GAZE_NER_MODEL_DIR": tmp_path / "other"})
