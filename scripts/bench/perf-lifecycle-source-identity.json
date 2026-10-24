@@ -1,0 +1,66 @@
+{
+  "base": "764d98903e8e1e6a6a71486c5c31f6c43041ef38",
+  "files": [
+    {
+      "file": "crates/gaze-assembly/src/lib.rs",
+      "base_sha256": "4455fcc6f2c6c54ca2694e5b09c403ae7baea1056c4d4550f6204eb808635c66",
+      "candidate_sha256": "ef1fab08e12718c6c32decb85f24c1242365928f14cb854c910b1e96e15b83cc",
+      "without_hooks_sha256": "4455fcc6f2c6c54ca2694e5b09c403ae7baea1056c4d4550f6204eb808635c66"
+    },
+    {
+      "file": "crates/gaze-cli/src/commands/daemon.rs",
+      "base_sha256": "ce0e726ef64d8a70fa6e78573ac25bbbe300820275fd5501e44cf31fffaeee88",
+      "candidate_sha256": "200edabe832bac05fa74de8fbd89b26bed383d647497b34d84cc9fa33d2d693e",
+      "without_hooks_sha256": "ce0e726ef64d8a70fa6e78573ac25bbbe300820275fd5501e44cf31fffaeee88"
+    },
+    {
+      "file": "crates/gaze-cli/src/main.rs",
+      "base_sha256": "1f08bc13f07505944d13293c054d2d228c4f5b0df2f4b095c80628ff58d6bc02",
+      "candidate_sha256": "e703eb4acfb72f6894fc75a968de5811e306e5f2f8e33bf89a62caa563765bf6",
+      "without_hooks_sha256": "1f08bc13f07505944d13293c054d2d228c4f5b0df2f4b095c80628ff58d6bc02"
+    },
+    {
+      "file": "crates/gaze-cli/src/pipeline/build.rs",
+      "base_sha256": "52a2df5d7485c1f002b55dbb0a1f2d25cff1bfbb2c23709842b8aba4590b8be4",
+      "candidate_sha256": "ae63bc872ea40d479a1422795015e92f17e856f4b5449832785d6fb544235035",
+      "without_hooks_sha256": "52a2df5d7485c1f002b55dbb0a1f2d25cff1bfbb2c23709842b8aba4590b8be4"
+    },
+    {
+      "file": "crates/gaze-recognizers/src/bundle.rs",
+      "base_sha256": "8041dc04adc4658273a7524cba4d0a230ee9dfcc7b32794ec9ecf00a3e92fdae",
+      "candidate_sha256": "2774dbf1bb23b3234e4caaccd2eb91ab67f8269e486ed2470733c0ffbc8e2ce4",
+      "without_hooks_sha256": "8041dc04adc4658273a7524cba4d0a230ee9dfcc7b32794ec9ecf00a3e92fdae"
+    },
+    {
+      "file": "crates/gaze-recognizers/src/dob_judge.rs",
+      "base_sha256": "070289f6dbd74fc9baef12d449155b19e058485b62c4c94eed17354051de812d",
+      "candidate_sha256": "a477c363fc10624cf05833206cc5c0b5b5b2676c575610aadfcf5f15c88fa6be",
+      "without_hooks_sha256": "070289f6dbd74fc9baef12d449155b19e058485b62c4c94eed17354051de812d"
+    },
+    {
+      "file": "crates/gaze-recognizers/src/ner/backend/ort.rs",
+      "base_sha256": "f442336a9019735a5eb1061706e010c706bfa476c628e6e4d5da8ea10687bef2",
+      "candidate_sha256": "b368a18e712fefcf6f856b6fcd74076fa26acef503c5fdb2fe94d824811f2cad",
+      "without_hooks_sha256": "f442336a9019735a5eb1061706e010c706bfa476c628e6e4d5da8ea10687bef2"
+    },
+    {
+      "file": "crates/gaze-recognizers/src/ner/detector.rs",
+      "base_sha256": "2974edb0d4712d1854c23590b5f9d428546f8c87c7d1d5a9d0e186122c6f13fb",
+      "candidate_sha256": "a5fc1e745ca641f3477b6a2c1c06c7078cd29a45dc915424e4c7e412d42a189e",
+      "without_hooks_sha256": "2974edb0d4712d1854c23590b5f9d428546f8c87c7d1d5a9d0e186122c6f13fb"
+    },
+    {
+      "file": "crates/gaze-recognizers/src/ner/loader.rs",
+      "base_sha256": "aacd06e9b1b9d4cecd1f70b05fd63d535f8f78a3a00476db41062f8ba44a09d2",
+      "candidate_sha256": "6238ae2d7dcde8a1e221899e7d03230ae22ef466ec5157e5cd6f2443b1052819",
+      "without_hooks_sha256": "aacd06e9b1b9d4cecd1f70b05fd63d535f8f78a3a00476db41062f8ba44a09d2"
+    },
+    {
+      "file": "crates/gaze-recognizers/src/safety_net/nym/ort.rs",
+      "base_sha256": "9f96a1ae54967d7e9ee78ef60ac802c519d3ceb60bd9d99fda848addeea2926d",
+      "candidate_sha256": "bef0394cf7925a0b3ecddb0395030ca0d9f921a85ed0d7e76212a82ec3851113",
+      "without_hooks_sha256": "9f96a1ae54967d7e9ee78ef60ac802c519d3ceb60bd9d99fda848addeea2926d"
+    }
+  ],
+  "text_path_identical_without_hooks": true
+}

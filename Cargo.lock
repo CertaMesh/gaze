@@ -1255,6 +1255,7 @@ version = "0.17.0"
 dependencies = [
  "gaze-pii",
  "gaze-recognizers",
+ "gaze-types",
  "regex",
  "serde_json",
  "thiserror 1.0.69",

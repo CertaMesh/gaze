@@ -100,6 +100,7 @@ pub(crate) struct Args {
 }
 
 pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
+    let startup = gaze_types::perf_span!("daemon_startup_ns");
     let shutdown = install_signal_flags()?;
     let deprecated_core_extended = args
         .rulepacks
@@ -121,6 +122,9 @@ pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
 
     let idle_timeout = daemon.process_idle_timeout;
     let mut stdout = io::stdout().lock();
+    drop(startup);
+    #[cfg(feature = "perf-timers")]
+    crate::perf::ready();
     loop {
         if shutdown.load(Ordering::Relaxed) {
             break;

@@ -31,12 +31,16 @@ impl OrtBackend {
         labels: LabelMap,
         id2label: Vec<String>,
     ) -> Result<Self, NerLoadError> {
+        let tokenizer_load = gaze_types::perf_span!("tokenizer_load_ns");
         let tokenizer = tokenizers::Tokenizer::from_file(model_dir.join(TOKENIZER_FILE))
             .map_err(|err| NerLoadError::Tokenizer(err.to_string()))?;
+        drop(tokenizer_load);
+        let model_load = gaze_types::perf_span!("model_load_ns");
         let session = ort::session::Session::builder()
             .map_err(|err| NerLoadError::Runtime(err.to_string()))?
             .commit_from_file(model_dir.join(MODEL_FILE))
             .map_err(|err| NerLoadError::Runtime(err.to_string()))?;
+        drop(model_load);
         let has_token_type_ids = session
             .inputs()
             .iter()
