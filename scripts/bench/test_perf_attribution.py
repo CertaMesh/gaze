@@ -264,8 +264,11 @@ class LifecycleTests(unittest.TestCase):
             docs = [perf.Document(str(i), text, perf.sha(text.encode())) for i, text in enumerate(
                 ["alice@example.invalid", "No contact details.", "Unicode Grüße: alice@example.invalid"])]
             for one_shot in (True, False):
-                rows = perf.run_pass(binary, policy, docs, warmups=1, dry=True, timeout=30,
-                                     per_file=one_shot, require_timers=True)
+                try:
+                    rows = perf.run_pass(binary, policy, docs, warmups=1, dry=True, timeout=30,
+                                         per_file=one_shot, require_timers=True)
+                except ValueError as error:
+                    self.fail(f"real CLI lifecycle admission failed: {error}")
                 self.assertEqual(len(rows), 3)
                 self.assertTrue(all(r["trace"]["metrics"]["request_ns"]["invocations"] == 1 for r in rows))
 
