@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "timed": false,
-  "plain_binary_sha256": "4958d97d4cd16797c3ad38a8932176daea562f787a4494ab45c036149d25c721",
-  "timer_binary_sha256": "8d3b13d0222c235e7c100bed4810126f41aee050af50ed7d5da876e2044b30b9",
+  "plain_binary_sha256": "c9a775406903c47429360f369cc2f349084d5f75831060c9aa454b5c00199e97",
+  "timer_binary_sha256": "983af9b74f089949d5cf23be65828197863fd2d9de20171e7f7bfaeacaac7d3a",
   "normalization": "Only eight-hex session prefixes inside declared ordinary tokens become 00000000. Within-mode clean bytes, token spelling/index, mapping values, stats/disposition and daemon manifest spans are otherwise exact. The Rust fixed-snapshot test compares byte-for-byte without normalization.",
   "modes": {
     "one-shot": {
@@ -34,7 +34,7 @@
       "identical": true
     }
   },
-  "runtime_source_commit": "e1744ec1d533af669797c88c14e2494c0f98c450",
+  "runtime_source_commit": "2c43c2e9aa9032ecd417a9144f91bc39ca52ce35",
   "rust_toolchain": "1.96.0",
   "fixed_snapshot_test": {
     "name": "attribution_capture_preserves_pipe_fixture_bytes_and_restore",
@@ -53,10 +53,15 @@
     "passed": 1
   },
   "python_tests": {
-    "executed": 20,
-    "passed": 20,
+    "executed": 129,
+    "passed": 129,
     "skipped": 0,
-    "real_cli_test": "test_real_cli_lifecycle_hooks_are_validated_by_runner"
+    "real_cli_test": "test_real_cli_lifecycle_hooks_are_validated_by_runner",
+    "attribution_tests": 25,
+    "bound_tests": 104,
+    "duration_bounds": 28,
+    "child_parent_edge_tests": 37,
+    "forbidden_phase_tests": 34
   },
   "mutation": {
     "source_commit": "e1744ec1d533af669797c88c14e2494c0f98c450",
@@ -67,5 +72,242 @@
     "restored_runner_passed": true,
     "source_restored_exactly": true,
     "assertion": "AssertionError: real CLI lifecycle admission failed: required lifecycle hook missing"
+  },
+  "source_identity_base": "764d98903e8e1e6a6a71486c5c31f6c43041ef38",
+  "containment_mutation": {
+    "runner_sha256": "7e54225a7943948a12baaaa3147214cf5e02328d4f0d3b631615ee4039b0d6c5",
+    "runner_source_sha256": "a90989d9861daa4e48f572eff9ac36033e345feca49b9d96fb65305f2ef84470",
+    "contract_sha256": "08632e38a2881b69db931bd26246c0763d5d2e44de7799456441f348a1c6b12d",
+    "source_commit": "2c43c2e9aa9032ecd417a9144f91bc39ca52ce35",
+    "mutations": [
+      {
+        "check": "policy-ready",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_policy_ready",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "policy-load",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_policy_load",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "pipeline",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_pipeline",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "ready",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_ready",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "daemon-ready",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_daemon_ready",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "daemon-build",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_daemon_build",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "assembly",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_assembly",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym-attach",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_nym_attach",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "constructor-loads",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_constructor_loads",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "constructor-leaves",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_constructor_leaves",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "rules",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_rules",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "registry",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_registry",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "validators",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_validators",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "ner_tokenize",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_ner_tokenize",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "ner_ort",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_ner_ort",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "ner_mutex_wait",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_ner_mutex_wait",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "resolve1",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_resolve1",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "sweep",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_sweep",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "resolve2",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_resolve2",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "safety_view_build",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_safety_view_build",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "safety_model",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_safety_model",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym_tokenize",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_nym_tokenize",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym_ort",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_nym_ort",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym_mutex_wait",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_nym_mutex_wait",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym_stable",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_nym_stable",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym_neutral",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_nym_neutral",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "manifest",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_manifest",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "audit",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_bound_audit",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "clock-phase",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_phase_registry_ns",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "recognizer",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_recognizer_bound",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "startup-work",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_startup_work_counters_are_refused",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "startup-recognizers",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_startup_recognizers_are_refused",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "invocation",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_nonzero_clock_requires_invocation",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      }
+    ],
+    "mutation_count": 33,
+    "executed_assertion_failures": 33,
+    "restored_passes": 33
+  },
+  "timer_cli_tests": {
+    "executed": 2,
+    "passed": 2
+  },
+  "timer_symbol_probe": {
+    "plain": {
+      "perf::enabled::Span::new": false,
+      "perf::enabled::Capture::finish": false,
+      "gaze::perf::start": false
+    },
+    "timers": {
+      "perf::enabled::Span::new": true,
+      "perf::enabled::Capture::finish": true,
+      "gaze::perf::start": true
+    }
+  },
+  "standalone_probe": {
+    "locked_metadata_passed": true,
+    "locked_build_passed": true,
+    "lockfile_change": "gaze-assembly adds gaze-types; no version changes",
+    "other_independently_locked_workspace_consumes_assembly": false
+  },
+  "gates": {
+    "anvil_fast_passing_and_current": true,
+    "cargo_deny": true,
+    "public_text_scrub": true
   }
 }
