@@ -1,5 +1,5 @@
 //! Opt-in, thread-local attribution. Default builds erase the instrumentation macros.
-//! Records contain fixed metric keys and hashed recognizer identities, never input values.
+//! Records contain fixed metric keys and process-local recognizer ordinals, never input values.
 
 /// A zero-sized guard in builds without attribution support.
 #[doc(hidden)]
@@ -60,7 +60,6 @@ pub use enabled::*;
 #[cfg(feature = "perf-timers")]
 mod enabled {
     use serde::Serialize;
-    use sha3::{Digest, Sha3_256};
     use std::cell::RefCell;
     use std::collections::BTreeMap;
     use std::marker::PhantomData;
@@ -77,15 +76,18 @@ mod enabled {
     #[derive(Debug, Default, Serialize)]
     pub struct Record {
         pub schema: u32,
+        pub phase: &'static str,
+        pub ordinal: u64,
         #[serde(skip)]
         view: Option<&'static str>,
         pub metrics: BTreeMap<&'static str, Metric>,
         pub counters: BTreeMap<&'static str, u64>,
-        /// SHA3-256 of the declared ID. Custom recognizer IDs may contain private data.
+        /// Opaque encounter-order ordinals; declared IDs never leave process memory.
         pub recognizers: BTreeMap<String, Metric>,
     }
 
     thread_local! {
+        static IDENTIFIERS: RefCell<BTreeMap<String, String>> = const { RefCell::new(BTreeMap::new()) };
         static ACTIVE: RefCell<Option<Record>> = const { RefCell::new(None) };
     }
 
@@ -101,9 +103,14 @@ mod enabled {
     }
     impl Capture {
         pub fn new() -> Self {
+            Self::with_identity("request", 0)
+        }
+        pub fn with_identity(phase: &'static str, ordinal: u64) -> Self {
             let previous = ACTIVE.with(|slot| {
                 slot.replace(Some(Record {
-                    schema: 1,
+                    schema: 2,
+                    phase,
+                    ordinal,
                     ..Record::default()
                 }))
             });
@@ -117,6 +124,20 @@ mod enabled {
             let record = ACTIVE.with(|slot| slot.replace(previous));
             let mut record = record.expect("capture owns an active record");
             for key in [
+                "process_to_ready_ns",
+                "process_to_policy_ns",
+                "policy_load_ns",
+                "pipeline_build_ns",
+                "assembly_ns",
+                "rule_construction_ns",
+                "recognizer_construction_ns",
+                "nym_attach_ns",
+                "model_constructor_ns",
+                "tokenizer_load_ns",
+                "model_load_ns",
+                "bundle_verify_ns",
+                "daemon_startup_ns",
+                "request_ns",
                 "rules_ns",
                 "registry_ns",
                 "validators_ns",
@@ -214,7 +235,13 @@ mod enabled {
     impl RecognizerSpan {
         pub fn new(id: &str, rule: bool) -> Self {
             let active = ACTIVE.with(|slot| slot.borrow().is_some());
-            let id = active.then(|| format!("{:x}", Sha3_256::digest(id.as_bytes())));
+            let id = active.then(|| {
+                IDENTIFIERS.with(|ids| {
+                    let mut ids = ids.borrow_mut();
+                    let ordinal = format!("r{}", ids.len() + 1);
+                    ids.entry(id.to_owned()).or_insert(ordinal).clone()
+                })
+            });
             Self {
                 id,
                 start: active.then(Instant::now),
@@ -277,10 +304,27 @@ mod enabled {
             let record = inner.finish();
             assert_eq!(record.metrics["rules_ns"].invocations, 1);
             let (key, rule) = record.recognizers.first_key_value().unwrap();
-            assert_eq!(key.len(), 64);
+            assert!(key.starts_with('r'));
+            assert!(key[1..].parse::<u64>().is_ok());
             assert!(!key.contains("private"));
             assert_eq!(rule.candidates, 2);
             assert_eq!(outer.finish().counters["input_bytes"], 3);
         }
+    }
+}
+
+#[cfg(all(test, not(feature = "perf-timers")))]
+mod disabled_tests {
+    #[test]
+    fn disabled_macros_erase_arguments() {
+        let _span = crate::perf_span!(panic!("disabled span evaluated"));
+        let _recognizer = crate::perf_recognizer!(
+            panic!("disabled id evaluated"),
+            panic!("disabled evidence evaluated")
+        );
+        crate::perf_count!(
+            panic!("disabled key evaluated"),
+            panic!("disabled count evaluated")
+        );
     }
 }

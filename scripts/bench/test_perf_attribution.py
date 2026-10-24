@@ -9,6 +9,38 @@ from unittest.mock import patch
 import perf_attribution as perf
 
 
+def trace(phase="request", ordinal=1, *, daemon=False, models=0, nym=False, dob=False):
+    keys = (perf.LIFECYCLE - {"daemon_startup_ns", "nym_attach_ns", "model_constructor_ns",
+                              "tokenizer_load_ns", "model_load_ns", "bundle_verify_ns"}) if phase == "startup" else {"request_ns"}
+    metrics = {key: {"ns": 0, "invocations": 1, "candidates": 0} for key in keys}
+    if phase == "startup":
+        for key, n in {"daemon_startup_ns": int(daemon), "nym_attach_ns": int(nym),
+                       "model_constructor_ns": models, "tokenizer_load_ns": models,
+                       "model_load_ns": models, "bundle_verify_ns": models + int(nym)}.items():
+            metrics[key] = {"ns": 0, "invocations": n, "candidates": 0}
+    return {"schema": 2, "phase": phase, "ordinal": ordinal, "metrics": metrics, "counters": {}, "recognizers": {}}
+
+
+def fake_script(*, timers=True):
+    return ('#!/usr/bin/env python3\nimport sys,json,tomllib\n'
+            'sys.path.insert(0, ' + repr(str(Path(__file__).parent.resolve())) + ')\n'
+            'from test_perf_attribution import trace\n'
+            'daemon = sys.argv[1] == "daemon"\n'
+            'policy=tomllib.loads(open(sys.argv[sys.argv.index("--policy")+1]).read())\n'
+            'nym=policy.get("safety_net",{}).get("backend")=="nym"\n'
+            'dob=bool(policy.get("dob_judge"))\n'
+            'models=sum(bool(policy.get(k)) and policy[k].get("enabled",True) for k in ("ner","dob_judge"))+int(nym)\n'
+            + ('print("GAZE_PERF "+json.dumps(trace("startup",0,daemon=daemon,models=models,nym=nym,dob=dob)),file=sys.stderr,flush=True)\n' if timers else '')
+            + 'def respond(i):\n'
+            + (' print("GAZE_PERF "+json.dumps(trace(ordinal=i)),file=sys.stderr,flush=True)\n' if timers else '')
+            + ' print(json.dumps({"clean_text":"safe"}),flush=True)\n'
+            'if daemon:\n'
+            ' for i,line in enumerate(sys.stdin,1): respond(i)\n'
+            'else:\n'
+            ' sys.stdin.read()\n'
+            ' respond(1)\n')
+
+
 class AttributionTests(unittest.TestCase):
     def test_nearest_rank_tails(self):
         self.assertEqual(perf.percentiles(list(range(1, 101))), {"p50": 50, "p95": 95, "p99": 99})
@@ -45,11 +77,8 @@ class AttributionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             binary = Path(tmp) / "fake-gaze"
             for timers in [False, True]:
-                binary.write_text('#!/usr/bin/env python3\nimport sys,json\n'
-                    'for line in sys.stdin:\n'
-                    ' row=json.loads(line)\n'
-                    + (' print("GAZE_PERF " + json.dumps({"schema":1,"metrics":{"rules_ns":{"ns":7}},"counters":{},"recognizers":{}}), file=sys.stderr, flush=True)\n' if timers else '')
-                    + ' print(json.dumps({"clean_text":"safe","session_id":row["session_id"]}),flush=True)\n')
+                binary.write_text(fake_script(timers=timers))
+                (Path(tmp) / "policy").write_text("")
                 binary.chmod(0o700)
                 docs = [perf.Document(str(i), "private test input", "digest") for i in range(5)]
                 rows = perf.run_pass(binary, Path(tmp) / "policy", docs, warmups=2,
@@ -73,7 +102,7 @@ class AttributionTests(unittest.TestCase):
 class SummaryTests(unittest.TestCase):
     def test_stages_include_zero_work_documents_and_unknown_old_stages(self):
         def trace(metrics):
-            return {"metrics": metrics, "recognizers": {}}
+            return {"metrics": {**metrics, "request_ns": {"ns": 0}}, "recognizers": {}}
         rows = [{"id": "one", "e2e_ns": 100, "trace": trace({"rules_ns": {"ns": 40}})},
                 {"id": "two", "e2e_ns": 200, "trace": trace({})}]
         result = perf.summary(rows)
@@ -85,25 +114,24 @@ class SummaryTests(unittest.TestCase):
     def test_each_one_shot_file_gets_its_own_record(self):
         with tempfile.TemporaryDirectory() as tmp:
             binary = Path(tmp) / "fake-gaze"
-            binary.write_text('#!/usr/bin/env python3\nimport sys,json\nsys.stdin.read()\n'
-                              'print(json.dumps({"clean_text":"safe"}))\n'
-                              'print("GAZE_PERF " + json.dumps({"schema":1,"metrics":{},"counters":{},"recognizers":{}}),file=sys.stderr)\n')
+            binary.write_text(fake_script())
+            (Path(tmp) / "policy").write_text("")
             binary.chmod(0o700)
             rows = perf.run_pass(binary, Path(tmp) / "policy", [perf.Document("one", "text", "digest")],
                                  warmups=1, dry=True, timeout=5, per_file=True)
             self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0]["trace"]["schema"], 1)
+            self.assertEqual(rows[0]["trace"]["schema"], 2)
             self.assertIsNone(rows[0]["e2e_ns"])
 
 
 class PrivacyTests(unittest.TestCase):
     def test_unknown_fields_and_raw_ids_are_rejected(self):
-        base = {"schema": 1, "metrics": {}, "counters": {}, "recognizers": {}}
-        for trace in [{**base, "text": "private"}, {**base, "recognizers": {"private": {"ns": 1}}},
+        base = trace()
+        for bad_trace in [{**base, "text": "private"}, {**base, "recognizers": {"private": {"ns": 1}}},
                       {**base, "metrics": {"private": {"ns": 1}}},
                       {**base, "counters": {"input_bytes": "private"}}]:
             with self.assertRaisesRegex(ValueError, "contents suppressed"):
-                perf.validate_trace(trace)
+                perf.validate_trace(bad_trace)
         self.assertEqual(perf.validate_trace(base), base)
 
 
@@ -134,6 +162,11 @@ class ReceiptTests(unittest.TestCase):
                            "--measure", "--passes", "3", "--out", str(out)])
             receipt = json.loads(out.read_text())
             self.assertTrue(receipt["publishable"])
+            self.assertEqual(len(receipt["arms"]), 5)
+            one, daemon = (receipt["arms"][name] for name in ("source-tree", "source-tree-daemon"))
+            self.assertEqual(one["input_sha256"], daemon["input_sha256"])
+            self.assertEqual(one["input_bytes"], daemon["input_bytes"])
+            self.assertEqual(receipt["policies"]["source-tree"], receipt["policies"]["source-tree-daemon"])
             self.assertNotIn("never copied", out.read_text())
             for arm in receipt["arms"].values():
                 orders = [run["order"] for run in arm["runs"]]
@@ -142,6 +175,99 @@ class ReceiptTests(unittest.TestCase):
                 self.assertEqual(arm["paired_delta_ns_b_minus_a"]["0"]["p50"], 20)
                 self.assertIsNone(arm["summary"]["a"]["stages_ns"])
 
+
+
+class HookIdentityTests(unittest.TestCase):
+    def test_semantic_projection_normalizes_only_session_prefixes(self):
+        from perf_instrumentation_proof import canonical
+        a = {"clean_text": "<abcdef01:Email_1>", "tokens": [{"token": "<abcdef01:Email_1>", "class": "Email"}], "manifest": [{"clean_span": {"start": 0, "end": 18}}]}
+        b = json.loads(json.dumps(a).replace("abcdef01", "12345678"))
+        self.assertEqual(canonical(a, daemon=True), canonical(b, daemon=True))
+        b["manifest"][0]["clean_span"]["end"] += 1
+        self.assertNotEqual(canonical(a, daemon=True), canonical(b, daemon=True))
+        b = json.loads(json.dumps(a).replace("Email_1", "Email_2"))
+        self.assertNotEqual(canonical(a, daemon=True), canonical(b, daemon=True))
+
+    def test_only_exact_timer_hooks_are_removed(self):
+        from perf_hook_identity import without_hooks
+        original = 'fn load() {\n    detect();\n}\n'
+        hooked = original.replace('    detect();', '    let _verify = gaze_types::perf_span!("bundle_verify_ns");\n    detect();')
+        self.assertEqual(without_hooks(hooked), original)
+        self.assertNotEqual(without_hooks(hooked.replace('detect()', 'skip()')), original)
+
+
+class LifecycleTests(unittest.TestCase):
+    def test_missing_misattributed_and_old_lifecycle_refused(self):
+        import copy
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = Path(tmp) / "policy"
+            policy.write_text("")
+            good = [trace("startup", 0, daemon=True), trace()]
+            self.assertEqual(perf.validate_lifecycle(good, 1, daemon=True, policy=policy)[0], good[0])
+            cases = [[], good[1:], [good[1], good[0]], [good[0], {**good[1], "ordinal": 2}],
+                     [{**good[0], "schema": 1}, good[1]]]
+            for key in ("process_to_ready_ns", "process_to_policy_ns", "policy_load_ns",
+                        "pipeline_build_ns", "assembly_ns", "rule_construction_ns", "recognizer_construction_ns", "daemon_startup_ns"):
+                missing = copy.deepcopy(good)
+                missing[0]["metrics"][key]["invocations"] = 0
+                cases.append(missing)
+            wrong = copy.deepcopy(good)
+            wrong[1]["metrics"]["policy_load_ns"] = {"ns": 1, "invocations": 1}
+            cases.append(wrong)
+            wrong = copy.deepcopy(good)
+            wrong[0]["metrics"]["policy_load_ns"]["ns"] = 100
+            cases.append(wrong)
+            for records in cases:
+                with self.subTest(records=records), self.assertRaises(ValueError):
+                    perf.validate_lifecycle(records, 1, daemon=True, policy=policy, required=True)
+
+    def test_policy_model_counts_and_bundle_verifications_are_checked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = Path(tmp) / "policy"
+            policy.write_text('[ner]\nmodel_dir="/synthetic"\n[dob_judge]\nmodel_dir="/synthetic"\n[safety_net]\nbackend="nym"\n')
+            good = [trace("startup", 0, models=3, nym=True, dob=True), trace()]
+            perf.validate_lifecycle(good, 1, daemon=False, policy=policy)
+            for key in ("model_constructor_ns", "model_load_ns", "tokenizer_load_ns", "bundle_verify_ns", "nym_attach_ns"):
+                count = good[0]["metrics"][key]["invocations"]
+                good[0]["metrics"][key]["invocations"] = count - 1
+                with self.assertRaises(ValueError):
+                    perf.validate_lifecycle(good, 1, daemon=False, policy=policy)
+                good[0]["metrics"][key]["invocations"] = count
+
+    def test_input_identity_binds_order_bytes_and_duplicate_occurrences(self):
+        docs = [perf.Document("a", "one", "old"), perf.Document("b", "two", "old")]
+        for other in (docs[::-1], docs + docs[:1], [perf.Document("a", "changed", "old"), docs[1]]):
+            self.assertNotEqual(perf.input_identity(docs), perf.input_identity(other))
+
+    def test_cold_startup_and_warm_processing_are_separate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary, policy = Path(tmp) / "gaze", Path(tmp) / "policy"
+            policy.write_text("")
+            binary.write_text(fake_script())
+            binary.chmod(0o700)
+            docs = [perf.Document("one", "synthetic", "digest")]
+            rows = perf.run_pass(binary, policy, docs, warmups=1, dry=True, timeout=5,
+                                 per_file=False, require_timers=True)
+            self.assertEqual(rows[0]["startup_trace"]["phase"], "startup")
+            self.assertEqual(rows[0]["trace"]["ordinal"], 2)
+            self.assertIsNone(rows[0]["startup_e2e_ns"])
+            self.assertIsNone(rows[0]["e2e_ns"])
+
+    @unittest.skipUnless(os.environ.get("GAZE_ATTRIBUTION_TEST_BINARY"), "requires a locally built timer CLI")
+    def test_real_cli_lifecycle_hooks_are_validated_by_runner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = Path(tmp) / "policy.toml"
+            policy.write_text('schema_version="0.1.0"\n[session]\nscope="conversation"\n'
+                              '[policy.rulepacks]\nbundled=["core"]\n[safety_net]\nbackend="none"\n'
+                              '[[rule]]\nkind="default"\naction="tokenize"\n')
+            binary = Path(os.environ["GAZE_ATTRIBUTION_TEST_BINARY"]).resolve()
+            docs = [perf.Document(str(i), text, perf.sha(text.encode())) for i, text in enumerate(
+                ["alice@example.invalid", "No contact details.", "Unicode Grüße: alice@example.invalid"])]
+            for one_shot in (True, False):
+                rows = perf.run_pass(binary, policy, docs, warmups=1, dry=True, timeout=30,
+                                     per_file=one_shot, require_timers=True)
+                self.assertEqual(len(rows), 3)
+                self.assertTrue(all(r["trace"]["metrics"]["request_ns"]["invocations"] == 1 for r in rows))
 
 
 class FrozenPolicyTests(unittest.TestCase):
@@ -178,16 +304,7 @@ class ChildEnvironmentTests(unittest.TestCase):
                       'if sys.argv[1] == "setup":\n'
                       f' Path(sys.argv[sys.argv.index("--policy-out")+1]).write_text({policy_text!r})\n'
                       ' sys.exit(0)\n'
-                      f'model=Path(os.environ.get("GAZE_NYM_MODEL_DIR", {str(pinned)!r}))\n'
-                      'trace={"schema":1,"metrics":{},"recognizers":{},"counters":{"ner_windows":len((model/"model.onnx").read_bytes())}}\n'
-                      'def respond():\n'
-                      ' print("GAZE_PERF "+json.dumps(trace),file=sys.stderr,flush=True)\n'
-                      ' print(json.dumps({"clean_text":"safe"}),flush=True)\n'
-                      'if sys.argv[1] == "daemon":\n'
-                      ' for line in sys.stdin: respond()\n'
-                      'else:\n'
-                      ' sys.stdin.read()\n'
-                      ' respond()\n')
+                      + fake_script().split("\n", 1)[1])
             binaries = [root / side for side in ("a", "b")]
             for index, binary in enumerate(binaries):
                 binary.write_text(script + f"# side {index}\n")
@@ -211,7 +328,7 @@ class ChildEnvironmentTests(unittest.TestCase):
             self.assertEqual(receipt["model_inventory"], perf.model_inventory([pinned]))
             for arm in receipt["arms"].values():
                 for rows in arm["runs"][0]["sides"].values():
-                    self.assertTrue(all(row["trace"]["counters"]["ner_windows"] == 6 for row in rows))
+                    self.assertTrue(all(row["trace"]["schema"] == 2 for row in rows))
             environments = [json.loads(line) for line in journal.read_text().splitlines()]
             self.assertGreater(len(environments), 2)
             for environment in environments:
