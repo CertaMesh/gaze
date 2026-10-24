@@ -250,8 +250,13 @@ class RunnerWiringTests(unittest.TestCase):
                     mock.patch.object(runner.dataiku, "verify_dataset"), \
                     mock.patch.object(runner.dataiku, "load_documents", return_value=(positive, {})), \
                     mock.patch.object(runner, "load_negative_documents", return_value=([], {})), \
-                    mock.patch.object(runner.dataiku, "build_binary", return_value=root / "clean_for_bench"), \
-                    mock.patch.object(score, "build_validator_probe", return_value=root / "probe"), \
+                    mock.patch.object(score, "git_metadata", return_value={
+                        "revision": "a" * 40, "dirty": False,
+                    }), \
+                    mock.patch.object(runner.subject_build, "cargo_build_binary", \
+                                      return_value=root / "clean_for_bench") as build, \
+                    mock.patch.object(runner, "build_validator_probe", \
+                                      return_value=root / "probe") as probe, \
                     mock.patch.object(score, "collect_validator_measurements", return_value={
                         "documents": {positive[0].uid: {"gold_validation": [
                             {"start": span.start, "end": span.end, "label": span.label,
@@ -267,6 +272,8 @@ class RunnerWiringTests(unittest.TestCase):
                     mock.patch.object(score, "assemble_scorecard", side_effect=assemble_scorecard):
                 with self.assertRaises(self.Stop):
                     runner.run(args)
+                build.assert_called_once_with(REPO_ROOT, tuple(score.DEFAULT_CONFIGS), release=False)
+                probe.assert_called_once_with(REPO_ROOT, release=False)
         return measured, recorded["scored_label_contract"]
 
     def test_v2_cross_check_scores_and_records_v2(self) -> None:
