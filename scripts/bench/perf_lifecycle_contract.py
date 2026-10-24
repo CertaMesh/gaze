@@ -49,11 +49,16 @@ def violates_check(record: dict, check) -> bool:
             else any(ns > capacity for ns in children))
 
 
-RECORD_CHECKS = ("metric-candidates", "ner-encodes", "ner-windows", "nym-windows", "nym-views", "sweep-counter-owner", "parent-invocations")
+RECORD_CHECKS = ("metric-candidates", "ner-encodes", "ner-windows", "nym-windows", "nym-views", "sweep-counter-owner", "parent-invocations", "nonempty-input-work")
 
 
 def violates_record(record: dict, check: str) -> bool:
     metrics, counters = record["metrics"], record["counters"]
+    if check == "nonempty-input-work":
+        # prepare_windows emits only nonempty input ranges; sweep rejects empty
+        # matches before selecting additions. Raw recognizer candidate counts
+        # instead precede geometry/score/veto admission, so may describe errors.
+        return (counters["ner_windows"] > 0 or counters["sweep_candidates"] > 0) and counters["input_bytes"] == 0
     if check == "sweep-counter-owner":
         return counters["sweep_candidates"] > 0 and metrics["sweep_ns"]["invocations"] == 0
     if check == "parent-invocations":
@@ -109,6 +114,8 @@ HOOK_RELATIONS = (
                  "gaze/src/pipeline.rs:1224-1230: each first resolution follows one registry call"),
     HookRelation("sweep-resolve1", "sweep_ns", "resolve1_ns", "at-least",
                  "gaze/src/pipeline.rs:1228-1240,1652-1661: each sweep follows first resolution"),
+    HookRelation("manifest-sweep", "manifest_ns", "sweep_ns", "invoked",
+                 "gaze/src/pipeline.rs:1231-1240,1326; pipeline/occurrence.rs:156: sweep succeeds before Ledger::new"),
     HookRelation("resolve2-sweep", "resolve2_ns", "sweep_ns", "invoked",
                  "gaze/src/pipeline.rs:1231-1275,1713: second resolution is inside or after sweep"),
     HookRelation("sweep-added-resolve2", "sweep_candidates", "resolve2_ns", "counter-owner",
@@ -363,7 +370,13 @@ def documentation() -> str:
                  "Pipeline prerequisites are directional: later work requires earlier work,",
                  "not the reverse. Empty text/candidate sets still enter registry, first",
                  "resolution and sweep (pipeline.rs:1224-1240; registry.rs:1437), while",
-                 "second resolution remains optional. Skip-class and capitals gating apply",
+                 "manifest work requires an invoked sweep. Second resolution remains optional.",
+                 "Positive NER windows or sweep additions require positive input_bytes:",
+                 "NER windows use nonempty ranges (ner/backend/preparation.rs:60-84), and",
+                 "sweep matches reject empty spans (gaze/src/sweep.rs:379). Raw candidate",
+                 "counts precede geometry, score and veto admission (registry.rs:1264-1278);",
+                 "an empty-input custom regex can emit a candidate before failing resolution.",
+                 "Skip-class and capitals gating apply",
                  "only to safety nets (pipeline.rs:2009-2034). Prefix caching is disabled;",
                  "the text wrapper always rescans (pipeline.rs:1195-1205). Daemon requests",
                  "use the same path. A zero-recognizer CLI build fails assembly before",

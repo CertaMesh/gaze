@@ -53,8 +53,8 @@
     "passed": 1
   },
   "python_tests": {
-    "executed": 251,
-    "passed": 251,
+    "executed": 259,
+    "passed": 259,
     "skipped": 0,
     "real_cli_tests": [
       "test_real_cli_lifecycle_hooks_are_validated_by_runner",
@@ -63,7 +63,7 @@
       "test_real_empty_and_repeated_zero_candidate_requests_admit"
     ],
     "attribution_tests": 29,
-    "bound_tests": 222,
+    "bound_tests": 225,
     "duration_bounds": 57,
     "child_parent_edge_tests": 42,
     "forbidden_phase_tests": 34,
@@ -74,10 +74,11 @@
     "reviewer_round_three_recognizer_witness_tests": 3,
     "ownership_checks": 8,
     "reviewer_round_four_ownership_witness_tests": 2,
-    "record_checks": 7,
+    "record_checks": 8,
     "reviewer_round_five_invocation_witness_tests": 2,
-    "prerequisite_checks": 14,
-    "reviewer_prerequisite_witnesses": 8
+    "prerequisite_checks": 15,
+    "reviewer_prerequisite_witnesses": 8,
+    "hook_deletion_tests": 5
   },
   "mutation": {
     "source_commit": "e1744ec1d533af669797c88c14e2494c0f98c450",
@@ -1008,5 +1009,26 @@
     "cache": "prefix_cache is compatibility-only; pipeline.rs:1195-1205 always rescans",
     "source_call_paths": "pipeline.rs:1224-1275,1707-1713; registry.rs:1437",
     "binary_sha256": "378ec04cf7eb373893963a69b771f89487d8b24224a9e8d50837bcad324b0af6"
+  },
+  "hook_deletion_sweep": {
+    "fixture_sha256": "7178a07a158cc67e60601bc6e7464c3b5e8b8e14e3dc1422288110e8fac13960",
+    "source_sha256": "701eeedb1f39524fac0cb7fa728e5d5222bfa197bb4b12e6d3951d652a0c75fb",
+    "cases": 14,
+    "partial_error_cases": 1,
+    "inventory_hooks": 42,
+    "counts": {
+      "refused": 858,
+      "undetectable": 40,
+      "not-fired": 898
+    },
+    "unobservable_source_reasons": {
+      "input_bytes": "pipeline.rs:1218; registry.rs:1264-1265: empty text contributes zero, and candidate counts precede geometry/score/veto admission; positive NER windows or sweep additions do require bytes",
+      "validators_ns": "registry.rs:1264-1265; validator_veto.rs:23-48; gaze-types/src/perf.rs:291-300: anonymous candidate totals precede filtering and carry no validator kind; Rule includes unvalidated custom regexes",
+      "resolve2_ns": "pipeline.rs:1250-1284,1707-1713: optional street/address recovery or sweep; positive sweep_candidates does require it",
+      "sweep_candidates": "pipeline.rs:1707-1713: zero additions are valid; resolve2 can instead come from street/address recovery",
+      "manifest_ns": "pipeline.rs:1231-1326; occurrence.rs:156: errors may end after sweep but before Ledger::new; scan-only paths at pipeline.rs:1034,1079 can invoke safety nets without a ledger; schema 3 has no success flag",
+      "audit_ns": "pipeline.rs:3067-3072,3097-3102: sink calls are conditional on a logger; no independent sink-call counter"
+    },
+    "final_head_receipt": "Run perf_lifecycle_mutation.py after committing; its receipt binds the exact HEAD, source and fixture hashes. The containment_mutation object below is retained historical evidence."
   }
 }

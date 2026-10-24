@@ -113,7 +113,8 @@ def prove(out: Path) -> dict:
                "runner_source_sha256": hashlib.sha256(source.encode()).hexdigest(),
                "contract_sha256": hashlib.sha256((ROOT / "perf_lifecycle_contract.py").read_bytes()).hexdigest(),
                "test_sha256": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-                               for name in ("test_perf_attribution.py", "test_perf_lifecycle_bounds.py")},
+                               for name in ("test_perf_attribution.py", "test_perf_lifecycle_bounds.py",
+                                            "test_perf_hook_deletion.py")},
                "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                "mutations": results, "mutation_count": len(results),
                "serial_sum_checks": sum(c.kind == "serial" for c in CLOCK_CHECKS),
@@ -123,6 +124,17 @@ def prove(out: Path) -> dict:
                "prerequisite_checks": len(HOOK_RELATIONS),
                "parent_test_isolation": "Each parent check alone; serial sums and ancestor edges otherwise imply it. Full graph also rejects every parent witness.",
                "executed_assertion_failures": len(results), "restored_passes": len(results)}
+    from perf_hook_deletion import FIXTURE, sweep
+    deletion_sweep = sweep(json.loads(FIXTURE.read_text()))
+    deletion_path = out / "hook-deletions.json"
+    deletion_path.write_text(json.dumps(deletion_sweep, indent=2) + "\n")
+    receipt["hook_deletion_sweep"] = {
+        "source_sha256": perf.file_sha(ROOT / "perf_hook_deletion.py"),
+        "fixture_sha256": perf.file_sha(FIXTURE),
+        "result_sha256": perf.file_sha(deletion_path),
+        "cases": deletion_sweep["cases"],
+        "counts": {status: sum(row["status"] == status for row in deletion_sweep["deletions"])
+                   for status in ("refused", "undetectable", "not-fired")}}
     (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
     return receipt
 

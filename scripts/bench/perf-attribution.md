@@ -265,6 +265,7 @@ relations. The following generated prerequisites enforce sibling relations.
 | nym-neutral-stable | `nym_neutral_ns` | `nym_stable_ns` | prerequisite invocations >= trigger invocations | gaze-recognizers/src/safety_net/nym/mod.rs:162-186: stable precedes each neutral view |
 | resolve1-registry | `resolve1_ns` | `registry_ns` | prerequisite invocations >= trigger invocations | gaze/src/pipeline.rs:1224-1230: each first resolution follows one registry call |
 | sweep-resolve1 | `sweep_ns` | `resolve1_ns` | prerequisite invocations >= trigger invocations | gaze/src/pipeline.rs:1228-1240,1652-1661: each sweep follows first resolution |
+| manifest-sweep | `manifest_ns` | `sweep_ns` | positive trigger requires invoked prerequisite | gaze/src/pipeline.rs:1231-1240,1326; pipeline/occurrence.rs:156: sweep succeeds before Ledger::new |
 | resolve2-sweep | `resolve2_ns` | `sweep_ns` | positive trigger requires invoked prerequisite | gaze/src/pipeline.rs:1231-1275,1713: second resolution is inside or after sweep |
 | sweep-added-resolve2 | `sweep_candidates` | `resolve2_ns` | positive trigger requires invoked prerequisite | gaze/src/pipeline.rs:1707-1713: positive additions always start second resolution |
 | safety-model-view | `safety_model_ns` | `safety_view_build_ns` | positive trigger requires invoked prerequisite | gaze/src/pipeline.rs:1829-1858,1920: scan construction precedes either model call site |
@@ -274,7 +275,13 @@ windows. Invoked zero-duration hooks and invoked zero-window views are valid.
 Pipeline prerequisites are directional: later work requires earlier work,
 not the reverse. Empty text/candidate sets still enter registry, first
 resolution and sweep (pipeline.rs:1224-1240; registry.rs:1437), while
-second resolution remains optional. Skip-class and capitals gating apply
+manifest work requires an invoked sweep. Second resolution remains optional.
+Positive NER windows or sweep additions require positive input_bytes:
+NER windows use nonempty ranges (ner/backend/preparation.rs:60-84), and
+sweep matches reject empty spans (gaze/src/sweep.rs:379). Raw candidate
+counts precede geometry, score and veto admission (registry.rs:1264-1278);
+an empty-input custom regex can emit a candidate before failing resolution.
+Skip-class and capitals gating apply
 only to safety nets (pipeline.rs:2009-2034). Prefix caching is disabled;
 the text wrapper always rescans (pipeline.rs:1195-1205). Daemon requests
 use the same path. A zero-recognizer CLI build fails assembly before
@@ -366,6 +373,27 @@ After committing, run `perf_lifecycle_mutation.py --out <directory>`. It removes
 each parent check, serial sum and phase, assembly-count and startup-work guard in an isolated
 Python copy. Each mutation must fail one executed assertion, then pass the same
 test after restoration. The receipt pins both counts; logs retain every result.
+
+`test_perf_hook_deletion.py` separately erases every inventoried metric and counter
+and each recognizer's numeric output from retained real CLI records. Its fixed
+synthetic inputs cover empty text, zero candidates, repeat-value additions,
+daemon context assembly, NER, Nym and DOB construction. All hooks must be exercised.
+The seven missing-sweep negatives refuse, and real partial-error prefixes admit.
+To replay the full admission sweep, run:
+
+```sh
+uv run --project scripts/bench python scripts/bench/perf_hook_deletion.py --out target/hook-deletions.json
+```
+
+Add `--capture <timer-binary>` to recapture with the retained, hash-verified new
+binary and local models. This is an untimed diagnostic, with no latency claims.
+Each admitted deletion includes a source reason. Schema 3 cannot distinguish all
+optional outputs from missing instrumentation: it carries neither success status
+nor validator identities. A record may legitimately end before manifest work or
+have no configured audit sink. Positive NER windows or sweep additions do require
+nonzero input bytes. Positive sweep additions also require second resolution;
+street and address recovery can invoke that resolution without sweep additions.
+`UNOBSERVABLE` in the sweep lists each remaining limit and its source sites.
 
 
 For a synthetic comparison across separate feature-off and timer executables, run

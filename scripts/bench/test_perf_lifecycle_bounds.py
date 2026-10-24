@@ -42,7 +42,7 @@ def records(*, daemon=False):
         for key, value in {'assembly_ns': 100, 'recognizer_construction_ns': 20,
                            'rule_construction_ns': 20}.items():
             request['metrics'][key] = {'ns': value, 'invocations': 1, 'candidates': 0}
-    request['counters'].update(ner_encodes=1, ner_windows=1, nym_windows=1, nym_windows_stable=1)
+    request['counters'].update(input_bytes=100, ner_encodes=1, ner_windows=1, nym_windows=1, nym_windows_stable=1)
     return [startup, request]
 
 
@@ -84,6 +84,12 @@ class BoundTests(unittest.TestCase):
         audited = [key for hooks, _, _ in HOOK_AUDIT for key in hooks]
         self.assertEqual(len(audited), len(set(audited)))
         self.assertEqual(set(audited), perf.METRICS | perf.COUNTERS | {RECOGNIZERS})
+
+    def test_nonempty_input_work(self):
+        rows = records()
+        rows[1]['counters']['input_bytes'] = 0
+        with self.assertRaisesRegex(ValueError, 'nonempty-input-work'):
+            self.admit(rows)
 
     def test_zero_duration_model_hooks_and_zero_window_views_admit(self):
         rows = records()
