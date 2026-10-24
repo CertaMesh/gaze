@@ -968,3 +968,146 @@ async fn expansion_boundary_two_leaves_arguments() {
 async fn expansion_boundary_two_leaves_response() {
     expansion_boundary(true, true).await;
 }
+
+async fn new_hit_gap_contract(response: bool) {
+    let pipeline = repeat_pipeline(EvidenceKind::Rule);
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let tokens = seed(
+        &pipeline,
+        &session,
+        &["Maria", "Schneider", "Maria Schneider"],
+    )
+    .await;
+    let before = session.snapshot_entries();
+    let payload = json!(format!("Maria {}", tokens[1]));
+    let (registry, seen) = capture(if response {
+        payload.clone()
+    } else {
+        json!("public")
+    });
+    let result = dispatch(
+        &registry,
+        &Store::default(),
+        &pipeline,
+        &session,
+        if response { json!("public") } else { payload },
+    )
+    .await
+    .unwrap();
+    let actual = if response {
+        result.payload
+    } else {
+        seen.lock().unwrap().clone()
+    };
+    assert_eq!(actual, json!(format!("{} {}", tokens[0], tokens[1])));
+    assert_eq!(restore(&session, &actual), json!("Maria Schneider"));
+    assert_eq!(session.snapshot_entries(), before);
+}
+#[tokio::test]
+async fn review_new_hit_gap_arguments() {
+    new_hit_gap_contract(false).await;
+}
+#[tokio::test]
+async fn review_new_hit_gap_response() {
+    new_hit_gap_contract(true).await;
+}
+
+async fn new_hit_whitespace_variants(response: bool) {
+    for gap in [
+        " ",
+        "\u{a0}",
+        "\u{2009}",
+        "\t",
+        "\r\n",
+        " \t\u{a0}\r\n\u{2009}",
+    ] {
+        for shape in 0..4 {
+            let pipeline = repeat_pipeline(EvidenceKind::Rule);
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let tokens = seed(
+                &pipeline,
+                &session,
+                &[
+                    "Maria",
+                    "Schneider",
+                    "Fischer",
+                    "Maria Schneider",
+                    "Schneider Fischer",
+                    "Maria Schneider Fischer",
+                ],
+            )
+            .await;
+            let (wire, expected, expanded) = match shape {
+                0 => (
+                    format!("Maria{gap}{}", tokens[1]),
+                    format!("{}{gap}{}", tokens[0], tokens[1]),
+                    format!("Maria{gap}Schneider"),
+                ),
+                1 => (
+                    format!("{}{gap}Schneider", tokens[0]),
+                    format!("{}{gap}{}", tokens[0], tokens[1]),
+                    format!("Maria{gap}Schneider"),
+                ),
+                2 => (
+                    format!("Maria{gap}{}{gap}Fischer", tokens[1]),
+                    format!("{}{gap}{}{gap}{}", tokens[0], tokens[1], tokens[2]),
+                    format!("Maria{gap}Schneider{gap}Fischer"),
+                ),
+                _ => (
+                    format!("{}{gap}Schneider{gap}{}", tokens[0], tokens[2]),
+                    format!("{}{gap}{}{gap}{}", tokens[0], tokens[1], tokens[2]),
+                    format!("Maria{gap}Schneider{gap}Fischer"),
+                ),
+            };
+            // Discover normalized spellings using an already-owned wire first.
+            // Those unused discovery entries are outside the projection contract.
+            let (prime_registry, prime_seen) = capture(json!("public"));
+            dispatch(
+                &prime_registry,
+                &Store::default(),
+                &pipeline,
+                &session,
+                json!(expected.clone()),
+            )
+            .await
+            .unwrap();
+            assert_eq!(*prime_seen.lock().unwrap(), json!(expected));
+            let before = session.snapshot_entries();
+            let payload = json!(wire);
+            let (registry, seen) = capture(if response {
+                payload.clone()
+            } else {
+                json!("public")
+            });
+            let result = dispatch(
+                &registry,
+                &Store::default(),
+                &pipeline,
+                &session,
+                if response { json!("public") } else { payload },
+            )
+            .await
+            .unwrap();
+            let actual = if response {
+                result.payload
+            } else {
+                seen.lock().unwrap().clone()
+            };
+            assert_eq!(actual, json!(expected), "gap={gap:?} shape={shape}");
+            assert_eq!(restore(&session, &actual), json!(expanded));
+            assert_eq!(
+                session.snapshot_entries(),
+                before,
+                "gap={gap:?} shape={shape}"
+            );
+        }
+    }
+}
+#[tokio::test]
+async fn new_hit_whitespace_variants_arguments() {
+    new_hit_whitespace_variants(false).await;
+}
+#[tokio::test]
+async fn new_hit_whitespace_variants_response() {
+    new_hit_whitespace_variants(true).await;
+}

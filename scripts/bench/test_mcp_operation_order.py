@@ -197,3 +197,19 @@ def test_other_namespace_is_literal_and_never_credited_as_coverage():
     assert mask[len(foreign):] == [None] + ['name'] * len('Maria Schneider')
     with pytest.raises(ValueError, match='authoritative original'):
         arm.leaf_mask('Maria Schneider', foreign, {})
+
+
+def test_new_hit_gap_counterweights_keep_whitespace_outside_gold():
+    rows = [row for row in arm.fixture() if row["id"].startswith("public-new-hit-gap-")]
+    assert len(rows) == 48
+    assert {row["direction"] for row in rows} == {"arguments", "response"}
+    for row in rows:
+        assert row["layer"] == "D" and row["category"] == "text"
+        assert row["seed_names"][:3] == ["Maria", "Schneider", "Fischer"]
+        text = row["expanded"]["items"][0].encode()
+        mask = bytearray(len(text))
+        for gold in row["gold"]:
+            start, end = gold["span"]
+            assert text[start:end].decode() in row["seed_names"][:3]
+            mask[start:end] = b"\x01" * (end - start)
+        assert bytes(byte for byte, private in zip(text, mask) if not private).decode().isspace()

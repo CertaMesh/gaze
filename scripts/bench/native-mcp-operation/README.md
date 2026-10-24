@@ -6,10 +6,10 @@ Arguments captured inside the tool and protected responses released to the host
 are distinct operations. It does not flatten JSON into the text benchmark.
 
 The committed fixture `../fixtures/mcp_operation_order.json` is specification
-`mcp-operation-order-v3`. It contains 50 synthetic operations: declared sources
+`mcp-operation-order-v4`. It contains 98 synthetic operations: declared sources
 in A, ordinary text, code, and number counterweights in D, and source-first and source-last
 repeats and owned-token overlaps in R. The specification includes bare-filename and other-namespace token
-counterweights, plus repeats beside both. Both sides must be captured on this
+counterweights, plus repeats beside both. It also measures public whitespace beside newly protected name parts, including Unicode whitespace, both directions, and three-part chains. Both sides must be captured on this
 version; earlier specifications are superseded. Current-session manifest values
 restore through the runtime assessment API. Unowned spellings remain literal,
 as required by the existing MCP contract; their other owner is not validated

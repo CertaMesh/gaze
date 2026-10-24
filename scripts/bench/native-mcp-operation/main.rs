@@ -158,7 +158,7 @@ async fn run_case(
     .with_dictionaries(dictionaries);
     let principal = Principal::new("synthetic-agent");
     for name in &case.seed_names {
-        let args = json!({"items": [format!("From: {name} <alice@example.invalid>")], "count": 0});
+        let args = json!({"items": [format!("From: \"{name}\" <alice@example.invalid>")], "count": 0});
         if let Err(error) = envelope.dispatch(&principal, "capture", args, None).await {
             return Ok(json!({"id":case.id,"phase":"seed","error":error.to_string()}));
         }

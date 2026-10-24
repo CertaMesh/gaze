@@ -148,23 +148,58 @@ pub(super) fn cover_rule_repeats(
             .or_default()
             .push(hit);
     }
+    let public_gaps = tokens
+        .windows(2)
+        .map(|pair| pair[0].view.end..pair[1].view.start)
+        .filter(|gap| expanded[gap.clone()].chars().all(char::is_whitespace))
+        .collect::<Vec<_>>();
     let mut replacements = Vec::new();
     for hits in groups.values() {
         let unions = union_rule_ranges(hits.iter().map(|hit| (hit.span.clone(), hit)).collect());
         let mut parts = Vec::new();
         for (range, hit) in unions {
-            let blocked = tokens.iter().filter(|token| {
-                token.immutable || token.class != hit.class || token.family != hit.token_family
-            });
+            // Subtract public gaps before expanding fragments to compatible tokens.
+            // This includes tokens newly protected during this operation.
+            let mut blocked = tokens
+                .iter()
+                .filter(|token| {
+                    token.immutable || token.class != hit.class || token.family != hit.token_family
+                })
+                .map(|token| token.view.clone())
+                .chain(public_gaps.iter().cloned())
+                .collect::<Vec<_>>();
+            for (index, token) in tokens.iter().enumerate() {
+                let left = index.checked_sub(1).map_or(0, |i| tokens[i].view.end);
+                let right = tokens
+                    .get(index + 1)
+                    .map_or(expanded.len(), |t| t.view.start);
+                let before = &expanded[left..token.view.start];
+                let after = &expanded[token.view.end..right];
+                let leading = token.view.end
+                    ..token.view.end + after.len()
+                        - after.trim_start_matches(char::is_whitespace).len();
+                let trailing =
+                    left + before.trim_end_matches(char::is_whitespace).len()..token.view.start;
+                // The other side will be protected by this hit. Whitespace at
+                // the outer edge of a hit still requires ordinary coverage.
+                if !leading.is_empty() && range.start <= leading.start && leading.end < range.end {
+                    blocked.push(leading);
+                }
+                if !trailing.is_empty() && range.start < trailing.start && trailing.end <= range.end
+                {
+                    blocked.push(trailing);
+                }
+            }
+            blocked.sort_unstable_by_key(|span| (span.start, span.end));
             let mut cursor = range.start;
-            for token in blocked {
-                if token.view.end <= cursor || token.view.start >= range.end {
+            for span in blocked {
+                if span.end <= cursor || span.start >= range.end {
                     continue;
                 }
-                if cursor < token.view.start {
-                    parts.push((cursor..token.view.start, hit));
+                if cursor < span.start {
+                    parts.push((cursor..span.start, hit));
                 }
-                cursor = cursor.max(token.view.end);
+                cursor = cursor.max(span.end);
                 if cursor >= range.end {
                     break;
                 }
@@ -188,16 +223,6 @@ pub(super) fn cover_rule_repeats(
             }
         }
         for (view, hit) in union_rule_ranges(parts) {
-            // A public whitespace gap between two owned spans needs no token.
-            if tokens.windows(2).any(|pair| {
-                let gap = pair[0].view.end..pair[1].view.start;
-                gap.start <= view.start
-                    && view.end <= gap.end
-                    && expanded[gap].chars().all(char::is_whitespace)
-            }) {
-                continue;
-            }
-
             if tokens.iter().any(|token| {
                 token.immutable
                     && token.view.is_empty()

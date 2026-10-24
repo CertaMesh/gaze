@@ -38,7 +38,7 @@ def identity():
 
 def fixture():
     data = json.loads(FIXTURE.read_text())
-    if data["schema_version"] != 1 or data["contract"] != "mcp-operation-order-v3":
+    if data["schema_version"] != 1 or data["contract"] != "mcp-operation-order-v4":
         raise ValueError("unsupported MCP operation fixture")
     rows = data["cases"]
     if len({row["id"] for row in rows}) != len(rows) or {row["layer"] for row in rows} != {"A", "D", "R"}:
