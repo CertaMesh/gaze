@@ -684,7 +684,7 @@ def test_subject_build_receipt_binds_execution(tmp_path, evidence, field):
     card = copy.deepcopy(header['scorecard'])
     subject_build.validate(card, header['binary_sha256'])
     values = dict(mode='external-binary', source={'revision': 'f' * 40, 'dirty': False},
-                  binary_sha256='f' * 64, profile='release', configs=['another-config'])
+                  binary_sha256='f' * 64, profile='release', configs=['full-stack-nym-resolve'])
     card['subject_build'][field] = values[field]
     with pytest.raises(ValueError, match='^unqualified_subject_build$'):
         subject_build.validate(card, header['binary_sha256'])
