@@ -3336,6 +3336,21 @@ fn residual_scan_model_control(
     Ok(())
 }
 
+/// Permit whitespace only between covered spans of the same known-value occurrence.
+fn rule_hit_is_covered(text: &str, covered: &[bool], span: std::ops::Range<usize>) -> bool {
+    let (Some(text), Some(covered)) = (text.get(span.clone()), covered.get(span)) else {
+        return false;
+    };
+    if !covered.first().copied().unwrap_or(false) || !covered.last().copied().unwrap_or(false) {
+        return false;
+    }
+    text.char_indices().all(|(start, character)| {
+        let bytes = &covered[start..start + character.len_utf8()];
+        bytes.iter().all(|byte| *byte)
+            || (character.is_whitespace() && bytes.iter().all(|byte| !*byte))
+    })
+}
+
 /// Walk state for the outbound request residual re-scan.
 struct RequestResidualScan<'a, 'session> {
     pipeline: &'a Pipeline,
@@ -3348,8 +3363,9 @@ struct RequestResidualScan<'a, 'session> {
 }
 
 impl RequestResidualScan<'_, '_> {
-    /// Every overlapping Rule hit must be wholly owned. Unknown token-looking text stays
-    /// literal: only exact tokens in this captured request may contribute owned bytes.
+    /// Every overlapping Rule hit needs owned non-whitespace bytes. Only internal
+    /// whitespace gaps between covered spans are allowed. Unknown token-looking text
+    /// stays literal: only exact tokens in this captured request contribute ownership.
     fn rule_repeats_are_covered(&self, text: &str) -> Result<bool, ProxyError> {
         let mut expanded = String::new();
         let mut covered = Vec::new();
@@ -3386,7 +3402,7 @@ impl RequestResidualScan<'_, '_> {
             .map_err(|source| ProxyError::Pipeline { source })?;
         Ok(hits
             .into_iter()
-            .all(|hit| covered[hit.span].iter().all(|byte| *byte)))
+            .all(|hit| rule_hit_is_covered(&expanded, &covered, hit.span)))
     }
 
     fn probe(&self, field_path: &str, text: &str) -> Result<(), ProxyError> {
@@ -4162,6 +4178,48 @@ mod tests {
             "all name letters are owned; only a public separator remains: {result:?}"
         );
         assert_eq!(body["unsupported_carrier"], carrier);
+    }
+
+    #[test]
+    fn residual_coverage_allows_only_internal_whitespace_gaps() {
+        for (gap, allowed) in [
+            (" ", true),
+            ("\t\n", true),
+            ("\u{00a0}\u{202f}", true),
+            ("x", false),
+            ("42", false),
+            ("-", false),
+            (".", false),
+            ("\u{200b}", false),
+            ("\u{200c}", false),
+            ("\u{200d}", false),
+            ("\u{2060}", false),
+            ("\u{feff}", false),
+        ] {
+            let text = format!("ab{gap}cd");
+            let mut covered = vec![false; text.len()];
+            covered[..2].fill(true);
+            covered[text.len() - 2..].fill(true);
+            assert_eq!(
+                rule_hit_is_covered(&text, &covered, 0..text.len()),
+                allowed,
+                "gap {gap:?}"
+            );
+            covered.fill(true);
+            assert!(rule_hit_is_covered(&text, &covered, 0..text.len()));
+        }
+        for (text, covered) in [
+            (" A B", vec![false, true, false, true]),
+            ("A B ", vec![true, false, true, false]),
+            (" ", vec![false]),
+            ("", vec![]),
+            ("A\u{00a0}B", vec![true, true, false, true]),
+        ] {
+            assert!(
+                !rule_hit_is_covered(text, &covered, 0..text.len()),
+                "boundary {text:?}"
+            );
+        }
     }
 
     const DIRECT_REQUEST_BODY: &[u8] = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":"synthetic request"}]}"#;

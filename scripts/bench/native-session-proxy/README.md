@@ -96,3 +96,10 @@ false positives still count as cost. Successful rows retain their exact wire
 leaves and proven mappings so reviewers can re-score each stopped leak.
 The default strict comparison and the both-forwarded paired comparison remain
 available unchanged in policy.
+
+Immutable-carrier Rule coverage permits an uncovered gap only when it contains
+whitespace between two covered spans of the same occurrence. Leading or trailing
+gaps refuse. Every uncovered non-whitespace byte, including punctuation, digits,
+and zero-width characters, refuses. The native cases include a fully owned
+name repeated across a public separator and a private interior name between
+owned copies. The mutable protector keeps its existing, stronger byte coverage.

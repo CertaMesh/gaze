@@ -719,6 +719,21 @@ async fn check_unsupported_rule_carriers(provider: Provider, stream: bool) {
             "Hello {token} johanna",
             Some("Maria Schneider"),
         ),
+        (
+            "From: Schneider Johanna Maria <m@example.invalid>\nHello.",
+            "Hello {token} johanna {token}",
+            Some("Maria Schneider"),
+        ),
+        (
+            "From: Schneider . Maria <m@example.invalid>\nHello.",
+            "Hello {token} . {token}",
+            Some("Maria Schneider"),
+        ),
+        (
+            "From: Schneider \u{200b} Maria <m@example.invalid>\nHello.",
+            "Hello {token} \u{200b} {token}",
+            Some("Maria Schneider"),
+        ),
     ] {
         run_configured_case(
             provider,
@@ -812,6 +827,31 @@ async fn unsupported_carrier_counterweights_remain_verbatim() {
                     evidence,
                     (SOURCE, "ordinary text", Some(("maria schneider", false))),
                     None,
+                    false,
+                )
+                .await;
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn unsupported_owned_copies_allow_only_whitespace_between_covered_spans() {
+    for provider in [Provider::OpenAi, Provider::Gemini] {
+        for stream in [false, true] {
+            for gap in [" ", "\t\n", "\u{00a0}"] {
+                let carrier = format!("Hello {{token}}{gap}{{token}}");
+                run_configured_case(
+                    provider,
+                    stream,
+                    false,
+                    Some(gaze::EvidenceKind::Rule),
+                    (
+                        "From: Schneider Maria <m@example.invalid>\nHello.",
+                        "ordinary text",
+                        Some((&carrier, false)),
+                    ),
+                    Some("Maria Schneider"),
                     false,
                 )
                 .await;
