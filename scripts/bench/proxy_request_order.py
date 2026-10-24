@@ -29,6 +29,7 @@ import queue
 import re
 import socket
 import subprocess
+import sys
 import threading
 import tomllib
 import time
@@ -45,6 +46,36 @@ NEUTRAL_V2 = {row["class"] for row in json.loads(V2_CONTRACT.read_text())["neutr
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def load_cases(fixture=FIXTURE):
+    """Expand authored large-carrier shapes; no detector output defines their gold."""
+    data = json.loads(fixture.read_text())
+    cases = data["cases"]
+    for shape in data.get("large_owned_carriers", []):
+        name = "X" * shape["name_bytes"]
+        seed_text = f"From: {name} <m@example.invalid>"
+        seed = {"text": seed_text, "gold": [
+            {"start": 6, "end": 6 + len(name), "label": "FIRSTNAME"},
+            {"start": 8 + len(name), "end": 25 + len(name), "label": "EMAIL"}]}
+        wire = "{seed} " * shape["copies"]
+        if shape["private_byte"]:
+            middle = shape["copies"] // 2
+            wire = "{seed} " * middle + "S " + "{seed} " * (shape["copies"] - middle)
+            source = f"From: {name} S {name} <m@example.invalid>"
+            source_gold = [{"start": 6, "end": 6 + len(name), "label": "FIRSTNAME"},
+                           {"start": 7 + len(name), "end": 8 + len(name), "label": "FIRSTNAME"},
+                           {"start": 9 + len(name), "end": 9 + 2 * len(name), "label": "FIRSTNAME"},
+                           {"start": 11 + 2 * len(name), "end": 28 + 2 * len(name), "label": "EMAIL"}]
+        else:
+            source, source_gold = "ordinary source", []
+        text = wire.replace("{seed}", name)
+        gold = [{"start": found.start(), "end": found.end(), "label": "FIRSTNAME"}
+                for found in re.finditer(r"X+|S", text)]
+        cases.append({"id": shape["id"], "order": "source_first", "seed": seed,
+                      "leaves": [{"text": source, "gold": source_gold},
+                                 {"text": text, "wire_text": wire, "gold": gold, "carrier": "unsupported"}]})
+    return cases
 
 
 def leaves(provider, body):
@@ -413,6 +444,8 @@ def native_session_id(provider, case_id):
 
 
 def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
+    # Exact known-token alignment still uses one frame per wire token.
+    sys.setrecursionlimit(max(sys.getrecursionlimit(), 10000))
     dirty = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no", "--",
                                      "crates", "Cargo.toml", "Cargo.lock"], cwd=runtime_root, text=True)
     if dirty:
@@ -422,7 +455,7 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
     policy_data = tomllib.loads(policy.read_text())
     if policy_data.get("safety_net", {}).get("backend") not in {"nym", "kiji"}:
         raise ValueError("capture requires the full own-policy safety-net arm")
-    cases = json.loads(fixture.read_text())["cases"]
+    cases = load_cases(fixture)
     rows = []
     with upstream() as (upstream_url, captured), proxy(binary, policy, upstream_url, output.with_suffix(".log"), runtime_root, **({"session_binary": session_binary} if session_binary else {})) as (base_url, command):
         for provider in PROVIDERS:
@@ -534,7 +567,7 @@ def compare(base, candidate, *, gate_policy="strict"):
         raise ValueError("proxy captures have different input/scoring identities")
     counts = tuple(base["totals"])
     expected = {(provider, case["id"]) for provider in PROVIDERS
-                for case in json.loads(FIXTURE.read_text())["cases"]}
+                for case in load_cases()}
     for card in (base, candidate):
         keys = [(row["provider"], row["id"]) for row in card["cases"]]
         if len(keys) != len(expected) or set(keys) != expected:
@@ -588,7 +621,7 @@ def compare(base, candidate, *, gate_policy="strict"):
     old = {key: sum(before[key] for before, _ in paired) for key in counts}
     new = {key: sum(after[key] for _, after in paired) for key in counts}
     transitions = []
-    fixture = {case["id"]: case for case in json.loads(FIXTURE.read_text())["cases"]}
+    fixture = {case["id"]: case for case in load_cases()}
     for row in candidate["cases"]:
         previous = rows[(row["provider"], row["id"])]
         if previous["forwarded"] or not row["forwarded"]:

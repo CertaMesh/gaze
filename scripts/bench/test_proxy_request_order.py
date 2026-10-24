@@ -40,7 +40,7 @@ def test_credential_neutrality_only_excludes_non_gold_v2_bytes():
 
 
 def test_authored_gold_and_order_twins_are_independent_of_runtime_output():
-    cases = json.loads(bench.FIXTURE.read_text())["cases"]
+    cases = bench.load_cases()
     assert len({case["id"] for case in cases}) == len(cases)
     for case in cases:
         for leaf in case["leaves"]:
@@ -54,7 +54,7 @@ def test_authored_gold_and_order_twins_are_independent_of_runtime_output():
 
 
 def capture_card(leaks):
-    cases = json.loads(bench.FIXTURE.read_text())["cases"]
+    cases = bench.load_cases()
     rows = [{"provider": provider, "id": case["id"], "attempted": 1, "forwarded": 1,
              "failed_closed": 0, "selected_restore_exact": 1, "alignment_valid": 1,
              "seed_forwarded": int("seed" in case), "seed_restore_exact": int("seed" in case), "owned_identities_preserved": 1,
@@ -181,7 +181,7 @@ def test_post_forward_response_errors_cannot_hide_request_leaks(monkeypatch, tmp
 
     monkeypatch.setattr(bench, "request_json", fail_after_forward)
     fixture = tmp_path / "unseeded.json"
-    cases = [case for case in json.loads(bench.FIXTURE.read_text())["cases"] if "seed" not in case]
+    cases = [case for case in bench.load_cases() if "seed" not in case]
     fixture.write_text(json.dumps({"cases": cases}))
     result = bench.measure(binary, policy, fixture, tmp_path / "result.json", tmp_path)
     expected = len(cases) * len(bench.PROVIDERS)
@@ -222,7 +222,7 @@ def test_seeded_alignment_uses_prior_manifest_values_for_adjacent_tokens():
 def test_seed_binding_requires_a_real_prior_owned_token_and_exact_restore(monkeypatch):
     import queue
     email = "<1234abcd:Email_1>"
-    case = next(case for case in json.loads(bench.FIXTURE.read_text())["cases"]
+    case = next(case for case in bench.load_cases()
                 if case["id"] == "existing-token-given-source_last")
     captured = queue.Queue()
     def seed_reply(url, body, **kwargs):
@@ -361,7 +361,7 @@ def test_alignment_failure_retains_diagnostics_and_never_writes_a_scorecard(tmp_
         raise bench.AmbiguousAlignment("synthetic ambiguous token boundaries")
 
     monkeypatch.setattr(bench, "checked_document_mappings", ambiguous)
-    case = next(case for case in json.loads(bench.FIXTURE.read_text())["cases"] if "seed" not in case)
+    case = next(case for case in bench.load_cases() if "seed" not in case)
     fixture, output = tmp_path / "fixture.json", tmp_path / "result.json"
     fixture.write_text(json.dumps({"cases": [case]}))
     with pytest.raises(bench.AmbiguousAlignment, match="openai/" + case["id"]):
@@ -543,10 +543,30 @@ def test_leak_refusal_policy_requires_complete_split_byte_evidence():
 
 def test_unsupported_cases_do_not_double_count_identical_wire_requests():
     seen = set()
-    for case in json.loads(bench.FIXTURE.read_text())["cases"]:
+    for case in bench.load_cases():
         if not any(leaf.get("carrier") == "unsupported" for leaf in case["leaves"]):
             continue
         _, body = bench.native_request("openai", case)
         signature = (json.dumps(body, sort_keys=True), json.dumps(case.get("seed"), sort_keys=True))
         assert signature not in seen, case["id"]
         seen.add(signature)
+
+
+def test_large_owned_carriers_have_exact_independent_gold_and_small_wire():
+    cases = {case["id"]: case for case in bench.load_cases()}
+    for private in (False, True):
+        case = cases["unsupported-large-owned-private-byte" if private else "unsupported-large-owned-counterweight"]
+        leaf = case["leaves"][-1]
+        name = "X" * 2048
+        clean = leaf["wire_text"].replace("{seed}", TOKEN)
+        assert len(clean) < 20000
+        assert len(leaf["text"]) > 2 * 1024 * 1024
+        score = bench.score_leaf(leaf, clean, {TOKEN: name})
+        assert score["leaked_bytes"] == int(private)
+        assert score["false_positive_bytes_v1"] == 0
+        assert score["false_positive_bytes_v2"] == 0
+        seed = case["seed"]
+        assert seed["text"][seed["gold"][-1]["start"]:seed["gold"][-1]["end"]] == "m@example.invalid"
+        if private:
+            source = case["leaves"][0]
+            assert source["text"][source["gold"][-1]["start"]:source["gold"][-1]["end"]] == "m@example.invalid"

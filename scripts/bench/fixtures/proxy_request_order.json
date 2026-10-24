@@ -3738,5 +3738,19 @@
         }
       ]
     }
+  ],
+  "large_owned_carriers": [
+    {
+      "id": "unsupported-large-owned-counterweight",
+      "name_bytes": 2048,
+      "copies": 1025,
+      "private_byte": false
+    },
+    {
+      "id": "unsupported-large-owned-private-byte",
+      "name_bytes": 2048,
+      "copies": 1025,
+      "private_byte": true
+    }
   ]
 }
