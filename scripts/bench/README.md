@@ -631,9 +631,11 @@ schemas, canonical document descriptors, measuring runtime, and execution protoc
 `benchmark-protocol.json` declares that protocol. The
 [initial full-population manifest](../../docs/reference/benchmarks/specifications/ae74d9a02195d3c60b5fe8bc8b0eb984e6926f390fad0ad624958e86577d9edb.json)
 is preserved under its content hash. The
-[current admission specification](../../docs/reference/benchmarks/specifications/d0010b6f71ecd9481700895eb439448fc166a76f9a6c31168f2b746125fdb2f0.json)
+[previous admission specification](../../docs/reference/benchmarks/specifications/d0010b6f71ecd9481700895eb439448fc166a76f9a6c31168f2b746125fdb2f0.json)
 binds the effective validation vocabulary and executing-source admission checks.
-It remains archived; new admissions also require the runtime and canonical descriptor bindings described below.
+The [current admission specification](../../docs/reference/benchmarks/specifications/d19a7b56c45899d1d91fe470db0f1e0de8b31540c7ede989ed53105d61a9bdf1.json)
+also binds the qualified runtime and canonical document descriptors.
+Both previous manifests remain archived under their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
 inputs does not itself change the benchmark specification.
