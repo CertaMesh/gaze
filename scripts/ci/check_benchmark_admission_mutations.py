@@ -147,6 +147,9 @@ def main():
     mutations.append(('native_build_guard', 'scripts/bench/conftest.py',
                       'if resolved and Path(resolved).resolve() in blocked:', 'if False:',
                       'scripts/bench/test_native_build_guard.py::test_literal_and_absolute_cargo_builds_are_blocked', 1))
+    mutations.append(('native_cargo_allowlist', 'scripts/bench/conftest.py',
+                      'return bool(arguments) and arguments[0] in ALLOWED', 'return True',
+                      'scripts/bench/test_native_build_guard.py::test_native_cargo_allowlist_refuses_unknown_commands', 5))
     if args.only:
         if set(args.only) - {row[0] for row in mutations}:
             raise SystemExit('unknown_mutation')
