@@ -1111,3 +1111,124 @@ async fn new_hit_whitespace_variants_arguments() {
 async fn new_hit_whitespace_variants_response() {
     new_hit_whitespace_variants(true).await;
 }
+
+async fn empty_owned_markers(response: bool, shape: usize) {
+    let pipeline = repeat_pipeline(EvidenceKind::Rule);
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let tokens = seed(
+        &pipeline,
+        &session,
+        &["Maria", "Schneider", "Maria Schneider"],
+    )
+    .await;
+    let empty = session.tokenize(&PiiClass::Name, "").unwrap();
+    let (wire, expected, expanded) = match shape {
+        0 => (
+            format!("{empty}Maria"),
+            format!("{empty}{}", tokens[0]),
+            "Maria",
+        ),
+        1 => (
+            format!("Maria{empty}"),
+            format!("{}{empty}", tokens[0]),
+            "Maria",
+        ),
+        2 => (
+            format!("Maria{empty} {}", tokens[1]),
+            format!("{}{empty} {}", tokens[0], tokens[1]),
+            "Maria Schneider",
+        ),
+        3 => (
+            format!("{}{empty}{}", tokens[0], tokens[1]),
+            format!("{}{empty}{}", tokens[0], tokens[1]),
+            "MariaSchneider",
+        ),
+        4 => (
+            format!("{} {empty} {}", tokens[0], tokens[1]),
+            format!("{} {empty} {}", tokens[0], tokens[1]),
+            "Maria  Schneider",
+        ),
+        _ => unreachable!(),
+    };
+    // Prime spelling discovery independently of the raw/owned projection.
+    let (prime_registry, prime_seen) = capture(json!("public"));
+    dispatch(
+        &prime_registry,
+        &Store::default(),
+        &pipeline,
+        &session,
+        json!(expected),
+    )
+    .await
+    .unwrap();
+    assert_eq!(*prime_seen.lock().unwrap(), json!(expected));
+    let before = session.snapshot_entries();
+    let store = Store::default();
+    let (registry, seen) = capture(if response {
+        json!(wire)
+    } else {
+        json!("public")
+    });
+    let result = dispatch(
+        &registry,
+        &store,
+        &pipeline,
+        &session,
+        if response {
+            json!("public")
+        } else {
+            json!(wire)
+        },
+    )
+    .await
+    .expect("a base-safe operation must preserve its empty owned marker");
+    let actual = if response {
+        result.payload
+    } else {
+        seen.lock().unwrap().clone()
+    };
+    assert_eq!(actual, json!(expected));
+    assert_eq!(restore(&session, &actual), json!(expanded));
+    assert_eq!(session.snapshot_entries(), before);
+    assert_eq!(*store.events.lock().unwrap(), vec!["begin", "finish"]);
+}
+#[tokio::test]
+async fn empty_owned_prefix_arguments() {
+    empty_owned_markers(false, 0).await;
+}
+#[tokio::test]
+async fn empty_owned_prefix_response() {
+    empty_owned_markers(true, 0).await;
+}
+#[tokio::test]
+async fn empty_owned_suffix_arguments() {
+    empty_owned_markers(false, 1).await;
+}
+#[tokio::test]
+async fn empty_owned_suffix_response() {
+    empty_owned_markers(true, 1).await;
+}
+#[tokio::test]
+async fn empty_owned_raw_first_chain_arguments() {
+    empty_owned_markers(false, 2).await;
+}
+#[tokio::test]
+async fn empty_owned_raw_first_chain_response() {
+    empty_owned_markers(true, 2).await;
+}
+#[tokio::test]
+async fn empty_owned_between_tokens_arguments() {
+    empty_owned_markers(false, 3).await;
+}
+#[tokio::test]
+async fn empty_owned_between_tokens_response() {
+    empty_owned_markers(true, 3).await;
+}
+#[tokio::test]
+async fn empty_owned_inside_whitespace_gap_arguments() {
+    empty_owned_markers(false, 4).await;
+}
+#[tokio::test]
+async fn empty_owned_inside_whitespace_gap_response() {
+    empty_owned_markers(true, 4).await;
+}
