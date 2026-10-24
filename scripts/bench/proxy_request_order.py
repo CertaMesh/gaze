@@ -624,7 +624,7 @@ def compare(base, candidate, *, gate_policy="strict"):
     old = {key: sum(before[key] for before, _ in paired) for key in counts}
     new = {key: sum(after[key] for _, after in paired) for key in counts}
     transitions = []
-    fixture = {case["id"]: case for case in load_cases() if provider in case.get("providers", PROVIDERS)}
+    fixture = {case["id"]: case for case in load_cases()}
     for row in candidate["cases"]:
         previous = rows[(row["provider"], row["id"])]
         if previous["forwarded"] or not row["forwarded"]:
