@@ -35,6 +35,7 @@ def test_documented_release_build_commands(tmp_path, monkeypatch, release):
     monkeypatch.setattr(build.subprocess, 'run', command)
     assert build.cargo_build_binary(tmp_path, configs, release=True) == binary
     argv = command.call_args.args[0]
+    assert '--features' in argv
     assert argv[argv.index('--features') + 1] == feature
     assert '--release' in argv and '--locked' in argv
     assert build.build_features(tmp_path, configs) == [feature]
