@@ -3368,7 +3368,11 @@ impl ResidualView<'_> {
     /// Retain enough non-space, non-ignored scalars for any Rule pattern, then
     /// finish the whitespace-delimited run for word, URL and compound-name context.
     /// In particular, long compounds cannot hide a raw suffix beyond the pattern.
-    fn raw_windows(&self, context_chars: usize) -> Vec<std::ops::Range<usize>> {
+    fn raw_windows(
+        &self,
+        context_chars: usize,
+        budget: usize,
+    ) -> Result<Vec<std::ops::Range<usize>>, ProxyError> {
         let mut windows = Vec::new();
         for (index, piece) in self.pieces.iter().enumerate() {
             if piece.owned || piece.text.chars().all(char::is_whitespace) {
@@ -3381,14 +3385,22 @@ impl ResidualView<'_> {
             let right = self.pieces[index + 1..]
                 .iter()
                 .flat_map(|piece| piece.text.chars());
-            let start = piece.start - Self::context_bytes(left, context_chars);
-            let end = piece.start + piece.text.len() + Self::context_bytes(right, context_chars);
+            let start = piece.start - Self::context_bytes(left, context_chars, budget)?;
+            let end =
+                piece.start + piece.text.len() + Self::context_bytes(right, context_chars, budget)?;
+            if end - start > budget {
+                return Err(ProxyError::UnprovenCoverage);
+            }
             windows.push(start..end);
         }
-        windows
+        Ok(windows)
     }
 
-    fn context_bytes(chars: impl Iterator<Item = char>, context_chars: usize) -> usize {
+    fn context_bytes(
+        chars: impl Iterator<Item = char>,
+        context_chars: usize,
+        budget: usize,
+    ) -> Result<usize, ProxyError> {
         let mut significant = 0;
         let mut bytes = 0;
         for character in chars {
@@ -3396,11 +3408,14 @@ impl ResidualView<'_> {
                 break;
             }
             bytes += character.len_utf8();
+            if bytes > budget {
+                return Err(ProxyError::UnprovenCoverage);
+            }
             if !character.is_whitespace() && !matches!(character, '\u{200c}' | '\u{200d}') {
                 significant += 1;
             }
         }
-        bytes
+        Ok(bytes)
     }
 
     fn materialize(&self, window: std::ops::Range<usize>) -> (String, Vec<bool>) {
@@ -3486,7 +3501,15 @@ impl RequestResidualScan<'_, '_> {
             owned: false,
         });
         let view = ResidualView { pieces };
-        for window in view.raw_windows(context_chars) {
+        // Bound each context walk and allocation by wire bytes plus known-value length,
+        // not by the full expansion. Long URL/compound runs fail closed at this work limit.
+        // Eight covers two Unicode contexts of four-byte scalars each.
+        let budget = text
+            .len()
+            .checked_add(context_chars)
+            .and_then(|size| size.checked_mul(8))
+            .ok_or(ProxyError::UnprovenCoverage)?;
+        for window in view.raw_windows(context_chars, budget)? {
             let (expanded, covered) = view.materialize(window);
             // Enumerate ALL overlapping hits. The symbolic view never selects a cover.
             let hits = self
@@ -4276,6 +4299,31 @@ mod tests {
             "all name letters are owned; only a public separator remains: {result:?}"
         );
         assert_eq!(body["unsupported_carrier"], carrier);
+    }
+
+    #[test]
+    fn residual_window_work_limit_depends_on_wire_and_rule_context() {
+        let value = "X".repeat(1024);
+        let mut view = ResidualView {
+            pieces: vec![
+                ResidualPiece {
+                    text: &value,
+                    start: 0,
+                    owned: true,
+                },
+                ResidualPiece {
+                    text: " ",
+                    start: value.len(),
+                    owned: false,
+                },
+            ],
+        };
+        assert!(view.raw_windows(1, 8).unwrap().is_empty());
+        view.pieces[1].text = "S";
+        assert!(matches!(
+            view.raw_windows(1, 8),
+            Err(ProxyError::UnprovenCoverage)
+        ));
     }
 
     #[test]

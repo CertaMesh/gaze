@@ -121,8 +121,13 @@ exclusions, and compound-name growth stay unchanged. Whitespace-only raw gaps
 need no materialization because sweep patterns trim their endpoints and compound
 names end on letters. Materialization occurs one window at a time. Work depends
 on wire gaps, known-value lengths, and their boundary runs. There is no separate
-2 MiB expanded-leaf cap. The existing wire request and sweep-pattern limits
-remain in effect.
+2 MiB expanded-leaf cap. Each context walk and materialized window instead has
+a work limit of `8 * (wire_leaf_bytes + 3 * longest_manifest_value_bytes)`.
+The factor three covers Unicode spelling expansion. Eight covers two contexts
+of four-byte scalars. A boundary run beyond this limit returns
+`UnprovenCoverage`; fully owned carriers with only public whitespace never
+materialize a window or consume this budget. The existing wire request and
+sweep-pattern limits remain in effect.
 
 Discarded probe transactions preserve mappings and session state. They do not
 suppress audit attempts: `control_would_mutate` retains one audit attempt on
