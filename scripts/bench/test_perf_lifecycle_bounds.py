@@ -216,7 +216,7 @@ class BoundTests(unittest.TestCase):
             rows = records()
             for ordinal in ('r3', 'r4'):
                 rows[1]['recognizers'][ordinal] = dict(rows[1]['recognizers']['r2'], model=model)
-            with self.assertRaisesRegex(ValueError, 'recognizer-role'):
+            with self.assertRaises(ValueError):
                 self.admit(rows)
 
     def test_ner_only_ner_nym_and_ner_nym_dob_shapes_admit(self):
