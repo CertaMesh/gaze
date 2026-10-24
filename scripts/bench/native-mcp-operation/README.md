@@ -94,3 +94,12 @@ Model-free oracle tests:
 uv run --project scripts/bench --group comparison-test python -m pytest \
   -q scripts/bench/test_mcp_operation_order.py
 ```
+
+An explicit source-identity reuse ruling can replace fresh text capture when
+all C/A/D/R inputs are unchanged. In that mode, pass `--text-path-identity`
+instead of text scorecards. The gate verifies every recorded file hash and
+checks that the published runtime matches the measured candidate. Derived
+scorecards mark text layers `unchanged_by_construction`; they contain no
+invented text counts. See the committed
+[operation-order evidence](../../../docs/reference/benchmarks/gates/mcp-operation-order/README.md)
+for the approved capture, identity record, cleanup receipt, and model-free replay.

@@ -1,0 +1,16 @@
+{
+  "scope": "diagnostic only; both frozen contracts unchanged",
+  "base": {
+    "raw_space_bytes": 8,
+    "other_leaked_utf8_bytes": 32,
+    "space_only_cases": [
+      "owned-contained-arguments",
+      "owned-contained-response"
+    ]
+  },
+  "candidate": {
+    "raw_space_bytes": 0,
+    "other_leaked_utf8_bytes": 0,
+    "space_only_cases": []
+  }
+}

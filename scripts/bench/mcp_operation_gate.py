@@ -11,6 +11,7 @@ import argparse
 from collections import Counter
 import copy
 import hashlib
+import gzip
 import json
 from pathlib import Path
 import tomllib
@@ -18,6 +19,7 @@ import tomllib
 import agentic_layers as layers
 import gaze_bench_score as score
 import mcp_operation_order as mcp
+import mcp_text_path_identity as path_identity
 
 
 def _bind(core, native, contract):
@@ -114,20 +116,60 @@ def compare(core_cards, core_paths, native_cards, native_paths):
     return result
 
 
+def compare_unchanged_text(record, native_cards, native_paths, identity_path, publication_revision="HEAD"):
+    """The explicit reuse ruling: prove source identity, never invent text counts."""
+    if (record["base_revision"], record["candidate_revision"]) != tuple(card["runtime_revision"] for card in native_cards):
+        raise ValueError("text identity does not bind both measured native revisions")
+    path_identity.verify(record)
+    publication = path_identity.verify(record, publication_revision)
+    measured = path_identity._tree(native_cards[1]["runtime_revision"])
+    published = path_identity._tree(publication["candidate_revision"])
+    runtime_paths = [path for path in measured.keys() | published.keys() if path.startswith("crates/") or path in {"Cargo.toml", "Cargo.lock", "rust-toolchain.toml"} or path.startswith(".cargo/")]
+    if any(measured.get(path) != published.get(path) for path in runtime_paths):
+        raise ValueError("published runtime differs from the measured MCP runtime")
+    native_result = mcp.compare(*native_cards)
+    result = {"schema_version": 1, "kind": "mcp-operation-gain-gate-with-unchanged-text", "fresh_text_capture": False,
+              "text_layers": record["text_layers"], "path_identity_sha256": mcp.digest(identity_path),
+              "protected_file_count": record["protected_file_count"], "publication_revision": publication["candidate_revision"],
+              "reuse_authority": "Explicit orchestrator ruling: same source-identity reuse rule as PR #869", "contracts": {}, "scorecards": {}}
+    for contract in ("v2", "v1"):
+        result["contracts"][contract] = {"verdict": "pass" if native_result[contract]["pass"] else "fail", "native": native_result[contract]}
+        result["scorecards"][contract] = [{"schema_version": 1, "kind": "mcp-operation-scorecard-with-unchanged-text",
+            "side": side, "contract": contract, "runtime_revision": card["runtime_revision"], "fresh_text_capture": False,
+            "text_layers": record["text_layers"], "path_identity_sha256": mcp.digest(identity_path),
+            "native_capture_sha256": mcp.digest(path), "native_operation_layers": card["scores"][contract]["layers"],
+            "d_counterweights": card["scores"][contract]["d_counterweights"]}
+            for side, card, path in zip(("base", "candidate"), native_cards, native_paths, strict=True)]
+    result["passed"] = all(row["verdict"] == "pass" for row in result["contracts"].values())
+    return result
+
+
+def read_json(path):
+    raw = path.read_bytes()
+    return json.loads(gzip.decompress(raw) if path.suffix == ".gz" else raw)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     for contract in ("v1", "v2"):
-        parser.add_argument("--base-" + contract, type=Path, required=True)
-        parser.add_argument("--candidate-" + contract, type=Path, required=True)
+        parser.add_argument("--base-" + contract, type=Path)
+        parser.add_argument("--candidate-" + contract, type=Path)
     parser.add_argument("--base-native", type=Path, required=True)
     parser.add_argument("--candidate-native", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--text-path-identity", type=Path)
+    parser.add_argument("--publication-revision", default="HEAD")
     args = parser.parse_args()
-    paths = {contract: (getattr(args, "base_" + contract), getattr(args, "candidate_" + contract)) for contract in ("v1", "v2")}
-    cards = {contract: tuple(json.loads(path.read_text()) for path in pair) for contract, pair in paths.items()}
     native_paths = (args.base_native, args.candidate_native)
-    native = tuple(json.loads(path.read_text()) for path in native_paths)
-    report = compare(cards, paths, native, native_paths)
+    native = tuple(read_json(path) for path in native_paths)
+    if args.text_path_identity:
+        report = compare_unchanged_text(read_json(args.text_path_identity), native, native_paths, args.text_path_identity, args.publication_revision)
+    else:
+        paths = {contract: (getattr(args, "base_" + contract), getattr(args, "candidate_" + contract)) for contract in ("v1", "v2")}
+        if any(path is None for pair in paths.values() for path in pair):
+            parser.error("supply both contracts' text captures, or an authorized text-path identity record")
+        cards = {contract: tuple(read_json(path) for path in pair) for contract, pair in paths.items()}
+        report = compare(cards, paths, native, native_paths)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for contract, pair in report.pop("scorecards").items():
         for card in pair:

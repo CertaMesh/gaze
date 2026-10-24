@@ -1,0 +1,17 @@
+{
+  "native_capture": {
+    "authority": "Explicit orchestrator and load-coordinator GO",
+    "scope": "Native MCP leak-only capture, base first then candidate, alongside #773 outside bench-machine",
+    "nice": 10,
+    "bench_machine_lease": false,
+    "isolated_worker_owned_copies": true,
+    "serial_use_of_one_copy_set": true,
+    "copies_hash_verified_and_deleted": true,
+    "local_approval_record_sha256": "3dcf9fd0a41b0dd0fdf0c1b05c53801b9c6ea7e1110bcb407ac57c21efff2f42"
+  },
+  "text_reuse": {
+    "authority": "Explicit orchestrator ruling, same source-identity rule as PR #869",
+    "condition": "No crate or file on the C/A/D/R text path changed; per-file hashes prove unchanged by construction",
+    "fresh_capture": false
+  }
+}

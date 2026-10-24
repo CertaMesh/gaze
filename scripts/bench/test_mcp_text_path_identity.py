@@ -1,0 +1,49 @@
+"""Structural reuse proofs, without inference or unsigned fixture commits."""
+import copy
+import json
+
+import pytest
+import mcp_text_path_identity as proof
+
+
+def test_current_tree_proof_has_real_per_file_hashes_and_replays():
+    record = proof.build("HEAD", "HEAD")
+    assert record["protected_file_count"] > 100
+    assert all(row["base_sha256"] == row["candidate_sha256"] and len(row["base_sha256"]) == 64 for row in record["protected_files"])
+    assert any(row["path"] == "crates/gaze/src/pipeline/protection.rs" for row in record["protected_files"])
+    assert any(row["path"] == "scripts/bench/run_no_opf_benchmark.py" for row in record["protected_files"])
+    assert not record["fresh_text_capture"]
+    proof.verify(record)
+    changed = copy.deepcopy(record)
+    changed["protected_files"][0]["candidate_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="record differs"):
+        proof.verify(changed)
+
+
+def test_protected_change_is_rejected_before_hashing(monkeypatch):
+    actual = proof._tree
+    calls = 0
+    def altered(revision):
+        nonlocal calls
+        tree = actual(revision)
+        calls += 1
+        if calls == 2:
+            path = "crates/gaze/src/pipeline/protection.rs"
+            mode, kind, _ = tree[path]
+            tree[path] = (mode, kind, "0" * 40)
+        return tree
+    monkeypatch.setattr(proof, "_tree", altered)
+    with pytest.raises(ValueError, match="text-path or unclassified"):
+        proof.build("HEAD", "HEAD")
+
+
+def test_rmcp_counter_exemption_cannot_hide_other_fixture_changes():
+    before = {"receipt": {"counts": {"observer_recognizer_source_events": 1, "leaf_restore_exact": 2}}}
+    after = copy.deepcopy(before)
+    after["receipt"]["counts"]["observer_recognizer_source_events"] = 3
+    proof._golden_only(json.dumps(before), json.dumps(after))
+    after["receipt"]["counts"]["leaf_restore_exact"] = 1
+    with pytest.raises(ValueError, match="more than"):
+        proof._golden_only(json.dumps(before), json.dumps(after))
+    assert not proof._allowed("crates/gaze/src/mcp_operation.rs")
+    assert not proof._allowed("scripts/bench/unclassified_new_driver.py")

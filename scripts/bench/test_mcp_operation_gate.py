@@ -102,3 +102,9 @@ def test_text_execution_receipts_remain_mandatory_even_after_native_admission(mo
     paths = {key: (tmp_path / "base.json", tmp_path / "candidate.json") for key in ("v1", "v2")}
     with pytest.raises(gate.layers.LayerError):
         gate.compare(cards, paths, (native(), native()), paths["v1"])
+
+
+def test_unchanged_text_mode_rejects_unbound_runtime_revisions_before_reuse():
+    with pytest.raises(ValueError, match="bind both measured"):
+        gate.compare_unchanged_text({"base_revision": "base", "candidate_revision": "candidate"},
+                                    (native(), native()), (), None)
