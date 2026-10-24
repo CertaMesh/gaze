@@ -830,15 +830,13 @@ async fn whitespace_gap(response: bool) {
         &["Maria", "Schneider", "Maria Schneider"],
     )
     .await;
-    for whitespace in [" "] {
-        assert_unchanged_operation(
-            response,
-            &session,
-            &pipeline,
-            json!(format!("{}{whitespace}{}", tokens[0], tokens[1])),
-        )
-        .await;
-    }
+    assert_unchanged_operation(
+        response,
+        &session,
+        &pipeline,
+        json!(format!("{} {}", tokens[0], tokens[1])),
+    )
+    .await;
 }
 #[tokio::test]
 async fn whitespace_gap_arguments() {
