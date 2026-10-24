@@ -620,3 +620,304 @@ uv run --project scripts/bench python -m unittest discover -s scripts/bench
 
 CI does not download models or run either benchmark profile. The authoritative
 full model run and baseline/error-bucket analysis belong to A6.
+
+## Freeze the benchmark specification
+
+`benchmark_spec.py` resolves a portable manifest whose `gaze-benchmark-v1:<sha256>`
+ID hashes the measuring inputs. It binds the full corpus digest, generated
+corpus and generator version, seed, scored-label contracts, measuring source
+bytes, the effective source-ID vocabulary used by response validation, record
+schemas, canonical document descriptors, measuring runtime, and execution protocol.
+`benchmark-protocol.json` declares that protocol. The
+[initial full-population manifest](../../docs/reference/benchmarks/specifications/ae74d9a02195d3c60b5fe8bc8b0eb984e6926f390fad0ad624958e86577d9edb.json)
+is preserved under its content hash. The
+[previous admission specification](../../docs/reference/benchmarks/specifications/d0010b6f71ecd9481700895eb439448fc166a76f9a6c31168f2b746125fdb2f0.json)
+binds the effective validation vocabulary and executing-source admission checks.
+The [current admission specification](../../docs/reference/benchmarks/specifications/d19a7b56c45899d1d91fe470db0f1e0de8b31540c7ede989ed53105d61a9bdf1.json)
+also binds the qualified runtime and canonical document descriptors.
+Both previous manifests remain archived under their original identities.
+Preserve old manifests when the specification changes. Binary, policy, models, host,
+and measured Git revision remain subject provenance. Changing those subject
+inputs does not itself change the benchmark specification.
+
+Resolve the manifest without running detection:
+
+```bash
+uv run --project scripts/bench python scripts/bench/benchmark_spec.py \
+  --dataset target/bench-data/dataiku-en-de/test.parquet \
+  --seed 20260710 --output target/benchmark-spec.json
+```
+
+Both capture drivers attach this manifest to new scorecards. Observation
+headers bind its ID; re-scoring preserves it. `agentic_layers.py gate` refuses
+different specification IDs with `benchmark_spec_mismatch`. Legacy records
+remain readable with their original metrics, but an unproven specification
+cannot certify a candidate or become a row under the current specification.
+Archived comparisons between legacy artifacts remain available for their
+original ledgers. They do not establish current-specification evidence.
+
+### Qualified scoring runtime
+
+The qualified measuring runtime is CPython 3.13 with Unicode 15.1.0 and
+`pyarrow==23.0.1` from `uv.lock`. Use the prepared Anvil environment or
+`uv run --project scripts/bench --python 3.13`. The manifest binds the Python
+implementation, major.minor version, Unicode table version, and installed
+PyArrow version. Patch releases do not change this runtime identity.
+Resolution, both capture drivers, record writing, replay, and admission refuse
+runtime drift with a value-free error. Detector and model runtimes remain
+subject provenance.
+
+The scorer and replay use CPython's `re`, `unicodedata`, string classification,
+JSON, TOML, byte encoding, hashing, and numeric/statistics behavior. Unicode
+categories and names affect word-boundary gold-gap credit. The canonical corpus
+loader additionally uses PyArrow's parquet reader. Other imports in this path
+handle collections, process scheduling, files, or subject execution. They add
+no separately versioned scoring dependency. Locale and time affect provenance,
+not gold or predictions. Locked package bytes alone do not bind these stdlib
+semantics; the measuring runtime identity supplies that binding.
+
+### Measuring input boundaries
+
+The full C/A/D/R path reads these measuring inputs. `benchmark_spec.py` binds
+them before certification and history admission.
+
+| Reader | Runtime input | Binding |
+| --- | --- | --- |
+| `dataiku_en_de_gaze_bench.load_documents` | Pinned Dataiku parquet | Verified dataset hash and composite corpus digest |
+| `run_no_opf_benchmark.load_negative_documents` | Committed negative JSONL | Composite corpus digest and full document inventory |
+| `agentic_layers.prepare` | Generator Python, cue vocabulary JSON, generated-label contract | Source hashes, vocabulary file hash, generated corpus digest, and contract hash |
+| `gaze_bench_score.load_committed_source_id_vocabulary` | Embedded recognizer IDs, collision families, builtin IDs, and model IDs in TOML | Sorted effective vocabulary from the same loader |
+| `scorecard_record` | Trace-lineage vocabulary JSON and record schema | File hash and readable schema versions |
+| Scorer and replay | Scored-label contracts, Python modules, `pyproject.toml`, `uv.lock`, and qualified runtime | Contract and source hashes, runtime identity checked against the executing process |
+| Capture drivers | `benchmark-protocol.json` and execution parameters | Protocol fields, profile, seed, warmups, repetitions, and producer capture mode |
+| Canonical document inventory | Gold spans and labels, UTF-8 lengths, layer, language, region, source, negative category, and cell | Per-layer descriptor digests resolved from canonical inputs and verified on every record |
+
+Binary and validator executables, policies, policy dependency files, model
+checksum manifests, model bundles, and observation-environment values are subject
+inputs. Their identities belong to capture provenance and the comparison gate.
+The TOML vocabulary above is a measuring input even when declared next to a
+subject model or detector. Changes to other detector TOML fields do not change
+the specification.
+
+Retained records, scorecards, cache entries, policy deltas, and execution receipts
+are evidence inputs. Admission verifies their pins and semantic bindings.
+The optional dictionary-sequence extension has its own retained generator
+identity and is outside this full C/A/D/R certification protocol.
+
+## Certify the integrated candidate
+
+`benchmark_certification.py` checks a manifest against an explicit candidate
+commit and required mechanism list. It verifies pinned files, the complete
+C/A/D/R document inventories, both v2 and v1 replays, gate results, mechanism
+policy deltas, and the same integrated candidate binary for every mechanism.
+Before replay, the checker resolves the full specification from the executing
+checkout and canonical corpus. Changed source files, added or removed files,
+changed vocabulary, or a different protocol refuse with `harness_spec_mismatch`.
+Admission compares each base and candidate record with the canonical descriptor
+digests. Self-consistent edits to gold or metadata cannot retain certification.
+Both producers persist a capture discriminator in the record header and original
+scorecard. Only `canonical-once` with the original v1 corpus contract and the
+committed generated contract can certify gain or mechanism pairs. Independent
+`--cross-check` captures refuse, including those captured under v1.
+The checker reconstructs both contract scorecards and gates those reconstructed
+objects. Supplied cards must match every reconstructed field, including policy
+dependencies and model bundles.
+
+The canonical Dataiku holdout must be readable. If it lives outside the default
+harness cache, pass `--dataset /path/to/test.parquet` to certification or history.
+Admission reads the corpus without running detection or downloading data.
+
+A sampled population, missing contract, stale candidate, missing mechanism,
+or failed gate refuses certification. This command does not schedule merges
+or admit incremental evaluation.
+
+The JSON manifest has this structure. Replace every placeholder with measured
+evidence. All file pins are relative to the manifest directory and contain
+`file` and `sha256` fields. A scorecard pin hashes its stored bytes, including
+compression when present.
+
+```json
+{
+  "schema_version": 1,
+  "kind": "full-benchmark-certification",
+  "candidate": "<exact integrated commit>",
+  "benchmark_spec": "<resolved manifest object>",
+  "gain": {
+    "base": {"capture": "<pin>", "record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}},
+    "candidate": {"capture": "<pin>", "record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}}
+  },
+  "mechanisms": {
+    "<required mechanism>": {
+      "base": {"capture": "<pin>", "record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}},
+      "candidate": {"capture": "<pin>", "record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}},
+      "policy_delta": "<pin>"
+    }
+  }
+}
+```
+
+```bash
+uv run --project scripts/bench python scripts/bench/benchmark_certification.py \
+  target/certification.json --candidate "$(git rev-parse HEAD)" \
+  --required-mechanism nym-safety-net
+```
+
+Repeat `--required-mechanism` for every policy delta required by the change.
+Declare that list during review; the checker requires exactly those entries.
+The `capture` pin names the original runner scorecard. Its execution sidecar
+is verified before either contract replay is admitted. A pass binds the exact integrated commit and the certification manifest hash.
+The full release benchmark remains a separate release requirement.
+
+## Resume release history off the PR path
+
+`benchmark_history.py` writes a plan and an independent ledger under an explicit
+output directory. It leaves all committed per-version history ledgers intact.
+The default selection is the current and previous release. `--older` adds
+optional older subjects. An older failure records `unavailable` and cannot
+block a complete required pair. This is an explicit batch command; it does
+not install a background scheduler. Every displayed available row is revalidated
+on resume, including retained optional releases outside the selected jobs. Hash
+checks and replay reconstruct their metrics without executing optional backfills.
+Invalid artifacts or removed plan entries render unavailable. Only current and
+previous determine `required_complete`.
+
+The plan contains the resolved `benchmark_spec` object, `current` and `previous`
+version strings, and a `releases` array. Each release has these fields:
+
+- `version`: the displayed release, such as `v0.18.0`.
+- `args`: an argument array for `rescore_past_release.py`, including
+  `--release-root`, `--build`, `--binary-profile`, `--configs`,
+  `--agentic-layers`, and the subject's policy and model options. Do not include
+  output, sampling, or independent contract-capture flags.
+- `subject`: the pinned `revision`, `binary_sha256`, `policy_sha256`, and
+  `model_bundles` array from the intended subject. These fields must equal the
+  captured provenance. They prevent a resumed job from accepting another
+  subject at the same local paths.
+
+First inspect the plan without inference. Then execute only missing jobs:
+
+```bash
+uv run --project scripts/bench python scripts/bench/benchmark_history.py \
+  target/history-plan.json --output target/history-current-spec
+uv run --project scripts/bench python scripts/bench/benchmark_history.py \
+  target/history-plan.json --output target/history-current-spec --execute
+# Run older backfills separately, outside the PR critical path.
+uv run --project scripts/bench python scripts/bench/benchmark_history.py \
+  target/history-plan.json --output target/history-current-spec --execute --older
+```
+
+Each release is captured once. Every contract comes from that record. Resume
+verifies the saved artifact hashes, record population, specification, and subject
+pin before skipping a completed job. It binds the original capture and both
+contract scorecards to that record, then reconstructs their metrics and provenance.
+A mixed set from different subjects stays unavailable on first admission and resume. A changed specification requires another
+output directory. `history.json` retains original evidence hashes;
+`history.md` renders measured and unavailable rows through the history renderer.
+Only a complete current/previous pair under one specification satisfies the
+synchronous history requirement. Optional older rows keep their original
+specification and provenance. Never copy their metrics into a new specification.
+
+
+### Response-validation adapters
+
+Every capture writes `response_validation` in the observation header and original
+scorecard. The observation cache key includes the same adapter. It records the
+manifest actions and composite source-ID mode used to accept responses.
+Certification requires the current adapter for every gain and mechanism arm.
+Missing or incompatible adapters refuse with `response_validation_mismatch`.
+
+`rescore_past_release.py --manifest-actions tokenize` supports the manifest
+protocol shipped by v0.14.0. It cannot certify an integrated candidate. History
+jobs must declare `response_validation` explicitly for each release, alongside
+`subject` and `args`. `benchmark_spec.RELEASE_PROTOCOLS` lists the supported
+release protocols: v0.14.0 uses `LEGACY_VALIDATION`; v0.15.0, v0.15.1, v0.16.0,
+v0.17.0, and v0.18.0 use `CURRENT_VALIDATION`. Unknown releases refuse until their
+protocol is registered. Current and previous releases each use their own declared
+protocol. History rows retain and display the verified adapter on resume.
+
+The CLI audit covers `--manifest-actions`, `--cross-check`, `--scored-labels`,
+and `--agentic-scored-labels` in the full capture drivers. The generated-only
+`agentic_layers.py measure` driver also records `--split-composite-source-ids`.
+Its `--vocabulary-root` selects the release vocabulary whose commit is recorded
+as `binary_commit`; generated-only evidence cannot certify a full population.
+Other CLI options select inputs, populations, execution budgets, or outputs.
+
+Run the synthetic runner regressions without a benchmark capture:
+
+```sh
+anvil run -- uv run --project scripts/bench python -m pytest scripts/bench/test_benchmark_admission.py -q
+```
+
+After committing the changes, run the admission mutations:
+
+```sh
+anvil run -- uv run --project scripts/bench python scripts/ci/check_benchmark_admission_mutations.py
+```
+
+Each mutation removes one binding and requires an executed assertion failure.
+`target/mutation-admission-receipts.json` pins the committed baseline and every
+mutation log. No detector benchmark runs during these checks.
+
+
+### Source qualification and retained response evidence
+
+Certification and current-spec history require a producer-owned `subject_build`
+receipt for every arm, including uncached captures. The normal current runner
+builds its subject. The release driver uses `--build --release-root <checkout>`;
+Cargo's returned executable is measured, including when a Cargo configuration
+changes the target directory. The receipt binds its SHA-256, profile, configs
+and explicitly requested Cargo features
+to the clean source revision checked before and after the build. Admission checks
+those fields against both the original record and the capture.
+
+Current and past-release builds share the config requirements in
+`subject_build.py`. The measured checkout must declare each requested config in
+its example source and every required feature in its own Cargo manifest.
+The v0.14.0 Kiji arm requests `safety-net-kiji`; the v0.15.0 through v0.17.0
+`policy-file` arms request `safety-net-nym`. Nym and OPF diagnostic arms request
+their respective features too. No feature is inferred from the current checkout
+when building an older release. Receipts missing the feature list, or declaring
+a list inconsistent with their configs, require recapture. Cache identity also
+includes the requested features. These are explicit feature flags; Cargo's
+default and transitive features remain defined by the pinned target manifest.
+
+`--skip-build`, release `--binary`, and generated-only external binaries remain
+exploratory captures. They cannot certify or enter current-spec history.
+An explicit `CARGO_TARGET_DIR` also prevents source qualification and cache reuse.
+A filename, a binary digest and a checkout revision alone do not qualify a build.
+Cached observations retain their original receipt; a hit must match the freshly
+built executable and pass admission again.
+
+Records retain numeric manifest bounds and canonical classes, without text or
+replacement values. Replay checks manifest/trace agreement under the declared
+adapter and rejects contradictory runner options. Relabelling a legacy record
+cannot turn a response the current validator refuses into admissible evidence.
+Records with adapter declarations but without this evidence require recapture.
+
+The existing committed v0.14.0, v0.15.0, v0.15.1, v0.16.0 and v0.17.0 ledger rows
+have no specification identity. Their historical metrics and provenance remain
+intact; none qualifies for current-spec comparison. All five need a `--build`
+recapture under the current specification to become available there. Keep
+`--manifest-actions tokenize` and `LEGACY_VALIDATION` for v0.14.0; use the current
+adapter for v0.15.0 through v0.17.0. No old receipt is inferred or backfilled from
+a binary path. Resumed current-spec jobs that lack qualified evidence render
+`unavailable`; optional older recaptures stay off the PR critical path.
+
+### Model-free test build guard
+
+Pytest installs an audit hook for registered Cargo proxies and toolchain paths.
+An inherited `PYTHONPATH` installs the same hook through `sitecustomize` in
+Python children and grandchildren. Cargo and `rustup run ... cargo` PATH shims
+also deny build, test, check, run and unknown commands in shell children.
+Only metadata, new, version and help are allowed. The producer regressions use
+synthetic tools, including the actual validator, current runner, historical
+dataiku, openpii and safety-net helper calls; they start no native build.
+
+This protects against misplaced build mocks, not hostile code. A child that
+strips the guard environment or disables Python startup with `-I` or `-S` loses
+the audit hook; PATH shims still apply if retained. Arbitrary native launchers,
+absolute tools launched from non-Python children, renamed/copied tools and
+separately created minimal environments are outside this guard. Synthetic Cargo
+fixtures outside registered proxy/toolchain locations are intentionally allowed.
+The legacy standalone dataset helpers produce no qualified build receipt and
+cannot certify through current capture admission.

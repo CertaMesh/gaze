@@ -109,6 +109,22 @@ Main requires full-corpus-equivalent evidence for the exact integrated candidate
 full evaluation, shadow-validated sound incremental evaluation, or a full-gated
 combined merge train. A targeted subset never certifies main.
 
+Resolve the immutable manifest with `benchmark_spec.py` before measurement.
+Use `benchmark_history.py <plan> --output <spec-directory>` to inspect the
+current/previous selection, then add `--execute` to collect missing subjects.
+Run `--older` separately for optional backfills. Resume verifies frozen subject
+pins, artifact hashes and full record populations. Keep the resulting manifest,
+`history.json` and `history.md` with the release evidence. Unproven legacy rows
+remain unavailable under the current specification; preserve their old ledgers.
+See [benchmark specification and history commands](../../../scripts/bench/README.md#freeze-the-benchmark-specification).
+
+For an integrated detection candidate, run `benchmark_certification.py` with
+`--candidate <exact-head>` and every reviewed `--required-mechanism` before
+accepting its gain evidence. Pin both v1 and v2 scorecards and their shared
+observation record per arm in the certification manifest. Required mechanism
+pairs must use that same candidate binary. A pass does not replace the full
+release benchmark, hosted CI, or publication authority.
+
 Strict identity `not_comparable` stays distinct from an explicitly accepted
 comparison of each release's own setup policy. Such a numeric comparison must
 retain policy differences, layer-by-layer leaked and false-positive bytes,

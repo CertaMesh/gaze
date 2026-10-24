@@ -25,6 +25,8 @@ is synthetic.
 
 from __future__ import annotations
 
+import benchmark_spec
+
 import argparse
 import base64
 import copy
@@ -5742,6 +5744,10 @@ def compare_layers(
     allow_legacy_policy_inputs: bool = False,
 ) -> dict[str, object]:
     """Compare admitted captures or verified record replays; this is not artifact admission."""
+    try:
+        benchmark_spec.require_same(base, candidate, required=False)
+    except benchmark_spec.SpecError as error:
+        raise LayerError(error.code) from error
     base_identity = _layer_identity(base)
     candidate_identity = _layer_identity(candidate)
     delta_result: dict[str, object] = {}
@@ -5909,6 +5915,8 @@ def _measure(args: argparse.Namespace) -> None:
         corpus_sha256=prepared.manifest["corpus_sha256"], binary=args.binary.resolve(),
         extra_documents=[record.to_document() for record in generate(PUBLISHED_PARTITION)],
         layer_contract=prepared.contract,
+        capture_protocol=benchmark_spec.capture_protocol(args),
+        response_validation=benchmark_spec.response_validation(args),
     )
     layers = runner.measure_agentic_layers(
         prepared=prepared,
@@ -5926,9 +5934,14 @@ def _measure(args: argparse.Namespace) -> None:
         split_composite_source_ids=args.split_composite_source_ids,
         record_writer=writer,
     )
+    import subject_build
+
     result = {
+        "subject_build": subject_build.unqualified("external_generated_only"),
         "schema_version": score.SCORECARD_SCHEMA_VERSION,
         "measured": args.label,
+        "capture_protocol": benchmark_spec.capture_protocol(args),
+        "response_validation": benchmark_spec.response_validation(args),
         "gaze": score.git_metadata(repo_root),
         "binary_sha256": writer.binary_sha256,
         "binary_commit": score.git_metadata(vocabulary_root),
@@ -5943,6 +5956,11 @@ def _measure(args: argparse.Namespace) -> None:
         "runs": [],
         "layers": layers,
     }
+    result["benchmark_spec"] = benchmark_spec.resolve(
+        repo_root, corpus_sha256=prepared.manifest["corpus_sha256"],
+        seed=PARTITION_SEEDS[PUBLISHED_PARTITION], available=[], prepared=prepared,
+        profile="generated-only", warmups=0, repetitions=1,
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     result["observation_record"] = writer.write(
         args.output.with_name("observations-v1.jsonl.gz"), result,

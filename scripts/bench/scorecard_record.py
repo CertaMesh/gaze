@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import benchmark_spec
+
 import argparse
 import copy
 from concurrent.futures import ProcessPoolExecutor
@@ -395,6 +397,10 @@ def _compact_response(response: Mapping[str, object]) -> dict[str, object]:
            if "candidate_events" in response else {}),
         "restore": response["restore"],
         "manifest_integrity": response["manifest_integrity"],
+        "manifest_spans": [
+            {key: span[key] for key in ("raw_start", "raw_end", "clean_start", "clean_end", "class")}
+            for span in response["manifest_spans"]
+        ],
         "initial_safety_net_stats": response["initial_safety_net_stats"],
         "strict_would_reject": response["strict_would_reject"],
         "post_policy_safety_net_stats": response["post_policy_safety_net_stats"],
@@ -411,6 +417,8 @@ class RecordWriter:
         binary: Path | None = None,
         extra_documents: Sequence[score.Document] = (),
         layer_contract: score.ScoredLabelContract | None = None,
+        capture_protocol: Mapping | None = None,
+        response_validation: Mapping | None = None,
     ) -> None:
         self.documents = {document.uid: document for document in (*available, *extra_documents)}
         if len(self.documents) != len(available) + len(extra_documents):
@@ -424,6 +432,8 @@ class RecordWriter:
         self.binary = binary.resolve() if binary is not None else None
         self.binary_sha256 = score.sha256_file(self.binary) if self.binary is not None else None
         self.layer_contract = layer_contract
+        self.capture_protocol = copy.deepcopy(capture_protocol)
+        self.response_validation = copy.deepcopy(response_validation)
         self.layer_measurements: dict[str, Mapping[str, object]] = {}
         self.rows: list[dict[str, object]] = []
         # None until the first trace item: whether the producer emits lineage.
@@ -488,7 +498,13 @@ class RecordWriter:
             }
             for document in sorted(self.documents.values(), key=lambda item: item.uid)
         ]
+        spec_id = benchmark_spec.identity(scorecard)
+        if spec_id is not None:
+            benchmark_spec.require_runtime(scorecard["benchmark_spec"])
         header = {
+            **({"benchmark_spec_id": spec_id} if spec_id is not None else {}),
+            "capture_protocol": self.capture_protocol,
+            "response_validation": self.response_validation,
             "kind": "header",
             "schema_version": self.schema_version,
             "corpus_sha256": self.corpus_sha256,
@@ -650,6 +666,14 @@ def _read(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
         raise RecordError("unknown record row")
     _check_lineage(header, observations)
     card = header["scorecard"]
+    try:
+        spec_id = benchmark_spec.identity(card)
+        if spec_id is not None:
+            benchmark_spec.require_runtime(card["benchmark_spec"])
+        if header.get("benchmark_spec_id") != spec_id:
+            raise benchmark_spec.SpecError("benchmark_spec_mismatch")
+    except benchmark_spec.SpecError as error:
+        raise RecordError(error.code) from error
     recorded_corpus = (
         card["dataset"]["integrity"]["sha256"]
         if card.get("runs") else card["layers"]["generator"]["corpus_sha256"]
@@ -710,6 +734,44 @@ def pin_template(
     header["scorecard"] = expected
     header["add_reference"] = False
     _write_rows(output, [header, *observations])
+
+
+def validate_replay_adapter(header, observations):
+    """Re-enforce adapter semantics from retained value-free response metadata."""
+    adapter = header.get("response_validation")
+    if adapter is None:
+        return  # Historical exploratory records remain replayable, never certifiable.
+    card = header["scorecard"]
+    if adapter != card.get("response_validation"):
+        raise RecordError("response_validation_mismatch")
+    for source in (card.get("runner_provenance", {}), card.get("parameters", {})):
+        for field in ("manifest_replacing_actions", "split_composite_source_ids"):
+            if field in source and source[field] != adapter[field]:
+                raise RecordError("response_validation_provenance_mismatch")
+    documents = {row["id"]: _document_from_row(row) for row in header["documents"]}
+    try:
+        actions = frozenset(adapter["manifest_replacing_actions"])
+        if adapter not in (benchmark_spec.CURRENT_VALIDATION, benchmark_spec.LEGACY_VALIDATION,
+                           {**benchmark_spec.CURRENT_VALIDATION, "split_composite_source_ids": True},
+                           {**benchmark_spec.LEGACY_VALIDATION, "split_composite_source_ids": True}):
+            raise ValueError()
+        for row in observations:
+            response = row["response"]
+            if "pipeline_error_code" in response:
+                continue
+            manifest = response["manifest_spans"]
+            for i, span in enumerate(manifest):
+                score._validate_manifest_span(span, f"manifest_spans[{i}]")
+            if response["manifest_integrity"]["spans"] != len(manifest):
+                raise ValueError()
+            score._validate_final_protection_trace(
+                documents[row["document_id"]], response["final_protection_trace"], manifest,
+                actions, adapter["split_composite_source_ids"])
+            if (any(item["action"] == "redact" for item in response["final_protection_trace"])
+                    and response["restore"]["exact"] is True):
+                raise ValueError()
+    except (KeyError, TypeError, ValueError, score.ResponseValidationError) as error:
+        raise RecordError("response_validation_evidence_mismatch") from error
 
 
 def _replay_group(request):
@@ -810,6 +872,7 @@ def rescore(
     gold_verdict_reference: Path | None = None,
 ) -> dict[str, object]:
     header, observations = _read(path)
+    validate_replay_adapter(header, observations)
     frozen = None
     if gold_verdict_reference is not None:
         reference, _ = _read(gold_verdict_reference)

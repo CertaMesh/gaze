@@ -22,7 +22,7 @@ row stays reproducible) and the harness commit, driver and binary digest under
 
     uv run --project scripts/bench python scripts/bench/rescore_past_release.py \\
       --release-root <checkout of the release's measured commit> \\
-      --binary <that checkout>/target/debug/examples/clean_for_bench \\
+      --build \\
       --binary-profile debug \\
       --configs rule-floor-extended,pass2-ner,full-stack-kiji-resolve \\
       --model-env GAZE_KIJI_DISTILBERT_MODEL_DIR=<model-cache>/kiji-distilbert \\
@@ -51,6 +51,8 @@ import dataiku_en_de_gaze_bench as dataiku  # noqa: E402
 import agentic_layers as agentic  # noqa: E402
 import gaze_bench_score as score  # noqa: E402
 import scorecard_record as records  # noqa: E402
+import subject_build
+import benchmark_spec  # noqa: E402
 import run_no_opf_benchmark as runner  # noqa: E402
 
 HARNESS_ROOT = Path(__file__).resolve().parents[2]
@@ -117,7 +119,9 @@ def model_bundle(value: str) -> dict[str, object]:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--release-root", type=Path, required=True)
-    parser.add_argument("--binary", type=Path, required=True)
+    subject = parser.add_mutually_exclusive_group(required=True)
+    subject.add_argument("--binary", type=Path, help="external binary: exploratory capture only")
+    subject.add_argument("--build", action="store_true", help="build the release subject for certification")
     parser.add_argument("--binary-profile", choices=("debug", "release"), required=True)
     parser.add_argument("--configs", required=True)
     parser.add_argument("--policy", type=Path, help="policy for the policy-file config")
@@ -163,6 +167,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> Path:
+    benchmark_spec.require_runtime()
     configs = tuple(c for c in args.configs.split(",") if c)
     if not configs or any("opf" in c.lower() for c in configs):
         raise PastReleaseError("configs must be non-empty and OPF-free")
@@ -192,7 +197,12 @@ def run(args: argparse.Namespace) -> Path:
     ).stdout
     if harness_status.strip():
         raise PastReleaseError(f"harness checkout is dirty: {HARNESS_ROOT}")
-    binary = args.binary.resolve()
+    if args.build:
+        binary, build_receipt = subject_build.build(
+            release_root, configs, release=args.binary_profile == "release", builder=subject_build.cargo_build_binary)
+    else:
+        binary = args.binary.resolve()
+        build_receipt = subject_build.unqualified("external_binary")
     if not binary.is_file():
         raise PastReleaseError(f"release benchmark binary is missing: {binary}")
 
@@ -233,6 +243,8 @@ def run(args: argparse.Namespace) -> Path:
             [record.to_document() for record in agentic.generate(agentic.PUBLISHED_PARTITION)]
             if prepared is not None else []
         ),
+        capture_protocol=benchmark_spec.capture_protocol(args),
+        response_validation=benchmark_spec.response_validation(args),
         layer_contract=prepared.contract if prepared is not None else None,
     )
     environment = runner.build_no_opf_environment(os.environ)
@@ -322,6 +334,14 @@ def run(args: argparse.Namespace) -> Path:
         card["layers"]["gold_validity"] = {
             "C": agentic.gold_validity_digest(documents, measurements)
         }
+    card["subject_build"] = build_receipt
+    card["capture_protocol"] = benchmark_spec.capture_protocol(args)
+    card["response_validation"] = benchmark_spec.response_validation(args)
+    card["benchmark_spec"] = benchmark_spec.resolve(
+        HARNESS_ROOT, corpus_sha256=dataset_report["integrity"]["sha256"], seed=args.seed,
+        available=original_available, prepared=prepared,
+        profile=card["parameters"]["profile"], warmups=args.warmups, repetitions=1,
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     card["observation_record"] = record_writer.write(
         output.with_name("observations-v1.jsonl.gz"), card, add_reference=True
@@ -334,7 +354,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         print(f"rescore_past_release: wrote {run(parse_args(argv))}")
         return 0
-    except (PastReleaseError, runner.CandidateError, score.ScoredLabelContractError) as error:
+    except (PastReleaseError, runner.CandidateError, score.ScoredLabelContractError, benchmark_spec.SpecError) as error:
         sys.stderr.write(f"rescore_past_release: {error}\n")
         return 2
 

@@ -101,6 +101,7 @@ class ReleaseCheckoutTest(unittest.TestCase):
             writer.write.return_value = {}
             write_json = mock.Mock()
             returns = [
+                (rescore.benchmark_spec, "resolve", {"id": "synthetic-spec"}),
                 (rescore.subprocess, "run", SimpleNamespace(stdout="")),
                 (rescore.runner, "validate_required_models", []),
                 (rescore.runner, "load_scored_label_contract", {}),
