@@ -164,7 +164,8 @@ one unversioned error with a null `session_id`, then daemon input closes:
 
 The reader does not drain an oversized frame to find LF. At most one frame
 waits in the input queue; a full queue blocks the reader without dropping
-frames. EOF without LF still processes the final frame. Invalid UTF-8 closes
+frames. Batch clients need to read stdout concurrently with stdin writes.
+EOF without LF still processes the final frame. Invalid UTF-8 closes
 input without a response for that frame, as before.
 
 | Flag | Purpose |

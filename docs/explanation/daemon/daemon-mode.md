@@ -66,6 +66,10 @@ that queued frame, there can be one frame under processing and one held by the
 reader, plus stdin's fixed read buffer. Each raw frame buffer is capped. This
 does not bound model memory, session storage, decoded JSON, or response size.
 
+Backpressure also reaches the stdio pipes. Batch senders must read stdout
+concurrently with stdin writes. Writing an entire batch before reading can
+block when the pipe buffers fill.
+
 An EOF tail without LF is still processed. Invalid UTF-8 still closes input
 silently after earlier valid frames, matching the previous reader.
 
