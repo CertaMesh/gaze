@@ -18,7 +18,9 @@ reconstructs each emitted token's original bytes, checks JSON shape and types an
 non-text values, and counts raw private bytes and protected non-gold bytes.
 It also verifies the manifest call and the response snapshot hash. Session export and import
 runs in the runtime host too. Neither a runtime safety flag nor re-detection of
-protected output establishes coverage. Seed failures count as refusals.
+protected output establishes coverage. Seed failures count as refusals. If arguments reached the tool before a later
+response failure, their disclosed bytes still count. The comparison also rejects
+an increase in dispatch failures.
 
 Both scored-label contracts are reported. All current gold is Name or Email,
 scored under v1 and v2; v2 neutral predictions are excluded from false positives.

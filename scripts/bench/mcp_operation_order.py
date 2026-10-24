@@ -19,7 +19,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(__file__).with_name("fixtures") / "mcp_operation_order.json"
 TOKEN = re.compile(r"<[0-9a-f]{8}:[^<>]+>")
-FIELDS = ("leaked", "false_positive", "refused", "restore_exact", "restore_failed", "manifest_valid", "manifest_invalid")
+FIELDS = ("leaked", "false_positive", "refused", "dispatch_failed", "restore_exact", "restore_failed", "manifest_valid", "manifest_invalid")
 
 
 def digest(path):
@@ -152,8 +152,12 @@ def ulid_bytes(text):
     return value.to_bytes(16, "big")
 
 
-def validate_audit(record):
+def validate_audit(record, argument_released_before_failure=False):
     audit = record["audit"]
+    if argument_released_before_failure:
+        if (audit["begin"], audit["finish"], audit["fail"]) != (1, 0, 1) or audit["args"] != record["tool_args"] or audit["snapshot"] is not None or record["response"] is not None:
+            raise ValueError("incomplete failed manifest call after argument release")
+        return
     if (audit["begin"], audit["finish"], audit["fail"]) != (1, 1, 0) or audit["args"] != record["tool_args"]:
         raise ValueError("incomplete or inconsistent manifest call")
     wire = record["response_wire"].encode()
@@ -181,12 +185,15 @@ def score_case(case, record, neutral=()):
     result = dict.fromkeys(FIELDS, 0)
     if case["id"] != record["id"]:
         raise ValueError("capture order or fixture identity mismatch")
-    if record["phase"] != "target" or record["error"] is not None:
+    failed = record["error"] is not None
+    result["dispatch_failed"] = int(failed)
+    argument_released = record["phase"] == "target" and case["direction"] == "arguments" and record.get("tool_args") is not None
+    if record["phase"] != "target" or (failed and not argument_released):
         result["refused"] = 1
         return result
     try:
         entries = entries_from_snapshot(record["snapshot_hex"])
-        validate_audit(record)
+        validate_audit(record, failed and argument_released)
     except (ValueError, KeyError, TypeError):
         result["manifest_invalid"] = 1
         return result
@@ -242,7 +249,7 @@ def compare(base, candidate):
         regressions = []
         for layer in ("A", "D", "R"):
             old, new = a["layers"][layer], b["layers"][layer]
-            for metric in ("leaked", "refused", "restore_failed", "manifest_invalid"):
+            for metric in ("leaked", "refused", "dispatch_failed", "restore_failed", "manifest_invalid"):
                 if new[metric] > old[metric]:
                     regressions.append(layer + ":" + metric)
             for metric in ("restore_exact", "manifest_valid"):

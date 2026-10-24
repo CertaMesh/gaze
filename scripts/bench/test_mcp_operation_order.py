@@ -51,7 +51,7 @@ def test_oracle_counts_source_last_leak_and_exact_token_coverage():
     assert arm.score_case(data, raw)["leaked"] == 15
     protected = record(["hello <deadbeef:Name_1>"], [entry()])
     scored = arm.score_case(data, protected)
-    assert scored == {"leaked": 0, "false_positive": 0, "refused": 0, "restore_exact": 1,
+    assert scored == {"leaked": 0, "false_positive": 0, "refused": 0, "dispatch_failed": 0, "restore_exact": 1,
                       "restore_failed": 0, "manifest_valid": 1, "manifest_invalid": 0}
 
 
@@ -139,3 +139,17 @@ def test_runtime_restore_failure_is_not_hidden_by_a_good_mapping_oracle():
     observed = record(["hello <deadbeef:Name_1>"], [entry()])
     observed["restored"] = None
     assert arm.score_case(case(), observed)["restore_failed"] == 1
+
+
+def test_later_dispatch_failure_cannot_hide_arguments_already_released():
+    observed = record(case()["expanded"], [])
+    observed["error"] = "response protection failed"
+    observed["response"] = None
+    observed["response_wire"] = "null"
+    observed["audit"].update(finish=0, fail=1, snapshot=None)
+    result = arm.score_case(case(), observed)
+    assert result["leaked"] == 15
+    assert result["refused"] == 0
+    assert result["dispatch_failed"] == 1
+    response_case = {**case(), "direction": "response"}
+    assert arm.score_case(response_case, observed)["refused"] == 1
