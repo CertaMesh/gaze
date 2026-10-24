@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import subject_build
 import stage_timing as stages
 
 import argparse
@@ -1466,16 +1467,14 @@ def _run(args: argparse.Namespace) -> int:
     )
     profile = "release" if args.release else "debug"
     with stages.measure("build", role="detector", executed=not args.skip_build):
-        binary = (
-            Path(os.environ.get("CARGO_TARGET_DIR", str(repo_root / "target")))
-            / profile / "examples/clean_for_bench"
-            if args.skip_build
-            else dataiku.build_binary(
-                repo_root,
-                ("policy-file",) if policy_path else tuple(score.DEFAULT_CONFIGS),
-                release=args.release,
-            )
-        )
+        if args.skip_build:
+            binary = (Path(os.environ.get("CARGO_TARGET_DIR", str(repo_root / "target")))
+                      / profile / "examples/clean_for_bench")
+            build_receipt = subject_build.unqualified("skip_build")
+        else:
+            binary, build_receipt = subject_build.build(
+                repo_root, ("policy-file",) if policy_path else tuple(score.DEFAULT_CONFIGS),
+                release=args.release, builder=dataiku.build_binary)
     if not binary.is_file():
         raise CandidateError(f"benchmark binary is missing: {binary}")
     validator_probe = (
@@ -1502,6 +1501,8 @@ def _run(args: argparse.Namespace) -> int:
 
     bypass = ("explicit_no_cache" if args.no_cache else "unbound_skip_build" if args.skip_build
               else "fresh_performance_required" if args.performance_gating else None)
+    if build_receipt["mode"] != "producer-build":
+        bypass = "unqualified_subject_build"
     if bypass is None:
         cache_key, bypass = read_key()
     if evidence is not None:
@@ -1525,6 +1526,7 @@ def _run(args: argparse.Namespace) -> int:
                     max_workers=args.score_jobs,
                 )
                 benchmark_spec.require_same(candidate, {"benchmark_spec": spec})
+                subject_build.validate(candidate, score.sha256_file(binary))
                 if read_key()[0] != cache_key:
                     raise records.RecordError("effective inputs changed during cache verification")
             except (records.RecordError, OSError, ValueError):
@@ -1636,6 +1638,7 @@ def _run(args: argparse.Namespace) -> int:
             "C": agentic.gold_validity_digest(documents, validator_measurements)
         }
 
+    candidate["subject_build"] = build_receipt
     candidate["capture_protocol"] = benchmark_spec.capture_protocol(args)
     candidate["response_validation"] = benchmark_spec.response_validation(args)
     candidate["benchmark_spec"] = spec

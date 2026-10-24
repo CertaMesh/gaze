@@ -194,7 +194,7 @@ def test_history_shares_canonical_gold_admission(tmp_path, evidence):
     assert all(row['status'] == 'unavailable' for row in state['releases'].values())
 
 
-def produced_capture(tmp_path, monkeypatch, evidence, producer, flags, response_factory=None):
+def produced_capture(tmp_path, monkeypatch, evidence, producer, flags, response_factory=None, *, build_release=True):
     """Run the actual producer and writer; replace only dataset/subject execution."""
     from test_agentic_layers import _success_response
     source = tmp_path / 'candidate'
@@ -254,7 +254,8 @@ def produced_capture(tmp_path, monkeypatch, evidence, producer, flags, response_
         assert runner._run(args) == 0
         folder = folder / 'full'
     else:
-        args = past.parse_args(['--release-root', str(tmp_path), '--binary', str(binary), '--binary-profile', 'debug',
+        args = past.parse_args(['--release-root', str(tmp_path),
+            *(['--build'] if build_release else ['--binary', str(binary)]), '--binary-profile', 'debug',
             '--configs', 'policy-file', '--policy', str(policy), '--agentic-layers', '--dataset', str(dataset),
             '--output', str(folder / 'capture.json'), *flags])
         past.run(args)
@@ -572,3 +573,226 @@ def test_history_renderer_refuses_wrong_adapter(tmp_path, evidence):
     state['releases'][plan['current']]['response_validation'] = specs.LEGACY_VALIDATION
     with pytest.raises(history.render.RenderError, match='^release_protocol_mismatch$'):
         history.render.render_spec_history(state)
+
+
+@pytest.mark.parametrize('update_provenance', [False, True])
+def test_reviewer_relabelled_legacy_observations_refuse(tmp_path, evidence, monkeypatch, update_provenance):
+    """Round-four probe: adapter labels cannot change a retained population."""
+    from test_agentic_layers import _success_response
+    from bench_subprocess import ProducerFailure
+    def bad(doc):
+        value = _success_response(doc)
+        if doc.spans:
+            value['clean_text'] = '[REDACTED:email]'
+            value['final_protection_trace'] = [dict(raw_start=0, raw_end=len(doc.text.encode()),
+                **{'class': 'email'}, action='redact', provenance=dict(stage='safety_net',
+                decision='redact', source_ids=['synthetic:email']))]
+            value['restore']['exact'] = False
+        return value
+    with monkeypatch.context() as control:
+        with pytest.raises(ProducerFailure):
+            produced_capture(tmp_path, control, evidence, 'release', [], bad)
+    shutil.rmtree(tmp_path / 'produced')
+    folder = produced_capture(tmp_path, monkeypatch, evidence, 'release', ['--manifest-actions', 'tokenize'], bad)
+    rp = folder / 'observations-v1.jsonl.gz'
+    header, observations = records._read(rp)
+    untouched = copy.deepcopy(observations)
+    header['response_validation'] = copy.deepcopy(specs.CURRENT_VALIDATION)
+    header['scorecard']['response_validation'] = copy.deepcopy(specs.CURRENT_VALIDATION)
+    if update_provenance:
+        header['scorecard']['runner_provenance']['manifest_replacing_actions'] = ['redact', 'tokenize']
+    records._write_rows(rp, [header, *observations])
+    assert records._read(rp)[1] == untouched
+    with pytest.raises(records.RecordError, match='response_validation'):
+        records.rescore(rp, score.SCORED_LABEL_CONTRACT_V1, max_workers=1)
+    captured = copy.deepcopy(header['scorecard'])
+    captured['observation_record'] = {**json.loads((folder / 'capture.json').read_text())['observation_record'],
+                                     'sha256': identity.file_digest(rp), 'bytes': rp.stat().st_size}
+    (folder / 'capture.json').write_text(json.dumps(captured))
+    with pytest.raises(records.RecordError, match='response_validation'):
+        cert.admit_capture(folder / 'capture.json', rp, evidence['benchmark_spec'], ROOT)
+    for n in (1, 2):
+        (folder / f'scorecard-v{n}.json').write_text('{}')
+    job = dict(version='v0.18.0', subject=history.subject_identity(header),
+               response_validation=specs.CURRENT_VALIDATION)
+    row = dict(status='available', benchmark_spec_id=evidence['benchmark_spec']['id'],
+               job_sha256=identity.digest(job), artifacts={p.name: identity.file_digest(p)
+               for p in folder.iterdir() if p.name in ('capture.json', 'observations-v1.jsonl.gz',
+                                                      'scorecard-v1.json', 'scorecard-v2.json')})
+    assert not history.verified(row, folder, evidence['benchmark_spec'], job)
+
+
+def test_reviewer_skip_build_retained_binary_cannot_certify(tmp_path, evidence, monkeypatch):
+    """Round-four honest --skip-build probe; no record relabelling."""
+    from test_agentic_layers import _success_response
+    stale = ROOT / 'target/debug/examples/clean_for_bench'
+    existed = stale.exists()
+    if not existed:
+        stale.parent.mkdir(parents=True, exist_ok=True)
+        stale.write_bytes(b'synthetic retained binary')
+    try:
+        canonical = tmp_path / 'candidate/synthetic-binary'
+        canonical.write_bytes(b'changed synthetic candidate binary')
+        with monkeypatch.context() as fresh:
+            folder = produced_capture(tmp_path, fresh, evidence, 'current', [], _success_response)
+            fresh_header, fresh_observations = records._read(folder / 'observations-v1.jsonl.gz')
+            assert cert.admit_capture(folder / 'capture.json', folder / 'observations-v1.jsonl.gz',
+                                      evidence['benchmark_spec'], ROOT, REVISION)
+        shutil.rmtree(tmp_path / 'produced')
+        monkeypatch.setattr(runner, 'validator_probe_binary', lambda *a, **k: canonical)
+        def protected(doc):
+            value = _success_response(doc)
+            if doc.spans:
+                value['clean_text'] = '[EMAIL_1]'
+                value['manifest_spans'] = [dict(raw_start=0, raw_end=len(doc.text.encode()),
+                    clean_start=0, clean_end=len(value['clean_text']), **{'class': 'email'})]
+                value['manifest_integrity']['spans'] = 1
+                value['final_protection_trace'] = [dict(raw_start=0, raw_end=len(doc.text.encode()),
+                    **{'class': 'email'}, action='tokenize', provenance=dict(stage='primary_pipeline',
+                    decision='policy', source_ids=['synthetic:email']))]
+            return value
+        folder = produced_capture(tmp_path, monkeypatch, evidence, 'current', ['--skip-build'], protected)
+        rp = folder / 'observations-v1.jsonl.gz'
+        header, retained_observations = records._read(rp)
+        assert retained_observations != fresh_observations
+        assert header['binary_sha256'] == identity.file_digest(stale)
+        assert header['binary_sha256'] != fresh_header['binary_sha256']
+        attach_produced(tmp_path, evidence, folder, 'gain', 'candidate')
+        with pytest.raises(cert.CertificationError, match='unqualified_subject_build'):
+            check(evidence, tmp_path)
+    finally:
+        if not existed:
+            stale.unlink()
+
+
+@pytest.mark.parametrize('pair_name,side', [('gain', 'base'), ('gain', 'candidate'),
+                                         ('mechanism', 'base'), ('mechanism', 'candidate')])
+def test_external_release_binary_refuses_every_certification_arm(tmp_path, evidence, monkeypatch, pair_name, side):
+    folder = produced_capture(tmp_path, monkeypatch, evidence, 'release', [], build_release=False)
+    attach_produced(tmp_path, evidence, folder, pair_name, side)
+    with pytest.raises(cert.CertificationError, match='unqualified_subject_build'):
+        check(evidence, tmp_path)
+
+
+@pytest.mark.parametrize('field', ['mode', 'source', 'binary_sha256', 'profile', 'configs'])
+def test_subject_build_receipt_binds_execution(tmp_path, evidence, field):
+    import subject_build
+    header, _ = records._read(tmp_path / 'candidate/observations-v1.jsonl.gz')
+    card = copy.deepcopy(header['scorecard'])
+    subject_build.validate(card, header['binary_sha256'])
+    values = dict(mode='external-binary', source={'revision': 'f' * 40, 'dirty': False},
+                  binary_sha256='f' * 64, profile='release', configs=['another-config'])
+    card['subject_build'][field] = values[field]
+    with pytest.raises(ValueError, match='^unqualified_subject_build$'):
+        subject_build.validate(card, header['binary_sha256'])
+
+
+def test_noncache_execution_requires_subject_build(tmp_path, evidence):
+    import stage_timing as stages
+    header, _ = records._read(tmp_path / 'candidate/observations-v1.jsonl.gz')
+    card = copy.deepcopy(header['scorecard'])
+    card.pop('subject_build')
+    assert not card.get('cache_replay') and 'capture_cache' not in card
+    with pytest.raises(ValueError, match='^unqualified_subject_build$'):
+        stages.validate_execution(card, None, require_build=True)
+
+
+@pytest.mark.parametrize('drift', ['dirty', 'changed', 'target'])
+def test_producer_build_refuses_unqualified_source_or_target(tmp_path, monkeypatch, drift):
+    import subject_build
+    binary = tmp_path / 'synthetic-binary'
+    binary.write_bytes(b'synthetic producer build')
+    clean = {'revision': REVISION, 'dirty': False}
+    after = dict(clean)
+    if drift == 'dirty':
+        after['dirty'] = True
+    elif drift == 'changed':
+        after['revision'] = 'f' * 40
+    else:
+        monkeypatch.setenv('CARGO_TARGET_DIR', str(tmp_path / 'external-target'))
+    monkeypatch.setattr(score, 'git_metadata', mock.Mock(side_effect=[clean, after]))
+    builder = mock.Mock(return_value=binary)
+    selected, receipt = subject_build.build(tmp_path, ('policy-file',), release=False, builder=builder)
+    assert selected == binary
+    builder.assert_called_once_with(tmp_path, ('policy-file',), release=False)
+    assert receipt['mode'] == 'unqualified'
+
+
+def test_cargo_returned_artifact_wins_over_retained_default_path(tmp_path, monkeypatch):
+    import dataiku_en_de_gaze_bench as dataiku
+    selected = tmp_path / 'configured-target/clean_for_bench'
+    selected.parent.mkdir()
+    selected.write_bytes(b'synthetic fresh artifact')
+    retained = tmp_path / 'target/debug/examples/clean_for_bench'
+    retained.parent.mkdir(parents=True)
+    retained.write_bytes(b'synthetic stale artifact')
+    artifact = dict(reason='compiler-artifact', target=dict(name='clean_for_bench', kind=['example']), executable=str(selected))
+    command = mock.Mock(return_value=SimpleNamespace(stdout=json.dumps(artifact)))
+    monkeypatch.setattr(dataiku.subprocess, 'run', command)
+    assert dataiku.build_binary(tmp_path, (), release=False) == selected
+    assert '--message-format=json-render-diagnostics' in command.call_args.args[0]
+
+
+@pytest.mark.parametrize('producer', ['current', 'release'])
+def test_honest_producer_build_certifies_integrated_gain(tmp_path, evidence, monkeypatch, producer):
+    from test_agentic_layers import _success_response
+    def protected(doc):
+        value = _success_response(doc)
+        if doc.spans:
+            value['final_protection_trace'] = [dict(raw_start=0, raw_end=len(doc.text.encode()),
+                **{'class': 'email'}, action='tokenize', provenance=dict(stage='primary_pipeline',
+                decision='policy', source_ids=['synthetic:email']))]
+            value['manifest_spans'] = [dict(raw_start=0, raw_end=len(doc.text.encode()),
+                clean_start=0, clean_end=len(doc.text.encode()), **{'class': 'email'})]
+            value['manifest_integrity']['spans'] = 1
+        return value
+    folder = produced_capture(tmp_path, monkeypatch, evidence, producer, [], protected)
+    attach_produced(tmp_path, evidence, folder, 'gain', 'candidate')
+    assert check(evidence, tmp_path)['verdict'] == 'pass'
+
+
+
+def test_replay_refuses_contradictory_adapter_provenance(tmp_path, evidence):
+    rp = tmp_path / 'candidate/observations-v1.jsonl.gz'
+    header, observations = records._read(rp)
+    header['scorecard']['runner_provenance']['manifest_replacing_actions'] = ['tokenize']
+    records._write_rows(rp, [header, *observations])
+    with pytest.raises(records.RecordError, match='response_validation_provenance_mismatch'):
+        records.rescore(rp, score.SCORED_LABEL_CONTRACT_V1, max_workers=1)
+
+
+@pytest.mark.parametrize('change', ['manifest_count', 'restore_exact', 'missing_manifest'])
+def test_replay_checks_retained_response_evidence(tmp_path, evidence, change):
+    rp = tmp_path / 'candidate/observations-v1.jsonl.gz'
+    header, observations = records._read(rp)
+    response = next(row['response'] for row in observations if row['layer'] == 'C')
+    if change == 'manifest_count':
+        response['manifest_integrity']['spans'] += 1
+    elif change == 'missing_manifest':
+        response.pop('manifest_spans')
+    else:
+        response['final_protection_trace'][0]['action'] = 'redact'
+        response['final_protection_trace'][0]['provenance'].update(stage='safety_net', decision='redact')
+        assert response['restore']['exact'] is True
+    records._write_rows(rp, [header, *observations])
+    with pytest.raises(records.RecordError, match='response_validation_evidence_mismatch'):
+        records.rescore(rp, score.SCORED_LABEL_CONTRACT_V1, max_workers=1)
+
+
+@pytest.mark.parametrize('change', ['version', 'dirty', 'revision_format', 'hash_format'])
+def test_subject_build_receipt_rejects_malformed_identity(tmp_path, evidence, change):
+    import subject_build
+    header, _ = records._read(tmp_path / 'candidate/observations-v1.jsonl.gz')
+    card = copy.deepcopy(header['scorecard'])
+    receipt = card['subject_build']
+    digest = header['binary_sha256']
+    if change == 'version':
+        receipt['version'] = 2
+    elif change == 'dirty':
+        card['gaze']['dirty'] = receipt['source']['dirty'] = True
+    elif change == 'revision_format':
+        card['gaze']['revision'] = receipt['source']['revision'] = 'unqualified'
+    else:
+        digest = receipt['binary_sha256'] = 'unqualified'
+    with pytest.raises(ValueError, match='^unqualified_subject_build$'):
+        subject_build.validate(card, digest)

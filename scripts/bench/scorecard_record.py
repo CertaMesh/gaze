@@ -397,6 +397,10 @@ def _compact_response(response: Mapping[str, object]) -> dict[str, object]:
            if "candidate_events" in response else {}),
         "restore": response["restore"],
         "manifest_integrity": response["manifest_integrity"],
+        "manifest_spans": [
+            {key: span[key] for key in ("raw_start", "raw_end", "clean_start", "clean_end", "class")}
+            for span in response["manifest_spans"]
+        ],
         "initial_safety_net_stats": response["initial_safety_net_stats"],
         "strict_would_reject": response["strict_would_reject"],
         "post_policy_safety_net_stats": response["post_policy_safety_net_stats"],
@@ -732,6 +736,44 @@ def pin_template(
     _write_rows(output, [header, *observations])
 
 
+def validate_replay_adapter(header, observations):
+    """Re-enforce adapter semantics from retained value-free response metadata."""
+    adapter = header.get("response_validation")
+    if adapter is None:
+        return  # Historical exploratory records remain replayable, never certifiable.
+    card = header["scorecard"]
+    if adapter != card.get("response_validation"):
+        raise RecordError("response_validation_mismatch")
+    for source in (card.get("runner_provenance", {}), card.get("parameters", {})):
+        for field in ("manifest_replacing_actions", "split_composite_source_ids"):
+            if field in source and source[field] != adapter[field]:
+                raise RecordError("response_validation_provenance_mismatch")
+    documents = {row["id"]: _document_from_row(row) for row in header["documents"]}
+    try:
+        actions = frozenset(adapter["manifest_replacing_actions"])
+        if adapter not in (benchmark_spec.CURRENT_VALIDATION, benchmark_spec.LEGACY_VALIDATION,
+                           {**benchmark_spec.CURRENT_VALIDATION, "split_composite_source_ids": True},
+                           {**benchmark_spec.LEGACY_VALIDATION, "split_composite_source_ids": True}):
+            raise ValueError()
+        for row in observations:
+            response = row["response"]
+            if "pipeline_error_code" in response:
+                continue
+            manifest = response["manifest_spans"]
+            for i, span in enumerate(manifest):
+                score._validate_manifest_span(span, f"manifest_spans[{i}]")
+            if response["manifest_integrity"]["spans"] != len(manifest):
+                raise ValueError()
+            score._validate_final_protection_trace(
+                documents[row["document_id"]], response["final_protection_trace"], manifest,
+                actions, adapter["split_composite_source_ids"])
+            if (any(item["action"] == "redact" for item in response["final_protection_trace"])
+                    and response["restore"]["exact"] is True):
+                raise ValueError()
+    except (KeyError, TypeError, ValueError, score.ResponseValidationError) as error:
+        raise RecordError("response_validation_evidence_mismatch") from error
+
+
 def _replay_group(request):
     header, result, document_rows, rows, layer, index, config, selected_contract = request
     raw_documents = [_document_from_row(document_rows[row["document_id"]]) for row in rows]
@@ -830,6 +872,7 @@ def rescore(
     gold_verdict_reference: Path | None = None,
 ) -> dict[str, object]:
     header, observations = _read(path)
+    validate_replay_adapter(header, observations)
     frozen = None
     if gold_verdict_reference is not None:
         reference, _ = _read(gold_verdict_reference)

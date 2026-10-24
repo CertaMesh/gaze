@@ -5934,7 +5934,10 @@ def _measure(args: argparse.Namespace) -> None:
         split_composite_source_ids=args.split_composite_source_ids,
         record_writer=writer,
     )
+    import subject_build
+
     result = {
+        "subject_build": subject_build.unqualified("external_generated_only"),
         "schema_version": score.SCORECARD_SCHEMA_VERSION,
         "measured": args.label,
         "capture_protocol": benchmark_spec.capture_protocol(args),

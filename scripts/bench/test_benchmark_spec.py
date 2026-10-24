@@ -175,6 +175,8 @@ def capture(folder, docs, spec, protect, policy, revision=REVISION):
                 response['final_protection_trace'] = [{
                     'raw_start': 0, 'raw_end': len(doc.text), 'class': 'email', 'action': 'tokenize',
                     'provenance': {'stage': 'primary_pipeline', 'decision': 'policy', 'source_ids': ['synthetic:email']}}]
+                response['manifest_spans'] = [dict(raw_start=0, raw_end=len(doc.text),
+                    clean_start=0, clean_end=len(doc.text), **{'class': 'email'})]
                 response['manifest_integrity']['spans'] = 1
             responses[doc.uid] = response
         measured = records.filter_measurements(measurements, documents)
@@ -189,12 +191,16 @@ def capture(folder, docs, spec, protect, policy, revision=REVISION):
         'dataset': {'integrity': {'sha256': 'd' * 64},
                     'validator_gold_census': score.validator_gold_census(docs['C'], main_measurements)},
         'scoring': {'scored_label_contract': score.scored_label_contract_report(score.SCORED_LABEL_CONTRACT_V1, docs['C'])},
-        'parameters': {'profile': 'full', 'max_documents': None, 'configs': ['policy-file'],
+        'parameters': {'profile': 'full', 'binary_profile': 'debug', 'max_documents': None, 'configs': ['policy-file'],
                        'ner_threshold': 0.3, 'policy_sha256': capture_identity.file_digest(policy),
                        'sampling_seed': 20260710, 'warmup_count': 1, 'measured_repetitions': 1},
         'runner_provenance': {'policy': {'path': str(policy), 'sha256': capture_identity.file_digest(policy)},
                               'model_bundles': [], 'policy_dependencies': {'files': {}}},
         'runs': [runs['C']], 'benchmark_spec': spec,
+        'subject_build': {'version': 1, 'mode': 'producer-build',
+                          'source': {'revision': revision, 'dirty': False},
+                          'binary_sha256': capture_identity.file_digest(binary),
+                          'profile': 'debug', 'configs': ['policy-file']},
         'capture_protocol': specs.CANONICAL_CAPTURE,
         'response_validation': specs.CURRENT_VALIDATION,
         'layers': {'generator': spec['inputs']['generator'],
@@ -408,7 +414,8 @@ def test_certificate_refuses_untrusted_evidence(tmp_path, evidence, mutation):
         # Reversing a known improving pair must refuse the leak regression.
         evidence['gain']['base'], evidence['gain']['candidate'] = evidence['gain']['candidate'], evidence['gain']['base']
         rewrite_arm(tmp_path, evidence['gain']['candidate'],
-                    lambda header: header['scorecard']['gaze'].update(revision=REVISION))
+                    lambda header: (header['scorecard']['gaze'].update(revision=REVISION),
+                                    header['scorecard']['subject_build']['source'].update(revision=REVISION)))
     expected = {'spec': 'invalid_certification_evidence', 'artifact': 'evidence_integrity',
                 'mechanism_binary': 'mechanism_binary_mismatch', 'failed_gate': 'gate_refused'}
     with pytest.raises(cert.CertificationError, match='^' + expected[mutation] + '$'):

@@ -786,7 +786,7 @@ version strings, and a `releases` array. Each release has these fields:
 
 - `version`: the displayed release, such as `v0.18.0`.
 - `args`: an argument array for `rescore_past_release.py`, including
-  `--release-root`, `--binary`, `--binary-profile`, `--configs`,
+  `--release-root`, `--build`, `--binary-profile`, `--configs`,
   `--agentic-layers`, and the subject's policy and model options. Do not include
   output, sampling, or independent contract-capture flags.
 - `subject`: the pinned `revision`, `binary_sha256`, `policy_sha256`, and
@@ -857,3 +857,36 @@ anvil run -- uv run --project scripts/bench python scripts/ci/check_benchmark_ad
 Each mutation removes one binding and requires an executed assertion failure.
 `target/mutation-admission-receipts.json` pins the committed baseline and every
 mutation log. No detector benchmark runs during these checks.
+
+
+### Source qualification and retained response evidence
+
+Certification and current-spec history require a producer-owned `subject_build`
+receipt for every arm, including uncached captures. The normal current runner
+builds its subject. The release driver uses `--build --release-root <checkout>`;
+Cargo's returned executable is measured, including when a Cargo configuration
+changes the target directory. The receipt binds its SHA-256, profile and configs
+to the clean source revision checked before and after the build. Admission checks
+those fields against both the original record and the capture.
+
+`--skip-build`, release `--binary`, and generated-only external binaries remain
+exploratory captures. They cannot certify or enter current-spec history.
+An explicit `CARGO_TARGET_DIR` also prevents source qualification and cache reuse.
+A filename, a binary digest and a checkout revision alone do not qualify a build.
+Cached observations retain their original receipt; a hit must match the freshly
+built executable and pass admission again.
+
+Records retain numeric manifest bounds and canonical classes, without text or
+replacement values. Replay checks manifest/trace agreement under the declared
+adapter and rejects contradictory runner options. Relabelling a legacy record
+cannot turn a response the current validator refuses into admissible evidence.
+Records with adapter declarations but without this evidence require recapture.
+
+The existing committed v0.14.0, v0.15.0, v0.15.1, v0.16.0 and v0.17.0 ledger rows
+have no specification identity. Their historical metrics and provenance remain
+intact; none qualifies for current-spec comparison. All five need a `--build`
+recapture under the current specification to become available there. Keep
+`--manifest-actions tokenize` and `LEGACY_VALIDATION` for v0.14.0; use the current
+adapter for v0.15.0 through v0.17.0. No old receipt is inferred or backfilled from
+a binary path. Resumed current-spec jobs that lack qualified evidence render
+`unavailable`; optional older recaptures stay off the PR critical path.

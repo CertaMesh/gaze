@@ -78,8 +78,12 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def validate_execution(card: dict, scorecard: Path | None, record: Path | None = None) -> None:
+def validate_execution(card: dict, scorecard: Path | None, record: Path | None = None,
+                       *, require_build: bool = False) -> None:
     """Admit reusable captures only with completed evidence for these exact bytes."""
+    if require_build:
+        import subject_build
+        subject_build.validate(card)
     if not any(name in card for name in ("capture_cache", "cache_key_sha256")) and not card.get("cache_replay"):
         return
     provenance = card.get("capture_cache")

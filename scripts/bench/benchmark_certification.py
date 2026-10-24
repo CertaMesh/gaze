@@ -16,6 +16,7 @@ import bench_json
 import benchmark_spec as specs
 import gaze_bench_score as score
 import scorecard_record as records
+import subject_build
 import stage_timing as stages
 from capture_identity import digest, file_digest
 
@@ -104,7 +105,6 @@ def admit_capture(capture_path: Path, record_path: Path, spec: dict, harness: Pa
     original = full_record(record_path, spec, revision)
     captured = bench_json.load(capture_path)
     specs.require_same(captured, original)
-    stages.validate_execution(captured, capture_path, record_path)
     header, _ = records._read(record_path)
     if (header.get('response_validation') != response_validation
             or original.get('response_validation') != response_validation
@@ -118,9 +118,17 @@ def admit_capture(capture_path: Path, record_path: Path, spec: dict, harness: Pa
             or any(block.get(key) != canonical[key] for key in
                    ('id', 'version', 'file_sha256', 'excluded_labels', 'neutral_prediction_classes'))):
         raise CertificationError('noncanonical_capture')
-    for key in ('gaze', 'parameters', 'runner_provenance', 'dataset', 'scoring', 'layers', 'runs'):
+    for key in ('gaze', 'subject_build', 'parameters', 'runner_provenance', 'dataset', 'scoring', 'layers', 'runs'):
         if captured.get(key) != original.get(key):
             raise CertificationError('capture_record_mismatch')
+    try:
+        stages.validate_execution(captured, capture_path, record_path, require_build=True)
+        subject_build.validate(original, header_digest := records.binary_sha256(record_path, required=True))
+        subject_build.validate(captured, header_digest)
+    except ValueError as error:
+        if str(error) == 'unqualified_subject_build':
+            raise CertificationError('unqualified_subject_build') from error
+        raise
     block = captured['scoring']['scored_label_contract']
     contract = _contract(harness, block['version'], spec)
     # Display paths do not change contract semantics; all other fields are rederived.
