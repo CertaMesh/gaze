@@ -202,7 +202,7 @@ def test_fetch_translates_protocol_and_parse_errors(monkeypatch, failure):
             if failure == 'json':
                 return b'{'
             if failure == 'deep-json':
-                return b'[' * 2000
+                return b'[' * 10000 + b'0' + b']' * 10000
             return b' ' * (limit - 2) + b'{}'
     monkeypatch.setattr(f, 'urlopen', lambda *a, **kw: Response())
     f.fetch.cache_clear()
