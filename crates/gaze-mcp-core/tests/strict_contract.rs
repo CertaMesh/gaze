@@ -964,3 +964,6 @@ async fn configured_token_reflags_preserve_dispatch_roundtrip_and_manifest_order
     assert_eq!(*checks.lock().unwrap(), 2);
     assert_eq!(*store.events.lock().unwrap(), ["begin", "invoke", "finish"]);
 }
+
+#[path = "strict_contract/operation_repeats.rs"]
+mod operation_repeats;
