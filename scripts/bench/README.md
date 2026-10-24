@@ -627,7 +627,9 @@ full model run and baseline/error-bucket analysis belong to A6.
 ID hashes the measuring inputs. It binds the full corpus digest, generated
 corpus and generator version, seed, scored-label contracts, measuring source
 bytes, record schemas, expected document inventories, and execution protocol.
-`benchmark-protocol.json` declares that protocol. Binary, policy, models, host,
+`benchmark-protocol.json` declares that protocol. The
+[initial full-population manifest](../../docs/reference/benchmarks/specifications/ae74d9a02195d3c60b5fe8bc8b0eb984e6926f390fad0ad624958e86577d9edb.json)
+is committed under its content hash. Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
 inputs does not itself change the benchmark specification.
 

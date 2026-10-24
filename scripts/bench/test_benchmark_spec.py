@@ -449,3 +449,13 @@ def test_certification_admits_original_capture_execution_once_for_both_replays(t
     with pytest.raises(cert.CertificationError):
         cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION,
                    required_mechanisms=('synthetic',))
+
+
+def test_preserved_specifications_keep_their_content_addressed_names():
+    paths = sorted((ROOT / 'docs/reference/benchmarks/specifications').glob('*.json'))
+    assert paths
+    for path in paths:
+        value = specs.validate(json.loads(path.read_text()))
+        assert path.stem == value['id'].removeprefix(specs.PREFIX)
+        assert '/Users/' not in json.dumps(value)
+        assert '/home/' not in json.dumps(value)
