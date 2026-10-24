@@ -145,6 +145,20 @@ for example `gaze_assembly::CorePipelineConfig::new().build()`, and pass its
 locale chain to the envelope. An empty primary registry is rejected even for
 calls containing no strings. The CLI MCP host uses this assembly path.
 
+Arguments and protected responses are separate operations. Each operation discovers
+validated deterministic Rule sources across all original text leaves before protecting
+those leaves. An earlier repeat is therefore covered even when its source is later
+in the same operation. Learned and safety-net-only detections do not become Rule
+sources. Existing owned tokens keep their identities; overlapping Rule matches cover
+adjacent raw bytes without rewriting those tokens. An independent final Rule coverage
+proof runs before commit or release. Failed protection discards staged mappings.
+
+Each operation accepts at most 2 MiB of aggregate expanded original UTF-8 text.
+Session-owned tokens count as their restored values. Oversized expansions and unknown
+or forged tokens refuse with a class-only protection error. This is a text discovery
+budget; transports must also bound wire input and JSON structure. Separate dispatches
+remain separate operations, and later declarations cannot retract earlier releases.
+
 The compatible `PiiEnvelope::new` constructor uses an empty dictionary bundle.
 Use `.with_dictionaries(&bundle)` to supply tenant terms. Primary recognizers,
 mandatory safety nets, and `ToolResources::protection_context()` receive the
