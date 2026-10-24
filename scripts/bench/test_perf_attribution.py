@@ -239,6 +239,14 @@ class LifecycleTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "clock phase"):
                 perf.validate_lifecycle(records, 1, daemon=False, policy=policy, required=True)
 
+    def test_runner_identity_binds_clock_contract(self):
+        original = Path.read_bytes
+        def changed(path):
+            data = original(path)
+            return data + b"\n# changed clock contract\n" if path.name == "perf_lifecycle_contract.py" else data
+        with patch.object(Path, "read_bytes", changed):
+            self.assertNotEqual(perf.runner_sha256(), perf.RUNNER_SHA256)
+
     def test_clock_guide_is_generated_from_validation_table(self):
         from perf_lifecycle_contract import update_guide
         update_guide(check=True)

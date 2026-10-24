@@ -10,6 +10,7 @@ import sys
 import tempfile
 
 from perf_lifecycle_contract import BOUNDS
+import perf_attribution as perf
 
 ROOT = Path(__file__).resolve().parent
 
@@ -59,7 +60,10 @@ def prove(out: Path) -> dict:
                 raise AssertionError(f"restored assertion did not pass: {name}")
             results.append({"check": name, "test": selected, "mutated_assertions_failed": 1,
                             "restored_tests_passed": 1})
-    receipt = {"runner_sha256": hashlib.sha256(source.encode()).hexdigest(),
+    receipt = {"runner_sha256": perf.RUNNER_SHA256,
+               "runner_source_sha256": hashlib.sha256(source.encode()).hexdigest(),
+               "contract_sha256": hashlib.sha256((ROOT / "perf_lifecycle_contract.py").read_bytes()).hexdigest(),
+               "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                "mutations": results, "mutation_count": len(results),
                "executed_assertion_failures": len(results), "restored_passes": len(results)}
     (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")

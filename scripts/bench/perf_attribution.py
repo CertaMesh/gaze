@@ -26,8 +26,14 @@ from pathlib import Path
 from perf_lifecycle_contract import BOUNDS, CLOCK_PHASES, STARTUP_CLOCKS
 
 SPEC = "gaze-perf-attribution-v2"
-RUNNER_SHA256 = hashlib.sha256(Path(__file__).read_bytes() + b"\0"
-                               + Path(__file__).with_name("perf_lifecycle_contract.py").read_bytes()).hexdigest()
+
+
+def runner_sha256() -> str:
+    return hashlib.sha256(Path(__file__).read_bytes() + b"\0"
+                          + Path(__file__).with_name("perf_lifecycle_contract.py").read_bytes()).hexdigest()
+
+
+RUNNER_SHA256 = runner_sha256()
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = "GAZE_PERF "
 TEXT_SUFFIXES = {".txt", ".md", ".json", ".jsonl", ".toml", ".yaml", ".yml", ".rs", ".py", ".csv", ".tsv"}
@@ -562,7 +568,7 @@ def main(argv=None) -> int:
             or policy_hashes["source-tree"] != policy_hashes["source-tree-daemon"]):
         raise ValueError("source-tree arms must have identical ordered inputs and policies")
     receipt["probes"].append(host())
-    if file_sha(Path(__file__)) != RUNNER_SHA256:
+    if runner_sha256() != RUNNER_SHA256:
         raise ValueError("runner changed during capture")
     if hashes != {side: file_sha(path) for side, path in binaries.items()}:
         raise ValueError("binary changed during capture")
