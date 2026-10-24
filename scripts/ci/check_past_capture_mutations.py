@@ -32,6 +32,9 @@ BINDINGS = {
 PROBES = [(name, SOURCE, old, 'False', f'{TEST}::test_each_binding_guard_rejects_independently[{name}]')
           for name, old in BINDINGS.items()]
 PROBES += [
+    ('history-tag', 'scripts/bench/benchmark_history.py',
+     "or header['scorecard']['release_capture'].get('release_tag') == job['version']", 'or True',
+     f'{TEST}::test_history_subject_rejects_another_tag_at_the_same_revision'),
     ('loaded-policy', SOURCE, "if identity.file_digest(policy_path) != parameters['policy_sha256']:", 'if False:',
      f'{TEST}::test_policy_changed_after_loading_is_uncacheable'),
     ('configuration', SOURCE, "if parameters['configs'] != ['policy-file'] or args.policy is None:", 'if False:',

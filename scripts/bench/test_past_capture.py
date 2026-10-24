@@ -439,3 +439,12 @@ def test_policy_changed_after_loading_is_uncacheable(key_inputs):
     paths['policy'].write_text('[ner]\nthreshold=0.9\n')
     with pytest.raises(ValueError, match='policy_changed_after_loading'):
         past_capture.key(**inputs)
+
+
+def test_history_subject_rejects_another_tag_at_the_same_revision(tmp_path):
+    import benchmark_history as history
+    _, record, _ = bound_capture(tmp_path)
+    header, _ = records._read(record)
+    subject = history.subject_identity(header)
+    assert history.subject_matches(record, {'version': 'v0.17.0', 'subject': subject})
+    assert not history.subject_matches(record, {'version': 'v0.16.0', 'subject': subject})

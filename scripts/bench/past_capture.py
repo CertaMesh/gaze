@@ -27,7 +27,8 @@ KEY_FILE = 'release-capture-key.json'
 
 
 def provenance(key):
-    return {'format': FORMAT, 'key_file': KEY_FILE, 'key_sha256': cache.key_digest(key)}
+    return {'format': FORMAT, 'key_file': KEY_FILE, 'key_sha256': cache.key_digest(key),
+            'release_tag': key['subject']['release_tag']}
 
 
 def write_key(directory, key):

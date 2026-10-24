@@ -67,7 +67,9 @@ def subject_matches(record: Path, job: dict) -> bool:
     return (isinstance(expected, dict)
             and re.fullmatch('[0-9a-f]{40}', str(expected.get('revision', ''))) is not None
             and re.fullmatch('[0-9a-f]{64}', str(expected.get('binary_sha256', ''))) is not None
-            and subject_identity(header) == expected)
+            and subject_identity(header) == expected
+            and ('release_capture' not in header['scorecard']
+                 or header['scorecard']['release_capture'].get('release_tag') == job['version']))
 
 
 def verified(row: dict, folder: Path, spec: dict, job: dict, *, dataset: Path | None = None) -> bool:
