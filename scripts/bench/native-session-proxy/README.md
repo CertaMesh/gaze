@@ -75,3 +75,72 @@ separately and receive no target byte, restore, availability, or gate credit.
 The measured response's refusal and restoration result remain unchanged. This
 avoids joining unrelated owner echoes during the auxiliary proof and changes no
 response validator or target response format.
+
+Unsupported-carrier fixtures send a nested string under `unsupported_carrier`,
+separately from mutable message content. The observation includes that exact
+upstream leaf in its real wire position; authored gold and all benign bytes
+are scored there too. Plain repeats, existing-token remainders and contained
+overlaps have code, URL, public-word and lowercase-part counterweights.
+Anthropic's codec already rejects unknown fields; its rows remain fail-closed
+controls for this legacy OpenAI/Gemini repair.
+
+The opt-in `--gate-policy leak-to-refusal` applies the reviewed immutable-carrier
+ruling. Each newly refused target must have positive raw target leaked bytes
+in the fresh base capture. Seed leaks cannot justify a target refusal. Every
+accepted transition is listed as `leak -> refused`, with credit limited to the
+base target bytes stopped. Refusals remain a separate count. Refusing a target
+that did not leak in base fails unless it is the separately typed resource
+limit described below, as does any other byte, seed, restore or
+ownership regression outside those justified transitions. Refused targets
+supply no false-positive reduction credit. Increases in a refused target's seed
+false positives still count as cost. Successful rows retain their exact wire
+leaves and proven mappings so reviewers can re-score each stopped leak.
+The default strict comparison and the both-forwarded paired comparison remain
+available unchanged in policy.
+
+Immutable-carrier Rule coverage permits an uncovered gap only when it contains
+whitespace between two covered spans of the same occurrence. Leading or trailing
+gaps refuse. Every uncovered non-whitespace byte in a Rule occurrence, including punctuation,
+digits, and zero-width characters, refuses. The native cases include a fully owned
+name repeated across a public separator and a private interior name between
+owned copies. The mutable protector keeps its existing, stronger byte coverage.
+
+Large-carrier fixtures use the committed `large_owned_carriers` specifications.
+The loader expands each specification into owner text, wire text, and authored
+gold before measurement or comparison. A 2,048-byte synthetic name repeated
+1,025 times occupies 2,100,225 owner-text bytes but less than 20,000 wire bytes.
+The safe case has only owned values and public spaces. Its companion inserts
+a raw private `S` between two owned values and declares the longer header name
+in mutable content. Their target leak counts must be zero and one byte,
+respectively, when the carrier forwards unchanged.
+
+Residual Rule checking fully expands owned tokens, then runs the real Rule
+matcher against complete text. This preserves distant URL exclusions and
+compound-name growth. Adjacent-token controls append public punctuation, digits,
+a URL, or Unicode whitespace; their raw target leak counts remain zero.
+
+All immutable leaves in one request share an expansion resource budget of 16 times
+`ProxyConfig::body_limit_bytes` (32 MiB with the default 2 MiB body cap).
+`ProxyConfig::request_residual_expansion_limit_bytes` overrides that budget. The
+proxy preflights the combined expanded size before allocating any expanded text
+or ownership mask, normalizing, or matching. Larger totals return HTTP 413 `ResidualExpansionLimitExceeded`, independently of
+coverage. The approved `leak-to-refusal` policy records these transitions in
+`resource_limit_transitions` and `resource_limit_refusals`, with no byte or restore
+gain credit. Seed false-positive increases still count. This is the sole resource
+exception to the positive-base-leak rule; coverage refusals still require proof
+of a base leak. Strict and ordinary paired policies retain their refusal gates.
+The cap bounds expanded input, not peak process memory or concurrency.
+
+Rule coverage uses the captured request transaction; the independent detector/net
+probe uses a fresh discarded session to retain baseline neural context. Owned
+classes must not turn public suffixes into new neural findings. The digit-suffix
+counterweight exercises this distinction under the full policy. Probes preserve
+mappings and session state. They do not suppress audit attempts: `control_would_mutate` retains one audit attempt on
+both base and candidate. This pre-existing audit behavior is outside the repair.
+
+The large-carrier cases apply to OpenAI and Gemini, which use the repaired
+legacy residual path. Anthropic's existing `ResponseBodyLimitExceeded` rejects
+the 2,048-byte name seed before the unsupported-field target can run. The
+committed fixture records that exclusion. Anthropic's existing unknown-field
+controls remain in the comparison. No response limit or validator changes for
+this counterweight.
