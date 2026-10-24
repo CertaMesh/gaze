@@ -1305,6 +1305,33 @@ impl<'session> SessionTransaction<'session> {
         text: &str,
         max_bytes: usize,
     ) -> std::result::Result<String, BoundedRestoreError> {
+        self.restore_bounded(text, max_bytes, false)
+            .map(|(text, _)| text)
+    }
+
+    /// Bounded owner-side restoration with the same classification as
+    /// [`Session::assess_restore_text`], without constructing the output twice.
+    pub fn assess_restore_text_bounded(
+        &self,
+        text: &str,
+        max_bytes: usize,
+    ) -> std::result::Result<RestoreAssessment, BoundedRestoreError> {
+        let (text, authorized_output_ranges) = self.restore_bounded(text, max_bytes, true)?;
+        Ok(classify_restore_output(
+            &self.staged,
+            RestoredTextWithProvenance {
+                text,
+                authorized_output_ranges,
+            },
+        ))
+    }
+
+    fn restore_bounded(
+        &self,
+        text: &str,
+        max_bytes: usize,
+        provenance: bool,
+    ) -> std::result::Result<(String, Vec<Range<usize>>), BoundedRestoreError> {
         // Preserve the bounded API's distinct malformed-syntax error before
         // membership and ambiguity validation through the shared locator.
         strict_restore_tokens(text).map_err(|_| BoundedRestoreError::MalformedToken)?;
@@ -1339,6 +1366,12 @@ impl<'session> SessionTransaction<'session> {
         output
             .try_reserve_exact(size)
             .map_err(|_| BoundedRestoreError::CapExceeded)?;
+        let mut authorized = Vec::<Range<usize>>::new();
+        if provenance {
+            authorized
+                .try_reserve_exact(tokens.len())
+                .map_err(|_| BoundedRestoreError::CapExceeded)?;
+        }
         let mut cursor = 0;
         for token in tokens {
             let raw = self
@@ -1347,11 +1380,22 @@ impl<'session> SessionTransaction<'session> {
                 .get(&token.parsed.raw)
                 .ok_or(BoundedRestoreError::UnknownToken)?;
             output.push_str(&text[cursor..token.start]);
+            let start = output.len();
             output.push_str(raw);
+            if provenance && start < output.len() {
+                if let Some(previous) = authorized
+                    .last_mut()
+                    .filter(|previous| previous.end >= start)
+                {
+                    previous.end = output.len();
+                } else {
+                    authorized.push(start..output.len());
+                }
+            }
             cursor = token.end;
         }
         output.push_str(&text[cursor..]);
-        Ok(output)
+        Ok((output, authorized))
     }
 
     pub fn restore_strict_text_with_provenance(

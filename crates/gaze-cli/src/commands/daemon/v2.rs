@@ -119,7 +119,7 @@ impl Registry {
         for (id, live) in &self.sessions {
             if id != active {
                 state = state.saturating_add(live.bytes());
-                manifests = manifests.saturating_add(live.manifest_bytes);
+                manifests = manifests.saturating_add(live.session.manifest_allocation_bytes());
             }
         }
         (state, manifests)
@@ -137,7 +137,6 @@ struct Live {
     opening_digest: [u8; 32],
     opening: Box<RawValue>,
     receipt: Option<Receipt>,
-    manifest_bytes: usize,
     last_seen: Instant,
 }
 
@@ -147,7 +146,7 @@ impl Live {
             + 512
             + self.session_epoch.capacity()
             + self.projection_id.capacity()
-            + self.manifest_bytes.saturating_mul(2)
+            + self.session.manifest_allocation_bytes().saturating_mul(2)
             + raw_bytes(&self.blocks)
             + self.opening.get().len()
             + self.receipt.as_ref().map_or(0, Receipt::bytes)
@@ -648,7 +647,6 @@ impl Daemon {
             },
             self.v2.limits.v2_response_frame_bytes,
         )?;
-        let manifest_bytes = session.manifest_allocation_bytes();
         let live = Live {
             session,
             session_epoch: epoch,
@@ -660,7 +658,6 @@ impl Daemon {
             opening_digest: digest,
             opening: response.clone(),
             receipt: None,
-            manifest_bytes,
             last_seen: Instant::now(),
         };
         if self
@@ -763,7 +760,7 @@ impl Daemon {
             live,
             &inventory,
             &[],
-            live.manifest_bytes,
+            live.session.manifest_allocation_bytes(),
             other_bytes,
             other_manifests,
             0,
@@ -876,7 +873,6 @@ impl Daemon {
         live.blocks = inventory;
         live.revision += 1;
         live.generation = generation;
-        live.manifest_bytes = manifest_bytes;
         Ok(response)
     }
 
@@ -893,22 +889,27 @@ impl Daemon {
         }
         let text = r.string("text")?;
         let transaction = live.session.begin_transaction();
-        let text = transaction
-            .restore_strict_text_bounded(&text, self.v2.limits.v2_response_frame_bytes)
+        let available = self
+            .v2
+            .limits
+            .global_v2_state_bytes
+            .saturating_sub(self.v2.bytes_except(id).0)
+            .saturating_sub(live.bytes())
+            .saturating_sub(transaction.manifest_allocation_bytes().saturating_mul(2));
+        let assessment = transaction
+            .assess_restore_text_bounded(
+                &text,
+                self.v2.limits.v2_response_frame_bytes.min(available / 4),
+            )
             .map_err(|error| match error {
                 gaze::BoundedRestoreError::UnknownToken
                 | gaze::BoundedRestoreError::MalformedToken => Failure::UnknownToken,
                 gaze::BoundedRestoreError::CapExceeded => Failure::CacheCapacity,
                 _ => Failure::RestoreFailed,
             })?;
-        // The classified strict pass also refuses incomplete token wrappers and
-        // unowned placeholders in restored output, exactly as the v1 owner path.
-        let assessment = live
-            .session
-            .assess_restore_text(&r.string("text")?)
-            .map_err(|_| Failure::RestoreFailed)?;
         restore_pass2_validate(&assessment, RestoreMode::Strict)
             .map_err(|_| Failure::UnknownToken)?;
+        let text = assessment.into_restored().text;
         #[derive(Serialize)]
         struct Restored<'a> {
             #[serde(flatten)]
@@ -1158,7 +1159,7 @@ fn check_stage(
     if cache > limits.session_cache_bytes
         || manifest > limits.session_manifest_bytes
         || other_manifests
-            .saturating_add(live.manifest_bytes)
+            .saturating_add(live.session.manifest_allocation_bytes())
             .saturating_add(manifest)
             > limits.global_manifest_bytes
         || state > limits.global_v2_state_bytes

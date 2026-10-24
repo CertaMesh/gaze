@@ -438,15 +438,13 @@ fn late_pipeline() -> gaze::Pipeline {
 
 /// Reference helper forks the SAME pre-turn namespace into an uncommitted
 /// transaction. It neither imports a fresh prefix nor uses daemon batch code.
-fn oracle(
-    d: &Daemon,
-    id: &str,
-    texts: &[String],
-) -> (
-    Vec<Value>,
-    Vec<SessionSnapshotEntry>,
-    Vec<Option<gaze::SourceSpelling>>,
-) {
+struct Oracle {
+    output: Vec<Value>,
+    entries: Vec<SessionSnapshotEntry>,
+    spellings: Vec<Option<gaze::SourceSpelling>>,
+}
+
+fn oracle(d: &Daemon, id: &str, texts: &[String]) -> Oracle {
     let live = &d.v2.sessions[id];
     let mut reference = live.session.begin_transaction();
     reference.enable_deterministic_sweep();
@@ -485,7 +483,11 @@ fn oracle(
         .iter()
         .map(|e| reference.source_spelling(&e.token))
         .collect();
-    (output, entries, spellings)
+    Oracle {
+        output,
+        entries,
+        spellings,
+    }
 }
 
 #[test]
@@ -513,7 +515,11 @@ fn twenty_turn_same_namespace_oracle_covers_late_values_reorder_edit_and_old_res
         if turn == 16 {
             texts[0] = "Edited complete leaf.".into();
         }
-        let (expected, entries, spellings) = oracle(&d, "conversation-a", &texts);
+        let Oracle {
+            output: expected,
+            entries,
+            spellings,
+        } = oracle(&d, "conversation-a", &texts);
         state = clean(
             &mut d,
             &state,
@@ -789,4 +795,63 @@ fn individual_state_budgets_refuse_before_commit() {
         super::inventory(&r, live, false, limits).err(),
         Some(Failure::CacheCapacity)
     );
+}
+
+struct ChangingRecognizer(std::sync::atomic::AtomicUsize);
+impl gaze::Recognizer for ChangingRecognizer {
+    fn id(&self) -> &str {
+        "synthetic-changing"
+    }
+    fn supported_class(&self) -> &PiiClass {
+        &PiiClass::Name
+    }
+    fn token_family(&self) -> &str {
+        "counter"
+    }
+    fn evidence(&self) -> gaze::EvidenceKind {
+        gaze::EvidenceKind::Learned
+    }
+    fn detect(
+        &self,
+        text: &str,
+        _: &gaze::DetectContext<'_>,
+    ) -> std::result::Result<Vec<gaze::Candidate>, gaze_types::DetectError> {
+        let end = (self.0.fetch_add(1, Ordering::Relaxed) + 1).min(text.len());
+        Ok(vec![gaze::Candidate::new(
+            0..end,
+            PiiClass::Name,
+            self.id(),
+            1.0,
+            100,
+            None,
+            "counter",
+            self.id(),
+            ConflictTier::None,
+            vec![],
+        )
+        .with_evidence(gaze::EvidenceKind::Learned)])
+    }
+}
+
+#[test]
+fn mutable_recognizer_cannot_publish_an_unsettled_inventory() {
+    let mut d = daemon();
+    d.pipeline = gaze::Pipeline::builder()
+        .recognizer(ChangingRecognizer(std::sync::atomic::AtomicUsize::new(0)))
+        .rule(gaze::ClassRule::new(PiiClass::Name, Action::Tokenize))
+        .rule(gaze::DefaultRule::new(Action::Preserve))
+        .build()
+        .unwrap();
+    let opened = open(&mut d, "conversation-a");
+    let response = send(
+        &mut d,
+        clean_request(&opened, vec![block("leaf-a", "abcdefghijklmnopqrstuvwxyz")]),
+    );
+    assert_error(&response, "CacheConvergence");
+    let live = &d.v2.sessions["conversation-a"];
+    assert!(live.session.snapshot_entries().is_empty());
+    assert!(live.blocks.is_empty());
+    assert_eq!(live.revision, 0);
+    assert_eq!(live.generation, 0);
+    assert_eq!(live.next_seq, 1);
 }
