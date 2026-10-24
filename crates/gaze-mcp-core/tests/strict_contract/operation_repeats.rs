@@ -125,7 +125,7 @@ async fn earlier_argument_repeat_is_protected_before_tool_invocation() {
     assert_eq!(restore(&session, &protected), args);
     assert!(
         !protected[0].as_str().unwrap().contains("maria schneider"),
-        "raw earlier argument reached tool: {protected}"
+        "raw earlier argument reached tool"
     );
 }
 #[tokio::test]
@@ -149,8 +149,7 @@ async fn earlier_response_repeat_is_protected_before_host_release() {
             .as_str()
             .unwrap()
             .contains("maria schneider"),
-        "raw earlier response reached host: {}",
-        result.payload
+        "raw earlier response reached host"
     );
 }
 
@@ -256,7 +255,7 @@ async fn all_overlapping_rule_obligations_cross_owned_tokens_in_both_directions(
                 }
                 for raw in ["johanna", "eva", "und", "paula"] {
                     if input.contains(raw) {
-                        assert!(!text.contains(raw), "raw overlap {raw} in {text}");
+                        assert!(!text.contains(raw), "raw overlap reached output");
                     }
                 }
             }
