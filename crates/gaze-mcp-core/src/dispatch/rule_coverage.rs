@@ -1,8 +1,11 @@
+use super::DispatchError;
 use gaze::{Candidate, PiiClass, Pipeline, ProtectionError, SessionTransaction};
 use std::collections::HashSet;
 
-/// Aggregate expanded original text budget for one argument or response operation.
-pub(super) const MAX_OPERATION_TEXT_BYTES: usize = 2 * 1024 * 1024;
+/// Aggregate decoded input cap for one argument or response operation.
+pub(super) const MAX_OPERATION_INPUT_BYTES: usize = 2 * 1024 * 1024;
+/// Full restored text budget, derived from the MCP operation input cap.
+pub(super) const MAX_OPERATION_EXPANDED_BYTES: usize = 16 * MAX_OPERATION_INPUT_BYTES;
 
 /// Expand only exact current-session mappings. Other namespaces remain literal,
 /// as in the primary protection path. Check the full size before allocating.
@@ -10,7 +13,7 @@ pub(super) fn expand_owned_bounded(
     transaction: &SessionTransaction<'_>,
     input: &str,
     limit: usize,
-) -> Result<String, ProtectionError> {
+) -> Result<String, DispatchError> {
     let ranges = owned_token_ranges(input, &transaction.tokens())?;
     let unchanged = ranges
         .iter()
@@ -18,19 +21,22 @@ pub(super) fn expand_owned_bounded(
         .ok_or(ProtectionError::Provenance)?;
     let mut remaining = limit
         .checked_sub(unchanged)
-        .ok_or(ProtectionError::Provenance)?;
+        .ok_or(DispatchError::ResourceLimit)?;
     let mut expanded = Vec::with_capacity(ranges.len());
     for range in ranges {
         let raw = transaction
             .restore_strict_text_bounded(&input[range.clone()], remaining)
-            .map_err(|_| ProtectionError::Provenance)?;
+            .map_err(|error| match error {
+                gaze::BoundedRestoreError::CapExceeded => DispatchError::ResourceLimit,
+                _ => ProtectionError::Provenance.into(),
+            })?;
         remaining -= raw.len();
         expanded.push((range, raw));
     }
     let mut output = String::new();
     output
         .try_reserve_exact(limit - remaining)
-        .map_err(|_| ProtectionError::Provenance)?;
+        .map_err(|_| DispatchError::ResourceLimit)?;
     let mut cursor = 0;
     for (range, raw) in expanded {
         output.push_str(&input[cursor..range.start]);
@@ -46,8 +52,8 @@ pub(super) fn verify_rule_coverage(
     pipeline: &Pipeline,
     transaction: &SessionTransaction<'_>,
     protected: &str,
-) -> Result<(), ProtectionError> {
-    let original = expand_owned_bounded(transaction, protected, MAX_OPERATION_TEXT_BYTES)?;
+) -> Result<(), DispatchError> {
+    let original = expand_owned_bounded(transaction, protected, MAX_OPERATION_EXPANDED_BYTES)?;
     let mut covered = vec![false; original.len()];
     let (mut wire_cursor, mut raw_cursor) = (0, 0);
     for range in owned_token_ranges(protected, &transaction.tokens())? {
@@ -66,7 +72,7 @@ pub(super) fn verify_rule_coverage(
         wire_cursor = range.end;
     }
     if raw_cursor + protected.len() - wire_cursor != original.len() {
-        return Err(ProtectionError::Provenance);
+        return Err(ProtectionError::Provenance.into());
     }
     for hit in pipeline
         .staged_rule_repeat_candidates(transaction, &original)
@@ -76,7 +82,7 @@ pub(super) fn verify_rule_coverage(
             .get(hit.span)
             .is_some_and(|bytes| bytes.iter().all(|byte| *byte))
         {
-            return Err(ProtectionError::Residual);
+            return Err(ProtectionError::Residual.into());
         }
     }
     Ok(())
@@ -90,14 +96,14 @@ pub(super) fn cover_rule_repeats(
     transaction: &mut SessionTransaction<'_>,
     original: &str,
     input: &str,
-) -> Result<String, ProtectionError> {
+) -> Result<String, DispatchError> {
     let mut names = transaction.tokens();
     names.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
     let caller_owned = owned_token_ranges(original, &names)?
         .into_iter()
         .map(|range| original[range].to_owned())
         .collect::<HashSet<_>>();
-    let expanded = expand_owned_bounded(transaction, input, MAX_OPERATION_TEXT_BYTES)?;
+    let expanded = expand_owned_bounded(transaction, input, MAX_OPERATION_EXPANDED_BYTES)?;
     let entries = transaction.snapshot_entries();
     let mut tokens = Vec::new();
     let (mut wire_cursor, mut view_cursor) = (0, 0);
@@ -164,7 +170,7 @@ pub(super) fn cover_rule_repeats(
                         || token.class != hit.class
                         || token.family != hit.token_family
                     {
-                        return Err(ProtectionError::Provenance);
+                        return Err(ProtectionError::Provenance.into());
                     }
                     range.start = range.start.min(token.view.start);
                     range.end = range.end.max(token.view.end);
@@ -179,7 +185,7 @@ pub(super) fn cover_rule_repeats(
                     && view.end >= token.view.end
             }) {
                 // A zero-width owned value has no unique expanded-to-wire boundary.
-                return Err(ProtectionError::Provenance);
+                return Err(ProtectionError::Provenance.into());
             }
             let start = expanded_boundary_to_wire(view.start, &tokens, expanded.len())
                 .ok_or(ProtectionError::Provenance)?;
@@ -193,7 +199,7 @@ pub(super) fn cover_rule_repeats(
         .windows(2)
         .any(|pair| pair[0].0.end > pair[1].0.start)
     {
-        return Err(ProtectionError::Provenance);
+        return Err(ProtectionError::Provenance.into());
     }
     let mut output = String::with_capacity(input.len());
     let mut cursor = 0;

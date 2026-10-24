@@ -153,11 +153,14 @@ sources. Existing owned tokens keep their identities; overlapping Rule matches c
 adjacent raw bytes without rewriting those tokens. An independent final Rule coverage
 proof runs before commit or release. Failed protection discards staged mappings.
 
-Each operation accepts at most 2 MiB of aggregate original decoded UTF-8 text
-and 2 MiB after expanding owned tokens to their restored values. Oversized input,
-oversized expansions, and unknown or forged tokens refuse with a class-only
-protection error. Transports must also bound wire input and JSON structure. Separate dispatches
-remain separate operations, and later declarations cannot retract earlier releases.
+Each operation accepts at most 2 MiB of aggregate original decoded UTF-8 text.
+Full owned-token expansion has a separate budget of 16 times that input cap,
+currently 32 MiB. Both budgets count all string leaves together. Exceeding either
+budget returns `DispatchError::ResourceLimit`, with no input bytes in the error.
+Unknown or forged tokens retain their existing protection errors. Full expansion
+and the real Rule matcher still run within the budget. Transports must also bound
+wire input and JSON structure. Separate dispatches remain separate operations,
+and later declarations cannot retract earlier releases.
 
 The compatible `PiiEnvelope::new` constructor uses an empty dictionary bundle.
 Use `.with_dictionaries(&bundle)` to supply tenant terms. Primary recognizers,

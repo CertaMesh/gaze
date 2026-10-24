@@ -463,18 +463,33 @@ async fn owned_token_expansion_counts_against_the_operation_budget() {
         .tokenize(&PiiClass::Name, &"x".repeat(256 * 1024))
         .unwrap();
     let before = session.snapshot_entries();
-    let (registry, seen) = capture(json!("public"));
-    assert!(dispatch(
-        &registry,
-        &Store::default(),
-        &pipeline,
-        &session,
-        json!([token.repeat(9)])
-    )
-    .await
-    .is_err());
-    assert_eq!(*seen.lock().unwrap(), Value::Null);
-    assert_eq!(session.snapshot_entries(), before);
+    for response in [false, true] {
+        let payload = json!([token.repeat(16 * (2 * 1024 * 1024) / (256 * 1024) + 1)]);
+        let (registry, seen) = capture(if response { payload.clone() } else { json!([]) });
+        let store = Store::default();
+        let error = dispatch(
+            &registry,
+            &store,
+            &pipeline,
+            &session,
+            if response { json!([]) } else { payload },
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, DispatchError::ResourceLimit), "{error:?}");
+        assert_eq!(session.snapshot_entries(), before);
+        assert_eq!(
+            *store.events.lock().unwrap(),
+            if response {
+                vec!["begin", "fail"]
+            } else {
+                vec![]
+            }
+        );
+        if !response {
+            assert_eq!(*seen.lock().unwrap(), Value::Null);
+        }
+    }
 }
 
 struct FaultHeader {
@@ -691,4 +706,63 @@ async fn rule_coverage_crosses_literal_bare_identifier_boundaries() {
         .unwrap()
         .contains("maria scan_1 schneider"));
     assert_eq!(restore(&session, &protected), payload);
+}
+
+async fn large_owned_counterweight(response: bool, adjacent: bool) {
+    let pipeline = repeat_pipeline(EvidenceKind::Rule);
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let raw = "X".repeat(2048);
+    let token = seed(&pipeline, &session, &[&raw]).await.remove(0);
+    let (wire, expected) = if adjacent {
+        (
+            format!("{}.", token.repeat(1025)),
+            format!("{}.", raw.repeat(1025)),
+        )
+    } else {
+        (
+            format!("{token} ").repeat(1025),
+            format!("{raw} ").repeat(1025),
+        )
+    };
+    let payload = json!([wire]);
+    let (registry, seen) = capture(if response { payload.clone() } else { json!([]) });
+    let store = Store::default();
+    let result = dispatch(
+        &registry,
+        &store,
+        &pipeline,
+        &session,
+        if response { json!([]) } else { payload.clone() },
+    )
+    .await
+    .unwrap();
+    let protected = if response {
+        result.payload
+    } else {
+        seen.lock().unwrap().clone()
+    };
+    assert_eq!(protected, payload, "owned token wire changed");
+    assert!(
+        !protected[0].as_str().unwrap().contains('X'),
+        "raw bytes reached wire"
+    );
+    assert_eq!(restore(&session, &protected), json!([expected]));
+    assert_eq!(*store.events.lock().unwrap(), vec!["begin", "finish"]);
+}
+
+#[tokio::test]
+async fn large_owned_counterweight_spaced_arguments() {
+    large_owned_counterweight(false, false).await;
+}
+#[tokio::test]
+async fn large_owned_counterweight_adjacent_arguments() {
+    large_owned_counterweight(false, true).await;
+}
+#[tokio::test]
+async fn large_owned_counterweight_spaced_response() {
+    large_owned_counterweight(true, false).await;
+}
+#[tokio::test]
+async fn large_owned_counterweight_adjacent_response() {
+    large_owned_counterweight(true, true).await;
 }

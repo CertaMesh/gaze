@@ -57,3 +57,15 @@ def test_ci_registry_exception_only_adds_native_evidence_paths():
     after["gate_readers"]["gate"] = "changed"
     with pytest.raises(ValueError, match="beyond"):
         proof._ci_registry_only(json.dumps(before), json.dumps(after))
+
+
+def test_documentation_exceptions_are_exact_and_recorded():
+    assert proof.DOCUMENTATION_FILES == {"CHANGELOG.md", "docs/explanation/mcp/mcp-runtime.md"}
+    assert all(proof._allowed(path) for path in proof.DOCUMENTATION_FILES)
+    assert not proof._allowed("docs/reference/benchmarks/README.md")
+    assert not proof._allowed("docs/unclassified.md")
+    record = proof.build("HEAD", "HEAD")
+    assert record["documentation_changes"] == []
+    record["documentation_changes"] = [{"path": "CHANGELOG.md", "candidate_sha256": "0" * 64}]
+    with pytest.raises(ValueError, match="record differs: documentation_changes"):
+        proof.verify(record)

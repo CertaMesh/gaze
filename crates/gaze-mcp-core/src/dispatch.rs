@@ -41,6 +41,9 @@ pub enum DispatchError {
     /// The entry point does not match the registered request contract.
     #[error("request mode rejected")]
     RequestMode,
+    /// Aggregate input or restored expansion exceeded the MCP operation budget.
+    #[error("MCP operation resource limit exceeded")]
+    ResourceLimit,
     /// Strict boundary failure, containing class-only diagnostics.
     #[error("protection failed: {0}")]
     Protection(#[from] gaze::ProtectionError),
@@ -348,7 +351,7 @@ impl<'a> PiiEnvelope<'a> {
                                 &raw_response.payload,
                             );
                             response_transaction = Some(transaction);
-                            result.map_err(Into::into)
+                            result
                         }
                     }
                 }
@@ -424,19 +427,19 @@ fn protect_json(
     transaction: &mut gaze::SessionTransaction<'_>,
     context: gaze::ProtectionContext<'_>,
     value: &serde_json::Value,
-) -> Result<serde_json::Value, gaze::ProtectionError> {
+) -> Result<serde_json::Value, DispatchError> {
     pipeline.validate_protection_context(context)?;
     // Freeze interpretation for the whole operation, not just the current leaf.
     let original_tokens = transaction.tokens();
     // Expand every original before discovery can mint any token spelling. A later
     // literal must never acquire ownership from an earlier discovery leaf.
     let mut expanded = Vec::new();
-    let mut remaining = rule_coverage::MAX_OPERATION_TEXT_BYTES;
-    let mut remaining_input = rule_coverage::MAX_OPERATION_TEXT_BYTES;
+    let mut remaining = rule_coverage::MAX_OPERATION_EXPANDED_BYTES;
+    let mut remaining_input = rule_coverage::MAX_OPERATION_INPUT_BYTES;
     visit_text(value, &mut |text| {
         remaining_input = remaining_input
             .checked_sub(text.len())
-            .ok_or(gaze::ProtectionError::Provenance)?;
+            .ok_or(DispatchError::ResourceLimit)?;
         let view = rule_coverage::expand_owned_bounded(transaction, text, remaining)?;
         remaining -= view.len();
         if !view.is_empty() {
@@ -462,7 +465,7 @@ fn protect_json(
         .filter(|token| !original_tokens.contains(token))
     {
         if json_contains_literal(value, token) {
-            return Err(gaze::ProtectionError::Provenance);
+            return Err(gaze::ProtectionError::Provenance.into());
         }
     }
     Ok(output)
@@ -470,8 +473,8 @@ fn protect_json(
 
 fn visit_text(
     value: &serde_json::Value,
-    visit: &mut impl FnMut(&str) -> Result<(), gaze::ProtectionError>,
-) -> Result<(), gaze::ProtectionError> {
+    visit: &mut impl FnMut(&str) -> Result<(), DispatchError>,
+) -> Result<(), DispatchError> {
     match value {
         serde_json::Value::String(text) => visit(text),
         serde_json::Value::Array(values) => {
@@ -488,7 +491,7 @@ fn verify_json_rule_coverage(
     pipeline: &gaze::Pipeline,
     transaction: &gaze::SessionTransaction<'_>,
     value: &serde_json::Value,
-) -> Result<(), gaze::ProtectionError> {
+) -> Result<(), DispatchError> {
     visit_text(value, &mut |text| {
         rule_coverage::verify_rule_coverage(pipeline, transaction, text)
     })
@@ -510,14 +513,14 @@ fn protect_json_leaves(
     transaction: &mut gaze::SessionTransaction<'_>,
     context: gaze::ProtectionContext<'_>,
     value: &serde_json::Value,
-) -> Result<serde_json::Value, gaze::ProtectionError> {
+) -> Result<serde_json::Value, DispatchError> {
     use serde_json::Value as JsonValue;
     match value {
         JsonValue::String(text) => {
             let expected = rule_coverage::expand_owned_bounded(
                 transaction,
                 text,
-                rule_coverage::MAX_OPERATION_TEXT_BYTES,
+                rule_coverage::MAX_OPERATION_EXPANDED_BYTES,
             )?;
             let primary = pipeline.protect_text_transaction(transaction, text, context)?;
             let protected =
@@ -525,10 +528,10 @@ fn protect_json_leaves(
             if rule_coverage::expand_owned_bounded(
                 transaction,
                 &protected,
-                rule_coverage::MAX_OPERATION_TEXT_BYTES,
+                rule_coverage::MAX_OPERATION_EXPANDED_BYTES,
             )? != expected
             {
-                return Err(gaze::ProtectionError::Provenance);
+                return Err(gaze::ProtectionError::Provenance.into());
             }
             if protected != primary {
                 pipeline.admit_safety_nets_transaction(

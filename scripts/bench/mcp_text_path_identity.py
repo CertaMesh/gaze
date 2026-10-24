@@ -24,6 +24,9 @@ NATIVE_FILES = frozenset({
     "scripts/bench/publish_mcp_operation_evidence.py", "scripts/bench/test_publish_mcp_operation_evidence.py",
 })
 NATIVE_PREFIXES = ("crates/gaze-mcp-core/", "scripts/bench/native-mcp-operation/", "docs/reference/benchmarks/gates/mcp-operation-order/")
+# Documentation changes do not alter text inference. Keep their exact hashes
+# in the record so the explicit exception remains reviewable and replayable.
+DOCUMENTATION_FILES = frozenset({"CHANGELOG.md", "docs/explanation/mcp/mcp-runtime.md"})
 GOLDEN = "scripts/bench/fixtures/evidence/mcp_route_v1.golden.json"
 CI_REGISTRY = "scripts/ci/full-inputs.json"
 EVIDENCE_PREFIX = "docs/reference/benchmarks/gates/mcp-operation-order/"
@@ -46,7 +49,7 @@ def _tree(revision):
 
 
 def _allowed(path):
-    return path in NATIVE_FILES or path.startswith(NATIVE_PREFIXES) or path in {GOLDEN, CI_REGISTRY}
+    return path in NATIVE_FILES or path in DOCUMENTATION_FILES or path.startswith(NATIVE_PREFIXES) or path in {GOLDEN, CI_REGISTRY}
 
 
 def _ci_registry_only(before, after):
@@ -87,6 +90,9 @@ def build(base, candidate):
     for path in changed:
         if path in NATIVE_FILES and path in a:
             raise ValueError("native allowlist unexpectedly overlaps a base text input: " + path)
+    documentation_changes = [{"path": path, "base_sha256": hashlib.sha256(_blob(a[path][2])).hexdigest(),
+                              "candidate_sha256": hashlib.sha256(_blob(b[path][2])).hexdigest()}
+                             for path in changed if path in DOCUMENTATION_FILES]
     protected = sorted(path for path in a.keys() | b.keys() if not _allowed(path))
     digests, records = {}, []
     process = subprocess.Popen(["git", "cat-file", "--batch"], cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -130,7 +136,7 @@ def build(base, candidate):
                 raise ValueError("text module imports an excluded native module: " + path)
     return {"schema_version": 1, "kind": "mcp-text-path-identity", "base_revision": base, "candidate_revision": candidate,
             "text_layers": {layer: "unchanged_by_construction" for layer in ("C", "A", "D", "R")},
-            "fresh_text_capture": False, "protected_files": records, "protected_file_count": len(records),
+            "fresh_text_capture": False, "documentation_changes": documentation_changes, "protected_files": records, "protected_file_count": len(records),
             "allowed_changed_paths": changed, "native_exact_paths": sorted(NATIVE_FILES), "native_prefixes": list(NATIVE_PREFIXES),
             "rmcp_counter_fixture": {"path": GOLDEN, "scope": "rmcp evidence only; sole change is source events 1 to 3"},
             "ci_registry_exception": {"path": CI_REGISTRY, "scope": "only the twelve new native evidence path declarations"},
@@ -139,7 +145,7 @@ def build(base, candidate):
 
 def verify(record, candidate=None):
     replay = build(record["base_revision"], candidate or record["candidate_revision"])
-    for field in ("kind", "text_layers", "fresh_text_capture", "protected_files", "protected_file_count", "generator_sha256"):
+    for field in ("kind", "text_layers", "fresh_text_capture", "protected_files", "protected_file_count", "generator_sha256", "documentation_changes"):
         if replay[field] != record[field]:
             raise ValueError("text path-identity record differs: " + field)
     return replay
