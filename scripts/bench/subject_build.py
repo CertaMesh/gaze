@@ -10,8 +10,42 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import tomllib
 
 import gaze_bench_score as score
+
+
+# Requirements shared by the historical and current producer configurations.
+# Availability is checked against the measured checkout, never the harness root.
+CONFIG_FEATURES = {
+    "rule-floor-core": (), "rule-floor-extended": (), "pass2-ner": (),
+    "policy-file": ("safety-net-nym",),
+    "full-stack-kiji-resolve": ("safety-net-kiji",),
+    "pass3-kiji": ("safety-net-kiji",),
+    "full-stack-nym-resolve": ("safety-net-nym",),
+    "full-stack-nym-redact": ("safety-net-nym",),
+    "full-stack-opf-resolve": ("safety-net-openai",),
+    "pass3-opf": ("safety-net-openai",),
+    "pass3-locale-aware": ("safety-net-kiji", "safety-net-openai"),
+}
+
+
+def required_features(configs):
+    if any(config not in CONFIG_FEATURES for config in configs):
+        raise ValueError("unsupported_benchmark_config")
+    return sorted({feature for config in configs for feature in CONFIG_FEATURES[config]})
+
+
+def build_features(root, configs):
+    features = required_features(configs)
+    if configs:
+        package = Path(root) / "crates/gaze-recognizers"
+        manifest = tomllib.loads((package / "Cargo.toml").read_text())
+        source = (package / "examples/clean_for_bench.rs").read_text()
+        available = set(re.findall(r'"([a-z0-9-]+)"\s*=>\s*BenchConfig::', source))
+        if not set(configs) <= available or not set(features) <= manifest.get("features", {}).keys():
+            raise ValueError("unsupported_checkout_build_features")
+    return features
 
 
 def unqualified(reason):
@@ -20,6 +54,7 @@ def unqualified(reason):
 
 def build(root, configs, *, release, builder):
     before = score.git_metadata(root)
+    features = build_features(root, configs)
     binary = builder(root, configs, release=release)
     after = score.git_metadata(root)
     if os.environ.get("CARGO_TARGET_DIR") is not None:
@@ -29,7 +64,8 @@ def build(root, configs, *, release, builder):
     else:
         receipt = {"version": 1, "mode": "producer-build", "source": before,
                    "binary_sha256": score.sha256_file(binary),
-                   "profile": "release" if release else "debug", "configs": list(configs)}
+                   "profile": "release" if release else "debug", "configs": list(configs),
+                   "features": features}
     return binary, receipt
 
 
@@ -45,6 +81,11 @@ def validate(card, binary_sha256=None):
             or receipt.get("profile") != card.get("parameters", {}).get("binary_profile")
             or receipt.get("configs") != card.get("parameters", {}).get("configs")):
         raise ValueError("unqualified_subject_build")
+    try:
+        if receipt.get("features") != required_features(receipt["configs"]):
+            raise ValueError("unqualified_subject_build")
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("unqualified_subject_build") from error
 
 
 def cargo_build_binary(repo_root: Path, configs: tuple[str, ...], *, release: bool = False) -> Path:
@@ -58,11 +99,7 @@ def cargo_build_binary(repo_root: Path, configs: tuple[str, ...], *, release: bo
         "--example",
         "clean_for_bench",
     ]
-    features = []
-    if any("opf" in config for config in configs):
-        features.append("safety-net-openai")
-    if "policy-file" in configs:
-        features.append("safety-net-nym")
+    features = build_features(repo_root, configs)
     if features:
         command.extend(["--features", ",".join(features)])
     if release:

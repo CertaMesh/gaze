@@ -236,6 +236,7 @@ def produced_capture(tmp_path, monkeypatch, evidence, producer, flags, response_
     monkeypatch.setattr(runner, 'load_negative_documents', lambda p: ([], {}))
     monkeypatch.setattr(runner, 'composite_dataset_report', lambda *a: ({}, {'integrity': {'sha256': 'd' * 64}}))
     monkeypatch.setattr(runner.subject_build, 'cargo_build_binary', lambda *a, **k: binary)
+    monkeypatch.setattr(runner.subject_build, 'build_features', lambda root, configs: runner.subject_build.required_features(configs))
     monkeypatch.setattr(runner, 'build_validator_probe', lambda *a, **k: binary)
     monkeypatch.setattr(runner, 'validate_required_models', lambda *a: [])
     monkeypatch.setattr(runner, 'policy_ner_provenance', lambda *a: (0.3, []))
@@ -714,6 +715,7 @@ def test_producer_build_refuses_unqualified_source_or_target(tmp_path, monkeypat
         monkeypatch.setenv('CARGO_TARGET_DIR', str(tmp_path / 'external-target'))
     monkeypatch.setattr(score, 'git_metadata', mock.Mock(side_effect=[clean, after]))
     builder = mock.Mock(return_value=binary)
+    monkeypatch.setattr(subject_build, 'build_features', lambda root, configs: subject_build.required_features(configs))
     selected, receipt = subject_build.build(tmp_path, ('policy-file',), release=False, builder=builder)
     assert selected == binary
     builder.assert_called_once_with(tmp_path, ('policy-file',), release=False)

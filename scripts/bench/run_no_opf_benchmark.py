@@ -983,6 +983,8 @@ def observation_cache_key(
         "profile": args.profile,
         "max_documents": args.quick_documents if args.profile == "quick" else None,
         "release": args.release,
+        "build_features": subject_build.required_features(
+            ("policy-file",) if policy_path else tuple(score.DEFAULT_CONFIGS)),
         "warmups": args.warmups,
         "measured_repetitions": args.measured_repetitions,
         "hardware": platform.platform() + "; " + platform.processor(),

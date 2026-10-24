@@ -200,7 +200,7 @@ def capture(folder, docs, spec, protect, policy, revision=REVISION):
         'subject_build': {'version': 1, 'mode': 'producer-build',
                           'source': {'revision': revision, 'dirty': False},
                           'binary_sha256': capture_identity.file_digest(binary),
-                          'profile': 'debug', 'configs': ['policy-file']},
+                          'profile': 'debug', 'configs': ['policy-file'], 'features': ['safety-net-nym']},
         'capture_protocol': specs.CANONICAL_CAPTURE,
         'response_validation': specs.CURRENT_VALIDATION,
         'layers': {'generator': spec['inputs']['generator'],

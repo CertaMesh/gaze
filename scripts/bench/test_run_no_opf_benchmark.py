@@ -708,7 +708,7 @@ class PolicyNerSettingsTests(unittest.TestCase):
                 "parameters": {"binary_profile": "debug", "configs": list(score.DEFAULT_CONFIGS)},
                 "subject_build": {"version": 1, "mode": "producer-build", "source": metadata,
                                   "binary_sha256": score.sha256_file(dataset), "profile": "debug",
-                                  "configs": list(score.DEFAULT_CONFIGS)}}
+                                  "configs": list(score.DEFAULT_CONFIGS), "features": []}}
             stack.enter_context(mock.patch.object(score, "git_metadata", return_value=metadata))
             stack.enter_context(mock.patch.object(
                 runner.records, "rescore", return_value=cached_card,
