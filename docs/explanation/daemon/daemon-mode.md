@@ -60,15 +60,26 @@ Overflow emits exactly one unversioned `FrameTooLarge` error with a null
 The daemon then closes input without processing further frames or draining an
 unbounded line to find LF. Already queued valid frames keep their order.
 
-A synchronous channel holds at most one queued frame. When the queue is full,
-the reader blocks until processing makes room; no frame is dropped. Besides
-that queued frame, there can be one frame under processing and one held by the
-reader, plus stdin's fixed read buffer. Each raw frame buffer is capped. This
-does not bound model memory, session storage, decoded JSON, or response size.
+The queue has a separate 160 MiB byte budget, derived from the same checked
+16-times input cap. A packed buffer stores UTF-8 frames with one LF delimiter
+each, including empty frames, without per-frame allocation overhead. The
+reader acquires byte credits before copying a frame into the queue. Processing
+returns those credits as soon as it takes the frame. A frame that does not fit
+the remaining credits waits; an empty queue always admits a frame at the cap
+plus its one-byte delimiter.
 
-Backpressure also reaches the stdio pipes. Batch senders must read stdout
-concurrently with stdin writes. Writing an entire batch before reading can
-block when the pipe buffers fill.
+Reader and queue buffers together retain at most the 160 MiB frame cap plus
+the 160 MiB queue budget, a fixed stdin read buffer, and constant bookkeeping
+(including the extra delimiter byte for a frame at the cap). Each allocation's
+requested capacity is bounded. This does not bound allocator overhead, model
+memory, session storage, the frame under processing, decoded JSON, or response
+size.
+
+A batch within the queue budget can finish writing before reading stdout, as
+in earlier versions. The queue introduces backpressure only beyond that budget:
+the reader waits until processing makes room, without dropping, reordering, or
+refusing frames. Larger batch clients should read stdout concurrently with
+stdin writes to avoid a wait cycle when both stdio pipes fill.
 
 An EOF tail without LF is still processed. Invalid UTF-8 still closes input
 silently after earlier valid frames, matching the previous reader.

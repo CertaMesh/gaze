@@ -11,9 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `gaze daemon` bounds each raw JSONL frame at 160 MiB before UTF-8 conversion
   or JSON parsing. Oversized frames now receive one value-free `FrameTooLarge`
-  error, then input closes without draining the line. The input queue holds
-  at most one frame and blocks the reader under backpressure without dropping
-  frames.
+  error, then input closes without draining the line. A separate 160 MiB
+  queue byte budget preserves write-all-then-read batches within that budget.
+  Only beyond the queue budget does the reader apply backpressure, without
+  dropping, reordering, or refusing frames. Reader and queue buffers retain at
+  most the frame cap plus queue budget, a fixed read buffer, and constant
+  bookkeeping.
 
 - Immutable proxy request leaves share one expansion budget across the request.
   The proxy checks the combined size before expansion or Rule matching, so

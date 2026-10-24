@@ -114,7 +114,7 @@ pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
         eprintln!("{warning}");
     }
     let frame_limit = daemon_frame_max_bytes();
-    let (sender, receiver) = input::channel();
+    let (sender, receiver) = input::channel(frame_limit);
     std::thread::spawn(move || {
         input::read_frames(io::stdin().lock(), sender, frame_limit);
     });
@@ -946,7 +946,7 @@ action = "preserve"
         }
         let mut actual = Vec::new();
         std::thread::scope(|scope| {
-            let (sender, receiver) = input::channel();
+            let (sender, receiver) = input::channel(1024);
             scope.spawn(move || {
                 input::read_frames(
                     BufReader::with_capacity(1, Cursor::new(fixture)),
@@ -954,7 +954,8 @@ action = "preserve"
                     1024,
                 )
             });
-            for frame in receiver {
+            for _ in 0..4 {
+                let frame = receiver.recv_timeout(Duration::from_secs(5)).unwrap();
                 let input::Frame::Line(line) = frame else {
                     panic!("fixture must fit");
                 };
