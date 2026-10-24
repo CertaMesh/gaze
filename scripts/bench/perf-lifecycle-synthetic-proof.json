@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "timed": false,
-  "plain_binary_sha256": "c9a775406903c47429360f369cc2f349084d5f75831060c9aa454b5c00199e97",
-  "timer_binary_sha256": "983af9b74f089949d5cf23be65828197863fd2d9de20171e7f7bfaeacaac7d3a",
+  "plain_binary_sha256": "d65eadbd9a421b900805bc69942f2985624cb82f9ebe08205f5a72e7406c8284",
+  "timer_binary_sha256": "378ec04cf7eb373893963a69b771f89487d8b24224a9e8d50837bcad324b0af6",
   "normalization": "Only eight-hex session prefixes inside declared ordinary tokens become 00000000. Within-mode clean bytes, token spelling/index, mapping values, stats/disposition and daemon manifest spans are otherwise exact. The Rust fixed-snapshot test compares byte-for-byte without normalization.",
   "modes": {
     "one-shot": {
@@ -34,7 +34,7 @@
       "identical": true
     }
   },
-  "runtime_source_commit": "2c43c2e9aa9032ecd417a9144f91bc39ca52ce35",
+  "runtime_source_commit": "6fd3b19df66d8bfd68170a90337148a111039dac",
   "rust_toolchain": "1.96.0",
   "fixed_snapshot_test": {
     "name": "attribution_capture_preserves_pipe_fixture_bytes_and_restore",
@@ -53,15 +53,15 @@
     "passed": 1
   },
   "python_tests": {
-    "executed": 179,
-    "passed": 179,
+    "executed": 192,
+    "passed": 192,
     "skipped": 0,
     "real_cli_tests": [
       "test_real_cli_lifecycle_hooks_are_validated_by_runner",
       "test_real_daemon_context_assembly_is_admitted"
     ],
     "attribution_tests": 26,
-    "bound_tests": 153,
+    "bound_tests": 166,
     "duration_bounds": 57,
     "child_parent_edge_tests": 42,
     "forbidden_phase_tests": 34,
@@ -69,7 +69,9 @@
     "parent_checks": 42,
     "full_graph_parent_witness_tests": 42,
     "reviewer_round_two_witness_tests": 3,
-    "reviewer_round_three_recognizer_witness_tests": 3
+    "reviewer_round_three_recognizer_witness_tests": 3,
+    "ownership_checks": 6,
+    "reviewer_round_four_ownership_witness_tests": 2
   },
   "mutation": {
     "source_commit": "e1744ec1d533af669797c88c14e2494c0f98c450",
@@ -83,10 +85,10 @@
   },
   "source_identity_base": "764d98903e8e1e6a6a71486c5c31f6c43041ef38",
   "containment_mutation": {
-    "runner_sha256": "9d4b5bd919ef6a904ef9fe6dc9e8dc9d6320a748aa68826dfe9c19739011d05a",
-    "runner_source_sha256": "97fefbfbbabf06dfdf78c6914cef32a6c903bc7720b56bcd2260c04d5ba79da6",
-    "contract_sha256": "6994e70cd211f59137e8793db72126b6893716df8d2358da51d9e6f01f89370f",
-    "source_commit": "05f904ea7c7e526156cecad74b60225e7552bc94",
+    "runner_sha256": "516d3e0494df772af88c45002c7d5d6eeeddf5fccfa9355f399077a9ee081409",
+    "runner_source_sha256": "1dd99f75f2fcb9bea170f8b818c10008d2b7ea44ee6c8217c4ed3c6b286a0781",
+    "contract_sha256": "355b01a35b746e3b0198b12c2a5412b3362326965fb2c43dcf46f94cb1b71cc6",
+    "source_commit": "d87d44ec20b433b1c479a2c470aba3f7b15316fb",
     "mutations": [
       {
         "check": "ready-build-parent-pipeline_build_ns",
@@ -431,6 +433,42 @@
         "restored_tests_passed": 1
       },
       {
+        "check": "rule-owner-ns",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_reviewer_rules_must_equal_rule_spans",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "rule-owner-invocations",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_rule_owner_invocations",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "rule-owner-candidates",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_rule_owner_candidates",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "ner-owner-capacity",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_ner_owner_serial_nonzero_leaves",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "recognizer-role",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_recognizer_role",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "stable-recognizer-role",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_stable_recognizer_role",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
         "check": "clock-phase",
         "test": "test_perf_lifecycle_bounds.BoundTests.test_phase_registry_ns",
         "mutated_assertions_failed": 1,
@@ -479,12 +517,13 @@
         "restored_tests_passed": 1
       }
     ],
-    "mutation_count": 65,
+    "mutation_count": 71,
     "serial_sum_checks": 15,
     "parent_checks": 42,
+    "ownership_checks": 6,
     "parent_test_isolation": "Each parent check alone; serial sums and ancestor edges otherwise imply it. Full graph also rejects every parent witness.",
-    "executed_assertion_failures": 65,
-    "restored_passes": 65
+    "executed_assertion_failures": 71,
+    "restored_passes": 71
   },
   "timer_cli_tests": {
     "executed": 2,
@@ -538,5 +577,47 @@
       }
     ],
     "input": "Two safe-text daemon requests in one session, the second with an empty context object."
+  },
+  "diagnostic_schema": 3,
+  "recognizer_metadata_test": {
+    "name": "model_roles_are_value_free_and_unknown_learned_roles_stay_visible",
+    "executed": 1,
+    "passed": 1
+  },
+  "daemon_context_positive": {
+    "binary_sha256": "378ec04cf7eb373893963a69b771f89487d8b24224a9e8d50837bcad324b0af6",
+    "policy_sha256": "b7132fd8e1215af696e2413590b6f5150451d62bbdeab4216376eabb4ffed5ce",
+    "records": 3,
+    "requests": 2,
+    "records_canonical_sha256": "afb9df5f7139dd89425716b0860d9043e1808a9d5225a4e657d9dc8a88bf843f",
+    "admitted": true,
+    "request_assembly_invocations": [
+      {
+        "assembly_ns": 0,
+        "recognizer_construction_ns": 0,
+        "rule_construction_ns": 0
+      },
+      {
+        "assembly_ns": 1,
+        "recognizer_construction_ns": 1,
+        "rule_construction_ns": 1
+      }
+    ]
+  },
+  "admission_source_commit": "d87d44ec20b433b1c479a2c470aba3f7b15316fb",
+  "diagnostic_source_sha256": "c6d302210776dc23ed3c8a0220a1387a8214a3b906971dcdee7d45c7e769c289",
+  "recognizer_ownership": {
+    "checks": [
+      "rule-owner-ns",
+      "rule-owner-invocations",
+      "rule-owner-candidates",
+      "ner-owner-capacity",
+      "recognizer-role",
+      "stable-recognizer-role"
+    ],
+    "labels": "Fixed evidence (rule/learned) and model (none/ner/dob/other); no declared IDs or input values.",
+    "unsupported_learned_roles_refused": true,
+    "one_model_ordinal_across_capture": true,
+    "zero_duration_ner_invocations_require_owner": true
   }
 }
