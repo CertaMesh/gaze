@@ -1,0 +1,116 @@
+[
+  {
+    "daemon": false,
+    "error": false,
+    "id": "clean-email",
+    "policy": "schema_version=\"0.1.0\"\n[session]\nscope=\"conversation\"\n[policy.rulepacks]\nbundled=[\"core\"]\n[[rule]]\nkind=\"default\"\naction=\"tokenize\"\n",
+    "requests": [
+      {
+        "session_id": "synthetic-snapshot",
+        "text": "alice@example.invalid"
+      }
+    ]
+  },
+  {
+    "daemon": false,
+    "error": false,
+    "id": "clean-context",
+    "policy": "schema_version=\"0.1.0\"\n[session]\nscope=\"conversation\"\n[policy.rulepacks]\nbundled=[\"core\"]\n[[rule]]\nkind=\"default\"\naction=\"tokenize\"\n",
+    "requests": [
+      {
+        "context": {},
+        "session_id": "synthetic-snapshot",
+        "text": "alice@example.invalid"
+      }
+    ]
+  },
+  {
+    "daemon": false,
+    "error": false,
+    "id": "clean-validator",
+    "policy": "schema_version=\"0.1.0\"\n[session]\nscope=\"conversation\"\n[policy.rulepacks]\nbundled=[\"core\"]\n[[rule]]\nkind=\"default\"\naction=\"tokenize\"\n",
+    "requests": [
+      {
+        "session_id": "synthetic-snapshot",
+        "text": "Card: 4111 1111 1111 1111"
+      }
+    ]
+  },
+  {
+    "daemon": false,
+    "error": false,
+    "id": "clean-anchored",
+    "policy": "schema_version=\"0.1.0\"\n[session]\nscope=\"conversation\"\n[policy.rulepacks]\nbundled=[\"core\"]\n[[rule]]\nkind=\"default\"\naction=\"tokenize\"\n[[policy.custom_recognizers]]\nkind=\"regex\"\nname=\"synthetic-order\"\nclass=\"custom:order_id\"\npattern=\"^SYNTH-[0-9]+$\"\n",
+    "requests": [
+      {
+        "session_id": "synthetic-snapshot",
+        "text": "SYNTH-123"
+      }
+    ]
+  },
+  {
+    "daemon": true,
+    "error": false,
+    "id": "daemon",
+    "policy": "schema_version=\"0.1.0\"\n[session]\nscope=\"conversation\"\n[policy.rulepacks]\nbundled=[\"core\"]\n[[rule]]\nkind=\"default\"\naction=\"tokenize\"\n",
+    "requests": [
+      {
+        "session_id": "synthetic-snapshot",
+        "text": ""
+      },
+      {
+        "session_id": "synthetic-snapshot",
+        "text": "alice@example.invalid"
+      },
+      {
+        "session_id": "synthetic-snapshot",
+        "text": "alice@example.invalid"
+      },
+      {
+        "session_id": "synthetic-snapshot",
+        "text": "plain prose"
+      }
+    ]
+  },
+  {
+    "daemon": true,
+    "error": false,
+    "id": "daemon-context",
+    "policy": "schema_version=\"0.1.0\"\n[session]\nscope=\"conversation\"\n[policy.rulepacks]\nbundled=[\"core\"]\n[[rule]]\nkind=\"default\"\naction=\"tokenize\"\n",
+    "requests": [
+      {
+        "context": {},
+        "session_id": "synthetic-snapshot",
+        "text": "alice@example.invalid"
+      }
+    ]
+  },
+  {
+    "daemon": true,
+    "error": false,
+    "id": "daemon-sweep",
+    "policy": "schema_version=\"0.1.0\"\n[session]\nscope=\"conversation\"\n[policy.rulepacks]\nbundled=[\"core\"]\n[[rule]]\nkind=\"default\"\naction=\"tokenize\"\n[[policy.custom_recognizers]]\nkind=\"regex\"\nname=\"synthetic-order\"\nclass=\"custom:order_id\"\npattern=\"^SYNTH-[0-9]+$\"\n",
+    "requests": [
+      {
+        "session_id": "synthetic-snapshot",
+        "text": "SYNTH-123"
+      },
+      {
+        "session_id": "synthetic-snapshot",
+        "text": "prefix SYNTH-123"
+      }
+    ]
+  },
+  {
+    "daemon": true,
+    "error": true,
+    "id": "daemon-empty-error",
+    "policy": "schema_version=\"0.1.0\"\n[session]\nscope=\"conversation\"\n[policy.rulepacks]\nbundled=[\"core\"]\n[[rule]]\nkind=\"default\"\naction=\"tokenize\"\n[[policy.custom_recognizers]]\nkind=\"regex\"\nname=\"synthetic-order\"\nclass=\"custom:order_id\"\npattern=\"^$\"\n",
+    "requests": [
+      {
+        "session_id": "synthetic-snapshot",
+        "text": ""
+      }
+    ]
+  }
+]

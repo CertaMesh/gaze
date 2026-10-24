@@ -1,7 +1,7 @@
 # Performance attribution
 
 `perf_attribution.py` separates source cost from policy/model cost without changing
-protection. Specification: **gaze-perf-attribution-v1**. It does not replace the
+protection. Specification: **gaze-perf-attribution-v2**. It does not replace the
 detection gain gate or alter the release benchmark specification.
 
 The runner requires an explicit `--dry-run` or `--measure`. Dry runs clean five
@@ -21,7 +21,7 @@ Verify downloaded release binaries against their published `.sha256` assets firs
 Label them with `--binary-kind-a published-release` and
 `--binary-kind-b published-release`. Automatic builds require a clean checkout.
 
-All four arms use the same two binaries:
+All five arms use the same two binaries:
 
 | Arm | Policy | Process mode |
 | --- | --- | --- |
@@ -29,6 +29,7 @@ All four arms use the same two binaries:
 | `shipped` | Each executable's own `gaze setup` output | Warm daemon |
 | `vernio` | Davlan mBERT, threshold 0.3; core; de-DE/en-US/global; address blocks; no safety net or secrets pack | Warm daemon |
 | `source-tree` | Same as Vernio | New process/model load for each file |
+| `source-tree-daemon` | Same as Vernio | One resident daemon, same ordered files as `source-tree` |
 
 `--shipped-policy-a` and `--shipped-policy-b` accept policies previously generated
 by those versions' setup commands. Otherwise the runner invokes setup. Setup may
@@ -59,7 +60,7 @@ Eligible suffixes are `.txt`, `.md`, `.json`, `.jsonl`, `.toml`, `.yaml`, `.yml`
 `.rs`, `.py`, `.csv` and `.tsv`; symlinks, NUL-containing files, empty files and
 files larger than 1,000,000 bytes are excluded. Fewer than 400 eligible files is
 an error even during dry runs. The receipt pins the resolved commit and every
-selected document hash. File identities are hashed rather than exposing paths.
+selected document hash. Both source-tree arms bind the same ordered IDs, exact UTF-8 bytes, duplicate occurrences, and policy with `input_sha256`. Dry runs use the same first five files in both arms. File identities are hashed rather than exposing paths.
 
 ## Run
 
@@ -84,10 +85,10 @@ warmups warm filesystem/process caches only; every measured file still starts
 a fresh process and loads its models.
 
 The receipt records hardware, OS, `uptime`, load before/after each side, binary,
-policy and model hashes, the runner hash, document identities, numeric samples, work counters,
+policy and model hashes, the combined runner/clock-contract hash, document identities, numeric samples, work counters,
 p50/p95/p99 per document and stage, and files/minute. End-to-end daemon latency
 includes request serialization, pipe transport and CLI response serialization.
-It excludes Python response parsing. Stage clocks cover the library only.
+It excludes Python response parsing. `startup_e2e_ns` measures process launch through receipt of the startup record on stderr. The daemon emits that record before waiting for input. `startup_total_ns` sums child startup clocks, while `processing_total_ns` sums child request clocks. Neither total includes warmups. One-shot rows retain startup records for every file; daemon rows retain one startup record per pass.
 One-shot latency includes process and model startup. Files/minute uses the sum
 of request latencies as its denominator, excluding warmups and receipt work. Stage times are inclusive and
 must not be summed: `registry_ns` includes recognizers and NER; `rules_ns` sums
@@ -104,21 +105,35 @@ receipt. Do not derive performance claims from a failed gate.
 ## Timer builds and privacy
 
 Build `gaze-cli` with `--features perf-timers`; the feature is default-off across
-core, recognizers and shared types. Default builds expand the instrumentation
-macros to no-ops: no clock, TLS, ID hashing, environment lookup or diagnostic IO.
-An instrumented CLI additionally needs `GAZE_PERF=1` to collect a document. It
-writes exactly one `GAZE_PERF {json}` record to stderr per daemon request or
-one-shot clean. Stdout retains its existing protocol. A failed diagnostic write
-does not change protection behavior.
+core, assembly, recognizers and shared types. Default builds expand the instrumentation
+macros to no-ops: no clock, TLS, identity allocation, environment lookup or diagnostic IO from the instrumentation.
+An instrumented CLI additionally needs `GAZE_PERF=1` to collect startup and requests. It
+writes one startup `GAZE_PERF {json}` record and one record per request to stderr.
+The startup clock starts at the first operation in `main`; it excludes OS loader
+work before `main`. Stdout retains its existing protocol. A failed diagnostic
+write does not change protection behavior.
+
+Schema **3** includes `phase` (`startup` or `request`), a process-local `ordinal`,
+and fixed recognizer evidence/model labels.
+Startup is ordinal 0. Requests count from 1, including warmups. The runner rejects
+schemas 1 and 2, partial traces, missing required keys/prerequisites, wrong ordinals, processing clocks in
+startup, and model initialization attached to request records. Nym timer backports must
+include both split clocks below; aggregate-only Nym traces are refused. Old executables that emit no records retain unknown stage
+costs. `--binary-kind-a local-timer`, `--binary-kind-b local-timer`, and
+`--build-timers` require the full protocol; a missing trace is an error.
+Old v1 receipts remain historical records and cannot be relabeled as v2 evidence.
+The old patch below emits v1 and needs the new boundaries before it can supply
+v2 stage attribution.
 
 The record contains fixed metric keys, durations, invocation/candidate/window
-counts, input byte length and SHA3-256 recognizer IDs. It never carries input
-text, matched values, token mappings, session IDs or raw custom IDs. To locate a
-specific recognizer, hash its declared ID locally using SHA3-256. These hashes
-are unsalted: guessable custom IDs can be recovered by dictionary matching.
-This remains a privacy limitation of local attribution receipts. Before sharing
-an adopter receipt, remove custom recognizer IDs or replace them with locally
-keyed hashes. Per-receipt keyed IDs are a follow-up, outside this change.
+counts, input byte length and process-local recognizer ordinals (`r1`, `r2`, …).
+It never carries input text, matched values, token mappings, session IDs, raw
+custom IDs, or unsalted hashes of custom IDs. Ordinals follow first encounter
+order and remain stable across requests in one process. They do not prove that
+the same ordinal refers to the same recognizer in different processes or builds.
+The summary does not aggregate recognizer ordinals across processes.
+Use aggregate stage clocks for cross-build comparisons. Resolve custom IDs only
+locally; public receipts carry no reversible recognizer-name lookup.
 
 Treat local source, policy, and model files as trusted inputs. The receipt does
 not copy their contents or paths. The runner consumes then discards CLI
@@ -130,8 +145,202 @@ validation. `audit_ns` covers synchronous primary/safety/restore audit sink call
 NER records tokenization, encodes, ORT calls/windows and session-mutex wait. Nym
 records tokenization, ORT windows and mutex wait, plus separate stable/neutral
 view durations and window counts. Stable and neutral views both remain active.
-No allocation profiler is installed; allocation counts and model-constructor
-counts are outside this specification.
+No allocation profiler is installed. Constructor counts are the `invocations`
+fields of the lifecycle metrics below. They count attempted calls, including
+failed calls; the runner refuses failed documents.
+
+## Lifecycle boundaries
+
+All `ns` values are inclusive wall-clock durations. Parent and child durations
+must not be added together. The following leaf stages run serially without
+overlap inside a constructor: bundle verification, tokenizer load/configuration,
+and ORT model/session load. Their sum omits constructor bookkeeping. The runner
+checks invocation counts against the policy and checks parent/child bounds.
+The Nym assembly check and constructor check remain separate invocations of
+`bundle_verify_ns`; this change preserves both checks. NER and DOB constructors
+use `model_constructor_ns`; Nym uses `nym_model_constructor_ns`. The extra outer
+Nym check is enclosed by `nym_outer_verify_ns`, outside the constructor. The
+aggregate verification + tokenizer + model duration must fit within the combined
+constructors plus that outer check. The outer check's enclosing clock includes
+its timer bookkeeping, so this aggregate bound conservatively includes that
+small overhead. Tokenizer + model durations must also fit within the constructors
+alone. No aggregate constructor duration is charged to the wrong sibling.
+
+The phase table and clock graph below are generated from
+`perf_lifecycle_contract.py`, which validation imports directly. Refresh with
+`python scripts/bench/perf_lifecycle_contract.py`; verify with `--check`.
+
+<!-- BEGIN GENERATED CLOCK CONTRACT -->
+| Metric | Phase | Boundary |
+| --- | --- | --- |
+| `process_to_ready_ns` | startup | First operation in main through completion of startup |
+| `process_to_policy_ns` | startup | First operation in main through policy load and overrides |
+| `policy_load_ns` | startup | CLI policy load and overrides, including the policy-less default |
+| `pipeline_build_ns` | startup | CLI policy resolution through PipelineBuilder::build |
+| `assembly_ns` | startup or request | build_pipeline_builder_inner, including NER and DOB constructors |
+| `recognizer_construction_ns` | startup or request | Recognizer registration before model registration |
+| `rule_construction_ns` | startup or request | Policy action rule construction after model registration |
+| `nym_attach_ns` | startup | Nym outer verification, constructor and checked attachment |
+| `model_constructor_ns` | startup | NER and DOB constructors, including their children |
+| `nym_model_constructor_ns` | startup | Nym constructor, including its children |
+| `nym_outer_verify_ns` | startup | Assembly's extra Nym bundle verification call |
+| `bundle_verify_ns` | startup | All complete pinned-bundle verifications, including Nym's extra call |
+| `tokenizer_load_ns` | startup | All constructor tokenizer loads and configuration |
+| `model_load_ns` | startup | All constructor ORT session builds and model loads |
+| `daemon_startup_ns` | startup | Daemon entry through setup, before the request loop |
+| `request_ns` | request | One-shot processing after startup, or one daemon handle_line call |
+
+The hook graph below declares serial children (sum <= parent capacity) or
+overlapping children (each <= parent capacity, with no sum). Admission
+checks every parent edge and every serial sum. A parent capacity containing
+multiple clocks pools their durations; it is not a new measured clock.
+Daemon-build and request-assembly apply only in daemon mode.
+`recognizers[*]` expands to each emitted recognizer ordinal. Parent edges
+check each ordinal; serial groups sum them. As a parent, it pools their durations.
+
+| Group | Phase | Relationship | Children | Parent capacity | Hook sites and exceptions |
+| --- | --- | --- | --- | --- | --- |
+| ready-build | startup | serial | `pipeline_build_ns` + `nym_attach_ns` | `process_to_ready_ns` | pipeline/run.rs: prepare_clean_pipeline; cli/perf.rs: Document::from_env |
+| ready-policy | startup | serial | `process_to_policy_ns` + `assembly_ns` + `nym_attach_ns` | `process_to_ready_ns` | pipeline/build.rs: policy_loaded before assembly; pipeline/run.rs: Nym after build. pipeline_build overlaps process_to_policy; use two alternative serial groups |
+| ready-daemon | startup | overlapping | `daemon_startup_ns` | `process_to_ready_ns` | commands/daemon.rs: run; cli/perf.rs: ready. daemon_startup overlaps the policy prefix and contains pipeline construction |
+| policy-load | startup | overlapping | `policy_load_ns` | `process_to_policy_ns` | pipeline/build.rs: resolve_pipeline_builder |
+| pipeline | startup | serial | `policy_load_ns` + `assembly_ns` | `pipeline_build_ns` | pipeline/build.rs: resolve_pipeline and resolve_pipeline_builder |
+| daemon-build | startup | serial | `pipeline_build_ns` + `nym_attach_ns` | `daemon_startup_ns` | commands/daemon.rs: run and Daemon::new |
+| assembly | startup | serial | `recognizer_construction_ns` + `model_constructor_ns` + `rule_construction_ns` | `assembly_ns` | gaze-assembly/lib.rs: build_pipeline_builder_inner |
+| nym-attach | startup | serial | `nym_outer_verify_ns` + `nym_model_constructor_ns` | `nym_attach_ns` | gaze-assembly/lib.rs: attach_nym_safety_net |
+| constructor-loads | startup | serial | `tokenizer_load_ns` + `model_load_ns` | `model_constructor_ns` + `nym_model_constructor_ns` | ner/detector.rs; ner/backend/ort.rs; dob_judge.rs; safety_net/nym/ort.rs. leaf totals pool NER, DOB and Nym constructors; no per-constructor leaf split exists |
+| constructor-leaves | startup | serial | `bundle_verify_ns` + `tokenizer_load_ns` + `model_load_ns` | `model_constructor_ns` + `nym_model_constructor_ns` + `nym_outer_verify_ns` | ner/loader.rs; bundle.rs; gaze-assembly/lib.rs; constructor hooks above. bundle_verify also includes Nym outer verification; load-only group excludes that capacity |
+| request-sweep | request | serial | `assembly_ns` + `registry_ns` + `resolve1_ns` + `sweep_ns` + `safety_view_build_ns` + `safety_model_ns` + `manifest_ns` + `audit_ns` | `request_ns` | pipeline.rs: redact_text_with_manifest_uncached, sweep_repeat_values, run_safety_nets_in_context, log_*; pipeline/occurrence.rs: Ledger; safety_net_scan.rs: new. resolve2 partly runs inside sweep and partly afterwards; never sum sweep + resolve2 |
+| request-resolve | request | serial | `assembly_ns` + `registry_ns` + `resolve1_ns` + `resolve2_ns` + `safety_view_build_ns` + `safety_model_ns` + `manifest_ns` + `audit_ns` | `request_ns` | pipeline.rs: recovery::plan at sweep, house-number and address-piece sites. alternative serial group accounts for resolve2 without double counting sweep |
+| request-assembly | request | serial | `recognizer_construction_ns` + `rule_construction_ns` | `assembly_ns` | commands/daemon.rs: clean_request; gaze-assembly/lib.rs: pipeline_with_context. context rebuilds recognizers and rules; resident NER, Nym and DOB handles are reused |
+| request-overlap | request | overlapping | `validators_ns` | `request_ns` | gaze-types/lib.rs: ValidatorKind. validators run inside recognizers, registry vetoes, recovery and other request work |
+| registry-recognizers | request | serial | `recognizers[*]` | `registry_ns` | registry.rs: detect_candidate_pool/detect_declared; perf.rs: RecognizerSpan. built-in clean runs recognizers serially inside registry |
+| recognizer-work | request | serial | `rules_ns` + `ner_tokenize_ns` + `ner_mutex_wait_ns` + `ner_ort_ns` | `recognizers[*]` | perf.rs: RecognizerSpan::drop; ner/backend/preparation.rs and ort.rs. necessary aggregate bound; the ownership checks below additionally enforce exact Rule totals and containment within the single declared NER ordinal |
+| nym-views | request | serial | `nym_stable_ns` + `nym_neutral_ns` | `safety_model_ns` | pipeline.rs: run_safety_nets_in_context; safety_net/nym/mod.rs: check_with_neutral_and_telemetry |
+| nym-inference | request | serial | `nym_tokenize_ns` + `nym_mutex_wait_ns` + `nym_ort_ns` | `nym_stable_ns` + `nym_neutral_ns` | safety_net/nym/ort.rs: score_pieces and run_window. leaf totals pool both serial views; the protocol does not split leaves by view |
+
+Cross-hook audit: every production clock and work counter is listed below.
+These are invocation and ownership guarantees, independent of nanoseconds.
+Existing phase, constructor, ownership and graph checks enforce the enclosing
+relations. The following generated prerequisites enforce sibling relations.
+
+| Hooks / counters | Source call sites | Mandatory co-occurrence / owner |
+| --- | --- | --- |
+| `process_to_ready_ns`, `process_to_policy_ns` | gaze-cli/src/perf.rs:19-20 | Start together, once per startup; policy ends before ready |
+| `request_ns` | gaze-cli/src/perf.rs:56 | Encloses every request; once per Document |
+| `daemon_startup_ns` | gaze-cli/src/commands/daemon.rs:103-127 | Encloses build and attachment; exactly one in daemon startup |
+| `pipeline_build_ns`, `policy_load_ns` | gaze-cli/src/pipeline/build.rs:127,158-165 | Build encloses policy load; successful load ends process_to_policy |
+| `assembly_ns`, `recognizer_construction_ns`, `rule_construction_ns` | gaze-assembly/src/lib.rs:252-292 | Assembly encloses recognizer registration, then model registration, then rules; one of each per successful assembly; daemon rebuild reuses models |
+| `nym_attach_ns`, `nym_outer_verify_ns` | gaze-assembly/src/lib.rs:113-150 | Attachment encloses outer verification then Nym constructor; one each for active Nym |
+| `model_constructor_ns` | gaze-recognizers/src/ner/detector.rs:43; dob_judge.rs:118 | Encloses verification, tokenizer and model load; once per active NER/DOB |
+| `nym_model_constructor_ns` | gaze-recognizers/src/safety_net/nym/ort.rs:121-153 | Encloses verification, tokenizer and model load; once for active Nym |
+| `bundle_verify_ns` | gaze-recognizers/src/bundle.rs:31; ner/loader.rs:22 | Enclosed by constructor or outer verification; active Nym verifies twice |
+| `tokenizer_load_ns`, `model_load_ns` | gaze-recognizers/src/ner/backend/ort.rs:34-38; dob_judge.rs:123-127; safety_net/nym/ort.rs:135-153 | One serial tokenizer then model load per successful constructor; pooled across models |
+| `registry_ns` | gaze/src/registry.rs:1437 | Encloses serial recognizer calls |
+| `recognizers[*]`, `rules_ns` | gaze/src/registry.rs:1263; gaze-types/src/perf.rs:281-313 | RecognizerSpan owns candidate totals; Rule drops also add exactly their duration, invocations and candidates to rules_ns |
+| `validators_ns` | gaze-types/src/lib.rs:935-959,1000 | Enclosed by request; validators can run in recognizers, recovery or vetoes; no mandatory recognizer sibling |
+| `ner_tokenize_ns`, `ner_encodes` | gaze-recognizers/src/ner/backend/preparation.rs:16-18 | Encode counter increments once inside each tokenize span, even on failure |
+| `ner_mutex_wait_ns`, `ner_ort_ns`, `ner_windows` | gaze-recognizers/src/ner/backend/ort.rs:132-149 | Wait precedes ORT; ORT owns one window increment; tokenize precedes both; failures can leave extra waits |
+| `nym_tokenize_ns`, `nym_mutex_wait_ns`, `nym_ort_ns`, `nym_windows` | gaze-recognizers/src/safety_net/nym/ort.rs:193-207,230-248 | Tokenize precedes windows; wait precedes each ORT; ORT owns one window increment |
+| `nym_stable_ns`, `nym_neutral_ns`, `nym_windows_stable`, `nym_windows_neutral` | gaze-recognizers/src/safety_net/nym/mod.rs:163,181,185; gaze-types/src/perf.rs:207-232,317-325 | Stable precedes neutral; each view owns its window counter; view counts partition total windows; zero windows permitted |
+| `input_bytes` | gaze/src/pipeline.rs:1218 | Owned by enclosing request, at uncached text entry; not necessarily raw document length |
+| `resolve1_ns` | gaze/src/pipeline.rs:1228 | Enclosed by request after registry; failure may stop before sweep |
+| `sweep_ns`, `sweep_candidates` | gaze/src/pipeline.rs:1661,1707 | Sweep owns added-candidate count; may exit without additions |
+| `resolve2_ns` | gaze/src/pipeline.rs:1253,1275,1713 | Optional; inside sweep or later recovery; cannot sum with sweep |
+| `safety_view_build_ns` | gaze/src/safety_net_scan.rs:21 | Request owns scan construction; scan precedes safety model, but model may be skipped |
+| `safety_model_ns` | gaze/src/pipeline.rs:1858,1920 | Request encloses model call after scan construction; Nym views are serial children |
+| `manifest_ns` | gaze/src/pipeline/occurrence.rs:156,210,222,393 | Request encloses ledger allocation, insertion, projection and validation; call counts vary |
+| `audit_ns` | gaze/src/pipeline.rs:1760,3069,3099,3166,3207,3246,3287 | Optional sink; no-net CLI clean audit implies nonempty input and ledger allocation; scan-only Nym paths are exempt |
+
+| Prerequisite check | Trigger | Required hook | Relation | Source guarantee |
+| --- | --- | --- | --- | --- |
+| ner-ort-wait | `ner_ort_ns` | `ner_mutex_wait_ns` | prerequisite invocations >= trigger invocations | gaze-recognizers/src/ner/backend/ort.rs:132-139: wait drops before ORT starts |
+| nym-ort-wait | `nym_ort_ns` | `nym_mutex_wait_ns` | prerequisite invocations >= trigger invocations | gaze-recognizers/src/safety_net/nym/ort.rs:230-236: wait drops before ORT starts |
+| ner-ort-tokenize | `ner_ort_ns` | `ner_tokenize_ns` | positive trigger requires invoked prerequisite | gaze-recognizers/src/ner/backend/ort.rs:67-89; preparation.rs:13-59: encode precedes inference |
+| ner-mutex_wait-tokenize | `ner_mutex_wait_ns` | `ner_tokenize_ns` | positive trigger requires invoked prerequisite | gaze-recognizers/src/ner/backend/ort.rs:67-89; preparation.rs:13-59: encode precedes inference |
+| nym-ort-tokenize | `nym_ort_ns` | `nym_tokenize_ns` | positive trigger requires invoked prerequisite | gaze-recognizers/src/safety_net/nym/ort.rs:193-207: tokenize precedes window loop |
+| nym-mutex_wait-tokenize | `nym_mutex_wait_ns` | `nym_tokenize_ns` | positive trigger requires invoked prerequisite | gaze-recognizers/src/safety_net/nym/ort.rs:193-207: tokenize precedes window loop |
+| nym-stable-window-owner | `nym_windows_stable` | `nym_stable_ns` | positive trigger requires invoked prerequisite | gaze-types/src/perf.rs:207-212,221-232,317-325: active view selects counter; drop records invocation |
+| nym-neutral-window-owner | `nym_windows_neutral` | `nym_neutral_ns` | positive trigger requires invoked prerequisite | gaze-types/src/perf.rs:207-212,221-232,317-325: active view selects counter; drop records invocation |
+| nym-neutral-stable | `nym_neutral_ns` | `nym_stable_ns` | prerequisite invocations >= trigger invocations | gaze-recognizers/src/safety_net/nym/mod.rs:162-186: stable precedes each neutral view |
+| resolve1-registry | `resolve1_ns` | `registry_ns` | prerequisite invocations >= trigger invocations | gaze/src/pipeline.rs:1224-1230: each first resolution follows one registry call |
+| sweep-resolve1 | `sweep_ns` | `resolve1_ns` | prerequisite invocations >= trigger invocations | gaze/src/pipeline.rs:1228-1240,1652-1661: each sweep follows first resolution |
+| manifest-sweep | `manifest_ns` | `sweep_ns` | positive trigger requires invoked prerequisite | gaze/src/pipeline.rs:1231-1240,1326; pipeline/occurrence.rs:156: sweep succeeds before Ledger::new |
+| resolve2-sweep | `resolve2_ns` | `sweep_ns` | positive trigger requires invoked prerequisite | gaze/src/pipeline.rs:1231-1275,1713: second resolution is inside or after sweep |
+| sweep-added-resolve2 | `sweep_candidates` | `resolve2_ns` | positive trigger requires invoked prerequisite | gaze/src/pipeline.rs:1707-1713: positive additions always start second resolution |
+| safety-model-view | `safety_model_ns` | `safety_view_build_ns` | positive trigger requires invoked prerequisite | gaze/src/pipeline.rs:1829-1858,1920: scan construction precedes either model call site |
+
+Waits can outnumber ORT calls after failures. Tokenizations need not equal
+windows. Invoked zero-duration hooks and invoked zero-window views are valid.
+Pipeline prerequisites are directional: later work requires earlier work,
+not the reverse. Empty text/candidate sets still enter registry, first
+resolution and sweep (pipeline.rs:1224-1240; registry.rs:1437), while
+manifest work requires an invoked sweep. Second resolution remains optional.
+With no safety net, positive CLI clean audit requires nonzero input_bytes
+and an invoked manifest hook: admitted geometry and Ledger::new precede
+primary/veto/residual audit (pipeline.rs:1326-1523). With neither NER
+nor address_blocks enabled, resolve2 requires positive sweep_candidates;
+the street/address recovery alternatives cannot run in that policy.
+Positive NER windows or sweep additions require positive input_bytes:
+NER windows use nonempty ranges (ner/backend/preparation.rs:60-84), and
+sweep matches reject empty spans (gaze/src/sweep.rs:379). Raw candidate
+counts precede geometry, score and veto admission (registry.rs:1264-1278);
+an empty-input custom regex can emit a candidate before failing resolution.
+Skip-class and capitals gating apply
+only to safety nets (pipeline.rs:2009-2034). Prefix caching is disabled;
+the text wrapper always rescans (pipeline.rs:1195-1205). Daemon requests
+use the same path. A zero-recognizer CLI build fails assembly before
+processing; admission does not require a nonempty recognizer map.
+
+A startup record must have zero processing durations, invocation/candidate
+counts, work counters and recognizer entries. Daemon context requests may
+emit assembly, recognizer-construction and rule-construction clocks, once each.
+One-shot requests cannot emit those clocks. All request records must have
+zero model initialization and other startup-only durations and counts.
+
+Schema 3 recognizer entries contain fixed `evidence` (`rule` or `learned`)
+and `model` (`none`, `ner`, `dob`, `other`) labels, never declared IDs or input values.
+Schema 3 requires every declared metric and counter and all three u64 metric fields.
+Only `rules_ns` may have candidates. `ner_encodes`, `ner_windows` and
+`nym_windows` equal their tokenize/ORT invocation counts; Nym window views
+sum to the total. Every emitted recognizer has at least one invocation,
+even with zero duration. Invoked child clocks require an invoked parent,
+including zero-duration clocks; sweep candidates require a sweep invocation.
+NER activates only with `ner.model_dir`; DOB only with `dob_judge.enabled=true`.
+Nym activates only with `safety_net.backend="nym"`. Only active model paths
+enter the inventory; every active model must pin an absolute directory.
+Admission requires `rules_ns` duration, invocations and candidates to equal the
+corresponding sums of Rule entries. Learned entries never contribute to rules.
+The three serial NER leaves must fit the single NER entry; they cannot borrow
+DOB capacity. At most one NER and one DOB ordinal are allowed, only when configured.
+Other learned recognizers, contradictory labels and ordinal role changes across
+requests refuse admission. These checks are linear in the emitted entries.
+
+| Ownership check | Requirement |
+| --- | --- |
+| recognizer-invocations | Every emitted entry was invoked |
+| inactive-nym | Safety-net processing requires the active Nym backend |
+| rule-owner-ns | Exact Rule duration sum |
+| rule-owner-invocations | Exact Rule invocation sum |
+| rule-owner-candidates | Exact Rule candidate sum |
+| ner-owner-capacity | Serial NER leaves fit the NER ordinal |
+| recognizer-role | Configured single NER/DOB; other learned roles refused |
+| stable-recognizer-role | One role per ordinal across the capture |
+<!-- END GENERATED CLOCK CONTRACT -->
+
+`pipeline_build_ns` includes `policy_load_ns` and `assembly_ns`. Nym attaches
+after that CLI builder returns, so `nym_attach_ns` belongs to
+`process_to_ready_ns`, not to `pipeline_build_ns`. One-shot startup includes
+stdin reading and initial session creation. Daemon startup excludes input wait.
+The request clock includes clean response construction; daemon wire serialization
+runs after `handle_line` and belongs only to end-to-end latency. A daemon request
+with a context constructs request-specific recognizers and rules, even when the
+context is empty. Admission includes that assembly in the request clock and checks
+its serial children. Resident NER, Nym and DOB models remain initialized at startup.
+The benchmark arms send no context.
+
+No speedup or regression follows from adding these clocks. Controlled paired
+measurements need the benchmark-machine lease and a quiet host.
 
 The capture is thread-local and synchronous. Library callers can use
 `gaze_types::perf::Capture`; it must cover execution on the same thread and cannot
@@ -144,20 +353,95 @@ and use unmodified releases for end-to-end regression confirmation.
 
 Published v0.16.0/v0.17.0 executables have no timer protocol and are measured only
 end to end. `perf-timers-v0.16.0.patch` applies directly to the v0.16.0 tag without
-cherry-picking implementation commits. It includes the same shared timer layer
-and measurement boundaries, adapted to that version's recognizer return path
-and one-shot clean path. Apply it in an isolated Anvil checkout, build with
-`--features perf-timers`, and label the resulting binary as a local timer build.
-Use `--binary-kind-a local-timer --timer-patch-a <patch>` for the patched side.
-The receipt records the patch hash alongside its binary hash. For a later revision containing
-this feature, `--build-timers` enables it during automatic builds. Do not pass
-that flag to an unpatched old revision.
+cherry-picking implementation commits. It includes the earlier v1 timer layer
+and document-only boundaries, adapted to that version's recognizer return path
+and one-shot clean path. That historical patch alone is incompatible with this
+v2 runner. Backport the current schema-3 protocol and lifecycle hooks to the tag
+before building in an isolated Anvil checkout with `--features perf-timers`.
+Use `--binary-kind-a local-timer --timer-patch-a <adapted-v2-patch>` for that side.
+The receipt records the adapted patch hash alongside its binary hash. For a
+revision already containing schema 3, `--build-timers` enables it during automatic
+builds. Do not pass that flag to an unpatched old revision.
 
 ## Plumbing validation
 
-The model-free Python tests use fake daemon protocols to prove request/record
-pairing, old-binary fallback, identical-binary refusal, privacy, provenance,
-percentiles and the quiet-host gate. `cli_pipe` compares clean text, manifest,
+The model-free Python tests use fake daemon protocols to prove lifecycle and request pairing, old-binary fallback, schema rejection, identical-binary refusal, privacy, provenance, exact ordered source-tree identity, percentiles and the quiet-host gate. `GAZE_ATTRIBUTION_TEST_BINARY` enables a synthetic test of actual CLI hooks through the runner. `cli_pipe` compares clean text, manifest,
 entries and safety disposition byte for byte with capture disabled/enabled from
-the same initial session snapshot, and verifies exact restore for each fixture.
-No new Rust test binary is introduced.
+the same initial session snapshot, and verifies exact restore for each fixture. The capture includes construction as well as processing.
+Nonzero witnesses cover every parent edge, serial group and wrong-phase
+placement. Each serial witness violates exactly one sum while all parent edges
+still fit. Each parent witness is rejected by the full graph. Parent mutation
+tests also exercise that edge alone through lifecycle admission, because the
+serial sum or an ancestor edge would otherwise reject the same record.
+
+After committing, run `perf_lifecycle_mutation.py --out <directory>`. It removes
+each parent check, serial sum and phase, assembly-count and startup-work guard in an isolated
+Python copy. Each mutation must fail one executed assertion, then pass the same
+test after restoration. The receipt pins both counts; logs retain every result.
+
+The Rust test `perf_invocation_snapshot::attribution_invocation_snapshot_covers_model_free_inventory`
+(in `cli_pipe`) drives the timer CLI with capture enabled over committed model-free
+fixtures: one-shot and daemon calls, context/no context, email, a validator, empty
+input, an empty-regex error and an anchored custom regex whose repeated value adds
+a sweep candidate. It compares every metric's invocations/candidates, all counters,
+and every recognizer ordinal, evidence/model label, invocation and candidate count
+against `crates/gaze-cli/tests/fixtures/perf-invocations.json`. Only `ns` is excluded.
+The `cli` workspace shard runs `cli_pipe` with `--all-features`, including this test.
+
+Coverage uses `perf-hook-inventory.json`, generated from `HOOK_AUDIT`; the Python
+suite rejects a stale inventory or fixture projection. Every model-free hook must
+fire in the Rust test. New inventory hooks default to model-free and fail coverage
+until exercised. The explicit model-only boundary is NER/Nym/DOB constructors,
+bundle/tokenizer/model loading, NER/Nym inference leaves and counters, and safety-net
+scan/model/view hooks. These require local model bundles and are not exercised by
+this model-free CI snapshot. Existing Python admission rules and retained model
+records still cover their schema, ownership and prerequisite guarantees.
+
+Regenerate deliberately after reviewing a legitimate invocation change:
+
+```sh
+uv run --project scripts/bench python scripts/bench/perf_invocation_snapshot.py --binary <timer-binary>
+```
+
+Hook-regression detection is the snapshot gate's job. It detects changes to the
+observed counts or shape on these fixtures; it cannot detect timing-only changes,
+hooks moved along paths with identical observations, unexercised branches, or model
+hooks. The admission validator does not claim exhaustive single-hook detection.
+After committing, `perf_snapshot_mutation.py --out <directory>` disables the
+sweep span, input_bytes count and RecognizerSpan in Rust one at a time. It requires
+an executed snapshot assertion failure for each and a restored pass, records the
+source hashes, and restores every edited file byte for byte. Run it in a clean
+Anvil worktree with a granted machine slot.
+
+`test_perf_hook_deletion.py` separately probes admission by erasing inventoried
+outputs from retained real CLI records. It includes the source-faithful omission
+of the single RecognizerSpan hook: all dynamic entries and their coupled rule totals
+disappear together. Admission can accept that omission because the protocol carries
+no independent recognizer cardinality; the Rust snapshot rejects it. This diagnostic
+also covers local model records, seven missing-sweep negatives and real partial-error
+prefixes. Replay without loading models:
+
+```sh
+uv run --project scripts/bench python scripts/bench/perf_hook_deletion.py --out target/hook-deletions.json
+```
+
+Add `--capture <timer-binary>` to recapture with the retained, hash-verified new
+binary and local models. This is untimed. `ADMISSION_LIMITS` describes remaining
+ambiguities only after contextual checks: no-net audit implies nonempty input and
+manifest work; resolve2 implies sweep additions when both NER and address blocks
+are inactive. Real empty/error prefixes and model scan-only paths remain admissible.
+
+
+For a synthetic comparison across separate feature-off and timer executables, run
+`perf_instrumentation_proof.py --plain <binary> --timers <binary> --out <proof.json>`.
+It runs seven fixtures through one-shot and daemon clean/restore with no latency
+clocks. The proof normalizes only random eight-hex session prefixes inside declared
+ordinary tokens. It compares token spelling/index, mapping values, clean text,
+one-shot stats/disposition and daemon manifest spans exactly within each mode.
+It does not claim cross-mode byte identity. The Rust fixed-snapshot test retains
+exact byte comparison without prefix normalization.
+
+`perf_hook_identity.py --base <commit> --out <proof.json>` hashes the ten runtime
+files changed by lifecycle hooks. It removes only the named hooks and refuses if
+the remaining bytes differ from the base. Timer implementation, feature metadata,
+tests and this diagnostic runner are outside that text-path proof.

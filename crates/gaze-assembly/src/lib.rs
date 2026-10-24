@@ -110,6 +110,7 @@ pub fn attach_nym_safety_net(
         verify_nym_bundle, NymConfig, NymSafetyNet, REQUIRED_NYM_SMALL_ARTIFACTS,
     };
 
+    let _attach = gaze_types::perf_span!("nym_attach_ns");
     let model_dir = model_dir_override
         .or(policy.safety_net.nym_model_dir.as_deref())
         .ok_or(BuildError::NymModelDirMissing)?;
@@ -133,7 +134,9 @@ pub fn attach_nym_safety_net(
             ));
         }
     }
+    let outer_verify = gaze_types::perf_span!("nym_outer_verify_ns");
     verify_nym_bundle(model_dir).map_err(BuildError::NymBundle)?;
+    drop(outer_verify);
     let mut config = NymConfig::new(model_dir)
         .with_operating_point(policy.safety_net.nym.clone().unwrap_or_default());
     if let Some(bytes) = max_input_bytes {
@@ -246,6 +249,8 @@ fn build_pipeline_builder_inner(
     ner_threshold: Option<f32>,
     resident: Option<&gaze::RecognizerRegistry>,
 ) -> Result<PipelineBuilder, BuildError> {
+    let _assembly = gaze_types::perf_span!("assembly_ns");
+    let rules = gaze_types::perf_span!("recognizer_construction_ns");
     let mut builder = registration::AssemblyBuilder::default();
     let mut registered_dictionaries = BTreeSet::<String>::new();
     let locale_vocab = merged_locale_vocab(rulepacks, active_locales);
@@ -276,6 +281,7 @@ fn build_pipeline_builder_inner(
     if policy.address_blocks {
         register_address_vocabularies(&mut builder, rulepacks, active_locales);
     }
+    drop(rules);
     ner::register_ner(&mut builder, policy, ner_threshold, resident)?;
     ner::register_dob_judge(&mut builder, policy, resident)?;
 
@@ -283,6 +289,7 @@ fn build_pipeline_builder_inner(
         return Err(BuildError::NoRecognizers);
     }
 
+    let _policy_rules = gaze_types::perf_span!("rule_construction_ns");
     for rule in &policy.rules {
         match rule {
             RuleSpec::Class { class, action } => {

@@ -16,7 +16,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-perf-timers = ["gaze-types/perf-timers", "gaze/perf-timers", "gaze-recognizers/perf-timers"]
+perf-timers = ["gaze-assembly/perf-timers", "gaze-types/perf-timers", "gaze/perf-timers", "gaze-recognizers/perf-timers"]
 default = ["proxy", "setup"]
 setup = ["dep:gaze-model-setup", "dep:tempfile", "safety-net-nym"]
 safety-net-openai = ["gaze-recognizers/safety-net-openai"]
