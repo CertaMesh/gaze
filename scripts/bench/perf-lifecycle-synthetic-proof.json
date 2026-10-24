@@ -53,15 +53,16 @@
     "passed": 1
   },
   "python_tests": {
-    "executed": 192,
-    "passed": 192,
+    "executed": 210,
+    "passed": 210,
     "skipped": 0,
     "real_cli_tests": [
       "test_real_cli_lifecycle_hooks_are_validated_by_runner",
-      "test_real_daemon_context_assembly_is_admitted"
+      "test_real_daemon_context_assembly_is_admitted",
+      "test_real_cli_ner_tuning_without_model_admits"
     ],
-    "attribution_tests": 26,
-    "bound_tests": 166,
+    "attribution_tests": 28,
+    "bound_tests": 182,
     "duration_bounds": 57,
     "child_parent_edge_tests": 42,
     "forbidden_phase_tests": 34,
@@ -70,8 +71,10 @@
     "full_graph_parent_witness_tests": 42,
     "reviewer_round_two_witness_tests": 3,
     "reviewer_round_three_recognizer_witness_tests": 3,
-    "ownership_checks": 6,
-    "reviewer_round_four_ownership_witness_tests": 2
+    "ownership_checks": 8,
+    "reviewer_round_four_ownership_witness_tests": 2,
+    "record_checks": 7,
+    "reviewer_round_five_invocation_witness_tests": 2
   },
   "mutation": {
     "source_commit": "e1744ec1d533af669797c88c14e2494c0f98c450",
@@ -85,10 +88,14 @@
   },
   "source_identity_base": "764d98903e8e1e6a6a71486c5c31f6c43041ef38",
   "containment_mutation": {
-    "runner_sha256": "516d3e0494df772af88c45002c7d5d6eeeddf5fccfa9355f399077a9ee081409",
-    "runner_source_sha256": "1dd99f75f2fcb9bea170f8b818c10008d2b7ea44ee6c8217c4ed3c6b286a0781",
-    "contract_sha256": "355b01a35b746e3b0198b12c2a5412b3362326965fb2c43dcf46f94cb1b71cc6",
-    "source_commit": "729608c81093c30505204296b3ece534d363b6f1",
+    "runner_sha256": "b1b8f73d32d915cb806e794118071db695fe33d774a7139e358984359d2900ba",
+    "runner_source_sha256": "4ae03e33ed70588cb7bc850f9efa22b9c965d5261e25df523b40d82063d723c0",
+    "contract_sha256": "ff4807e88d1736af8d6093c147cc775276499a1e8810d030fcf871b0d2f4ed9b",
+    "test_sha256": {
+      "test_perf_attribution.py": "a95006a5314faf7f6562d1c098201c1face3bbfd3e87049e735c7650ddb35f60",
+      "test_perf_lifecycle_bounds.py": "45a7651d99d2c4d1120f69fae46147b97a85aa4cbffbdb7c2096ca7bdf3f4dd5"
+    },
+    "source_commit": "c7b8cd571cffe6cb0f90c7d32da3b8a8e6558c6e",
     "mutations": [
       {
         "check": "ready-build-parent-pipeline_build_ns",
@@ -433,6 +440,54 @@
         "restored_tests_passed": 1
       },
       {
+        "check": "metric-candidates",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_metric_candidates",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "ner-encodes",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_ner_encodes",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "ner-windows",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_ner_windows",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym-windows",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_nym_windows",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "nym-views",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_nym_views",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "sweep-counter-owner",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_sweep_counter_owner",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "parent-invocations",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_parent_invocations",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "recognizer-invocations",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_uninvoked_recognizer_independent",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
         "check": "rule-owner-ns",
         "test": "test_perf_lifecycle_bounds.BoundTests.test_reviewer_rules_must_equal_rule_spans",
         "mutated_assertions_failed": 1,
@@ -457,6 +512,12 @@
         "restored_tests_passed": 1
       },
       {
+        "check": "inactive-nym",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_inactive_nym",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
         "check": "recognizer-role",
         "test": "test_perf_lifecycle_bounds.BoundTests.test_recognizer_role",
         "mutated_assertions_failed": 1,
@@ -465,6 +526,48 @@
       {
         "check": "stable-recognizer-role",
         "test": "test_perf_lifecycle_bounds.BoundTests.test_stable_recognizer_role",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "complete-metrics",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_complete_emitted_record_shape",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "complete-counters",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_complete_emitted_record_shape",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "complete-metric-fields",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_complete_metric_fields",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "u64-metric",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_emitted_numbers_are_u64",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "u64-recognizer",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_emitted_numbers_are_u64",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "u64-counter",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_emitted_numbers_are_u64",
+        "mutated_assertions_failed": 1,
+        "restored_tests_passed": 1
+      },
+      {
+        "check": "u64-ordinal",
+        "test": "test_perf_lifecycle_bounds.BoundTests.test_emitted_ordinal_is_u64",
         "mutated_assertions_failed": 1,
         "restored_tests_passed": 1
       },
@@ -517,13 +620,14 @@
         "restored_tests_passed": 1
       }
     ],
-    "mutation_count": 71,
+    "mutation_count": 87,
     "serial_sum_checks": 15,
     "parent_checks": 42,
-    "ownership_checks": 6,
+    "ownership_checks": 8,
+    "record_checks": 7,
     "parent_test_isolation": "Each parent check alone; serial sums and ancestor edges otherwise imply it. Full graph also rejects every parent witness.",
-    "executed_assertion_failures": 71,
-    "restored_passes": 71
+    "executed_assertion_failures": 87,
+    "restored_passes": 87
   },
   "timer_cli_tests": {
     "executed": 2,
@@ -548,12 +652,29 @@
     "other_independently_locked_workspace_consumes_assembly": false
   },
   "gates": {
-    "cargo_deny": true,
-    "public_text_scrub": true,
-    "anvil_fast_checked_commit": "8f25c88a807c4d3668fce707937717a1d4e0eca3",
-    "anvil_fast_passing_and_current_at_checked_commit": true,
-    "python_only_graph_revision": "09a73b47c44894228bc065c3144e546bf4d8f2ea",
-    "rust_and_cargo_sources_unchanged_since_fast_check": true
+    "historical_only": {
+      "cargo_deny": true,
+      "public_text_scrub": true,
+      "anvil_fast_checked_commit": "8f25c88a807c4d3668fce707937717a1d4e0eca3",
+      "anvil_fast_passing_and_current_at_checked_commit": true,
+      "python_only_graph_revision": "09a73b47c44894228bc065c3144e546bf4d8f2ea",
+      "rust_and_cargo_sources_unchanged_since_fast_check": false
+    },
+    "historical_note": "The old fast-check receipt predates the schema-3 metadata Rust change and is not current proof. No exact-head fast pass is claimed.",
+    "current_rust_gates": "Exact-head CI is required; this revision changes only Python, its generated guide, and proof data.",
+    "public_text_scrub": {
+      "passed": true,
+      "guide_sha256": "f7bb7d9dea392a0a3eb09dd5ae8b69ba74505943249f0e6500378b6894165134",
+      "checked_implementation_commit": "c7b8cd571cffe6cb0f90c7d32da3b8a8e6558c6e",
+      "command": "cargo run -p xtask -- scrub-public-text scripts/bench/perf-attribution.md"
+    },
+    "python_suite": {
+      "passed": true,
+      "tests": 210,
+      "skipped": 0,
+      "checked_implementation_commit": "c7b8cd571cffe6cb0f90c7d32da3b8a8e6558c6e"
+    },
+    "runtime_source_unchanged_since": "6fd3b19df66d8bfd68170a90337148a111039dac"
   },
   "daemon_context_admission": {
     "timed": false,
@@ -604,14 +725,16 @@
       }
     ]
   },
-  "admission_source_commit": "729608c81093c30505204296b3ece534d363b6f1",
+  "admission_source_commit": "c7b8cd571cffe6cb0f90c7d32da3b8a8e6558c6e",
   "diagnostic_source_sha256": "c6d302210776dc23ed3c8a0220a1387a8214a3b906971dcdee7d45c7e769c289",
   "recognizer_ownership": {
     "checks": [
+      "recognizer-invocations",
       "rule-owner-ns",
       "rule-owner-invocations",
       "rule-owner-candidates",
       "ner-owner-capacity",
+      "inactive-nym",
       "recognizer-role",
       "stable-recognizer-role"
     ],
@@ -619,5 +742,34 @@
     "unsupported_learned_roles_refused": true,
     "one_model_ordinal_across_capture": true,
     "zero_duration_ner_invocations_require_owner": true
-  }
+  },
+  "admission_contract_audit": {
+    "record_shape": "Every emitted metric/counter key and all u64 metric fields are required.",
+    "recognizers": "Every emitted entry has positive invocations, including zero-duration spans; multi-invocation NER remains admissible.",
+    "candidates": "Only rules_ns aggregates candidates; exact Rule sums and positive owner invocations are required.",
+    "counter_checks": [
+      "ner_encodes equals ner_tokenize invocations",
+      "ner_windows equals ner_ort invocations",
+      "nym_windows equals nym_ort invocations",
+      "Nym view windows sum to total",
+      "sweep_candidates requires an invoked sweep"
+    ],
+    "zero_duration": "Invoked child clocks require an invoked parent. Zero-duration invocations remain valid.",
+    "activation": {
+      "ner": "model_dir is present",
+      "dob": "enabled is true",
+      "nym": "backend is nym"
+    },
+    "inventory": "Only active models are inventoried, each with an explicit absolute model_dir. External rulepacks and terms files remain refused.",
+    "scope": "The runner supplies no model/selection CLI overrides and strips inherited model environment overrides. Rust validates the policy schema before successful workload admission."
+  },
+  "record_consistency_checks": [
+    "metric-candidates",
+    "ner-encodes",
+    "ner-windows",
+    "nym-windows",
+    "nym-views",
+    "sweep-counter-owner",
+    "parent-invocations"
+  ]
 }
