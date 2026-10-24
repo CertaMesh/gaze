@@ -103,3 +103,27 @@ gaps refuse. Every uncovered non-whitespace byte, including punctuation, digits,
 and zero-width characters, refuses. The native cases include a fully owned
 name repeated across a public separator and a private interior name between
 owned copies. The mutable protector keeps its existing, stronger byte coverage.
+
+Large-carrier fixtures use the committed `large_owned_carriers` specifications.
+The loader expands each specification into owner text, wire text, and authored
+gold before measurement or comparison. A 2,048-byte synthetic name repeated
+1,025 times occupies 2,100,225 owner-text bytes but less than 20,000 wire bytes.
+The safe case has only owned values and public spaces. Its companion inserts
+a raw private `S` between two owned values and declares the longer header name
+in mutable content. Their target leak counts must be zero and one byte,
+respectively, when the carrier forwards unchanged.
+
+Residual Rule checking borrows manifest values once and stores token occurrences
+as symbolic slices. It materializes raw non-whitespace gaps with enough context
+for the longest request-known value, including Unicode spelling expansion.
+Window edges retain whole whitespace-delimited runs so word boundaries, URL
+exclusions, and compound-name growth stay unchanged. Whitespace-only raw gaps
+need no materialization because sweep patterns trim their endpoints and compound
+names end on letters. Materialization occurs one window at a time. Work depends
+on wire gaps, known-value lengths, and their boundary runs. There is no separate
+2 MiB expanded-leaf cap. The existing wire request and sweep-pattern limits
+remain in effect.
+
+Discarded probe transactions preserve mappings and session state. They do not
+suppress audit attempts: `control_would_mutate` retains one audit attempt on
+both base and candidate. This pre-existing audit behavior is outside the repair.
