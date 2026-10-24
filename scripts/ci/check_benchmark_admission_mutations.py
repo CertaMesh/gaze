@@ -135,7 +135,7 @@ def main():
         ('build_target_environment', 'scripts/bench/subject_build.py',
          'if os.environ.get("CARGO_TARGET_DIR") is not None:', 'if False:',
          'test_producer_build_refuses_unqualified_source_or_target[target]', 1),
-        ('cargo_returned_executable', 'scripts/bench/dataiku_en_de_gaze_bench.py', '    return artifacts[0]',
+        ('cargo_returned_executable', 'scripts/bench/subject_build.py', '    return artifacts[0]',
          '    return repo_root / "target/debug/examples/clean_for_bench"',
          'test_cargo_returned_artifact_wins_over_retained_default_path', 1),
     ])

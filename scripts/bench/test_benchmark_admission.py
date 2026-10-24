@@ -235,7 +235,7 @@ def produced_capture(tmp_path, monkeypatch, evidence, producer, flags, response_
     monkeypatch.setattr(runner.dataiku, 'load_documents', lambda p: (documents['C'], {}))
     monkeypatch.setattr(runner, 'load_negative_documents', lambda p: ([], {}))
     monkeypatch.setattr(runner, 'composite_dataset_report', lambda *a: ({}, {'integrity': {'sha256': 'd' * 64}}))
-    monkeypatch.setattr(runner.dataiku, 'build_binary', lambda *a, **k: binary)
+    monkeypatch.setattr(runner.subject_build, 'cargo_build_binary', lambda *a, **k: binary)
     monkeypatch.setattr(runner, 'build_validator_probe', lambda *a, **k: binary)
     monkeypatch.setattr(runner, 'validate_required_models', lambda *a: [])
     monkeypatch.setattr(runner, 'policy_ner_provenance', lambda *a: (0.3, []))
@@ -721,7 +721,7 @@ def test_producer_build_refuses_unqualified_source_or_target(tmp_path, monkeypat
 
 
 def test_cargo_returned_artifact_wins_over_retained_default_path(tmp_path, monkeypatch):
-    import dataiku_en_de_gaze_bench as dataiku
+    import subject_build
     selected = tmp_path / 'configured-target/clean_for_bench'
     selected.parent.mkdir()
     selected.write_bytes(b'synthetic fresh artifact')
@@ -730,8 +730,8 @@ def test_cargo_returned_artifact_wins_over_retained_default_path(tmp_path, monke
     retained.write_bytes(b'synthetic stale artifact')
     artifact = dict(reason='compiler-artifact', target=dict(name='clean_for_bench', kind=['example']), executable=str(selected))
     command = mock.Mock(return_value=SimpleNamespace(stdout=json.dumps(artifact)))
-    monkeypatch.setattr(dataiku.subprocess, 'run', command)
-    assert dataiku.build_binary(tmp_path, (), release=False) == selected
+    monkeypatch.setattr(subject_build.subprocess, 'run', command)
+    assert subject_build.cargo_build_binary(tmp_path, (), release=False) == selected
     assert '--message-format=json-render-diagnostics' in command.call_args.args[0]
 
 

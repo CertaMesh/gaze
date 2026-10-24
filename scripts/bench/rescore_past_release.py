@@ -199,7 +199,7 @@ def run(args: argparse.Namespace) -> Path:
         raise PastReleaseError(f"harness checkout is dirty: {HARNESS_ROOT}")
     if args.build:
         binary, build_receipt = subject_build.build(
-            release_root, configs, release=args.binary_profile == "release", builder=dataiku.build_binary)
+            release_root, configs, release=args.binary_profile == "release", builder=subject_build.cargo_build_binary)
     else:
         binary = args.binary.resolve()
         build_receipt = subject_build.unqualified("external_binary")

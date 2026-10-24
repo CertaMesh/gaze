@@ -178,8 +178,7 @@ def build_binary(repo_root: Path, configs: tuple[str, ...], *, release: bool = F
     command = [
         "cargo",
         "build",
-        "--locked",
-        "--message-format=json-render-diagnostics",
+        "-q",
         "-p",
         "gaze-recognizers",
         "--example",
@@ -194,18 +193,13 @@ def build_binary(repo_root: Path, configs: tuple[str, ...], *, release: bool = F
         command.extend(["--features", ",".join(features)])
     if release:
         command.append("--release")
-    result = subprocess.run(command, cwd=repo_root, check=True, text=True, capture_output=True)
-    artifacts = []
-    for line in result.stdout.splitlines():
-        item = json.loads(line)
-        if (item.get("reason") == "compiler-artifact"
-                and item.get("target", {}).get("name") == "clean_for_bench"
-                and "example" in item.get("target", {}).get("kind", [])
-                and item.get("executable")):
-            artifacts.append(Path(item["executable"]).resolve())
-    if len(artifacts) != 1 or not artifacts[0].is_file():
-        raise FileNotFoundError("benchmark build did not return one executable")
-    return artifacts[0]
+    subprocess.run(command, cwd=repo_root, check=True)
+    target_dir = Path(os.environ.get("CARGO_TARGET_DIR", str(repo_root / "target")))
+    profile = "release" if release else "debug"
+    binary = target_dir / profile / "examples/clean_for_bench"
+    if not binary.is_file():
+        raise FileNotFoundError(f"benchmark runner is missing: {binary}")
+    return binary
 
 
 def parse_args() -> argparse.Namespace:

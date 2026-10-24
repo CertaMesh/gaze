@@ -1474,7 +1474,7 @@ def _run(args: argparse.Namespace) -> int:
         else:
             binary, build_receipt = subject_build.build(
                 repo_root, ("policy-file",) if policy_path else tuple(score.DEFAULT_CONFIGS),
-                release=args.release, builder=dataiku.build_binary)
+                release=args.release, builder=subject_build.cargo_build_binary)
     if not binary.is_file():
         raise CandidateError(f"benchmark binary is missing: {binary}")
     validator_probe = (
