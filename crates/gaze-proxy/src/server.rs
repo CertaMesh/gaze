@@ -4019,6 +4019,56 @@ mod tests {
         );
     }
 
+    #[test]
+    fn legacy_residual_rejects_request_known_rule_repeats_without_publishing() {
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::new("Synthetic Person", PiiClass::Name).unwrap())
+            .rule(DefaultRule::new(Action::Tokenize))
+            .enable_prefix_cache()
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let existing = session
+            .tokenize(&gaze::PiiClass::Name, "Existing Synthetic")
+            .unwrap();
+        let before = session.snapshot_entries();
+        let adapter =
+            crate::adapters::OpenAiAdapter::new(Url::parse("http://127.0.0.1:1").unwrap());
+        let mut body = serde_json::json!({
+            "model":"gpt-test",
+            "messages":[{"role":"user","content":"Synthetic Person"}],
+            "unsupported_carrier":"synthetic person"
+        });
+        let dictionaries = DictionaryBundle::default();
+        let staged = redact_surfaces(
+            &pipeline,
+            &session,
+            adapter.request_pii_surfaces(&mut body),
+            &[LocaleTag::Global],
+            &dictionaries,
+        )
+        .unwrap();
+        let staged_before = staged.transaction.snapshot_entries();
+        assert!(matches!(residual_scan_request(
+            &pipeline,
+            &body,
+            &staged.field_paths,
+            &[LocaleTag::Global],
+            &dictionaries,
+            true,
+            &staged.transaction,
+        ), Err(ProxyError::UnsurfacedPii { field_path }) if field_path == "unsupported_carrier"));
+        assert_eq!(body["unsupported_carrier"], "synthetic person");
+        assert_eq!(staged.transaction.snapshot_entries(), staged_before);
+        drop(staged);
+        assert_eq!(session.snapshot_entries(), before);
+        assert_eq!(
+            session.restore_strict(&existing).unwrap(),
+            "Existing Synthetic"
+        );
+        assert_eq!(session.prefix_cache_entry_count(), 0);
+    }
+
     const DIRECT_REQUEST_BODY: &[u8] = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":"synthetic request"}]}"#;
     const DIRECT_SSE_REQUEST_BODY: &[u8] = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":"synthetic request"}],"stream":true}"#;
     const DIRECT_JSON_RESPONSE: &[u8] = br#"{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{"type":"text","text":"synthetic response"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}"#;

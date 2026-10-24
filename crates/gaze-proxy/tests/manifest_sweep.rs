@@ -263,7 +263,7 @@ async fn run_seeded_case(
         stream,
         source_first,
         evidence,
-        (source, copy),
+        (source, copy, None),
         seed,
         false,
     )
@@ -275,11 +275,11 @@ async fn run_configured_case(
     stream: bool,
     source_first: bool,
     evidence: Option<gaze::EvidenceKind>,
-    texts: (&str, &str),
+    texts: (&str, &str, Option<(&str, bool)>),
     seed: Option<&str>,
     repeat_net: bool,
 ) {
-    let (source, copy) = texts;
+    let (source, copy, unsupported) = texts;
     let forwarded = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()
         .route("/{*path}", post(capture))
@@ -384,7 +384,7 @@ async fn run_configured_case(
     } else {
         [copy, PUBLIC, source]
     };
-    let request = match provider {
+    let mut request = match provider {
         Provider::OpenAi | Provider::Anthropic => json!({
             "model":"claude-test", "max_tokens":128, "stream":stream,
             "messages":texts.map(|text| json!({"role":"user","content":text}))
@@ -393,6 +393,11 @@ async fn run_configured_case(
             json!({"contents":texts.map(|text| json!({"role":"user","parts":[{"text":text}]}))})
         }
     };
+    let unsupported_text =
+        unsupported.map(|(text, reject)| (text.replace("{token}", &token), reject));
+    if let Some((text, _)) = &unsupported_text {
+        request["unsupported_carrier"] = json!({"nested": [text]});
+    }
     let response = client
         .post(format!("http://{bind}{path}"))
         .header("x-gaze-session-id", "00000000-0000-4000-8000-000000000869")
@@ -404,12 +409,36 @@ async fn run_configured_case(
         .unwrap();
     let status = response.status();
     let reply = response.text().await.unwrap();
+    if unsupported_text.as_ref().is_some_and(|(_, reject)| *reject) {
+        assert!(
+            !status.is_success(),
+            "{provider:?} stream={stream}: unsafe carrier forwarded"
+        );
+        if !matches!(provider, Provider::Anthropic) {
+            assert_eq!(status, reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+            assert_eq!(
+                serde_json::from_str::<Value>(&reply).unwrap(),
+                json!({"error":"UnsurfacedPii"})
+            );
+        }
+        assert!(
+            forwarded.lock().await.is_empty(),
+            "request reached upstream"
+        );
+        assert!(!reply.to_lowercase().contains("schneider"));
+        proxy_task.abort();
+        upstream_task.abort();
+        return;
+    }
     assert!(
         status.is_success(),
         "{provider:?} stream={stream} source_first={source_first}: {status} {reply}"
     );
     let captured = forwarded.lock().await.clone();
     assert_eq!(captured.len(), 1);
+    if let Some((text, _)) = &unsupported_text {
+        assert_eq!(captured[0]["unsupported_carrier"]["nested"][0], *text);
+    }
     for (index, raw) in texts.iter().enumerate() {
         let protected = provider.text(&captured[0], index);
         if *raw == PUBLIC || (*raw == copy && evidence != Some(gaze::EvidenceKind::Rule)) {
@@ -564,7 +593,7 @@ async fn check_existing_token(provider: Provider, repeat_net: bool) {
                     stream,
                     source_first,
                     Some(gaze::EvidenceKind::Rule),
-                    (source, copy),
+                    (source, copy, None),
                     Some(seed),
                     repeat_net,
                 )
@@ -626,7 +655,7 @@ async fn check_complete_net_context(provider: Provider) {
                 stream,
                 source_first,
                 Some(gaze::EvidenceKind::Rule),
-                (SOURCE, "Public {token}; thanks schneider"),
+                (SOURCE, "Public {token}; thanks schneider", None),
                 Some("Maria"),
                 true,
             )
@@ -658,6 +687,7 @@ async fn check_contained_overlap(provider: Provider) {
                 (
                     "From: Schneider Johanna <m@example.invalid>\nHello.",
                     "Hello {token} johanna",
+                    None,
                 ),
                 Some("Maria Schneider"),
                 false,
@@ -678,4 +708,90 @@ async fn gemini_contained_overlap_covers_all_raw_intersections() {
 #[tokio::test]
 async fn anthropic_contained_overlap_covers_all_raw_intersections() {
     check_contained_overlap(Provider::Anthropic).await;
+}
+
+async fn check_unsupported_rule_carriers(provider: Provider, stream: bool) {
+    for (source, carrier, seed) in [
+        (SOURCE, "The earlier sender is maria schneider again.", None),
+        (SOURCE, "Hello {token} schneider", Some("Maria")),
+        (
+            "From: Schneider Johanna <m@example.invalid>\nHello.",
+            "Hello {token} johanna",
+            Some("Maria Schneider"),
+        ),
+    ] {
+        run_configured_case(
+            provider,
+            stream,
+            false,
+            Some(gaze::EvidenceKind::Rule),
+            (source, "ordinary text", Some((carrier, true))),
+            seed,
+            false,
+        )
+        .await;
+    }
+}
+
+#[tokio::test]
+async fn openai_unsupported_rule_carriers_json_refuse_before_forwarding() {
+    check_unsupported_rule_carriers(Provider::OpenAi, false).await;
+}
+
+#[tokio::test]
+async fn openai_unsupported_rule_carriers_sse_refuse_before_forwarding() {
+    check_unsupported_rule_carriers(Provider::OpenAi, true).await;
+}
+
+#[tokio::test]
+async fn gemini_unsupported_rule_carriers_json_refuse_before_forwarding() {
+    check_unsupported_rule_carriers(Provider::Gemini, false).await;
+}
+
+#[tokio::test]
+async fn gemini_unsupported_rule_carriers_sse_refuse_before_forwarding() {
+    check_unsupported_rule_carriers(Provider::Gemini, true).await;
+}
+
+#[tokio::test]
+async fn anthropic_unsupported_carriers_remain_fail_closed() {
+    for stream in [false, true] {
+        check_unsupported_rule_carriers(Provider::Anthropic, stream).await;
+    }
+}
+
+#[tokio::test]
+async fn unsupported_carrier_counterweights_remain_verbatim() {
+    for provider in [Provider::OpenAi, Provider::Gemini] {
+        for stream in [false, true] {
+            for carrier in [
+                PUBLIC,
+                "const MariaSchneider = 1; public name field; thanks maria schneiderling",
+                "thanks maria; thanks schneider",
+            ] {
+                run_configured_case(
+                    provider,
+                    stream,
+                    false,
+                    Some(gaze::EvidenceKind::Rule),
+                    (SOURCE, "ordinary text", Some((carrier, false))),
+                    None,
+                    false,
+                )
+                .await;
+            }
+            for evidence in [Some(gaze::EvidenceKind::Learned), None] {
+                run_configured_case(
+                    provider,
+                    stream,
+                    false,
+                    evidence,
+                    (SOURCE, "ordinary text", Some(("maria schneider", false))),
+                    None,
+                    false,
+                )
+                .await;
+            }
+        }
+    }
 }
