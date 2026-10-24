@@ -3,7 +3,7 @@
   "kind": "mcp-operation-scorecard-with-unchanged-text",
   "side": "candidate",
   "contract": "v2",
-  "runtime_revision": "5f200016828630fc8c16c3b6e84877f67a743a8a",
+  "runtime_revision": "849f81a3b67da14553865b94f8e3860cca990ea1",
   "fresh_text_capture": false,
   "text_layers": {
     "C": "unchanged_by_construction",
@@ -11,8 +11,8 @@
     "D": "unchanged_by_construction",
     "R": "unchanged_by_construction"
   },
-  "path_identity_sha256": "f85e271b82bc9ebe29400c5baefeb27af11d1f180cd677a26d5cd6adbff9a573",
-  "native_capture_sha256": "a077d6e86562c8b304dd27f48c7abbc0bb729a0ff0c38c0d0a0d3c8acf160031",
+  "path_identity_sha256": "9c0b4e5569954357f37d6a8e3a46dce14f510ade9c8fbef849b2ba0575ae74f1",
+  "native_capture_sha256": "f1caa9f8cf67bfb61973b977a4dc716d035b9c3ea6063c35b824eaa619a2168c",
   "native_operation_layers": {
     "A": {
       "leaked": 0,
@@ -29,19 +29,19 @@
       "false_positive": 180,
       "refused": 2,
       "dispatch_failed": 2,
-      "restore_exact": 14,
+      "restore_exact": 18,
       "restore_failed": 0,
-      "manifest_valid": 14,
+      "manifest_valid": 18,
       "manifest_invalid": 0
     },
     "R": {
       "leaked": 0,
-      "false_positive": 30,
+      "false_positive": 40,
       "refused": 4,
       "dispatch_failed": 4,
-      "restore_exact": 18,
+      "restore_exact": 20,
       "restore_failed": 0,
-      "manifest_valid": 18,
+      "manifest_valid": 20,
       "manifest_invalid": 0
     }
   },
@@ -61,9 +61,9 @@
       "false_positive": 180,
       "refused": 0,
       "dispatch_failed": 0,
-      "restore_exact": 8,
+      "restore_exact": 12,
       "restore_failed": 0,
-      "manifest_valid": 8,
+      "manifest_valid": 12,
       "manifest_invalid": 0
     },
     "number": {

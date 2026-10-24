@@ -12,9 +12,9 @@
     "pre_arm_load_checks": [
       {
         "arm": "base",
-        "utc": "2026-10-24T04:24:57.683518+00:00",
-        "load_1m": 3.95361328125,
-        "memory_free_percent": 86,
+        "utc": "2026-10-24T04:59:30.609103+00:00",
+        "load_1m": 4.33251953125,
+        "memory_free_percent": 85,
         "required_load_below": 12,
         "required_memory_at_least": 60,
         "allowed": true,
@@ -22,20 +22,21 @@
       },
       {
         "arm": "candidate",
-        "utc": "2026-10-24T04:25:13.331042+00:00",
-        "load_1m": 3.88330078125,
-        "memory_free_percent": 85,
+        "utc": "2026-10-24T04:59:49.752487+00:00",
+        "load_1m": 4.732421875,
+        "memory_free_percent": 86,
         "required_load_below": 12,
         "required_memory_at_least": 60,
         "allowed": true,
         "nice": 10
       }
     ],
-    "captured_specification": "mcp-operation-order-v2"
+    "captured_specification": "mcp-operation-order-v3"
   },
   "text_reuse": {
     "authority": "Explicit orchestrator ruling, same source-identity rule as PR #869",
     "condition": "No crate or file on the C/A/D/R text path changed; per-file hashes prove unchanged by construction",
     "fresh_capture": false
-  }
+  },
+  "namespace_scope": "Explicit orchestrator ruling: expand only current-session mappings; other namespaces retain exactly the base literal-text behavior, validation stage and error type. An opaque-carrier contract is a follow-up."
 }

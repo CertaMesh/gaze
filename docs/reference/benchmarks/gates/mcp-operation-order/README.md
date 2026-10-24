@@ -1,13 +1,13 @@
 # MCP operation ordering evidence
 
 The native operation arm passes both scored-label contracts v2 and v1. Across
-44 attempted operations per side, annotated leaked bytes fall from 40 to 0.
+50 attempted operations per side, annotated leaked bytes fall from 40 to 0.
 False positives, refusals, exact restores, and valid manifests do not change.
 This is a finite capture of real `PiiEnvelope::dispatch`, not a completeness or
 latency claim.
 
 The base runtime is `f7a794f5668864d3c4336aaa878c6896e92fc009`. The measured
-candidate is `5f200016828630fc8c16c3b6e84877f67a743a8a`. Each runtime built the
+candidate is `849f81a3b67da14553865b94f8e3860cca990ea1`. Each runtime built the
 same committed host against its own libraries and lockfile, then ran its own
 `gaze setup` policy. Those policies were byte-identical. Both model bundles
 have identical hashes and remained unchanged around both captures.
@@ -20,9 +20,9 @@ counts refer to completed operations. Refused attempts remain in the population.
 | Layer | Attempts per side | Leaked bytes | False-positive bytes | Refusals | Exact restores | Valid manifests |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | A | 6 | 0 → 0 | 0 → 0 | 0 → 0 | 6 → 6 | 6 → 6 |
-| D | 16 | 0 → 0 | 180 → 180 | 2 → 2 | 14 → 14 | 14 → 14 |
-| R | 22 | 40 → 0 | 30 → 30 | 4 → 4 | 18 → 18 | 18 → 18 |
-| Total | 44 | 40 → 0 | 210 → 210 | 6 → 6 | 38 → 38 | 38 → 38 |
+| D | 20 | 0 → 0 | 180 → 180 | 2 → 2 | 18 → 18 | 18 → 18 |
+| R | 24 | 40 → 0 | 40 → 40 | 4 → 4 | 20 → 20 | 20 → 20 |
+| Total | 50 | 40 → 0 | 220 → 220 | 6 → 6 | 44 → 44 | 44 → 44 |
 
 No case becomes newly refused. Restore failures and invalid manifests are zero
 on both sides. The net annotated byte gain is 40 under each contract.
@@ -30,15 +30,15 @@ on both sides. The net annotated byte gain is 40 under each contract.
 The 40 annotated bytes include 8 ASCII spaces and 32 other UTF-8 bytes. Two
 cases exposed only one space each. The separate diagnostic preserves that
 distinction. The frozen fixture and both scoring contracts were not changed
-after either v2 capture. Native specification `mcp-operation-order-v2` adds
-bare-filename counterweights and repeat cases beside those filenames. It
-supersedes the v1 capture; both arms were recaptured together on v2.
+after either v3 capture. Native specification `mcp-operation-order-v3` includes
+bare-filename and other-namespace counterweights, plus repeats beside both.
+It supersedes earlier captures; both arms were recaptured together on v3.
 
 ## Text layers are unchanged by construction
 
 C/A/D/R text inference was **not recaptured**. Under the explicit reuse ruling,
 `text-path-identity.json.gz` records matching base and candidate SHA-256 values
-for 2,005 repository inputs outside the isolated MCP change. This includes the
+for 2,006 repository inputs outside the isolated MCP change. This includes the
 core, types, recognizers, assembly, CLI clean code, existing text drivers,
 scorers, corpus inputs, contracts, dependency locks, and build configuration.
 New native tools are not imported by the unchanged text modules.
@@ -48,11 +48,20 @@ change is the verified recognizer-event count from 1 to 3 for discovery. It is
 not part of the C/A/D/R text corpus. The checker rejects any broader fixture
 edit or unclassified file change. The CI input registry separately admits
 exactly the twelve new native evidence paths, with no other registry change.
-Document MCP integration assertions change only inside `cfg(test)`; their
-production prefix is byte-identical. Foreign and malformed placeholders now
-fail before invocation with `Protection(Provenance)`, a deliberate fail-closed
-improvement over adopter-specific errors after invocation. Broad bare filenames
-retain their original behavior.
+All crates outside MCP core, including document MCP and token-bridge code and
+tests, match the base exactly.
+
+Only current-session token mappings expand. Other namespaces retain main's
+literal-text behavior and their existing validation stage and error type.
+The unchanged real token-bridge integration test proves its owner token passes.
+MCP tests also prove current-session tokens still expand and cross-boundary Rule
+repeats are covered. A separate opaque-carrier and foreign-namespace contract
+remains a follow-up.
+
+The host imports the signed current-session manifest and uses the runtime's
+restore assessment. Other-namespace spellings remain literal. The independent
+byte oracle never credits those opaque bytes as token coverage and rejects any
+changed original. This arm does not validate another owner's namespace.
 
 The four derived scorecards label text layers `unchanged_by_construction` and
 retain the actual native operation counts. They do not invent zero text counts
@@ -90,8 +99,8 @@ archives are replayable without the private paths.
 The original orchestrator and load-coordinator GO approved leak-only captures
 alongside #773, outside bench-machine, at nice 10. The standing recapture ruling
 requires `load_1m < 12` and `memory_free_percent >= 60`, checked before each arm.
-Base recorded `load_1m=3.95` and `memory_free_percent=86`.
-Candidate recorded `load_1m=3.88` and `memory_free_percent=85`. The runs used
+Base recorded `load_1m=4.33` and `memory_free_percent=85`.
+Candidate recorded `load_1m=4.73` and `memory_free_percent=86`. The runs used
 worker-owned model copies with distinct file identities from the installed
 bundles. The same immutable copy set served the two arms serially. Hashes were
 checked before and after each capture, then all private copies were deleted.
