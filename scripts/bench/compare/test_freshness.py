@@ -92,6 +92,8 @@ def test_no_stable():
 def test_github_model_family_and_prerelease():
     row = {**ROW, "kind": "github", "name": "synthetic/models", "pinned_version": "en-1.0", "tag_prefix": "en-"}
     def get(url):
+        if "/git/ref/tags/" in url:
+            return {"object": {"type": "commit", "sha": "a" * 40}}
         if "/matching-refs/" in url:
             return [{"ref": "refs/tags/" + t} for t in ["en-1.0", "de-9.0", "en-3.0", "en-4.0", "en-2.0rc1"]]
         tag = url.rsplit("/", 1)[1]
@@ -102,6 +104,8 @@ def test_github_model_family_and_prerelease():
 def test_github_pagination_limit_is_not_current():
     row = {**ROW, "kind": "github", "name": "synthetic/models", "pinned_version": "1.0", "tag_prefix": ""}
     def get(url):
+        if "/git/ref/tags/" in url:
+            return {"object": {"type": "commit", "sha": "a" * 40}}
         if "/tags/" in url:
             return {"published_at": "2025-01-01T00:00:00Z"}
         return [{"tag_name": "1.0", "published_at": "2025-01-01T00:00:00Z", "draft": False, "prerelease": False}] * 100

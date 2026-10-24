@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import lru_cache
 import hashlib
+from http.client import HTTPException
 import json
 from pathlib import Path
 import re
@@ -136,9 +137,26 @@ def fetch(url: str, timeout: float = 8) -> object:
         if exc.code == 404:
             raise MissingSource() from None
         raise SourceFailure(f"HTTP {exc.code}") from None
+    except (HTTPException, ValueError, RecursionError):
+        raise SourceFailure("invalid HTTP response or JSON") from None
+
+
+def metadata(value, expected):
+    """Reject unsupported upstream shapes at the adapter boundary."""
+    if not isinstance(value, expected):
+        raise SourceFailure("unsupported metadata shape")
+    return value
+
+
+def sha(value):
+    value = metadata(value, str)
+    if re.fullmatch(r"[0-9a-fA-F]{40}", value) is None:
+        raise SourceFailure("unsupported commit identity")
+    return value.lower()
 
 
 def stable(value: str, prefix: str = "") -> Version | None:
+    metadata(value, str)
     if not value.startswith(prefix):
         return None
     try:
@@ -151,21 +169,33 @@ def stable(value: str, prefix: str = "") -> Version | None:
 def date(value: str | None) -> str | None:
     if value is None:
         return None
+    metadata(value, str)
     return datetime.fromisoformat(value.replace("Z", "+00:00")).date().isoformat()
 
 
 def release(version: str, released: str | None) -> dict:
-    return {"version": version, "release_date": date(released)}
+    return {"version": metadata(version, str), "release_date": date(released)}
 
 
 def pypi(row, get):
     url = f"https://pypi.org/pypi/{quote(row['name'], safe='')}/json"
     data = get(url)
-    releases = data["releases"]
+    releases = metadata(metadata(data, dict)["releases"], dict)
     candidates = []
     pinned = None
     for version, files in releases.items():
-        if version == row["pinned_version"]:
+        metadata(files, list)
+        for item in files:
+            metadata(item, dict)
+            metadata(item["upload_time_iso_8601"], str)
+            metadata(item.get("yanked", False), bool)
+            if item.get("requires_python") is not None:
+                metadata(item["requires_python"], str)
+        try:
+            parsed = Version(version)
+        except InvalidVersion:
+            continue
+        if parsed == Version(row["pinned_version"]):
             pinned = release(version, min((f["upload_time_iso_8601"] for f in files), default=None))
         parsed = stable(version)
         usable = [f for f in files if not f.get("yanked", False)]
@@ -186,35 +216,41 @@ def github(row, get):
     base = f"https://api.github.com/repos/{row['name']}"
     pin = row["pinned_version"]
     if row.get("commit_pin"):
-        commit = get(f"{base}/commits/{quote(pin, safe='')}")
-        pinned = release(pin, commit["commit"]["committer"]["date"])
+        commit = metadata(get(f"{base}/commits/{quote(pin, safe='')}"), dict)
+        committer = metadata(metadata(commit["commit"], dict)["committer"], dict)
+        pinned = release(pin, committer["date"])
+        pinned["commit"] = sha(commit["sha"])
     else:
-        data = get(f"{base}/releases/tags/{quote(pin, safe='')}")
+        data = metadata(get(f"{base}/releases/tags/{quote(pin, safe='')}"), dict)
         pinned = release(pin, data["published_at"])
+        pinned["commit"] = github_commit(base, pin, get)
     if row["tag_prefix"]:
         # Model repositories publish many unrelated families. Query this tag
         # namespace directly instead of exhausting the repository release list.
-        refs = get(f"{base}/git/matching-refs/tags/{quote(row['tag_prefix'], safe='')}")
-        tags = [ref["ref"].removeprefix("refs/tags/") for ref in refs]
+        refs = metadata(get(f"{base}/git/matching-refs/tags/{quote(row['tag_prefix'], safe='')}"), list)
+        tags = [metadata(metadata(ref, dict)["ref"], str).removeprefix("refs/tags/") for ref in refs]
         candidates = [(stable(tag, row["tag_prefix"]), tag) for tag in tags
                       if stable(tag, row["tag_prefix"]) is not None]
         for _, tag in sorted(candidates, reverse=True)[:100]:
             try:
-                item = get(f"{base}/releases/tags/{quote(tag, safe='')}")
+                item = metadata(get(f"{base}/releases/tags/{quote(tag, safe='')}"), dict)
             except MissingSource:
                 continue
-            if not item["draft"] and not item["prerelease"]:
-                return pinned, release(tag, item["published_at"]), None, base
+            if not metadata(item["draft"], bool) and not metadata(item["prerelease"], bool):
+                latest = release(tag, item["published_at"])
+                latest["commit"] = github_commit(base, tag, get)
+                return pinned, latest, None, base
         if len(candidates) > 100:
             raise SourceFailure("release lookup limit reached")
         return pinned, None, "no-stable-release", base
     candidates = []
     # A bounded listing cannot certify a missing/older release beyond its end.
     for page in range(1, 11):
-        batch = get(f"{base}/releases?per_page=100&page={page}")
+        batch = metadata(get(f"{base}/releases?per_page=100&page={page}"), list)
         for item in batch:
+            metadata(item, dict)
             version = stable(item["tag_name"], row["tag_prefix"])
-            if not item["draft"] and not item["prerelease"] and version is not None:
+            if not metadata(item["draft"], bool) and not metadata(item["prerelease"], bool) and version is not None:
                 candidates.append((version, item["tag_name"], item["published_at"]))
         if len(batch) < 100:
             break
@@ -223,19 +259,45 @@ def github(row, get):
     if not candidates:
         return pinned, None, "no-stable-release", base
     _, version, released = max(candidates)
-    return pinned, release(version, released), None, base
+    latest = release(version, released)
+    latest["commit"] = github_commit(base, version, get)
+    return pinned, latest, None, base
+
+
+def github_commit(base, tag, get):
+    """Resolve lightweight or nested annotated tags, never target_commitish branches."""
+    ref = metadata(get(f"{base}/git/ref/tags/{quote(tag, safe='')}"), dict)
+    obj = metadata(ref["object"], dict)
+    seen = set()
+    for _ in range(10):
+        identity = sha(obj["sha"])
+        if obj["type"] == "commit":
+            return identity
+        if obj["type"] != "tag" or identity in seen:
+            raise SourceFailure("unsupported or cyclic tag object")
+        seen.add(identity)
+        annotated = metadata(get(f"{base}/git/tags/{identity}"), dict)
+        obj = metadata(annotated["object"], dict)
+    raise SourceFailure("annotated tag depth limit reached")
 
 
 def huggingface(row, get):
     base = f"https://huggingface.co/api/models/{row['name']}"
 
     def snapshot(revision):
-        commits = get(f"{base}/commits/{quote(revision, safe='')}")
-        return release(commits[0]["id"], commits[0]["date"])
+        commits = metadata(get(f"{base}/commits/{quote(revision, safe='')}"), list)
+        commit = metadata(commits[0], dict)
+        return release(sha(commit["id"]), commit["date"])
 
     pinned = snapshot(row["pinned_version"])
-    tags = get(f"{base}/refs")["tags"]
-    candidates = [(stable(t["name"]), t) for t in tags if stable(t["name"]) is not None]
+    tags = metadata(metadata(get(f"{base}/refs"), dict)["tags"], list)
+    candidates = []
+    for tag in tags:
+        metadata(tag, dict)
+        version = stable(tag["name"])
+        if version is not None:
+            sha(tag["targetCommit"])
+            candidates.append((version, tag))
     if not candidates:
         # main is a moving branch, not evidence of a stable release.
         return pinned, None, "unversioned", base
@@ -268,7 +330,12 @@ def check(row: dict, checked_on: str, get=fetch) -> dict:
         incompatible = latest.get("incompatible_reason")
         if constraint and not SpecifierSet(constraint["specifier"]).contains(latest["version"].removeprefix(row.get("tag_prefix", ""))):
             incompatible = constraint["reason"]
-        same = latest["version"] == row["pinned_version"]
+        if row["kind"] == "pypi":
+            same = Version(latest["version"]) == Version(pinned["version"])
+        elif row["kind"] == "github":
+            same = latest["commit"] == pinned["commit"]
+        else:
+            same = latest["version"] == pinned["version"]
         if incompatible and not same:
             result.update(status="incompatible-latest", finding=incompatible + "; measured row remains explicitly old")
         elif same:
@@ -279,7 +346,7 @@ def check(row: dict, checked_on: str, get=fetch) -> dict:
         result.update(status="missing", finding="package, repository or pinned revision not found")
     except (URLError, TimeoutError, OSError):
         result.update(status="network-failure", finding="source check failed; freshness unknown")
-    except (SourceFailure, ValueError, KeyError, IndexError, TypeError):
+    except (SourceFailure, HTTPException, ValueError, KeyError, IndexError, TypeError, RecursionError):
         result.update(status="source-failure", finding="source metadata unavailable or unsupported; freshness unknown")
     return result
 

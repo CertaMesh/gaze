@@ -20,6 +20,7 @@
         "version": {"type": "string"},
         "release_date": {"type": ["string", "null"], "format": "date"},
         "tag": {"type": "string"},
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "incompatible_reason": {"type": "string"}
       },
       "additionalProperties": false
