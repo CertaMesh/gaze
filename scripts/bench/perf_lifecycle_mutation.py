@@ -25,7 +25,9 @@ def prove(out: Path) -> dict:
         ("recognizer", source.replace('if record["phase"] == "request" and any(', 'if False and any('),
          "test_recognizer_bound"),
         ("startup-work", source.replace('if record["phase"] == "startup" and (any(', 'if False and (any('),
-         "test_startup_work_counters_and_recognizers_are_refused"),
+         "test_startup_work_counters_are_refused"),
+        ("startup-recognizers", source.replace('if record["phase"] == "startup" and (any(', 'if False and (any('),
+         "test_startup_recognizers_are_refused"),
         ("invocation", source.replace('if metric["ns"] and not metric.get("invocations", 0):', 'if False:'),
          "test_nonzero_clock_requires_invocation"),
     ])

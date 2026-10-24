@@ -64,13 +64,17 @@ class BoundTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'recognizer duration'):
             self.admit(rows)
 
-    def test_startup_work_counters_and_recognizers_are_refused(self):
-        for field, value in [('counters', {'input_bytes': 1}),
-                             ('recognizers', {'r1': {'ns': 1, 'invocations': 1, 'candidates': 1}})]:
-            rows = records()
-            rows[0][field] = value
-            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'startup processing'):
-                self.admit(rows)
+    def test_startup_work_counters_are_refused(self):
+        rows = records()
+        rows[0]['counters'] = {'input_bytes': 1}
+        with self.assertRaisesRegex(ValueError, 'startup processing'):
+            self.admit(rows)
+
+    def test_startup_recognizers_are_refused(self):
+        rows = records()
+        rows[0]['recognizers'] = {'r1': {'ns': 1, 'invocations': 1, 'candidates': 1}}
+        with self.assertRaisesRegex(ValueError, 'startup processing'):
+            self.admit(rows)
 
     def test_nonzero_clock_requires_invocation(self):
         rows = records()
