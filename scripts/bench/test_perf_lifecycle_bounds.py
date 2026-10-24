@@ -287,7 +287,8 @@ def phase_test(key, phase):
 
 def one_shot_assembly_phase_test(key):
     def test(self):
-        for field in ('ns', 'invocations', 'candidates'):
+        # A candidate-only count isolates the phase guard from duration and hook-count guards.
+        for field in ('candidates', 'invocations', 'ns'):
             rows = records()
             rows[1]['metrics'][key] = {'ns': 0, 'invocations': 0, 'candidates': 0}
             rows[1]['metrics'][key][field] = 1
