@@ -168,6 +168,9 @@ class CaptureIdentityTests(unittest.TestCase):
                 read = lambda: runner.observation_cache_key(**inputs)[0]
                 original = read()
                 self.assertIsNotNone(original)
+                args.cross_check = True
+                self.assertNotEqual(read(), original)
+                args.cross_check = False
                 self.assertEqual(original["binary_sha256"], identity.file_digest(paths["detector"]))
                 self.assertEqual(original["binary_sha256"], original["effective_inputs"]["files"]["detector_binary"])
                 for name, path in paths.items():

@@ -22,5 +22,11 @@
       "tokenize"
     ]
   },
-  "mechanism_results": "explicit required policy deltas, re-derived under both gate contracts"
+  "mechanism_results": "explicit required policy deltas, re-derived under both gate contracts",
+  "canonical_capture": {
+    "version": 1,
+    "mode": "canonical-once",
+    "corpus_contract": "all-corpus-labels-v1",
+    "generated_contract": "committed generated-label contract"
+  }
 }

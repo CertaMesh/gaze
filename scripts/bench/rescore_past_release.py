@@ -164,6 +164,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> Path:
+    benchmark_spec.require_runtime()
     configs = tuple(c for c in args.configs.split(",") if c)
     if not configs or any("opf" in c.lower() for c in configs):
         raise PastReleaseError("configs must be non-empty and OPF-free")
@@ -234,6 +235,7 @@ def run(args: argparse.Namespace) -> Path:
             [record.to_document() for record in agentic.generate(agentic.PUBLISHED_PARTITION)]
             if prepared is not None else []
         ),
+        capture_protocol=benchmark_spec.capture_protocol(args),
         layer_contract=prepared.contract if prepared is not None else None,
     )
     environment = runner.build_no_opf_environment(os.environ)
@@ -323,6 +325,7 @@ def run(args: argparse.Namespace) -> Path:
         card["layers"]["gold_validity"] = {
             "C": agentic.gold_validity_digest(documents, measurements)
         }
+    card["capture_protocol"] = benchmark_spec.capture_protocol(args)
     card["benchmark_spec"] = benchmark_spec.resolve(
         HARNESS_ROOT, corpus_sha256=dataset_report["integrity"]["sha256"], seed=args.seed,
         available=original_available, prepared=prepared,

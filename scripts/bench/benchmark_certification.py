@@ -68,8 +68,12 @@ def full_record(path: Path, spec: dict, revision: str | None = None) -> dict:
     if set(inventory) != set(populations):
         raise CertificationError('partial_population')
     for layer, ids in inventory.items():
-        if populations[layer] != {'documents': len(ids), 'document_ids_sha256': digest(sorted(ids))}:
+        if ({key: populations[layer][key] for key in ('documents', 'document_ids_sha256')}
+                != {'documents': len(ids), 'document_ids_sha256': digest(sorted(ids))}):
             raise CertificationError('partial_population')
+        descriptors = [row for row in header['documents'] if row['layer'] == layer]
+        if populations[layer].get('descriptors_sha256') != specs.descriptor_digest(descriptors):
+            raise CertificationError('canonical_document_mismatch')
     groups = defaultdict(list)
     for row in observations:
         groups[(row['layer'], row['config'])].append(row['document_id'])
@@ -100,6 +104,15 @@ def admit_capture(capture_path: Path, record_path: Path, spec: dict, harness: Pa
     captured = bench_json.load(capture_path)
     specs.require_same(captured, original)
     stages.validate_execution(captured, capture_path, record_path)
+    header, _ = records._read(record_path)
+    canonical = score.scored_label_contract_report(score.SCORED_LABEL_CONTRACT_V1, ())
+    block = original['scoring']['scored_label_contract']
+    if (header.get('capture_protocol') != specs.CANONICAL_CAPTURE
+            or original.get('capture_protocol') != specs.CANONICAL_CAPTURE
+            or captured.get('capture_protocol') != specs.CANONICAL_CAPTURE
+            or any(block.get(key) != canonical[key] for key in
+                   ('id', 'version', 'file_sha256', 'excluded_labels', 'neutral_prediction_classes'))):
+        raise CertificationError('noncanonical_capture')
     for key in ('gaze', 'parameters', 'runner_provenance', 'dataset', 'scoring', 'layers', 'runs'):
         if captured.get(key) != original.get(key):
             raise CertificationError('capture_record_mismatch')

@@ -145,6 +145,22 @@ def run(plan: dict, output: Path, *, execute: bool = False, older: bool = False,
     for row in state['releases'].values():
         row['required'] = False
     measure_job = measure if measure_job is None else measure_job
+    selected = {job['version'] for job in jobs}
+    # Retained optional evidence is displayed too; validate it without scheduling a backfill.
+    retained = {job['version']: job for job in selection(plan, True)}
+    for version in set(state['releases']) - selected:
+        job = retained.get(version)
+        folder = output / version
+        row = state['releases'][version]
+        if row.get('status') != 'available':
+            continue
+        try:
+            if job is None or not verified(row, folder, spec, job, dataset=dataset):
+                raise HistoryError('evidence_invalid')
+            row['contracts'] = scored_rows(folder, spec)
+            row['subject'] = job['subject']
+        except (OSError, ValueError, KeyError, TypeError, score.ResponseValidationError):
+            state['releases'][version] = {'status': 'unavailable', 'reason': 'evidence_invalid', 'required': False}
     for job in jobs:
         version = job['version']
         folder = output / version

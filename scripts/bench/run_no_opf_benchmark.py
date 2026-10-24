@@ -957,6 +957,7 @@ def observation_cache_key(
         "binary_sha256": inputs["files"]["detector_binary"],
         "record_schema_version": records.SCHEMA_VERSION,
         "benchmark_spec_id": benchmark_spec_id,
+        "capture_protocol": benchmark_spec.capture_protocol(args),
         **source_identity,
         "cargo_lock_sha256": score.sha256_file(repo_root / "Cargo.lock"),
         "cargo_config_sha256": {
@@ -1331,6 +1332,7 @@ def run(args: argparse.Namespace) -> int:
 
 
 def _run(args: argparse.Namespace) -> int:
+    benchmark_spec.require_runtime()
     repo_root = Path(__file__).resolve().parents[2]
     source_environment = dict(os.environ)
     if args.compare_baseline is not None:
@@ -1548,6 +1550,7 @@ def _run(args: argparse.Namespace) -> int:
         original_available_documents, complete_validator_measurements,
         corpus_sha256=dataset_report["integrity"]["sha256"], binary=binary,
         extra_documents=extra_documents,
+        capture_protocol=benchmark_spec.capture_protocol(args),
         layer_contract=agentic_prepared.contract if agentic_prepared is not None else None,
     )
     if cache_key is not None and record_writer.binary_sha256 != cache_key["binary_sha256"]:
@@ -1631,6 +1634,7 @@ def _run(args: argparse.Namespace) -> int:
             "C": agentic.gold_validity_digest(documents, validator_measurements)
         }
 
+    candidate["capture_protocol"] = benchmark_spec.capture_protocol(args)
     candidate["benchmark_spec"] = spec
     candidate["cache_replay"] = False
     if cache_key is not None:

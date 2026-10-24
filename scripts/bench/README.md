@@ -627,12 +627,13 @@ full model run and baseline/error-bucket analysis belong to A6.
 ID hashes the measuring inputs. It binds the full corpus digest, generated
 corpus and generator version, seed, scored-label contracts, measuring source
 bytes, the effective source-ID vocabulary used by response validation, record
-schemas, expected document inventories, and execution protocol.
+schemas, canonical document descriptors, measuring runtime, and execution protocol.
 `benchmark-protocol.json` declares that protocol. The
 [initial full-population manifest](../../docs/reference/benchmarks/specifications/ae74d9a02195d3c60b5fe8bc8b0eb984e6926f390fad0ad624958e86577d9edb.json)
 is preserved under its content hash. The
 [current admission specification](../../docs/reference/benchmarks/specifications/d0010b6f71ecd9481700895eb439448fc166a76f9a6c31168f2b746125fdb2f0.json)
-includes the effective validation vocabulary and executing-source admission checks.
+binds the effective validation vocabulary and executing-source admission checks.
+It remains archived; new admissions also require the runtime and canonical descriptor bindings described below.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
 inputs does not itself change the benchmark specification.
@@ -653,6 +654,26 @@ cannot certify a candidate or become a row under the current specification.
 Archived comparisons between legacy artifacts remain available for their
 original ledgers. They do not establish current-specification evidence.
 
+### Qualified scoring runtime
+
+The qualified measuring runtime is CPython 3.13 with Unicode 15.1.0 and
+`pyarrow==23.0.1` from `uv.lock`. Use the prepared Anvil environment or
+`uv run --project scripts/bench --python 3.13`. The manifest binds the Python
+implementation, major.minor version, Unicode table version, and installed
+PyArrow version. Patch releases do not change this runtime identity.
+Resolution, both capture drivers, record writing, replay, and admission refuse
+runtime drift with a value-free error. Detector and model runtimes remain
+subject provenance.
+
+The scorer and replay use CPython's `re`, `unicodedata`, string classification,
+JSON, TOML, byte encoding, hashing, and numeric/statistics behavior. Unicode
+categories and names affect word-boundary gold-gap credit. The canonical corpus
+loader additionally uses PyArrow's parquet reader. Other imports in this path
+handle collections, process scheduling, files, or subject execution. They add
+no separately versioned scoring dependency. Locale and time affect provenance,
+not gold or predictions. Locked package bytes alone do not bind these stdlib
+semantics; the measuring runtime identity supplies that binding.
+
 ### Measuring input boundaries
 
 The full C/A/D/R path reads these measuring inputs. `benchmark_spec.py` binds
@@ -665,8 +686,9 @@ them before certification and history admission.
 | `agentic_layers.prepare` | Generator Python, cue vocabulary JSON, generated-label contract | Source hashes, vocabulary file hash, generated corpus digest, and contract hash |
 | `gaze_bench_score.load_committed_source_id_vocabulary` | Embedded recognizer IDs, collision families, builtin IDs, and model IDs in TOML | Sorted effective vocabulary from the same loader |
 | `scorecard_record` | Trace-lineage vocabulary JSON and record schema | File hash and readable schema versions |
-| Scorer and replay | Scored-label contracts, Python modules, `pyproject.toml`, and `uv.lock` | Contract hashes and complete source-file membership with hashes |
-| Capture drivers | `benchmark-protocol.json` and execution parameters | Protocol fields, profile, seed, warmups, and repetitions |
+| Scorer and replay | Scored-label contracts, Python modules, `pyproject.toml`, `uv.lock`, and qualified runtime | Contract and source hashes, runtime identity checked against the executing process |
+| Capture drivers | `benchmark-protocol.json` and execution parameters | Protocol fields, profile, seed, warmups, repetitions, and producer capture mode |
+| Canonical document inventory | Gold spans and labels, UTF-8 lengths, layer, language, region, source, negative category, and cell | Per-layer descriptor digests resolved from canonical inputs and verified on every record |
 
 Binary and validator executables, policies, policy dependency files, model
 checksum manifests, model bundles, and observation-environment values are subject
@@ -689,6 +711,12 @@ policy deltas, and the same integrated candidate binary for every mechanism.
 Before replay, the checker resolves the full specification from the executing
 checkout and canonical corpus. Changed source files, added or removed files,
 changed vocabulary, or a different protocol refuse with `harness_spec_mismatch`.
+Admission compares each base and candidate record with the canonical descriptor
+digests. Self-consistent edits to gold or metadata cannot retain certification.
+Both producers persist a capture discriminator in the record header and original
+scorecard. Only `canonical-once` with the original v1 corpus contract and the
+committed generated contract can certify gain or mechanism pairs. Independent
+`--cross-check` captures refuse, including those captured under v1.
 The checker reconstructs both contract scorecards and gates those reconstructed
 objects. Supplied cards must match every reconstructed field, including policy
 dependencies and model bundles.
@@ -745,7 +773,11 @@ output directory. It leaves all committed per-version history ledgers intact.
 The default selection is the current and previous release. `--older` adds
 optional older subjects. An older failure records `unavailable` and cannot
 block a complete required pair. This is an explicit batch command; it does
-not install a background scheduler.
+not install a background scheduler. Every displayed available row is revalidated
+on resume, including retained optional releases outside the selected jobs. Hash
+checks and replay reconstruct their metrics without executing optional backfills.
+Invalid artifacts or removed plan entries render unavailable. Only current and
+previous determine `required_complete`.
 
 The plan contains the resolved `benchmark_spec` object, `current` and `previous`
 version strings, and a `releases` array. Each release has these fields:

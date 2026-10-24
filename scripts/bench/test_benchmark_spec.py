@@ -163,7 +163,8 @@ def capture(folder, docs, spec, protect, policy, revision=REVISION):
     main_measurements = records.filter_measurements(measurements, docs['C'])
     writer = records.RecordWriter(docs['C'], main_measurements, corpus_sha256='d' * 64,
                                   binary=binary, extra_documents=[doc for doc in all_docs if doc not in docs['C']],
-                                  layer_contract=agentic.load_contract(ROOT))
+                                  layer_contract=agentic.load_contract(ROOT),
+                                  capture_protocol=specs.CANONICAL_CAPTURE)
     runs = {}
     for layer, documents in docs.items():
         responses = {}
@@ -193,6 +194,7 @@ def capture(folder, docs, spec, protect, policy, revision=REVISION):
         'runner_provenance': {'policy': {'path': str(policy), 'sha256': capture_identity.file_digest(policy)},
                               'model_bundles': [], 'policy_dependencies': {'files': {}}},
         'runs': [runs['C']], 'benchmark_spec': spec,
+        'capture_protocol': specs.CANONICAL_CAPTURE,
         'layers': {'generator': spec['inputs']['generator'],
                    'scored_label_contract': score.scored_label_contract_report(layer_contract, [doc for layer in ('A', 'D', 'R') for doc in docs[layer]]),
                    'gold_validity': {'C': agentic.gold_validity_digest(docs['C'], main_measurements)},
@@ -669,7 +671,8 @@ def test_current_spec_loads_negative_corpus_content(tmp_path):
         row['text'] = 'A different reserved fixture.'
         negative.write_text(json.dumps(row) + '\n')
         after = specs.resolve(**specs.full_inputs(root), seed=20260710)
-    assert after['inputs']['population'] == before['inputs']['population']
+    assert after['inputs']['population']['C']['document_ids_sha256'] == before['inputs']['population']['C']['document_ids_sha256']
+    assert after['inputs']['population']['C']['descriptors_sha256'] != before['inputs']['population']['C']['descriptors_sha256']
     assert after['inputs']['corpus_sha256'] != before['inputs']['corpus_sha256']
     assert after['id'] != before['id']
 

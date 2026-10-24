@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import copy
+import importlib.metadata
 import json
 import os
 import re
+import sys
+import unicodedata
 from pathlib import Path
 from typing import Mapping
 
@@ -25,6 +28,37 @@ class SpecError(ValueError):
         super().__init__(code)
 
 
+QUALIFIED_RUNTIME = {"implementation": "cpython", "python": "3.13", "unicode": "15.1.0", "pyarrow": "23.0.1"}
+CANONICAL_CAPTURE = {"version": 1, "mode": "canonical-once"}
+
+
+def runtime_identity() -> dict:
+    """Portable stdlib/Unicode semantics and the canonical parquet reader."""
+    try:
+        arrow = importlib.metadata.version("pyarrow")
+    except importlib.metadata.PackageNotFoundError:
+        arrow = None
+    return {"implementation": sys.implementation.name,
+            "python": ".".join(map(str, sys.version_info[:2])),
+            "unicode": unicodedata.unidata_version, "pyarrow": arrow}
+
+
+def require_runtime(spec: Mapping | None = None) -> dict:
+    actual = runtime_identity()
+    expected = QUALIFIED_RUNTIME if spec is None else spec["inputs"].get("measuring_runtime")
+    if actual != QUALIFIED_RUNTIME or actual != expected:
+        raise SpecError("benchmark_runtime_mismatch")
+    return actual
+
+
+def capture_protocol(args) -> dict:
+    # Mode comes from execution flags, never from a resulting scorecard.
+    cross_check = (getattr(args, "cross_check", False)
+                   or getattr(args, "scored_labels", None) is not None
+                   or getattr(args, "agentic_scored_labels", None) is not None)
+    return {"version": 1, "mode": "cross-check" if cross_check else "canonical-once"}
+
+
 def manifest(inputs: Mapping) -> dict:
     """No revision, timestamp, host, binary, policy or model belongs in this hash."""
     value = {"schema_version": SCHEMA_VERSION, "inputs": copy.deepcopy(dict(inputs))}
@@ -41,7 +75,8 @@ def validate(value: object) -> dict:
         fields = {"corpus_sha256", "generator", "seed", "contracts", "harness",
                   "record_schema", "protocol", "population"}
         if (not isinstance(inputs, dict)
-                or set(inputs) not in (fields, fields | {"validation_vocabulary"})
+                or not fields <= set(inputs)
+                or set(inputs) - fields - {"validation_vocabulary", "measuring_runtime"}
                 or not HEX64.fullmatch(inputs["corpus_sha256"])
                 or type(inputs["seed"]) is not int
                 or not inputs["contracts"] or not inputs["harness"]
@@ -72,11 +107,23 @@ def require_same(left: Mapping, right: Mapping, *, required: bool = True) -> str
     return a
 
 
-def population(documents) -> dict:
+def population(documents, layer: str = "C") -> dict:
+    import scorecard_record as records
+
     ids = sorted(document.uid for document in documents)
     if len(ids) != len(set(ids)):
         raise SpecError("benchmark_population_invalid")
-    return {"documents": len(ids), "document_ids_sha256": digest(ids)}
+    return {"documents": len(ids), "document_ids_sha256": digest(ids),
+            "descriptors_sha256": descriptor_digest([
+                {**records._document_row(document), "layer": layer} for document in documents])}
+
+
+def descriptor_digest(rows) -> str:
+    """Hash only canonical, value-free document descriptors; exclude subject validators."""
+    keys = ("id", "utf8_bytes", "language", "region", "source_dataset",
+            "negative_category", "cell", "gold", "layer")
+    return digest(sorted(({key: row[key] for key in keys} for row in rows),
+                         key=lambda row: row["id"]))
 
 
 def measuring_inputs(root: Path) -> dict:
@@ -96,6 +143,7 @@ def measuring_inputs(root: Path) -> dict:
     return {
         "harness": {path.relative_to(root).as_posix(): file_digest(path) for path in sources},
         "validation_vocabulary": sorted(score.load_committed_source_id_vocabulary(root)),
+        "measuring_runtime": require_runtime(),
     }
 
 
@@ -152,7 +200,7 @@ def resolve(root: Path, *, corpus_sha256: str, seed: int, available, prepared,
     protocol["execution"] = {"profile": profile, "warmups": warmups, "repetitions": repetitions}
     populations = {"C": population(available)}
     if prepared is not None:
-        populations.update({name: population(docs) for name, docs in (
+        populations.update({name: population(docs, name) for name, docs in (
             ("A", prepared.identifiers), ("D", prepared.lookalikes), ("R", prepared.repeats))})
     return validate(manifest({
         "corpus_sha256": corpus_sha256,
