@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Update Tokio from 1.52.3 to 1.54.1 to fix
+  [RUSTSEC-2026-0386](https://rustsec.org/advisories/RUSTSEC-2026-0386.html),
+  an I/O safety defect in the `AsyncFd` constructors. Gaze does not use `AsyncFd`.
+
 - Immutable proxy request leaves share one expansion budget across the request.
   The proxy checks the combined size before expansion or Rule matching, so
   splitting a carrier across leaves cannot bypass the resource cap. The default
