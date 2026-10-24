@@ -3508,6 +3508,79 @@
           }
         ]
       }
+    },
+    {
+      "id": "unsupported-synthetic-repeat",
+      "order": "source_first",
+      "leaves": [
+        {
+          "text": "From: Synthetic Person <synthetic@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 15,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 16,
+              "end": 22,
+              "label": "SURNAME"
+            },
+            {
+              "start": 24,
+              "end": 49,
+              "label": "EMAIL"
+            }
+          ]
+        },
+        {
+          "text": "The earlier sender is synthetic person again.",
+          "gold": [
+            {
+              "start": 22,
+              "end": 31,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 32,
+              "end": 38,
+              "label": "SURNAME"
+            }
+          ],
+          "carrier": "unsupported"
+        }
+      ]
+    },
+    {
+      "id": "unsupported-synthetic-counterweight",
+      "order": "source_first",
+      "leaves": [
+        {
+          "text": "From: Synthetic Person <synthetic@example.invalid>\nHello.",
+          "gold": [
+            {
+              "start": 6,
+              "end": 15,
+              "label": "FIRSTNAME"
+            },
+            {
+              "start": 16,
+              "end": 22,
+              "label": "SURNAME"
+            },
+            {
+              "start": 24,
+              "end": 49,
+              "label": "EMAIL"
+            }
+          ]
+        },
+        {
+          "text": "const SyntheticPerson = \"name\"; see https://example.invalid/Synthetic/Person; thanks synthetic; person field.",
+          "gold": [],
+          "carrier": "unsupported"
+        }
+      ]
     }
   ]
 }
