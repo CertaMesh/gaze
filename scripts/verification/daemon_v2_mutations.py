@@ -50,6 +50,10 @@ PROBES = [
     ("pass-count", CLI, '0..limits.stabilization_passes', "0..8", "capacity_failures_are_atomic_and_do_not_consume_sequences"),
     ("deterministic-source", CORE, 'if state.deterministic_sweep {', 'if false {', "session::tests::deterministic_transaction_sweep_has_stable_equal_span_family_order"),
 
+    ("global-manifest", CLI, '> limits.global_manifest_bytes', "> usize::MAX", "individual_state_budgets_refuse_before_commit"),
+    ("context", CLI, '.get("context")', '.get("absent_context")', "context_is_validated_on_every_request_and_does_not_carry_unmatched_values"),
+    ("duplicate-key", CLI, 'fields.insert(key, value).is_some()', 'fields.insert(key, value).is_some() && false', "invalid_protocol_objects_never_fall_back_to_v1"),
+
 ]
 
 

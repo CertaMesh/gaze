@@ -1179,23 +1179,25 @@ impl<'session> SessionTransaction<'session> {
         raw: &str,
         evidence: ManifestEvidence,
     ) {
-        let family_name = family.unwrap_or(DEFAULT_COUNTER_FAMILY);
-        let exists = self
-            .staged
-            .evidence_by_value
-            .keys()
-            .any(|key| key.family == family_name && key.class == *class && key.raw == raw);
-        if !exists
-            && self
-                .ensure_manifest_room(
-                    raw.len()
-                        .saturating_mul(2)
-                        .saturating_add(family_name.len().saturating_mul(2))
-                        .saturating_add(8192),
-                )
-                .is_err()
-        {
-            return;
+        if self.manifest_limit.is_some() {
+            let family_name = family.unwrap_or(DEFAULT_COUNTER_FAMILY);
+            let exists = self
+                .staged
+                .evidence_by_value
+                .keys()
+                .any(|key| key.family == family_name && key.class == *class && key.raw == raw);
+            if !exists
+                && self
+                    .ensure_manifest_room(
+                        raw.len()
+                            .saturating_mul(2)
+                            .saturating_add(family_name.len().saturating_mul(2))
+                            .saturating_add(8192),
+                    )
+                    .is_err()
+            {
+                return;
+            }
         }
         record_evidence_in_state(&mut self.staged, family, class, raw, evidence);
     }
