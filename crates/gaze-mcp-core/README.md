@@ -153,10 +153,10 @@ sources. Existing owned tokens keep their identities; overlapping Rule matches c
 adjacent raw bytes without rewriting those tokens. An independent final Rule coverage
 proof runs before commit or release. Failed protection discards staged mappings.
 
-Each operation accepts at most 2 MiB of aggregate expanded original UTF-8 text.
-Session-owned tokens count as their restored values. Oversized expansions and unknown
-or forged tokens refuse with a class-only protection error. This is a text discovery
-budget; transports must also bound wire input and JSON structure. Separate dispatches
+Each operation accepts at most 2 MiB of aggregate original decoded UTF-8 text
+and 2 MiB after expanding owned tokens to their restored values. Oversized input,
+oversized expansions, and unknown or forged tokens refuse with a class-only
+protection error. Transports must also bound wire input and JSON structure. Separate dispatches
 remain separate operations, and later declarations cannot retract earlier releases.
 
 The compatible `PiiEnvelope::new` constructor uses an empty dictionary bundle.

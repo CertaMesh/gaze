@@ -432,12 +432,18 @@ fn protect_json(
     // literal must never acquire ownership from an earlier discovery leaf.
     let mut expanded = Vec::new();
     let mut remaining = rule_coverage::MAX_OPERATION_TEXT_BYTES;
+    let mut remaining_input = rule_coverage::MAX_OPERATION_TEXT_BYTES;
     visit_text(value, &mut |text| {
+        remaining_input = remaining_input
+            .checked_sub(text.len())
+            .ok_or(gaze::ProtectionError::Provenance)?;
         let view = transaction
             .restore_strict_text_bounded(text, remaining)
             .map_err(|_| gaze::ProtectionError::Provenance)?;
         remaining -= view.len();
-        expanded.push(view);
+        if !view.is_empty() {
+            expanded.push(view);
+        }
         Ok(())
     })?;
     for view in expanded {

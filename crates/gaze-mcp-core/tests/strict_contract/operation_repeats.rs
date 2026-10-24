@@ -553,3 +553,20 @@ async fn every_observed_rule_failure_refuses_without_partial_operation_state() {
         }
     }
 }
+
+#[tokio::test]
+async fn shrinking_owned_values_do_not_bypass_the_input_text_budget() {
+    let pipeline = repeat_pipeline(EvidenceKind::Rule);
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let token = session.tokenize(&PiiClass::Name, "").unwrap();
+    let before = session.snapshot_entries();
+    let (registry, seen) = capture(json!([]));
+    let payload = json!([token.repeat((2 * 1024 * 1024) / token.len() + 1)]);
+    assert!(
+        dispatch(&registry, &Store::default(), &pipeline, &session, payload)
+            .await
+            .is_err()
+    );
+    assert_eq!(*seen.lock().unwrap(), Value::Null);
+    assert_eq!(session.snapshot_entries(), before);
+}
