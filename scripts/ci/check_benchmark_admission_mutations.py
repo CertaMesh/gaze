@@ -144,6 +144,9 @@ def main():
     build_end = certification_source.index("    block = captured['scoring']['scored_label_contract']", build_start)
     mutations.append(('capture_build_qualification', CERT, certification_source[build_start:build_end], '',
                       'test_reviewer_skip_build_retained_binary_cannot_certify', 1))
+    mutations.append(('native_build_guard', 'scripts/bench/conftest.py',
+                      'if resolved and Path(resolved).resolve() in blocked:', 'if False:',
+                      'scripts/bench/test_native_build_guard.py::test_literal_and_absolute_cargo_builds_are_blocked', 1))
     if args.only:
         if set(args.only) - {row[0] for row in mutations}:
             raise SystemExit('unknown_mutation')

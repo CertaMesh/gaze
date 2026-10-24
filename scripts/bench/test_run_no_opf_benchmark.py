@@ -703,8 +703,15 @@ class PolicyNerSettingsTests(unittest.TestCase):
             stack.enter_context(mock.patch.object(
                 runner.benchmark_cache, "restore_layers", return_value="hit",
             ))
+            metadata = {"revision": "a" * 40, "dirty": False}
+            cached_card = {"cached": True, "benchmark_spec": spec, "gaze": metadata,
+                "parameters": {"binary_profile": "debug", "configs": list(score.DEFAULT_CONFIGS)},
+                "subject_build": {"version": 1, "mode": "producer-build", "source": metadata,
+                                  "binary_sha256": score.sha256_file(dataset), "profile": "debug",
+                                  "configs": list(score.DEFAULT_CONFIGS)}}
+            stack.enter_context(mock.patch.object(score, "git_metadata", return_value=metadata))
             stack.enter_context(mock.patch.object(
-                runner.records, "rescore", return_value={"cached": True, "benchmark_spec": spec},
+                runner.records, "rescore", return_value=cached_card,
             ))
             def publish(_args, directory, card):
                 directory.mkdir(parents=True, exist_ok=True)
@@ -712,7 +719,7 @@ class PolicyNerSettingsTests(unittest.TestCase):
                 (directory / "observations-v1.jsonl.gz").write_bytes(b"synthetic restored record")
                 return 17
             finish = stack.enter_context(mock.patch.object(runner, "finish_run", side_effect=publish))
-            build = stack.enter_context(mock.patch.object(runner.dataiku, "build_binary", return_value=dataset))
+            build = stack.enter_context(mock.patch.object(runner.subject_build, "cargo_build_binary", return_value=dataset))
             probe = stack.enter_context(mock.patch.object(runner, "build_validator_probe", return_value=dataset))
             execute = stack.enter_context(mock.patch.object(runner, "execute_measurements"))
 
@@ -720,7 +727,7 @@ class PolicyNerSettingsTests(unittest.TestCase):
             build.assert_called_once()
             probe.assert_called_once()
             execute.assert_not_called()
-            finish.assert_called_once_with(args, output / "quick", {"cached": True, "benchmark_spec": spec})
+            finish.assert_called_once_with(args, output / "quick", cached_card)
 
     def test_run_records_absent_ner_and_portable_policy_path(self) -> None:
         class StopAfterProvenance(Exception):

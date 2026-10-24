@@ -259,6 +259,9 @@ class RecordReplayTests(unittest.TestCase):
             "restore": {"exact": True, "decision": "success", "unknown_token_count": 0,
                         "manifest_bypass_count": 0, "fresh_pii_detected_count": 0,
                         "phase_execution_mask": 0},
+            "manifest_spans": [{"raw_start": self.prediction.start, "raw_end": self.prediction.end,
+                                "clean_start": self.prediction.start, "clean_end": self.prediction.end,
+                                "class": "email"}],
             "manifest_integrity": {"spans": 1, "invalid_clean_bounds": 0,
                                    "invalid_raw_bounds": 0, "overlapping_clean_spans": 0,
                                    "non_monotonic_raw_spans": 0,
@@ -646,6 +649,7 @@ class RecordReplayTests(unittest.TestCase):
                 response["fixture_id"] = document.uid
                 response["final_protection_trace"] = []
                 response["manifest_integrity"]["spans"] = 0
+                response["manifest_spans"] = []
                 layer_responses[document.uid] = response
             for layer in ("A", "D", "R"):
                 documents = [document for document in layer_docs if document.cell.startswith(f"{layer}|")]
