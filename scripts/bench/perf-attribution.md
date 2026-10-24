@@ -85,7 +85,7 @@ warmups warm filesystem/process caches only; every measured file still starts
 a fresh process and loads its models.
 
 The receipt records hardware, OS, `uptime`, load before/after each side, binary,
-policy and model hashes, the runner hash, document identities, numeric samples, work counters,
+policy and model hashes, the combined runner/clock-contract hash, document identities, numeric samples, work counters,
 p50/p95/p99 per document and stage, and files/minute. End-to-end daemon latency
 includes request serialization, pipe transport and CLI response serialization.
 It excludes Python response parsing. `startup_e2e_ns` measures process launch through receipt of the startup record on stderr. The daemon emits that record before waiting for input. `startup_total_ns` sums child startup clocks, while `processing_total_ns` sums child request clocks. Neither total includes warmups. One-shot rows retain startup records for every file; daemon rows retain one startup record per pass.
@@ -115,8 +115,9 @@ write does not change protection behavior.
 
 Schema **2** adds `phase` (`startup` or `request`) and a process-local `ordinal`.
 Startup is ordinal 0. Requests count from 1, including warmups. The runner rejects
-schema 1, partial traces, missing hooks, wrong ordinals, and lifecycle work attached
-to request records. Old executables that emit no records retain unknown stage
+schema 1, partial traces, missing hooks, wrong ordinals, processing clocks in
+startup, and lifecycle work attached to request records. Nym timer backports must
+include both split clocks below; aggregate-only Nym traces are refused. Old executables that emit no records retain unknown stage
 costs. `--binary-kind-a local-timer`, `--binary-kind-b local-timer`, and
 `--build-timers` require the full protocol; a missing trace is an error.
 Old v1 receipts remain historical records and cannot be relabeled as v2 evidence.
@@ -155,24 +156,78 @@ overlap inside a constructor: bundle verification, tokenizer load/configuration,
 and ORT model/session load. Their sum omits constructor bookkeeping. The runner
 checks invocation counts against the policy and checks parent/child bounds.
 The Nym assembly check and constructor check remain separate invocations of
-`bundle_verify_ns`; this change preserves both checks.
+`bundle_verify_ns`; this change preserves both checks. NER and DOB constructors
+use `model_constructor_ns`; Nym uses `nym_model_constructor_ns`. The extra outer
+Nym check is enclosed by `nym_outer_verify_ns`, outside the constructor. The
+aggregate verification + tokenizer + model duration must fit within the combined
+constructors plus that outer check. The outer check's enclosing clock includes
+its timer bookkeeping, so this aggregate bound conservatively includes that
+small overhead. Tokenizer + model durations must also fit within the constructors
+alone. No aggregate constructor duration is charged to the wrong sibling.
 
-| Metric | Boundary |
-| --- | --- |
-| `process_to_policy_ns` | First operation in `main` through policy load and CLI overrides |
-| `process_to_ready_ns` | First operation in `main` through completion of startup |
-| `policy_load_ns` | CLI policy load and overrides, including the policy-less default |
-| `pipeline_build_ns` | CLI policy resolution through `PipelineBuilder::build` |
-| `assembly_ns` | `build_pipeline_builder_inner`, including recognizer constructors |
-| `recognizer_construction_ns` | Policy, rulepack, context and address recognizer registration before model registration |
-| `rule_construction_ns` | Policy action rule construction after model registration |
-| `nym_attach_ns` | Assembly's Nym verification, preload and checked attachment |
-| `model_constructor_ns` | Each NER, Nym or DOB model constructor, including its children |
-| `tokenizer_load_ns` | Tokenizer file load and configuration |
-| `model_load_ns` | ORT session builder through model load |
-| `bundle_verify_ns` | Each complete pinned-bundle verification call |
-| `daemon_startup_ns` | Daemon entry through setup, immediately before the request loop |
-| `request_ns` | One-shot processing after startup, or one daemon `handle_line` call |
+The phase and containment tables below are generated from
+`perf_lifecycle_contract.py`, which validation imports directly. Refresh with
+`python scripts/bench/perf_lifecycle_contract.py`; verify with `--check`.
+
+<!-- BEGIN GENERATED CLOCK CONTRACT -->
+| Metric | Phase | Boundary |
+| --- | --- | --- |
+| `process_to_ready_ns` | startup | First operation in main through completion of startup |
+| `process_to_policy_ns` | startup | First operation in main through policy load and overrides |
+| `policy_load_ns` | startup | CLI policy load and overrides, including the policy-less default |
+| `pipeline_build_ns` | startup | CLI policy resolution through PipelineBuilder::build |
+| `assembly_ns` | startup | build_pipeline_builder_inner, including NER and DOB constructors |
+| `recognizer_construction_ns` | startup | Recognizer registration before model registration |
+| `rule_construction_ns` | startup | Policy action rule construction after model registration |
+| `nym_attach_ns` | startup | Nym outer verification, constructor and checked attachment |
+| `model_constructor_ns` | startup | NER and DOB constructors, including their children |
+| `nym_model_constructor_ns` | startup | Nym constructor, including its children |
+| `nym_outer_verify_ns` | startup | Assembly's extra Nym bundle verification call |
+| `bundle_verify_ns` | startup | All complete pinned-bundle verifications, including Nym's extra call |
+| `tokenizer_load_ns` | startup | All constructor tokenizer loads and configuration |
+| `model_load_ns` | startup | All constructor ORT session builds and model loads |
+| `daemon_startup_ns` | startup | Daemon entry through setup, before the request loop |
+| `request_ns` | request | One-shot processing after startup, or one daemon handle_line call |
+
+Each row below requires the sum of the children to fit within the sum of
+the parents. Only the daemon build bound is conditional on daemon mode.
+
+| Bound | Serial children | Inclusive parents |
+| --- | --- | --- |
+| policy-ready | `process_to_policy_ns` | `process_to_ready_ns` |
+| policy-load | `policy_load_ns` | `process_to_policy_ns` |
+| pipeline | `policy_load_ns` + `assembly_ns` | `pipeline_build_ns` |
+| ready | `pipeline_build_ns` + `nym_attach_ns` | `process_to_ready_ns` |
+| daemon-ready | `daemon_startup_ns` | `process_to_ready_ns` |
+| daemon-build | `pipeline_build_ns` + `nym_attach_ns` | `daemon_startup_ns` |
+| assembly | `recognizer_construction_ns` + `rule_construction_ns` + `model_constructor_ns` | `assembly_ns` |
+| nym-attach | `nym_outer_verify_ns` + `nym_model_constructor_ns` | `nym_attach_ns` |
+| constructor-loads | `tokenizer_load_ns` + `model_load_ns` | `model_constructor_ns` + `nym_model_constructor_ns` |
+| constructor-leaves | `bundle_verify_ns` + `tokenizer_load_ns` + `model_load_ns` | `model_constructor_ns` + `nym_model_constructor_ns` + `nym_outer_verify_ns` |
+| rules | `rules_ns` | `request_ns` |
+| registry | `registry_ns` | `request_ns` |
+| validators | `validators_ns` | `request_ns` |
+| ner_tokenize | `ner_tokenize_ns` | `request_ns` |
+| ner_ort | `ner_ort_ns` | `request_ns` |
+| ner_mutex_wait | `ner_mutex_wait_ns` | `request_ns` |
+| resolve1 | `resolve1_ns` | `request_ns` |
+| sweep | `sweep_ns` | `request_ns` |
+| resolve2 | `resolve2_ns` | `request_ns` |
+| safety_view_build | `safety_view_build_ns` | `request_ns` |
+| safety_model | `safety_model_ns` | `request_ns` |
+| nym_tokenize | `nym_tokenize_ns` | `request_ns` |
+| nym_ort | `nym_ort_ns` | `request_ns` |
+| nym_mutex_wait | `nym_mutex_wait_ns` | `request_ns` |
+| nym_stable | `nym_stable_ns` | `request_ns` |
+| nym_neutral | `nym_neutral_ns` | `request_ns` |
+| manifest | `manifest_ns` | `request_ns` |
+| audit | `audit_ns` | `request_ns` |
+
+All metrics belong exclusively to their declared phase. A startup record
+must have zero processing durations, invocation/candidate counts, work
+counters and recognizer entries. Request records must have zero startup
+durations and counts. Each recognizer duration must fit within request_ns.
+<!-- END GENERATED CLOCK CONTRACT -->
 
 `pipeline_build_ns` includes `policy_load_ns` and `assembly_ns`. Nym attaches
 after that CLI builder returns, so `nym_attach_ns` belongs to
@@ -212,7 +267,12 @@ builds. Do not pass that flag to an unpatched old revision.
 The model-free Python tests use fake daemon protocols to prove lifecycle and request pairing, old-binary fallback, schema rejection, identical-binary refusal, privacy, provenance, exact ordered source-tree identity, percentiles and the quiet-host gate. `GAZE_ATTRIBUTION_TEST_BINARY` enables a synthetic test of actual CLI hooks through the runner. `cli_pipe` compares clean text, manifest,
 entries and safety disposition byte for byte with capture disabled/enabled from
 the same initial session snapshot, and verifies exact restore for each fixture. The capture includes construction as well as processing.
-No new Rust test binary is introduced.
+No new Rust test binary is introduced. Nonzero witnesses cover each declared
+bound and each child/parent edge, plus every wrong-phase placement. Run
+`perf_lifecycle_mutation.py --out <directory>` after committing: it removes each
+bound and phase/recognizer/work guard in an isolated Python copy, requires one
+executed assertion failure, then requires that same test to pass after restore.
+Its receipt pins the mutation and restored test counts; logs retain each result.
 
 
 For a synthetic comparison across separate feature-off and timer executables, run

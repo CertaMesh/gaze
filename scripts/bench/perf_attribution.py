@@ -23,19 +23,17 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from perf_lifecycle_contract import BOUNDS, CLOCK_PHASES, STARTUP_CLOCKS
+
 SPEC = "gaze-perf-attribution-v2"
-RUNNER_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+RUNNER_SHA256 = hashlib.sha256(Path(__file__).read_bytes() + b"\0"
+                               + Path(__file__).with_name("perf_lifecycle_contract.py").read_bytes()).hexdigest()
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = "GAZE_PERF "
 TEXT_SUFFIXES = {".txt", ".md", ".json", ".jsonl", ".toml", ".yaml", ".yml", ".rs", ".py", ".csv", ".tsv"}
 
-LIFECYCLE = {"process_to_ready_ns", "process_to_policy_ns", "policy_load_ns", "pipeline_build_ns",
-             "assembly_ns", "rule_construction_ns", "recognizer_construction_ns", "nym_attach_ns", "model_constructor_ns",
-             "tokenizer_load_ns", "model_load_ns", "bundle_verify_ns", "daemon_startup_ns"}
-METRICS = LIFECYCLE | {"rules_ns", "registry_ns", "validators_ns", "ner_tokenize_ns", "ner_ort_ns",
-           "ner_mutex_wait_ns", "resolve1_ns", "sweep_ns", "resolve2_ns", "safety_view_build_ns",
-           "safety_model_ns", "nym_tokenize_ns", "nym_ort_ns", "nym_mutex_wait_ns", "nym_stable_ns",
-           "nym_neutral_ns", "manifest_ns", "audit_ns", "request_ns"}
+LIFECYCLE = set(STARTUP_CLOCKS)
+METRICS = set(CLOCK_PHASES)
 COUNTERS = {"input_bytes", "ner_encodes", "ner_windows", "sweep_candidates", "nym_windows",
             "nym_windows_stable", "nym_windows_neutral"}
 
@@ -77,6 +75,24 @@ def validate_lifecycle(traces: list[dict], requests: int, *, daemon: bool, polic
             or any(t["phase"] != "request" or t["ordinal"] != i + 1
                    for i, t in enumerate(traces[1:]))):
         raise ValueError("lifecycle trace attribution mismatch")
+    for record in traces:
+        for key, metric in record["metrics"].items():
+            if CLOCK_PHASES[key] != record["phase"] and any(metric.values()):
+                raise ValueError("misattributed clock phase")
+            if metric["ns"] and not metric.get("invocations", 0):
+                raise ValueError("duration without an invocation")
+        if record["phase"] == "startup" and (any(record["counters"].values()) or record["recognizers"]):
+            raise ValueError("misattributed startup processing")
+        for bound in BOUNDS:
+            if bound.phase != record["phase"] or (bound.daemon_only and not daemon):
+                continue
+            ns = lambda key: record["metrics"].get(key, {}).get("ns", 0)
+            if sum(map(ns, bound.children)) > sum(map(ns, bound.parents)):
+                raise ValueError(f"lifecycle duration attribution mismatch: {bound.id}")
+        if record["phase"] == "request" and any(
+                metric["ns"] > record["metrics"].get("request_ns", {}).get("ns", 0)
+                for metric in record["recognizers"].values()):
+            raise ValueError("recognizer duration exceeds request")
     startup = traces[0]
     def inv(trace, key):
         return trace["metrics"].get(key, {}).get("invocations", 0)
@@ -90,26 +106,16 @@ def validate_lifecycle(traces: list[dict], requests: int, *, daemon: bool, polic
     net = config.get("safety_net", {}).get("backend") == "nym"
     constructors = sum(bool(config.get(name)) and config[name].get("enabled", True)
                        for name in ("ner", "dob_judge")) + int(net)
-    for key in ("model_constructor_ns", "tokenizer_load_ns", "model_load_ns"):
-        if inv(startup, key) != constructors:
+    for key, count in (("model_constructor_ns", constructors - int(net)),
+                       ("nym_model_constructor_ns", int(net)),
+                       ("nym_outer_verify_ns", int(net)),
+                       ("tokenizer_load_ns", constructors), ("model_load_ns", constructors)):
+        if inv(startup, key) != count:
             raise ValueError("model constructor attribution mismatch")
     # Assembly and the Nym constructor both verify today. Do not optimize that away here.
     verifications = constructors + int(net)
     if inv(startup, "bundle_verify_ns") != verifications or inv(startup, "nym_attach_ns") != int(net):
         raise ValueError("bundle verification attribution mismatch")
-    # Inclusive parent clocks must contain their serial child work.
-    ns = lambda key: startup["metrics"].get(key, {}).get("ns", 0)
-    if (ns("process_to_policy_ns") > ns("process_to_ready_ns")
-            or ns("pipeline_build_ns") > ns("process_to_ready_ns")
-            or ns("policy_load_ns") > ns("process_to_policy_ns")
-            or ns("policy_load_ns") + ns("assembly_ns") > ns("pipeline_build_ns")
-            or ns("pipeline_build_ns") + ns("nym_attach_ns") > ns("process_to_ready_ns")
-            or ns("daemon_startup_ns") > ns("process_to_ready_ns")
-            or ns("bundle_verify_ns") > ns("process_to_ready_ns")
-            or ns("model_constructor_ns") + ns("recognizer_construction_ns") + ns("rule_construction_ns") > ns("process_to_ready_ns")
-            or ns("rule_construction_ns") + ns("recognizer_construction_ns") > ns("assembly_ns")
-            or ns("tokenizer_load_ns") + ns("model_load_ns") > ns("model_constructor_ns")):
-        raise ValueError("lifecycle duration attribution mismatch")
     for trace in traces[1:]:
         if inv(trace, "request_ns") != 1 or any(inv(trace, key) for key in LIFECYCLE):
             raise ValueError("misattributed request work")

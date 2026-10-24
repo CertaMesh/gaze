@@ -11,11 +11,13 @@ import perf_attribution as perf
 
 def trace(phase="request", ordinal=1, *, daemon=False, models=0, nym=False, dob=False):
     keys = (perf.LIFECYCLE - {"daemon_startup_ns", "nym_attach_ns", "model_constructor_ns",
-                              "tokenizer_load_ns", "model_load_ns", "bundle_verify_ns"}) if phase == "startup" else {"request_ns"}
+                              "tokenizer_load_ns", "model_load_ns", "bundle_verify_ns",
+                              "nym_model_constructor_ns", "nym_outer_verify_ns"}) if phase == "startup" else {"request_ns"}
     metrics = {key: {"ns": 0, "invocations": 1, "candidates": 0} for key in keys}
     if phase == "startup":
         for key, n in {"daemon_startup_ns": int(daemon), "nym_attach_ns": int(nym),
-                       "model_constructor_ns": models, "tokenizer_load_ns": models,
+                       "model_constructor_ns": models - int(nym), "nym_model_constructor_ns": int(nym),
+                       "nym_outer_verify_ns": int(nym), "tokenizer_load_ns": models,
                        "model_load_ns": models, "bundle_verify_ns": models + int(nym)}.items():
             metrics[key] = {"ns": 0, "invocations": n, "candidates": 0}
     return {"schema": 2, "phase": phase, "ordinal": ordinal, "metrics": metrics, "counters": {}, "recognizers": {}}
@@ -205,6 +207,42 @@ class HookIdentityTests(unittest.TestCase):
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_reviewer_constructor_counterexample(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = Path(tmp) / "policy"
+            policy.write_text('[ner]\nenabled=true\n')
+            records = [trace("startup", 0, models=1), trace()]
+            for key, value in {"process_to_ready_ns": 1000, "pipeline_build_ns": 900,
+                               "assembly_ns": 800, "model_constructor_ns": 100,
+                               "bundle_verify_ns": 700, "tokenizer_load_ns": 40,
+                               "model_load_ns": 40}.items():
+                records[0]["metrics"][key]["ns"] = value
+            with self.assertRaisesRegex(ValueError, "constructor-leaves"):
+                perf.validate_lifecycle(records, 1, daemon=False, policy=policy, required=True)
+
+    def test_reviewer_request_counterexample(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = Path(tmp) / "policy"
+            policy.write_text("")
+            records = [trace("startup", 0), trace()]
+            records[1]["metrics"]["request_ns"]["ns"] = 1
+            records[1]["metrics"]["registry_ns"] = {"ns": 1000000, "invocations": 1}
+            with self.assertRaisesRegex(ValueError, "registry"):
+                perf.validate_lifecycle(records, 1, daemon=False, policy=policy, required=True)
+
+    def test_reviewer_startup_processing_counterexample(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = Path(tmp) / "policy"
+            policy.write_text("")
+            records = [trace("startup", 0), trace()]
+            records[0]["metrics"]["registry_ns"] = {"ns": 123, "invocations": 1}
+            with self.assertRaisesRegex(ValueError, "clock phase"):
+                perf.validate_lifecycle(records, 1, daemon=False, policy=policy, required=True)
+
+    def test_clock_guide_is_generated_from_validation_table(self):
+        from perf_lifecycle_contract import update_guide
+        update_guide(check=True)
+
     def test_missing_misattributed_and_old_lifecycle_refused(self):
         import copy
         with tempfile.TemporaryDirectory() as tmp:
@@ -236,7 +274,7 @@ class LifecycleTests(unittest.TestCase):
             policy.write_text('[ner]\nmodel_dir="/synthetic"\n[dob_judge]\nmodel_dir="/synthetic"\n[safety_net]\nbackend="nym"\n')
             good = [trace("startup", 0, models=3, nym=True, dob=True), trace()]
             perf.validate_lifecycle(good, 1, daemon=False, policy=policy)
-            for key in ("model_constructor_ns", "model_load_ns", "tokenizer_load_ns", "bundle_verify_ns", "nym_attach_ns"):
+            for key in ("model_constructor_ns", "nym_model_constructor_ns", "nym_outer_verify_ns", "model_load_ns", "tokenizer_load_ns", "bundle_verify_ns", "nym_attach_ns"):
                 count = good[0]["metrics"][key]["invocations"]
                 good[0]["metrics"][key]["invocations"] = count - 1
                 with self.assertRaises(ValueError):

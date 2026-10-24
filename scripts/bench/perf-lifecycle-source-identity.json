@@ -1,17 +1,17 @@
 {
-  "base": "f9783b29082f3890699b30dccd8f815cd6e84012",
+  "base": "6f46d1ac9a8a4f20cc476243f6f949dd82e1f2a1",
   "files": [
     {
       "file": "crates/gaze-assembly/src/lib.rs",
       "base_sha256": "4455fcc6f2c6c54ca2694e5b09c403ae7baea1056c4d4550f6204eb808635c66",
-      "candidate_sha256": "6d666f0f7f4ea516687c28db54d1373591b0664f5dd8ca5d976d9462ec83d655",
+      "candidate_sha256": "ef1fab08e12718c6c32decb85f24c1242365928f14cb854c910b1e96e15b83cc",
       "without_hooks_sha256": "4455fcc6f2c6c54ca2694e5b09c403ae7baea1056c4d4550f6204eb808635c66"
     },
     {
       "file": "crates/gaze-cli/src/commands/daemon.rs",
-      "base_sha256": "58f3d7900d6ee28257f00f6db5007f2ee22c43e14b60a298c12cab63e063f67a",
-      "candidate_sha256": "47c7f49953d8b3dd84b3108e4fcc2b098b590c3f043bc5ccd60268c35aeb39bf",
-      "without_hooks_sha256": "58f3d7900d6ee28257f00f6db5007f2ee22c43e14b60a298c12cab63e063f67a"
+      "base_sha256": "ce0e726ef64d8a70fa6e78573ac25bbbe300820275fd5501e44cf31fffaeee88",
+      "candidate_sha256": "200edabe832bac05fa74de8fbd89b26bed383d647497b34d84cc9fa33d2d693e",
+      "without_hooks_sha256": "ce0e726ef64d8a70fa6e78573ac25bbbe300820275fd5501e44cf31fffaeee88"
     },
     {
       "file": "crates/gaze-cli/src/main.rs",
@@ -58,7 +58,7 @@
     {
       "file": "crates/gaze-recognizers/src/safety_net/nym/ort.rs",
       "base_sha256": "9f96a1ae54967d7e9ee78ef60ac802c519d3ceb60bd9d99fda848addeea2926d",
-      "candidate_sha256": "0ae0cf3068771ef3c40edea1c7f67914bd0b43dd4967e5cb9926086615aa71f3",
+      "candidate_sha256": "bef0394cf7925a0b3ecddb0395030ca0d9f921a85ed0d7e76212a82ec3851113",
       "without_hooks_sha256": "9f96a1ae54967d7e9ee78ef60ac802c519d3ceb60bd9d99fda848addeea2926d"
     }
   ],

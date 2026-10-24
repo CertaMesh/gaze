@@ -118,7 +118,7 @@ impl std::fmt::Debug for NymOrtBackend {
 
 impl NymOrtBackend {
     pub(crate) fn new(config: NymConfig) -> Result<Self, SafetyNetError> {
-        let _constructor = gaze_types::perf_span!("model_constructor_ns");
+        let _constructor = gaze_types::perf_span!("nym_model_constructor_ns");
         verify_nym_bundle_with_digest(&config.model_dir, config.expected_bundle_sha256)?;
         let config_json =
             std::fs::read(config.model_dir.join(NYM_SMALL_CONFIG_FILE)).map_err(|_| {

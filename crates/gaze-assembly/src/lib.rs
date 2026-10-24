@@ -134,7 +134,9 @@ pub fn attach_nym_safety_net(
             ));
         }
     }
+    let outer_verify = gaze_types::perf_span!("nym_outer_verify_ns");
     verify_nym_bundle(model_dir).map_err(BuildError::NymBundle)?;
+    drop(outer_verify);
     let mut config = NymConfig::new(model_dir)
         .with_operating_point(policy.safety_net.nym.clone().unwrap_or_default());
     if let Some(bytes) = max_input_bytes {

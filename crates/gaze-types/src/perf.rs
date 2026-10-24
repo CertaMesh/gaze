@@ -133,6 +133,8 @@ mod enabled {
                 "recognizer_construction_ns",
                 "nym_attach_ns",
                 "model_constructor_ns",
+                "nym_model_constructor_ns",
+                "nym_outer_verify_ns",
                 "tokenizer_load_ns",
                 "model_load_ns",
                 "bundle_verify_ns",

@@ -24,8 +24,8 @@ FILES = (
 
 def without_hooks(source):
     source = re.sub(r'^\s*#\[cfg\(feature = "perf-timers"\)\]\n\s*(?:crate::perf::(?:ready|policy_loaded)|perf::start)\(\);\n', '', source, flags=re.M)
-    source = re.sub(r'^ *let (?:_construction|policy_load|_assembly|rules|_policy_rules|_attach|_constructor|tokenizer_load|model_load|_verify|startup) = gaze_types::perf_span!\("[a-z_]+"\);\n', '', source, flags=re.M)
-    source = re.sub(r'^ *drop\((?:policy_load|rules|tokenizer_load|model_load|startup)\);\n', '', source, flags=re.M)
+    source = re.sub(r'^ *let (?:_construction|policy_load|_assembly|rules|_policy_rules|_attach|_constructor|tokenizer_load|model_load|_verify|outer_verify|startup) = gaze_types::perf_span!\("[a-z_]+"\);\n', '', source, flags=re.M)
+    source = re.sub(r'^ *drop\((?:policy_load|rules|tokenizer_load|model_load|outer_verify|startup)\);\n', '', source, flags=re.M)
     return source
 
 
