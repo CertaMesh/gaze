@@ -19,6 +19,7 @@ impl NerDetector {
     /// Verify SHA256SUMS, parse labels.json and config.json. No backend
     /// initialization. Used both by `load` and by unit tests.
     pub fn verify_artifacts(model_dir: &Path) -> Result<VerifiedArtifacts, NerLoadError> {
+        let _verify = gaze_types::perf_span!("bundle_verify_ns");
         if !model_dir.is_dir() {
             return Err(NerLoadError::ModelDirMissing {
                 path: model_dir.to_path_buf(),

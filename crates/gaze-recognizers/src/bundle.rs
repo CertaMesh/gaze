@@ -28,6 +28,7 @@ pub(crate) fn verify_bundle(
     spec: BundleSpec,
     expected_sha256: &str,
 ) -> Result<(), SafetyNetError> {
+    let _verify = gaze_types::perf_span!("bundle_verify_ns");
     if !dir.exists() {
         return Err(SafetyNetError::WeightsMissing {
             path: sanitize_path(dir),
