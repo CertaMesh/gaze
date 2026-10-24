@@ -178,13 +178,13 @@ python3.12 scripts/bench/compare/pii_tracer.py --dataset target/bench-data/datai
 native label; its output is never published. The third-party sets take the same
 `--pii-tracer-python` / `--pii-tracer-model` flags on `theirbench.py`.
 
-Presidio: https://github.com/data-privacy-stack/presidio/tree/main/docs/analyzer/nlp_engines
-DataFog Core: https://github.com/DataFog/datafog-core
-DataFog Python: https://github.com/DataFog/datafog-python
-scrubadub: https://github.com/LeapBeyond/scrubadub/blob/master/docs/usage.rst
-GLiNER PII model: https://huggingface.co/urchade/gliner_multi_pii-v1
+Presidio: https://github.com/data-privacy-stack/presidio/blob/2.2.364/docs/analyzer/index.md
+DataFog Core: https://github.com/DataFog/datafog-core/blob/v0.3.0/README.md
+DataFog Python: https://github.com/DataFog/datafog-python/blob/v4.8.1/README.md
+scrubadub: https://github.com/LeapBeyond/scrubadub/blob/v2.0.0/docs/usage.rst
+GLiNER PII model: https://huggingface.co/urchade/gliner_multi_pii-v1/tree/1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d
 OPF: https://github.com/openai/privacy-filter
-PII-Tracer: https://huggingface.co/perplexity-ai/PII-Tracer
+PII-Tracer: https://huggingface.co/perplexity-ai/PII-Tracer/blob/d25c16f2e57e321f6d2527715c01df9112f956f5/README.md
 
 ## Publish the Spanish scrubadub supplement
 
