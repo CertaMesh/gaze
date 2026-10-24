@@ -241,7 +241,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let case: Case = serde_json::from_str(&line?)?;
         println!(
             "{}",
-            run_case(case, &pipeline, &inputs.locale_chain, &inputs.dictionaries).await?
+            run_case(
+                case,
+                &pipeline,
+                inputs.locale_chain.as_slice(),
+                &inputs.dictionaries
+            )
+            .await?
         );
     }
     Ok(())
