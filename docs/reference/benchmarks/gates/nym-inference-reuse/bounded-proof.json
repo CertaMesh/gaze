@@ -4,7 +4,9 @@
     "base_sha256": "dbe486825474433d6a8ced67c5da149cb5244e1062d895e643bd658e0c5f6df6",
     "candidate_sha256": "e8cdf7549773ac0156d76ec8b35b9b7bb6ec0052554d3e7166fc421fb1b188c2"
   },
+  "full_specification_reference": "gaze-benchmark-v1:a436a22c225242899bc242767803d2b9cd82d43412e8ea855dc99533dccf453d",
   "implementation_source": "e6d0c4ed6ddff63812978bf297a65093da799e9c",
+  "integrated_candidate_source": "b595f520df771d44d393bf76327c9751cded4523",
   "inventory": {
     "dataset_sha256": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
     "documents": [
@@ -489,7 +491,7 @@
         "text_sha256": "fa2f1f48ac47f23b82a4da3ec06a1cb2ab74f5780271094a8fba2f5aaf6e8bd1"
       }
     ],
-    "generator_sha256": "a8e226d541691320b290d9aa1d3f8f3986c3711911a00f9370fdc3951c71b3fe",
+    "generator_sha256": "7d9ba7976765db539f1f46cd38d95d5ae125fd5aca6447bc2bb04ab09331fea4",
     "requests_sha256": "e0836cae13fd3313ae50aaa1e77cfcf8169c3d27cb13174aaa58edf4ac93abb3",
     "seed": 20260710
   },
@@ -528,6 +530,11 @@
     "source_head": "e6d0c4ed6ddff63812978bf297a65093da799e9c",
     "source_sha256": "35ca9b38ca6c83584fb758b1368dee00268ab8ede77957a452579447ff46d288",
     "test": "safety_net::nym::reuse::tests::every_execution_input_separates_reuse"
+  },
+  "ner_proof": {
+    "call_inputs": "Primary raw text, target, locale chain and dictionaries are unchanged.",
+    "observations": "NER candidate events and audit bytes match exactly.",
+    "source_diff_from_base": false
   },
   "policies": {
     "model-free-equivalence": {
@@ -1090,6 +1097,7 @@
         "R": 24
       },
       "policy_sha256": "8cac3730921a1fe79b04bc905693e0972e6d7730af7795e84225b3b95d279192",
+      "policy_template_sha256": "8cac3730921a1fe79b04bc905693e0972e6d7730af7795e84225b3b95d279192",
       "raw_nym_probability_bits": null,
       "requests_sha256": "e0836cae13fd3313ae50aaa1e77cfcf8169c3d27cb13174aaa58edf4ac93abb3",
       "scope": "bounded slice, not main certification or full-corpus gate",
@@ -1655,6 +1663,7 @@
         "R": 24
       },
       "policy_sha256": "438c9b3bc9ffe32526d38420d526a7fb8133aeec628c9bc3ae4e60ac0e4e2584",
+      "policy_template_sha256": "438c9b3bc9ffe32526d38420d526a7fb8133aeec628c9bc3ae4e60ac0e4e2584",
       "raw_nym_probability_bits": {
         "documents": 293,
         "verified_windows": 672
@@ -1665,5 +1674,6 @@
     }
   },
   "policy_template_sha256": "45a402b2fe816daa091d2fbbab063bcbb56e061c1f73e910bff538646608deaa",
+  "rust_tree_unchanged_since_implementation": true,
   "scope": "bounded equivalence, full-corpus certification pending"
 }
