@@ -132,3 +132,10 @@ sweep-pattern limits remain in effect.
 Discarded probe transactions preserve mappings and session state. They do not
 suppress audit attempts: `control_would_mutate` retains one audit attempt on
 both base and candidate. This pre-existing audit behavior is outside the repair.
+
+The large-carrier cases apply to OpenAI and Gemini, which use the repaired
+legacy residual path. Anthropic's existing `ResponseBodyLimitExceeded` rejects
+the 2,048-byte name seed before the unsupported-field target can run. The
+committed fixture records that exclusion. Anthropic's existing unknown-field
+controls remain in the comparison. No response limit or validator changes for
+this counterweight.

@@ -3744,13 +3744,23 @@
       "id": "unsupported-large-owned-counterweight",
       "name_bytes": 2048,
       "copies": 1025,
-      "private_byte": false
+      "private_byte": false,
+      "providers": [
+        "openai",
+        "gemini"
+      ],
+      "provider_exclusion_reason": "Anthropic's existing ResponseBodyLimitExceeded rejects the 2048-byte name seed before the unsupported-field target. The repaired legacy residual path applies to OpenAI and Gemini."
     },
     {
       "id": "unsupported-large-owned-private-byte",
       "name_bytes": 2048,
       "copies": 1025,
-      "private_byte": true
+      "private_byte": true,
+      "providers": [
+        "openai",
+        "gemini"
+      ],
+      "provider_exclusion_reason": "Anthropic's existing ResponseBodyLimitExceeded rejects the 2048-byte name seed before the unsupported-field target. The repaired legacy residual path applies to OpenAI and Gemini."
     }
   ]
 }

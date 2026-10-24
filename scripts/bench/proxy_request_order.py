@@ -73,6 +73,7 @@ def load_cases(fixture=FIXTURE):
         gold = [{"start": found.start(), "end": found.end(), "label": "FIRSTNAME"}
                 for found in re.finditer(r"X+|S", text)]
         cases.append({"id": shape["id"], "order": "source_first", "seed": seed,
+                      "providers": shape["providers"], "provider_exclusion_reason": shape["provider_exclusion_reason"],
                       "leaves": [{"text": source, "gold": source_gold},
                                  {"text": text, "wire_text": wire, "gold": gold, "carrier": "unsupported"}]})
     return cases
@@ -460,6 +461,8 @@ def measure(binary, policy, fixture, output, runtime_root, session_binary=None):
     with upstream() as (upstream_url, captured), proxy(binary, policy, upstream_url, output.with_suffix(".log"), runtime_root, **({"session_binary": session_binary} if session_binary else {})) as (base_url, command):
         for provider in PROVIDERS:
             for case in cases:
+                if provider not in case.get("providers", PROVIDERS):
+                    continue
                 session_id = native_session_id(provider, case["id"]) if session_binary is not None else None
                 bound, known, seed_scores, owner_token = case, {}, {}, None
                 if "seed" in case:
@@ -567,7 +570,7 @@ def compare(base, candidate, *, gate_policy="strict"):
         raise ValueError("proxy captures have different input/scoring identities")
     counts = tuple(base["totals"])
     expected = {(provider, case["id"]) for provider in PROVIDERS
-                for case in load_cases()}
+                for case in load_cases() if provider in case.get("providers", PROVIDERS)}
     for card in (base, candidate):
         keys = [(row["provider"], row["id"]) for row in card["cases"]]
         if len(keys) != len(expected) or set(keys) != expected:
@@ -621,7 +624,7 @@ def compare(base, candidate, *, gate_policy="strict"):
     old = {key: sum(before[key] for before, _ in paired) for key in counts}
     new = {key: sum(after[key] for _, after in paired) for key in counts}
     transitions = []
-    fixture = {case["id"]: case for case in load_cases()}
+    fixture = {case["id"]: case for case in load_cases() if provider in case.get("providers", PROVIDERS)}
     for row in candidate["cases"]:
         previous = rows[(row["provider"], row["id"])]
         if previous["forwarded"] or not row["forwarded"]:

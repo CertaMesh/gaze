@@ -60,7 +60,8 @@ def capture_card(leaks):
              "seed_forwarded": int("seed" in case), "seed_restore_exact": int("seed" in case), "owned_identities_preserved": 1,
              "gold_bytes": sum(sum(bench.gold_bytes(leaf)) for leaf in case["leaves"]),
              "leaked_bytes": leaks, "false_positive_bytes_v1": 0, "false_positive_bytes_v2": 0}
-            for provider in bench.PROVIDERS for case in cases]
+            for provider in bench.PROVIDERS for case in cases
+            if provider in case.get("providers", bench.PROVIDERS)]
     counts = tuple(key for key in rows[0] if key not in {"provider", "id"})
     return {"schema": "gaze-proxy-request-order-v3", "layer": "proxy-request-order",
             "contract_labels": ["FIRSTNAME", "SURNAME", "EMAIL"], "scored_contracts": ["v2", "v1"],
@@ -570,3 +571,12 @@ def test_large_owned_carriers_have_exact_independent_gold_and_small_wire():
         if private:
             source = case["leaves"][0]
             assert source["text"][source["gold"][-1]["start"]:source["gold"][-1]["end"]] == "m@example.invalid"
+
+
+def test_large_carriers_are_scoped_to_the_repaired_legacy_path():
+    cases = bench.load_cases()
+    assert sum(provider in case.get("providers", bench.PROVIDERS)
+               for provider in bench.PROVIDERS for case in cases) == 169
+    for case in cases[-2:]:
+        assert case["providers"] == ["openai", "gemini"]
+        assert "ResponseBodyLimitExceeded" in case["provider_exclusion_reason"]
