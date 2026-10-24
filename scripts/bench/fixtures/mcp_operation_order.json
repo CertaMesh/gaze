@@ -1,0 +1,2183 @@
+{
+  "schema_version": 1,
+  "contract": "mcp-operation-order-v1",
+  "test": "scripts/bench/test_mcp_operation_order.py",
+  "cases": [
+    {
+      "id": "declared-maria-schneider-arguments",
+      "layer": "A",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "declared-maria-schneider-response",
+      "layer": "A",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-maria-schneider-last-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-maria-schneider-last-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-maria-schneider-first-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "hello maria schneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "hello maria schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "repeat-maria-schneider-first-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "hello maria schneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "hello maria schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "declared-johanna-fischer-arguments",
+      "layer": "A",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "From: Johanna Fischer <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "From: Johanna Fischer <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "declared-johanna-fischer-response",
+      "layer": "A",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "From: Johanna Fischer <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "From: Johanna Fischer <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-johanna-fischer-last-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello johanna fischer",
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello johanna fischer",
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-johanna-fischer-last-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello johanna fischer",
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello johanna fischer",
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-johanna-fischer-first-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ],
+          "hello johanna fischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ],
+          "hello johanna fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "repeat-johanna-fischer-first-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ],
+          "hello johanna fischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ],
+          "hello johanna fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "declared-mária-brenner-arguments",
+      "layer": "A",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "From: Mária Brenner <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "From: Mária Brenner <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            22,
+            43
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "declared-mária-brenner-response",
+      "layer": "A",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "From: Mária Brenner <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "From: Mária Brenner <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            22,
+            43
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-mária-brenner-last-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello mária brenner",
+          [
+            "From: Mária Brenner <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello mária brenner",
+          [
+            "From: Mária Brenner <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            22,
+            43
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-mária-brenner-last-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello mária brenner",
+          [
+            "From: Mária Brenner <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello mária brenner",
+          [
+            "From: Mária Brenner <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            22,
+            43
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-mária-brenner-first-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          [
+            "From: Mária Brenner <alice@example.invalid>"
+          ],
+          "hello mária brenner"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          [
+            "From: Mária Brenner <alice@example.invalid>"
+          ],
+          "hello mária brenner"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            22,
+            43
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "repeat-mária-brenner-first-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          [
+            "From: Mária Brenner <alice@example.invalid>"
+          ],
+          "hello mária brenner"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          [
+            "From: Mária Brenner <alice@example.invalid>"
+          ],
+          "hello mária brenner"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            22,
+            43
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "owned-contained-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria Schneider"
+      ],
+      "payload": {
+        "items": [
+          "hello {{owned_0}} johanna",
+          "From: Schneider Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello Maria Schneider johanna",
+          "From: Schneider Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            12,
+            29
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            23
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            25,
+            46
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-contained-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria Schneider"
+      ],
+      "payload": {
+        "items": [
+          "hello {{owned_0}} johanna",
+          "From: Schneider Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello Maria Schneider johanna",
+          "From: Schneider Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            12,
+            29
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            23
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            25,
+            46
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-prefix-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria Schneider"
+      ],
+      "payload": {
+        "items": [
+          "hello eva {{owned_0}}",
+          "From: Eva Maria <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello eva Maria Schneider",
+          "From: Eva Maria <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            10,
+            25
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            17,
+            38
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-prefix-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria Schneider"
+      ],
+      "payload": {
+        "items": [
+          "hello eva {{owned_0}}",
+          "From: Eva Maria <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello eva Maria Schneider",
+          "From: Eva Maria <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            10,
+            25
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            17,
+            38
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-between-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria Schneider",
+        "Johanna Fischer"
+      ],
+      "payload": {
+        "items": [
+          "hello {{owned_0}} und {{owned_1}}",
+          "From: Schneider Und Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello Maria Schneider und Johanna Fischer",
+          "From: Schneider Und Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            12,
+            33
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            26,
+            41
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            27
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            29,
+            50
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-between-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria Schneider",
+        "Johanna Fischer"
+      ],
+      "payload": {
+        "items": [
+          "hello {{owned_0}} und {{owned_1}}",
+          "From: Schneider Und Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello Maria Schneider und Johanna Fischer",
+          "From: Schneider Und Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            12,
+            33
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            26,
+            41
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            27
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            29,
+            50
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-chain-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria Schneider",
+        "Julia Weber"
+      ],
+      "payload": {
+        "items": [
+          "hello {{owned_0}} johanna {{owned_1}} paula",
+          "From: Schneider Johanna <alice@example.invalid>",
+          "From: Johanna Julia <alice@example.invalid>",
+          "From: Weber Paula <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello Maria Schneider johanna Julia Weber paula",
+          "From: Schneider Johanna <alice@example.invalid>",
+          "From: Johanna Julia <alice@example.invalid>",
+          "From: Weber Paula <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            12,
+            29
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            22,
+            35
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            36,
+            47
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            30,
+            41
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            23
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            25,
+            46
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            6,
+            19
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            21,
+            42
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            6,
+            17
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            19,
+            40
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-chain-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria Schneider",
+        "Julia Weber"
+      ],
+      "payload": {
+        "items": [
+          "hello {{owned_0}} johanna {{owned_1}} paula",
+          "From: Schneider Johanna <alice@example.invalid>",
+          "From: Johanna Julia <alice@example.invalid>",
+          "From: Weber Paula <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello Maria Schneider johanna Julia Weber paula",
+          "From: Schneider Johanna <alice@example.invalid>",
+          "From: Johanna Julia <alice@example.invalid>",
+          "From: Weber Paula <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            12,
+            29
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            22,
+            35
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            36,
+            47
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            30,
+            41
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            23
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            25,
+            46
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            6,
+            19
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            21,
+            42
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            6,
+            17
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            19,
+            40
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "public-text-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "maria_count is a variable"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "maria_count is a variable"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "public-text-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "maria_count is a variable"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "maria_count is a variable"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "public-code-arguments",
+      "layer": "D",
+      "category": "code",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "let item_count = 17;",
+          "https://packages.example.invalid/maria-schneider",
+          "function tally(items) { return items.length; }"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "let item_count = 17;",
+          "https://packages.example.invalid/maria-schneider",
+          "function tally(items) { return items.length; }"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "public-code-response",
+      "layer": "D",
+      "category": "code",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "let item_count = 17;",
+          "https://packages.example.invalid/maria-schneider",
+          "function tally(items) { return items.length; }"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "let item_count = 17;",
+          "https://packages.example.invalid/maria-schneider",
+          "function tally(items) { return items.length; }"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "public-number-arguments",
+      "layer": "D",
+      "category": "number",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          17,
+          42,
+          256,
+          "batch count 64"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          17,
+          42,
+          256,
+          "batch count 64"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "public-number-response",
+      "layer": "D",
+      "category": "number",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          17,
+          42,
+          256,
+          "batch count 64"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          17,
+          42,
+          256,
+          "batch count 64"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "siblings-text-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "siblings-text-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "siblings-code-arguments",
+      "layer": "D",
+      "category": "code",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "let maria_count = 17;",
+          "https://packages.example.invalid/schneider",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "let maria_count = 17;",
+          "https://packages.example.invalid/schneider",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "siblings-code-response",
+      "layer": "D",
+      "category": "code",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "let maria_count = 17;",
+          "https://packages.example.invalid/schneider",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "let maria_count = 17;",
+          "https://packages.example.invalid/schneider",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "siblings-number-arguments",
+      "layer": "D",
+      "category": "number",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          17,
+          42,
+          "item count 256",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          17,
+          42,
+          "item count 256",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "siblings-number-response",
+      "layer": "D",
+      "category": "number",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          17,
+          42,
+          "item count 256",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          17,
+          42,
+          "item count 256",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    }
+  ]
+}
