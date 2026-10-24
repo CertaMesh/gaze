@@ -61,10 +61,32 @@ Captures retain exact synthetic protected leaves and signed manifests, plus
 hashes for the fixture, driver, host, builder, runtime lock, binary, policy, and models. Preserve
 setup/build/capture logs alongside them. The host emits no timing claim.
 
-This arm supplements the required full v2 and v1 gain gate for layers C, A, D, and R. Its A, D, and R totals
-must not be silently substituted for the text layers. Coordinate gate integration
-and required history measurements before claiming a detection-changing merge pass.
-An implementation with only unit-test gains is not ready to merge.
+The composed gate in `../mcp_operation_gate.py` adds the native operation counts
+to A, D, and R while retaining the original text component and C. It first admits
+the text scorecards through `agentic_layers.gate` and replays the native byte
+oracle. Exact runtime revisions, setup-policy hashes, NER thresholds, and model
+bundle digests must match within each side. A regression in either component
+fails even when the combined totals would hide it. Original capture scorecards
+and their execution receipts remain unchanged. The derived scorecards retain
+both input hashes and the composed totals used by the canonical byte-gain rule.
+
+```sh
+uv run --project scripts/bench --group comparison-test python \
+  scripts/bench/mcp_operation_gate.py \
+  --base-v1 /path/to/base-v1/scorecard.json \
+  --candidate-v1 /path/to/candidate-v1/scorecard.json \
+  --base-v2 /path/to/base-v2/scorecard.json \
+  --candidate-v2 /path/to/candidate-v2/scorecard.json \
+  --base-native /path/to/base-native.json \
+  --candidate-native /path/to/candidate-native.json \
+  --output-dir target/mcp-composed-gate
+```
+
+The command writes four composed scorecards and `gate.json`. It exits with 1
+unless both contracts pass. A native-only comparison does not establish the
+full gain gate. Missing or mismatched text captures block composition. Run the
+required history measurements or report unsupported releases before claiming
+the benchmark's release evidence is complete.
 
 Model-free oracle tests:
 
