@@ -55,7 +55,7 @@ def main():
             if old not in source:
                 raise RuntimeError(f'probe target missing: {name}')
             SOURCE.write_text(source.replace(old, new, 1))
-            run = subprocess.run([sys.executable, '-m', 'pytest', '-q', str(HERE / test)],
+            run = subprocess.run([sys.executable, '-m', 'pytest', '--color=no', '-q', str(HERE / test)],
                                  cwd=ROOT, capture_output=True, text=True)
             output = run.stdout + run.stderr
             (logs / f'{name}.log').write_text(f'commit {head}\n' + output)
