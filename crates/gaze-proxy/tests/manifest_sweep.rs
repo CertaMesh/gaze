@@ -465,7 +465,7 @@ async fn run_configured_case(
             .unwrap()
             .to_owned()
     };
-    if seed.is_some() {
+    if seed.is_some() && unsupported_text.is_none() {
         let index = usize::from(source_first);
         assert!(
             provider.text(&captured[0], index).contains(&token),
@@ -780,6 +780,30 @@ async fn unsupported_carrier_counterweights_remain_verbatim() {
                 )
                 .await;
             }
+            run_configured_case(
+                provider,
+                stream,
+                false,
+                Some(gaze::EvidenceKind::Rule),
+                (SOURCE, "ordinary text", Some(("Hello {token}", false))),
+                Some("Maria"),
+                false,
+            )
+            .await;
+            run_configured_case(
+                provider,
+                stream,
+                false,
+                Some(gaze::EvidenceKind::Rule),
+                (
+                    SOURCE,
+                    "ordinary text",
+                    Some(("Literal <deadbeef:Name_1> documentation", false)),
+                ),
+                None,
+                false,
+            )
+            .await;
             for evidence in [Some(gaze::EvidenceKind::Learned), None] {
                 run_configured_case(
                     provider,

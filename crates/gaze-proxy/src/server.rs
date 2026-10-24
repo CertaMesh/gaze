@@ -3271,13 +3271,11 @@ fn residual_scan_request(
     locale_chain: &[LocaleTag],
     dictionaries: &DictionaryBundle,
     model_is_routing_control: bool,
-    routing_transaction: &SessionTransaction<'_>,
+    request_transaction: &SessionTransaction<'_>,
 ) -> Result<(), ProxyError> {
-    let session =
-        Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
     let scan = RequestResidualScan {
         pipeline,
-        session,
+        transaction: request_transaction,
         surfaced,
         locale_chain,
         dictionaries,
@@ -3289,7 +3287,7 @@ fn residual_scan_request(
         match (model_is_routing_control, key.as_str(), value) {
             (true, "model", Value::String(text)) => residual_scan_model_control(
                 pipeline,
-                routing_transaction,
+                request_transaction,
                 text,
                 locale_chain,
                 dictionaries,
@@ -3339,9 +3337,9 @@ fn residual_scan_model_control(
 }
 
 /// Walk state for the outbound request residual re-scan.
-struct RequestResidualScan<'a> {
+struct RequestResidualScan<'a, 'session> {
     pipeline: &'a Pipeline,
-    session: Session,
+    transaction: &'a SessionTransaction<'session>,
     surfaced: &'a HashSet<String>,
     /// The same chain the primary pass ran under. See [`residual_scan_request`].
     locale_chain: &'a [LocaleTag],
@@ -3349,31 +3347,57 @@ struct RequestResidualScan<'a> {
     dictionaries: &'a DictionaryBundle,
 }
 
-impl RequestResidualScan<'_> {
-    fn probe(&self, field_path: &str, text: &str) -> Result<(), ProxyError> {
-        let (clean, spans, report) = self
+impl RequestResidualScan<'_, '_> {
+    /// Every overlapping Rule hit must be wholly owned. Unknown token-looking text stays
+    /// literal: only exact tokens in this captured request may contribute owned bytes.
+    fn rule_repeats_are_covered(&self, text: &str) -> Result<bool, ProxyError> {
+        let mut expanded = String::new();
+        let mut covered = Vec::new();
+        let mut cursor = 0;
+        for range in owned_token_ranges(text, &self.transaction.tokens()) {
+            let value = self
+                .transaction
+                .restore(&text[range.clone()])
+                .ok_or(ProxyError::UnprovenCoverage)?;
+            let end = expanded
+                .len()
+                .checked_add(range.start - cursor)
+                .and_then(|length| length.checked_add(value.len()))
+                .filter(|length| *length <= DEFAULT_MAX_REQUEST_BYTES)
+                .ok_or(ProxyError::UnprovenCoverage)?;
+            expanded.push_str(&text[cursor..range.start]);
+            covered.resize(expanded.len(), false);
+            expanded.push_str(&value);
+            covered.resize(end, true);
+            cursor = range.end;
+        }
+        let end = expanded
+            .len()
+            .checked_add(text.len() - cursor)
+            .filter(|length| *length <= DEFAULT_MAX_REQUEST_BYTES)
+            .ok_or(ProxyError::UnprovenCoverage)?;
+        expanded.push_str(&text[cursor..]);
+        covered.resize(end, false);
+        // This query enumerates ALL eligible hits, including contained/chained overlaps.
+        // No non-overlapping selection or protection pass may hide a raw intersection.
+        let hits = self
             .pipeline
-            .clean_with_safety_net_detect_context(
-                &self.session,
-                RawDocument::Text(text.to_owned()),
-                self.locale_chain,
-                self.dictionaries,
-            )
+            .staged_rule_repeat_candidates(self.transaction, &expanded)
             .map_err(|source| ProxyError::Pipeline { source })?;
-        // This walk forwards `text` unchanged when it returns `Ok`, so the only thing that
-        // justifies `Ok` is the pipeline having done NOTHING to this position. An empty `spans`
-        // does not say that: a safety-net fallback DELETION removes the PII from a clean text
-        // that is discarded here and emits no manifest entry, so reading `spans` alone accepts
-        // the very position a net just flagged and forwards the raw bytes to the provider.
-        let untouched = matches!(&clean, CleanDocument::Text(cleaned) if cleaned == text);
-        // Three conjuncts, deliberately overlapping. Under the policy this call site pins
-        // (`SafetyNetPolicy::default()` = Resolve + Redact) a deletion always leaves BOTH a
-        // changed text and a surviving suspect, so `untouched` and `report.suspects` are each
-        // redundant TODAY -- a mutation probe kills neither on its own. Keep both anyway:
-        // `untouched` states directly what `Ok` promises here (these exact bytes get forwarded),
-        // and `report.suspects` is the only backstop left if a future mode reports without
-        // mutating. Dropping either narrows the guard to an assumption about the current policy.
-        if untouched && spans.is_empty() && report.suspects.is_empty() {
+        Ok(hits
+            .into_iter()
+            .all(|hit| covered[hit.span].iter().all(|byte| *byte)))
+    }
+
+    fn probe(&self, field_path: &str, text: &str) -> Result<(), ProxyError> {
+        // Immutable positions never publish probe mappings. Each full-pipeline probe forks
+        // the same captured request, so Learned/net findings cannot seed later positions.
+        if self.rule_repeats_are_covered(text)?
+            && !self
+                .pipeline
+                .control_would_mutate(self.transaction, text, self.locale_chain, self.dictionaries)
+                .map_err(|source| ProxyError::Pipeline { source })?
+        {
             return Ok(());
         }
         Err(ProxyError::UnsurfacedPii {
@@ -4067,6 +4091,33 @@ mod tests {
             "Existing Synthetic"
         );
         assert_eq!(session.prefix_cache_entry_count(), 0);
+    }
+
+    #[test]
+    fn residual_probes_share_only_the_captured_request_evidence() {
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::new("Synthetic Person", PiiClass::Name).unwrap())
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let transaction = session.begin_transaction();
+        let surfaced = HashSet::new();
+        let dictionaries = DictionaryBundle::default();
+        let scan = RequestResidualScan {
+            pipeline: &pipeline,
+            transaction: &transaction,
+            surfaced: &surfaced,
+            locale_chain: &[LocaleTag::Global],
+            dictionaries: &dictionaries,
+        };
+        assert!(matches!(
+            scan.probe("first", "Synthetic Person"),
+            Err(ProxyError::UnsurfacedPii { .. })
+        ));
+        assert!(scan.probe("second", "synthetic person").is_ok());
+        assert!(transaction.snapshot_entries().is_empty());
+        assert!(session.snapshot_entries().is_empty());
     }
 
     const DIRECT_REQUEST_BODY: &[u8] = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":"synthetic request"}]}"#;
