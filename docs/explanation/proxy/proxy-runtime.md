@@ -7,11 +7,14 @@ response shape.
 ## Immutable request coverage and expansion limits
 
 The legacy OpenAI and Gemini paths probe immutable request leaves against the
-captured request transaction. Owned tokens expand to their manifest values before
+captured request transaction for Rule coverage. Owned tokens expand to their manifest values before
 the real Rule repeat matcher runs. Full context preserves word boundaries, URL
 exclusions, Unicode spelling, and compound-name growth. Learned and safety-net-only
-values do not supply repeat evidence. Probes discard staged mappings; the existing
-full-pipeline control probe can still emit an audit attempt.
+values do not supply repeat evidence. An independent full-pipeline probe uses a
+fresh discarded session, preserving baseline detector/net context. Owned classes
+are not lent to neural detection: that can misclassify a public suffix even when
+the Rule proof admits it. Probes discard mappings; the existing full-pipeline
+control probe can still emit an audit attempt.
 
 Every non-whitespace byte in a Rule occurrence must be owned by a token. An
 uncovered whitespace gap is allowed only inside the same occurrence, between two

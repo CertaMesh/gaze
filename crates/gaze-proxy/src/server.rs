@@ -3409,15 +3409,24 @@ impl RequestResidualScan<'_, '_> {
     }
 
     fn probe(&self, field_path: &str, text: &str) -> Result<(), ProxyError> {
-        // Immutable positions never publish probe mappings. Each full-pipeline probe forks
-        // the same captured request, so Learned/net findings cannot seed later positions.
-        if self.rule_repeats_are_covered(text)?
-            && !self
+        // Captured Rule evidence is proved above the independent baseline detector/net
+        // probe. Lending owned classes to that probe changes neural context and can turn
+        // a public suffix into a new suspect even when the real Rule matcher admits it.
+        if self.rule_repeats_are_covered(text)? {
+            let probe_session =
+                Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
+            if !self
                 .pipeline
-                .control_would_mutate(self.transaction, text, self.locale_chain, self.dictionaries)
+                .control_would_mutate(
+                    &probe_session.begin_transaction(),
+                    text,
+                    self.locale_chain,
+                    self.dictionaries,
+                )
                 .map_err(|source| ProxyError::Pipeline { source })?
-        {
-            return Ok(());
+            {
+                return Ok(());
+            }
         }
         Err(ProxyError::UnsurfacedPii {
             field_path: field_path.to_string(),

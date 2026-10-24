@@ -131,8 +131,11 @@ exception to the positive-base-leak rule; coverage refusals still require proof
 of a base leak. Strict and ordinary paired policies retain their refusal gates.
 The cap bounds expanded input, not peak process memory or concurrency.
 
-Discarded probe transactions preserve mappings and session state. They do not
-suppress audit attempts: `control_would_mutate` retains one audit attempt on
+Rule coverage uses the captured request transaction; the independent detector/net
+probe uses a fresh discarded session to retain baseline neural context. Owned
+classes must not turn public suffixes into new neural findings. The digit-suffix
+counterweight exercises this distinction under the full policy. Probes preserve
+mappings and session state. They do not suppress audit attempts: `control_would_mutate` retains one audit attempt on
 both base and candidate. This pre-existing audit behavior is outside the repair.
 
 The large-carrier cases apply to OpenAI and Gemini, which use the repaired
