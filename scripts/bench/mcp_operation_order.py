@@ -116,6 +116,23 @@ def masks(original, protected, entries, path=()):
     return {}
 
 
+def verify_owned_identity(original, protected, entries, seed_names):
+    if isinstance(original, str):
+        for index, name in enumerate(seed_names):
+            count = original.count("{{owned_" + str(index) + "}}")
+            if not count:
+                continue
+            tokens = [token for token, entry in entries.items() if entry["class"] == "Name" and entry["raw"] == name]
+            if len(tokens) != 1 or protected.count(tokens[0]) < count:
+                raise ValueError("caller-owned token identity changed")
+    elif isinstance(original, list):
+        for left, right in zip(original, protected):
+            verify_owned_identity(left, right, entries, seed_names)
+    elif isinstance(original, dict):
+        for key in original:
+            verify_owned_identity(original[key], protected[key], entries, seed_names)
+
+
 def ulid_bytes(text):
     alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
     if len(text) != 26:
@@ -166,6 +183,7 @@ def score_case(case, record, neutral=()):
     protected = record["tool_args"] if case["direction"] == "arguments" else record["response"]
     try:
         coverage = masks(case["expanded"], protected, entries)
+        verify_owned_identity(case.get("payload", case["expanded"]), protected, entries, case.get("seed_names", []))
     except (ValueError, KeyError, TypeError):
         result["restore_failed"] = 1
         return result
@@ -201,7 +219,7 @@ def score(rows, records):
 
 
 def compare(base, candidate):
-    for field in ("specification", "contracts", "model_files", "host_registry_lock"):
+    for field in ("specification", "contracts", "model_files", "host_registry_lock", "policy_sha256"):
         if base[field] != candidate[field]:
             raise ValueError("non-comparable MCP arm identity: " + field)
     decisions = {}

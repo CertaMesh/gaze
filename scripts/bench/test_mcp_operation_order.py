@@ -105,7 +105,7 @@ def test_gate_rejects_per_layer_regression_and_new_refusal_even_at_equal_totals(
     totals = {layer: dict.fromkeys(arm.FIELDS, 0) for layer in "ADR"}
     totals["R"]["leaked"] = 15
     scores = {contract: {"layers": copy.deepcopy(totals), "cases": [{"id": "a", "refused": 0}, {"id": "b", "refused": 1}], "d_counterweights": {}} for contract in ("v1", "v2")}
-    base = {"specification": "fixed", "contracts": "fixed", "model_files": "fixed", "host_registry_lock": "fixed", "scores": scores}
+    base = {"specification": "fixed", "contracts": "fixed", "model_files": "fixed", "host_registry_lock": "fixed", "policy_sha256": "fixed", "scores": scores}
     candidate = copy.deepcopy(base)
     for contract in ("v1", "v2"):
         candidate["scores"][contract]["layers"]["R"]["leaked"] = 0
@@ -117,3 +117,10 @@ def test_gate_rejects_per_layer_regression_and_new_refusal_even_at_equal_totals(
     candidate["specification"] = "different"
     with pytest.raises(ValueError, match="non-comparable"):
         arm.compare(base, candidate)
+
+
+def test_owned_identity_cannot_be_replaced_by_an_equivalent_new_token():
+    entries = {"<deadbeef:Name_1>": entry(), "<deadbeef:Name_2>": entry(token="<deadbeef:Name_2>")}
+    with pytest.raises(ValueError, match="identity"):
+        arm.verify_owned_identity("hello {{owned_0}}", "hello <deadbeef:Name_2>", entries, ["Maria Schneider"])
+    arm.verify_owned_identity("hello {{owned_0}}", "hello <deadbeef:Name_1>", {"<deadbeef:Name_1>": entry()}, ["Maria Schneider"])
