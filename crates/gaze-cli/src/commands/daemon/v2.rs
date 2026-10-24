@@ -114,7 +114,14 @@ impl Registry {
     }
 
     fn bytes_except(&self, active: &str) -> (usize, usize) {
-        let mut state = self.tombstones.iter().map(Tombstone::bytes).sum::<usize>();
+        let mut state = std::mem::size_of::<Self>()
+            .saturating_add(4096)
+            .saturating_add(
+                self.tombstones
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<Tombstone>()),
+            )
+            .saturating_add(self.tombstones.iter().map(Tombstone::bytes).sum::<usize>());
         let mut manifests = 0usize;
         for (id, live) in &self.sessions {
             if id != active {
@@ -143,7 +150,7 @@ struct Live {
 impl Live {
     fn bytes(&self) -> usize {
         std::mem::size_of::<Self>()
-            + 512
+            + 1024
             + self.session_epoch.capacity()
             + self.projection_id.capacity()
             + self.session.manifest_allocation_bytes().saturating_mul(2)
@@ -1149,6 +1156,13 @@ fn result_bytes(results: &[BlockResult]) -> usize {
                         + b.sha256.capacity()
                         + b.clean_text.capacity()
                         + b.manifest.capacity() * 256
+                        + b.manifest
+                            .iter()
+                            .map(|span| match &span.class {
+                                PiiClass::Custom(name) => name.capacity(),
+                                _ => 0,
+                            })
+                            .sum::<usize>()
                         + b.tokens.capacity() * 128
                         + b.tokens
                             .iter()
