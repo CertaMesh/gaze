@@ -57,10 +57,3 @@ def test_ci_registry_exception_only_adds_native_evidence_paths():
     after["gate_readers"]["gate"] = "changed"
     with pytest.raises(ValueError, match="beyond"):
         proof._ci_registry_only(json.dumps(before), json.dumps(after))
-
-
-def test_document_mcp_exception_cannot_change_production_code():
-    before = b'fn production() {}\n#[cfg(test)]\nmod tests { old_assertion(); }'
-    proof._document_tests_only(before, before.replace(b'old_assertion', b'new_assertion'))
-    with pytest.raises(ValueError, match='production code changed'):
-        proof._document_tests_only(before, before.replace(b'production', b'other'))

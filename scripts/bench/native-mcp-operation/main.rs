@@ -101,7 +101,9 @@ fn replace_owned(value: &mut Value, tokens: &[String]) {
 }
 fn restore_json(session: &gaze::Session, value: &Value) -> Result<Value, gaze::RestoreError> {
     match value {
-        Value::String(text) => session.restore_strict_text(text).map(Value::String),
+        Value::String(text) => session
+            .assess_restore_text(text)
+            .map(|assessment| Value::String(assessment.into_restored().text)),
         Value::Array(values) => values
             .iter()
             .map(|value| restore_json(session, value))

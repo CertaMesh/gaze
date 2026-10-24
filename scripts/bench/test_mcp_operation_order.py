@@ -186,3 +186,14 @@ def test_policy_must_load_the_models_whose_private_copies_are_hashed(tmp_path):
     arm.verify_policy_bundle_paths(policy, directories)
     with pytest.raises(ValueError, match="declared isolated bundle"):
         arm.verify_policy_bundle_paths(policy, {**directories, "GAZE_NER_MODEL_DIR": tmp_path / "other"})
+
+
+def test_other_namespace_is_literal_and_never_credited_as_coverage():
+    foreign = '<cafebabe:Name_1>'
+    original = foreign + ' Maria Schneider'
+    protected = foreign + ' <deadbeef:Name_1>'
+    mask = arm.leaf_mask(original, protected, {'<deadbeef:Name_1>': entry()})
+    assert mask[:len(foreign)] == [None] * len(foreign)
+    assert mask[len(foreign):] == [None] + ['name'] * len('Maria Schneider')
+    with pytest.raises(ValueError, match='authoritative original'):
+        arm.leaf_mask('Maria Schneider', foreign, {})

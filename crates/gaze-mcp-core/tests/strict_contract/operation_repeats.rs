@@ -297,48 +297,64 @@ async fn learned_sources_do_not_propagate_and_unrelated_siblings_stay_public() {
 }
 
 #[tokio::test]
-async fn forged_and_foreign_tokens_roll_back_the_whole_operation() {
+async fn other_namespaces_stay_literal_while_current_session_tokens_expand() {
     let pipeline = repeat_pipeline(EvidenceKind::Rule);
-    let foreign_session = Session::new(Scope::Ephemeral).unwrap();
-    let foreign = seed(&pipeline, &foreign_session, &["Maria Schneider"])
+    let owner = Session::new(Scope::Ephemeral).unwrap();
+    let foreign = seed(&pipeline, &owner, &["Maria Schneider"])
         .await
         .remove(0);
-    for token in ["<deadbeef:Name_1>".to_owned(), foreign] {
+    for token in [
+        "<deadbeef:Name_1>".to_owned(),
+        "<deadbeef:Name_>".to_owned(),
+        foreign,
+    ] {
         for response in [false, true] {
             let session = Session::new(Scope::Ephemeral).unwrap();
             let owned = seed(&pipeline, &session, &["Julia Weber"]).await;
-            let entries = session.snapshot_entries();
-            let cache = session.prefix_cache_entry_count();
             let store = Store::default();
-            let payload = json!([source("Schneider Johanna"), token]);
+            let payload = json!([
+                token,
+                "hello maria schneider",
+                format!("hello {} brenner", owned[0]),
+                source("Julia Weber Brenner")
+            ]);
             let (registry, seen) = capture(if response {
                 payload.clone()
             } else {
                 json!("public")
             });
-            assert!(dispatch(
+            let out = dispatch(
                 &registry,
                 &store,
                 &pipeline,
                 &session,
-                if response { json!("public") } else { payload }
+                if response {
+                    json!("public")
+                } else {
+                    payload.clone()
+                },
             )
             .await
-            .is_err());
-            assert_eq!(session.snapshot_entries(), entries);
-            assert_eq!(session.prefix_cache_entry_count(), cache);
-            assert_eq!(session.tokens(), owned);
-            if !response {
-                assert_eq!(*seen.lock().unwrap(), Value::Null);
-            }
+            .unwrap();
+            let protected = if response {
+                out.payload
+            } else {
+                seen.lock().unwrap().clone()
+            };
+            assert_eq!(protected[0], payload[0]);
             assert_eq!(
-                *store.events.lock().unwrap(),
-                if response {
-                    vec!["begin", "fail"]
-                } else {
-                    vec![]
-                }
+                protected[1], payload[1],
+                "other namespace seeded a Rule source"
             );
+            assert!(protected[2].as_str().unwrap().contains(&owned[0]));
+            assert!(!protected[2].as_str().unwrap().contains("brenner"));
+            assert_eq!(
+                session
+                    .restore_strict_text(protected[2].as_str().unwrap())
+                    .unwrap(),
+                "hello Julia Weber brenner"
+            );
+            assert_eq!(*store.events.lock().unwrap(), vec!["begin", "finish"]);
         }
     }
 }

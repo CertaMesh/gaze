@@ -303,8 +303,9 @@ Transport: `gaze-mcp-rmcp`. User-input protection: `gaze-proxy`.
 
 Full dispatch, audit, and threat contracts: [MCP runtime](../../docs/explanation/mcp/mcp-runtime.md). Correlation fields, manifest lifecycle, failure variants, and authorization audit: [Metrics](../../docs/reference/metrics.md#7-mcp-chokepoint-observability-gaze-mcp-core).
 
-Broad bare identifiers such as `scan_1.png` remain literal text. Malformed or
-foreign placeholders fail before tool invocation with `Protection(Provenance)`.
-This deliberate fail-closed change replaces adopter-specific errors that could
-previously occur after invocation and an open audit call. No tool or filesystem
-access occurs for those rejected arguments.
+Only current-session token mappings expand for operation discovery and coverage.
+Other namespaces, including token-bridge owner tokens, retain their base behavior
+as literal text. They are not expanded or newly rejected by this operation proof.
+Their adopter-specific validation and error stage remain unchanged. A separate
+opaque-carrier and foreign-namespace contract is a follow-up. Ordinary filenames
+such as `scan_1.png` remain literal text too.

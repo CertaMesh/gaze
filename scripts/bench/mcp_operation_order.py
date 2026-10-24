@@ -38,7 +38,7 @@ def identity():
 
 def fixture():
     data = json.loads(FIXTURE.read_text())
-    if data["schema_version"] != 1 or data["contract"] != "mcp-operation-order-v2":
+    if data["schema_version"] != 1 or data["contract"] != "mcp-operation-order-v3":
         raise ValueError("unsupported MCP operation fixture")
     rows = data["cases"]
     if len({row["id"] for row in rows}) != len(rows) or {row["layer"] for row in rows} != {"A", "D", "R"}:
@@ -87,6 +87,9 @@ def leaf_mask(original, protected, entries):
     """Exact literal/token reconstruction; one owner class or None per original UTF-8 byte."""
     parts, owners, cursor = [], [], 0
     for match in TOKEN.finditer(protected):
+        if match.group() not in entries:
+            # Other namespaces are literal bytes, never credited token coverage.
+            continue
         gap = protected[cursor:match.start()]
         entry = entries[match.group()]
         parts.extend((gap, entry["raw"]))

@@ -4,43 +4,40 @@ use std::collections::HashSet;
 /// Aggregate expanded original text budget for one argument or response operation.
 pub(super) const MAX_OPERATION_TEXT_BYTES: usize = 2 * 1024 * 1024;
 
-/// Broad bare identifiers are literal text, not session claims. Bound each owned
-/// expansion before allocation while retaining strict checks on other spellings.
+/// Expand only exact current-session mappings. Other namespaces remain literal,
+/// as in the primary protection path. Check the full size before allocating.
 pub(super) fn expand_owned_bounded(
     transaction: &SessionTransaction<'_>,
     input: &str,
     limit: usize,
 ) -> Result<String, ProtectionError> {
-    gaze::token_shape::validate_restore_shapes(input).map_err(|_| ProtectionError::Provenance)?;
-    let mut output = String::new();
-    let mut cursor = 0;
-    for bare in gaze::token_shape::pattern()
-        .find_iter(input)
-        .filter(|found| {
-            gaze::token_shape::is_bare_identifier(found.as_str())
-                && !transaction.contains_token(found.as_str())
-        })
-    {
-        let gap = transaction
-            .restore_strict_text_bounded(&input[cursor..bare.start()], limit - output.len())
+    let ranges = owned_token_ranges(input, &transaction.tokens())?;
+    let unchanged = ranges
+        .iter()
+        .try_fold(input.len(), |size, range| size.checked_sub(range.len()))
+        .ok_or(ProtectionError::Provenance)?;
+    let mut remaining = limit
+        .checked_sub(unchanged)
+        .ok_or(ProtectionError::Provenance)?;
+    let mut expanded = Vec::with_capacity(ranges.len());
+    for range in ranges {
+        let raw = transaction
+            .restore_strict_text_bounded(&input[range.clone()], remaining)
             .map_err(|_| ProtectionError::Provenance)?;
-        let size = output
-            .len()
-            .checked_add(gap.len())
-            .and_then(|n| n.checked_add(bare.len()))
-            .filter(|n| *n <= limit)
-            .ok_or(ProtectionError::Provenance)?;
-        output
-            .try_reserve(size - output.len())
-            .map_err(|_| ProtectionError::Provenance)?;
-        output.push_str(&gap);
-        output.push_str(bare.as_str());
-        cursor = bare.end();
+        remaining -= raw.len();
+        expanded.push((range, raw));
     }
-    let tail = transaction
-        .restore_strict_text_bounded(&input[cursor..], limit - output.len())
+    let mut output = String::new();
+    output
+        .try_reserve_exact(limit - remaining)
         .map_err(|_| ProtectionError::Provenance)?;
-    output.push_str(&tail);
+    let mut cursor = 0;
+    for (range, raw) in expanded {
+        output.push_str(&input[cursor..range.start]);
+        output.push_str(&raw);
+        cursor = range.end;
+    }
+    output.push_str(&input[cursor..]);
     Ok(output)
 }
 
@@ -53,11 +50,11 @@ pub(super) fn verify_rule_coverage(
     let original = expand_owned_bounded(transaction, protected, MAX_OPERATION_TEXT_BYTES)?;
     let mut covered = vec![false; original.len()];
     let (mut wire_cursor, mut raw_cursor) = (0, 0);
-    for range in owned_token_ranges(protected, &transaction.tokens()) {
+    for range in owned_token_ranges(protected, &transaction.tokens())? {
         raw_cursor += range.start - wire_cursor;
         let value = transaction
-            .restore_strict_text(&protected[range.clone()])
-            .map_err(|_| ProtectionError::Provenance)?;
+            .restore(&protected[range.clone()])
+            .ok_or(ProtectionError::Provenance)?;
         let end = raw_cursor
             .checked_add(value.len())
             .ok_or(ProtectionError::Provenance)?;
@@ -96,7 +93,7 @@ pub(super) fn cover_rule_repeats(
 ) -> Result<String, ProtectionError> {
     let mut names = transaction.tokens();
     names.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
-    let caller_owned = owned_token_ranges(original, &names)
+    let caller_owned = owned_token_ranges(original, &names)?
         .into_iter()
         .map(|range| original[range].to_owned())
         .collect::<HashSet<_>>();
@@ -104,15 +101,15 @@ pub(super) fn cover_rule_repeats(
     let entries = transaction.snapshot_entries();
     let mut tokens = Vec::new();
     let (mut wire_cursor, mut view_cursor) = (0, 0);
-    for wire in owned_token_ranges(input, &names) {
+    for wire in owned_token_ranges(input, &names)? {
         let entry = entries
             .iter()
             .find(|entry| entry.token == input[wire.clone()])
             .ok_or(ProtectionError::Provenance)?;
         view_cursor += wire.start - wire_cursor;
         let value = transaction
-            .restore_strict_text(&input[wire.clone()])
-            .map_err(|_| ProtectionError::Provenance)?;
+            .restore(&input[wire.clone()])
+            .ok_or(ProtectionError::Provenance)?;
         let view = view_cursor..view_cursor + value.len();
         let immutable = caller_owned.contains(&input[wire.clone()]);
         wire_cursor = wire.end;
@@ -268,24 +265,82 @@ fn expanded_boundary_to_wire(
     (position <= length).then_some(wire + position - view)
 }
 
-/// Locate immutable owned tokens in wire order, preferring the longest at a shared start.
-fn owned_token_ranges(input: &str, tokens: &[String]) -> Vec<std::ops::Range<usize>> {
-    let mut ranges = Vec::new();
-    let mut cursor = 0;
-    while cursor < input.len() {
-        let next = tokens
-            .iter()
-            .filter_map(|token| {
-                input[cursor..]
-                    .find(token)
-                    .map(|offset| (cursor + offset, token.len()))
-            })
-            .min_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)));
-        let Some((start, length)) = next else {
-            break;
-        };
-        ranges.push(start..start + length);
-        cursor = start + length;
+/// Match the primary protection path's exact manifest spellings and boundaries.
+fn owned_token_ranges(
+    input: &str,
+    tokens: &[String],
+) -> Result<Vec<std::ops::Range<usize>>, ProtectionError> {
+    if tokens.is_empty() {
+        return Ok(Vec::new());
     }
-    ranges
+    let mut tokens = tokens.to_vec();
+    tokens.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+    let pattern = tokens
+        .iter()
+        .map(|token| {
+            let escaped = regex::escape(token);
+            if token.starts_with('<') && token.ends_with('>') {
+                escaped
+            } else if token.split_once(':').is_some_and(|(prefix, _)| {
+                prefix.len() == 8
+                    && prefix
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            }) {
+                format!(r"(?:{escaped})\b")
+            } else {
+                format!(r"\b(?:{escaped})\b")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("|");
+    let pattern = regex::Regex::new(&pattern).map_err(|_| ProtectionError::Provenance)?;
+    Ok(pattern
+        .find_iter(input)
+        .filter(|found| {
+            !(found
+                .as_str()
+                .split_once(':')
+                .is_some_and(|(_, body)| body.starts_with("custom:family:"))
+                && input.as_bytes().get(found.end()) == Some(&b'-'))
+        })
+        .map(|found| found.range())
+        .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::owned_token_ranges;
+
+    #[test]
+    fn owned_locator_keeps_primary_protection_boundaries() {
+        let tokens = [
+            "<deadbeef:Name_1>",
+            "deadbeef:name_1",
+            "email1.deadbeef@gaze-fake.invalid",
+            "deadbeef:custom:family:account_1",
+        ]
+        .map(str::to_owned);
+        for literal in [
+            "<cafebabe:Name_1>",
+            "deadbeef:name_10",
+            "xemail1.deadbeef@gaze-fake.invalid",
+            "email1.deadbeef@gaze-fake.invalidx",
+            "deadbeef:custom:family:account_1-more",
+        ] {
+            assert!(owned_token_ranges(literal, &tokens).unwrap().is_empty());
+        }
+        for token in &tokens {
+            let text = format!("before {token} after");
+            let ranges = owned_token_ranges(&text, &tokens).unwrap();
+            assert_eq!(ranges.len(), 1);
+            assert_eq!(&text[ranges[0].clone()], token);
+        }
+        assert_eq!(
+            owned_token_ranges("prefixdeadbeef:name_1", &tokens)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
 }

@@ -6,11 +6,14 @@ Arguments captured inside the tool and protected responses released to the host
 are distinct operations. It does not flatten JSON into the text benchmark.
 
 The committed fixture `../fixtures/mcp_operation_order.json` is specification
-`mcp-operation-order-v2`. It contains 44 synthetic operations: declared sources
+`mcp-operation-order-v3`. It contains 50 synthetic operations: declared sources
 in A, ordinary text, code, and number counterweights in D, and source-first and source-last
-repeats and owned-token overlaps in R. Version 2 adds bare-filename
-counterweights and repeats beside those filenames. Both sides must be captured
-on this version; the earlier v1 capture is superseded. Payloads use fixed producer declarations
+repeats and owned-token overlaps in R. The specification includes bare-filename and other-namespace token
+counterweights, plus repeats beside both. Both sides must be captured on this
+version; earlier specifications are superseded. Current-session manifest values
+restore through the runtime assessment API. Unowned spellings remain literal,
+as required by the existing MCP contract; their other owner is not validated
+by this arm. The real token-bridge integration test covers that owner contract. Payloads use fixed producer declarations
 for `items` and a public `count`; fixtures do not confer carrier authority.
 The ordinary agentic generator is unchanged; this arm has its own frozen identity.
 

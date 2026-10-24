@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "contract": "mcp-operation-order-v2",
+  "contract": "mcp-operation-order-v3",
   "test": "scripts/bench/test_mcp_operation_order.py",
   "cases": [
     {
@@ -2346,6 +2346,214 @@
             "From: Maria Schneider <alice@example.invalid>"
           ],
           "scan_1.png Scan_1.png"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "opaque-foreign-arguments",
+      "layer": "D",
+      "category": "code",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "opaque-malformed-arguments",
+      "layer": "D",
+      "category": "code",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "<deadbeef:Name_>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "<deadbeef:Name_>"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "repeat-with-other-namespace-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "opaque-foreign-response",
+      "layer": "D",
+      "category": "code",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "opaque-malformed-response",
+      "layer": "D",
+      "category": "code",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "<deadbeef:Name_>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "<deadbeef:Name_>"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "repeat-with-other-namespace-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "<deadbeef:Name_999>"
         ],
         "count": 17
       },

@@ -747,10 +747,7 @@ mod tests {
             .await
             .unwrap_err();
         assert!(
-            matches!(
-                err,
-                DispatchError::Protection(gaze::ProtectionError::Provenance)
-            ),
+            matches!(err, DispatchError::ToolError(ToolError::InvalidArgs(_))),
             "{err:?}"
         );
         // Ordinary bare `<word>_<digits>` filenames were previously rejected at
@@ -791,12 +788,14 @@ mod tests {
                 json!({ "path": "directory/<deadbeef:Email_999>/input.png" }),
             )
             .await
-            .expect_err("unowned session-prefixed token must fail before invocation");
+            .expect_err("unowned session-prefixed token must fail at the restore gate");
         match err {
-            DispatchError::Protection(gaze::ProtectionError::Provenance) => {}
+            DispatchError::ToolError(ToolError::InvalidArgs(message)) => {
+                assert_eq!(message, "path restoration failed");
+            }
             other => panic!("unexpected error: {other:?}"),
         }
-        assert_eq!(harness.manifest.failures.load(Ordering::SeqCst), 0);
+        assert_eq!(harness.manifest.failures.load(Ordering::SeqCst), 1);
         assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
     }
 
@@ -856,13 +855,14 @@ mod tests {
             let err = harness
                 .dispatch("gaze_read_file", json!({ "path": malformed }))
                 .await
-                .expect_err("malformed token in path must fail before invocation");
+                .expect_err("malformed token in path must fail at the restore gate");
             assert!(
                 matches!(
                     err,
-                    DispatchError::Protection(gaze::ProtectionError::Provenance)
+                    DispatchError::ToolError(ToolError::InvalidArgs(ref msg))
+                    if msg == "path restoration failed"
                 ),
-                "malformed `{malformed}` must fail before invocation, got: {err:?}",
+                "malformed `{malformed}` must return InvalidArgs, got: {err:?}",
             );
         }
         assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
@@ -881,13 +881,14 @@ mod tests {
             let err = harness
                 .dispatch("gaze_read_file", json!({ "path": unowned }))
                 .await
-                .expect_err("unowned token in path must fail before invocation");
+                .expect_err("unowned token in path must fail at the restore gate");
             assert!(
                 matches!(
                     err,
-                    DispatchError::Protection(gaze::ProtectionError::Provenance)
+                    DispatchError::ToolError(ToolError::InvalidArgs(ref msg))
+                    if msg == "path restoration failed"
                 ),
-                "unowned `{unowned}` must fail before invocation, got: {err:?}",
+                "unowned `{unowned}` must return InvalidArgs, got: {err:?}",
             );
         }
         assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
@@ -897,7 +898,7 @@ mod tests {
     async fn read_file_dispatch_rejects_unowned_wrapped_and_legacy_placeholders() {
         let harness = Harness::new();
         // Unowned wrapped (`<Email_1>`) and legacy (`email_1`) placeholders are
-        // not bare identifiers and must be rejected before invocation rather
+        // not bare identifiers and must be rejected at the restore gate rather
         // than passed through to filesystem access.
         for unowned in [
             "<Email_1>/input.png",
@@ -907,13 +908,14 @@ mod tests {
             let err = harness
                 .dispatch("gaze_read_file", json!({ "path": unowned }))
                 .await
-                .expect_err("unowned trap placeholder in path must fail before invocation");
+                .expect_err("unowned trap placeholder in path must fail at the restore gate");
             assert!(
                 matches!(
                     err,
-                    DispatchError::Protection(gaze::ProtectionError::Provenance)
+                    DispatchError::ToolError(ToolError::InvalidArgs(ref msg))
+                    if msg == "path restoration failed"
                 ),
-                "unowned trap `{unowned}` must fail before invocation, got: {err:?}",
+                "unowned trap `{unowned}` must return InvalidArgs, got: {err:?}",
             );
         }
         assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
@@ -972,7 +974,7 @@ mod tests {
             "owned-token path must reach validate_file: {err:?}",
         );
 
-        // Malformed token in path is rejected before invocation.
+        // Malformed token in path is rejected at the restore gate.
         let malformed = format!(
             "{}/file.pdf",
             directory.path().join("<deadbeef:Email_>").display()
@@ -987,14 +989,11 @@ mod tests {
             .await
             .unwrap_err();
         assert!(
-            matches!(
-                err,
-                DispatchError::Protection(gaze::ProtectionError::Provenance)
-            ),
+            matches!(err, DispatchError::ToolError(ToolError::InvalidArgs(_))),
             "malformed token in path must be rejected: {err:?}",
         );
 
-        // Unowned wrapped placeholder is rejected before invocation.
+        // Unowned wrapped placeholder is rejected at the restore gate.
         let unowned_wrapped = format!("{}/file.pdf", directory.path().join("<Email_1>").display());
         let err = envelope
             .dispatch(
@@ -1006,10 +1005,7 @@ mod tests {
             .await
             .unwrap_err();
         assert!(
-            matches!(
-                err,
-                DispatchError::Protection(gaze::ProtectionError::Provenance)
-            ),
+            matches!(err, DispatchError::ToolError(ToolError::InvalidArgs(_))),
             "unowned wrapped placeholder must be rejected: {err:?}",
         );
     }
