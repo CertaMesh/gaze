@@ -151,7 +151,9 @@ those leaves. An earlier repeat is therefore covered even when its source is lat
 in the same operation. Learned and safety-net-only detections do not become Rule
 sources. Existing owned tokens keep their identities; overlapping Rule matches cover
 adjacent raw bytes without rewriting those tokens. An independent final Rule coverage
-proof runs before commit or release. Failed protection discards staged mappings.
+proof runs before commit or release. Empty owned values remain wire-position
+markers, including at Rule-hit boundaries and inside matches. Projection never
+consumes these markers. Failed protection discards staged mappings.
 
 Each operation has a 32 MiB full owned-token expansion budget, derived as
 16 times the existing 2 MiB sizing constant. It counts all restored string leaves

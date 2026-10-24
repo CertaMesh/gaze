@@ -62,7 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   input above 2 MiB. Only expansion budget exhaustion returns the distinct `DispatchError::ResourceLimit` and
   discards staged changes instead of reporting a token provenance failure. The rmcp
   adapter returns the stable `resource_limit` error class. Whitespace-only interior
-  gaps between owned spans stay literal and create no PII mapping.
+  gaps between owned spans stay literal and create no PII mapping. Empty owned
+  values preserve their wire positions and identities beside or inside Rule hits.
 
 - Proxy routing model identifiers such as `claude-sonnet-4-5` no longer fail
   because NER or a safety net classifies them as personal data. Strict ASCII

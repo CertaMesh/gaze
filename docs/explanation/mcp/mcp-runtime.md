@@ -52,6 +52,9 @@ Token provenance and restore failures retain `DispatchError::Protection`.
 The rmcp adapter maps this budget refusal to the stable `resource_limit` text
 class with `isError: true`. Whitespace-only interior gaps between owned spans
 count as covered in projection and final proof without minting new mappings.
+Empty owned values keep their wire positions and identities. Projection splits
+a replacement at an interior empty marker and leaves boundary markers outside
+the replacement. The independent coverage proof still checks the full expansion.
 
 ## Type-level seal
 
