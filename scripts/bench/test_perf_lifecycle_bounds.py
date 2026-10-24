@@ -96,6 +96,14 @@ class BoundTests(unittest.TestCase):
         rows[1]['counters'].update(nym_windows_stable=0, nym_windows_neutral=0)
         self.admit(rows)
 
+    def test_empty_recognizer_results_keep_pipeline_hooks_admissible(self):
+        rows = records()
+        rows[1]['recognizers'] = {}
+        for key in ('rules_ns', 'ner_tokenize_ns', 'ner_mutex_wait_ns', 'ner_ort_ns'):
+            rows[1]['metrics'][key].update(ns=0, invocations=0, candidates=0)
+        rows[1]['counters'].update(ner_encodes=0, ner_windows=0)
+        self.admit(rows)
+
     def test_extra_waits_and_many_windows_per_tokenize_admit(self):
         rows = records()
         for model in ('ner', 'nym'):
@@ -162,15 +170,20 @@ class BoundTests(unittest.TestCase):
             entry['ns'] = 0
         for key in ('rules_ns', 'ner_tokenize_ns', 'ner_mutex_wait_ns', 'ner_ort_ns'):
             rows[1]['metrics'][key]['ns'] = 0
-        with self.assertRaisesRegex(ValueError, 'parent-invocations'):
-            self.admit(rows)
+        # Prove the parent guard alone: registry absence also breaks the
+        # subsequent resolution prerequisite, independently covered below.
+        with patch.object(perf, 'HOOK_RELATIONS', ()):
+            with self.assertRaisesRegex(ValueError, 'parent-invocations'):
+                self.admit(rows)
 
     def test_sweep_counter_owner(self):
         rows = records()
         rows[1]['metrics']['sweep_ns'].update(ns=0, invocations=0)
         rows[1]['counters']['sweep_candidates'] = 1
-        with self.assertRaisesRegex(ValueError, 'sweep-counter-owner'):
-            self.admit(rows)
+        # Resolve2 also requires sweep; isolate the counter's direct owner.
+        with patch.object(perf, 'HOOK_RELATIONS', ()):
+            with self.assertRaisesRegex(ValueError, 'sweep-counter-owner'):
+                self.admit(rows)
 
     def test_metric_candidates(self):
         rows = records()
@@ -655,7 +668,8 @@ def prerequisite_test(relation, *, isolated):
             if relation.prerequisite == 'ner_tokenize_ns':
                 record['counters']['ner_encodes'] = 0
             if relation.kind == 'counter-owner':
-                record['counters'].update(nym_windows_stable=0, nym_windows_neutral=0)
+                if relation.trigger.startswith('nym_'):
+                    record['counters'].update(nym_windows_stable=0, nym_windows_neutral=0)
                 record['counters'][relation.trigger] = 1
         # Some direct prerequisites are also implied transitively (ORT -> wait
         # -> tokenize). Test each alone for mutation proof and with all checks.

@@ -263,10 +263,22 @@ relations. The following generated prerequisites enforce sibling relations.
 | nym-stable-window-owner | `nym_windows_stable` | `nym_stable_ns` | positive trigger requires invoked prerequisite | gaze-types/src/perf.rs:207-212,221-232,317-325: active view selects counter; drop records invocation |
 | nym-neutral-window-owner | `nym_windows_neutral` | `nym_neutral_ns` | positive trigger requires invoked prerequisite | gaze-types/src/perf.rs:207-212,221-232,317-325: active view selects counter; drop records invocation |
 | nym-neutral-stable | `nym_neutral_ns` | `nym_stable_ns` | prerequisite invocations >= trigger invocations | gaze-recognizers/src/safety_net/nym/mod.rs:162-186: stable precedes each neutral view |
+| resolve1-registry | `resolve1_ns` | `registry_ns` | prerequisite invocations >= trigger invocations | gaze/src/pipeline.rs:1224-1230: each first resolution follows one registry call |
+| sweep-resolve1 | `sweep_ns` | `resolve1_ns` | prerequisite invocations >= trigger invocations | gaze/src/pipeline.rs:1228-1240,1652-1661: each sweep follows first resolution |
+| resolve2-sweep | `resolve2_ns` | `sweep_ns` | positive trigger requires invoked prerequisite | gaze/src/pipeline.rs:1231-1275,1713: second resolution is inside or after sweep |
+| sweep-added-resolve2 | `sweep_candidates` | `resolve2_ns` | positive trigger requires invoked prerequisite | gaze/src/pipeline.rs:1707-1713: positive additions always start second resolution |
 | safety-model-view | `safety_model_ns` | `safety_view_build_ns` | positive trigger requires invoked prerequisite | gaze/src/pipeline.rs:1829-1858,1920: scan construction precedes either model call site |
 
 Waits can outnumber ORT calls after failures. Tokenizations need not equal
 windows. Invoked zero-duration hooks and invoked zero-window views are valid.
+Pipeline prerequisites are directional: later work requires earlier work,
+not the reverse. Empty text/candidate sets still enter registry, first
+resolution and sweep (pipeline.rs:1224-1240; registry.rs:1437), while
+second resolution remains optional. Skip-class and capitals gating apply
+only to safety nets (pipeline.rs:2009-2034). Prefix caching is disabled;
+the text wrapper always rescans (pipeline.rs:1195-1205). Daemon requests
+use the same path. A zero-recognizer CLI build fails assembly before
+processing; admission does not require a nonempty recognizer map.
 
 A startup record must have zero processing durations, invocation/candidate
 counts, work counters and recognizer entries. Daemon context requests may

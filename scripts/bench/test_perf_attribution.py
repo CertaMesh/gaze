@@ -376,6 +376,28 @@ class LifecycleTests(unittest.TestCase):
                     self.assertEqual(admitted[1]["metrics"][key]["invocations"], 1)
 
     @unittest.skipUnless(os.environ.get("GAZE_ATTRIBUTION_TEST_BINARY"), "requires a locally built timer CLI")
+    def test_real_empty_and_repeated_zero_candidate_requests_admit(self):
+        binary = Path(os.environ["GAZE_ATTRIBUTION_TEST_BINARY"]).resolve()
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = Path(tmp) / "policy.toml"
+            policy.write_text('schema_version="0.1.0"\n[session]\nscope="conversation"\n'
+                              '[policy.rulepacks]\nbundled=["core"]\n'
+                              '[[rule]]\nkind="default"\naction="tokenize"\n')
+            docs = [perf.Document(str(i), text, perf.sha(text.encode()))
+                    for i, text in enumerate(("", "plain text", "plain text"))]
+            # Empty stdin is a CLI usage error in one-shot mode; daemon accepts
+            # an explicit empty text field. Repeated requests cover full rescans.
+            for one_shot in (False, True):
+                rows = perf.run_pass(binary, policy, docs[1:] if one_shot else docs,
+                                     warmups=0, dry=True, timeout=30, per_file=one_shot, require_timers=True)
+                for row in rows:
+                    record = row["trace"]
+                    self.assertEqual(sum(e["candidates"] for e in record["recognizers"].values()), 0)
+                    for key in ("registry_ns", "resolve1_ns", "sweep_ns"):
+                        self.assertEqual(record["metrics"][key]["invocations"], 1)
+                    self.assertEqual(record["metrics"]["resolve2_ns"]["invocations"], 0)
+
+    @unittest.skipUnless(os.environ.get("GAZE_ATTRIBUTION_TEST_BINARY"), "requires a locally built timer CLI")
     def test_real_cli_lifecycle_hooks_are_validated_by_runner(self):
         with tempfile.TemporaryDirectory() as tmp:
             policy = Path(tmp) / "policy.toml"
