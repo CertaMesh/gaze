@@ -8,9 +8,9 @@
     "D": "unchanged_by_construction",
     "R": "unchanged_by_construction"
   },
-  "path_identity_sha256": "e873a89681cdc3ad17d5d3b962092d709a95554dd2be64e0e23660e1a549c732",
-  "protected_file_count": 2002,
-  "publication_revision": "91e0515f29e78290616971d12248d9aef9e758f0",
+  "path_identity_sha256": "64277a4cebe69cc339e5d79e3bf6fba6111c0237cd77178646106029b303e0ab",
+  "protected_file_count": 2003,
+  "publication_revision": "533bc71add2d0100a7f71ce75b55e277c230cc47",
   "reuse_authority": "Explicit orchestrator ruling: same source-identity reuse rule as PR #869",
   "contracts": {
     "v2": {
@@ -37,9 +37,9 @@
             "false_positive": 180,
             "refused": 2,
             "dispatch_failed": 2,
-            "restore_exact": 66,
+            "restore_exact": 68,
             "restore_failed": 0,
-            "manifest_valid": 66,
+            "manifest_valid": 68,
             "manifest_invalid": 0
           },
           "R": {
@@ -69,9 +69,9 @@
             "false_positive": 180,
             "refused": 2,
             "dispatch_failed": 2,
-            "restore_exact": 66,
+            "restore_exact": 68,
             "restore_failed": 0,
-            "manifest_valid": 66,
+            "manifest_valid": 68,
             "manifest_invalid": 0
           },
           "R": {
@@ -91,9 +91,9 @@
             "false_positive": 0,
             "refused": 0,
             "dispatch_failed": 0,
-            "restore_exact": 52,
+            "restore_exact": 54,
             "restore_failed": 0,
-            "manifest_valid": 52,
+            "manifest_valid": 54,
             "manifest_invalid": 0
           },
           "code": {
@@ -123,9 +123,9 @@
             "false_positive": 0,
             "refused": 0,
             "dispatch_failed": 0,
-            "restore_exact": 52,
+            "restore_exact": 54,
             "restore_failed": 0,
-            "manifest_valid": 52,
+            "manifest_valid": 54,
             "manifest_invalid": 0
           },
           "code": {
@@ -175,9 +175,9 @@
             "false_positive": 180,
             "refused": 2,
             "dispatch_failed": 2,
-            "restore_exact": 66,
+            "restore_exact": 68,
             "restore_failed": 0,
-            "manifest_valid": 66,
+            "manifest_valid": 68,
             "manifest_invalid": 0
           },
           "R": {
@@ -207,9 +207,9 @@
             "false_positive": 180,
             "refused": 2,
             "dispatch_failed": 2,
-            "restore_exact": 66,
+            "restore_exact": 68,
             "restore_failed": 0,
-            "manifest_valid": 66,
+            "manifest_valid": 68,
             "manifest_invalid": 0
           },
           "R": {
@@ -229,9 +229,9 @@
             "false_positive": 0,
             "refused": 0,
             "dispatch_failed": 0,
-            "restore_exact": 52,
+            "restore_exact": 54,
             "restore_failed": 0,
-            "manifest_valid": 52,
+            "manifest_valid": 54,
             "manifest_invalid": 0
           },
           "code": {
@@ -261,9 +261,9 @@
             "false_positive": 0,
             "refused": 0,
             "dispatch_failed": 0,
-            "restore_exact": 52,
+            "restore_exact": 54,
             "restore_failed": 0,
-            "manifest_valid": 52,
+            "manifest_valid": 54,
             "manifest_invalid": 0
           },
           "code": {

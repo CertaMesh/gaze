@@ -1,13 +1,13 @@
 # MCP operation ordering evidence
 
 The native operation arm passes both scored-label contracts v2 and v1. Across
-98 attempted operations per side, annotated leaked bytes fall from 40 to 6.
+100 attempted operations per side, annotated leaked bytes fall from 40 to 6.
 False positives, refusals, exact restores, and valid manifests do not change.
 This is a finite capture of real `PiiEnvelope::dispatch`, not a completeness or
 latency claim.
 
-The base runtime is `f7a794f5668864d3c4336aaa878c6896e92fc009`. The measured
-candidate is `91e0515f29e78290616971d12248d9aef9e758f0`. Each runtime built the
+The base runtime is `f9783b29082f3890699b30dccd8f815cd6e84012`. The measured
+candidate is `533bc71add2d0100a7f71ce75b55e277c230cc47`. Each runtime built the
 same committed host against its own libraries and lockfile, then ran its own
 `gaze setup` policy. Those policies were byte-identical. Both model bundles
 have identical hashes and remained unchanged around both captures.
@@ -20,9 +20,9 @@ counts refer to completed operations. Refused attempts remain in the population.
 | Layer | Attempts per side | Leaked bytes | False-positive bytes | Refusals | Exact restores | Valid manifests |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | A | 6 | 0 → 0 | 0 → 0 | 0 → 0 | 6 → 6 | 6 → 6 |
-| D | 68 | 0 → 0 | 180 → 180 | 2 → 2 | 66 → 66 | 66 → 66 |
+| D | 70 | 0 → 0 | 180 → 180 | 2 → 2 | 68 → 68 | 68 → 68 |
 | R | 24 | 40 → 6 | 40 → 40 | 4 → 4 | 20 → 20 | 20 → 20 |
-| Total | 98 | 40 → 6 | 220 → 220 | 6 → 6 | 92 → 92 | 92 → 92 |
+| Total | 100 | 40 → 6 | 220 → 220 | 6 → 6 | 94 → 94 | 94 → 94 |
 
 No case becomes newly refused. Restore failures and invalid manifests are zero
 on both sides. The net annotated byte gain is 34 under each contract.
@@ -36,12 +36,12 @@ verifies token ownership on both sides.
 
 All 48 new counterweights have zero leaks, false positives, and refusals on both
 sides. The frozen fixture and both scored contracts were unchanged after either
-v4 capture. Native specification `mcp-operation-order-v4` includes the existing
+v5 capture. Native specification `mcp-operation-order-v5` includes the existing
 bare-filename and other-namespace counterweights, plus repeats beside both.
 The new cases cover public whitespace beside newly protected name parts, across
 six whitespace variants, both directions, and three-part chains. Seed headers
 quote each name so the production recognizer supplies Rule evidence for
-single-name parts. Both arms were recaptured together on v4.
+single-name parts. Both arms were recaptured together on v5.
 
 
 ## Large owned-token compatibility
@@ -80,11 +80,28 @@ then check that the mixed raw/owned operation adds no mapping. The native
 specification measures all 48 variants as false-positive counterweights.
 
 
+## Empty owned mappings
+
+Empty owned values remain position markers on the wire. Projection splits at
+interior markers, starts a replacement after markers at its left boundary,
+and ends it before markers at its right boundary. The final coverage proof
+still expands every mapping and uses the real Rule matcher independently.
+
+Twelve real-dispatch regressions assert exact wire, no new mapping, exact restore,
+and successful manifest lifecycle in both directions. They cover prefix and
+suffix markers, a raw-first name chain, markers between owned tokens, markers
+inside a whitespace gap, and repeated markers inside a Rule hit. Restoring the
+inclusive zero-width refusal after committing the tests produces eight executed
+admission assertion failures. Both new native admission counterweights have
+zero leaks, false positives, and refusals on both sides. Each contains prefix
+and suffix markers seeded through the public tokenize API. The existing oracle
+checks their identity as well as restore.
+
 ## Text layers are unchanged by construction
 
 C/A/D/R text inference was **not recaptured**. Under the explicit reuse ruling,
 `text-path-identity.json.gz` records matching base and candidate SHA-256 values
-for 2,002 repository inputs outside the isolated MCP change. This includes the
+for 2,003 repository inputs outside the isolated MCP change. This includes the
 core, types, recognizers, assembly, CLI clean code, existing text drivers,
 scorers, corpus inputs, contracts, dependency locks, and build configuration.
 New native tools are not imported by the unchanged text modules. The required
@@ -148,17 +165,14 @@ archives are replayable without the private paths.
 
 ## Approval and cleanup
 
-The original orchestrator and load-coordinator GO approved leak-only captures
-alongside #773, outside bench-machine, at nice 10. The standing recapture ruling
-allows heavy job 2 alongside #773 when memory free is at least 30%,
-or at least 20% while Splash runs. Load is recorded before each arm and does not
-gate these captures.
-Base recorded `load_1m=8.69` and `memory_free_percent=32`.
-Candidate recorded `load_1m=8.27` and `memory_free_percent=33`. The runs used
-worker-owned model copies with distinct file identities from the installed
-bundles. The same immutable copy set served the two arms serially. Hashes were
-checked before and after each capture, then all private copies were deleted.
-`authority-and-cleanup.json` records the scope and the local approval digest.
+The orchestrator approved native captures outside bench-machine, at nice 10,
+as heavy job 3. After the heavy-job assignment, each Cargo invocation and native arm starts at load1 below
+12 and memory free at least 60%. No job starts below 30% free memory.
+Base recorded `load_1m=11.05` and `memory_free_percent=73`.
+Candidate recorded `load_1m=10.80` and `memory_free_percent=74`.
+Both arms used worker-owned model copies with distinct file identities from the
+installed bundles. Hashes were checked around each serial capture, then the
+private copies were deleted. `authority-and-cleanup.json` records the evidence.
 
 C/A/D/R is source-identical under the approved reuse rule. No new historical
 text measurements or native historical-release rows are claimed here.

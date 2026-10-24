@@ -1,41 +1,35 @@
 {
   "native_capture": {
-    "authority": "Explicit orchestrator and load-coordinator GO",
-    "scope": "Native MCP leak-only capture, base first then candidate, alongside #773 outside bench-machine",
+    "authority": "Explicit orchestrator brief and heavy-job resource ruling",
+    "scope": "Native MCP leak-only capture, base first then candidate, as heavy job 3 outside bench-machine",
     "nice": 10,
     "bench_machine_lease": false,
     "isolated_worker_owned_copies": true,
     "serial_use_of_one_copy_set": true,
     "copies_hash_verified_and_deleted": true,
-    "local_approval_record_sha256": "71d463a1f55aa5f2632f3c8a7f1e35f9c69cb01aad8b5773cd8c26c71bd6c3ca",
-    "standing_recapture_authority": "Explicit resource correction: heavy job 2 alongside #773; memory free >=30%, or >=20% while Splash runs, regardless of load; record load and memory before each arm",
+    "local_approval_record_sha256": "7faf62a16728f556fa1cda0244f4b09d3147076b198efdad6e3dc677d1c7c9e8",
+    "standing_recapture_authority": "Heavy job 3: load1 <12 and memory free >=60%, rechecked before every Cargo invocation and native arm; pause below 30%. No bench-machine lease.",
     "pre_arm_load_checks": [
       {
         "arm": "base",
-        "utc": "2026-10-24T09:03:03.516263+00:00",
-        "load_1m": 8.69482421875,
-        "memory_free_percent": 32,
-        "required_memory_at_least": 30,
-        "splash_running": false,
-        "load_is_gate": false,
-        "heavy_job": 2,
+        "utc": "2026-10-24T10:07:06.196234+00:00",
+        "load_1m": 11.04833984375,
+        "memory_free_percent": 73,
         "allowed": true,
+        "heavy_job": 3,
         "nice": 10
       },
       {
         "arm": "candidate",
-        "utc": "2026-10-24T09:03:53.472026+00:00",
-        "load_1m": 8.2705078125,
-        "memory_free_percent": 33,
-        "required_memory_at_least": 30,
-        "splash_running": false,
-        "load_is_gate": false,
-        "heavy_job": 2,
+        "utc": "2026-10-24T10:08:22.410421+00:00",
+        "load_1m": 10.80419921875,
+        "memory_free_percent": 74,
         "allowed": true,
+        "heavy_job": 3,
         "nice": 10
       }
     ],
-    "captured_specification": "mcp-operation-order-v4"
+    "captured_specification": "mcp-operation-order-v5"
   },
   "text_reuse": {
     "authority": "Explicit orchestrator ruling, same source-identity rule as PR #869",
@@ -248,6 +242,105 @@
       "leaked": 0,
       "false_positive": 0,
       "refused": 0
+    },
+    "empty_owned_counterweights": {
+      "attempts": 2,
+      "leaked": 0,
+      "false_positive": 0,
+      "refused": 0
     }
+  },
+  "empty_owned_regression_proof": {
+    "candidate_revision": "533bc71add2d0100a7f71ce75b55e277c230cc47",
+    "tests_committed_first": true,
+    "mutation_probes": [
+      {
+        "name": "restore-inclusive-empty-owned-refusal",
+        "exit": 101,
+        "executed_assertion_failures": 8,
+        "failed_tests": [
+          "operation_repeats::empty_owned_inside_rule_hit_arguments",
+          "operation_repeats::empty_owned_inside_rule_hit_response",
+          "operation_repeats::empty_owned_prefix_arguments",
+          "operation_repeats::empty_owned_prefix_response",
+          "operation_repeats::empty_owned_raw_first_chain_arguments",
+          "operation_repeats::empty_owned_raw_first_chain_response",
+          "operation_repeats::empty_owned_suffix_arguments",
+          "operation_repeats::empty_owned_suffix_response"
+        ],
+        "source_sha256": "3c2e905792d8853bbcac78ae25f5cbda0b843817b73e5f30a02e4ec9c9182fa9",
+        "log_sha256": "a7beb4ff8dc9a3936d52228002c11b6756c913a7714526035b9e0b57d3fe04e1"
+      }
+    ],
+    "suite_counts": {
+      "core-tests": {
+        "completed_tests": 108,
+        "literal_ok_lines": 107,
+        "log_sha256": "0273f8d2c19400d22b11e343aa1461297c6c8a02f6a672a95e6651a48d325ad1",
+        "regression_literal_ok_names": [
+          "dispatch::rule_coverage::tests::final_proof_covers_only_whitespace_interior_gaps_independently_of_projection",
+          "operation_repeats::empty_owned_between_tokens_arguments",
+          "operation_repeats::empty_owned_between_tokens_response",
+          "operation_repeats::empty_owned_inside_rule_hit_arguments",
+          "operation_repeats::empty_owned_inside_rule_hit_response",
+          "operation_repeats::empty_owned_inside_whitespace_gap_arguments",
+          "operation_repeats::empty_owned_inside_whitespace_gap_response",
+          "operation_repeats::empty_owned_prefix_arguments",
+          "operation_repeats::empty_owned_prefix_response",
+          "operation_repeats::empty_owned_raw_first_chain_arguments",
+          "operation_repeats::empty_owned_raw_first_chain_response",
+          "operation_repeats::empty_owned_suffix_arguments",
+          "operation_repeats::empty_owned_suffix_response",
+          "operation_repeats::expansion_boundary_single_leaf_arguments",
+          "operation_repeats::expansion_boundary_single_leaf_response",
+          "operation_repeats::expansion_boundary_two_leaves_arguments",
+          "operation_repeats::expansion_boundary_two_leaves_response",
+          "operation_repeats::large_owned_counterweight_adjacent_arguments",
+          "operation_repeats::large_owned_counterweight_adjacent_response",
+          "operation_repeats::large_owned_counterweight_spaced_arguments",
+          "operation_repeats::large_owned_counterweight_spaced_response",
+          "operation_repeats::new_hit_whitespace_variants_arguments",
+          "operation_repeats::new_hit_whitespace_variants_response",
+          "operation_repeats::non_whitespace_interior_gap_is_still_protected_in_both_directions",
+          "operation_repeats::public_input_above_two_mib_arguments",
+          "operation_repeats::public_input_above_two_mib_response",
+          "operation_repeats::review_new_hit_gap_arguments",
+          "operation_repeats::review_new_hit_gap_response",
+          "operation_repeats::shrinking_owned_values_above_two_mib_are_admitted_in_both_directions",
+          "operation_repeats::whitespace_gap_arguments",
+          "operation_repeats::whitespace_gap_response"
+        ]
+      },
+      "rmcp-tests": {
+        "completed_tests": 41,
+        "literal_ok_lines": 41,
+        "log_sha256": "f9d24cc5c7d698051e55e525b7829c217acff932f946ed41b3a07580bdf3f5d3",
+        "regression_literal_ok_names": []
+      },
+      "token-bridge-tests": {
+        "completed_tests": 110,
+        "literal_ok_lines": 110,
+        "log_sha256": "3d969cf362d058c1e75a71d0129241f1ba8e11b628c8e22845211c0e55282f16",
+        "regression_literal_ok_names": [
+          "custom_class_internal_whitespace_divergence_finds_the_hit",
+          "from_raw_collapses_internal_whitespace_for_custom_class"
+        ]
+      },
+      "document-mcp-tests": {
+        "completed_tests": 15,
+        "literal_ok_lines": 15,
+        "log_sha256": "6f425f268ee6a7a019fb09e278714088f013b794999263ed2546c57b233ac275",
+        "regression_literal_ok_names": []
+      },
+      "document-stdio-tests": {
+        "completed_tests": 1,
+        "literal_ok_lines": 1,
+        "log_sha256": "d05003de546eac00d8c65d6249eed58c1a63c6c080f07ea3cec3a6f7c94adba6",
+        "regression_literal_ok_names": []
+      }
+    },
+    "python_evidence_tests": 29,
+    "empty_owned": "Exact wire, no new mapping and exact restore for prefix, suffix, raw-first chain, between owned tokens, inside whitespace gap and inside a Rule hit with repeated empty markers, all in arguments and responses.",
+    "native_counterweights": 2
   }
 }
