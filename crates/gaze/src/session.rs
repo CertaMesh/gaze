@@ -5091,4 +5091,33 @@ mod repeat_query_purity_tests {
         transaction.commit().unwrap();
         assert_eq!(session.begin_transaction().semantic_revision(), stable);
     }
+    #[test]
+    fn deterministic_transaction_sweep_has_stable_equal_span_family_order() {
+        for _ in 0..64 {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let class = PiiClass::Custom("class_alpha".into());
+            let mut transaction = session.begin_transaction();
+            for family in ["omega", "alpha"] {
+                transaction
+                    .tokenize_with_family(family, &class, "ZXQ7-4832")
+                    .unwrap();
+                transaction.record_evidence(
+                    Some(family),
+                    &class,
+                    "ZXQ7-4832",
+                    ManifestEvidence::Pattern,
+                );
+            }
+            transaction.enable_deterministic_sweep();
+            let hits = crate::sweep::select(
+                transaction
+                    .sweep_matcher()
+                    .unwrap()
+                    .unwrap()
+                    .find("ZXQ7-4832"),
+            );
+            assert_eq!(hits.len(), 1);
+            assert_eq!(hits[0].family, "alpha");
+        }
+    }
 }

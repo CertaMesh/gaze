@@ -301,6 +301,7 @@ enum Failure {
     UnknownToken,
     RestoreFailed,
     ContextInvalid,
+    Protection(&'static str),
 }
 
 impl Failure {
@@ -319,6 +320,7 @@ impl Failure {
             Self::UnknownToken => "UnknownToken",
             Self::RestoreFailed => "RestoreFailed",
             Self::ContextInvalid => "PolicyConfig",
+            Self::Protection(variant) => variant,
         }
     }
     fn detail(self) -> &'static str {
@@ -785,17 +787,12 @@ impl Daemon {
                         dictionaries,
                         policy,
                     )
-                    .map_err(|error| {
-                        if matches!(error, gaze::Error::SessionCapacity) {
-                            Failure::CacheCapacity
-                        } else {
-                            Failure::Pipeline
-                        }
-                    })?;
+                    .map_err(|error| protection_failure(pipeline, error))?;
                 self.logger
                     .log_safety_net_report(&report, &live.session, DocumentKind::Text)
                     .map_err(|_| Failure::Pipeline)?;
-                enforce_safety_net_mode(&report, policy).map_err(|_| Failure::Pipeline)?;
+                enforce_safety_net_mode(&report, policy)
+                    .map_err(|error| Failure::Protection(DaemonError::Cli(error).variant()))?;
                 let gaze::CleanDocument::Text(clean_text) = clean else {
                     return Err(Failure::Pipeline);
                 };
@@ -1034,6 +1031,18 @@ impl Daemon {
     }
 }
 
+fn protection_failure(pipeline: &gaze::Pipeline, error: gaze::Error) -> Failure {
+    if matches!(error, gaze::Error::SessionCapacity) {
+        return Failure::CacheCapacity;
+    }
+    let cli = if pipeline.safety_net_count() > 0 {
+        map_safety_net_pipeline_error(error)
+    } else {
+        CliError::Pipeline
+    };
+    Failure::Protection(DaemonError::Cli(cli).variant())
+}
+
 fn inventory(r: &Object, live: &Live, resync: bool, limits: Limits) -> Result<Vec<RawBlock>> {
     let requested = r.field::<Vec<Object>>("blocks")?;
     if requested.len() > limits.active_blocks {
@@ -1148,7 +1157,10 @@ fn check_stage(
         .saturating_add(other);
     if cache > limits.session_cache_bytes
         || manifest > limits.session_manifest_bytes
-        || other_manifests.saturating_add(manifest) > limits.global_manifest_bytes
+        || other_manifests
+            .saturating_add(live.manifest_bytes)
+            .saturating_add(manifest)
+            > limits.global_manifest_bytes
         || state > limits.global_v2_state_bytes
     {
         return Err(Failure::CacheCapacity);
