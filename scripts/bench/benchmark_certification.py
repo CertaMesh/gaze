@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
 import re
 import sys
@@ -82,12 +83,55 @@ def full_record(path: Path, spec: dict, revision: str | None = None) -> dict:
 
 
 def _contract(root: Path, number: int, spec: dict):
-    if number == 1:
+    if number == 1 and spec['inputs']['contracts']['v1'] == 'all-corpus-labels-v1':
         return score.SCORED_LABEL_CONTRACT_V1
+    if type(number) is not int or number < 2:
+        raise CertificationError('contract_identity')
     path = root / f'docs/reference/benchmarks/scored-labels-v{number}.json'
     if file_digest(path) != spec['inputs']['contracts'][f'scored-labels-v{number}']:
         raise CertificationError('contract_identity')
     return score.load_scored_label_contract(path)
+
+
+def admit_capture(capture_path: Path, record_path: Path, spec: dict, harness: Path,
+                  revision: str | None = None) -> dict:
+    """Admit execution once and bind its subject, metadata and metrics to the record."""
+    original = full_record(record_path, spec, revision)
+    captured = bench_json.load(capture_path)
+    specs.require_same(captured, original)
+    stages.validate_execution(captured, capture_path, record_path)
+    for key in ('gaze', 'parameters', 'runner_provenance', 'dataset', 'scoring', 'layers', 'runs'):
+        if captured.get(key) != original.get(key):
+            raise CertificationError('capture_record_mismatch')
+    block = captured['scoring']['scored_label_contract']
+    contract = _contract(harness, block['version'], spec)
+    # Display paths do not change contract semantics; all other fields are rederived.
+    contract = replace(contract, path=block['file'])
+    layer_contract = agentic.load_contract(harness)
+    if layer_contract.sha256 != spec['inputs']['contracts']['generated']:
+        raise CertificationError('contract_identity')
+    header, _ = records._read(record_path)
+    if header['layer_contract'] != records._contract_row(layer_contract):
+        raise CertificationError('contract_identity')
+    replay = records.rescore(record_path, contract, max_workers=1)
+    if (captured.get('observation_record') != replay.get('observation_record')
+            or captured['runs'] != replay['runs']
+            or captured['layers'] != replay['layers']
+            or captured['scoring'] != replay['scoring']
+            or captured['dataset'] != replay['dataset']):
+        raise CertificationError('capture_record_mismatch')
+    return captured
+
+
+def admit_scorecard(path: Path, record_path: Path, number: int,
+                    spec: dict, harness: Path) -> dict:
+    """Only reconstructed evidence may feed a gate or a history row."""
+    card = bench_json.load(path)
+    specs.require_same(card, {'benchmark_spec': spec})
+    replay = records.rescore(record_path, _contract(harness, number, spec), max_workers=1)
+    if card != replay:
+        raise CertificationError('scorecard_record_mismatch')
+    return replay
 
 
 def check_pair(pair: dict, *, root: Path, harness: Path, spec: dict,
@@ -98,29 +142,13 @@ def check_pair(pair: dict, *, root: Path, harness: Path, spec: dict,
         if set(arm['contracts']) != {'1', '2'}:
             raise CertificationError('absent_contract')
         record_path = pin(root, arm['record'])
-        original = full_record(record_path, spec, candidate if mechanism or side == 'candidate' else None)
         capture_path = pin(root, arm['capture'])
-        captured = bench_json.load(capture_path)
-        specs.require_same(captured, original)
-        stages.validate_execution(captured, capture_path, record_path)
-        if (captured['gaze'] != original['gaze']
-                or agentic._layer_identity(captured) != agentic._layer_identity(original)
-                or captured.get('observation_record', {}).get('sha256') != file_digest(record_path)):
-            raise CertificationError('capture_record_mismatch')
+        admit_capture(capture_path, record_path, spec, harness,
+                      candidate if mechanism or side == 'candidate' else None)
         record_paths[side] = record_path
         for number in (2, 1):
             path = pin(root, arm['contracts'][str(number)])
-            card = bench_json.load(path)
-            specs.require_same(card, {'benchmark_spec': spec})
-            contract = _contract(harness, number, spec)
-            replay = records.rescore(record_path, contract, max_workers=1)
-            config = agentic.production_config(card)
-            if (agentic._layer_identity(card) != agentic._layer_identity(replay)
-                    or agentic.layer_totals(card, config) != agentic.layer_totals(replay, config)
-                    or card['gaze'] != replay['gaze']
-                    or card.get('observation_record', {}).get('sha256') != file_digest(record_path)):
-                raise CertificationError('scorecard_record_mismatch')
-            cards[side, number] = card
+            cards[side, number] = admit_scorecard(path, record_path, number, spec, harness)
     if mechanism and records.binary_sha256(record_paths['base'], required=True) != records.binary_sha256(record_paths['candidate'], required=True):
         raise CertificationError('mechanism_binary_mismatch')
     delta = pin(root, pair['policy_delta']) if 'policy_delta' in pair else None
@@ -139,13 +167,17 @@ def check_pair(pair: dict, *, root: Path, harness: Path, spec: dict,
 
 
 def check(value: dict, *, root: Path, harness: Path, candidate: str,
-          required_mechanisms: tuple[str, ...]) -> dict:
+          required_mechanisms: tuple[str, ...], dataset: Path | None = None) -> dict:
     try:
         if not re.fullmatch('[0-9a-f]{40}', candidate) or value['candidate'] != candidate:
             raise CertificationError('stale_candidate')
         if value['schema_version'] != 1 or value['kind'] != 'full-benchmark-certification':
             raise CertificationError('invalid_certification')
         spec = specs.validate(value['benchmark_spec'])
+        try:
+            specs.require_current(spec, harness, dataset=dataset)
+        except specs.SpecError as error:
+            raise CertificationError('harness_spec_mismatch') from error
         if not required_mechanisms or set(value['mechanisms']) != set(required_mechanisms):
             raise CertificationError('absent_mechanism')
         gates = check_pair(value['gain'], root=root, harness=harness, spec=spec, candidate=candidate)
@@ -159,7 +191,7 @@ def check(value: dict, *, root: Path, harness: Path, candidate: str,
         return {'verdict': 'pass', 'candidate': candidate, 'benchmark_spec_id': spec['id'],
                 'manifest_sha256': digest(value), 'contracts': gates, 'mechanisms': mechanisms}
     except (specs.SpecError, records.RecordError, agentic.LayerError, OSError, KeyError,
-            TypeError, ValueError) as error:
+            TypeError, ValueError, score.ResponseValidationError) as error:
         if isinstance(error, CertificationError):
             raise
         raise CertificationError('invalid_certification_evidence') from error
@@ -168,13 +200,14 @@ def check(value: dict, *, root: Path, harness: Path, candidate: str,
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('manifest', type=Path)
+    parser.add_argument('--dataset', type=Path, help='canonical Dataiku holdout; defaults to the harness cache')
     parser.add_argument('--candidate', required=True, help='exact integrated Git HEAD')
     parser.add_argument('--required-mechanism', action='append', required=True)
     args = parser.parse_args(argv)
     try:
         result = check(json.loads(args.manifest.read_text()), root=args.manifest.resolve().parent,
                        harness=Path(__file__).resolve().parents[2], candidate=args.candidate,
-                       required_mechanisms=tuple(args.required_mechanism))
+                       required_mechanisms=tuple(args.required_mechanism), dataset=args.dataset)
         print(json.dumps(result, indent=2))
         return 0
     except (CertificationError, OSError, ValueError) as error:

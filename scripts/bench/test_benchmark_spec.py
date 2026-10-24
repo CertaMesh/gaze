@@ -37,6 +37,11 @@ def measuring_root(root):
     contracts.mkdir(parents=True)
     shutil.copyfile(ROOT / 'docs/reference/benchmarks/scored-labels-v2.json',
                     contracts / 'scored-labels-v2.json')
+    rules = root / 'crates/gaze-recognizers/embedded'
+    rules.mkdir(parents=True)
+    (rules / 'synthetic.toml').write_text('[[recognizers]]\nid = "synthetic:rule"\n')
+    (bench / 'no_opf_models.toml').write_text(
+        '[builtin_source_ids]\nids = ["synthetic:other"]\n[model]\nid = "synthetic:model"\n')
     return root
 
 
@@ -136,7 +141,6 @@ def make_population():
 
 
 def synthetic_spec(root, docs):
-    root = measuring_root(root)
     prepared = SimpleNamespace(manifest={
         'generator_version': agentic.GENERATOR_VERSION, 'seed': 20260710,
         'corpus_sha256': 'd' * 64, 'documents': sum(len(docs[k]) for k in ('A', 'D', 'R')),
@@ -190,7 +194,7 @@ def capture(folder, docs, spec, protect, policy, revision=REVISION):
                               'model_bundles': [], 'policy_dependencies': {'files': {}}},
         'runs': [runs['C']], 'benchmark_spec': spec,
         'layers': {'generator': spec['inputs']['generator'],
-                   'scored_label_contract': score.scored_label_contract_report(layer_contract, all_docs),
+                   'scored_label_contract': score.scored_label_contract_report(layer_contract, [doc for layer in ('A', 'D', 'R') for doc in docs[layer]]),
                    'gold_validity': {'C': agentic.gold_validity_digest(docs['C'], main_measurements)},
                    **{layer: {'runs': [runs[layer]], 'population': score.population_summary(docs[layer])}
                       for layer in ('A', 'D', 'R')}},
@@ -210,9 +214,14 @@ def capture(folder, docs, spec, protect, policy, revision=REVISION):
 
 
 @pytest.fixture
-def evidence(tmp_path):
+def evidence(tmp_path, monkeypatch):
     docs = make_population()
-    spec = synthetic_spec(tmp_path / 'measuring', docs)
+    spec = synthetic_spec(ROOT, docs)
+    monkeypatch.setattr(specs, 'full_inputs', lambda root, dataset=None: dict(
+        root=root, corpus_sha256=spec['inputs']['corpus_sha256'], available=docs['C'],
+        prepared=SimpleNamespace(manifest=spec['inputs']['generator'],
+            contract=agentic.load_contract(ROOT), identifiers=docs['A'],
+            lookalikes=docs['D'], repeats=docs['R'])))
     policy = tmp_path / 'base.toml'
     policy.write_text('[ner]\nthreshold = 0.3\n')
     delta = tmp_path / 'delta.toml'
@@ -335,7 +344,7 @@ def test_history_resume_verifies_pins_and_older_failure_does_not_block(tmp_path,
         return {'status': 'available', 'benchmark_spec_id': spec['id'],
                 'job_sha256': capture_identity.digest(job), 'artifacts': artifacts}
     # The synthetic spec's measuring files live in its own root.
-    with mock.patch.object(history.past, 'HARNESS_ROOT', tmp_path / 'measuring'):
+    with mock.patch.object(history.past, 'HARNESS_ROOT', ROOT):
         state = history.run(plan, tmp_path / 'history', execute=True, older=True, measure_job=measure)
         assert state['required_complete']
         assert calls == ['v0.18.0', 'v0.17.0', 'v0.16.0']
@@ -394,23 +403,8 @@ def test_certificate_refuses_untrusted_evidence(tmp_path, evidence, mutation):
     else:
         # Reversing a known improving pair must refuse the leak regression.
         evidence['gain']['base'], evidence['gain']['candidate'] = evidence['gain']['candidate'], evidence['gain']['base']
-        path = tmp_path / evidence['gain']['candidate']['record']['file']
-        header, observations = records._read(path)
-        header['scorecard']['gaze']['revision'] = REVISION
-        records._write_rows(path, [header, *observations])
-        arm = evidence['gain']['candidate']
-        arm['record']['sha256'] = capture_identity.file_digest(path)
-        capture_path = tmp_path / arm['capture']['file']
-        captured = json.loads(capture_path.read_text())
-        captured['gaze']['revision'] = REVISION
-        captured['observation_record']['sha256'] = arm['record']['sha256']
-        capture_path.write_text(json.dumps(captured))
-        arm['capture']['sha256'] = capture_identity.file_digest(capture_path)
-        for number in (1, 2):
-            contract = cert._contract(ROOT, number, evidence['benchmark_spec'])
-            card_path = tmp_path / arm['contracts'][str(number)]['file']
-            card_path.write_text(json.dumps(records.rescore(path, contract, max_workers=1)))
-            arm['contracts'][str(number)]['sha256'] = capture_identity.file_digest(card_path)
+        rewrite_arm(tmp_path, evidence['gain']['candidate'],
+                    lambda header: header['scorecard']['gaze'].update(revision=REVISION))
     expected = {'spec': 'invalid_certification_evidence', 'artifact': 'evidence_integrity',
                 'mechanism_binary': 'mechanism_binary_mismatch', 'failed_gate': 'gate_refused'}
     with pytest.raises(cert.CertificationError, match='^' + expected[mutation] + '$'):
@@ -463,3 +457,218 @@ def test_preserved_specifications_keep_their_content_addressed_names():
         assert path.stem == value['id'].removeprefix(specs.PREFIX)
         assert '/Users/' not in json.dumps(value)
         assert '/home/' not in json.dumps(value)
+
+
+@pytest.mark.parametrize('declaration', ['builtin', 'recognizer', 'collision', 'model'])
+def test_spec_binds_effective_validation_vocabulary(tmp_path, declaration):
+    root = measuring_root(tmp_path)
+    args = inputs(root)
+    before = specs.resolve(**args)
+    if declaration in ('builtin', 'model'):
+        path = root / 'scripts/bench/no_opf_models.toml'
+        old = 'synthetic:other' if declaration == 'builtin' else 'synthetic:model'
+        path.write_text(path.read_text().replace(old, 'synthetic:value'))
+    else:
+        path = root / 'crates/gaze-recognizers/embedded/synthetic.toml'
+        path.write_text(path.read_text() + ('[recognizers.collision]\nfamily = "synthetic"\n'
+                                          if declaration == 'collision' else ''))
+        if declaration == 'recognizer':
+            path.write_text(path.read_text().replace('synthetic:rule', 'synthetic:value'))
+    after = specs.resolve(**args)
+    assert score.load_committed_source_id_vocabulary(root) != frozenset(before['inputs']['validation_vocabulary'])
+    assert after['id'] != before['id']
+    assert after['inputs']['harness'] == before['inputs']['harness']
+
+
+def test_vocabulary_membership_changes_response_acceptance_and_spec(tmp_path):
+    root = measuring_root(tmp_path)
+    text = 'synthetic:value'
+    doc = score.Document('reserved', text, 'en', 'US', 'synthetic',
+                         (score.Span(0, len(text), 'EMAIL'),))
+    response = _success_response(doc)
+    response['final_protection_trace'] = [{
+        'raw_start': 0, 'raw_end': len(text), 'class': 'email', 'action': 'tokenize',
+        'provenance': {'stage': 'primary_pipeline', 'decision': 'policy', 'source_ids': [text]}}]
+    response['manifest_integrity']['spans'] = 1
+    before = specs.resolve(**inputs(root))
+    with mock.patch.object(score, 'COMMITTED_SOURCE_ID_VOCABULARY', score.load_committed_source_id_vocabulary(root)):
+        with pytest.raises(score.ResponseValidationError):
+            score._validate_final_protection_trace(doc, response['final_protection_trace'], [{'raw_start': 0, 'raw_end': len(text), 'class': 'email'}])
+    path = root / 'scripts/bench/no_opf_models.toml'
+    path.write_text(path.read_text().replace('synthetic:other', text))
+    with mock.patch.object(score, 'COMMITTED_SOURCE_ID_VOCABULARY', score.load_committed_source_id_vocabulary(root)):
+        assert score._validate_final_protection_trace(doc, response['final_protection_trace'], [{'raw_start': 0, 'raw_end': len(text), 'class': 'email'}])
+    assert specs.resolve(**inputs(root))['id'] != before['id']
+
+
+@pytest.mark.parametrize('mutation', ['changed', 'added', 'removed', 'protocol', 'vocabulary', 'population'])
+def test_certificate_resolves_executing_spec_before_replay(tmp_path, evidence, mutation):
+    spec = copy.deepcopy(evidence['benchmark_spec'])
+    if mutation in ('changed', 'added', 'removed'):
+        harness = spec['inputs']['harness']
+        name = 'scripts/bench/gaze_bench_score.py'
+        if mutation == 'removed':
+            del harness[name]
+        else:
+            harness[name if mutation == 'changed' else 'scripts/bench/extra.py'] = 'f' * 64
+    elif mutation == 'vocabulary':
+        spec['inputs']['validation_vocabulary'].append('synthetic:extra')
+    elif mutation == 'population':
+        spec['inputs']['population']['C']['documents'] += 1
+    else:
+        spec['inputs']['protocol']['validation'] = 'different measuring protocol'
+    evidence['benchmark_spec'] = specs.manifest(spec['inputs'])
+    with mock.patch.object(records, 'rescore', side_effect=AssertionError('replay started')):
+        with pytest.raises(cert.CertificationError, match='^harness_spec_mismatch$'):
+            cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION,
+                       required_mechanisms=('synthetic',))
+
+
+def rewrite_arm(root, arm, update):
+    path = root / arm['record']['file']
+    header, observations = records._read(path)
+    update(header)
+    records._write_rows(path, [header, *observations])
+    arm['record']['sha256'] = capture_identity.file_digest(path)
+    capture_path = root / arm['capture']['file']
+    captured = copy.deepcopy(header['scorecard'])
+    captured['observation_record'] = records.rescore(path, score.SCORED_LABEL_CONTRACT_V1, max_workers=1)['observation_record']
+    capture_path.write_text(json.dumps(captured))
+    arm['capture']['sha256'] = capture_identity.file_digest(capture_path)
+    for number in (1, 2):
+        target = root / arm['contracts'][str(number)]['file']
+        target.write_text(json.dumps(records.rescore(path, cert._contract(ROOT, number, header['scorecard']['benchmark_spec']), max_workers=1)))
+        arm['contracts'][str(number)]['sha256'] = capture_identity.file_digest(target)
+
+
+@pytest.mark.parametrize('pair_name', ['gain', 'mechanism'])
+@pytest.mark.parametrize('field', ['policy_dependencies', 'model_bundles'])
+def test_certificate_cannot_hide_record_dependency_difference(tmp_path, evidence, pair_name, field):
+    pair = evidence['gain'] if pair_name == 'gain' else evidence['mechanisms']['synthetic']
+    value = ({'files': {'dictionary:terms': 'a' * 64}} if field == 'policy_dependencies'
+             else [{'model_id': 'davlan-mbert-ner-hrl-onnx', 'observed_sha256': 'a' * 64}])
+    rewrite_arm(tmp_path, pair['base'], lambda header: header['scorecard']['runner_provenance'].update({field: value}))
+    with pytest.raises(cert.CertificationError, match='^gate_refused$'):
+        cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION, required_mechanisms=('synthetic',))
+    for pin in pair['candidate']['contracts'].values():
+        path = tmp_path / pin['file']
+        card = json.loads(path.read_text())
+        card['runner_provenance'][field] = value
+        path.write_text(json.dumps(card))
+        pin['sha256'] = capture_identity.file_digest(path)
+    with pytest.raises(cert.CertificationError, match='^scorecard_record_mismatch$'):
+        cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION, required_mechanisms=('synthetic',))
+
+
+@pytest.mark.parametrize('artifact', ['capture.json', 'scorecard-v1.json', 'scorecard-v2.json'])
+@pytest.mark.parametrize('admission', ['first', 'resume'])
+def test_history_mixed_subject_artifacts_are_unavailable(tmp_path, evidence, artifact, admission):
+    header, _ = records._read(tmp_path / 'candidate/observations-v1.jsonl.gz')
+    job = {'version': 'v0.18.0', 'args': [], 'subject': history.subject_identity(header)}
+    other = {**job, 'version': 'v0.17.0'}
+    plan = {'benchmark_spec': evidence['benchmark_spec'], 'current': job['version'],
+            'previous': other['version'], 'releases': [job, other]}
+    output = tmp_path / 'mixed-history'
+    def measure(job, folder, spec):
+        folder.mkdir(parents=True, exist_ok=True)
+        artifacts = {}
+        for name in ('capture.json', 'observations-v1.jsonl.gz', 'scorecard-v1.json', 'scorecard-v2.json'):
+            source = 'base' if name == artifact and admission == 'first' else 'candidate'
+            shutil.copyfile(tmp_path / source / name, folder / name)
+            artifacts[name] = capture_identity.file_digest(folder / name)
+        return {'status': 'available', 'benchmark_spec_id': spec['id'],
+                'job_sha256': capture_identity.digest(job), 'artifacts': artifacts}
+    state = history.run(plan, output, execute=True, measure_job=measure)
+    if admission == 'resume':
+        assert state['required_complete']
+        folder = output / job['version']
+        shutil.copyfile(tmp_path / 'base' / artifact, folder / artifact)
+        state['releases'][job['version']]['artifacts'][artifact] = capture_identity.file_digest(folder / artifact)
+        history.atomic(output / 'history.json', state)
+        state = history.run(plan, output)
+    assert not state['required_complete']
+    assert state['releases'][job['version']]['status'] == 'unavailable'
+
+
+def test_detector_toml_bytes_outside_effective_vocabulary_are_subject_inputs(tmp_path):
+    root = measuring_root(tmp_path)
+    before = specs.resolve(**inputs(root))
+    rule = root / 'crates/gaze-recognizers/embedded/synthetic.toml'
+    rule.write_text(rule.read_text() + 'pattern = "synthetic detector pattern"\n')
+    models = root / 'scripts/bench/no_opf_models.toml'
+    models.write_text(models.read_text() + 'bundle_sha = "' + 'f' * 64 + '"\n')
+    assert specs.resolve(**inputs(root)) == before
+
+
+@pytest.mark.parametrize('filename', ['lookalike_cue_vocabulary.json', 'trace-lineage-vocabulary.json'])
+def test_consumed_json_vocabulary_changes_spec(tmp_path, filename):
+    root = measuring_root(tmp_path)
+    path = root / 'scripts/bench' / filename
+    shutil.copyfile(ROOT / 'scripts/bench' / filename, path)
+    before = specs.resolve(**inputs(root))
+    data = json.loads(path.read_text())
+    data['schema_version'] = 99
+    path.write_text(json.dumps(data))
+    assert specs.resolve(**inputs(root))['id'] != before['id']
+
+
+@pytest.mark.parametrize('field', ['scoring', 'runner_provenance', 'parameters', 'metrics'])
+def test_history_rederives_contract_metrics_and_provenance(tmp_path, evidence, field):
+    folder = tmp_path / 'candidate'
+    path = folder / 'scorecard-v2.json'
+    card = json.loads(path.read_text())
+    if field == 'scoring':
+        card['scoring']['scored_label_contract']['file_sha256'] = 'f' * 64
+    elif field == 'runner_provenance':
+        card[field]['policy_dependencies']['files']['dictionary:terms'] = 'a' * 64
+    elif field == 'parameters':
+        card[field]['policy_sha256'] = 'a' * 64
+    else:
+        card['runs'][0]['metrics']['utf8_bytes']['leaked'] += 1
+    path.write_text(json.dumps(card))
+    with pytest.raises(cert.CertificationError, match='^scorecard_record_mismatch$'):
+        history.scored_rows(folder, evidence['benchmark_spec'])
+
+
+def test_certificate_refuses_changed_measuring_file_in_supplied_root(tmp_path, evidence):
+    root = tmp_path / 'measuring-copy'
+    names = set(evidence['benchmark_spec']['inputs']['harness'])
+    names.update(path.relative_to(ROOT).as_posix() for path in
+                 (ROOT / 'crates/gaze-recognizers/embedded').glob('*.toml'))
+    names.update(path.relative_to(ROOT).as_posix() for path in
+                 (ROOT / 'docs/reference/benchmarks').glob('scored-labels-v*.json'))
+    names.add('scripts/bench/no_opf_models.toml')
+    for name in names:
+        target = root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / name, target)
+    specs.require_current(evidence['benchmark_spec'], root)
+    path = root / 'scripts/bench/gaze_bench_score.py'
+    path.write_text(path.read_text() + '\n# changed measuring source\n')
+    with mock.patch.object(records, 'rescore', side_effect=AssertionError('replay started')):
+        with pytest.raises(cert.CertificationError, match='^harness_spec_mismatch$'):
+            cert.check(evidence, root=tmp_path, harness=root, candidate=REVISION,
+                       required_mechanisms=('synthetic',))
+
+
+def test_current_spec_loads_negative_corpus_content(tmp_path):
+    import dataiku_en_de_gaze_bench as dataiku
+    import run_no_opf_benchmark as runner
+
+    root = measuring_root(tmp_path)
+    args = inputs(root)
+    negative = root / runner.NEGATIVE_CORPUS
+    negative.parent.mkdir(parents=True)
+    row = dict(id='reserved', text='A reserved fixture.', language='en',
+               category='synthetic', oracle_spans=[])
+    negative.write_text(json.dumps(row) + '\n')
+    with mock.patch.object(dataiku, 'verify_dataset'), mock.patch.object(
+            dataiku, 'load_documents', return_value=(args['available'], {'integrity': {'sha256': 'a' * 64}})), mock.patch.object(
+            agentic, 'prepare', return_value=args['prepared']):
+        before = specs.resolve(**specs.full_inputs(root), seed=20260710)
+        row['text'] = 'A different reserved fixture.'
+        negative.write_text(json.dumps(row) + '\n')
+        after = specs.resolve(**specs.full_inputs(root), seed=20260710)
+    assert after['inputs']['population'] == before['inputs']['population']
+    assert after['inputs']['corpus_sha256'] != before['inputs']['corpus_sha256']
+    assert after['id'] != before['id']

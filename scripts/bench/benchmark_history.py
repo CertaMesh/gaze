@@ -11,11 +11,11 @@ from pathlib import Path
 
 import benchmark_spec as specs
 import agentic_layers as agentic
-import bench_json
 import benchmark_certification as certification
 import render_benchmark_doc as render
 import rescore_past_release as past
 import scorecard_record as records
+import gaze_bench_score as score
 from capture_identity import digest, file_digest
 
 
@@ -63,7 +63,7 @@ def subject_matches(record: Path, job: dict) -> bool:
             and subject_identity(header) == expected)
 
 
-def verified(row: dict, folder: Path, spec: dict, job: dict) -> bool:
+def verified(row: dict, folder: Path, spec: dict, job: dict, *, dataset: Path | None = None) -> bool:
     if (row.get('status') != 'available' or row.get('benchmark_spec_id') != spec['id']
             or row.get('job_sha256') != digest(job)):
         return False
@@ -75,10 +75,15 @@ def verified(row: dict, folder: Path, spec: dict, job: dict) -> bool:
         for name, sha in artifacts.items():
             if Path(name).name != name or file_digest(folder / name) != sha:
                 return False
-        certification.full_record(folder / 'observations-v1.jsonl.gz', spec)
+        specs.require_current(spec, past.HARNESS_ROOT, dataset=dataset)
+        record = folder / 'observations-v1.jsonl.gz'
+        certification.admit_capture(folder / 'capture.json', record, spec, past.HARNESS_ROOT)
+        for number in (2, 1):
+            certification.admit_scorecard(folder / f'scorecard-v{number}.json', record,
+                                         number, spec, past.HARNESS_ROOT)
         if not subject_matches(folder / 'observations-v1.jsonl.gz', job):
             return False
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, score.ResponseValidationError):
         return False
     return True
 
@@ -87,10 +92,9 @@ def verified(row: dict, folder: Path, spec: dict, job: dict) -> bool:
 def scored_rows(folder: Path, spec: dict) -> dict:
     result = {}
     for number in (2, 1):
-        card = bench_json.load(folder / f'scorecard-v{number}.json')
-        specs.require_same(card, {'benchmark_spec': spec})
-        if card['scoring']['scored_label_contract']['version'] != number:
-            raise HistoryError('contract_identity_mismatch')
+        card = certification.admit_scorecard(folder / f'scorecard-v{number}.json',
+                                            folder / 'observations-v1.jsonl.gz', number,
+                                            spec, past.HARNESS_ROOT)
         result[str(number)] = agentic.layer_totals(card, agentic.production_config(card))
     return result
 
@@ -126,7 +130,7 @@ def measure(job: dict, folder: Path, spec: dict) -> dict:
 
 
 def run(plan: dict, output: Path, *, execute: bool = False, older: bool = False,
-        measure_job=None) -> dict:
+        measure_job=None, dataset: Path | None = None) -> dict:
     spec = specs.validate(plan['benchmark_spec'])
     jobs = selection(plan, older)
     state_path = output / 'history.json'
@@ -134,10 +138,10 @@ def run(plan: dict, output: Path, *, execute: bool = False, older: bool = False,
         'schema_version': 1, 'benchmark_spec': spec, 'releases': {}}
     specs.require_same(state, {'benchmark_spec': spec})
     if execute:
-        # Refuse a stale measuring checkout before launching any subject.
-        for name, sha in spec['inputs']['harness'].items():
-            if file_digest(past.HARNESS_ROOT / name) != sha:
-                raise HistoryError('harness_spec_mismatch')
+        try:
+            specs.require_current(spec, past.HARNESS_ROOT, dataset=dataset)
+        except specs.SpecError as error:
+            raise HistoryError('harness_spec_mismatch') from error
     for row in state['releases'].values():
         row['required'] = False
     measure_job = measure if measure_job is None else measure_job
@@ -146,14 +150,14 @@ def run(plan: dict, output: Path, *, execute: bool = False, older: bool = False,
         folder = output / version
         required = version in (plan['current'], plan['previous'])
         row = state['releases'].get(version, {})
-        if verified(row, folder, spec, job):
+        if verified(row, folder, spec, job, dataset=dataset):
             row['required'] = required
         else:
             row = {'status': 'unavailable', 'reason': 'not_measured', 'required': required}
             if execute:
                 try:
                     row = {**measure_job(job, folder, spec), 'required': required}
-                    if not verified(row, folder, spec, job):
+                    if not verified(row, folder, spec, job, dataset=dataset):
                         raise HistoryError('evidence_invalid')
                 except (Exception, SystemExit):
                     # A failed optional backfill cannot block required release evidence.
@@ -163,7 +167,7 @@ def run(plan: dict, output: Path, *, execute: bool = False, older: bool = False,
             try:
                 row['contracts'] = scored_rows(folder, spec)
                 row['subject'] = job['subject']
-            except (OSError, ValueError, KeyError, TypeError):
+            except (OSError, ValueError, KeyError, TypeError, score.ResponseValidationError):
                 row = {'status': 'unavailable', 'reason': 'evidence_invalid', 'required': required}
         state['releases'][version] = row
         atomic(state_path, state)
@@ -178,11 +182,12 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('plan', type=Path, help='pinned spec, current/previous versions and rescore_past_release argument lists')
     parser.add_argument('--output', type=Path, required=True, help='separate directory per immutable specification')
+    parser.add_argument('--dataset', type=Path, help='canonical Dataiku holdout; defaults to the harness cache')
     parser.add_argument('--execute', action='store_true', help='perform missing measurements; default only writes a plan')
     parser.add_argument('--older', action='store_true', help='include optional older releases off the PR path')
     args = parser.parse_args(argv)
     try:
-        state = run(json.loads(args.plan.read_text()), args.output, execute=args.execute, older=args.older)
+        state = run(json.loads(args.plan.read_text()), args.output, execute=args.execute, older=args.older, dataset=args.dataset)
         print(json.dumps({'required_complete': state['required_complete']}))
         return 0 if not args.execute or state['required_complete'] else 2
     except (OSError, ValueError, KeyError, TypeError) as error:

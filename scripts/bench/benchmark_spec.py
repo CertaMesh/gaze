@@ -38,9 +38,10 @@ def validate(value: object) -> dict:
                 or value["schema_version"] != SCHEMA_VERSION):
             raise SpecError()
         inputs = value["inputs"]
-        if (not isinstance(inputs, dict) or set(inputs) != {
-                "corpus_sha256", "generator", "seed", "contracts", "harness",
-                "record_schema", "protocol", "population"}
+        fields = {"corpus_sha256", "generator", "seed", "contracts", "harness",
+                  "record_schema", "protocol", "population"}
+        if (not isinstance(inputs, dict)
+                or set(inputs) not in (fields, fields | {"validation_vocabulary"})
                 or not HEX64.fullmatch(inputs["corpus_sha256"])
                 or type(inputs["seed"]) is not int
                 or not inputs["contracts"] or not inputs["harness"]
@@ -78,6 +79,59 @@ def population(documents) -> dict:
     return {"documents": len(ids), "document_ids_sha256": digest(ids)}
 
 
+def measuring_inputs(root: Path) -> dict:
+    """Resolve file membership and the effective scorer vocabulary on every admission."""
+    import gaze_bench_score as score
+
+    bench = root / "scripts/bench"
+    sources = []
+    for directory, folders, names in os.walk(bench):
+        folders[:] = sorted(name for name in folders
+                            if not name.startswith((".", "__")) and name != "fixtures")
+        sources.extend(Path(directory) / name for name in sorted(names)
+                       if name.endswith(".py") and not name.startswith("test_"))
+    # These are measuring semantics; subject bytes have separate provenance.
+    sources += sorted(bench.glob("*.json"))
+    sources += [bench / "pyproject.toml", bench / "uv.lock"]
+    return {
+        "harness": {path.relative_to(root).as_posix(): file_digest(path) for path in sources},
+        "validation_vocabulary": sorted(score.load_committed_source_id_vocabulary(root)),
+    }
+
+
+def full_inputs(root: Path, dataset: Path | None = None) -> dict:
+    """Load the complete canonical population, without executing a detector."""
+    import agentic_layers as agentic
+    import dataiku_en_de_gaze_bench as dataiku
+    import run_no_opf_benchmark as runner
+
+    path = dataset or root / runner.parse_args(['full']).dataset
+    dataiku.verify_dataset(path)
+    positives, positive_report = dataiku.load_documents(path)
+    negatives, negative_report = runner.load_negative_documents(root / runner.NEGATIVE_CORPUS)
+    _, report = runner.composite_dataset_report(positive_report, negative_report)
+    return dict(root=root, corpus_sha256=report['integrity']['sha256'],
+                available=positives + negatives, prepared=agentic.prepare(root))
+
+
+def require_current(value: dict, root: Path, *, dataset: Path | None = None) -> None:
+    """Bind a supplied specification to the executing source and canonical inputs."""
+    try:
+        validate(value)
+        executing = Path(__file__).resolve().parents[2]
+        measured = measuring_inputs(root)
+        if measured != measuring_inputs(executing):
+            raise SpecError('harness_spec_mismatch')
+        execution = value['inputs']['protocol']['execution']
+        expected = resolve(**full_inputs(root, dataset), seed=value['inputs']['seed'],
+                           profile='full', warmups=execution['warmups'],
+                           repetitions=execution['repetitions'])
+        if expected != value:
+            raise SpecError('harness_spec_mismatch')
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, ImportError) as error:
+        raise SpecError('harness_spec_mismatch') from error
+
+
 def resolve(root: Path, *, corpus_sha256: str, seed: int, available, prepared,
             profile: str = "full", warmups: int = 1, repetitions: int = 1) -> dict:
     """Bind measuring source bytes, not Git HEAD (which also contains the subject).
@@ -88,16 +142,7 @@ def resolve(root: Path, *, corpus_sha256: str, seed: int, available, prepared,
     """
     import scorecard_record as records
 
-    bench = root / "scripts/bench"
-    sources = []
-    for directory, folders, names in os.walk(bench):
-        folders[:] = sorted(name for name in folders
-                            if not name.startswith((".", "__")) and name != "fixtures")
-        sources.extend(Path(directory) / name for name in sorted(names)
-                       if name.endswith(".py") and not name.startswith("test_"))
-    # These are input semantics, not the measured subject's model/policy files.
-    sources += sorted(bench.glob("*.json"))
-    sources += [bench / "pyproject.toml", bench / "uv.lock"]
+    measuring = measuring_inputs(root)
     contracts = {"v1": "all-corpus-labels-v1"}
     for path in sorted((root / "docs/reference/benchmarks").glob("scored-labels-v*.json")):
         contracts[path.stem] = file_digest(path)
@@ -114,7 +159,7 @@ def resolve(root: Path, *, corpus_sha256: str, seed: int, available, prepared,
         "generator": copy.deepcopy(prepared.manifest) if prepared is not None else None,
         "seed": seed,
         "contracts": contracts,
-        "harness": {path.relative_to(root).as_posix(): file_digest(path) for path in sources},
+        **measuring,
         "record_schema": sorted(records.READABLE_SCHEMA_VERSIONS),
         "protocol": protocol,
         "population": populations,
