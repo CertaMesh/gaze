@@ -63,6 +63,8 @@ def key(*, harness_root, release_root, args, binary, probe, receipt, spec,
     if parameters['configs'] != ['policy-file'] or args.policy is None:
         raise ValueError('unsupported_release_cache_configuration')
     policy_path = args.policy.resolve()
+    if identity.file_digest(policy_path) != parameters['policy_sha256']:
+        raise ValueError('policy_changed_after_loading')
     policy = tomllib.loads(policy_path.read_text())
     if policy.get('safety_net', {}).get('backend') not in (None, 'nym'):
         raise ValueError('unsupported_release_cache_backend')
@@ -82,7 +84,8 @@ def key(*, harness_root, release_root, args, binary, probe, receipt, spec,
         models['nym'] = path if path.is_absolute() else release_root / path
     for value in args.model_env:
         name, path = value.split('=', 1)
-        models['env:' + name] = Path(path).expanduser()
+        model_path = Path(path).expanduser()
+        models['env:' + name] = model_path if model_path.is_absolute() else release_root / model_path
     for value in args.model_bundle:
         name, path, _ = value.split('=')
         models['bundle:' + name] = Path(path).expanduser()
@@ -98,6 +101,8 @@ def key(*, harness_root, release_root, args, binary, probe, receipt, spec,
                           'harness_revision': harness['revision'], 'validator': validator},
             'subject': {'release_tag': tag, 'build': receipt},
             'execution': {'parameters': parameters, 'inputs': inputs,
+                          'capture_protocol': specs.capture_protocol(args),
+                          'response_validation': specs.response_validation(args),
                           'document_ids_sha256': identity.digest(list(document_ids)),
                           'policy_dependencies': dependencies, 'model_bundles': bundles}}
 
@@ -117,6 +122,8 @@ def validate_binding(card, header, key, *, version=None):
             or benchmark['harness_revision'] != card['runner_provenance']['harness_revision']
             or subject['build'] != card['subject_build']
             or execution['parameters'] != card['parameters']
+            or execution['capture_protocol'] != card['capture_protocol']
+            or execution['response_validation'] != card['response_validation']
             or execution['policy_dependencies'] != card['runner_provenance']['policy_dependencies']
             or execution['model_bundles'] != card['runner_provenance']['model_bundles']
             or not re.fullmatch(r'v\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?', subject['release_tag'])
@@ -143,6 +150,8 @@ def admit(card, path, *, version=None):
         stages.validate_execution(captured, captured_path, require_build=True)
         if bench_json.load(path) != card:
             raise ValueError('release_capture_artifact')
+        if card.get('observation_record') != captured.get('observation_record'):
+            raise ValueError('release_capture_record')
         key = json.loads((path.parent / KEY_FILE).read_text())
         record = path.parent / card['observation_record']['file']
         header, _ = records._read(record)

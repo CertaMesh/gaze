@@ -633,7 +633,7 @@ schemas, canonical document descriptors, measuring runtime, and execution protoc
 is preserved under its content hash. The
 [previous admission specification](../../docs/reference/benchmarks/specifications/d0010b6f71ecd9481700895eb439448fc166a76f9a6c31168f2b746125fdb2f0.json)
 binds the effective validation vocabulary and executing-source admission checks.
-The [current admission specification](../../docs/reference/benchmarks/specifications/e0971106fc184dea6fe4120bd57336cf4a42e4ecfd0eb4e6807910e3c52b7e97.json)
+The [current admission specification](../../docs/reference/benchmarks/specifications/9b6f5dacac5a939d2ea1660482936e0cffc2a0879fa7cd1492af4d722aa919ff.json)
 also binds the qualified runtime and canonical document descriptors.
 Both previous manifests remain archived under their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,

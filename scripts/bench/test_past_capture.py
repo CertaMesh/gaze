@@ -31,7 +31,9 @@ def bound_capture(tmp_path):
            'benchmark': {'spec_id': spec['id'], 'harness_revision': 'b' * 40,
                          'validator': {'source': 'independent', 'binary': 'c' * 64}},
            'subject': {'release_tag': 'v0.17.0', 'build': card['subject_build']},
-           'execution': {'parameters': card['parameters'], 'inputs': {'models': {'nym': {'model': 'd' * 64}}},
+           'execution': {'parameters': card['parameters'],
+                         'capture_protocol': card['capture_protocol'],
+                         'response_validation': card['response_validation'], 'inputs': {'models': {'nym': {'model': 'd' * 64}}},
                          'policy_dependencies': card['runner_provenance']['policy_dependencies'],
                          'model_bundles': []}}
     card['capture_cache'] = cache.provenance(key)
@@ -130,7 +132,7 @@ def key_inputs(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize('change', ['model', 'policy', 'corpus', 'negative', 'harness', 'runtime',
                                     'binary', 'features', 'spec', 'validator_binary', 'validator_source',
-                                    'environment', 'documents', 'release_tag'])
+                                    'environment', 'documents', 'release_tag', 'capture_protocol', 'response_validation'])
 def test_live_inputs_invalidate_one_at_a_time(key_inputs, change):
     inputs, paths, models, runtime, harness_source = key_inputs
     original = past_capture.key(**inputs)
@@ -139,6 +141,8 @@ def test_live_inputs_invalidate_one_at_a_time(key_inputs, change):
     elif change in ('policy', 'corpus', 'negative', 'validator_binary'):
         path = paths[{'corpus': 'dataset', 'validator_binary': 'probe'}.get(change, change)]
         path.write_text(path.read_text() + '\n# changed\n')
+        if change == 'policy':
+            inputs['parameters']['policy_sha256'] = past_capture.identity.file_digest(path)
     elif change == 'harness':
         harness_source['revision'] = 'e' * 40
     elif change == 'runtime':
@@ -159,6 +163,10 @@ def test_live_inputs_invalidate_one_at_a_time(key_inputs, change):
         (inputs['harness_root'] / 'scripts/bench/validator_recall_probe/src/main.rs').write_text('changed')
     elif change == 'environment':
         inputs['environment']['RAYON_NUM_THREADS'] = '2'
+    elif change == 'capture_protocol':
+        inputs['args'].cross_check = True
+    elif change == 'response_validation':
+        inputs['args'].manifest_actions = 'tokenize'
     elif change == 'documents':
         inputs['document_ids'] = ['changed']
     else:
@@ -168,12 +176,12 @@ def test_live_inputs_invalidate_one_at_a_time(key_inputs, change):
 
 @pytest.mark.parametrize('field', ['format', 'binary', 'release_marker', 'cache_marker',
     'header_release', 'header_cache', 'spec', 'harness', 'build', 'parameters', 'policy', 'models',
-    'tag_format', 'tag_match', 'measurement', 'features'])
+    'tag_format', 'tag_match', 'measurement', 'features', 'capture_protocol', 'response_validation'])
 def test_each_binding_guard_rejects_independently(tmp_path, field):
     path, record, key = bound_capture(tmp_path)
     header, _ = records._read(record)
     card = copy.deepcopy(header['scorecard'])
-    if field in ('format', 'binary', 'spec', 'harness', 'build', 'parameters', 'policy', 'models', 'tag_format', 'features'):
+    if field in ('format', 'binary', 'spec', 'harness', 'build', 'parameters', 'policy', 'models', 'tag_format', 'features', 'capture_protocol', 'response_validation'):
         if field == 'format':
             key['format'] = 'legacy'
         elif field == 'binary':
@@ -190,6 +198,8 @@ def test_each_binding_guard_rejects_independently(tmp_path, field):
             key['execution']['policy_dependencies'] = {'changed': True}
         elif field == 'models':
             key['execution']['model_bundles'] = [{'changed': True}]
+        elif field in ('capture_protocol', 'response_validation'):
+            key['execution'][field] = {}
         elif field == 'tag_format':
             key['subject']['release_tag'] = 'not-a-tag'
         else:
@@ -201,7 +211,9 @@ def test_each_binding_guard_rejects_independently(tmp_path, field):
             target['capture_cache'] = cache.provenance(key)
             target['release_capture'] = past_capture.provenance(key)
     elif field in ('release_marker', 'cache_marker'):
-        card['release_capture' if field == 'release_marker' else 'capture_cache'] = {}
+        marker = 'release_capture' if field == 'release_marker' else 'capture_cache'
+        card[marker] = {}
+        header['scorecard'][marker] = {}
     elif field in ('header_release', 'header_cache'):
         header['scorecard']['release_capture' if field == 'header_release' else 'capture_cache'] = {}
     elif field == 'measurement':
@@ -397,6 +409,7 @@ def test_incomplete_input_closure_is_uncacheable(key_inputs, monkeypatch, damage
         inputs['receipt']['features'] = []
     elif damage == 'unsupported_backend':
         paths['policy'].write_text('[safety_net]\nbackend="opf"\n')
+        inputs['parameters']['policy_sha256'] = past_capture.identity.file_digest(paths['policy'])
     elif damage == 'unqualified_build':
         inputs['receipt']['mode'] = 'unqualified'
     elif damage == 'missing_tag':
@@ -406,4 +419,23 @@ def test_incomplete_input_closure_is_uncacheable(key_inputs, monkeypatch, damage
         import run_no_opf_benchmark as runner
         monkeypatch.setattr(runner, 'source_tree_identity', lambda root: (None, 'dirty'))
     with pytest.raises((ValueError, KeyError)):
+        past_capture.key(**inputs)
+
+
+def test_derived_card_cannot_switch_execution_record(tmp_path):
+    import shutil
+    path, record, _ = bound_capture(tmp_path)
+    alternate = path.parent / 'alternate.jsonl.gz'
+    shutil.copyfile(record, alternate)
+    derived = records.rescore(alternate, records.score.SCORED_LABEL_CONTRACT_V1, max_workers=1)
+    derived_path = path.parent / 'derived.json'
+    derived_path.write_text(json.dumps(derived))
+    with pytest.raises(ValueError, match='unverified_release_capture'):
+        past_capture.admit(derived, derived_path)
+
+
+def test_policy_changed_after_loading_is_uncacheable(key_inputs):
+    inputs, paths, _, _, _ = key_inputs
+    paths['policy'].write_text('[ner]\nthreshold=0.9\n')
+    with pytest.raises(ValueError, match='policy_changed_after_loading'):
         past_capture.key(**inputs)

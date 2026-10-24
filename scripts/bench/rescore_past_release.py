@@ -265,6 +265,11 @@ def _run(args: argparse.Namespace) -> Path:
     for value in args.model_env:
         name, path = _key_value(value, "--model-env")
         environment[name] = str(Path(path).expanduser())
+    # Match the environment run_config actually sends to the policy producer.
+    environment["GAZE_NER_MODEL_DIR"] = str(davlan)
+    environment["GAZE_NER_THRESHOLD"] = str(args.threshold)
+    if policy is not None:
+        environment["GAZE_BENCH_POLICY"] = str(policy)
     output = args.output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     output_record = output.with_name("observations-v1.jsonl.gz")

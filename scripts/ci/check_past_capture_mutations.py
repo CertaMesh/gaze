@@ -21,6 +21,8 @@ BINDINGS = {
     'harness': "benchmark['harness_revision'] != card['runner_provenance']['harness_revision']",
     'build': "subject['build'] != card['subject_build']",
     'parameters': "execution['parameters'] != card['parameters']",
+    'capture_protocol': "execution['capture_protocol'] != card['capture_protocol']",
+    'response_validation': "execution['response_validation'] != card['response_validation']",
     'policy': "execution['policy_dependencies'] != card['runner_provenance']['policy_dependencies']",
     'models': "execution['model_bundles'] != card['runner_provenance']['model_bundles']",
     'tag_format': "not re.fullmatch(r'v\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?', subject['release_tag'])",
@@ -30,6 +32,14 @@ BINDINGS = {
 PROBES = [(name, SOURCE, old, 'False', f'{TEST}::test_each_binding_guard_rejects_independently[{name}]')
           for name, old in BINDINGS.items()]
 PROBES += [
+    ('loaded-policy', SOURCE, "if identity.file_digest(policy_path) != parameters['policy_sha256']:", 'if False:',
+     f'{TEST}::test_policy_changed_after_loading_is_uncacheable'),
+    ('configuration', SOURCE, "if parameters['configs'] != ['policy-file'] or args.policy is None:", 'if False:',
+     f'{TEST}::test_incomplete_input_closure_is_uncacheable[unsupported_config]'),
+    ('backend', SOURCE, "if policy.get('safety_net', {}).get('backend') not in (None, 'nym'):", 'if False:',
+     f'{TEST}::test_incomplete_input_closure_is_uncacheable[unsupported_backend]'),
+    ('capture-record', SOURCE, "if card.get('observation_record') != captured.get('observation_record'):", 'if False:',
+     f'{TEST}::test_derived_card_cannot_switch_execution_record'),
     ('features', SOURCE, "    subject_build.validate(card, header['binary_sha256'])", '    pass',
      f'{TEST}::test_each_binding_guard_rejects_independently[features]'),
     ('metrics', SOURCE, 'if records.rescore(record, contract, max_workers=1) != card:', 'if False:',
