@@ -570,3 +570,48 @@ async fn shrinking_owned_values_do_not_bypass_the_input_text_budget() {
     assert_eq!(*seen.lock().unwrap(), Value::Null);
     assert_eq!(session.snapshot_entries(), before);
 }
+
+#[tokio::test]
+async fn overlapping_rule_values_preserve_owned_tokens_from_different_classes() {
+    let pipeline = repeat_pipeline(EvidenceKind::Rule);
+    for response in [false, true] {
+        for source_first in [false, true] {
+            for email_value in ["Johanna", "m@example.invalid"] {
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let name = session.tokenize(&PiiClass::Name, "Maria").unwrap();
+                let email = session.tokenize(&PiiClass::Email, email_value).unwrap();
+                let copy = format!("hello {name} schneider {email} brenner");
+                let declaration = source(&format!("Maria Schneider {email_value} Brenner"));
+                let payload = if source_first {
+                    json!([declaration, copy])
+                } else {
+                    json!([copy, declaration])
+                };
+                let expected = restore(&session, &payload);
+                let (registry, seen) = capture(if response { payload.clone() } else { json!([]) });
+                let result = dispatch(
+                    &registry,
+                    &Store::default(),
+                    &pipeline,
+                    &session,
+                    if response { json!([]) } else { payload },
+                )
+                .await
+                .unwrap();
+                let protected = if response {
+                    result.payload
+                } else {
+                    seen.lock().unwrap().clone()
+                };
+                assert_eq!(restore(&session, &protected), expected);
+                let copy = protected[if source_first { 1 } else { 0 }]
+                    .as_str()
+                    .unwrap();
+                assert!(copy.contains(&name));
+                assert!(copy.contains(&email));
+                assert!(!copy.contains("schneider"));
+                assert!(!copy.contains("brenner"));
+            }
+        }
+    }
+}
