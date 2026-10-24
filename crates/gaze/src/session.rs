@@ -4721,6 +4721,9 @@ mod tests {
                 Err(SessionTransactionError::GenerationConflict) => {
                     assert!(!session.contains_token(&staged));
                 }
+                Err(SessionTransactionError::CapacityExceeded) => {
+                    panic!("unbounded transaction refused capacity")
+                }
             }
             assert!(session.contains_token(&mutation));
         }

@@ -160,6 +160,9 @@ fn strict_restore_deletion_compaction_and_close_tombstone() {
     assert_error(&send(&mut d, conflicting), "RequestConflict");
     let reopened = open(&mut d, "conversation-a");
     assert_ne!(reopened["session_epoch"], opened["session_epoch"]);
+    assert_eq!(send(&mut d, close.clone()), closed);
+    assert!(d.v2.contains("conversation-a"));
+    d.v2.tombstones.front_mut().unwrap().created = Instant::now() - Duration::from_secs(61);
     assert_error(&send(&mut d, close), "CacheConflict");
     assert!(d.v2.contains("conversation-a"));
 }

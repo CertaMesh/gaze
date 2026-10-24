@@ -104,6 +104,15 @@ impl Registry {
         outer.finalize().into()
     }
 
+    fn replay(&self, response: &RawValue) -> Result<Box<RawValue>> {
+        if self.bytes_except("").0.saturating_add(response.get().len())
+            > self.limits.global_v2_state_bytes
+        {
+            return Err(Failure::CacheCapacity);
+        }
+        Ok(response.to_owned())
+    }
+
     fn bytes_except(&self, active: &str) -> (usize, usize) {
         let mut state = self.tombstones.iter().map(Tombstone::bytes).sum::<usize>();
         let mut manifests = 0usize;
@@ -152,12 +161,14 @@ struct RawBlock {
 }
 
 fn raw_bytes(blocks: &[RawBlock]) -> usize {
-    std::mem::size_of_val(blocks).saturating_add(
-        blocks
-            .iter()
-            .map(|b| b.id.capacity() + b.sha256.capacity() + b.text.capacity() + 64)
-            .sum::<usize>(),
-    )
+    std::mem::size_of_val(blocks)
+        .saturating_mul(4)
+        .saturating_add(
+            blocks
+                .iter()
+                .map(|b| b.id.capacity() + b.sha256.capacity() + b.text.capacity() + 64)
+                .sum::<usize>(),
+        )
 }
 
 struct Receipt {
@@ -507,6 +518,14 @@ impl Daemon {
         r.string("daemon_epoch")?;
         r.string("session_epoch")?;
         r.string("pipeline_id")?;
+        if op == "close"
+            && self.v2.tombstones.iter().any(|t| {
+                t.session_id == session_id
+                    && r.string("session_epoch").ok().as_deref() == Some(&t.session_epoch)
+            })
+        {
+            return self.v2_closed_retry(r, &session_id, &request_id, &projection_id, seq, digest);
+        }
         if self.sessions.contains_key(&session_id) {
             return Err(Failure::ProtocolInvalid);
         }
@@ -533,7 +552,13 @@ impl Daemon {
                 {
                     return Err(Failure::CacheConflict);
                 }
-                return Ok(receipt.response.clone());
+                let response = self.v2.replay(&receipt.response)?;
+                self.v2
+                    .sessions
+                    .get_mut(&session_id)
+                    .expect("live receipt")
+                    .last_seen = Instant::now();
+                return Ok(response);
             }
         }
         if seq != live.next_seq || seq == MAX_COUNTER {
@@ -574,13 +599,17 @@ impl Daemon {
         if self.sessions.contains_key(&session_id) {
             return Err(Failure::ProtocolInvalid);
         }
-        if let Some(live) = self.v2.sessions.get_mut(&session_id) {
-            return if live.opening_digest == digest {
-                live.last_seen = Instant::now();
-                Ok(live.opening.clone())
-            } else {
-                Err(Failure::SessionExists)
-            };
+        if let Some(live) = self.v2.sessions.get(&session_id) {
+            if live.opening_digest != digest {
+                return Err(Failure::SessionExists);
+            }
+            let response = self.v2.replay(&live.opening)?;
+            self.v2
+                .sessions
+                .get_mut(&session_id)
+                .expect("live opening")
+                .last_seen = Instant::now();
+            return Ok(response);
         }
         self.make_session_room();
         let session = Session::from_policy(&self.policy).map_err(|_| Failure::Pipeline)?;
@@ -673,7 +702,7 @@ impl Daemon {
                 && t.receipt.request_id == request_id
                 && t.receipt.digest == digest
             {
-                Ok(t.receipt.response.clone())
+                self.v2.replay(&t.receipt.response)
             } else {
                 Err(Failure::RequestConflict)
             };
@@ -1072,26 +1101,28 @@ fn hash(text: &str) -> String {
 }
 
 fn result_bytes(results: &[BlockResult]) -> usize {
-    std::mem::size_of_val(results).saturating_add(
-        results
-            .iter()
-            .map(|b| {
-                b.id.capacity()
-                    + b.sha256.capacity()
-                    + b.clean_text.capacity()
-                    + b.manifest.capacity() * 256
-                    + b.tokens.capacity() * 128
-                    + b.tokens
-                        .iter()
-                        .map(|t| {
-                            t.token.capacity()
-                                + t.class.capacity()
-                                + t.family.as_ref().map_or(0, String::capacity)
-                        })
-                        .sum::<usize>()
-            })
-            .sum::<usize>(),
-    )
+    std::mem::size_of_val(results)
+        .saturating_mul(4)
+        .saturating_add(
+            results
+                .iter()
+                .map(|b| {
+                    b.id.capacity()
+                        + b.sha256.capacity()
+                        + b.clean_text.capacity()
+                        + b.manifest.capacity() * 256
+                        + b.tokens.capacity() * 128
+                        + b.tokens
+                            .iter()
+                            .map(|t| {
+                                t.token.capacity()
+                                    + t.class.capacity()
+                                    + t.family.as_ref().map_or(0, String::capacity)
+                            })
+                            .sum::<usize>()
+                })
+                .sum::<usize>(),
+        )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1113,6 +1144,7 @@ fn check_stage(
         .saturating_add(manifest.saturating_mul(2))
         .saturating_add(cache)
         .saturating_add(response.saturating_mul(2))
+        .saturating_add(512)
         .saturating_add(other);
     if cache > limits.session_cache_bytes
         || manifest > limits.session_manifest_bytes
@@ -1136,7 +1168,7 @@ fn validate_result(
         };
         if span.clean_span.start < previous
             || raw.text.get(span.raw_span.clone()).is_none()
-            || (!transaction.contains_token(token) && !gaze::is_redaction_marker(token))
+            || (gaze::token_shape::contains_token(token) && !transaction.contains_token(token))
         {
             return Err(Failure::Pipeline);
         }
