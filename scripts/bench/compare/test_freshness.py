@@ -92,11 +92,10 @@ def test_no_stable():
 def test_github_model_family_and_prerelease():
     row = {**ROW, "kind": "github", "name": "synthetic/models", "pinned_version": "en-1.0", "tag_prefix": "en-"}
     def get(url):
-        if "/tags/" in url:
-            return {"published_at": "2025-01-01T00:00:00Z"}
-        return [{"tag_name": t, "published_at": "2026-01-01T00:00:00Z", "draft": d, "prerelease": p}
-                for t, d, p in [("en-1.0", False, False), ("de-9.0", False, False),
-                                ("en-3.0", False, True), ("en-4.0", True, False), ("en-2.0rc1", False, False)]]
+        if "/matching-refs/" in url:
+            return [{"ref": "refs/tags/" + t} for t in ["en-1.0", "de-9.0", "en-3.0", "en-4.0", "en-2.0rc1"]]
+        tag = url.rsplit("/", 1)[1]
+        return {"published_at": "2025-01-01T00:00:00Z", "draft": tag == "en-4.0", "prerelease": tag == "en-3.0"}
     assert f.check(row, DAY, get)["status"] == "current"
 
 

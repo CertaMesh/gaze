@@ -191,6 +191,23 @@ def github(row, get):
     else:
         data = get(f"{base}/releases/tags/{quote(pin, safe='')}")
         pinned = release(pin, data["published_at"])
+    if row["tag_prefix"]:
+        # Model repositories publish many unrelated families. Query this tag
+        # namespace directly instead of exhausting the repository release list.
+        refs = get(f"{base}/git/matching-refs/tags/{quote(row['tag_prefix'], safe='')}")
+        tags = [ref["ref"].removeprefix("refs/tags/") for ref in refs]
+        candidates = [(stable(tag, row["tag_prefix"]), tag) for tag in tags
+                      if stable(tag, row["tag_prefix"]) is not None]
+        for _, tag in sorted(candidates, reverse=True)[:100]:
+            try:
+                item = get(f"{base}/releases/tags/{quote(tag, safe='')}")
+            except MissingSource:
+                continue
+            if not item["draft"] and not item["prerelease"]:
+                return pinned, release(tag, item["published_at"]), None, base
+        if len(candidates) > 100:
+            raise SourceFailure("release lookup limit reached")
+        return pinned, None, "no-stable-release", base
     candidates = []
     # A bounded listing cannot certify a missing/older release beyond its end.
     for page in range(1, 11):
