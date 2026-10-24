@@ -2,8 +2,9 @@
 """Hash every unchanged repository input outside the isolated MCP change.
 
 This records structural identity, never fresh C/A/D/R inference. The explicit
-allowlist is limited to the MCP runtime, new native MCP tools/evidence, and the
-rmcp-only golden source-event counter. Every other tracked file must be identical.
+allowlist is limited to the MCP runtime, new native MCP tools/evidence, the
+rmcp-only golden counter, and exact CI evidence-path additions. Every other
+tracked file must be identical.
 """
 from __future__ import annotations
 import argparse
@@ -24,6 +25,12 @@ NATIVE_FILES = frozenset({
 })
 NATIVE_PREFIXES = ("crates/gaze-mcp-core/", "scripts/bench/native-mcp-operation/", "docs/reference/benchmarks/gates/mcp-operation-order/")
 GOLDEN = "scripts/bench/fixtures/evidence/mcp_route_v1.golden.json"
+CI_REGISTRY = "scripts/ci/full-inputs.json"
+EVIDENCE_PREFIX = "docs/reference/benchmarks/gates/mcp-operation-order/"
+EVIDENCE_NAMES = frozenset({"README.md", "authority-and-cleanup.json", "base-native.json.gz",
+    "base-v1.scorecard.json", "base-v2.scorecard.json", "candidate-native.json.gz",
+    "candidate-v1.scorecard.json", "candidate-v2.scorecard.json", "gate.json",
+    "native-comparison.json", "space-diagnostic.json", "text-path-identity.json.gz"})
 
 
 def _tree(revision):
@@ -39,7 +46,14 @@ def _tree(revision):
 
 
 def _allowed(path):
-    return path in NATIVE_FILES or path.startswith(NATIVE_PREFIXES) or path == GOLDEN
+    return path in NATIVE_FILES or path.startswith(NATIVE_PREFIXES) or path in {GOLDEN, CI_REGISTRY}
+
+
+def _ci_registry_only(before, after):
+    a, b = json.loads(before), json.loads(after)
+    a["paths"] = sorted(set(a["paths"]) | {EVIDENCE_PREFIX + name for name in EVIDENCE_NAMES})
+    if a != b:
+        raise ValueError("CI registry changed beyond the native evidence path declarations")
 
 
 def _golden_only(before, after):
@@ -68,6 +82,8 @@ def build(base, candidate):
     # not the C/A/D/R corpus. Check its exact permitted edit, rather than skip it.
     if GOLDEN in changed:
         _golden_only(_blob(a[GOLDEN][2]), _blob(b[GOLDEN][2]))
+    if CI_REGISTRY in changed:
+        _ci_registry_only(_blob(a[CI_REGISTRY][2]), _blob(b[CI_REGISTRY][2]))
     for path in changed:
         if path in NATIVE_FILES and path in a:
             raise ValueError("native allowlist unexpectedly overlaps a base text input: " + path)
@@ -117,6 +133,7 @@ def build(base, candidate):
             "fresh_text_capture": False, "protected_files": records, "protected_file_count": len(records),
             "allowed_changed_paths": changed, "native_exact_paths": sorted(NATIVE_FILES), "native_prefixes": list(NATIVE_PREFIXES),
             "rmcp_counter_fixture": {"path": GOLDEN, "scope": "rmcp evidence only; sole change is source events 1 to 3"},
+            "ci_registry_exception": {"path": CI_REGISTRY, "scope": "only the twelve new native evidence path declarations"},
             "generator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
 
 

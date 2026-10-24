@@ -47,3 +47,13 @@ def test_rmcp_counter_exemption_cannot_hide_other_fixture_changes():
         proof._golden_only(json.dumps(before), json.dumps(after))
     assert not proof._allowed("crates/gaze/src/mcp_operation.rs")
     assert not proof._allowed("scripts/bench/unclassified_new_driver.py")
+
+
+def test_ci_registry_exception_only_adds_native_evidence_paths():
+    before = {"paths": ["existing.txt"], "gate_readers": {"gate": "unchanged"}}
+    after = copy.deepcopy(before)
+    after["paths"] = sorted(after["paths"] + [proof.EVIDENCE_PREFIX + name for name in proof.EVIDENCE_NAMES])
+    proof._ci_registry_only(json.dumps(before), json.dumps(after))
+    after["gate_readers"]["gate"] = "changed"
+    with pytest.raises(ValueError, match="beyond"):
+        proof._ci_registry_only(json.dumps(before), json.dumps(after))

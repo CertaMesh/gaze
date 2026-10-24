@@ -8,9 +8,9 @@
     "D": "unchanged_by_construction",
     "R": "unchanged_by_construction"
   },
-  "path_identity_sha256": "52024b2bfe6d5207d9cda136cca0163493171c490198d809fe3034e496ce2786",
-  "protected_file_count": 2007,
-  "publication_revision": "4465da0387a2fe11c007b5abe11c7dd5c58a7e6a",
+  "path_identity_sha256": "9c76b6af86669ef410070223da8ed4f847536907b6920729352e61f4f855b1d2",
+  "protected_file_count": 2006,
+  "publication_revision": "35aa332d0aa91afd187e80a1cead84df92b828e6",
   "reuse_authority": "Explicit orchestrator ruling: same source-identity reuse rule as PR #869",
   "contracts": {
     "v2": {

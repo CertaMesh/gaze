@@ -36,7 +36,7 @@ after inference.
 
 C/A/D/R text inference was **not recaptured**. Under the explicit reuse ruling,
 `text-path-identity.json.gz` records matching base and candidate SHA-256 values
-for 2,007 repository inputs outside the isolated MCP change. This includes the
+for 2,006 repository inputs outside the isolated MCP change. This includes the
 core, types, recognizers, assembly, CLI clean code, existing text drivers,
 scorers, corpus inputs, contracts, dependency locks, and build configuration.
 New native tools are not imported by the unchanged text modules.
@@ -44,7 +44,8 @@ New native tools are not imported by the unchanged text modules.
 The only changed existing benchmark fixture is rmcp route evidence. Its sole
 change is the verified recognizer-event count from 1 to 3 for discovery. It is
 not part of the C/A/D/R text corpus. The checker rejects any broader fixture
-edit or unclassified file change.
+edit or unclassified file change. The CI input registry separately admits
+exactly the twelve new native evidence paths, with no other registry change.
 
 The four derived scorecards label text layers `unchanged_by_construction` and
 retain the actual native operation counts. They do not invent zero text counts
