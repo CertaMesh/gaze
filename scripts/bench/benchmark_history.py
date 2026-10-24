@@ -132,6 +132,10 @@ def measure(job: dict, folder: Path, spec: dict) -> dict:
     versions = sorted(int(name.rsplit('v', 1)[1]) for name in spec['inputs']['contracts']
                       if name.startswith('scored-labels-v'))
     names = [record.name, output.name]
+    captured = json.loads(output.read_text())
+    if 'release_capture' in captured:
+        import past_capture
+        names += ['run-evidence.json', past_capture.KEY_FILE]
     for number in sorted({1, 2, *versions}):
         contract = certification._contract(past.HARNESS_ROOT, number, spec)
         path = folder / f'scorecard-v{number}.json'

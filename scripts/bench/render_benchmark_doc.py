@@ -485,6 +485,7 @@ def contract_result_from_scorecard(
     *,
     scorecard_filename: str,
     scorecard_sha256: str,
+    scorecard_path: Path | None = None,
 ) -> dict[str, Any]:
     """One release re-scored under another contract, checked against its row.
 
@@ -499,6 +500,7 @@ def contract_result_from_scorecard(
         scorecard_filename=scorecard_filename,
         scorecard_sha256=scorecard_sha256,
         shipped_arm=shipped_default_arm(parent),
+        scorecard_path=scorecard_path,
     )
     try:
         benchmark_spec.require_same(projected, parent, required=False)
@@ -970,15 +972,19 @@ def history_entry_from_scorecard(
     machine: str,
     scorecard_filename: str,
     scorecard_sha256: str,
+    scorecard_path: Path | None = None,
     provisional: bool = False,
     note: str = "",
     shipped_arm: str = SHIPPED_DEFAULT_ARM,
 ) -> dict[str, Any]:
     """Project one schema-v4 scorecard onto the fields the document prints."""
-    if scorecard.get("cache_replay") is True:
-        raise RenderError("release scorecards must be fresh: cache_replay is true")
-    if "capture_cache" in scorecard:
-        raise RenderError("reusable base captures require run evidence; use --no-cache for release admission")
+    if (scorecard.get("cache_replay") is True or "capture_cache" in scorecard
+            or "release_capture" in scorecard):
+        try:
+            import past_capture
+            past_capture.admit(scorecard, scorecard_path, version=version)
+        except ValueError as error:
+            raise RenderError("release cache admission requires verified run evidence") from error
     if not VERSION_RE.match(version):
         raise RenderError(f"--version must look like v1.2.3, got {version!r}")
     if scorecard.get("schema_version") != SCORECARD_SCHEMA_VERSION:
@@ -2398,6 +2404,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     scorecard,
                     rows[0],
                     scorecard_filename=expected,
+                    scorecard_path=args.scorecard,
                     scorecard_sha256=bench_json.content_sha256(args.scorecard),
                 )
             )
@@ -2431,6 +2438,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 bench_json.load(scorecard_path),
                 version=args.release_version,
                 machine=args.machine,
+                scorecard_path=scorecard_path,
                 scorecard_filename=scorecard_path.name,
                 scorecard_sha256=bench_json.content_sha256(scorecard_path),
                 provisional=args.provisional,
