@@ -170,3 +170,17 @@ The browser-MITM project is separate (formerly in-tree `debug-proxy`).
   See [Nym's neutral token view](docs/explanation/safety-net/nym-neutral-view.md).
 - Rulepack fields parsed but gated: `token.format`, `context.hotwords`, `context.boost`,
   `context.window`. `token.family` was un-gated in v0.4.2.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in the `CertaMesh/gaze` GitHub Issues, accessed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles use the default label strings: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `GLOSSARY.md` plus `docs/adr/`. See `docs/agents/domain.md`.
