@@ -47,6 +47,28 @@ Invalid JSON syntax returns unversioned `JsonMalformed`. A syntactically valid
 version 1 object with missing or wrongly typed fields returns versioned
 `ProtocolInvalid`, including when `session_id` is empty.
 
+## Input resource limits
+
+The daemon bounds raw wire frames before converting bytes to UTF-8 or parsing
+JSON. The cap is 160 MiB (167772160 bytes), derived with checked arithmetic as
+16 times `gaze clean`'s existing 10 MiB input cap. It includes JSON syntax and
+context, excludes LF, and counts CR in a CRLF ending. This resource limit adds
+a refusal for oversized frames that earlier versions accepted.
+
+Overflow emits exactly one unversioned `FrameTooLarge` error with a null
+`session_id`. Its detail contains only fixed text and the numeric byte limit.
+The daemon then closes input without processing further frames or draining an
+unbounded line to find LF. Already queued valid frames keep their order.
+
+A synchronous channel holds at most one queued frame. When the queue is full,
+the reader blocks until processing makes room; no frame is dropped. Besides
+that queued frame, there can be one frame under processing and one held by the
+reader, plus stdin's fixed read buffer. Each raw frame buffer is capped. This
+does not bound model memory, session storage, decoded JSON, or response size.
+
+An EOF tail without LF is still processed. Invalid UTF-8 still closes input
+silently after earlier valid frames, matching the previous reader.
+
 ## Caller-known record context
 
 Both legacy clean frames and version 1 `clean` frames accept an optional typed

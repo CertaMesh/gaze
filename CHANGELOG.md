@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- `gaze daemon` bounds each raw JSONL frame at 160 MiB before UTF-8 conversion
+  or JSON parsing. Oversized frames now receive one value-free `FrameTooLarge`
+  error, then input closes without draining the line. The input queue holds
+  at most one frame and blocks the reader under backpressure without dropping
+  frames.
+
 - Gemini URL model identifiers are decoded and validated before forwarding.
   Previously, that URI segment bypassed request scanning and could carry PII
   to the provider. Strict model identifiers retain deterministic checks; values
