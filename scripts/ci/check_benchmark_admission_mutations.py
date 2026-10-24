@@ -80,6 +80,9 @@ def main():
         ('release_protocol_declaration', HISTORY, "if expected is None or job.get('response_validation') != expected:", 'if False:', 'test_history_declares_release_protocol', 5),
         ('history_record_validation', HISTORY, "        certification.admit_capture(folder / 'capture.json', record, spec, past.HARNESS_ROOT,\n                                    response_validation=validation)", '        pass', 'test_history_binds_declared_adapter_to_actual_record', 2),
         ('history_cli_validation', HISTORY, 'if specs.response_validation(args) != validation:', 'if False:', 'test_history_measure_refuses_adapter_before_subject', 1),
+        ('retained_history_adapter', HISTORY, "            row['response_validation'] = release_validation(job)\n", '', 'test_history_rows_rederive_validation_adapter[True]', 1),
+        ('selected_history_adapter', HISTORY, "                row['response_validation'] = release_validation(job)\n", '', 'test_history_rows_rederive_validation_adapter[False]', 1),
+        ('render_history_adapter', 'scripts/bench/render_benchmark_doc.py', "if validation != benchmark_spec.RELEASE_PROTOCOLS.get(version) or validation is None:", 'if False:', 'test_history_renderer_refuses_wrong_adapter', 1),
         ('optional_history', HISTORY, optional_source[optional_start:optional_end], '',
          'test_default_resume_revalidates_optional_rows_without_backfill', 3),
     ]

@@ -513,7 +513,20 @@ def test_generated_runner_records_validation_flags(tmp_path, evidence, monkeypat
     process = mock.MagicMock()
     process.__enter__.return_value = process
     process.message_deadline = 0
-    process.exchange.side_effect = lambda request: _success_response(docs[request['fixture_id']])
+    def response(request):
+        doc = docs[request['fixture_id']]
+        value = _success_response(doc)
+        if flag == 'split-composite-source-ids' and doc.spans:
+            value['clean_text'] = '[REDACTED:email]'
+            value['manifest_spans'] = [dict(raw_start=0, raw_end=len(doc.text.encode()),
+                clean_start=0, clean_end=len(value['clean_text']), **{'class': 'email'})]
+            value['manifest_integrity']['spans'] = 1
+            value['final_protection_trace'] = [dict(raw_start=0, raw_end=len(doc.text.encode()),
+                **{'class': 'email'}, action='redact', provenance=dict(stage='safety_net',
+                decision='redact', source_ids=['synthetic:email+synthetic:email']))]
+            value['restore']['exact'] = False
+        return value
+    process.exchange.side_effect = response
     monkeypatch.setattr(score, 'BenchSubprocess', lambda *a, **k: process)
     monkeypatch.setattr(score, 'validator_probe_binary', lambda root: tmp_path / 'candidate/synthetic-binary')
     monkeypatch.setattr(score, 'collect_validator_measurements', lambda probe, documents, ids: {
@@ -525,11 +538,37 @@ def test_generated_runner_records_validation_flags(tmp_path, evidence, monkeypat
     monkeypatch.setattr(agentic, 'generate', lambda *a: [SimpleNamespace(to_document=lambda doc=doc: doc) for doc in docs.values()])
     output = tmp_path / 'generated/capture.json'
     flags = ['--manifest-actions', 'tokenize'] if flag == 'manifest-actions' else ['--split-composite-source-ids']
-    assert agentic.main(['measure', '--binary', str(tmp_path / 'candidate/synthetic-binary'),
-        '--config', 'policy-file', '--label', 'synthetic', '--output', str(output), *flags]) == 0
+    argv = ['measure', '--binary', str(tmp_path / 'candidate/synthetic-binary'),
+        '--config', 'policy-file', '--label', 'synthetic', '--output', str(output)]
+    if flag == 'split-composite-source-ids':
+        from bench_subprocess import ProducerFailure
+        with pytest.raises(ProducerFailure):
+            agentic.main(argv)
+    assert agentic.main([*argv, *flags]) == 0
     header, _ = records._read(output.with_name('observations-v1.jsonl.gz'))
     expected = specs.LEGACY_VALIDATION if flag == 'manifest-actions' else {**specs.CURRENT_VALIDATION,
                                                                        'split_composite_source_ids': True}
     assert header['response_validation'] == expected
     assert header['scorecard'].get('response_validation') == expected
     assert json.loads(output.read_text()).get('response_validation') == expected
+
+
+@pytest.mark.parametrize('retained', [False, True])
+def test_history_rows_rederive_validation_adapter(tmp_path, evidence, monkeypatch, retained):
+    plan, measure = plan_and_measure(tmp_path, evidence)
+    monkeypatch.setattr(history.render, 'render_spec_history', lambda state: '')
+    out = tmp_path / 'history'
+    state = history.run(plan, out, execute=True, older=True, measure_job=measure)
+    version = 'v0.16.0' if retained else plan['current']
+    state['releases'][version]['response_validation'] = specs.LEGACY_VALIDATION
+    history.atomic(out / 'history.json', state)
+    state = history.run(plan, out)
+    assert state['releases'][version].get('response_validation') == specs.CURRENT_VALIDATION
+
+
+def test_history_renderer_refuses_wrong_adapter(tmp_path, evidence):
+    plan, measure = plan_and_measure(tmp_path, evidence)
+    state = history.run(plan, tmp_path / 'history', execute=True, measure_job=measure)
+    state['releases'][plan['current']]['response_validation'] = specs.LEGACY_VALIDATION
+    with pytest.raises(history.render.RenderError, match='^release_protocol_mismatch$'):
+        history.render.render_spec_history(state)
