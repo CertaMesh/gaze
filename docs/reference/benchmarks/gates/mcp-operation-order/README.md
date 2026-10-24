@@ -89,8 +89,9 @@ archives are replayable without the private paths.
 
 The original orchestrator and load-coordinator GO approved leak-only captures
 alongside #773, outside bench-machine, at nice 10. The standing recapture ruling
-requires one-minute load below 12 and at least 60% free memory before each arm.
-The recorded base check is 4.20 and 86%; candidate is 3.95 and 85%. The runs used
+requires `load_1m < 12` and `memory_free_percent >= 60`, checked before each arm.
+Base recorded `load_1m=4.20` and `memory_free_percent=86`.
+Candidate recorded `load_1m=3.95` and `memory_free_percent=85`. The runs used
 worker-owned model copies with distinct file identities from the installed
 bundles. The same immutable copy set served the two arms serially. Hashes were
 checked before and after each capture, then all private copies were deleted.
