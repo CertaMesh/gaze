@@ -144,12 +144,42 @@ def main():
     build_end = certification_source.index("    block = captured['scoring']['scored_label_contract']", build_start)
     mutations.append(('capture_build_qualification', CERT, certification_source[build_start:build_end], '',
                       'test_reviewer_skip_build_retained_binary_cannot_certify', 1))
-    mutations.append(('native_build_guard', 'scripts/bench/conftest.py',
-                      'if resolved and Path(resolved).resolve() in blocked:', 'if False:',
+    mutations.append(('native_build_guard', 'scripts/bench/native_build_guard.py',
+                      'if resolved and (Path(resolved).resolve() in blocked\n'
+                      '                             or Path(resolved).resolve().is_relative_to(toolchains.resolve())):', 'if False:',
                       'scripts/bench/test_native_build_guard.py::test_literal_and_absolute_cargo_builds_are_blocked', 1))
-    mutations.append(('native_cargo_allowlist', 'scripts/bench/conftest.py',
+    mutations.append(('native_cargo_allowlist', 'scripts/bench/native_build_guard.py',
                       'return bool(arguments) and arguments[0] in ALLOWED', 'return True',
                       'scripts/bench/test_native_build_guard.py::test_native_cargo_allowlist_refuses_unknown_commands', 5))
+    mutations.extend([
+        ('build_receipt_features', 'scripts/bench/subject_build.py',
+         'if receipt.get("features") != required_features(receipt["configs"]):', 'if False:',
+         'scripts/bench/test_subject_build.py::test_receipt_refuses_features_that_cannot_run_declared_configs', 4),
+        ('build_selected_features', 'scripts/bench/subject_build.py', '"features": features}', '"features": []}',
+         'scripts/bench/test_subject_build.py::test_qualified_build_records_selected_features', 1),
+        ('target_feature_availability', 'scripts/bench/subject_build.py',
+         ' or not set(features) <= manifest.get("features", {}).keys()', '',
+         'scripts/bench/test_subject_build.py::test_target_checkout_rejects_unavailable_build_requirements[missing_feature]', 1),
+        ('target_config_availability', 'scripts/bench/subject_build.py',
+         'not set(configs) <= available or ', '',
+         'scripts/bench/test_subject_build.py::test_target_checkout_rejects_unavailable_build_requirements[missing_config]', 1),
+        ('historical_kiji_features', 'scripts/bench/subject_build.py',
+         '"full-stack-kiji-resolve": ("safety-net-kiji",)', '"full-stack-kiji-resolve": ()',
+         'scripts/bench/test_subject_build.py::test_documented_release_build_commands[v0.14.0]', 1),
+        ('cache_build_features', CURRENT,
+         '        "build_features": subject_build.required_features(\n'
+         '            ("policy-file",) if policy_path else tuple(score.DEFAULT_CONFIGS)),\n', '',
+         'scripts/bench/test_capture_reuse.py::CaptureIdentityTests::test_runner_key_binds_native_artifacts_and_capture_parameters', 1),
+        ('descendant_python_startup', 'scripts/bench/conftest.py',
+         'activate_from_environment()\\n', '',
+         'scripts/bench/test_native_build_guard.py::test_descendant_absolute_toolchain_cargo_is_blocked', 2),
+        ('descendant_actual_producers', 'scripts/bench/conftest.py',
+         'activate_from_environment()\\n', '',
+         'scripts/bench/test_native_build_guard.py::test_descendant_actual_producer_is_blocked', 6),
+        ('rustup_path_shim', 'scripts/bench/native_build_guard.py',
+         'check_cargo "$@"\\n', '',
+         'scripts/bench/test_native_build_guard.py::test_path_launchers_block_children_without_python_startup', 1),
+    ])
     if args.only:
         if set(args.only) - {row[0] for row in mutations}:
             raise SystemExit('unknown_mutation')

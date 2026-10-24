@@ -168,6 +168,7 @@ class CaptureIdentityTests(unittest.TestCase):
                 read = lambda: runner.observation_cache_key(**inputs)[0]
                 original = read()
                 self.assertIsNotNone(original)
+                self.assertEqual(original.get("build_features"), [])
                 self.assertEqual(original.get("response_validation"), runner.benchmark_spec.CURRENT_VALIDATION)
                 args.manifest_actions = "tokenize"
                 self.assertNotEqual(read(), original)

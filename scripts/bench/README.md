@@ -865,9 +865,21 @@ Certification and current-spec history require a producer-owned `subject_build`
 receipt for every arm, including uncached captures. The normal current runner
 builds its subject. The release driver uses `--build --release-root <checkout>`;
 Cargo's returned executable is measured, including when a Cargo configuration
-changes the target directory. The receipt binds its SHA-256, profile and configs
+changes the target directory. The receipt binds its SHA-256, profile, configs
+and explicitly requested Cargo features
 to the clean source revision checked before and after the build. Admission checks
 those fields against both the original record and the capture.
+
+Current and past-release builds share the config requirements in
+`subject_build.py`. The measured checkout must declare each requested config in
+its example source and every required feature in its own Cargo manifest.
+The v0.14.0 Kiji arm requests `safety-net-kiji`; the v0.15.0 through v0.17.0
+`policy-file` arms request `safety-net-nym`. Nym and OPF diagnostic arms request
+their respective features too. No feature is inferred from the current checkout
+when building an older release. Receipts missing the feature list, or declaring
+a list inconsistent with their configs, require recapture. Cache identity also
+includes the requested features. These are explicit feature flags; Cargo's
+default and transitive features remain defined by the pinned target manifest.
 
 `--skip-build`, release `--binary`, and generated-only external binaries remain
 exploratory captures. They cannot certify or enter current-spec history.
@@ -890,3 +902,22 @@ recapture under the current specification to become available there. Keep
 adapter for v0.15.0 through v0.17.0. No old receipt is inferred or backfilled from
 a binary path. Resumed current-spec jobs that lack qualified evidence render
 `unavailable`; optional older recaptures stay off the PR critical path.
+
+### Model-free test build guard
+
+Pytest installs an audit hook for registered Cargo proxies and toolchain paths.
+An inherited `PYTHONPATH` installs the same hook through `sitecustomize` in
+Python children and grandchildren. Cargo and `rustup run ... cargo` PATH shims
+also deny build, test, check, run and unknown commands in shell children.
+Only metadata, new, version and help are allowed. The producer regressions use
+synthetic tools, including the actual validator, current runner, historical
+dataiku, openpii and safety-net helper calls; they start no native build.
+
+This protects against misplaced build mocks, not hostile code. A child that
+strips the guard environment or disables Python startup with `-I` or `-S` loses
+the audit hook; PATH shims still apply if retained. Arbitrary native launchers,
+absolute tools launched from non-Python children, renamed/copied tools and
+separately created minimal environments are outside this guard. Synthetic Cargo
+fixtures outside registered proxy/toolchain locations are intentionally allowed.
+The legacy standalone dataset helpers produce no qualified build receipt and
+cannot certify through current capture admission.
