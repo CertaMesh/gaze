@@ -178,13 +178,13 @@ python3.12 scripts/bench/compare/pii_tracer.py --dataset target/bench-data/datai
 native label; its output is never published. The third-party sets take the same
 `--pii-tracer-python` / `--pii-tracer-model` flags on `theirbench.py`.
 
-Presidio: https://github.com/data-privacy-stack/presidio/tree/main/docs/analyzer/nlp_engines
-DataFog Core: https://github.com/DataFog/datafog-core
-DataFog Python: https://github.com/DataFog/datafog-python
-scrubadub: https://github.com/LeapBeyond/scrubadub/blob/master/docs/usage.rst
-GLiNER PII model: https://huggingface.co/urchade/gliner_multi_pii-v1
+Presidio: https://github.com/data-privacy-stack/presidio/blob/2.2.364/docs/analyzer/index.md
+DataFog Core: https://github.com/DataFog/datafog-core/blob/v0.3.0/README.md
+DataFog Python: https://github.com/DataFog/datafog-python/blob/v4.8.1/README.md
+scrubadub: https://github.com/LeapBeyond/scrubadub/blob/v2.0.0/docs/usage.rst
+GLiNER PII model: https://huggingface.co/urchade/gliner_multi_pii-v1/tree/1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d
 OPF: https://github.com/openai/privacy-filter
-PII-Tracer: https://huggingface.co/perplexity-ai/PII-Tracer
+PII-Tracer: https://huggingface.co/perplexity-ai/PII-Tracer/blob/d25c16f2e57e321f6d2527715c01df9112f956f5/README.md
 
 ## Publish the Spanish scrubadub supplement
 
@@ -277,3 +277,52 @@ snapshot byte hashes and reconstructs the composition; altered inherited or
 fresh objects fail validation. A rejected input leaves the prior output intact.
 Tuned Presidio remains bound to the original snapshot, with the existing
 byte-identity verdict and disclosed label differences. Timing stays withheld.
+
+
+## Check competitor source freshness
+
+Run the metadata check before a release or comparison report. It reads all four
+comparison locks, spaCy wheel pins, tuned model/setup declarations, PII-Tracer,
+and the separately recorded GLiNER tokenizer and OPF sources. It never imports
+competitor runtimes, downloads model weights, installs packages, or changes pins.
+
+```sh
+uv run --project scripts/bench --locked python scripts/bench/compare/freshness.py \
+  --report docs/reference/benchmarks/comparison.json \
+  --output target/competitor-freshness.json
+```
+
+The aggregate follows `freshness.schema.json`. Each row records its exact pin,
+pinned release date, current stable version and release date, UTC check date,
+source URL, and consuming lock/setup files. PyPI dates are the first artifact
+upload. GitHub release dates are publication dates. Model snapshot dates are
+commit dates. Unknown dates remain explicit. Prereleases, development versions,
+drafts and fully yanked PyPI releases do not count as stable. A model without
+stable version tags remains `unversioned`; a moving branch is not labeled stable.
+The OPF checkpoint has only a recorded digest and no versioned release source,
+so that limitation remains visible. A missing pin, failed network request,
+unsupported metadata or bounded pagination limit produces a visible finding
+and does not abort the remaining checks. Requests use four workers, an eight
+second timeout and metadata-only response limits.
+
+A new release is `update-unverified` until a separate PR qualifies its driver,
+updates the pins and changes the measured subject identity. An incompatible
+latest release is `incompatible-latest`, and the measured row stays explicitly
+old. The existing Presidio resolver requires its exact anonymizer version;
+upstream Python requirements are checked against the locked Python 3.12
+protocol. Other driver compatibility is unverified, never assumed. This sidecar
+is report metadata and does not change benchmark specifications, subject keys,
+measurement times or cache admission.
+
+Add `--freshness target/competitor-freshness.json` to `render.py` to append the
+inventory to the comparison page. Rendering checks the comparison hash and
+source-input hashes, and rejects partial checks. Without this option, existing
+pages stay unchanged. Rerun the command when source pins change. The check date
+stays visible; rendering never queries the network or refreshes it implicitly.
+
+For a bounded source check, pass an exact key such as
+`--source pypi:presidio-anonymizer@2.2.364`. A partial check cannot accompany a
+published aggregate. For an optional scheduled check, run the full command from
+a weekly scheduler in a prepared checkout and retain its JSON and stdout. The
+command exits successfully when source checks fail so findings remain reportable;
+review the row statuses rather than interpreting exit zero as current pins.
