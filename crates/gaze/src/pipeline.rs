@@ -611,6 +611,13 @@ impl Pipeline {
         &self.registry
     }
 
+    /// Replace detection inputs while retaining policy rules, loggers and resident safety nets.
+    /// Callers must assemble the registry against the same policy as this pipeline.
+    pub fn with_recognizer_registry(mut self, registry: RecognizerRegistry) -> Self {
+        self.registry = Arc::new(registry);
+        self
+    }
+
     pub fn builder() -> PipelineBuilder {
         PipelineBuilder::default()
     }
@@ -5032,6 +5039,12 @@ impl PipelineBuilder {
         R: Recognizer + 'static,
     {
         self.registry = self.registry.register(recognizer);
+        self
+    }
+
+    /// Register an already-loaded recognizer without reloading its model or weights.
+    pub fn recognizer_arc(mut self, recognizer: Arc<dyn Recognizer>) -> Self {
+        self.registry = self.registry.register_arc(recognizer);
         self
     }
 

@@ -47,6 +47,31 @@ Invalid JSON syntax returns unversioned `JsonMalformed`. A syntactically valid
 version 1 object with missing or wrongly typed fields returns versioned
 `ProtocolInvalid`, including when `session_id` is empty.
 
+## Caller-known record context
+
+Both legacy clean frames and version 1 `clean` frames accept an optional typed
+`context` object, with the [same schema and limits as `--context-json`](../../reference/policy.md#caller-known-record-context):
+
+```json
+{"version":1,"op":"clean","session_id":"run","text":"Handle Zelmora Quentrix.","context":{"record":{"full_name":"Zelmora Quentrix"}}}
+```
+
+Supply context from the trusted owner application, before forwarding only
+`clean_text` to a model. Context on `open`, `restore`, or `close` returns
+`ProtocolInvalid`. A present `null` is invalid context, not an omitted field.
+
+Context that violates the schema, repeats keys, exceeds a limit, or conflicts
+with policy returns `PolicyConfig` without cleaned output or a session change.
+Errors never include context field names or values. The size limit counts raw
+encoded context bytes, including whitespace and escape sequences.
+
+The envelope lasts for one request. It is never echoed, logged, audited, or
+stored as session state. Normal manifest entries and metadata-only audit rows
+still describe values actually protected. Those matches are caller-asserted,
+deterministic rule evidence: the [repeat-value sweep](../detection/manifest-sweep.md)
+protects eligible copies on later turns without context. Unmatched context
+values are forgotten. Other sessions receive no context or sweep evidence.
+
 ## Runtime shape
 
 Startup builds one `Pipeline` from `--policy` through the `gaze clean` build

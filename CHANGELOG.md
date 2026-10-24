@@ -135,6 +135,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   v8. JSON source spelling alone retains v7; ordinary snapshots remain v6. New
   readers restore v2–v8. Older readers reject v8 rather than silently dropping
   repeat protection; upgrade all readers before exchanging these snapshots.
+- **Breaking:** context JSON requires a top-level object. Positional arrays of
+  zero through six fields are rejected with `PolicyConfig` by
+  `gaze clean --context-json` and daemon clean frames. Replace positional input
+  such as `[{}, {}, {}, {"full_name":"[customer name]"}]` with
+  `{"record":{"full_name":"[customer name]"}}`. Existing object input is unchanged.
 
 - **Snapshot contract.** `Session` records each token's source spelling and
   adds `source_spelling` and `restore_strict_decoded_text_with_provenance`. A
