@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   at most one frame and blocks the reader under backpressure without dropping
   frames.
 
+- Immutable proxy request leaves share one expansion budget across the request.
+  The proxy checks the combined size before expansion or Rule matching, so
+  splitting a carrier across leaves cannot bypass the resource cap. The default
+  remains 16 times the body cap, or 32 MiB. Embedding applications can override
+  `ProxyConfig::request_residual_expansion_limit_bytes`. An oversized total
+  returns the distinct HTTP 413 `ResidualExpansionLimitExceeded` without PII
+  coverage or benchmark gain credit (#876).
+
 - Gemini URL model identifiers are decoded and validated before forwarding.
   Previously, that URI segment bypassed request scanning and could carry PII
   to the provider. Strict model identifiers retain deterministic checks; values
@@ -53,6 +61,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stdin and stdout contracts are unchanged.
 
 ### Fixed
+
+- MCP owned-token operations retain full expansion and Rule coverage up to
+  16 times the existing 2 MiB sizing constant, currently 32 MiB. Leak-free arguments and
+  responses above the former 2 MiB expansion cap now succeed, including decoded
+  input above 2 MiB. Only expansion budget exhaustion returns the distinct `DispatchError::ResourceLimit` and
+  discards staged changes instead of reporting a token provenance failure. The rmcp
+  adapter returns the stable `resource_limit` error class. Whitespace-only interior
+  gaps between owned spans stay literal and create no PII mapping. Empty owned
+  values preserve their wire positions and identities beside or inside Rule hits.
 
 - Proxy routing model identifiers such as `claude-sonnet-4-5` no longer fail
   because NER or a safety net classifies them as personal data. Strict ASCII
