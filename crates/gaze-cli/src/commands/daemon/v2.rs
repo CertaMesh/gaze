@@ -1002,11 +1002,11 @@ impl Daemon {
 
     fn make_session_room(&mut self) {
         while self.sessions.len() + self.v2.sessions.len() >= self.session_cap {
-            let v1 = self
-                .sessions
-                .iter()
-                .min_by_key(|(_, e)| e.last_seen)
-                .map(|(id, e)| (id.clone(), e.last_seen));
+            let v1 = self.lru.front().and_then(|id| {
+                self.sessions
+                    .get(id)
+                    .map(|entry| (id.clone(), entry.last_seen))
+            });
             let v2 = self
                 .v2
                 .sessions
