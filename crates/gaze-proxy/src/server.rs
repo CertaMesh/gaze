@@ -3351,6 +3351,77 @@ fn rule_hit_is_covered(text: &str, covered: &[bool], span: std::ops::Range<usize
     })
 }
 
+/// A borrowed slice of a wire gap or of one manifest value; repeats share that value.
+struct ResidualPiece<'a> {
+    text: &'a str,
+    start: usize,
+    owned: bool,
+}
+
+struct ResidualView<'a> {
+    pieces: Vec<ResidualPiece<'a>>,
+}
+
+impl ResidualView<'_> {
+    /// Patterns trim their endpoints; name-joiner growth also ends on a letter.
+    /// Thus only a raw non-whitespace character can violate residual coverage.
+    /// Retain enough non-space, non-ignored scalars for any Rule pattern, then
+    /// finish the whitespace-delimited run for word, URL and compound-name context.
+    /// In particular, long compounds cannot hide a raw suffix beyond the pattern.
+    fn raw_windows(&self, context_chars: usize) -> Vec<std::ops::Range<usize>> {
+        let mut windows = Vec::new();
+        for (index, piece) in self.pieces.iter().enumerate() {
+            if piece.owned || piece.text.chars().all(char::is_whitespace) {
+                continue;
+            }
+            let left = self.pieces[..index]
+                .iter()
+                .rev()
+                .flat_map(|piece| piece.text.chars().rev());
+            let right = self.pieces[index + 1..]
+                .iter()
+                .flat_map(|piece| piece.text.chars());
+            let start = piece.start - Self::context_bytes(left, context_chars);
+            let end = piece.start + piece.text.len() + Self::context_bytes(right, context_chars);
+            windows.push(start..end);
+        }
+        windows
+    }
+
+    fn context_bytes(chars: impl Iterator<Item = char>, context_chars: usize) -> usize {
+        let mut significant = 0;
+        let mut bytes = 0;
+        for character in chars {
+            if significant >= context_chars && character.is_whitespace() {
+                break;
+            }
+            bytes += character.len_utf8();
+            if !character.is_whitespace() && !matches!(character, '\u{200c}' | '\u{200d}') {
+                significant += 1;
+            }
+        }
+        bytes
+    }
+
+    fn materialize(&self, window: std::ops::Range<usize>) -> (String, Vec<bool>) {
+        let mut text = String::new();
+        let mut covered = Vec::new();
+        let first = self
+            .pieces
+            .partition_point(|piece| piece.start + piece.text.len() <= window.start);
+        for piece in &self.pieces[first..] {
+            if piece.start >= window.end {
+                break;
+            }
+            let start = window.start.saturating_sub(piece.start);
+            let end = piece.text.len().min(window.end - piece.start);
+            text.push_str(&piece.text[start..end]);
+            covered.resize(text.len(), piece.owned);
+        }
+        (text, covered)
+    }
+}
+
 /// Walk state for the outbound request residual re-scan.
 struct RequestResidualScan<'a, 'session> {
     pipeline: &'a Pipeline,
@@ -3367,42 +3438,69 @@ impl RequestResidualScan<'_, '_> {
     /// whitespace gaps between covered spans are allowed. Unknown token-looking text
     /// stays literal: only exact tokens in this captured request contribute ownership.
     fn rule_repeats_are_covered(&self, text: &str) -> Result<bool, ProxyError> {
-        let mut expanded = String::new();
-        let mut covered = Vec::new();
+        let entries = self.transaction.snapshot_entries();
+        // Unicode spelling/normalization can expand one scalar to at most three.
+        // Bytes are a conservative scalar bound, including all Rule source values.
+        let context_chars = entries
+            .iter()
+            .map(|entry| entry.raw.len())
+            .max()
+            .unwrap_or(0)
+            .checked_mul(3)
+            .ok_or(ProxyError::UnprovenCoverage)?;
+        let values: HashMap<_, _> = entries
+            .iter()
+            .map(|entry| (entry.token.as_str(), entry.raw.as_str()))
+            .collect();
+        let tokens = self.transaction.tokens();
+        let mut pieces = Vec::new();
         let mut cursor = 0;
-        for range in owned_token_ranges(text, &self.transaction.tokens()) {
-            let value = self
-                .transaction
-                .restore(&text[range.clone()])
-                .ok_or(ProxyError::UnprovenCoverage)?;
-            let end = expanded
-                .len()
-                .checked_add(range.start - cursor)
-                .and_then(|length| length.checked_add(value.len()))
-                .filter(|length| *length <= DEFAULT_MAX_REQUEST_BYTES)
-                .ok_or(ProxyError::UnprovenCoverage)?;
-            expanded.push_str(&text[cursor..range.start]);
-            covered.resize(expanded.len(), false);
-            expanded.push_str(&value);
-            covered.resize(end, true);
+        let mut expanded_len = 0usize;
+        for range in owned_token_ranges(text, &tokens) {
+            for (part, owned) in [
+                (&text[cursor..range.start], false),
+                (
+                    *values
+                        .get(&text[range.clone()])
+                        .ok_or(ProxyError::UnprovenCoverage)?,
+                    true,
+                ),
+            ] {
+                pieces.push(ResidualPiece {
+                    text: part,
+                    start: expanded_len,
+                    owned,
+                });
+                expanded_len = expanded_len
+                    .checked_add(part.len())
+                    .ok_or(ProxyError::UnprovenCoverage)?;
+            }
             cursor = range.end;
         }
-        let end = expanded
-            .len()
+        expanded_len
             .checked_add(text.len() - cursor)
-            .filter(|length| *length <= DEFAULT_MAX_REQUEST_BYTES)
             .ok_or(ProxyError::UnprovenCoverage)?;
-        expanded.push_str(&text[cursor..]);
-        covered.resize(end, false);
-        // This query enumerates ALL eligible hits, including contained/chained overlaps.
-        // No non-overlapping selection or protection pass may hide a raw intersection.
-        let hits = self
-            .pipeline
-            .staged_rule_repeat_candidates(self.transaction, &expanded)
-            .map_err(|source| ProxyError::Pipeline { source })?;
-        Ok(hits
-            .into_iter()
-            .all(|hit| rule_hit_is_covered(&expanded, &covered, hit.span)))
+        pieces.push(ResidualPiece {
+            text: &text[cursor..],
+            start: expanded_len,
+            owned: false,
+        });
+        let view = ResidualView { pieces };
+        for window in view.raw_windows(context_chars) {
+            let (expanded, covered) = view.materialize(window);
+            // Enumerate ALL overlapping hits. The symbolic view never selects a cover.
+            let hits = self
+                .pipeline
+                .staged_rule_repeat_candidates(self.transaction, &expanded)
+                .map_err(|source| ProxyError::Pipeline { source })?;
+            if hits
+                .into_iter()
+                .any(|hit| !rule_hit_is_covered(&expanded, &covered, hit.span))
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     fn probe(&self, field_path: &str, text: &str) -> Result<(), ProxyError> {
@@ -4178,6 +4276,80 @@ mod tests {
             "all name letters are owned; only a public separator remains: {result:?}"
         );
         assert_eq!(body["unsupported_carrier"], carrier);
+    }
+
+    #[test]
+    fn residual_windows_match_complete_expansion() {
+        let pipeline = Pipeline::builder()
+            .detector(
+                RegexDetector::new("Synthetic Person|Person Synthetic|Vasquez", PiiClass::Name)
+                    .unwrap(),
+            )
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        pipeline
+            .redact(
+                &session,
+                gaze::RawDocument::Text("Synthetic Person; Person Synthetic; Vasquez".to_owned()),
+            )
+            .unwrap();
+        let transaction = session.begin_transaction();
+        let surfaced = HashSet::new();
+        let dictionaries = DictionaryBundle::default();
+        let scan = RequestResidualScan {
+            pipeline: &pipeline,
+            transaction: &transaction,
+            surfaced: &surfaced,
+            locale_chain: &[LocaleTag::Global],
+            dictionaries: &dictionaries,
+        };
+        let token = transaction
+            .snapshot_entries()
+            .into_iter()
+            .find(|entry| entry.raw == "Synthetic Person")
+            .unwrap()
+            .token;
+        let long_compound = "-Ellery".repeat(64);
+        for prefix in ["", "Public ", "https://example.invalid/", "www."] {
+            for gap in [
+                " ",
+                "\t\n",
+                "\u{00a0}",
+                "\u{200c}",
+                "\u{200d}",
+                " x ",
+                "-Ellery",
+                " vasquez",
+                long_compound.as_str(),
+            ] {
+                for suffix in ["", " synthetic person", "-Vasquez", " END"] {
+                    let repeated = format!("{token} ").repeat(16);
+                    let wire = format!("{prefix}{repeated}{token}{gap}{token}{repeated}{suffix}");
+                    let full = wire.replace(&token, "Synthetic Person");
+                    let mut covered = vec![false; full.len()];
+                    let mut cursor = 0;
+                    let mut expanded_cursor = 0;
+                    for range in owned_token_ranges(&wire, std::slice::from_ref(&token)) {
+                        expanded_cursor += range.start - cursor;
+                        covered[expanded_cursor..expanded_cursor + 16].fill(true);
+                        expanded_cursor += 16;
+                        cursor = range.end;
+                    }
+                    let expected = pipeline
+                        .staged_rule_repeat_candidates(&transaction, &full)
+                        .unwrap()
+                        .into_iter()
+                        .all(|hit| rule_hit_is_covered(&full, &covered, hit.span));
+                    assert_eq!(
+                        scan.rule_repeats_are_covered(&wire).unwrap(),
+                        expected,
+                        "{prefix:?}, {gap:?}, {suffix:?}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
