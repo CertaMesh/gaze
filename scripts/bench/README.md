@@ -669,13 +669,13 @@ compression when present.
   "candidate": "<exact integrated commit>",
   "benchmark_spec": "<resolved manifest object>",
   "gain": {
-    "base": {"record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}},
-    "candidate": {"record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}}
+    "base": {"capture": "<pin>", "record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}},
+    "candidate": {"capture": "<pin>", "record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}}
   },
   "mechanisms": {
     "<required mechanism>": {
-      "base": {"record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}},
-      "candidate": {"record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}},
+      "base": {"capture": "<pin>", "record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}},
+      "candidate": {"capture": "<pin>", "record": "<pin>", "contracts": {"1": "<pin>", "2": "<pin>"}},
       "policy_delta": "<pin>"
     }
   }
@@ -690,7 +690,8 @@ uv run --project scripts/bench python scripts/bench/benchmark_certification.py \
 
 Repeat `--required-mechanism` for every policy delta required by the change.
 Declare that list during review; the checker requires exactly those entries.
-A pass binds the exact integrated commit and the certification manifest hash.
+The `capture` pin names the original runner scorecard. Its execution sidecar
+is verified before either contract replay is admitted. A pass binds the exact integrated commit and the certification manifest hash.
 The full release benchmark remains a separate release requirement.
 
 ## Resume release history off the PR path

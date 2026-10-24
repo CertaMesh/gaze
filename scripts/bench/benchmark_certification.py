@@ -15,6 +15,7 @@ import bench_json
 import benchmark_spec as specs
 import gaze_bench_score as score
 import scorecard_record as records
+import stage_timing as stages
 from capture_identity import digest, file_digest
 
 
@@ -44,8 +45,8 @@ def full_record(path: Path, spec: dict, revision: str | None = None) -> dict:
             or card.get('parameters', {}).get('profile') != 'full'
             or card.get('parameters', {}).get('max_documents') is not None):
         raise CertificationError('partial_population')
-    if revision is not None and (card.get('gaze', {}).get('revision') != revision
-                                 or card.get('gaze', {}).get('dirty') is not False):
+    if (card.get('gaze', {}).get('dirty') is not False
+            or (revision is not None and card.get('gaze', {}).get('revision') != revision)):
         raise CertificationError('stale_candidate')
     parameters = card['parameters']
     execution = spec['inputs']['protocol']['execution']
@@ -91,13 +92,21 @@ def _contract(root: Path, number: int, spec: dict):
 
 def check_pair(pair: dict, *, root: Path, harness: Path, spec: dict,
                candidate: str, mechanism: bool = False) -> dict:
-    cards, paths, record_paths = {}, {}, {}
+    cards, record_paths = {}, {}
     for side in ('base', 'candidate'):
         arm = pair[side]
         if set(arm['contracts']) != {'1', '2'}:
             raise CertificationError('absent_contract')
         record_path = pin(root, arm['record'])
-        full_record(record_path, spec, candidate if mechanism or side == 'candidate' else None)
+        original = full_record(record_path, spec, candidate if mechanism or side == 'candidate' else None)
+        capture_path = pin(root, arm['capture'])
+        captured = bench_json.load(capture_path)
+        specs.require_same(captured, original)
+        stages.validate_execution(captured, capture_path, record_path)
+        if (captured['gaze'] != original['gaze']
+                or agentic._layer_identity(captured) != agentic._layer_identity(original)
+                or captured.get('observation_record', {}).get('sha256') != file_digest(record_path)):
+            raise CertificationError('capture_record_mismatch')
         record_paths[side] = record_path
         for number in (2, 1):
             path = pin(root, arm['contracts'][str(number)])
@@ -111,7 +120,7 @@ def check_pair(pair: dict, *, root: Path, harness: Path, spec: dict,
                     or card['gaze'] != replay['gaze']
                     or card.get('observation_record', {}).get('sha256') != file_digest(record_path)):
                 raise CertificationError('scorecard_record_mismatch')
-            cards[side, number], paths[side, number] = card, path
+            cards[side, number] = card
     if mechanism and records.binary_sha256(record_paths['base'], required=True) != records.binary_sha256(record_paths['candidate'], required=True):
         raise CertificationError('mechanism_binary_mismatch')
     delta = pin(root, pair['policy_delta']) if 'policy_delta' in pair else None
@@ -119,10 +128,10 @@ def check_pair(pair: dict, *, root: Path, harness: Path, spec: dict,
         raise CertificationError('absent_mechanism_delta')
     results = {}
     for number in (2, 1):
-        result = agentic.gate(cards['base', number], cards['candidate', number],
-                              policy_delta=delta,
-                              scorecard_paths=(paths['base', number], paths['candidate', number]),
-                              record_paths=(record_paths['base'], record_paths['candidate']))
+        # Execution was admitted once from the original capture. Each contract
+        # was independently reconstructed from its pinned observation record.
+        result = agentic.compare_layers(cards['base', number], cards['candidate', number],
+                                         policy_delta=delta)
         if result['verdict'] != 'pass':
             raise CertificationError('gate_refused')
         results[str(number)] = result

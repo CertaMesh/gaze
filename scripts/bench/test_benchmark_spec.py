@@ -19,6 +19,8 @@ import capture_identity
 import gaze_bench_score as score
 import render_benchmark_doc as render
 import scorecard_record as records
+import benchmark_cache
+import stage_timing as stages
 from test_agentic_layers import _scorecard, _success_response
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -194,8 +196,10 @@ def capture(folder, docs, spec, protect, policy, revision=REVISION):
                       for layer in ('A', 'D', 'R')}},
     }
     record = folder / 'observations-v1.jsonl.gz'
-    writer.write(record, card, add_reference=True)
-    pins = {'record': {'file': str(record), 'sha256': capture_identity.file_digest(record)}, 'contracts': {}}
+    card['observation_record'] = writer.write(record, card, add_reference=True)
+    capture_path = folder / 'capture.json'
+    capture_path.write_text(json.dumps(card))
+    pins = {'capture': {'file': str(capture_path), 'sha256': capture_identity.file_digest(capture_path)},'record': {'file': str(record), 'sha256': capture_identity.file_digest(record)}, 'contracts': {}}
     for number in (1, 2):
         contract = score.SCORED_LABEL_CONTRACT_V1 if number == 1 else score.load_scored_label_contract(
             ROOT / 'docs/reference/benchmarks/scored-labels-v2.json')
@@ -323,7 +327,7 @@ def test_history_resume_verifies_pins_and_older_failure_does_not_block(tmp_path,
         source = tmp_path / 'candidate'
         folder.mkdir(parents=True, exist_ok=True)
         artifacts = {}
-        for name in ('observations-v1.jsonl.gz', 'scorecard-v1.json', 'scorecard-v2.json'):
+        for name in ('capture.json', 'observations-v1.jsonl.gz', 'scorecard-v1.json', 'scorecard-v2.json'):
             shutil.copyfile(source / name, folder / name)
             artifacts[name] = capture_identity.file_digest(folder / name)
         return {'status': 'available', 'benchmark_spec_id': spec['id'],
@@ -394,6 +398,12 @@ def test_certificate_refuses_untrusted_evidence(tmp_path, evidence, mutation):
         records._write_rows(path, [header, *observations])
         arm = evidence['gain']['candidate']
         arm['record']['sha256'] = capture_identity.file_digest(path)
+        capture_path = tmp_path / arm['capture']['file']
+        captured = json.loads(capture_path.read_text())
+        captured['gaze']['revision'] = REVISION
+        captured['observation_record']['sha256'] = arm['record']['sha256']
+        capture_path.write_text(json.dumps(captured))
+        arm['capture']['sha256'] = capture_identity.file_digest(capture_path)
         for number in (1, 2):
             contract = cert._contract(ROOT, number, evidence['benchmark_spec'])
             card_path = tmp_path / arm['contracts'][str(number)]['file']
@@ -415,3 +425,27 @@ def test_history_bars_and_trends_exclude_other_specs(tmp_path):
     text = render.render_history(ledger)
     assert 'unavailable: specification unproven' in text
     assert spec['id'] in text
+
+
+def test_certification_admits_original_capture_execution_once_for_both_replays(tmp_path, evidence):
+    arm = evidence['gain']['candidate']
+    capture_path = tmp_path / arm['capture']['file']
+    card = json.loads(capture_path.read_text())
+    key = {'synthetic': 'capture-key'}
+    card['capture_cache'] = benchmark_cache.provenance(key)
+    capture_path.write_text(json.dumps(card))
+    arm['capture']['sha256'] = capture_identity.file_digest(capture_path)
+    # Contract scorecards differ from capture.json; their integrity is proved
+    # by record replay, while execution evidence binds the original artifact.
+    execution = stages.Evidence()
+    execution.outcome = 'completed'
+    execution.cache = {'status': 'miss', 'key_sha256': benchmark_cache.key_digest(key)}
+    execution.bind(capture_path, tmp_path / arm['record']['file'])
+    receipt = capture_path.parent / 'run-evidence.json'
+    execution.write(receipt)
+    assert cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION,
+                      required_mechanisms=('synthetic',))['verdict'] == 'pass'
+    receipt.unlink()
+    with pytest.raises(cert.CertificationError):
+        cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION,
+                   required_mechanisms=('synthetic',))

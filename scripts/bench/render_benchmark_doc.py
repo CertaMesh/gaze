@@ -1859,6 +1859,22 @@ def render_spec_history(state: Mapping[str, Any]) -> str:
             raise RenderError('invalid_history_status')
         evidence = ', '.join(f"`{name}`" for name in row.get('artifacts', {})) if status == 'available' else '—'
         lines.append(f"| {version} | {'required' if row['required'] else 'optional'} | {status}{': ' + reason if reason else ''} | {evidence} |")
+    for number in (2, 1):
+        lines += ['', f'Gate contract v{number}', '',
+                  '| Release | Layer | Leaked B | All-gold leaked B | FP B | Refused | Exact restores | Valid manifests |',
+                  '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |']
+        for version, row in state['releases'].items():
+            if row['status'] != 'available':
+                continue
+            totals = row.get('contracts', {}).get(str(number))
+            if not isinstance(totals, dict) or set(totals) != {'C', 'A', 'D', 'R'}:
+                raise RenderError('invalid_history_metrics')
+            for layer in ('C', 'A', 'D', 'R'):
+                values = [totals[layer].get(field) for field in
+                          ('leaked', 'headline_leaked', 'false_positive', 'failed_closed', 'restore_exact', 'manifest_valid')]
+                if any(type(value) is not int or value < 0 for value in values):
+                    raise RenderError('invalid_history_metrics')
+                lines.append(f'| {version} | {layer} | ' + ' | '.join(str(value) for value in values) + ' |')
     return "\n".join(lines) + "\n"
 
 

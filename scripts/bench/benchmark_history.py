@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 
 import benchmark_spec as specs
+import agentic_layers as agentic
+import bench_json
 import benchmark_certification as certification
 import render_benchmark_doc as render
 import rescore_past_release as past
@@ -67,7 +69,7 @@ def verified(row: dict, folder: Path, spec: dict, job: dict) -> bool:
         return False
     try:
         artifacts = row['artifacts']
-        required = {'observations-v1.jsonl.gz', 'scorecard-v1.json', 'scorecard-v2.json'}
+        required = {'capture.json', 'observations-v1.jsonl.gz', 'scorecard-v1.json', 'scorecard-v2.json'}
         if not required <= set(artifacts):
             return False
         for name, sha in artifacts.items():
@@ -81,6 +83,17 @@ def verified(row: dict, folder: Path, spec: dict, job: dict) -> bool:
     return True
 
 
+
+def scored_rows(folder: Path, spec: dict) -> dict:
+    result = {}
+    for number in (2, 1):
+        card = bench_json.load(folder / f'scorecard-v{number}.json')
+        specs.require_same(card, {'benchmark_spec': spec})
+        if card['scoring']['scored_label_contract']['version'] != number:
+            raise HistoryError('contract_identity_mismatch')
+        result[str(number)] = agentic.layer_totals(card, agentic.production_config(card))
+    return result
+
 def measure(job: dict, folder: Path, spec: dict) -> dict:
     argv = job['args']
     if (not isinstance(argv, list) or not all(isinstance(arg, str) for arg in argv)
@@ -88,7 +101,7 @@ def measure(job: dict, folder: Path, spec: dict) -> dict:
                                          '--scored-labels', '--agentic-scored-labels'} for arg in argv)):
         raise HistoryError('invalid_history_job')
     folder.mkdir(parents=True, exist_ok=True)
-    output = folder / 'scorecard-v1.json'
+    output = folder / 'capture.json'
     args = past.parse_args([*argv, '--output', str(output)])
     if (not args.agentic_layers or args.max_documents is not None or args.cross_check
             or args.scored_labels is not None or args.agentic_scored_labels is not None):
@@ -101,7 +114,7 @@ def measure(job: dict, folder: Path, spec: dict) -> dict:
     # One subject execution; contracts are derived exclusively from its record.
     versions = sorted(int(name.rsplit('v', 1)[1]) for name in spec['inputs']['contracts']
                       if name.startswith('scored-labels-v'))
-    names = [record.name]
+    names = [record.name, output.name]
     for number in sorted({1, 2, *versions}):
         contract = certification._contract(past.HARNESS_ROOT, number, spec)
         path = folder / f'scorecard-v{number}.json'
@@ -146,6 +159,12 @@ def run(plan: dict, output: Path, *, execute: bool = False, older: bool = False,
                     # A failed optional backfill cannot block required release evidence.
                     # Never put external error text, paths or values into public history.
                     row = {'status': 'unavailable', 'reason': 'measurement_refused', 'required': required}
+        if row['status'] == 'available':
+            try:
+                row['contracts'] = scored_rows(folder, spec)
+                row['subject'] = job['subject']
+            except (OSError, ValueError, KeyError, TypeError):
+                row = {'status': 'unavailable', 'reason': 'evidence_invalid', 'required': required}
         state['releases'][version] = row
         atomic(state_path, state)
     state['required_complete'] = all(state['releases'][v]['status'] == 'available'
