@@ -4,6 +4,39 @@
 to keep PII out of provider calls while preserving each SDK's native request and
 response shape.
 
+## Immutable request coverage and expansion limits
+
+The legacy OpenAI and Gemini paths probe immutable request leaves against the
+captured request transaction for Rule coverage. Owned tokens expand to their manifest values before
+the real Rule repeat matcher runs. Full context preserves word boundaries, URL
+exclusions, Unicode spelling, and compound-name growth. Learned and safety-net-only
+values do not supply repeat evidence. An independent full-pipeline probe uses a
+fresh discarded session, preserving baseline detector/net context. Owned classes
+are not lent to neural detection: that can misclassify a public suffix even when
+the Rule proof admits it. Probes discard mappings; the existing full-pipeline
+control probe can still emit an audit attempt.
+
+Every non-whitespace byte in a Rule occurrence must be owned by a token. An
+uncovered whitespace gap is allowed only inside the same occurrence, between two
+owned spans. Uncovered private bytes produce `UnsurfacedPii` (HTTP 422), and the
+request never reaches the provider.
+
+Full expansion has a separate resource budget shared by all immutable leaves in
+one request. The default is
+16 times `ProxyConfig::body_limit_bytes`: the default 2 MiB request cap permits
+32 MiB of expanded UTF-8 in total, including literal bytes in probed leaves. The
+proxy preflights the total with checked arithmetic before expanding any leaf,
+allocating its ownership mask, or running the Rule matcher. A larger total returns
+`ResidualExpansionLimitExceeded` (HTTP 413), even when every private byte is
+already owned. This resource refusal is distinct from a coverage finding and is
+counted separately in native gate reports. The cap limits input to the matcher;
+normalization, match metadata, and concurrent requests require additional memory.
+
+Embedding applications can override the cap with
+`ProxyConfig::request_residual_expansion_limit_bytes = Some(bytes)`. `None` retains the
+16-times-body-cap default. The standalone CLI uses the default. This setting does
+not change the direct Anthropic codec's limits or response validation.
+
 ## Adapter contract
 
 Adapters implement `ProviderAdapter`:
