@@ -113,7 +113,8 @@ The startup clock starts at the first operation in `main`; it excludes OS loader
 work before `main`. Stdout retains its existing protocol. A failed diagnostic
 write does not change protection behavior.
 
-Schema **2** adds `phase` (`startup` or `request`) and a process-local `ordinal`.
+Schema **3** includes `phase` (`startup` or `request`), a process-local `ordinal`,
+and fixed recognizer evidence/model labels.
 Startup is ordinal 0. Requests count from 1, including warmups. The runner rejects
 schemas 1 and 2, partial traces, missing hooks, wrong ordinals, processing clocks in
 startup, and model initialization attached to request records. Nym timer backports must

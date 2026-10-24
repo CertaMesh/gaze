@@ -61,12 +61,17 @@ def violates_ownership(record: dict, check: str, *, config: dict, roles: dict) -
             entry[field] for entry in entries.values() if entry["evidence"] == "rule")
     if check == "ner-owner-capacity":
         owners = [entry for entry in entries.values() if entry["model"] == "ner"]
-        leaves = sum(record["metrics"].get(key, {}).get("ns", 0) for key in
-                     ("ner_tokenize_ns", "ner_mutex_wait_ns", "ner_ort_ns"))
+        leaf_metrics = [record["metrics"].get(key, {}) for key in
+                        ("ner_tokenize_ns", "ner_mutex_wait_ns", "ner_ort_ns")]
+        if any(any(metric.values()) for metric in leaf_metrics) and len(owners) != 1:
+            return True
+        leaves = sum(metric.get("ns", 0) for metric in leaf_metrics)
         return leaves > sum(entry["ns"] for entry in owners)
     if check == "recognizer-role":
+        combined = {**roles, **{key: (entry["evidence"], entry["model"])
+                                for key, entry in entries.items()}}
         for model in ("ner", "dob"):
-            count = sum(entry["model"] == model for entry in entries.values())
+            count = sum(role[1] == model for role in combined.values())
             setting = config.get("ner" if model == "ner" else "dob_judge", {})
             if count > int(bool(setting) and setting.get("enabled", True)):
                 return True

@@ -169,6 +169,27 @@ class BoundTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'recognizer-role'):
             self.admit(rows)
 
+    def test_zero_duration_ner_hooks_still_require_an_owner(self):
+        rows = records()
+        del rows[1]['recognizers']['r2']
+        for key in ('ner_tokenize_ns', 'ner_mutex_wait_ns', 'ner_ort_ns'):
+            rows[1]['metrics'][key]['ns'] = 0
+        with self.assertRaisesRegex(ValueError, 'ner-owner-capacity'):
+            self.admit(rows)
+
+    def test_one_model_owner_across_all_requests(self):
+        import copy
+        rows = records(daemon=True)
+        second = copy.deepcopy(rows[1])
+        second['ordinal'] = 2
+        second['recognizers']['r3'] = second['recognizers'].pop('r2')
+        rows.append(second)
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = Path(tmp) / 'policy'
+            policy.write_text(POLICY)
+            with self.assertRaisesRegex(ValueError, 'recognizer-role'):
+                perf.validate_lifecycle(rows, 2, daemon=True, policy=policy, required=True)
+
     def test_stable_recognizer_role(self):
         rows = records(daemon=True)
         import copy
