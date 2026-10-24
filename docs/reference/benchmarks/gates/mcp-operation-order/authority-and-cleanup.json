@@ -12,8 +12,8 @@
     "pre_arm_load_checks": [
       {
         "arm": "base",
-        "utc": "2026-10-24T04:01:45.697862+00:00",
-        "load_1m": 4.201171875,
+        "utc": "2026-10-24T04:24:57.683518+00:00",
+        "load_1m": 3.95361328125,
         "memory_free_percent": 86,
         "required_load_below": 12,
         "required_memory_at_least": 60,
@@ -22,8 +22,8 @@
       },
       {
         "arm": "candidate",
-        "utc": "2026-10-24T04:02:32.984833+00:00",
-        "load_1m": 3.95361328125,
+        "utc": "2026-10-24T04:25:13.331042+00:00",
+        "load_1m": 3.88330078125,
         "memory_free_percent": 85,
         "required_load_below": 12,
         "required_memory_at_least": 60,
