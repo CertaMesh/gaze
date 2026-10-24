@@ -227,6 +227,15 @@ zero model initialization and other startup-only durations and counts.
 
 Schema 3 recognizer entries contain fixed `evidence` (`rule` or `learned`)
 and `model` (`none`, `ner`, `dob`, `other`) labels, never declared IDs or input values.
+Schema 3 requires every declared metric and counter and all three u64 metric fields.
+Only `rules_ns` may have candidates. `ner_encodes`, `ner_windows` and
+`nym_windows` equal their tokenize/ORT invocation counts; Nym window views
+sum to the total. Every emitted recognizer has at least one invocation,
+even with zero duration. Invoked child clocks require an invoked parent,
+including zero-duration clocks; sweep candidates require a sweep invocation.
+NER activates only with `ner.model_dir`; DOB only with `dob_judge.enabled=true`.
+Nym activates only with `safety_net.backend="nym"`. Only active model paths
+enter the inventory; every active model must pin an absolute directory.
 Admission requires `rules_ns` duration, invocations and candidates to equal the
 corresponding sums of Rule entries. Learned entries never contribute to rules.
 The three serial NER leaves must fit the single NER entry; they cannot borrow
@@ -236,6 +245,8 @@ requests refuse admission. These checks are linear in the emitted entries.
 
 | Ownership check | Requirement |
 | --- | --- |
+| recognizer-invocations | Every emitted entry was invoked |
+| inactive-nym | Safety-net processing requires the active Nym backend |
 | rule-owner-ns | Exact Rule duration sum |
 | rule-owner-invocations | Exact Rule invocation sum |
 | rule-owner-candidates | Exact Rule candidate sum |

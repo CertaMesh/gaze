@@ -21,7 +21,8 @@ def trace(phase="request", ordinal=1, *, daemon=False, models=0, nym=False, dob=
                        "nym_outer_verify_ns": int(nym), "tokenizer_load_ns": models,
                        "model_load_ns": models, "bundle_verify_ns": models + int(nym)}.items():
             metrics[key] = {"ns": 0, "invocations": n, "candidates": 0}
-    return {"schema": 3, "phase": phase, "ordinal": ordinal, "metrics": metrics, "counters": {}, "recognizers": {}}
+    metrics = {**{key: {"ns": 0, "invocations": 0, "candidates": 0} for key in perf.METRICS}, **metrics}
+    return {"schema": 3, "phase": phase, "ordinal": ordinal, "metrics": metrics, "counters": dict.fromkeys(perf.COUNTERS, 0), "recognizers": {}}
 
 
 def fake_script(*, timers=True):
@@ -32,7 +33,7 @@ def fake_script(*, timers=True):
             'policy=tomllib.loads(open(sys.argv[sys.argv.index("--policy")+1]).read())\n'
             'nym=policy.get("safety_net",{}).get("backend")=="nym"\n'
             'dob=bool(policy.get("dob_judge"))\n'
-            'models=sum(bool(policy.get(k)) and policy[k].get("enabled",True) for k in ("ner","dob_judge"))+int(nym)\n'
+            'models=int(policy.get("ner",{}).get("model_dir") is not None)+int(policy.get("dob_judge",{}).get("enabled",False))+int(nym)\n'
             + ('print("GAZE_PERF "+json.dumps(trace("startup",0,daemon=daemon,models=models,nym=nym,dob=dob)),file=sys.stderr,flush=True)\n' if timers else '')
             + 'def respond(i):\n'
             + (' print("GAZE_PERF "+json.dumps(trace(ordinal=i)),file=sys.stderr,flush=True)\n' if timers else '')
@@ -211,7 +212,7 @@ class LifecycleTests(unittest.TestCase):
     def test_reviewer_constructor_counterexample(self):
         with tempfile.TemporaryDirectory() as tmp:
             policy = Path(tmp) / "policy"
-            policy.write_text('[ner]\nenabled=true\n')
+            policy.write_text('[ner]\nmodel_dir="/synthetic/ner"\n')
             records = [trace("startup", 0, models=1), trace()]
             for key, value in {"process_to_ready_ns": 1000, "pipeline_build_ns": 900,
                                "assembly_ns": 800, "model_constructor_ns": 100,
@@ -227,7 +228,7 @@ class LifecycleTests(unittest.TestCase):
             policy.write_text("")
             records = [trace("startup", 0), trace()]
             records[1]["metrics"]["request_ns"]["ns"] = 1
-            records[1]["metrics"]["registry_ns"] = {"ns": 1000000, "invocations": 1}
+            records[1]["metrics"]["registry_ns"] = {"ns": 1000000, "invocations": 1, "candidates": 0}
             with self.assertRaisesRegex(ValueError, "registry"):
                 perf.validate_lifecycle(records, 1, daemon=False, policy=policy, required=True)
 
@@ -236,7 +237,7 @@ class LifecycleTests(unittest.TestCase):
             policy = Path(tmp) / "policy"
             policy.write_text("")
             records = [trace("startup", 0), trace()]
-            records[0]["metrics"]["registry_ns"] = {"ns": 123, "invocations": 1}
+            records[0]["metrics"]["registry_ns"] = {"ns": 123, "invocations": 1, "candidates": 0}
             with self.assertRaisesRegex(ValueError, "clock phase"):
                 perf.validate_lifecycle(records, 1, daemon=False, policy=policy, required=True)
 
@@ -267,7 +268,7 @@ class LifecycleTests(unittest.TestCase):
                 missing[0]["metrics"][key]["invocations"] = 0
                 cases.append(missing)
             wrong = copy.deepcopy(good)
-            wrong[1]["metrics"]["policy_load_ns"] = {"ns": 1, "invocations": 1}
+            wrong[1]["metrics"]["policy_load_ns"] = {"ns": 1, "invocations": 1, "candidates": 0}
             cases.append(wrong)
             for key in ("policy_load_ns", "daemon_startup_ns", "nym_attach_ns", "model_constructor_ns", "bundle_verify_ns"):
                 wrong = copy.deepcopy(good)
@@ -280,7 +281,7 @@ class LifecycleTests(unittest.TestCase):
     def test_policy_model_counts_and_bundle_verifications_are_checked(self):
         with tempfile.TemporaryDirectory() as tmp:
             policy = Path(tmp) / "policy"
-            policy.write_text('[ner]\nmodel_dir="/synthetic"\n[dob_judge]\nmodel_dir="/synthetic"\n[safety_net]\nbackend="nym"\n')
+            policy.write_text('[ner]\nmodel_dir="/synthetic"\n[dob_judge]\nenabled=true\nmodel_dir="/synthetic"\n[safety_net]\nbackend="nym"\n')
             good = [trace("startup", 0, models=3, nym=True, dob=True), trace()]
             perf.validate_lifecycle(good, 1, daemon=False, policy=policy)
             for key in ("model_constructor_ns", "nym_model_constructor_ns", "nym_outer_verify_ns", "model_load_ns", "tokenizer_load_ns", "bundle_verify_ns", "nym_attach_ns"):
@@ -308,6 +309,45 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual(rows[0]["trace"]["ordinal"], 2)
             self.assertIsNone(rows[0]["startup_e2e_ns"])
             self.assertIsNone(rows[0]["e2e_ns"])
+
+    def test_model_activation_follows_rust_policy_fields(self):
+        from perf_lifecycle_contract import active_models, violates_ownership
+        for section in ('[ner]\nthreshold=0.3\n', '[ner]\nlocale="de-DE"\n',
+                        '[dob_judge]\nenabled=false\n', '[dob_judge]\n',
+                        '[safety_net.nym]\nmodel_dir="relative-unused"\n'):
+            with self.subTest(section=section), tempfile.TemporaryDirectory() as tmp:
+                policy = Path(tmp) / "policy"
+                policy.write_text(section)
+                config = perf.tomllib.loads(section)
+                self.assertFalse(any(active_models(config).values()))
+                self.assertEqual(perf.policy_models(policy), [])
+                perf.validate_lifecycle([trace("startup", 0), trace()], 1,
+                                        daemon=False, policy=policy, required=True)
+                for role in ("ner", "dob"):
+                    entry = {"ns": 0, "invocations": 1, "candidates": 0,
+                             "evidence": "learned", "model": role}
+                    self.assertTrue(violates_ownership({"recognizers": {"r1": entry}},
+                                    "recognizer-role", config=config, roles={}))
+
+    @unittest.skipUnless(os.environ.get("GAZE_ATTRIBUTION_TEST_BINARY"), "requires a locally built timer CLI")
+    def test_real_cli_ner_tuning_without_model_admits(self):
+        binary = Path(os.environ["GAZE_ATTRIBUTION_TEST_BINARY"]).resolve()
+        proof = json.loads(Path(__file__).with_name("perf-lifecycle-synthetic-proof.json").read_text())
+        self.assertEqual(perf.file_sha(binary), proof["timer_binary_sha256"])
+        for tuning in ('threshold=0.3', 'locale="de-DE"'):
+            with self.subTest(tuning=tuning), tempfile.TemporaryDirectory() as tmp:
+                policy = Path(tmp) / "policy.toml"
+                policy.write_text('schema_version="0.1.0"\n[session]\nscope="conversation"\n'
+                                  '[policy.rulepacks]\nbundled=["core"]\n[safety_net]\nbackend="none"\n'
+                                  '[[rule]]\nkind="default"\naction="tokenize"\n[ner]\n' + tuning + '\n')
+                self.assertEqual(perf.policy_models(policy), [])
+                docs = [perf.Document("one", "alice@example.invalid", "synthetic")]
+                for one_shot in (True, False):
+                    rows = perf.run_pass(binary, policy, docs, warmups=0, dry=True, timeout=30,
+                                         per_file=one_shot, require_timers=True)
+                    self.assertEqual(len(rows), 1)
+                    self.assertEqual(rows[0]["startup_trace"]["metrics"]["model_constructor_ns"]["invocations"], 0)
+                    self.assertTrue(all(e["model"] == "none" for e in rows[0]["trace"]["recognizers"].values()))
 
     @unittest.skipUnless(os.environ.get("GAZE_ATTRIBUTION_TEST_BINARY"), "requires a locally built timer CLI")
     def test_real_cli_lifecycle_hooks_are_validated_by_runner(self):
@@ -363,7 +403,7 @@ class FrozenPolicyTests(unittest.TestCase):
             path = Path(tmp) / "policy.toml"
             for content in ['[policy.rulepacks]\npaths=["outside.toml"]\n',
                             '[[detector]]\nterms_file="outside.txt"\n',
-                            '[ner]\nthreshold=0.3\n',
+                            '[dob_judge]\nenabled=true\n',
                             '[safety_net]\nbackend="nym"\n',
                             '[ner]\nmodel_dir="~/models"\n',
                             '[ner]\nmodel_dir="${GAZE_NER_MODEL_DIR}"\n']:

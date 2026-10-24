@@ -49,12 +49,49 @@ def violates_check(record: dict, check) -> bool:
             else any(ns > capacity for ns in children))
 
 
-OWNERSHIP_CHECKS = ("rule-owner-ns", "rule-owner-invocations", "rule-owner-candidates",
-                    "ner-owner-capacity", "recognizer-role", "stable-recognizer-role")
+RECORD_CHECKS = ("metric-candidates", "ner-encodes", "ner-windows", "nym-windows", "nym-views", "sweep-counter-owner", "parent-invocations")
+
+
+def violates_record(record: dict, check: str) -> bool:
+    metrics, counters = record["metrics"], record["counters"]
+    if check == "sweep-counter-owner":
+        return counters["sweep_candidates"] > 0 and metrics["sweep_ns"]["invocations"] == 0
+    if check == "parent-invocations":
+        def invoked(key):
+            return (any(entry["invocations"] for entry in record["recognizers"].values())
+                    if key == RECOGNIZERS else metrics[key]["invocations"] > 0)
+        return any(any(invoked(key) for key in edge.children)
+                   and not any(invoked(key) for key in edge.parents)
+                   for edge in CLOCK_CHECKS if edge.phase == record["phase"]
+                   and edge.kind == "parent" and not edge.daemon_only)
+    if check == "metric-candidates":
+        return any(metric["candidates"] for key, metric in metrics.items() if key != "rules_ns")
+    if check == "ner-encodes":
+        return counters["ner_encodes"] != metrics["ner_tokenize_ns"]["invocations"]
+    if check == "ner-windows":
+        return counters["ner_windows"] != metrics["ner_ort_ns"]["invocations"]
+    if check == "nym-windows":
+        return counters["nym_windows"] != metrics["nym_ort_ns"]["invocations"]
+    if check == "nym-views":
+        return counters["nym_windows"] != counters["nym_windows_stable"] + counters["nym_windows_neutral"]
+    raise ValueError("unknown record check")
+
+
+def active_models(config: dict) -> dict[str, bool]:
+    """Mirror RawNerPolicy/parse_dob_judge and CLI safety-net selection."""
+    return {"ner": config.get("ner", {}).get("model_dir") is not None,
+            "dob": config.get("dob_judge", {}).get("enabled", False) is True,
+            "nym": config.get("safety_net", {}).get("backend", "none") == "nym"}
+
+
+OWNERSHIP_CHECKS = ("recognizer-invocations", "rule-owner-ns", "rule-owner-invocations", "rule-owner-candidates",
+                    "ner-owner-capacity", "inactive-nym", "recognizer-role", "stable-recognizer-role")
 
 
 def violates_ownership(record: dict, check: str, *, config: dict, roles: dict) -> bool:
     entries = record["recognizers"]
+    if check == "recognizer-invocations":
+        return any(entry["invocations"] == 0 for entry in entries.values())
     if check.startswith("rule-owner-"):
         field = check.removeprefix("rule-owner-")
         return record["metrics"].get("rules_ns", {}).get(field, 0) != sum(
@@ -67,13 +104,16 @@ def violates_ownership(record: dict, check: str, *, config: dict, roles: dict) -
             return True
         leaves = sum(metric.get("ns", 0) for metric in leaf_metrics)
         return leaves > sum(entry["ns"] for entry in owners)
+    if check == "inactive-nym":
+        return not active_models(config)["nym"] and any(
+            any(metric.values()) for key, metric in record["metrics"].items()
+            if key.startswith("nym_") or key in ("safety_model_ns", "safety_view_build_ns"))
     if check == "recognizer-role":
         combined = {**roles, **{key: (entry["evidence"], entry["model"])
                                 for key, entry in entries.items()}}
         for model in ("ner", "dob"):
             count = sum(role[1] == model for role in combined.values())
-            setting = config.get("ner" if model == "ner" else "dob_judge", {})
-            if count > int(bool(setting) and setting.get("enabled", True)):
+            if count > int(active_models(config)[model]):
                 return True
         return any((entry["evidence"], entry["model"]) not in
                    {("rule", "none"), ("learned", "ner"), ("learned", "dob")}
@@ -228,6 +268,15 @@ def documentation() -> str:
                  "zero model initialization and other startup-only durations and counts.", "",
                  "Schema 3 recognizer entries contain fixed `evidence` (`rule` or `learned`)",
                  "and `model` (`none`, `ner`, `dob`, `other`) labels, never declared IDs or input values.",
+                 "Schema 3 requires every declared metric and counter and all three u64 metric fields.",
+                 "Only `rules_ns` may have candidates. `ner_encodes`, `ner_windows` and",
+                 "`nym_windows` equal their tokenize/ORT invocation counts; Nym window views",
+                 "sum to the total. Every emitted recognizer has at least one invocation,",
+                 "even with zero duration. Invoked child clocks require an invoked parent,",
+                 "including zero-duration clocks; sweep candidates require a sweep invocation.",
+                 "NER activates only with `ner.model_dir`; DOB only with `dob_judge.enabled=true`.",
+                 "Nym activates only with `safety_net.backend=\"nym\"`. Only active model paths",
+                 "enter the inventory; every active model must pin an absolute directory.",
                  "Admission requires `rules_ns` duration, invocations and candidates to equal the",
                  "corresponding sums of Rule entries. Learned entries never contribute to rules.",
                  "The three serial NER leaves must fit the single NER entry; they cannot borrow",
@@ -237,6 +286,8 @@ def documentation() -> str:
                  "",
                  "| Ownership check | Requirement |",
                  "| --- | --- |",
+                 "| recognizer-invocations | Every emitted entry was invoked |",
+                 "| inactive-nym | Safety-net processing requires the active Nym backend |",
                  "| rule-owner-ns | Exact Rule duration sum |",
                  "| rule-owner-invocations | Exact Rule invocation sum |",
                  "| rule-owner-candidates | Exact Rule candidate sum |",

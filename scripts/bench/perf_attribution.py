@@ -23,7 +23,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from perf_lifecycle_contract import OWNERSHIP_CHECKS, violates_ownership, CLOCK_CHECKS, CLOCK_PHASES, REQUEST_ASSEMBLY, STARTUP_CLOCKS, violates_check
+from perf_lifecycle_contract import RECORD_CHECKS, violates_record, active_models, OWNERSHIP_CHECKS, violates_ownership, CLOCK_CHECKS, CLOCK_PHASES, REQUEST_ASSEMBLY, STARTUP_CLOCKS, violates_check
 
 SPEC = "gaze-perf-attribution-v2"
 
@@ -52,19 +52,19 @@ def validate_trace(trace: dict) -> dict:
                     and set(value) == {"ns", "invocations", "candidates", "evidence", "model"}
                     and value["evidence"] in ("rule", "learned")
                     and value["model"] in ("none", "ner", "dob", "other")
-                    and all(type(value[k]) is int and value[k] >= 0
+                    and all(type(value[k]) is int and 0 <= value[k] <= 2**64 - 1
                             for k in ("ns", "invocations", "candidates")))
-        return (isinstance(value, dict) and "ns" in value
-                and set(value) <= {"ns", "invocations", "candidates"}
-                and all(type(number) is int and number >= 0 for number in value.values()))
+        return (isinstance(value, dict)
+                and set(value) == {"ns", "invocations", "candidates"}
+                and all(type(number) is int and 0 <= number <= 2**64 - 1 for number in value.values()))
     valid = (isinstance(trace, dict) and set(trace) == {"schema", "phase", "ordinal", "metrics", "counters", "recognizers"}
              and type(trace["schema"]) is int and trace["schema"] == 3
              and trace["phase"] in ("startup", "request")
-             and type(trace["ordinal"]) is int and trace["ordinal"] >= 0
-             and isinstance(trace["metrics"], dict) and set(trace["metrics"]) <= METRICS
+             and type(trace["ordinal"]) is int and 0 <= trace["ordinal"] <= 2**64 - 1
+             and isinstance(trace["metrics"], dict) and set(trace["metrics"]) == METRICS
              and all(metric(value) for value in trace["metrics"].values())
-             and isinstance(trace["counters"], dict) and set(trace["counters"]) <= COUNTERS
-             and all(type(n) is int and n >= 0 for n in trace["counters"].values())
+             and isinstance(trace["counters"], dict) and set(trace["counters"]) == COUNTERS
+             and all(type(n) is int and 0 <= n <= 2**64 - 1 for n in trace["counters"].values())
              and isinstance(trace["recognizers"], dict)
              and all(re.fullmatch(r"r[1-9][0-9]*", key) and metric(value, recognizer=True)
                      for key, value in trace["recognizers"].items()))
@@ -92,7 +92,7 @@ def validate_lifecycle(traces: list[dict], requests: int, *, daemon: bool, polic
             one_shot_assembly = not daemon and record["phase"] == "request" and key in REQUEST_ASSEMBLY
             if (record["phase"] not in CLOCK_PHASES[key] or one_shot_assembly) and any(metric.values()):
                 raise ValueError("misattributed clock phase")
-            if metric["ns"] and not metric.get("invocations", 0):
+            if (metric["ns"] or metric["candidates"]) and not metric.get("invocations", 0):
                 raise ValueError("duration without an invocation")
         if record["phase"] == "startup" and (any(record["counters"].values()) or record["recognizers"]):
             raise ValueError("misattributed startup processing")
@@ -101,6 +101,9 @@ def validate_lifecycle(traces: list[dict], requests: int, *, daemon: bool, polic
                 continue
             if violates_check(record, check):
                 raise ValueError(f"lifecycle duration attribution mismatch: {check.id}")
+        for check in RECORD_CHECKS:
+            if violates_record(record, check):
+                raise ValueError(f"lifecycle record mismatch: {check}")
     startup = traces[0]
     def inv(trace, key):
         return trace["metrics"].get(key, {}).get("invocations", 0)
@@ -111,9 +114,9 @@ def validate_lifecycle(traces: list[dict], requests: int, *, daemon: bool, polic
     if inv(startup, "daemon_startup_ns") != int(daemon) or inv(startup, "request_ns"):
         raise ValueError("misattributed startup work")
     config = tomllib.loads(policy.read_text())
-    net = config.get("safety_net", {}).get("backend") == "nym"
-    constructors = sum(bool(config.get(name)) and config[name].get("enabled", True)
-                       for name in ("ner", "dob_judge")) + int(net)
+    active = active_models(config)
+    net = active["nym"]
+    constructors = sum(active.values())
     for key, count in (("model_constructor_ns", constructors - int(net)),
                        ("nym_model_constructor_ns", int(net)),
                        ("nym_outer_verify_ns", int(net)),
@@ -263,25 +266,22 @@ def model_inventory(paths: list[Path]) -> list[dict]:
 def policy_models(policy: Path) -> list[Path]:
     config = tomllib.loads(policy.read_text())
     found = []
-    net = config.get("safety_net", {})
-    if net.get("backend") == "nym" and not net.get("nym", {}).get("model_dir"):
-        raise ValueError("Nym policies must pin an explicit model_dir")
-    for name in ("ner", "dob_judge"):
-        section = config.get(name, {})
-        if section and section.get("enabled", True) and not section.get("model_dir"):
-            raise ValueError("model policies must pin explicit model_dir values")
+    active = active_models(config)
+    sections = {"ner": config.get("ner", {}), "dob": config.get("dob_judge", {}),
+                "nym": config.get("safety_net", {}).get("nym", {})}
+    for model, enabled in active.items():
+        if not enabled:
+            continue
+        value = sections[model].get("model_dir")
+        if not isinstance(value, str) or not value or not Path(value).is_absolute():
+            raise ValueError("active model policies must pin absolute model_dir values")
+        found.append(Path(value))
     def visit(value):
         if isinstance(value, dict):
             for key, item in value.items():
                 if key == "terms_file" or (key == "paths" and item):
                     raise ValueError("external rulepack and terms files are unsupported; use bundled rules and inline terms")
-                if key == "model_dir":
-                    p = Path(item)
-                    if not p.is_absolute():
-                        raise ValueError("model_dir must be absolute to freeze the effective input")
-                    found.append(p)
-                else:
-                    visit(item)
+                visit(item)
         elif isinstance(value, list):
             for item in value:
                 visit(item)

@@ -10,6 +10,7 @@ import sys
 import tempfile
 
 from perf_lifecycle_contract import CLOCK_CHECKS, REQUEST_ASSEMBLY, OWNERSHIP_CHECKS
+from perf_lifecycle_contract import RECORD_CHECKS
 import perf_attribution as perf
 
 ROOT = Path(__file__).resolve().parent
@@ -22,7 +23,13 @@ def prove(out: Path) -> dict:
                   ("test_serial_" + check.id.removesuffix("-serial").replace("-", "_")
                    if check.kind == "serial" else "test_parent_" + check.id.replace("-", "_")))
                  for check in CLOCK_CHECKS]
+    for check in RECORD_CHECKS:
+        mutations.append((check, source.replace("for check in RECORD_CHECKS:",
+                          f"for check in (c for c in RECORD_CHECKS if c != {check!r}):"),
+                          "test_" + check.replace("-", "_")))
     ownership_tests = {
+        "inactive-nym": "test_inactive_nym",
+        "recognizer-invocations": "test_uninvoked_recognizer_independent",
         "rule-owner-ns": "test_reviewer_rules_must_equal_rule_spans",
         "rule-owner-invocations": "test_rule_owner_invocations",
         "rule-owner-candidates": "test_rule_owner_candidates",
@@ -35,6 +42,25 @@ def prove(out: Path) -> dict:
                           f"for check in (c for c in OWNERSHIP_CHECKS if c != {check!r}):"),
                           ownership_tests[check]))
     mutations.extend([
+        ("complete-metrics", source.replace('set(trace["metrics"]) == METRICS',
+                                             'set(trace["metrics"]) <= METRICS'),
+         "test_complete_emitted_record_shape"),
+        ("complete-counters", source.replace('set(trace["counters"]) == COUNTERS',
+                                              'set(trace["counters"]) <= COUNTERS'),
+         "test_complete_emitted_record_shape"),
+        ("complete-metric-fields", source.replace('set(value) == {"ns", "invocations", "candidates"}',
+                                                   'set(value) <= {"ns", "invocations", "candidates"}'),
+         "test_complete_metric_fields"),
+        ("u64-metric", source.replace('0 <= number <= 2**64 - 1', '0 <= number'),
+         "test_emitted_numbers_are_u64"),
+        ("u64-recognizer", source.replace('0 <= value[k] <= 2**64 - 1', '0 <= value[k]'),
+         "test_emitted_numbers_are_u64"),
+        ("u64-counter", source.replace('0 <= n <= 2**64 - 1', '0 <= n'),
+         "test_emitted_numbers_are_u64"),
+        ("u64-ordinal", source.replace('0 <= trace["ordinal"] <= 2**64 - 1', '0 <= trace["ordinal"]'),
+         "test_emitted_ordinal_is_u64"),
+    ])
+    mutations.extend([
         ("clock-phase", source.replace('record["phase"] not in CLOCK_PHASES[key]', 'False'),
          "test_phase_registry_ns"),
         ("request-assembly-counts", source.replace('if assembly_counts not in ({0}, {1}):', 'if False:'),
@@ -43,7 +69,7 @@ def prove(out: Path) -> dict:
          "test_startup_work_counters_are_refused"),
         ("startup-recognizers", source.replace('if record["phase"] == "startup" and (any(', 'if False and (any('),
          "test_startup_recognizers_are_refused"),
-        ("invocation", source.replace('if metric["ns"] and not metric.get("invocations", 0):', 'if False:'),
+        ("invocation", source.replace('if (metric["ns"] or metric["candidates"]) and not metric.get("invocations", 0):', 'if False:'),
          "test_nonzero_clock_requires_invocation"),
     ])
     for key in sorted(REQUEST_ASSEMBLY):
@@ -82,11 +108,14 @@ def prove(out: Path) -> dict:
     receipt = {"runner_sha256": perf.RUNNER_SHA256,
                "runner_source_sha256": hashlib.sha256(source.encode()).hexdigest(),
                "contract_sha256": hashlib.sha256((ROOT / "perf_lifecycle_contract.py").read_bytes()).hexdigest(),
+               "test_sha256": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+                               for name in ("test_perf_attribution.py", "test_perf_lifecycle_bounds.py")},
                "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                "mutations": results, "mutation_count": len(results),
                "serial_sum_checks": sum(c.kind == "serial" for c in CLOCK_CHECKS),
                "parent_checks": sum(c.kind == "parent" for c in CLOCK_CHECKS),
                "ownership_checks": len(OWNERSHIP_CHECKS),
+               "record_checks": len(RECORD_CHECKS),
                "parent_test_isolation": "Each parent check alone; serial sums and ancestor edges otherwise imply it. Full graph also rejects every parent witness.",
                "executed_assertion_failures": len(results), "restored_passes": len(results)}
     (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")

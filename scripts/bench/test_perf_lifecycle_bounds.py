@@ -10,7 +10,7 @@ from perf_lifecycle_contract import CLOCK_CHECKS, CLOCK_GRAPH, CLOCK_PHASES, REC
 from test_perf_attribution import trace
 
 
-POLICY = '[ner]\nenabled=true\n[dob_judge]\nenabled=true\n[safety_net]\nbackend="nym"\n'
+POLICY = '[ner]\nmodel_dir="/synthetic/ner"\n[dob_judge]\nenabled=true\nmodel_dir="/synthetic/dob"\n[safety_net]\nbackend="nym"\n'
 
 
 def records(*, daemon=False):
@@ -25,7 +25,7 @@ def records(*, daemon=False):
     for key, value in values.items():
         startup['metrics'][key]['ns'] = value
     request = trace()
-    request['metrics'].update({key: {'ns': 1, 'invocations': 1} for key, phase in CLOCK_PHASES.items()
+    request['metrics'].update({key: {'ns': 1, 'invocations': 1, 'candidates': 0} for key, phase in CLOCK_PHASES.items()
                                if phase == ('request',)})
     for key, value in {'request_ns': 1000, 'registry_ns': 100, 'safety_model_ns': 100,
                        'nym_stable_ns': 40, 'nym_neutral_ns': 40, 'nym_tokenize_ns': 10,
@@ -41,7 +41,8 @@ def records(*, daemon=False):
     if daemon:
         for key, value in {'assembly_ns': 100, 'recognizer_construction_ns': 20,
                            'rule_construction_ns': 20}.items():
-            request['metrics'][key] = {'ns': value, 'invocations': 1}
+            request['metrics'][key] = {'ns': value, 'invocations': 1, 'candidates': 0}
+    request['counters'].update(ner_encodes=1, ner_windows=1, nym_windows=1, nym_windows_stable=1)
     return [startup, request]
 
 
@@ -78,6 +79,129 @@ class BoundTests(unittest.TestCase):
             policy = Path(tmp) / 'policy'
             policy.write_text(POLICY)
             return perf.validate_lifecycle(rows, 1, daemon=daemon, policy=policy, required=True)
+
+    def test_inactive_nym(self):
+        rows = records()
+        from perf_lifecycle_contract import violates_ownership
+        # Constructors are irrelevant to this policy/processing admission check.
+        with patch.object(perf, 'active_models', return_value={'ner': True, 'dob': True, 'nym': True}):
+            with tempfile.TemporaryDirectory() as tmp:
+                policy = Path(tmp) / 'policy'
+                policy.write_text('[ner]\nmodel_dir="/synthetic/ner"\n[dob_judge]\nenabled=true\n')
+                with self.assertRaisesRegex(ValueError, 'inactive-nym'):
+                    perf.validate_lifecycle(rows, 1, daemon=False, policy=policy, required=True)
+
+    def test_complete_emitted_record_shape(self):
+        import copy
+        base = records()
+        for group, key in (('metrics', 'audit_ns'), ('counters', 'input_bytes')):
+            rows = copy.deepcopy(base)
+            del rows[1][group][key]
+            with self.assertRaisesRegex(ValueError, 'invalid timer metadata'):
+                perf.validate_trace(rows[1])
+        for field in ('ns', 'invocations', 'candidates'):
+            rows = copy.deepcopy(base)
+            del rows[1]['metrics']['audit_ns'][field]
+            with self.assertRaisesRegex(ValueError, 'invalid timer metadata'):
+                perf.validate_trace(rows[1])
+
+    def test_complete_metric_fields(self):
+        rows = records()
+        del rows[1]['metrics']['audit_ns']['candidates']
+        with self.assertRaisesRegex(ValueError, 'invalid timer metadata'):
+            perf.validate_trace(rows[1])
+
+    def test_emitted_ordinal_is_u64(self):
+        rows = records()
+        rows[1]['ordinal'] = 2**64
+        with self.assertRaisesRegex(ValueError, 'invalid timer metadata'):
+            perf.validate_trace(rows[1])
+
+    def test_emitted_numbers_are_u64(self):
+        import copy
+        for group, key, field in (('metrics', 'audit_ns', 'ns'),
+                                  ('recognizers', 'r1', 'invocations'),
+                                  ('counters', 'input_bytes', None)):
+            rows = copy.deepcopy(records())
+            if field is None:
+                rows[1][group][key] = 2**64
+            else:
+                rows[1][group][key][field] = 2**64
+            with self.assertRaisesRegex(ValueError, 'invalid timer metadata'):
+                perf.validate_trace(rows[1])
+
+    def test_parent_invocations(self):
+        rows = records()
+        rows[1]['metrics']['registry_ns'].update(ns=0, invocations=0)
+        for entry in rows[1]['recognizers'].values():
+            entry['ns'] = 0
+        for key in ('rules_ns', 'ner_tokenize_ns', 'ner_mutex_wait_ns', 'ner_ort_ns'):
+            rows[1]['metrics'][key]['ns'] = 0
+        with self.assertRaisesRegex(ValueError, 'parent-invocations'):
+            self.admit(rows)
+
+    def test_sweep_counter_owner(self):
+        rows = records()
+        rows[1]['metrics']['sweep_ns'].update(ns=0, invocations=0)
+        rows[1]['counters']['sweep_candidates'] = 1
+        with self.assertRaisesRegex(ValueError, 'sweep-counter-owner'):
+            self.admit(rows)
+
+    def test_metric_candidates(self):
+        rows = records()
+        rows[1]['metrics']['registry_ns']['candidates'] = 1
+        with self.assertRaisesRegex(ValueError, 'metric-candidates'):
+            self.admit(rows)
+
+    def test_ner_encodes(self):
+        rows = records()
+        rows[1]['counters']['ner_encodes'] = 2
+        with self.assertRaisesRegex(ValueError, 'ner-encodes'):
+            self.admit(rows)
+
+    def test_ner_windows(self):
+        rows = records()
+        rows[1]['counters']['ner_windows'] = 2
+        with self.assertRaisesRegex(ValueError, 'ner-windows'):
+            self.admit(rows)
+
+    def test_nym_windows(self):
+        rows = records()
+        rows[1]['metrics']['nym_ort_ns']['invocations'] = 2
+        with self.assertRaisesRegex(ValueError, 'nym-windows'):
+            self.admit(rows)
+
+    def test_nym_views(self):
+        rows = records()
+        rows[1]['counters']['nym_windows_stable'] = 0
+        with self.assertRaisesRegex(ValueError, 'nym-views'):
+            self.admit(rows)
+
+    def test_reviewer_uninvoked_ner_owner(self):
+        rows = records()
+        rows[1]['recognizers']['r2']['invocations'] = 0
+        with self.assertRaisesRegex(ValueError, 'recognizer-invocations'):
+            self.admit(rows)
+
+    def test_reviewer_uninvoked_rule_candidates(self):
+        rows = records()
+        rows[1]['recognizers']['r1'].update(ns=0, invocations=0)
+        rows[1]['metrics']['rules_ns'].update(ns=0, invocations=0)
+        with self.assertRaises(ValueError):
+            self.admit(rows)
+
+    def test_uninvoked_recognizer_independent(self):
+        rows = records()
+        rows[1]['recognizers']['r3'] = dict(rows[1]['recognizers']['r1'], ns=0, invocations=0, candidates=0)
+        with self.assertRaisesRegex(ValueError, 'recognizer-invocations'):
+            self.admit(rows)
+
+    def test_zero_duration_invoked_and_multiple_ner_invocations_admit(self):
+        rows = records()
+        rows[1]['recognizers']['r1']['ns'] = 0
+        rows[1]['metrics']['rules_ns']['ns'] = 0
+        rows[1]['recognizers']['r2']['invocations'] = 3
+        self.admit(rows)
 
     def test_all_nonzero_clocks_are_admitted(self):
         for daemon in (False, True):
@@ -236,12 +360,13 @@ class BoundTests(unittest.TestCase):
                 if dob:
                     rows[1]['recognizers']['r3'] = dict(rows[1]['recognizers']['r2'], model='dob')
                 if not nym:
+                    rows[1]['counters'].update(nym_windows=0, nym_windows_stable=0)
                     for key in ('safety_model_ns', 'safety_view_build_ns', 'nym_stable_ns',
                                 'nym_neutral_ns', 'nym_tokenize_ns', 'nym_mutex_wait_ns', 'nym_ort_ns'):
                         rows[1]['metrics'][key].update(ns=0, invocations=0)
                 with tempfile.TemporaryDirectory() as tmp:
                     policy = Path(tmp) / 'policy'
-                    policy.write_text('[ner]\nenabled=true\n' + ('[dob_judge]\nenabled=true\n' if dob else '')
+                    policy.write_text('[ner]\nmodel_dir="/synthetic/ner"\n' + ('[dob_judge]\nenabled=true\nmodel_dir="/synthetic/dob"\n' if dob else '')
                                       + ('[safety_net]\nbackend="nym"\n' if nym else ''))
                     perf.validate_lifecycle(rows, 1, daemon=daemon, policy=policy, required=True)
 
@@ -267,7 +392,7 @@ class BoundTests(unittest.TestCase):
         rows = records(daemon=True)
         for key, ns in {'assembly_ns': 100, 'recognizer_construction_ns': 50,
                         'rule_construction_ns': 10}.items():
-            rows[1]['metrics'][key] = {'ns': ns, 'invocations': 1}
+            rows[1]['metrics'][key] = {'ns': ns, 'invocations': 1, 'candidates': 0}
         self.admit(rows, daemon=True)
 
     def test_reviewer_startup_serial_witness(self):
@@ -320,7 +445,7 @@ class BoundTests(unittest.TestCase):
     def test_one_shot_request_assembly_is_refused(self):
         rows = records()
         for key in REQUEST_ASSEMBLY:
-            rows[1]['metrics'][key] = {'ns': 0, 'invocations': 1}
+            rows[1]['metrics'][key] = {'ns': 0, 'invocations': 1, 'candidates': 0}
         with self.assertRaisesRegex(ValueError, 'clock phase'):
             self.admit(rows)
 
@@ -337,19 +462,19 @@ class BoundTests(unittest.TestCase):
     def test_resident_models_cannot_initialize_in_daemon_requests(self):
         for key in perf.LIFECYCLE - REQUEST_ASSEMBLY:
             rows = records(daemon=True)
-            rows[1]['metrics'][key] = {'ns': 1, 'invocations': 1}
+            rows[1]['metrics'][key] = {'ns': 1, 'invocations': 1, 'candidates': 0}
             with self.assertRaisesRegex(ValueError, 'clock phase'):
                 self.admit(rows, daemon=True)
 
     def test_request_model_invocations_are_refused_even_at_zero_duration(self):
         rows = records(daemon=True)
-        rows[1]['metrics']['model_load_ns'] = {'ns': 0, 'invocations': 1}
+        rows[1]['metrics']['model_load_ns'] = {'ns': 0, 'invocations': 1, 'candidates': 0}
         with self.assertRaisesRegex(ValueError, 'clock phase'):
             self.admit(rows, daemon=True)
 
     def test_startup_work_counters_are_refused(self):
         rows = records()
-        rows[0]['counters'] = {'input_bytes': 1}
+        rows[0]['counters']['input_bytes'] = 1
         with self.assertRaisesRegex(ValueError, 'startup processing'):
             self.admit(rows)
 
@@ -361,7 +486,7 @@ class BoundTests(unittest.TestCase):
 
     def test_nonzero_clock_requires_invocation(self):
         rows = records()
-        rows[1]['metrics']['registry_ns']['invocations'] = 0
+        rows[1]['metrics']['validators_ns']['invocations'] = 0
         with self.assertRaisesRegex(ValueError, 'without an invocation'):
             self.admit(rows)
 
@@ -371,7 +496,7 @@ def set_clock(record, key, value):
         for metric in record['recognizers'].values():
             metric['ns'] = value
     else:
-        record['metrics'].setdefault(key, {'ns': 0, 'invocations': 1})['ns'] = value
+        record['metrics'].setdefault(key, {'ns': 0, 'invocations': 1, 'candidates': 0})['ns'] = value
 
 
 def serial_test(group):
@@ -420,7 +545,7 @@ def parent_test(check, *, isolated):
 def phase_test(key, phase):
     def test(self):
         rows = records()
-        rows[int(phase == 'request')]['metrics'][key] = {'ns': 1, 'invocations': 1}
+        rows[int(phase == 'request')]['metrics'][key] = {'ns': 1, 'invocations': 1, 'candidates': 0}
         with self.assertRaisesRegex(ValueError, 'clock phase'):
             self.admit(rows)
     return test
@@ -428,11 +553,11 @@ def phase_test(key, phase):
 
 def one_shot_assembly_phase_test(key):
     def test(self):
-        # A candidate-only count isolates the phase guard from duration and hook-count guards.
-        for field in ('candidates', 'invocations', 'ns'):
-            rows = records()
-            rows[1]['metrics'][key] = {'ns': 0, 'invocations': 0, 'candidates': 0}
-            rows[1]['metrics'][key][field] = 1
+        rows = records()
+        rows[1]['metrics'][key] = {'ns': 0, 'invocations': 1, 'candidates': 0}
+        # Other assembly hooks remain zero. Isolate this phase edge from the
+        # independently tested all-or-none request assembly count constraint.
+        with patch.object(perf, 'REQUEST_ASSEMBLY', frozenset((key,))):
             with self.assertRaisesRegex(ValueError, 'clock phase'):
                 self.admit(rows)
     return test
