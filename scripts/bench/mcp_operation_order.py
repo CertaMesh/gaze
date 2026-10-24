@@ -237,7 +237,7 @@ def score(rows, records):
     return result
 
 
-def compare(base, candidate):
+def _compare_totals(base, candidate):
     for field in ("specification", "contracts", "model_files", "host_registry_lock", "policy_sha256"):
         if base[field] != candidate[field]:
             raise ValueError("non-comparable MCP arm identity: " + field)
@@ -269,6 +269,26 @@ def compare(base, candidate):
     return decisions
 
 
+def compare(base, candidate):
+    """Admit observations and independently replay the oracle before the gate."""
+    specification = identity()
+    known_contracts = {key: value["identity"] for key, value in contracts().items()}
+    rows = fixture()
+    for card in (base, candidate):
+        if card["specification"] != specification or card["contracts"] != known_contracts:
+            raise ValueError("capture is not bound to this committed MCP specification")
+        build = card["host_build"]
+        expected = {"runtime_revision": card["runtime_revision"], "binary_sha256": card["binary_sha256"],
+                    "source_sha256": specification["scripts/bench/native-mcp-operation/main.rs"],
+                    "builder_sha256": specification["scripts/bench/build_native_mcp_operation.py"],
+                    "runtime_lock_sha256": card["host_registry_lock"]}
+        if build["registry_dependencies_pinned_to_runtime"] is not True or any(build[key] != value for key, value in expected.items()):
+            raise ValueError("MCP capture host provenance mismatch")
+        if score(rows, card["records"]) != card["scores"]:
+            raise ValueError("saved MCP scores differ from replayed observations")
+    return _compare_totals(base, candidate)
+
+
 def capture(runtime_root, binary, policy, build_evidence):
     runtime_root, binary, policy = runtime_root.resolve(), binary.resolve(), policy.resolve()
     build = json.loads(build_evidence.read_text())
@@ -285,6 +305,10 @@ def capture(runtime_root, binary, policy, build_evidence):
         model_files[name] = {str(p.relative_to(folder)): digest(p) for p in sorted(folder.rglob("*")) if p.is_file()}
         if not model_files[name]:
             raise ValueError("empty model bundle " + name)
+    specification = identity()
+    policy_sha256 = digest(policy)
+    if subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], cwd=runtime_root):
+        raise ValueError("runtime checkout has tracked changes before MCP capture")
     rows = fixture()
     fields = ("id", "direction", "payload", "seed_names")
     wire = "".join(json.dumps({key: row[key] for key in fields}, ensure_ascii=False) + "\n" for row in rows)
@@ -292,7 +316,16 @@ def capture(runtime_root, binary, policy, build_evidence):
     if process.returncode:
         raise ValueError("MCP benchmark host failed; preserve stderr separately: " + process.stderr[-2000:])
     records = [json.loads(line) for line in process.stdout.splitlines()]
-    return {"specification": identity(), "contracts": {k: v["identity"] for k, v in contracts().items()}, "model_files": model_files, "host_registry_lock": build["runtime_lock_sha256"], "runtime_revision": revision, "host_build": build, "binary_sha256": digest(binary), "policy_sha256": digest(policy), "machine": platform.platform(), "records": records, "scores": score(rows, records)}
+    for name, before in model_files.items():
+        folder = Path(os.environ[name]).resolve()
+        after = {str(p.relative_to(folder)): digest(p) for p in sorted(folder.rglob("*")) if p.is_file()}
+        if before != after:
+            raise ValueError("model files changed during MCP capture")
+    after_revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=runtime_root, text=True).strip()
+    dirty = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], cwd=runtime_root)
+    if after_revision != revision or dirty or identity() != specification or digest(binary) != expected["binary_sha256"] or digest(policy) != policy_sha256:
+        raise ValueError("MCP capture artifacts changed during execution")
+    return {"specification": specification, "contracts": {k: v["identity"] for k, v in contracts().items()}, "model_files": model_files, "host_registry_lock": build["runtime_lock_sha256"], "runtime_revision": revision, "host_build": build, "binary_sha256": digest(binary), "policy_sha256": policy_sha256, "machine": platform.platform(), "records": records, "scores": score(rows, records)}
 
 
 if __name__ == "__main__":

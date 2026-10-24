@@ -118,14 +118,14 @@ def test_gate_rejects_per_layer_regression_and_new_refusal_even_at_equal_totals(
     candidate = copy.deepcopy(base)
     for contract in ("v1", "v2"):
         candidate["scores"][contract]["layers"]["R"]["leaked"] = 0
-    assert all(row["pass"] for row in arm.compare(base, candidate).values())
+    assert all(row["pass"] for row in arm._compare_totals(base, candidate).values())
     for contract in ("v1", "v2"):
         candidate["scores"][contract]["cases"][0]["refused"] = 1
         candidate["scores"][contract]["cases"][1]["refused"] = 0
-    assert not any(row["pass"] for row in arm.compare(base, candidate).values())
+    assert not any(row["pass"] for row in arm._compare_totals(base, candidate).values())
     candidate["specification"] = "different"
     with pytest.raises(ValueError, match="non-comparable"):
-        arm.compare(base, candidate)
+        arm._compare_totals(base, candidate)
 
 
 def test_owned_identity_cannot_be_replaced_by_an_equivalent_new_token():
@@ -153,3 +153,26 @@ def test_later_dispatch_failure_cannot_hide_arguments_already_released():
     assert result["dispatch_failed"] == 1
     response_case = {**case(), "direction": "response"}
     assert arm.score_case(response_case, observed)["refused"] == 1
+
+
+def test_gate_replays_observations_instead_of_trusting_saved_scores(monkeypatch):
+    row = {**case(), "layer": "R", "category": "text"}
+    monkeypatch.setattr(arm, "fixture", lambda: [row])
+    specification = arm.identity()
+    observed = record(row["expanded"], [])
+    card = {"specification": specification, "contracts": {k: v["identity"] for k, v in arm.contracts().items()},
+            "model_files": {}, "host_registry_lock": "fixed", "policy_sha256": "fixed", "runtime_revision": "fixed", "binary_sha256": "fixed",
+            "records": [observed], "scores": arm.score([row], [observed])}
+    card["host_build"] = {"runtime_revision": "fixed", "binary_sha256": "fixed", "runtime_lock_sha256": "fixed",
+                          "source_sha256": specification["scripts/bench/native-mcp-operation/main.rs"],
+                          "builder_sha256": specification["scripts/bench/build_native_mcp_operation.py"],
+                          "registry_dependencies_pinned_to_runtime": True}
+    assert not any(result["pass"] for result in arm.compare(card, copy.deepcopy(card)).values())
+    tampered = copy.deepcopy(card)
+    tampered["scores"]["v1"]["layers"]["R"]["leaked"] = 0
+    with pytest.raises(ValueError, match="replayed"):
+        arm.compare(card, tampered)
+    tampered = copy.deepcopy(card)
+    tampered["host_build"]["runtime_revision"] = "different"
+    with pytest.raises(ValueError, match="provenance"):
+        arm.compare(card, tampered)
