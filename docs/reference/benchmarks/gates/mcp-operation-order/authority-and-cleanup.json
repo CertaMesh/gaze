@@ -12,9 +12,9 @@
     "pre_arm_load_checks": [
       {
         "arm": "base",
-        "utc": "2026-10-24T06:10:46.333186+00:00",
-        "load_1m": 6.07421875,
-        "memory_free_percent": 86,
+        "utc": "2026-10-24T06:40:36.368139+00:00",
+        "load_1m": 5.2890625,
+        "memory_free_percent": 85,
         "required_load_below": 12,
         "required_memory_at_least": 60,
         "allowed": true,
@@ -22,8 +22,8 @@
       },
       {
         "arm": "candidate",
-        "utc": "2026-10-24T06:11:01.740588+00:00",
-        "load_1m": 5.9345703125,
+        "utc": "2026-10-24T06:40:52.439272+00:00",
+        "load_1m": 5.93896484375,
         "memory_free_percent": 86,
         "required_load_below": 12,
         "required_memory_at_least": 60,
@@ -42,12 +42,113 @@
   "availability_counterweights": {
     "test_source": "crates/gaze-mcp-core/tests/strict_contract/operation_repeats.rs",
     "base_revision": "f7a794f5668864d3c4336aaa878c6896e92fc009",
-    "candidate_revision": "b5066c7689d697144a3b257a8a86f45cbadc40b9",
+    "candidate_revision": "6ba82c9684ad87b7c2fc8014abdba262fba83d86",
     "base_admitted": 4,
     "candidate_admitted": 4,
     "token_only_wire": true,
     "exact_restore": true,
     "restored_2_mib_cap_failures": 4,
     "above_16x_expansion_budget": "DispatchError::ResourceLimit in argument and response operations; staged state rolled back"
+  },
+  "regression_proof": {
+    "candidate_revision": "6ba82c9684ad87b7c2fc8014abdba262fba83d86",
+    "tests_committed_first": true,
+    "mutation_probes": [
+      {
+        "name": "input-cap",
+        "exit": 101,
+        "executed_assertion_failures": 3,
+        "log_sha256": "a54c2daa4829a789c753103c87765026f7b93b33e3f2bc81ff7e665e9724e69b",
+        "source_sha256": "a0dc6f888535523bbc5d45b420de779959335abd1f3e6826599e4f4f646314a4"
+      },
+      {
+        "name": "gap-projection",
+        "exit": 101,
+        "executed_assertion_failures": 2,
+        "log_sha256": "5dad4700338000c5fa7bf59a8eb90751227a84a7eb7264124f142d87ce8d50a9",
+        "source_sha256": "75328b95183206e4e82d88f74b7da6ab53e89327fb6595b1c4d5a5da109cbc69"
+      },
+      {
+        "name": "gap-proof",
+        "exit": 101,
+        "executed_assertion_failures": 2,
+        "log_sha256": "bf247303515b344bf89e58f4956795a02ab0c392a547c43e7460d7330131bf87",
+        "source_sha256": "75328b95183206e4e82d88f74b7da6ab53e89327fb6595b1c4d5a5da109cbc69"
+      },
+      {
+        "name": "rmcp-class",
+        "exit": 101,
+        "executed_assertion_failures": 1,
+        "log_sha256": "99962b21cb1c85a2ee04feb2423f8a0faf3fe81719a178163004496c40c60757",
+        "source_sha256": "7eabc090a8383caae54c7f111413ccbe3321a699d612ba9abe6eebcbfdb578eb"
+      },
+      {
+        "name": "expansion-2m",
+        "exit": 101,
+        "executed_assertion_failures": 4,
+        "log_sha256": "bc90cb0716c9d1e262cd3588f42fa7bad7a133f6ea2cd9e4070226b3f68cb13e",
+        "source_sha256": "75328b95183206e4e82d88f74b7da6ab53e89327fb6595b1c4d5a5da109cbc69"
+      }
+    ],
+    "suite_counts": {
+      "core-tests": {
+        "completed_tests": 92,
+        "literal_ok_lines": 91,
+        "log_sha256": "fc40771e230d81a4d502dd68a6cbe39cd32508082e272a25abc5f2b0e32bd71d",
+        "multiline_ok_tests": [
+          "external_construction_is_compile_fail"
+        ],
+        "regression_literal_ok_names": [
+          "dispatch::rule_coverage::tests::final_proof_covers_only_whitespace_interior_gaps_independently_of_projection",
+          "operation_repeats::expansion_boundary_single_leaf_arguments",
+          "operation_repeats::expansion_boundary_single_leaf_response",
+          "operation_repeats::expansion_boundary_two_leaves_arguments",
+          "operation_repeats::expansion_boundary_two_leaves_response",
+          "operation_repeats::large_owned_counterweight_adjacent_arguments",
+          "operation_repeats::large_owned_counterweight_adjacent_response",
+          "operation_repeats::large_owned_counterweight_spaced_arguments",
+          "operation_repeats::large_owned_counterweight_spaced_response",
+          "operation_repeats::non_whitespace_interior_gap_is_still_protected_in_both_directions",
+          "operation_repeats::public_input_above_two_mib_arguments",
+          "operation_repeats::public_input_above_two_mib_response",
+          "operation_repeats::shrinking_owned_values_above_two_mib_are_admitted_in_both_directions",
+          "operation_repeats::whitespace_gap_arguments",
+          "operation_repeats::whitespace_gap_response"
+        ]
+      },
+      "rmcp-tests": {
+        "completed_tests": 41,
+        "literal_ok_lines": 41,
+        "log_sha256": "af4498a90860ff5cc2aead54ed8285f6fba98d285901151017228d1d85bd3a84",
+        "regression_literal_ok_names": [
+          "frontend::tests::resource_limit_returns_stable_error_class"
+        ]
+      },
+      "token-bridge-tests": {
+        "completed_tests": 110,
+        "literal_ok_lines": 110,
+        "log_sha256": "e189562942bda0c92d9db962dea91b698fed98e821878e821c97d27f00a58f42",
+        "regression_literal_ok_names": [
+          "custom_class_internal_whitespace_divergence_finds_the_hit",
+          "from_raw_collapses_internal_whitespace_for_custom_class"
+        ]
+      },
+      "document-mcp-tests": {
+        "completed_tests": 15,
+        "literal_ok_lines": 15,
+        "log_sha256": "83c7142554cf11c83c11db38e1f32974045144e8c2eef7ee9f69d36bac1773a0",
+        "regression_literal_ok_names": []
+      },
+      "document-stdio-tests": {
+        "completed_tests": 1,
+        "literal_ok_lines": 1,
+        "log_sha256": "610bc2a574c0f28652198f4bae83ece12cc659a983f6abda64bf3f0e35161f37",
+        "regression_literal_ok_names": []
+      }
+    },
+    "python_evidence_tests": 26,
+    "boundaries": "single leaf and two-leaf aggregate; 32 MiB minus one and exact admitted, plus one refused; both directions",
+    "public_input": "2097153 periods and shrinking-owned-token input admitted unchanged in arguments and responses",
+    "whitespace": "Rule-seeded Maria/Schneider/full-name pair retains wire with no new entry; independent proof rejects non-whitespace gaps"
   }
 }

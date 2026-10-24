@@ -7,7 +7,7 @@ This is a finite capture of real `PiiEnvelope::dispatch`, not a completeness or
 latency claim.
 
 The base runtime is `f7a794f5668864d3c4336aaa878c6896e92fc009`. The measured
-candidate is `b5066c7689d697144a3b257a8a86f45cbadc40b9`. Each runtime built the
+candidate is `6ba82c9684ad87b7c2fc8014abdba262fba83d86`. Each runtime built the
 same committed host against its own libraries and lockfile, then ran its own
 `gaze setup` policy. Those policies were byte-identical. Both model bundles
 have identical hashes and remained unchanged around both captures.
@@ -36,11 +36,12 @@ It supersedes earlier captures; both arms were recaptured together on v3.
 
 ## Large owned-token compatibility
 
-The MCP input cap is 2 MiB of aggregate decoded text. Full owned-token expansion
-has a separate budget of 16 times that cap, currently 32 MiB. The runtime still
-expands every owned token and applies the real Rule matcher. Exhausting either
-budget returns the distinct `DispatchError::ResourceLimit` and discards staged state.
-This explicit resource limit is the allowed admission exception.
+Full owned-token expansion has an aggregate budget of 16 times the existing
+2 MiB sizing constant, currently 32 MiB. Literal input bytes count toward that
+budget. Decoded input has no separate cap. The runtime expands every owned token
+and applies the real Rule matcher. Only expansion above 32 MiB returns the
+new `DispatchError::ResourceLimit` and discards staged state. The rmcp adapter
+returns the stable `resource_limit` class without input details.
 
 Four committed real-dispatch counterweights seed a deterministic Rule Name of
 2,048 synthetic `X` bytes. They submit 1,025 copies of its owned token, separated
@@ -49,26 +50,36 @@ All four pass on both the base and measured candidate, preserve token-only wire
 text, and restore exactly. Restoring the 2 MiB expansion cap after committing the
 tests makes all four fail. Above-budget tests assert `ResourceLimit` in both
 directions, no partial session changes, and the required manifest lifecycle.
-These compatibility tests supplement the unchanged 50-case native specification.
+Committed contract tests also admit 2,097,153 public periods and a shrinking
+owned-token input in both directions. A Rule-seeded pair separated by one space
+keeps the base wire and adds no entry. Independent proof tests accept interior
+whitespace and reject non-whitespace or outer raw text without invoking projection.
+Single-leaf and two-leaf tests assert admission at 32 MiB minus one and exactly
+32 MiB, then refusal one byte over, with rollback and manifest checks.
+Mutation probes restore the decoded-input cap, gap projection, gap proof, and
+missing rmcp mapping. Each produces executed assertion failures after the tests
+were committed. These tests supplement the unchanged 50-case native specification.
 
 ## Text layers are unchanged by construction
 
 C/A/D/R text inference was **not recaptured**. Under the explicit reuse ruling,
 `text-path-identity.json.gz` records matching base and candidate SHA-256 values
-for 2,004 repository inputs outside the isolated MCP change. This includes the
+for 2,002 repository inputs outside the isolated MCP change. This includes the
 core, types, recognizers, assembly, CLI clean code, existing text drivers,
 scorers, corpus inputs, contracts, dependency locks, and build configuration.
 New native tools are not imported by the unchanged text modules. The required
-CHANGELOG and MCP runtime documentation edits have separate before/after hashes
-in the identity record; those two files do not affect text inference.
+CHANGELOG, MCP runtime documentation, and rmcp README edits have separate
+before/after hashes in the identity record. The rmcp frontend exception admits
+exactly the resource-limit arm and its assertion test, records both source hashes,
+and rejects any other adapter edit. These files do not affect text inference.
 
 The only changed existing benchmark fixture is rmcp route evidence. Its sole
 change is the verified recognizer-event count from 1 to 3 for discovery. It is
 not part of the C/A/D/R text corpus. The checker rejects any broader fixture
 edit or unclassified file change. The CI input registry separately admits
 exactly the twelve new native evidence paths, with no other registry change.
-All crates outside MCP core, including document MCP and token-bridge code and
-tests, match the base exactly.
+Document MCP and token-bridge code and tests match the base exactly. Apart from
+the explicitly checked rmcp error mapping, crates outside MCP core are unchanged.
 
 Only current-session token mappings expand. Other namespaces retain main's
 literal-text behavior and their existing validation stage and error type.
@@ -118,8 +129,8 @@ archives are replayable without the private paths.
 The original orchestrator and load-coordinator GO approved leak-only captures
 alongside #773, outside bench-machine, at nice 10. The standing recapture ruling
 requires `load_1m < 12` and `memory_free_percent >= 60`, checked before each arm.
-Base recorded `load_1m=6.07` and `memory_free_percent=86`.
-Candidate recorded `load_1m=5.93` and `memory_free_percent=86`. The runs used
+Base recorded `load_1m=5.29` and `memory_free_percent=85`.
+Candidate recorded `load_1m=5.94` and `memory_free_percent=86`. The runs used
 worker-owned model copies with distinct file identities from the installed
 bundles. The same immutable copy set served the two arms serially. Hashes were
 checked before and after each capture, then all private copies were deleted.

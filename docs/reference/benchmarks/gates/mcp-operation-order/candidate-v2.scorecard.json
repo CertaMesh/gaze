@@ -3,7 +3,7 @@
   "kind": "mcp-operation-scorecard-with-unchanged-text",
   "side": "candidate",
   "contract": "v2",
-  "runtime_revision": "b5066c7689d697144a3b257a8a86f45cbadc40b9",
+  "runtime_revision": "6ba82c9684ad87b7c2fc8014abdba262fba83d86",
   "fresh_text_capture": false,
   "text_layers": {
     "C": "unchanged_by_construction",
@@ -11,8 +11,8 @@
     "D": "unchanged_by_construction",
     "R": "unchanged_by_construction"
   },
-  "path_identity_sha256": "24920f15f8a3bde4c02a9b35def28efc32307f2f1b04daee1d03c3b939b2b8b7",
-  "native_capture_sha256": "f99f82f2e83aed0088fceaeb5f85354d09654a422ebab189451617c53c4b4e30",
+  "path_identity_sha256": "c8cb570a3d12a67feeb2960e107e1a3f017ae49b8f42279eb7b9f09270bc50bb",
+  "native_capture_sha256": "eba571f9af60c8457e20cca451318a5bd5f98e2e51b707bb7e1e7f8c861519c2",
   "native_operation_layers": {
     "A": {
       "leaked": 0,
