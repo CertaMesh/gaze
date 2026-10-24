@@ -1,0 +1,35 @@
+schema_version = "0.1.0"
+
+[session]
+scope = "conversation"
+
+[locale]
+active = ["en-US", "de-DE", "global"]
+
+[ner]
+model_dir = "models/davlan-mbert-ner-hrl"
+threshold = 0.3
+
+[safety_net]
+backend = "nym"
+
+[safety_net.nym]
+model_dir = "models/nym-small-int8"
+
+[address_blocks]
+enabled = true
+
+[policy.rulepacks]
+bundled = ["core", "secrets"]
+
+[[policy.custom_recognizers]]
+kind = "dictionary"
+name = "synthetic_reviewer_names"
+class = "name"
+terms = ["Dr. Schmidt"]
+case_sensitive = true
+safety_tier = "safe_default"
+
+[[rule]]
+kind = "default"
+action = "tokenize"

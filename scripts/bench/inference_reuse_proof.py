@@ -113,6 +113,13 @@ def scan_views(response):
 def equivalence(args):
     out = args.output
     out.mkdir(parents=True, exist_ok=True)
+    policy_template_sha256 = sha(args.policy)
+    if args.model_root is not None:
+        text = args.policy.read_text()
+        for model in ('davlan-mbert-ner-hrl', 'nym-small-int8'):
+            text = text.replace(f'"models/{model}"', f'"{args.model_root.resolve() / model}"')
+        args.policy = out / 'effective-policy.toml'
+        args.policy.write_text(text)
     documents = corpus(args.dataset, args.per_layer)
     requests = [request(d) for _, d in documents]
     corpus_path = out / 'requests.jsonl'
@@ -180,14 +187,17 @@ def equivalence(args):
     window_inputs.extend(dict.fromkeys(text for _, blocks in WORKLOADS for text in blocks))
     verifier_path.write_text(''.join(json.dumps({'text': text}, ensure_ascii=False) + '\n'
                                     for text in window_inputs))
-    with verifier_path.open() as stream, (out / 'raw-windows.jsonl').open('w') as result:
-        subprocess.run([str(args.verifier.resolve())], stdin=stream, stdout=result, env=env,
-                       cwd=ROOT, timeout=1800, check=True)
-    raw = json.loads((out / 'raw-windows.jsonl').read_text().splitlines()[-1])
+    raw = None
+    if args.verifier is not None:
+        with verifier_path.open() as stream, (out / 'raw-windows.jsonl').open('w') as result:
+            subprocess.run([str(args.verifier.resolve())], stdin=stream, stdout=result, env=env,
+                           cwd=ROOT, timeout=1800, check=True)
+        raw = json.loads((out / 'raw-windows.jsonl').read_text().splitlines()[-1])
     report = {'scope': 'bounded slice, not main certification or full-corpus gate',
               'documents': len(documents), 'layers': dict(Counter(l for l, _ in documents)),
               'base_sha256': sha(args.base), 'candidate_sha256': sha(args.candidate),
-              'policy_sha256': sha(args.policy), 'requests_sha256': sha(corpus_path),
+              'policy_sha256': sha(args.policy), 'policy_template_sha256': policy_template_sha256,
+              'requests_sha256': sha(corpus_path),
               'compared': 'exact fixed-session clean bytes, manifest spans, audit rows, candidate events, '
                           'protection traces, safety-net statistics and strict restores; only timing excluded',
               'raw_nym_probability_bits': raw, 'window_inputs_sha256': sha(verifier_path),
@@ -212,7 +222,12 @@ class Daemon:
         for stream, target, prefix in ((self.process.stdout, self.responses, ''),
                                        (self.process.stderr, self.traces, 'GAZE_PERF ')):
             threading.Thread(target=read, args=(stream, target, prefix), daemon=True).start()
-        self.startup = self.traces.get(timeout=60)
+        try:
+            self.startup = self.traces.get(timeout=60)
+        except BaseException:
+            self.process.kill()
+            self.process.wait()
+            raise
     def req(self, op, text=None):
         req = {'version': 1, 'op': op, 'session_id': 'diagnostic'}
         if text is not None:
@@ -282,7 +297,7 @@ def diagnostic(args):
                         restored, _, _ = daemon.req('restore', response['clean_text'])
                         if restored['text'] != text:
                             raise AssertionError('diagnostic restore mismatch')
-                    normalized = [canonical(r, daemon=True).hex() for r in protected]
+                    normalized = [canonical(r, daemon=True) for r in protected]
                     if name in reference and reference[name] != normalized:
                         raise AssertionError('diagnostic protection output differs')
                     reference[name] = normalized
@@ -301,13 +316,14 @@ def main():
     for name in ('base', 'candidate', 'policy', 'output'):
         parser.add_argument(f'--{name}', type=Path, required=True)
     parser.add_argument('--dataset', type=Path)
+    parser.add_argument('--model-root', type=Path)
     parser.add_argument('--verifier', type=Path)
     parser.add_argument('--per-layer', type=int, default=24)
     parser.add_argument('--runs', type=int, default=5)
     args = parser.parse_args()
     if args.mode == 'equivalence':
-        if args.dataset is None or args.verifier is None or args.per_layer < 2 or args.per_layer % 2:
-            parser.error('equivalence needs --dataset, --verifier and a positive even --per-layer')
+        if args.dataset is None or args.per_layer < 2 or args.per_layer % 2:
+            parser.error('equivalence needs --dataset and a positive even --per-layer')
         equivalence(args)
     else:
         if args.runs < 5:
