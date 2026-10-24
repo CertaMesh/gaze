@@ -65,6 +65,7 @@ def main():
          'test_actual_producers_persist_and_enforce_capture_mode', 6, 'release'),
         ('cache_capture_mode', CURRENT, '        "capture_protocol": benchmark_spec.capture_protocol(args),\n', '',
          'scripts/bench/test_capture_reuse.py::CaptureIdentityTests::test_runner_key_binds_native_artifacts_and_capture_parameters', 1),
+        ('reviewer_manifest_adapter', CERT, "    if (header.get('response_validation') != response_validation\n            or original.get('response_validation') != response_validation\n            or captured.get('response_validation') != response_validation):\n        raise CertificationError('response_validation_mismatch')\n", '', 'test_reviewer_legacy_manifest_runner_cannot_certify', 4),
         ('validation_header', CERT, "header.get('response_validation') != response_validation", 'False', 'test_validation_adapter_required_at_every_boundary[header]', 1),
         ('validation_original', CERT, "original.get('response_validation') != response_validation", 'False', 'test_validation_adapter_required_at_every_boundary[original]', 1),
         ('validation_capture', CERT, "captured.get('response_validation') != response_validation", 'False', 'test_validation_adapter_required_at_every_boundary[capture]', 1),

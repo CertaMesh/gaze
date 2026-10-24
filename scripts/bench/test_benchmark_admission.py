@@ -414,8 +414,8 @@ def test_reviewer_legacy_manifest_runner_cannot_certify(tmp_path, evidence, monk
     header, _ = records._read(folder / 'observations-v1.jsonl.gz')
     assert header['capture_protocol'] == specs.CANONICAL_CAPTURE
     assert header['response_validation'] == specs.LEGACY_VALIDATION
-    assert header['scorecard']['response_validation'] == specs.LEGACY_VALIDATION
-    assert json.loads((folder / 'capture.json').read_text())['response_validation'] == specs.LEGACY_VALIDATION
+    assert header['scorecard'].get('response_validation') == specs.LEGACY_VALIDATION
+    assert json.loads((folder / 'capture.json').read_text()).get('response_validation') == specs.LEGACY_VALIDATION
     attach_produced(tmp_path, evidence, folder, pair_name, side)
     with pytest.raises(cert.CertificationError, match='^response_validation_mismatch$'):
         check(evidence, tmp_path)
@@ -435,8 +435,8 @@ def test_actual_producers_bind_every_validation_flag(tmp_path, evidence, monkeyp
     header, _ = records._read(rp)
     expected = specs.LEGACY_VALIDATION if flag == 'manifest-actions' else specs.CURRENT_VALIDATION
     assert header['response_validation'] == expected
-    assert header['scorecard']['response_validation'] == expected
-    assert json.loads(cp.read_text())['response_validation'] == expected
+    assert header['scorecard'].get('response_validation') == expected
+    assert json.loads(cp.read_text()).get('response_validation') == expected
     if flag == 'canonical':
         assert cert.admit_capture(cp, rp, evidence['benchmark_spec'], ROOT)
     else:
@@ -531,5 +531,5 @@ def test_generated_runner_records_validation_flags(tmp_path, evidence, monkeypat
     expected = specs.LEGACY_VALIDATION if flag == 'manifest-actions' else {**specs.CURRENT_VALIDATION,
                                                                        'split_composite_source_ids': True}
     assert header['response_validation'] == expected
-    assert header['scorecard']['response_validation'] == expected
-    assert json.loads(output.read_text())['response_validation'] == expected
+    assert header['scorecard'].get('response_validation') == expected
+    assert json.loads(output.read_text()).get('response_validation') == expected
