@@ -1,8 +1,12 @@
 """Independent raw field-boundary coverage, including canonical scorer sensitivity."""
 import hashlib
 import json
+import csv
 import re
 import unittest
+import sqlite3
+import tomllib
+from contextlib import closing
 
 import agentic_layers as api
 import gaze_bench_score as score
@@ -10,13 +14,55 @@ import record_id_boundary_cells as cells
 
 
 class RecordIdBoundaryTests(unittest.TestCase):
+    def test_quote_dialects_declare_private_values_and_real_public_siblings(self):
+        for partition in api.PARTITIONS:
+            rows = [r for r in cells.records(api, partition)
+                    if r.surface.startswith("recordids_boundary_quote_dialects_")]
+            self.assertEqual(len(rows), 2790)
+            self.assertEqual({r.layer for r in rows}, {"A", "D", "R"})
+            self.assertEqual({int(re.search(r"json_depth(\d+)", r.surface)[1])
+                              for r in rows if "json_depth" in r.surface}, set(range(1, 10)))
+            for row in rows:
+                self.assertTrue(any(d.label == "public_column" for d in row.decoys))
+                self.assertEqual(bool(row.gold), row.layer != "D")
+                if row.layer == "R":
+                    self.assertEqual(len(row.gold), 2)
+                    self.assertEqual(row.gold[0].value, row.gold[1].value)
+                if row.layer != "R" and "json_depth" in row.surface:
+                    parsed = json.loads(row.text)
+                    while "payload" in parsed:
+                        self.assertIn("public_version", parsed)
+                        parsed = json.loads(parsed["payload"])
+                    self.assertEqual(parsed["tags"], ["'", "FRAME"])
+                    self.assertEqual(parsed["public_version"], "'")
+                if row.layer != "R" and row.surface.endswith("_record"):
+                    if "csv_double" in row.surface:
+                        parsed = next(csv.reader([row.text.split(": ", 1)[1]], skipinitialspace=True))
+                        self.assertIn('"É', parsed[0])
+                        self.assertEqual(len(parsed), 2)
+                    if "toml_" in row.surface or "prefix_triple_" in row.surface:
+                        parsed = tomllib.loads(row.text)
+                        self.assertIn("public_version", parsed)
+                        self.assertEqual(len(row.gold), 0 if row.layer == "D" else 1)
+                    if "sql_single" in row.surface:
+                        field = row.text.split(" SET ", 1)[1].split("=", 1)[0]
+                        with closing(sqlite3.connect(":memory:")) as db:
+                            db.execute(f'CREATE TABLE synthetic_records ("{field}" TEXT, public_version TEXT)')
+                            db.execute('INSERT INTO synthetic_records DEFAULT VALUES')
+                            db.execute(row.text)
+                            self.assertIn("'É", db.execute(f'SELECT "{field}" FROM synthetic_records').fetchone()[0])
+
+    def test_rust_fixture_rebuilds_from_current_application_owned_gold(self):
+        from write_record_id_boundary_fixture import OUTPUT, fixture
+        self.assertEqual(json.loads(OUTPUT.read_text()), fixture())
+
     def test_each_shape_has_all_families_partitions_and_scored_layers(self):
         for partition in api.PARTITIONS:
             rows = cells.records(api, partition)
             self.assertEqual(rows, cells.records(api, partition))
             self.assertEqual(len(rows), len({r.uid for r in rows}))
             for family in cells.LABELS:
-                for shape in ("punctuation", "connectors", "serialized", "opening_lf", "tab_group"):
+                for shape in ("punctuation", "connectors", "serialized", "opening_lf", "tab_group", "unterminated"):
                     selected = [r for r in rows if r.family == family and r.surface.startswith("recordids_boundary_" + shape)]
                     self.assertEqual({r.layer for r in selected}, {"A", "D", "R"}, (partition, family, shape))
             for row in rows:
@@ -40,6 +86,56 @@ class RecordIdBoundaryTests(unittest.TestCase):
         for version, digest in ((17, "a13af8a9773195adc0f8dee2a2ef0aa53a838158d876748b03a26cdfbb3a173a"),
                                 (18, "5a638e5ff857d43c918a8840867c72d6d322f097964b8f946a5f4e310dac2dc6")):
             self.assertEqual(hashlib.sha256((root / api.HISTORICAL_CONTRACTS[version]).read_bytes()).hexdigest(), digest)
+
+    def test_unterminated_suffix_cells_own_delimiters_and_preserve_previous_corpus(self):
+        pins = {"dev": "a88025bd7c995e3633738debf8b8bab45c8c7232bf222a4d72a9af36fc67ca59",
+                "test": "133f8452d01fd517c77087e539ba9dc253e30a1886668bfab3e1631cc9ff6c32"}
+        for partition in api.PARTITIONS:
+            self.assertEqual(hashlib.sha256(api.corpus_bytes(api.records_as_of(25, api.generate(partition)))).hexdigest(), pins[partition])
+            rows = [r for r in cells.records(api, partition) if r.surface.startswith("recordids_boundary_unterminated_")]
+            self.assertEqual(len(rows), 810)
+            for row in rows:
+                value = (row.gold or row.decoys)[0].value
+                self.assertIn("É", value)
+                self.assertTrue(any(d in value for d in (";", ",", "\\n")))
+                if row.layer != "D":
+                    self.assertEqual(len(row.gold), 2 if row.layer == "R" else 1)
+                if not row.surface.endswith("_eof"):
+                    self.assertTrue(any(d.label == "public_column" for d in row.decoys))
+
+    def test_private_key_suffixes_have_separate_public_counterweights_and_frozen_v26(self):
+        pins = {"dev": "0d9beb37228837d361ef45aec59556fb73ae483d89d56aaa5cd8dfdaaac62959",
+                "test": "7daf9d5d40fe74152cfa773166b9143e54340f92ad67fd09031d44ea0f941086"}
+        for partition in api.PARTITIONS:
+            self.assertEqual(hashlib.sha256(api.corpus_bytes(api.records_as_of(26, api.generate(partition)))).hexdigest(), pins[partition])
+            rows = [r for r in cells.records(api, partition) if r.surface.startswith("recordids_boundary_private_keys_")]
+            self.assertEqual(len(rows), 1863)
+            self.assertEqual({r.layer for r in rows}, {"A", "D", "R"})
+            for row in rows:
+                self.assertTrue(any(d.label == "public_column" for d in row.decoys))
+                spans = row.gold or tuple(d for d in row.decoys if d.label == "public_reference")
+                self.assertTrue(any("=" in span.value or "ID:" in span.value or "private_code" in span.value for span in spans))
+                if row.gold:
+                    self.assertEqual(len(row.gold), 2 if row.layer == "R" else 1)
+                    self.assertLess(row.gold[-1].end, row.decoys[-1].start)
+                if row.surface.endswith("_record"):
+                    self.assertIn("\npublic_version=", row.text)
+                else:
+                    text = row.text if row.layer != "R" else row.text.split("\n", 1)[1]
+                    parsed = json.loads(text)
+                    while "payload" in parsed:
+                        parsed = json.loads(parsed["payload"])
+                    self.assertIn("public_version", parsed)
+                    self.assertIn("note", parsed)
+
+    def test_quoted_private_keys_do_not_borrow_quotes_from_prior_public_fields(self):
+        for partition in api.PARTITIONS:
+            rows = api.generate(partition)
+            selected = [r for r in rows if r.surface == "recordids_boundary_private_keys_quoted_key_record"]
+            self.assertEqual(len(selected), 90)
+            self.assertEqual({r.layer for r in selected}, {"A", "D", "R"})
+            self.assertTrue(any("format_hint='quote character:" in r.text for r in selected))
+            self.assertTrue(all('"private_code":' in (r.gold or r.decoys)[0].value for r in selected))
 
     def test_terminal_internal_and_quoted_punctuation_own_different_bytes(self):
         for partition in api.PARTITIONS:
@@ -124,7 +220,11 @@ class RecordIdBoundaryTests(unittest.TestCase):
                         self.assertEqual({r.layer for r in selected}, {"A", "D", "R"})
                         for row in selected:
                             spans = row.gold if row.gold else row.decoys
-                            self.assertTrue(spans[0].value.startswith("\n" if newline == "lf" else "\r\n"))
+                            if closure == "closed":
+                                self.assertTrue(spans[0].value.startswith("\n" if newline == "lf" else "\r\n"))
+                            else:
+                                self.assertFalse(spans[0].value.startswith(("\n", "\r")))
+                                self.assertIn("\npublic_version=", row.text)
                             scalar = row.gold[-1] if row.gold else row.decoys[0]
                             self.assertEqual(row.text.encode()[scalar.start - 1:scalar.start], b'"')
                             if row.gold:
