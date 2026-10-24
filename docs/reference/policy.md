@@ -453,12 +453,39 @@ emitted. This guard sees text outside `capture_groups`; an invalid guard
 regex fails pipeline assembly. It is unavailable in
 `[[policy.custom_recognizers]]`.
 
+Regex rulepacks may set `reject_unquoted_capture_regex` in the same context.
+This guard checks the original captured value in the default `grouped` mode,
+or the complete owned value in `field_owned` mode, only when its first character is not immediately preceded by a single or double
+quote. Quotes on a field name or prose label do not exempt the value. It uses
+the same audit veto path and assembly-time regex validation. Setting it on a
+non-regex matcher produces a typed rulepack error. The person-linked
+ID rules use it to reject unquoted alphabetic placeholders and JSON keywords,
+while retaining numeric scalars and quoted opaque alphabetic identifiers.
+
 Regex rulepacks may also set `complete_labelled_value = true` under
 `[recognizers.match]` when a labelled identifier's captured value can continue
 through adjacent groups. The scanner protects the complete value run and
 records a typed `labelled_value_scan_reason` for a date boundary, field
 boundary, other-class boundary, or a value over four groups or 40 bytes.
-Those limits are audit signals, not reasons to leave a suffix raw. The setting
+Those limits are audit signals, not reasons to leave a suffix raw.
+
+With `complete_labelled_value = true`, the optional typed
+`labelled_value_mode = "field_owned"` selects label-owned field scanning. It
+protects a complete quoted scalar, including Unicode and raw JSON escapes,
+and stops unquoted grouped values before an adjacent field assignment. The
+quoted grammar recognizes single/triple delimiters and doubled quotes. Complete
+multiline scalars remain whole; every close search is bounded by its enclosing
+serialized string. Unclassified quoting retains nonempty private ownership.
+The unquoted guard judges that entire bounded value. A rejected placeholder leaves
+the next cue available for matching. An unterminated value ends at the nearest
+enclosing serialized string close (excluded, with escape depth preserved),
+unescaped LF/CRLF/CR record boundary, or input end. Assignments and container
+punctuation inside the unfinished value remain private. Escaped line breaks
+remain content; ambiguous public-looking text may also be protected. The bundled
+CRM/HR identifier rules opt into this mode; other complete-value rules retain
+the default `"grouped"` mode.
+
+The setting
 is rulepack-only; `[[policy.custom_recognizers]]` has no equivalent field. See
 [labelled identifiers](../explanation/detection/labelled-identifiers.md).
 

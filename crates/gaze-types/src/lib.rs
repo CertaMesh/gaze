@@ -285,6 +285,33 @@ impl CollisionMembership {
 }
 
 impl PiiClass {
+    /// Whether a value meets the existing manifest-repeat precision floor.
+    ///
+    /// The caller supplies the pipeline-normalized value. This pure query does
+    /// not normalize, choose a pattern, or strip content wrappers. Non-family
+    /// ASCII digits with only whitespace and `-./` separators need six digits;
+    /// collision-family and other values need four non-whitespace characters.
+    pub fn clears_repeat_floor(&self, normalized_value: &str) -> bool {
+        let digit_run = self.as_family_name().is_none()
+            && normalized_value.chars().any(|ch| ch.is_ascii_digit())
+            && normalized_value
+                .chars()
+                .all(|ch| ch.is_ascii_digit() || ch.is_whitespace() || "-./".contains(ch));
+        if digit_run {
+            normalized_value
+                .chars()
+                .filter(char::is_ascii_digit)
+                .count()
+                >= 6
+        } else {
+            normalized_value
+                .chars()
+                .filter(|ch| !ch.is_whitespace())
+                .count()
+                >= 4
+        }
+    }
+
     /// Parses a policy class name into the shared class vocabulary.
     pub fn from_policy_name(input: &str) -> Option<Self> {
         let trimmed = input.trim();
@@ -716,6 +743,18 @@ impl ValidatorFailReason {
 /// Field separators that the bundled labelled identifier rules must all accept.
 pub const LABELLED_FIELD_CONNECTORS: &[char] = &[':', '=', '|', '\t', ',', ';', '-'];
 
+/// Ownership contract for completing a labelled regex value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum LabelledValueMode {
+    /// Preserve the legacy identifier-group and cross-recognizer arbitration contract.
+    #[default]
+    Grouped,
+    /// An explicit field owns its value separately from following assignments.
+    FieldOwned,
+}
+
 /// Why a labelled identifier scan stopped or exceeded its usual precision bound.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -729,6 +768,30 @@ pub enum LabelledValueScanReason {
     LabelBoundary,
     /// A different recognizer claims the following value.
     OtherClassBoundary,
+    /// Raw quote delimiters exceed eight JSON serialization wrappers; the tail is owned.
+    SerializationDepthExceeded,
+    /// Quote delimiters are inconsistent or unclosed; the remaining tail is owned.
+    UncertainQuoteBoundary,
+    /// A repeat was protected from a conservative typed prefix seed.
+    UncertainRepeatPrefix,
+}
+
+/// How an explicitly owned scalar licenses a repeat seed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum LabelledValueRepeatSeedKind {
+    /// Preserve the scalar's exact whitespace fringes as well as ordinary variants.
+    ExactScalar,
+    /// Extra protection from an uncertain prefix; the whole value remains owned.
+    UncertainPrefix,
+}
+
+/// Repeat evidence in the same byte coordinates as its candidate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelledValueRepeatSeed {
+    pub span: Range<usize>,
+    pub kind: LabelledValueRepeatSeedKind,
 }
 
 /// Typed validator outcome used by the pre-resolver validator-veto phase.
@@ -4684,6 +4747,8 @@ pub struct Candidate {
     pub labelled_value_scan_reason: Option<LabelledValueScanReason>,
     /// End of the original labelled-value capture before extension, for cross-class trimming.
     pub labelled_value_capture_end: Option<usize>,
+    /// Optional field-owned scalar or conservative-prefix repeat evidence.
+    pub labelled_value_repeat_seed: Option<LabelledValueRepeatSeed>,
     /// The recognizer's match guard vetoed the original capture.
     pub regex_guard_rejected: bool,
 }
@@ -4721,6 +4786,7 @@ impl Candidate {
             validator_fail_reason: None,
             labelled_value_scan_reason: None,
             labelled_value_capture_end: None,
+            labelled_value_repeat_seed: None,
             regex_guard_rejected: false,
         }
     }

@@ -47,15 +47,6 @@ use crate::normalize::normalize;
 /// Recognizer id, source label and audit stage of a swept copy.
 pub(crate) const SWEEP_ID: &str = "manifest_sweep";
 
-/// Precision floors, one per [`ValueShape`]. Whole values below their floor
-/// are left to their own recognizers.
-const MIN_VALUE_CHARS: usize = 4;
-/// A digit run needs this many digits. Short numbers (a four-digit AT/CH
-/// postcode, a bare five-digit postal code) are found only through the cue or
-/// city next to them, and that anchor is their whole precision: bare `\d{4}`
-/// is 19 % precise. Copying the digits alone would tokenize years and room
-/// numbers (`2024 Neuchâtel` then `Im Jahr 2024`).
-const MIN_DIGIT_RUN: usize = 6;
 /// Name parts need at least this many letters.
 const MIN_PART_LETTERS: usize = 3;
 /// Runs of parts are built only for names of at most this many parts, which
@@ -199,6 +190,13 @@ pub(crate) struct SweepSource {
     pub(crate) family: String,
     pub(crate) class: PiiClass,
     pub(crate) raw: String,
+    pub(crate) repeat_seed: Option<RepeatSeed>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub(crate) struct RepeatSeed {
+    pub(crate) raw: String,
+    pub(crate) kind: gaze_types::LabelledValueRepeatSeedKind,
 }
 
 /// How a swept copy relates to the value it was found from. Audit rows carry
@@ -211,6 +209,8 @@ pub(crate) enum SweepLink {
     Variant,
     /// A part, or a run of parts, of a multi-word name.
     Part,
+    /// A conservative prefix of a field-owned value, not its complete manifest raw.
+    UncertainPrefix,
 }
 
 impl SweepLink {
@@ -219,6 +219,7 @@ impl SweepLink {
             Self::Exact => "manifest_sweep:exact",
             Self::Variant => "manifest_sweep:variant",
             Self::Part => "manifest_sweep:part",
+            Self::UncertainPrefix => "manifest_sweep:uncertain_prefix",
         }
     }
 }
@@ -252,6 +253,10 @@ impl SweepHit {
             Vec::new(),
         );
         candidate.source_recognizer_ids = vec![SWEEP_ID.to_string()];
+        if self.link == SweepLink::UncertainPrefix {
+            candidate.labelled_value_scan_reason =
+                Some(gaze_types::LabelledValueScanReason::UncertainRepeatPrefix);
+        }
         // A copy of a rule-found value is itself rule evidence.
         candidate.with_evidence(EvidenceKind::Rule)
     }
@@ -392,6 +397,7 @@ impl SweepMatcher {
         }
         let link = match link {
             SweepLink::Part => SweepLink::Part,
+            SweepLink::UncertainPrefix => SweepLink::UncertainPrefix,
             _ if normalize(&source.raw).text == text[span.clone()] => SweepLink::Exact,
             _ => SweepLink::Variant,
         };
@@ -462,14 +468,13 @@ pub(crate) fn select(mut hits: Vec<SweepHit>) -> Vec<SweepHit> {
 /// was found with; each variant now owns its floor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ValueShape {
-    /// A collision-family value: byte-exact, at least [`MIN_VALUE_CHARS`].
+    /// A collision-family value: byte-exact.
     Family,
-    /// Digits and separators only: folded, at least [`MIN_DIGIT_RUN`] digits.
+    /// Digits and separators only: folded.
     DigitRun,
-    /// One alphabetic word: its spellings, at least [`MIN_VALUE_CHARS`].
+    /// One alphabetic word: its spellings.
     Word,
-    /// Anything else: folded, at least [`MIN_VALUE_CHARS`] non-space
-    /// characters, plus title-case parts of a `Name`.
+    /// Anything else: folded, plus title-case parts of a `Name`.
     MultiWord,
 }
 
@@ -489,15 +494,6 @@ impl ValueShape {
             Self::MultiWord
         }
     }
-
-    fn clears_floor(self, value: &str) -> bool {
-        match self {
-            Self::DigitRun => value.chars().filter(char::is_ascii_digit).count() >= MIN_DIGIT_RUN,
-            Self::Family | Self::Word | Self::MultiWord => {
-                value.chars().filter(|ch| !ch.is_whitespace()).count() >= MIN_VALUE_CHARS
-            }
-        }
-    }
 }
 
 fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Pattern>) {
@@ -512,7 +508,7 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
             link,
         })
     };
-    if shape.clears_floor(value) {
+    if source.class.clears_repeat_floor(value) {
         match shape {
             ValueShape::Family => push(PatternKind::Exact, value.to_string(), SweepLink::Exact),
             ValueShape::Word => {
@@ -522,6 +518,29 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
             }
             ValueShape::DigitRun | ValueShape::MultiWord => {
                 push(PatternKind::Folded, fold(value).text, SweepLink::Exact)
+            }
+        }
+    }
+    if let Some(seed) = &source.repeat_seed {
+        let raw = normalize(&seed.raw).text;
+        let body = raw.trim();
+        if source.class.clears_repeat_floor(body) {
+            let uncertain = matches!(
+                seed.kind,
+                gaze_types::LabelledValueRepeatSeedKind::UncertainPrefix
+            );
+            let link = if uncertain {
+                SweepLink::UncertainPrefix
+            } else {
+                SweepLink::Exact
+            };
+            if uncertain {
+                push(PatternKind::Folded, fold(body).text, link);
+            }
+            // Exact raw scalar bytes retain leading/trailing whitespace. The
+            // floor is still evaluated on the body, never on those fringes.
+            if raw != value {
+                push(PatternKind::Exact, raw, link);
             }
         }
     }
@@ -794,6 +813,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Name,
             raw: raw.into(),
+            repeat_seed: None,
         }
     }
 
@@ -873,6 +893,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::family("id"),
             raw: "AB12-CD34".into(),
+            repeat_seed: None,
         };
         assert_eq!(found(vec![family.clone()], "x AB12-CD34 y"), ["AB12-CD34"]);
         assert!(found(vec![family], "x ab12-cd34 y").is_empty());
@@ -908,12 +929,14 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Custom("postal_code".into()),
             raw: "2024".into(),
+            repeat_seed: None,
         };
         assert!(SweepMatcher::build(vec![postcode]).unwrap().is_none());
         let long = SweepSource {
             family: "counter".into(),
             class: PiiClass::Custom("id".into()),
             raw: "123 456".into(),
+            repeat_seed: None,
         };
         assert_eq!(found(vec![long], "ref 123\n456 ok"), ["123\n456"]);
     }
@@ -938,8 +961,41 @@ mod tests {
             ValueShape::of(&PiiClass::family("id"), "2024"),
             ValueShape::Family
         );
-        assert!(!ValueShape::DigitRun.clears_floor("10115"));
-        assert!(ValueShape::DigitRun.clears_floor("101 150"));
+        assert!(!custom.clears_repeat_floor("10115"));
+        assert!(custom.clears_repeat_floor("101 150"));
+    }
+
+    #[test]
+    fn repeat_floor_independent_truth_table() {
+        let ordinary = PiiClass::custom("synthetic_identifier").unwrap();
+        let family = PiiClass::family("synthetic_identifier");
+        for (body, ordinary_expected, family_expected) in [
+            ("", false, false),
+            ("   ", false, false),
+            ("12345", false, true),
+            ("123456", true, true),
+            ("12-3./45", false, true),
+            ("12-3./456", true, true),
+            ("12 345", false, true),
+            ("12\u{a0}3456", true, true),
+            ("１２３４５", true, true),
+            ("١٢٣٤٥", true, true),
+            ("ABC", false, false),
+            ("ABCD", true, true),
+            ("A B C", false, false),
+            ("A\u{202f}B C D", true, true),
+        ] {
+            assert_eq!(
+                ordinary.clears_repeat_floor(body),
+                ordinary_expected,
+                "ordinary {body:?}"
+            );
+            assert_eq!(
+                family.clears_repeat_floor(body),
+                family_expected,
+                "family {body:?}"
+            );
+        }
     }
 
     #[test]
@@ -948,6 +1004,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Name,
             raw: "KOWALSKI".into(),
+            repeat_seed: None,
         };
         assert_eq!(found(vec![source.clone()], "x KOWALSKI y"), ["KOWALSKI"]);
         assert_eq!(found(vec![source], "x Kowalski y"), ["Kowalski"]);
@@ -997,6 +1054,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Name,
             raw: "Kowalski".into(),
+            repeat_seed: None,
         };
         assert_eq!(found(vec![single], "x KOWALSKI y"), ["KOWALSKI"]);
     }
@@ -1025,6 +1083,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Custom("id".into()),
             raw: "AB12CD".into(),
+            repeat_seed: None,
         };
         assert_eq!(found(vec![id], "x AB12CD-extra y"), ["AB12CD"]);
     }
@@ -1146,6 +1205,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Name,
             raw: "GitHub".into(),
+            repeat_seed: None,
         };
         assert!(found(vec![hub.clone()], "GITHUB outage").is_empty());
         assert_eq!(found(vec![hub], "GitHub outage"), ["GitHub"]);
@@ -1177,6 +1237,7 @@ mod tests {
             family: "counter".into(),
             class: PiiClass::Custom("id".into()),
             raw: format!("ID-{i:08}"),
+            repeat_seed: None,
         });
         assert_eq!(
             SweepMatcher::build(sources).err(),

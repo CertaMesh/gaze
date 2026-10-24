@@ -174,7 +174,17 @@ fn freeze(
         if let Some(emission) = node.family_emission {
             family_emissions.insert((span.start, span.end), emission);
         }
-        selected.push(node.candidate.with_span(span));
+        let mut candidate = node.candidate;
+        if let Some(seed) = &mut candidate.labelled_value_repeat_seed {
+            let mapped = map_span(&seed.span, normalized, raw)?;
+            if mapped.start != span.start || mapped.end > span.end {
+                return Err(super::clean_to_raw_mapping_error(
+                    "repeat seed exceeds owned value",
+                ));
+            }
+            seed.span = mapped;
+        }
+        selected.push(candidate.with_span(span));
     }
     Ok(selected)
 }

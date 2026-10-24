@@ -41,3 +41,40 @@ hand-written probes.
 See the [fallback inventory](../../reference/redaction-classes.md#embedded-recognizers)
 and [policy reference](../../reference/policy.md). `complete_labelled_value` is
 available to external rulepacks, not `[[policy.custom_recognizers]]`.
+
+The CRM/HR identifier rules select the typed `field_owned` mode. A label owns
+the complete adjacent value: quoted scalars keep every raw Unicode and
+escape byte, while unquoted grouped identifiers stop before another field
+assignment. Each personal field supplies its own token and repeat seed; a public
+field stays outside the prior value. The unquoted-placeholder guard judges that
+complete bounded value, and rejection leaves later cues available for matching.
+Single and triple delimiters recognize doubled quote content and complete
+multiline values. Every close search is bounded by the enclosing serialized
+string; later public apostrophes cannot close the private scalar. Unclassified
+quote runs retain nonempty private ownership through the safe boundary.
+JSON record-separator escapes preserve the following person-label cue. An absent
+value cannot consume the enclosing JSON's later public fields.
+Raw line breaks inside a verified quoted CSV cell or SQL literal stay private
+content, including lines before the personal label. An earlier record can
+precede the SQL statement. CSV backslashes are literal;
+only doubled quotes escape its delimiter. JSON string layers retain exact source
+ranges while the scanner identifies the enclosing cell.
+An unterminated value ends at the nearest enclosing serialized string close
+(excluded, with escape depth preserved), unescaped LF/CRLF/CR record boundary,
+or input end. The line break defines the end of that record; escaped line breaks
+remain content. Key-looking assignments and container punctuation stay private.
+An enclosing JSON string keeps its closing quote and remains parseable. Ambiguous
+public-looking text may also be protected.
+Unicode opening punctuation (`Ps`/`Pi`), paired brackets, typographic quotes,
+backticks, and ASCII angle wrappers use the same ownership contract. JSON `\u`
+escapes, including surrogate pairs, preserve this contract and original-byte
+manifest spans. A valid JSON stream prefix retains ownership when its closing
+quote or final escape is incomplete. Escapes in a prior raw-value repeat cannot
+open an enclosing JSON string. Known
+pairs stop at their matching closer; an unmatched or unknown opener keeps the
+value through the enclosing string or record boundary. Complete CSV-labelled
+cells recognize doubled quotes separately from JSON escapes, including embedded
+quotes inside the private value. SQL literals use their doubled apostrophes.
+Ambiguous quote dialects protect the larger private range, and the manifest
+retains the exact encoded source bytes for restore.
+This opt-in mode leaves the tax/licence/identity scanner described above unchanged.

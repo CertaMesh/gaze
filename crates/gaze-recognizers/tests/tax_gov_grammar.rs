@@ -173,7 +173,6 @@ fn generic_id_cues_do_not_turn_short_numeric_groups_into_national_ids() {
     for input in [
         "Order ID number 12 345 678",
         "Order ID number 1 2 3",
-        "Customer ID number 2024 10 15",
         "Product ID number 12.345.678 EUR",
         "ID card 1/2/3",
         "Invoice id number 4711/2024/03",
@@ -181,6 +180,11 @@ fn generic_id_cues_do_not_turn_short_numeric_groups_into_national_ids() {
     ] {
         assert_eq!(clean(&pipeline, input), input, "{input:?}");
     }
+    // Customer-specific labels establish person linkage even for date-shaped groups.
+    // That authority belongs to the CRM class, never the generic national-ID rule.
+    let cleaned = clean(&pipeline, "Customer ID number 2024 10 15");
+    assert!(cleaned.contains(":Custom:customer_id_1>"), "{cleaned:?}");
+    assert!(!cleaned.contains(":Custom:national_id_"), "{cleaned:?}");
     // The IP recognizer retains ownership instead of a generic ID cue.
     let cleaned = clean(&pipeline, "ID number 10.0.0.1");
     assert!(cleaned.contains(":Custom:ip_address_1>"), "{cleaned:?}");

@@ -1,0 +1,12 @@
+{
+  "source_sha256": "ba013588ddbd02a04749f1809bc86cc76d1565f8f69a6d92475d0f9c0bf4d2d1",
+  "recognizers": [
+    "customer_id.labelled",
+    "employee_id.labelled",
+    "record_id.labelled"
+  ],
+  "files": {
+    "base-core.toml": "302a4dd01d43cfdd8108ab523b1fe53c7ea09843efb9f9b53cee9c592782c1eb",
+    "mechanism.toml": "2cfab3fffe253d3a467463e6ea754c0676ba2135f70a4fdc111187b35399fff5"
+  }
+}

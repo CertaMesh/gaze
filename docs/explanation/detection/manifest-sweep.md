@@ -101,6 +101,42 @@ sub-six-digit runs, earlier proxy fields, model-only sources, honorific names
 made solely of common words, and all-caps surnames in mixed-case names.
 `VAN DER BERG` has no distinctive part and relies on NER for changed-case copies.
 
+## Field-owned scalar repeats
+
+The opt-in CRM/HR scanner preserves every byte of a complete quoted scalar,
+including an initial LF/CRLF and terminal punctuation. Its exact repeat pattern
+includes raw whitespace fringes; ordinary spelling variants retain their previous behavior.
+The existing length floor is evaluated on the value body, never on whitespace.
+
+Nested JSON escaping preserves scalar boundaries at every representable depth.
+Single and triple delimiters recognize doubled quote content and complete
+multiline values. The same enclosing-string bound limits every close search,
+so an apostrophe in a later public field cannot close a private scalar.
+An unclosed or inconsistent value owns through the nearest enclosing serialized
+string close (excluded, with escape depth preserved), unescaped LF/CRLF/CR record
+boundary, or input end. Key-looking private content stays in the repeat pattern;
+a following assignment alone does not establish a public field. Escaped line
+breaks remain value content. The enclosing JSON stays parseable.
+Unclassified quote runs retain nonempty private ownership through the safe boundary.
+An ambiguous tab group can retain a typed conservative prefix seed consisting
+of numeric-bearing groups before its final alphabetic-only group. The whole
+grouped value stays owned. This seed never declares a public boundary or
+includes following label bytes. It can protect extra public prefix copies;
+benchmark evidence reports that cost alongside tab-column costs.
+
+A legacy grouped owner can also retain one earliest prefix before a complete
+next-field cue consumed inside its conservative tail. The original capture and
+whole tail stay protected. Unconsumed cues, prose and record separators never
+license this seed; it does not declare any following namespace public. Its start
+matches the owner, including a leading angle wrapper, and its end precedes the
+separator and label at a UTF-8 boundary.
+
+These seeds belong only to values found by deterministic rules.
+They pass through the existing resolver and policy checks; NER-only values never
+license them. A seed is an offset and kind bound to the minted owner value, so it
+survives later turns and snapshot import without a separate persisted raw-value
+store. Each protected prefix copy gets its own reversible mapping.
+
 ## Token identity and restore
 
 Byte-identical copies reuse the source token. Changed spelling or a name part
@@ -109,19 +145,25 @@ gets a sibling in the same class/family. Each token maps to one exact byte strin
 ## Session state
 
 Entries retain the strongest evidence tier seen. One cached multi-pattern
-matcher rebuilds only when sweepability changes; it uses the existing manifest,
+matcher rebuilds when sweepability or repeat-seed metadata changes; it uses the existing manifest,
 without another raw-value store.
 
-`session_blob` envelope v6 carries evidence. Readers through v0.15 reject it with
-`InvalidSnapshotVersion(6)`. Blobs v5 and older import/restore but cannot seed
-sweeps because their evidence is unknown.
+Ordinary `session_blob` snapshots remain v6 and carry evidence. A snapshot with
+deterministic repeat metadata uses v8; JSON source spelling alone uses v7. A reader
+supporting only v7 or earlier rejects v8 with `InvalidSnapshotVersion(8)`; the new
+reader imports v2–v8.
+Signatures bind the envelope version, and import rejects invalid seed offsets,
+missing deterministic evidence, or seed metadata under an older envelope.
+Blobs v5 and older still import/restore but cannot seed sweeps because their
+evidence is unknown.
 
 ## Audit
 
 Copies record `recognizer_id = manifest_sweep`, `provenance_stage = manifest_sweep`,
 `decided_by = manifest_sweep` (`ConflictTier::ManifestSweep`), and
-`provenance_merged_from = manifest_sweep:exact`, `:variant`, or `:part` (parts/runs).
-Rows never contain source tokens/values. Daemon overwrites the stage with
+`provenance_merged_from = manifest_sweep:exact`, `:variant`, `:part` (parts/runs), or `:uncertain_prefix` (conservative typed prefix seeds).
+Conservative prefix copies also carry `uncertain_repeat_prefix` as their typed
+labelled-value reason. Rows never contain source tokens/values. Daemon overwrites the stage with
 `daemon`; `decided_by` still identifies the sweep.
 
 ## Failure
@@ -134,3 +176,5 @@ return `Error::ManifestSweep`. Never emit unswept text.
 - [Session contract](../core/session-contract.md)
 - [How Gaze works](../how-gaze-works.md)
 - Tests: `crates/gaze/tests/manifest_sweep.rs`, `crates/gaze-cli/tests/manifest_sweep.rs`, `crates/gaze-proxy/tests/manifest_sweep.rs`
+
+A wrapper prepended by the legacy labelled-value scanner does not count toward a conservative prefix seed's precision floor. The recognizer evaluates its normalized prefix body with the same pure floor query as the sweep, then retains the original wrapper bytes and same-start geometry only when eligible. Below-floor prefixes omit the extra seed; the full declaration remains owned and restorable. Original captures that themselves include a wrapper keep their existing behavior.

@@ -50,16 +50,44 @@ process that writes one.
 
 A session now records whether each value was captured inside a JSON string
 literal in its escaped spelling. A manifest that holds such a value exports as
-envelope version 7. Every other manifest still exports as version 6.
+envelope version 7 unless it also carries repeat metadata (version 8).
+Manifests without either metadata path still export as version 6.
 
 - A v0.17 or older reader refuses a v7 blob with `InvalidSnapshotVersion(7)`.
   It fails closed; nothing is restored.
-- This release imports v2 to v7 blobs. Older blobs restore exactly as before;
-  their values read as plain text.
+- This release imports v2 to v8 blobs. Older blobs restore exactly as before;
+  values without spelling metadata read as plain text.
 
 `gaze-proxy` restores such a value into Anthropic `tool_use.input` as the value
 its escapes spell, not with literal backslashes. Text blocks and other
 plain-text destinations still receive the bytes the client sent.
+
+### Action required: conditional `session_blob` version 8
+
+Field-owned record identifiers now retain exact scalar whitespace and conservative
+repeat prefixes for ambiguous tab groups and complete cues
+inside conservative legacy owners. Legacy prefixes never shorten the original
+capture or declare the next field public. Their ordinary length floor is unchanged.
+A signed snapshot with this metadata uses envelope v8. JSON source spelling alone
+retains v7. Ordinary snapshots remain v6. Readers supporting only v7 and earlier
+reject v8 with `InvalidSnapshotVersion(8)`.
+
+Upgrade every reader before importing newly written v8 snapshots. The new reader
+imports and restores v2–v8 without re-tokenizing old manifests. Seed offsets bind
+to the existing owner value. Import rejects invalid geometry, missing deterministic
+evidence, and seed metadata in an older envelope. Whole-value ownership and
+strict restore remain intact. Conservative prefix matches can protect public
+bytes and retain the existing repeat-length floors.
+
+Single and triple ASCII quote delimiters retain raw content, including doubled
+quotes and complete multiline scalars. Every closing-quote search stops before
+the enclosing serialized string's close at every representable depth.
+Unterminated or inconsistent values end at the nearest enclosing serialized
+string close (excluded, with escape depth preserved), an unescaped LF/CRLF/CR
+record boundary, or input end. Key-looking text and container punctuation inside
+the unfinished value remain private; a following assignment alone is no boundary.
+Unclassified quoting keeps nonempty ownership through that safe boundary. Unquoted tab grouping
+retains its existing conservative public-column cost.
 
 ---
 

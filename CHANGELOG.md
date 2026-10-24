@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   retain their keys and punctuation. Generic `token` keys remain outside the
   code-field rule; ambiguous password metadata stays fail-closed. Whole Argon2
   encodings no longer split at an inner postal-code candidate (#824).
+- Protect explicitly labelled customer, employee and person/member record identifiers
+  in English/German prose, JSON and logs with exact reversible value capture.
+  Generic record, order, invoice, issue, build and tracking IDs remain outside these rules.
+
 - Plain-text session files on macOS/Linux clear and verify their extended ACL
   before any restore-key bytes are written, including overwrite replacements.
   ACL failures and unsupported platforms (including Windows) refuse
@@ -63,6 +67,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A new mapping invalidates the cache. Ambiguous runs now return the distinct
   `AmbiguousTokenRun` error, whose display and debug output contain no tokens
   or manifest values.
+- Cross-class identifier trimming discards repeat seeds that extend beyond the
+  shortened owner, preserving fail-closed validation without refusing valid
+  mixed licence and card inputs.
+
+- Preserve first-value repeats when a complete private or unknown cue remains
+  inside a conservative legacy identifier owner, including raw NFC/NFD licence
+  labels. One typed prefix seed retains the owned tail and existing length floor;
+  conservative protection of public prefix copies remains a measured cost.
+
+- Labelled customer, employee and member IDs preserve terminal prose punctuation,
+  stop at complete next-field cues, and protect raw quoted scalars through nested
+  serialization, initial newlines and tab groups. Single and triple delimiters
+  retain doubled quotes and complete multiline values. Unicode opening
+  punctuation, typographic quotes, paired brackets and backticks preserve whole
+  private scalars. Complete CSV cells and enclosing SQL literals distinguish
+  doubled delimiters from JSON escaping. Unpaired scalars inside CSV and SQL
+  literals retain embedded line breaks and literal backslashes. Every close search stays
+  inside its enclosing serialized string, preserving later public fields.
+  JSON record-separator escapes retain the following person-label cue.
+  Unterminated values end before an enclosing serialized string
+  close, at an unescaped record line break, or at input end. Key-looking private
+  suffixes stay protected, and enclosing JSON remains parseable. Unclassified
+  quote runs retain nonempty ownership. Conservative tab prefixes protect repeats
+  under unchanged length floors, including later session turns; their public-byte
+  cost is disclosed in benchmark evidence.
+- Legacy grouped identifier extensions stop at positively recognized complete
+  operational metadata cues without trimming their original regex capture.
+  Private and unknown tails retain conservative ownership until an independent
+  recognizer supplies existing boundary proof. Unicode groups and complete
+  licence connectors retain their original bytes.
 - `gaze-proxy` no longer restores a value captured from a JSON document with its
   JSON escapes. A name captured as `Robert \"Bob\" Smith` from a JSON text block
   or JSON tool result now reaches Anthropic `tool_use.input` as
@@ -97,6 +131,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Signed session snapshots with deterministic repeat-seed metadata use envelope
+  v8. JSON source spelling alone retains v7; ordinary snapshots remain v6. New
+  readers restore v2–v8. Older readers reject v8 rather than silently dropping
+  repeat protection; upgrade all readers before exchanging these snapshots.
 - **Breaking:** context JSON requires a top-level object. Positional arrays of
   zero through six fields are rejected with `PolicyConfig` by
   `gaze clean --context-json` and daemon clean frames. Replace positional input
@@ -105,9 +143,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Snapshot contract.** `Session` records each token's source spelling and
   adds `source_spelling` and `restore_strict_decoded_text_with_provenance`. A
-  manifest holding a JSON-escaped value exports as `session_blob` envelope v7,
-  which v0.17 and older refuse with `InvalidSnapshotVersion(7)`. Other
-  manifests still export as v6.
+  manifest holding a JSON-escaped value exports as `session_blob` envelope v7
+  unless repeat metadata requires v8. Readers on v0.17 and older refuse both
+  versions. Manifests without either metadata path still export as v6.
 
 ### Benchmark
 
