@@ -263,7 +263,7 @@ def test_actual_producers_persist_and_enforce_capture_mode(tmp_path, evidence, m
     header, _ = records._read(record)
     expected = {'version': 1, 'mode': 'cross-check' if flags else 'canonical-once'}
     assert header['capture_protocol'] == expected
-    assert json.loads(capture.read_text())['capture_protocol'] == expected
+    assert json.loads(capture.read_text()).get('capture_protocol') == expected
     # This exercises the common admission used by both gain and mechanism pairs and history.
     if flags:
         pair = evidence['gain'] if pair_name == 'gain' else evidence['mechanisms']['synthetic']
@@ -306,6 +306,10 @@ def test_missing_producer_mode_cannot_be_inferred_from_v1(tmp_path, evidence, lo
     else:
         records._write_rows(rp, [header, *obs])
         rebuild(tmp_path, arm)
+        if location == 'original':
+            captured = json.loads(cp.read_text())
+            captured['capture_protocol'] = specs.CANONICAL_CAPTURE
+            cp.write_text(json.dumps(captured))
     # Admission requires the producer discriminator even with a canonical scoring contract.
     with pytest.raises(cert.CertificationError, match='^noncanonical_capture$'):
         cert.admit_capture(cp, rp, evidence['benchmark_spec'], ROOT)
