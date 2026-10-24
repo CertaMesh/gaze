@@ -651,9 +651,15 @@ mod tests {
                 default_dictionaries(),
             )
             .unwrap();
-        assert_eq!(
-            verify_json_rule_coverage(pipeline, &transaction, &json!(["alice@example.invalid"])),
-            Err(gaze::ProtectionError::Residual),
+        assert!(
+            matches!(
+                verify_json_rule_coverage(
+                    pipeline,
+                    &transaction,
+                    &json!(["alice@example.invalid"])
+                ),
+                Err(DispatchError::Protection(gaze::ProtectionError::Residual)),
+            ),
             "raw Rule repeat accepted by final proof",
         );
         let protected = pipeline
