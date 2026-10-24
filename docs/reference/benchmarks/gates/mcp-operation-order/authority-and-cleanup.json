@@ -7,7 +7,31 @@
     "isolated_worker_owned_copies": true,
     "serial_use_of_one_copy_set": true,
     "copies_hash_verified_and_deleted": true,
-    "local_approval_record_sha256": "3dcf9fd0a41b0dd0fdf0c1b05c53801b9c6ea7e1110bcb407ac57c21efff2f42"
+    "local_approval_record_sha256": "71d463a1f55aa5f2632f3c8a7f1e35f9c69cb01aad8b5773cd8c26c71bd6c3ca",
+    "standing_recapture_authority": "Explicit orchestrator ruling: load_1m < 12 and memory_free_percent >= 60 before each arm",
+    "pre_arm_load_checks": [
+      {
+        "arm": "base",
+        "utc": "2026-10-24T04:01:45.697862+00:00",
+        "load_1m": 4.201171875,
+        "memory_free_percent": 86,
+        "required_load_below": 12,
+        "required_memory_at_least": 60,
+        "allowed": true,
+        "nice": 10
+      },
+      {
+        "arm": "candidate",
+        "utc": "2026-10-24T04:02:32.984833+00:00",
+        "load_1m": 3.95361328125,
+        "memory_free_percent": 85,
+        "required_load_below": 12,
+        "required_memory_at_least": 60,
+        "allowed": true,
+        "nice": 10
+      }
+    ],
+    "captured_specification": "mcp-operation-order-v2"
   },
   "text_reuse": {
     "authority": "Explicit orchestrator ruling, same source-identity rule as PR #869",

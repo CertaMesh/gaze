@@ -1,13 +1,13 @@
 # MCP operation ordering evidence
 
 The native operation arm passes both scored-label contracts v2 and v1. Across
-38 attempted operations per side, annotated leaked bytes fall from 40 to 0.
+44 attempted operations per side, annotated leaked bytes fall from 40 to 0.
 False positives, refusals, exact restores, and valid manifests do not change.
 This is a finite capture of real `PiiEnvelope::dispatch`, not a completeness or
 latency claim.
 
 The base runtime is `f7a794f5668864d3c4336aaa878c6896e92fc009`. The measured
-candidate is `4465da0387a2fe11c007b5abe11c7dd5c58a7e6a`. Each runtime built the
+candidate is `df85d4b8e02705a2ac85b02fa3ec7353d0fb24dd`. Each runtime built the
 same committed host against its own libraries and lockfile, then ran its own
 `gaze setup` policy. Those policies were byte-identical. Both model bundles
 have identical hashes and remained unchanged around both captures.
@@ -20,9 +20,9 @@ counts refer to completed operations. Refused attempts remain in the population.
 | Layer | Attempts per side | Leaked bytes | False-positive bytes | Refusals | Exact restores | Valid manifests |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | A | 6 | 0 → 0 | 0 → 0 | 0 → 0 | 6 → 6 | 6 → 6 |
-| D | 12 | 0 → 0 | 180 → 180 | 2 → 2 | 10 → 10 | 10 → 10 |
-| R | 20 | 40 → 0 | 20 → 20 | 4 → 4 | 16 → 16 | 16 → 16 |
-| Total | 38 | 40 → 0 | 200 → 200 | 6 → 6 | 32 → 32 | 32 → 32 |
+| D | 16 | 0 → 0 | 180 → 180 | 2 → 2 | 14 → 14 | 14 → 14 |
+| R | 22 | 40 → 0 | 30 → 30 | 4 → 4 | 18 → 18 | 18 → 18 |
+| Total | 44 | 40 → 0 | 210 → 210 | 6 → 6 | 38 → 38 | 38 → 38 |
 
 No case becomes newly refused. Restore failures and invalid manifests are zero
 on both sides. The net annotated byte gain is 40 under each contract.
@@ -30,13 +30,15 @@ on both sides. The net annotated byte gain is 40 under each contract.
 The 40 annotated bytes include 8 ASCII spaces and 32 other UTF-8 bytes. Two
 cases exposed only one space each. The separate diagnostic preserves that
 distinction. The frozen fixture and both scoring contracts were not changed
-after inference.
+after either v2 capture. Native specification `mcp-operation-order-v2` adds
+bare-filename counterweights and repeat cases beside those filenames. It
+supersedes the v1 capture; both arms were recaptured together on v2.
 
 ## Text layers are unchanged by construction
 
 C/A/D/R text inference was **not recaptured**. Under the explicit reuse ruling,
 `text-path-identity.json.gz` records matching base and candidate SHA-256 values
-for 2,006 repository inputs outside the isolated MCP change. This includes the
+for 2,005 repository inputs outside the isolated MCP change. This includes the
 core, types, recognizers, assembly, CLI clean code, existing text drivers,
 scorers, corpus inputs, contracts, dependency locks, and build configuration.
 New native tools are not imported by the unchanged text modules.
@@ -46,6 +48,11 @@ change is the verified recognizer-event count from 1 to 3 for discovery. It is
 not part of the C/A/D/R text corpus. The checker rejects any broader fixture
 edit or unclassified file change. The CI input registry separately admits
 exactly the twelve new native evidence paths, with no other registry change.
+Document MCP integration assertions change only inside `cfg(test)`; their
+production prefix is byte-identical. Foreign and malformed placeholders now
+fail before invocation with `Protection(Provenance)`, a deliberate fail-closed
+improvement over adopter-specific errors after invocation. Broad bare filenames
+retain their original behavior.
 
 The four derived scorecards label text layers `unchanged_by_construction` and
 retain the actual native operation counts. They do not invent zero text counts
@@ -80,8 +87,10 @@ archives are replayable without the private paths.
 
 ## Approval and cleanup
 
-The orchestrator and load coordinator explicitly approved these leak-only
-captures alongside #773, outside bench-machine, at nice 10. The runs used
+The original orchestrator and load-coordinator GO approved leak-only captures
+alongside #773, outside bench-machine, at nice 10. The standing recapture ruling
+requires one-minute load below 12 and at least 60% free memory before each arm.
+The recorded base check is 4.20 and 86%; candidate is 3.95 and 85%. The runs used
 worker-owned model copies with distinct file identities from the installed
 bundles. The same immutable copy set served the two arms serially. Hashes were
 checked before and after each capture, then all private copies were deleted.

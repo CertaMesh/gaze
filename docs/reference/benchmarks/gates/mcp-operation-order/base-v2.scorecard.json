@@ -11,8 +11,8 @@
     "D": "unchanged_by_construction",
     "R": "unchanged_by_construction"
   },
-  "path_identity_sha256": "9c76b6af86669ef410070223da8ed4f847536907b6920729352e61f4f855b1d2",
-  "native_capture_sha256": "0678c9475519970fd0a37375a53d676a4d3d9177fa1e004a8a607dc0e8785501",
+  "path_identity_sha256": "c73105f6428a65c14f23b3d12474676d58cefb81f5e849935a5088f23692f9e5",
+  "native_capture_sha256": "c58e09d1460c077dfa4de142b2ac7ab93c6b92ec855f10cdf2ae5e6a67f45a8f",
   "native_operation_layers": {
     "A": {
       "leaked": 0,
@@ -29,19 +29,19 @@
       "false_positive": 180,
       "refused": 2,
       "dispatch_failed": 2,
-      "restore_exact": 10,
+      "restore_exact": 14,
       "restore_failed": 0,
-      "manifest_valid": 10,
+      "manifest_valid": 14,
       "manifest_invalid": 0
     },
     "R": {
       "leaked": 40,
-      "false_positive": 20,
+      "false_positive": 30,
       "refused": 4,
       "dispatch_failed": 4,
-      "restore_exact": 16,
+      "restore_exact": 18,
       "restore_failed": 0,
-      "manifest_valid": 16,
+      "manifest_valid": 18,
       "manifest_invalid": 0
     }
   },
@@ -61,9 +61,9 @@
       "false_positive": 180,
       "refused": 0,
       "dispatch_failed": 0,
-      "restore_exact": 4,
+      "restore_exact": 8,
       "restore_failed": 0,
-      "manifest_valid": 4,
+      "manifest_valid": 8,
       "manifest_invalid": 0
     },
     "number": {
