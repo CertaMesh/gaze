@@ -98,7 +98,9 @@ def test_github_model_family_and_prerelease():
             return [{"ref": "refs/tags/" + t} for t in ["en-1.0", "de-9.0", "en-3.0", "en-4.0", "en-2.0rc1"]]
         tag = url.rsplit("/", 1)[1]
         return {"published_at": "2025-01-01T00:00:00Z", "draft": tag == "en-4.0", "prerelease": tag == "en-3.0"}
-    assert f.check(row, DAY, get)["status"] == "current"
+    result = f.check(row, DAY, get)
+    assert result["status"] == "current"
+    assert result["latest_stable"]["version"] == "en-1.0"
 
 
 def test_github_pagination_limit_is_not_current():

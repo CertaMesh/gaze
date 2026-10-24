@@ -10,10 +10,11 @@ from functools import lru_cache
 import hashlib
 from http.client import HTTPException
 import json
+import os
 from pathlib import Path
 import re
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
 from packaging.requirements import Requirement
@@ -127,6 +128,10 @@ class SourceFailure(Exception):
 @lru_cache(maxsize=1024)
 def fetch(url: str, timeout: float = 8) -> object:
     request = Request(url, headers={"User-Agent": SCHEMA, "Accept": "application/json"})
+    token = os.environ.get("GH_TOKEN")
+    source = urlsplit(url)
+    if token and source.scheme == "https" and source.hostname == "api.github.com":
+        request.add_unredirected_header("Authorization", f"Bearer {token}")
     try:
         with urlopen(request, timeout=timeout) as response:
             data = response.read(16 * 1024 * 1024 + 1)

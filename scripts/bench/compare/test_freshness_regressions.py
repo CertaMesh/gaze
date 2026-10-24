@@ -228,3 +228,56 @@ def test_main_writes_aggregate_with_failed_and_healthy_rows(tmp_path, monkeypatc
     report = __import__('json').loads(output.read_text())
     assert [row['status'] for row in report['rows']] == ['source-failure', 'current']
     assert 'private diagnostic' not in output.read_text()
+
+
+@pytest.mark.parametrize('token,url,authorized', [
+    ('synthetic-token', 'https://api.github.com/repos/synthetic/repo', True),
+    (None, 'https://api.github.com/repos/synthetic/repo', False),
+    ('synthetic-token', 'https://pypi.org/pypi/synthetic-tool/json', False),
+    ('synthetic-token', 'http://api.github.com/repos/synthetic/repo', False),
+    ('synthetic-token', 'https://api.github.com.example.invalid/metadata', False),
+])
+def test_github_token_stays_at_its_boundary(monkeypatch, token, url, authorized):
+    if token is None:
+        monkeypatch.delenv('GH_TOKEN', raising=False)
+    else:
+        monkeypatch.setenv('GH_TOKEN', token)
+    requests = []
+    class Response:
+        def __enter__(self):
+            return self
+        def __exit__(self, *_):
+            pass
+        def read(self, _):
+            return b'{}'
+    def open_request(request, **kwargs):
+        requests.append(request)
+        return Response()
+    monkeypatch.setattr(f, 'urlopen', open_request)
+    f.fetch.cache_clear()
+    assert f.fetch(url) == {}
+    assert requests[0].get_header('Authorization') == ('Bearer synthetic-token' if authorized else None)
+    assert 'synthetic-token' not in requests[0].full_url
+    f.fetch.cache_clear()
+
+
+def test_github_token_is_not_forwarded_on_redirect(monkeypatch):
+    from urllib.request import HTTPRedirectHandler
+    monkeypatch.setenv('GH_TOKEN', 'synthetic-token')
+    class Response:
+        def __enter__(self):
+            return self
+        def __exit__(self, *_):
+            pass
+        def read(self, _):
+            return b'{}'
+    def open_request(request, **kwargs):
+        assert request.get_header('Authorization') == 'Bearer synthetic-token'
+        redirected = HTTPRedirectHandler().redirect_request(request, None, 302, 'redirect', {},
+                                                           'https://example.invalid/metadata')
+        assert redirected.get_header('Authorization') is None
+        return Response()
+    monkeypatch.setattr(f, 'urlopen', open_request)
+    f.fetch.cache_clear()
+    f.fetch('https://api.github.com/repos/synthetic/repo')
+    f.fetch.cache_clear()

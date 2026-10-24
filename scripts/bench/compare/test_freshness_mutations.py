@@ -11,6 +11,8 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 SOURCE = HERE / 'freshness.py'
 PROBES = [
+    ('github-token-scope', 'if token and source.scheme == "https" and source.hostname == "api.github.com":', 'if True:', 'test_freshness_regressions.py::test_github_token_stays_at_its_boundary'),
+    ('github-token-redirect', 'request.add_unredirected_header("Authorization",', 'request.add_header("Authorization",', 'test_freshness_regressions.py::test_github_token_is_not_forwarded_on_redirect'),
     ('prerelease', 'return None if version.is_prerelease or version.is_devrelease else version', 'return version', 'test_freshness.py::test_prerelease_only_newer_ignored'),
     ('yanked', 'if not f.get("yanked", False)', 'if True', 'test_freshness.py::test_yanked_release_ignored'),
     ('missing', 'result.update(status="missing", finding="package, repository or pinned revision not found")', 'result.update(status="current", finding=None)', 'test_freshness.py::test_missing_package'),
