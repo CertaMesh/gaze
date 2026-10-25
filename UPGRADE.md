@@ -29,6 +29,26 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Breaking: trusted snapshot version 8 for private host identifiers
+
+MCP private class and dictionary labels now use domain-separated HMAC identifiers
+under a dedicated random session key. Identical names have stable labels within
+one session and different labels in independent sessions. No original identifier
+is retained for this translation. Record-generated dictionary names receive the
+same protection, including audit recognizer labels.
+
+When this namespace is used, `Session::export` writes a version 8 snapshot with
+the key in the signed trusted payload. Import preserves the key, labels and later
+turn protection. Treat this blob as sensitive owner data, like its original
+values. Do not send it to the model. Upgrade readers before opening version 8
+blobs; earlier readers reject them. Sessions that never use the namespace keep
+the existing version 6 or 7 encoding.
+
+Old snapshots without the key still restore their tokens. MCP dispatch refuses
+old opaque `host_` classes before invocation or audit instead of guessing their
+policy aliases. Restore owner data and start a fresh session to continue those
+legacy conversations. Ordinary old snapshots without opaque classes remain usable.
+
 ### Action required: pass an explicit MCP host context selection
 
 `DispatchHost::dispatch`, `PiiEnvelope::dispatch`, and `dispatch_request` now take

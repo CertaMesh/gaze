@@ -1439,6 +1439,7 @@ dependencies = [
  "gaze-recognizers",
  "gaze-types",
  "hex",
+ "hmac",
  "libc",
  "proptest",
  "pulldown-cmark",

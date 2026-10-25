@@ -20,6 +20,7 @@ CORE = "crates/gaze-mcp-core/src/dispatch.rs"
 PRIVATE = "crates/gaze-mcp-core/src/host_context.rs"
 FRONTEND = "crates/gaze-mcp-rmcp/src/frontend.rs"
 RAW = "crates/gaze/src/context.rs"
+SESSION = "crates/gaze/src/session.rs"
 CONTRACT = ["cargo", "test", "-p", "gaze-mcp-core", "--test", "strict_contract"]
 
 
@@ -35,10 +36,28 @@ def without_exclusions(source):
     return source[:start] + source[end:]
 
 
-def reveal_names(source):
-    start = source.index("fn opaque_name(name: &str) -> String {")
+def replace_opaque_name(source, body):
+    start = source.index("fn opaque_name(")
     end = source.index("\n}\n", start) + 3
-    return source[:start] + "fn opaque_name(name: &str) -> String { name.to_owned() }\n" + source[end:]
+    signature = source[start:source.index("{", start) + 1]
+    return source[:start] + signature + "\n" + body + "\n}\n" + source[end:]
+
+
+def reveal_names(source):
+    return replace_opaque_name(source, "let _ = (session, namespace); Ok(name.to_owned())")
+
+
+def public_hash_names(source):
+    return replace_opaque_name(source,
+        'let _ = (session, namespace); use sha2::{Digest, Sha256}; '
+        'Ok(format!("host_{}", &format!("{:x}", Sha256::digest(name.as_bytes()))[..32]))')
+
+
+def public_record_names(source):
+    start = source.index('        let hidden = if name.starts_with(gaze::RECORD_DICTIONARY_PREFIX) {')
+    body = source.index('{', start) + 1
+    end = source.index('        } else {', body)
+    return source[:body] + '\n            name.clone()\n' + source[end:]
 
 
 def ignore_http(source):
@@ -74,6 +93,22 @@ PROBES = [
      ["cargo", "test", "-p", "gaze-mcp-rmcp", "--all-features", "--lib",
       "frontend::tests::embedded_http_reads_host_middleware_request_extensions", "--", "--exact"],
      "frontend::tests::embedded_http_reads_host_middleware_request_extensions"),
+    ("public-hash-identifiers", PRIVATE, public_hash_names,
+     CONTRACT + ["host_context_private_labels_are_session_scoped_and_defeat_public_hash_guesses"],
+     "host_context::host_context_private_labels_are_session_scoped_and_defeat_public_hash_guesses"),
+    ("public-record-identifiers", PRIVATE, public_record_names,
+     CONTRACT + ["host_context_record_dictionary_identifiers_defeat_public_hash_guesses"],
+     "host_context::host_context_record_dictionary_identifiers_defeat_public_hash_guesses"),
+    ("omit-snapshot-opaque-key", SESSION,
+     lambda source: replace(source, "            opaque_identifier_key,\n            scope:",
+                            "            opaque_identifier_key: { drop(opaque_identifier_key); None },\n            scope:"),
+     CONTRACT + ["host_context_private_labels_survive_trusted_snapshot_import"],
+     "host_context::host_context_private_labels_survive_trusted_snapshot_import"),
+    ("ignore-legacy-opaque-key", CORE,
+     lambda source: replace(source, "crate::host_context::validate_session(self.session)?;",
+                            "let _ = crate::host_context::validate_session(self.session);"),
+     CONTRACT + ["host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed"],
+     "host_context::host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed"),
 ]
 
 

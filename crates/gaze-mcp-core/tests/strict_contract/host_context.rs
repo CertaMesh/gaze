@@ -569,3 +569,198 @@ async fn host_context_untrusted_invocation_protects_responses_without_a_guess_or
         }
     }
 }
+
+async fn private_identifier_call(
+    session: &Session,
+    dictionary: &str,
+    class: Option<&str>,
+    selection: bool,
+) -> Result<ToolResponse, DispatchError> {
+    let mut raw = json!({"dictionaries":{dictionary:{"terms":[KNOWN]}}});
+    if let Some(name) = class {
+        raw["class_map"] = json!({dictionary:format!("custom:{name}")});
+    }
+    let selection = if selection {
+        HostContextSelection::present(raw.to_string())
+    } else {
+        HostContextSelection::Absent
+    };
+    private_identifier_dispatch(session, class, selection, Capture::default()).await
+}
+
+async fn private_identifier_dispatch(
+    session: &Session,
+    class: Option<&str>,
+    selection: HostContextSelection,
+    logs: Capture,
+) -> Result<ToolResponse, DispatchError> {
+    let store = PrivateStore(logs.clone());
+    let registry = registry(
+        &Store::default(),
+        Default::default(),
+        Some(json!(KNOWN)),
+        false,
+        false,
+    );
+    let mut policy = host_policy();
+    policy.rules = match class {
+        Some(name) => vec![
+            gaze::RuleSpec::Class {
+                class: PiiClass::Custom(name.into()),
+                action: Action::Tokenize,
+            },
+            gaze::RuleSpec::Default {
+                action: Action::Preserve,
+            },
+        ],
+        None => vec![gaze::RuleSpec::Default {
+            action: Action::Tokenize,
+        }],
+    };
+    let context = gaze::Context::from_json_str("{}").unwrap();
+    let locales = gaze::LocaleChain::from(&[gaze::LocaleTag::Global][..]);
+    let pipeline = gaze_assembly::build_pipeline(&policy, &context, &[], &locales, None)
+        .unwrap()
+        .with_redaction_logger(logs);
+    PiiEnvelope::new(
+        &registry,
+        &Auth,
+        &store,
+        &pipeline,
+        session,
+        locales.as_slice(),
+        &SessionIdPolicy::default_strict(),
+    )
+    .with_context_policy(&policy, &[])
+    .dispatch(&Principal::new("agent"), "test", json!({}), None, selection)
+    .await
+}
+
+#[tokio::test]
+async fn host_context_private_labels_are_session_scoped_and_defeat_public_hash_guesses() {
+    use sha2::{Digest, Sha256};
+    for class in [Some("private_canary_class"), None] {
+        let dictionary = "private_canary_dictionary";
+        let mut classes = Vec::new();
+        for _ in 0..2 {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let first = private_identifier_call(&session, dictionary, class, true)
+                .await
+                .unwrap();
+            assert_ne!(first.payload, json!(KNOWN));
+            assert_eq!(
+                session
+                    .restore_strict_text(first.payload.as_str().unwrap())
+                    .unwrap(),
+                KNOWN
+            );
+            for guess in [dictionary, class.unwrap_or(dictionary)] {
+                let public_digest = format!("{:x}", Sha256::digest(guess.as_bytes()));
+                assert!(
+                    !first.payload.to_string().contains(&public_digest[..32]),
+                    "private identifier was recovered by a public hash guess"
+                );
+            }
+            let later = private_identifier_call(&session, dictionary, class, false)
+                .await
+                .unwrap();
+            assert_eq!(later.payload, first.payload);
+            classes.push(session.snapshot_entries()[0].class.clone());
+        }
+        assert_ne!(
+            classes[0], classes[1],
+            "private labels must not link independent sessions"
+        );
+    }
+}
+
+#[tokio::test]
+async fn host_context_private_labels_survive_trusted_snapshot_import() {
+    for class in [Some("private_canary_class"), None] {
+        let session = Session::new(Scope::Conversation("synthetic-conversation".into())).unwrap();
+        let first = private_identifier_call(&session, "private_canary_dictionary", class, true)
+            .await
+            .unwrap();
+        let blob = session.export().unwrap().into_bytes();
+        assert_eq!(blob[0], 8);
+        let restored = Session::import(blob.into()).unwrap();
+        assert_eq!(
+            restored
+                .restore_strict_text(first.payload.as_str().unwrap())
+                .unwrap(),
+            KNOWN
+        );
+        let later = private_identifier_call(&restored, "private_canary_dictionary", class, false)
+            .await
+            .unwrap();
+        assert_eq!(first.payload, later.payload);
+        assert_eq!(
+            session.snapshot_entries()[0].class,
+            restored.snapshot_entries()[0].class
+        );
+    }
+}
+
+#[tokio::test]
+async fn host_context_record_dictionary_identifiers_defeat_public_hash_guesses() {
+    use sha2::{Digest, Sha256};
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let logs = Capture::default();
+    let class = "private_canary_class";
+    let selection = HostContextSelection::present(
+        json!({
+            "record":{"private_canary_field":KNOWN},
+            "field_map":{"/private_canary_field":format!("custom:{class}")},
+        "record_match_kinds":{format!("custom:{class}"):["exact"]},
+        })
+        .to_string(),
+    );
+    let output = private_identifier_dispatch(&session, Some(class), selection, logs.clone())
+        .await
+        .unwrap();
+    assert_ne!(output.payload, json!(KNOWN));
+    assert_eq!(
+        session
+            .restore_strict_text(output.payload.as_str().unwrap())
+            .unwrap(),
+        KNOWN
+    );
+    let observed = format!("{} {}", output.payload, logs.0.lock().unwrap().join("\n"));
+    assert!(!observed.contains("private_canary"));
+    for guess in [class.to_owned(), format!("custom:{class}")] {
+        let digest = format!("{:x}", Sha256::digest(guess.as_bytes()));
+        assert!(
+            !observed.contains(&digest[..32]),
+            "record metadata disclosed a public identifier digest"
+        );
+    }
+}
+
+#[tokio::test]
+async fn host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed() {
+    use sha2::{Digest, Sha256};
+    let session = Session::new(Scope::Conversation("synthetic-legacy".into())).unwrap();
+    let digest = format!("{:x}", Sha256::digest(b"private_canary_class"));
+    let class = PiiClass::Custom(format!("host_{}", &digest[..32]));
+    let token = session.tokenize(&class, KNOWN).unwrap();
+    let blob = session.export().unwrap().into_bytes();
+    assert_eq!(blob[0], 6);
+    let restored = Session::import(blob.into()).unwrap();
+    assert_eq!(restored.restore_strict_text(&token).unwrap(), KNOWN);
+    for context in [false, true] {
+        let error = private_identifier_call(
+            &restored,
+            "private_canary_dictionary",
+            Some("private_canary_class"),
+            context,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            DispatchError::HostContext(HostContextError::Policy)
+        ));
+        assert!(!restored.has_opaque_identifier_key());
+        assert_eq!(restored.tokens(), vec![token.clone()]);
+    }
+}

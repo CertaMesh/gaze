@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Private MCP class and dictionary labels use session-keyed HMAC identifiers,
+  so public hash guesses cannot recover their names. Trusted snapshot version 8
+  preserves the key for import and later turns. Keyless legacy opaque tokens
+  remain restorable, while MCP dispatch fails closed before invoking tools.
+
 - MCP hosts can supply private per-call record context through an explicit typed
   dispatch input and embedded HTTP request extensions. The shared Context parser
   validates original JSON. Private context protects responses, excludes guesses

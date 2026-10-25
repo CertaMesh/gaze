@@ -251,21 +251,25 @@ impl<'a> PiiEnvelope<'a> {
 
         // Static policy aliases let matched private custom classes remain protected
         // on later calls without retaining a record or context class map.
-        let aliased_pipeline = self.context_policy.map(|(policy, _)| {
-            self.pipeline
-                .clone()
-                .with_class_aliases(&crate::host_context::policy_aliases(policy))
-        });
-        let resident_pipeline = aliased_pipeline.as_ref().unwrap_or(self.pipeline);
+        crate::host_context::validate_session(self.session)?;
         let mut host_context = crate::host_context::parse(host_context)?;
         if host_context.is_some() && descriptor.response_redaction() != ResponseRedaction::Apply {
             return Err(crate::HostContextError::Unsupported.into());
         }
+        let aliased_pipeline = self
+            .context_policy
+            .filter(|_| host_context.is_some() || self.session.has_opaque_identifier_key())
+            .map(|(policy, _)| {
+                let aliases = crate::host_context::policy_aliases(self.session, policy)?;
+                Ok::<_, crate::HostContextError>(self.pipeline.clone().with_class_aliases(&aliases))
+            })
+            .transpose()?;
+        let resident_pipeline = aliased_pipeline.as_ref().unwrap_or(self.pipeline);
         let response_inputs = if let Some(context) = host_context.as_mut() {
             let (policy, rulepacks) = self
                 .context_policy
                 .ok_or(crate::HostContextError::Unsupported)?;
-            let policy = crate::host_context::opaque_context(context, policy);
+            let policy = crate::host_context::opaque_context(self.session, context, policy)?;
             let args = match &request {
                 RequestState::Protected(args) => args,
                 RequestState::Untrusted(args) => args.as_value(),

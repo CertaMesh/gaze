@@ -65,7 +65,25 @@ pub(crate) fn parse(
     }
 }
 
-fn private_class(class: &gaze::PiiClass) -> gaze::PiiClass {
+const CLASS_NAMESPACE: &str = "gaze-mcp/host-context/class/v1";
+const DICTIONARY_NAMESPACE: &str = "gaze-mcp/host-context/dictionary/v1";
+
+pub(crate) fn validate_session(session: &gaze::Session) -> Result<(), HostContextError> {
+    if !session.has_opaque_identifier_key()
+        && session.classes().iter().any(|class| {
+            matches!(class, gaze::PiiClass::Custom(name) if name.strip_prefix("host_")
+            .is_some_and(|id| id.len() == 32 && id.bytes().all(|byte| byte.is_ascii_hexdigit())))
+        })
+    {
+        return Err(HostContextError::Policy);
+    }
+    Ok(())
+}
+
+fn private_class(
+    session: &gaze::Session,
+    class: &gaze::PiiClass,
+) -> Result<gaze::PiiClass, HostContextError> {
     match class {
         gaze::PiiClass::Custom(name)
             if !matches!(
@@ -80,37 +98,49 @@ fn private_class(class: &gaze::PiiClass) -> gaze::PiiClass {
                     | "postal_code"
             ) =>
         {
-            gaze::PiiClass::Custom(opaque_name(name))
+            Ok(gaze::PiiClass::Custom(opaque_name(
+                session,
+                CLASS_NAMESPACE,
+                name,
+            )?))
         }
-        _ => class.clone(),
+        _ => Ok(class.clone()),
     }
 }
 
-fn opaque_name(name: &str) -> String {
-    use sha2::{Digest, Sha256};
-    format!(
-        "host_{}",
-        &format!("{:x}", Sha256::digest(name.as_bytes()))[..32]
-    )
+fn opaque_name(
+    session: &gaze::Session,
+    namespace: &str,
+    name: &str,
+) -> Result<String, HostContextError> {
+    session
+        .opaque_identifier(namespace, name)
+        .map(|id| format!("host_{id}"))
+        .map_err(|_| HostContextError::Policy)
 }
 
 pub(crate) fn policy_aliases(
+    session: &gaze::Session,
     policy: &gaze::Policy,
-) -> std::collections::HashMap<gaze::PiiClass, gaze::PiiClass> {
-    policy
-        .rules
-        .iter()
-        .filter_map(|rule| match rule {
-            gaze::RuleSpec::Class { class, .. } if private_class(class) != *class => {
-                Some((class.clone(), private_class(class)))
+) -> Result<std::collections::HashMap<gaze::PiiClass, gaze::PiiClass>, HostContextError> {
+    let mut aliases = std::collections::HashMap::new();
+    for rule in &policy.rules {
+        if let gaze::RuleSpec::Class { class, .. } = rule {
+            let hidden = private_class(session, class)?;
+            if hidden != *class {
+                aliases.insert(class.clone(), hidden);
             }
-            _ => None,
-        })
-        .collect()
+        }
+    }
+    Ok(aliases)
 }
 
 // Caller-defined identifiers are content too. Keep them out of source ids and tokens.
-pub(crate) fn opaque_context(context: &mut gaze::Context, policy: &gaze::Policy) -> gaze::Policy {
+pub(crate) fn opaque_context(
+    session: &gaze::Session,
+    context: &mut gaze::Context,
+    policy: &gaze::Policy,
+) -> Result<gaze::Policy, HostContextError> {
     let mut policy = policy.clone();
     // Dictionary names without class_map also name their custom class.
     for name in context.dictionaries.keys() {
@@ -122,13 +152,21 @@ pub(crate) fn opaque_context(context: &mut gaze::Context, policy: &gaze::Policy)
     }
     let mut classes = std::collections::HashMap::new();
     for class in context.class_map.values() {
-        let hidden = private_class(class);
+        let hidden = private_class(session, class)?;
         if hidden != *class {
             classes.insert(class.clone(), hidden);
         }
     }
     let original_rules = policy.rules.clone();
     for (original, hidden) in &classes {
+        if let Some(kinds) = context
+            .record_match_kinds
+            .remove(&original.to_canonical_str())
+        {
+            context
+                .record_match_kinds
+                .insert(hidden.to_canonical_str(), kinds);
+        }
         if let Some(action) = original_rules.iter().find_map(|rule| match rule {
             gaze::RuleSpec::Class { class, action } if class == original => Some(*action),
             gaze::RuleSpec::Default { action } => Some(*action),
@@ -147,9 +185,13 @@ pub(crate) fn opaque_context(context: &mut gaze::Context, policy: &gaze::Policy)
     let class_map = std::mem::take(&mut context.class_map);
     for (name, dictionary) in dictionaries {
         let hidden = if name.starts_with(gaze::RECORD_DICTIONARY_PREFIX) {
-            name.clone()
+            format!(
+                "{}{}",
+                gaze::RECORD_DICTIONARY_PREFIX,
+                opaque_name(session, DICTIONARY_NAMESPACE, &name)?
+            )
         } else {
-            opaque_name(&name)
+            opaque_name(session, DICTIONARY_NAMESPACE, &name)?
         };
         if let Some(class) = class_map.get(&name) {
             context
@@ -161,7 +203,7 @@ pub(crate) fn opaque_context(context: &mut gaze::Context, policy: &gaze::Policy)
     // Fields and rejection paths are not detection inputs at this boundary.
     context.fields.clear();
     context.record_value_rejections.clear();
-    policy
+    Ok(policy)
 }
 
 /// Conservative guess exclusion uses the shared record normalization without cues or

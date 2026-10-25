@@ -338,3 +338,10 @@ Keep context out of tool args, schemas, `_meta`, `ToolCtx`, audit payloads, and
 logs. The raw wrapper has redacting Debug and clears its owned buffer on final
 drop. This does not guarantee erasure of allocator or parser copies. The HTTP
 adapter accepts host middleware extensions; ordinary stdio has no private channel.
+
+Private class and dictionary identifiers use domain-separated HMAC labels under
+a random per-session key. They are stable across turns and trusted snapshot
+imports, while independent sessions use unrelated labels. The key is stored only
+in the live session and its signed version 8 sensitive snapshot. Keyless legacy
+opaque classes remain restorable but cannot dispatch tools. See
+[UPGRADE.md](../../UPGRADE.md) for the migration boundary.

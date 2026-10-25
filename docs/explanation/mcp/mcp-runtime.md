@@ -121,7 +121,11 @@ and existing session mappings continue to protect those values.
 Only matched response values persist as Rule evidence. Later turns protect those
 values without retaining the record. Unused values and raw context do not enter the
 session, `ToolCtx`, manifest metadata, or protocol output. Custom context identifiers
-use opaque names in detection metadata. The host retains restore authority.
+use session-keyed HMAC names in detection metadata. A dedicated random key keeps
+labels stable across turns and trusted snapshot imports, with separate domains
+for classes and dictionaries. Version 8 snapshots carry that key in the signed
+owner-only payload. Older keyless snapshots still restore, but MCP dispatch
+refuses their opaque classes before invocation or audit. The host retains restore authority.
 
 Embedded HTTP middleware sets `HostCallContext` in request extensions. Raw context
 in `_meta`, arguments, headers, or provider bodies is never trusted input. Stock
