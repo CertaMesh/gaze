@@ -40,7 +40,7 @@ PROBES = [
     ("response-frame", CLI, 'bytes.len() > self.limit.saturating_sub(self.bytes.len())', "false", "bounded_request_and_response_edges_and_nonterminal_real_v2_frame_ceiling"),
     ("stabilization", CLI, 'before == transaction.semantic_revision()', "true", "late_last_block_revisits_earlier_text_and_oversize_inventory_never_partially_commits"),
     ("restore-generation", CLI, 'r.counter("minimum_manifest_generation")? > live.generation', "false", "restore_limits_generation_and_unknown_tokens_fail_closed"),
-    ("manifest-reservation", CORE, 'if projected > limit {', 'if false {', "session::tests::staged_manifest_budget_refuses_before_mapping_growth_and_commit"),
+    ("manifest-reservation", CORE, 'if projected > limit {', 'if false {', "session::repeat_query_purity_tests::staged_manifest_budget_refuses_before_mapping_growth_and_commit"),
     ("v1-isolation", DAEMON, 'self.v2.contains(&request.session_id)', "false", "invalid_protocol_objects_never_fall_back_to_v1"),
     ("counter-bound", CLI, 'value > MAX_COUNTER', "false", "invalid_protocol_objects_never_fall_back_to_v1"),
     ("payload-cache", CLI, 'raw_bytes(&blocks) > limits.session_cache_bytes', "false", "individual_state_budgets_refuse_before_commit"),
@@ -48,7 +48,7 @@ PROBES = [
     ("session-manifest", CLI, 'manifest > limits.session_manifest_bytes', "false", "individual_state_budgets_refuse_before_commit"),
     ("global-state", CLI, 'state > limits.global_v2_state_bytes', "false", "individual_state_budgets_refuse_before_commit"),
     ("pass-count", CLI, '0..limits.stabilization_passes', "0..8", "capacity_failures_are_atomic_and_do_not_consume_sequences"),
-    ("deterministic-source", CORE, 'if state.deterministic_sweep {', 'if false {', "session::tests::deterministic_transaction_sweep_has_stable_equal_span_family_order"),
+    ("deterministic-source", CORE, 'if state.deterministic_sweep {', 'if false {', "session::repeat_query_purity_tests::deterministic_transaction_sweep_has_stable_equal_span_family_order"),
 
     ("global-manifest", CLI, '> limits.global_manifest_bytes', "> usize::MAX", "individual_state_budgets_refuse_before_commit"),
     ("context", CLI, '.get("context")', '.get("absent_context")', "context_is_validated_on_every_request_and_does_not_carry_unmatched_values"),
