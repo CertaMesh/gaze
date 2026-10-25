@@ -509,10 +509,13 @@ def test_contract_v4_restores_typed_credential_credit() -> None:
 
 @pytest.fixture
 def direct_evidence(tmp_path):
-    """Only committed aggregate JSON and fictional scorer input; no native records."""
+    """Synthetic current-code receipts and fictional scorer input; no native records."""
     from comparison_availability import digest
     report = original_comparison()
     tuned = json.loads(derive_contract_v4.TUNED.read_bytes())
+    tuned["harness_revision"] = "d" * 40
+    tuned["code_sha256"] = {name: render.digest_file(
+        Path(__file__).parent / "tuned_presidio" / name) for name in render.TUNED_CODE}
     text = "TOKEN_A TOKEN_A"
     layers = {layer: [compare.score.Document(
         f"fictional-{layer}", text, "en", "", "synthetic",
@@ -758,3 +761,46 @@ def test_direct_v4_check_rejects_broken_composition(composed_direct_evidence, fa
         tuned_path.write_text(json.dumps(tuned))
     with pytest.raises(ValueError, match=match):
         derive_contract_v4.check(report_path, tuned_path)
+
+
+def test_published_tuned_aggregate_renders_without_history_or_current_tuning_code(monkeypatch):
+    report = derive_contract_v4.REPORT
+    page = report.with_name("competitors.md")
+    before = {path: path.read_bytes() for path in (report, derive_contract_v4.TUNED, page)}
+    digest_file = render.digest_file
+    def no_current_tuning_code(path):
+        assert path.parent.name != "tuned_presidio", "historical check read current tuning code"
+        return digest_file(path)
+    def no_subprocess(*args, **kwargs):
+        raise AssertionError("historical render requires no Git history or inference")
+    monkeypatch.setattr(render, "digest_file", no_current_tuning_code)
+    monkeypatch.setattr(subprocess, "check_output", no_subprocess)
+    monkeypatch.setattr(subprocess, "run", no_subprocess)
+    monkeypatch.setattr(sys, "argv", ["render.py", str(report), "--page", str(page), "--check"])
+    render.main()
+    assert {path: path.read_bytes() for path in before} == before
+
+
+@pytest.mark.parametrize("damage", ["aggregate_bytes", "recorded_hash", "closure_bytes"])
+def test_historical_tuned_closure_refuses_tampering(tmp_path, monkeypatch, damage):
+    path = tmp_path / "presidio-tuned.json"
+    raw = derive_contract_v4.TUNED.read_bytes()
+    if damage == "aggregate_bytes":
+        raw += b" "
+    elif damage == "recorded_hash":
+        tuned = json.loads(raw)
+        tuned["code_sha256"]["tune.py"] = "0" * 64
+        raw = json.dumps(tuned).encode()
+    else:
+        closure = tmp_path / "closure.json"
+        closure.write_bytes(render.HISTORICAL_TUNED_CLOSURE.read_bytes() + b" ")
+        monkeypatch.setattr(render, "HISTORICAL_TUNED_CLOSURE", closure)
+    path.write_bytes(raw)
+    with pytest.raises(render.TunedClosureError, match="^invalid_historical_tuned_closure$"):
+        render.validate_tuned(json.loads(raw), derive_contract_v4.REPORT, tuned_path=path)
+
+
+def test_current_tuned_admission_still_requires_current_code():
+    tuned = json.loads(derive_contract_v4.TUNED.read_bytes())
+    with pytest.raises(ValueError, match=r"tuned_presidio/tune\.py changed"):
+        render.validate_tuned(tuned, derive_contract_v4.REPORT)

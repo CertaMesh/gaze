@@ -409,6 +409,11 @@ Each unit key binds the exact text hash, document ID, language and region, the
 immutable benchmark specification ID, and the actual subject/config/model/runtime
 identity. Changes to current Gaze detector bytes do not change a competitor key while the
 measuring specification remains unchanged.
+Published historical tuned evidence verifies against a committed, content-addressed
+closure of its recorded revision and source hashes, bound to the exact aggregate
+bytes. Rendering needs no historical Git objects. Fresh capture admission still
+requires current source bytes; historical evidence is never relabeled as current.
+
 Runtime identity includes every Python flag, `-X` option and warning option,
 effective integer/encoding limits, and CPU count and affinity used by native
 thread defaults. Capture and tuning refuse randomized hashing or interpreters
