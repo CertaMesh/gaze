@@ -967,3 +967,5 @@ async fn configured_token_reflags_preserve_dispatch_roundtrip_and_manifest_order
 
 #[path = "strict_contract/operation_repeats.rs"]
 mod operation_repeats;
+
+mod host_context;

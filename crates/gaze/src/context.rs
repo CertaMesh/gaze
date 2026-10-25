@@ -571,6 +571,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn raw_context_debug_is_value_free() {
+        let raw: RawContext = serde_json::from_str(
+            r#"{"fields":{"private_canary_key":"private_canary_value"}}"#,
+        ).unwrap();
+        let debug = format!("{raw:?}");
+        assert!(!debug.contains("private_canary_key"));
+        assert!(!debug.contains("private_canary_value"));
+    }
+
+    #[test]
     fn context_requires_an_object_even_when_all_fields_have_defaults() {
         for raw in ["[]", "[{}, {}, {}]", "null", "42", "\"private-value\""] {
             let error = Context::from_json_str(raw).unwrap_err();
