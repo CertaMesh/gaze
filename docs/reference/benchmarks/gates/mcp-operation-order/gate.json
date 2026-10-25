@@ -1,0 +1,294 @@
+{
+  "schema_version": 1,
+  "kind": "mcp-operation-gain-gate-with-unchanged-text",
+  "fresh_text_capture": false,
+  "text_layers": {
+    "C": "unchanged_by_construction",
+    "A": "unchanged_by_construction",
+    "D": "unchanged_by_construction",
+    "R": "unchanged_by_construction"
+  },
+  "path_identity_sha256": "64277a4cebe69cc339e5d79e3bf6fba6111c0237cd77178646106029b303e0ab",
+  "protected_file_count": 2003,
+  "publication_revision": "533bc71add2d0100a7f71ce75b55e277c230cc47",
+  "reuse_authority": "Explicit orchestrator ruling: same source-identity reuse rule as PR #869",
+  "contracts": {
+    "v2": {
+      "verdict": "pass",
+      "native": {
+        "pass": true,
+        "regressions": [],
+        "leaked_removed": 34,
+        "false_positive_added": 0,
+        "net_bytes": 34,
+        "base": {
+          "A": {
+            "leaked": 0,
+            "false_positive": 0,
+            "refused": 0,
+            "dispatch_failed": 0,
+            "restore_exact": 6,
+            "restore_failed": 0,
+            "manifest_valid": 6,
+            "manifest_invalid": 0
+          },
+          "D": {
+            "leaked": 0,
+            "false_positive": 180,
+            "refused": 2,
+            "dispatch_failed": 2,
+            "restore_exact": 68,
+            "restore_failed": 0,
+            "manifest_valid": 68,
+            "manifest_invalid": 0
+          },
+          "R": {
+            "leaked": 40,
+            "false_positive": 40,
+            "refused": 4,
+            "dispatch_failed": 4,
+            "restore_exact": 20,
+            "restore_failed": 0,
+            "manifest_valid": 20,
+            "manifest_invalid": 0
+          }
+        },
+        "candidate": {
+          "A": {
+            "leaked": 0,
+            "false_positive": 0,
+            "refused": 0,
+            "dispatch_failed": 0,
+            "restore_exact": 6,
+            "restore_failed": 0,
+            "manifest_valid": 6,
+            "manifest_invalid": 0
+          },
+          "D": {
+            "leaked": 0,
+            "false_positive": 180,
+            "refused": 2,
+            "dispatch_failed": 2,
+            "restore_exact": 68,
+            "restore_failed": 0,
+            "manifest_valid": 68,
+            "manifest_invalid": 0
+          },
+          "R": {
+            "leaked": 6,
+            "false_positive": 40,
+            "refused": 4,
+            "dispatch_failed": 4,
+            "restore_exact": 20,
+            "restore_failed": 0,
+            "manifest_valid": 20,
+            "manifest_invalid": 0
+          }
+        },
+        "d_counterweights_base": {
+          "text": {
+            "leaked": 0,
+            "false_positive": 0,
+            "refused": 0,
+            "dispatch_failed": 0,
+            "restore_exact": 54,
+            "restore_failed": 0,
+            "manifest_valid": 54,
+            "manifest_invalid": 0
+          },
+          "code": {
+            "leaked": 0,
+            "false_positive": 180,
+            "refused": 0,
+            "dispatch_failed": 0,
+            "restore_exact": 12,
+            "restore_failed": 0,
+            "manifest_valid": 12,
+            "manifest_invalid": 0
+          },
+          "number": {
+            "leaked": 0,
+            "false_positive": 0,
+            "refused": 2,
+            "dispatch_failed": 2,
+            "restore_exact": 2,
+            "restore_failed": 0,
+            "manifest_valid": 2,
+            "manifest_invalid": 0
+          }
+        },
+        "d_counterweights_candidate": {
+          "text": {
+            "leaked": 0,
+            "false_positive": 0,
+            "refused": 0,
+            "dispatch_failed": 0,
+            "restore_exact": 54,
+            "restore_failed": 0,
+            "manifest_valid": 54,
+            "manifest_invalid": 0
+          },
+          "code": {
+            "leaked": 0,
+            "false_positive": 180,
+            "refused": 0,
+            "dispatch_failed": 0,
+            "restore_exact": 12,
+            "restore_failed": 0,
+            "manifest_valid": 12,
+            "manifest_invalid": 0
+          },
+          "number": {
+            "leaked": 0,
+            "false_positive": 0,
+            "refused": 2,
+            "dispatch_failed": 2,
+            "restore_exact": 2,
+            "restore_failed": 0,
+            "manifest_valid": 2,
+            "manifest_invalid": 0
+          }
+        }
+      }
+    },
+    "v1": {
+      "verdict": "pass",
+      "native": {
+        "pass": true,
+        "regressions": [],
+        "leaked_removed": 34,
+        "false_positive_added": 0,
+        "net_bytes": 34,
+        "base": {
+          "A": {
+            "leaked": 0,
+            "false_positive": 0,
+            "refused": 0,
+            "dispatch_failed": 0,
+            "restore_exact": 6,
+            "restore_failed": 0,
+            "manifest_valid": 6,
+            "manifest_invalid": 0
+          },
+          "D": {
+            "leaked": 0,
+            "false_positive": 180,
+            "refused": 2,
+            "dispatch_failed": 2,
+            "restore_exact": 68,
+            "restore_failed": 0,
+            "manifest_valid": 68,
+            "manifest_invalid": 0
+          },
+          "R": {
+            "leaked": 40,
+            "false_positive": 40,
+            "refused": 4,
+            "dispatch_failed": 4,
+            "restore_exact": 20,
+            "restore_failed": 0,
+            "manifest_valid": 20,
+            "manifest_invalid": 0
+          }
+        },
+        "candidate": {
+          "A": {
+            "leaked": 0,
+            "false_positive": 0,
+            "refused": 0,
+            "dispatch_failed": 0,
+            "restore_exact": 6,
+            "restore_failed": 0,
+            "manifest_valid": 6,
+            "manifest_invalid": 0
+          },
+          "D": {
+            "leaked": 0,
+            "false_positive": 180,
+            "refused": 2,
+            "dispatch_failed": 2,
+            "restore_exact": 68,
+            "restore_failed": 0,
+            "manifest_valid": 68,
+            "manifest_invalid": 0
+          },
+          "R": {
+            "leaked": 6,
+            "false_positive": 40,
+            "refused": 4,
+            "dispatch_failed": 4,
+            "restore_exact": 20,
+            "restore_failed": 0,
+            "manifest_valid": 20,
+            "manifest_invalid": 0
+          }
+        },
+        "d_counterweights_base": {
+          "text": {
+            "leaked": 0,
+            "false_positive": 0,
+            "refused": 0,
+            "dispatch_failed": 0,
+            "restore_exact": 54,
+            "restore_failed": 0,
+            "manifest_valid": 54,
+            "manifest_invalid": 0
+          },
+          "code": {
+            "leaked": 0,
+            "false_positive": 180,
+            "refused": 0,
+            "dispatch_failed": 0,
+            "restore_exact": 12,
+            "restore_failed": 0,
+            "manifest_valid": 12,
+            "manifest_invalid": 0
+          },
+          "number": {
+            "leaked": 0,
+            "false_positive": 0,
+            "refused": 2,
+            "dispatch_failed": 2,
+            "restore_exact": 2,
+            "restore_failed": 0,
+            "manifest_valid": 2,
+            "manifest_invalid": 0
+          }
+        },
+        "d_counterweights_candidate": {
+          "text": {
+            "leaked": 0,
+            "false_positive": 0,
+            "refused": 0,
+            "dispatch_failed": 0,
+            "restore_exact": 54,
+            "restore_failed": 0,
+            "manifest_valid": 54,
+            "manifest_invalid": 0
+          },
+          "code": {
+            "leaked": 0,
+            "false_positive": 180,
+            "refused": 0,
+            "dispatch_failed": 0,
+            "restore_exact": 12,
+            "restore_failed": 0,
+            "manifest_valid": 12,
+            "manifest_invalid": 0
+          },
+          "number": {
+            "leaked": 0,
+            "false_positive": 0,
+            "refused": 2,
+            "dispatch_failed": 2,
+            "restore_exact": 2,
+            "restore_failed": 0,
+            "manifest_valid": 2,
+            "manifest_invalid": 0
+          }
+        }
+      }
+    }
+  },
+  "passed": true
+}

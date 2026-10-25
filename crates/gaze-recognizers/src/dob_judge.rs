@@ -115,16 +115,21 @@ impl DobJudgeRecognizer {
     pub(crate) const EVIDENCE: gaze_types::EvidenceKind = gaze_types::EvidenceKind::Learned;
 
     pub fn load(model_dir: &Path, threshold: f32) -> Result<Self, DobJudgeLoadError> {
+        let _constructor = gaze_types::perf_span!("model_constructor_ns");
         if !threshold.is_finite() || threshold <= 0.0 || threshold >= 1.0 {
             return Err(DobJudgeLoadError::Threshold);
         }
         verify_gliner_dob_bundle(model_dir)?;
+        let tokenizer_load = gaze_types::perf_span!("tokenizer_load_ns");
         let tokenizer = tokenizers::Tokenizer::from_file(model_dir.join("tokenizer.json"))
             .map_err(|_| DobJudgeLoadError::Tokenizer)?;
+        drop(tokenizer_load);
+        let model_load = gaze_types::perf_span!("model_load_ns");
         let session = ort::session::Session::builder()
             .map_err(|_| DobJudgeLoadError::Model)?
             .commit_from_file(model_dir.join("model.onnx"))
             .map_err(|_| DobJudgeLoadError::Model)?;
+        drop(model_load);
         Ok(Self {
             class: PiiClass::Custom("birth_date".into()),
             tokenizer,

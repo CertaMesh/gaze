@@ -50,6 +50,9 @@ Tool failures return `isError: true` with a single text frame containing only
 `backend-unavailable`, `backend-failure`, or `internal`. Error payloads and
 source messages are never included, including for future error variants.
 
+Operation expansion-budget refusals return `isError: true` with the single text
+class `resource_limit`, without input values or internal details.
+
 Detailed typed errors and manifest records remain on the trusted side for
 caller control flow and operator diagnostics. They may contain unredacted PII
 and must never be serialized into model-facing transport responses. Manifest

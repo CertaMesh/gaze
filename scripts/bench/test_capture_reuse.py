@@ -136,7 +136,7 @@ class CaptureIdentityTests(unittest.TestCase):
                 hardware = hardware.replace("Flags: synthetic", "Flags: changed")
                 self.assertNotEqual(identity.native_runtime({"detector": library}), original)
 
-    def test_reusable_base_cannot_bypass_existing_fresh_release_admission(self):
+    def test_unverified_base_capture_cannot_bypass_release_admission(self):
         with self.assertRaisesRegex(renderer.RenderError, "run evidence"):
             renderer.history_entry_from_scorecard(
                 {"capture_cache": {}, "cache_replay": False}, version="v0.1.0", machine="synthetic",
@@ -148,6 +148,8 @@ class CaptureIdentityTests(unittest.TestCase):
             (root / "docs/reference/benchmarks").mkdir(parents=True)
             paths = {name: root / name for name in ("detector", "validator", "dataset", "negative", "Cargo.lock")}
             paths["spec"] = root / "docs/reference/benchmarks/README.md"
+            paths["protocol"] = root / runner.benchmark_spec.PROTOCOL
+            paths["protocol"].parent.mkdir(parents=True)
             for path in paths.values():
                 path.write_bytes(b"synthetic")
             model = root / "model"
@@ -166,6 +168,14 @@ class CaptureIdentityTests(unittest.TestCase):
                 read = lambda: runner.observation_cache_key(**inputs)[0]
                 original = read()
                 self.assertIsNotNone(original)
+                self.assertEqual(original.get("build_features"), [])
+                self.assertEqual(original.get("response_validation"), runner.benchmark_spec.CURRENT_VALIDATION)
+                args.manifest_actions = "tokenize"
+                self.assertNotEqual(read(), original)
+                del args.manifest_actions
+                args.cross_check = True
+                self.assertNotEqual(read(), original)
+                args.cross_check = False
                 self.assertEqual(original["binary_sha256"], identity.file_digest(paths["detector"]))
                 self.assertEqual(original["binary_sha256"], original["effective_inputs"]["files"]["detector_binary"])
                 for name, path in paths.items():

@@ -22,7 +22,7 @@ row stays reproducible) and the harness commit, driver and binary digest under
 
     uv run --project scripts/bench python scripts/bench/rescore_past_release.py \\
       --release-root <checkout of the release's measured commit> \\
-      --binary <that checkout>/target/debug/examples/clean_for_bench \\
+      --build \\
       --binary-profile debug \\
       --configs rule-floor-extended,pass2-ner,full-stack-kiji-resolve \\
       --model-env GAZE_KIJI_DISTILBERT_MODEL_DIR=<model-cache>/kiji-distilbert \\
@@ -51,6 +51,11 @@ import dataiku_en_de_gaze_bench as dataiku  # noqa: E402
 import agentic_layers as agentic  # noqa: E402
 import gaze_bench_score as score  # noqa: E402
 import scorecard_record as records  # noqa: E402
+import subject_build
+import benchmark_cache
+import past_capture
+import stage_timing as stages
+import benchmark_spec  # noqa: E402
 import run_no_opf_benchmark as runner  # noqa: E402
 
 HARNESS_ROOT = Path(__file__).resolve().parents[2]
@@ -117,8 +122,13 @@ def model_bundle(value: str) -> dict[str, object]:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--release-root", type=Path, required=True)
-    parser.add_argument("--binary", type=Path, required=True)
+    subject = parser.add_mutually_exclusive_group(required=True)
+    subject.add_argument("--binary", type=Path, help="external binary: exploratory capture only")
+    subject.add_argument("--build", action="store_true", help="build the release subject for certification")
     parser.add_argument("--binary-profile", choices=("debug", "release"), required=True)
+    parser.add_argument("--release-tag", help="exact tag required for verified reuse")
+    parser.add_argument("--cache-dir", type=Path)
+    parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--configs", required=True)
     parser.add_argument("--policy", type=Path, help="policy for the policy-file config")
     parser.add_argument("--agentic-layers", action="store_true", help="measure generated layers too")
@@ -163,6 +173,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> Path:
+    output = args.output.resolve()
+    with stages.session(output.parent / "run-evidence.json", scorecard=output,
+                        record=output.with_name("observations-v1.jsonl.gz")):
+        return _run(args)
+
+
+def _run(args: argparse.Namespace) -> Path:
+    benchmark_spec.require_runtime()
     configs = tuple(c for c in args.configs.split(",") if c)
     if not configs or any("opf" in c.lower() for c in configs):
         raise PastReleaseError("configs must be non-empty and OPF-free")
@@ -192,7 +210,12 @@ def run(args: argparse.Namespace) -> Path:
     ).stdout
     if harness_status.strip():
         raise PastReleaseError(f"harness checkout is dirty: {HARNESS_ROOT}")
-    binary = args.binary.resolve()
+    if args.build:
+        binary, build_receipt = subject_build.build(
+            release_root, configs, release=args.binary_profile == "release", builder=subject_build.cargo_build_binary)
+    else:
+        binary = args.binary.resolve()
+        build_receipt = subject_build.unqualified("external_binary")
     if not binary.is_file():
         raise PastReleaseError(f"release benchmark binary is missing: {binary}")
 
@@ -204,6 +227,9 @@ def run(args: argparse.Namespace) -> Path:
     contract = runner.load_scored_label_contract(HARNESS_ROOT, args.scored_labels)
     dataset_path = runner.repo_path(HARNESS_ROOT, args.dataset)
     dataiku.verify_dataset(dataset_path)
+    loaded_inputs = ({'dataset': _sha256(dataset_path),
+                      'negative_corpus': _sha256(HARNESS_ROOT / runner.NEGATIVE_CORPUS)}
+                     if args.build and args.release_tag else None)
     positives, dataiku_report = dataiku.load_documents(dataset_path)
     negatives, negative_report = runner.load_negative_documents(
         HARNESS_ROOT / runner.NEGATIVE_CORPUS
@@ -217,15 +243,80 @@ def run(args: argparse.Namespace) -> Path:
     documents = score.apply_scored_label_contract(documents, contract)
 
     probe = runner.build_validator_probe(HARNESS_ROOT, release=True)
-    complete_measurements = score.collect_validator_measurements(
-        probe, original_available, (document.uid for document in documents)
-    )
-    measurements = records.filter_measurements(complete_measurements, available)
     metadata, dataset_report = runner.composite_dataset_report(dataiku_report, negative_report)
     prepared = (
         agentic.prepare(HARNESS_ROOT, args.agentic_scored_labels)
         if args.agentic_layers else None
     )
+    parameters = {
+        "profile": "full" if args.max_documents is None else "sampled",
+        "configs": list(configs), "binary_profile": args.binary_profile,
+        "policy_sha256": _sha256(policy) if policy is not None else None,
+        "max_documents": args.max_documents, "sampling_seed": args.seed,
+        "ner_threshold": args.threshold, "warmup_count": args.warmups,
+        "measured_repetitions": 1, "opf": False,
+    }
+    spec = benchmark_spec.resolve(
+        HARNESS_ROOT, corpus_sha256=dataset_report["integrity"]["sha256"], seed=args.seed,
+        available=original_available, prepared=prepared,
+        profile=parameters["profile"], warmups=args.warmups, repetitions=1,
+    )
+    environment = runner.build_no_opf_environment(os.environ)
+    for value in args.model_env:
+        name, path = _key_value(value, "--model-env")
+        environment[name] = str(Path(path).expanduser())
+    # Match the environment run_config actually sends to the policy producer.
+    environment["GAZE_NER_MODEL_DIR"] = str(davlan)
+    environment["GAZE_NER_THRESHOLD"] = str(args.threshold)
+    if policy is not None:
+        environment["GAZE_BENCH_POLICY"] = str(policy)
+    output = args.output.resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output_record = output.with_name("observations-v1.jsonl.gz")
+    cache_dir = runner.observation_cache_dir(HARNESS_ROOT, args.cache_dir)
+    evidence = stages.CURRENT.get()
+
+    def read_key():
+        try:
+            return past_capture.key(
+                harness_root=HARNESS_ROOT, release_root=release_root, args=args,
+                binary=binary, probe=probe, receipt=build_receipt, spec=spec,
+                parameters=parameters, bundles=bundles, environment=environment,
+                document_ids=[document.uid for document in documents]), None
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, agentic.LayerError):
+            return None, "unresolved_release_inputs"
+
+    cache_key, reason = ((None, "explicit_no_cache") if args.no_cache else
+                        (None, "external_binary") if not args.build else read_key())
+    evidence.cache = {"status": "disabled" if cache_key is None else "miss",
+                      "key_sha256": benchmark_cache.key_digest(cache_key) if cache_key else None,
+                      "reason": reason}
+    if cache_key is not None:
+        if loaded_inputs != {name: cache_key['execution']['inputs']['files'][name]
+                             for name in ('dataset', 'negative_corpus')}:
+            raise PastReleaseError('corpus inputs changed after loading')
+        status = benchmark_cache.restore_layers(cache_dir, cache_key, output_record)
+        evidence.cache.update(status="hit" if status == "hit" else "miss", reason=status)
+        if status == "hit":
+            try:
+                candidate = records.rescore(output_record, contract,
+                    prepared.contract if prepared else None, max_workers=1)
+                header, _ = records._read(output_record)
+                past_capture.validate_binding(candidate, header, cache_key, version=args.release_tag)
+                if read_key()[0] != cache_key:
+                    raise ValueError("release_inputs_changed")
+            except (records.RecordError, OSError, ValueError, KeyError, TypeError):
+                evidence.cache.update(status="miss", reason="miss_replay")
+                output_record.unlink(missing_ok=True)
+            else:
+                past_capture.write_key(output.parent, cache_key)
+                runner.write_json(output, candidate)
+                return output
+
+    complete_measurements = score.collect_validator_measurements(
+        probe, original_available, (document.uid for document in documents)
+    )
+    measurements = records.filter_measurements(complete_measurements, available)
     record_writer = records.RecordWriter(
         original_available, complete_measurements,
         corpus_sha256=dataset_report["integrity"]["sha256"], binary=binary,
@@ -233,13 +324,10 @@ def run(args: argparse.Namespace) -> Path:
             [record.to_document() for record in agentic.generate(agentic.PUBLISHED_PARTITION)]
             if prepared is not None else []
         ),
+        capture_protocol=benchmark_spec.capture_protocol(args),
+        response_validation=benchmark_spec.response_validation(args),
         layer_contract=prepared.contract if prepared is not None else None,
     )
-    environment = runner.build_no_opf_environment(os.environ)
-    for value in args.model_env:
-        key, path = _key_value(value, "--model-env")
-        environment[key] = str(Path(path).expanduser())
-    output = args.output.resolve()
     runs = [
         score.run_config(
             release_root,
@@ -270,18 +358,7 @@ def run(args: argparse.Namespace) -> Path:
         dataset_metadata=metadata,
         dataset_report=dataset_report,
         sampling_report=sampling_report,
-        parameters={
-            "profile": "full" if args.max_documents is None else "sampled",
-            "configs": list(configs),
-            "binary_profile": args.binary_profile,
-            "policy_sha256": _sha256(policy) if policy is not None else None,
-            "max_documents": args.max_documents,
-            "sampling_seed": args.seed,
-            "ner_threshold": args.threshold,
-            "warmup_count": args.warmups,
-            "measured_repetitions": 1,
-            "opf": False,
-        },
+        parameters=parameters,
         runs=runs,
         scored_label_contract=score.scored_label_contract_report(contract, documents),
     )
@@ -316,17 +393,29 @@ def run(args: argparse.Namespace) -> Path:
             measured_repetitions=1,
             policy_path=policy,
             configs=configs,
+            source_environment=environment,
             replacing_actions=frozenset(args.manifest_actions.split(",")),
             record_writer=record_writer,
         )
         card["layers"]["gold_validity"] = {
             "C": agentic.gold_validity_digest(documents, measurements)
         }
-    output.parent.mkdir(parents=True, exist_ok=True)
+    card["subject_build"] = build_receipt
+    card["capture_protocol"] = benchmark_spec.capture_protocol(args)
+    card["response_validation"] = benchmark_spec.response_validation(args)
+    card["benchmark_spec"] = spec
+    if cache_key is not None:
+        if read_key()[0] != cache_key or record_writer.binary_sha256 != cache_key["binary_sha256"]:
+            raise PastReleaseError("effective inputs changed during capture")
+        card["capture_cache"] = benchmark_cache.provenance(cache_key)
+        card["release_capture"] = past_capture.provenance(cache_key)
+        past_capture.write_key(output.parent, cache_key)
     card["observation_record"] = record_writer.write(
         output.with_name("observations-v1.jsonl.gz"), card, add_reference=True
     )
     runner.write_json(output, card)
+    if cache_key is not None:
+        runner.store_observations_if_unchanged(cache_dir, cache_key, output_record, read_key)
     return output
 
 
@@ -334,7 +423,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         print(f"rescore_past_release: wrote {run(parse_args(argv))}")
         return 0
-    except (PastReleaseError, runner.CandidateError, score.ScoredLabelContractError) as error:
+    except (PastReleaseError, runner.CandidateError, score.ScoredLabelContractError, benchmark_spec.SpecError) as error:
         sys.stderr.write(f"rescore_past_release: {error}\n")
         return 2
 

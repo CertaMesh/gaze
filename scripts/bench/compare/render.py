@@ -13,6 +13,7 @@ REPO = Path(__file__).resolve().parents[3]
 BENCH = REPO / "scripts/bench"
 import compare  # noqa: E402
 import row_sources  # noqa: E402
+import freshness  # noqa: E402
 from comparison_availability import unavailable_tools  # noqa: E402
 from layer_display import layer_display_name  # noqa: E402
 from markdown_table import table_header  # noqa: E402
@@ -661,9 +662,13 @@ def main() -> None:
     parser.add_argument("report", type=Path)
     parser.add_argument("--page", type=Path, required=True)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--freshness", type=Path, help="optional aggregate freshness sidecar bound to this report")
     args = parser.parse_args()
     report = json.loads(args.report.read_text(encoding="utf-8"))
-    row_sources.protect_inputs(args.page, input_paths(report, args.report))
+    inputs = input_paths(report, args.report)
+    if args.freshness:
+        inputs.append(args.freshness)
+    row_sources.protect_inputs(args.page, inputs)
     validate_current(report, args.report)
     tuned_path = args.report.with_name(TUNED_NAME)
     tuned = None
@@ -671,6 +676,9 @@ def main() -> None:
         tuned = json.loads(tuned_path.read_text(encoding="utf-8"))
         validate_tuned(tuned, args.report)
     page = render(report, args.report.name, tuned, args.report.with_name("release-history.json"))
+    if args.freshness:
+        ledger = freshness.read_for_comparison(args.freshness, args.report)
+        page = check_public(page + "\n" + freshness.markdown(ledger), "competitors.md")
     if args.check:
         if args.page.read_text(encoding="utf-8") != page:
             raise ValueError("competitor page is stale; rerender it")

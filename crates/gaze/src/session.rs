@@ -1149,6 +1149,13 @@ impl<'session> SessionTransaction<'session> {
         record_repeat_seed_in_state(&mut self.staged, family, class, raw, seed);
     }
 
+    pub(crate) fn sweep_matcher_view(&self) -> Result<Option<Arc<SweepMatcher>>> {
+        match &self.staged.sweep_matcher_cache {
+            Some(matcher) => Ok(Some(Arc::clone(matcher))),
+            None => build_sweep_matcher(&self.staged),
+        }
+    }
+
     pub(crate) fn sweep_matcher(&mut self) -> Result<Option<Arc<SweepMatcher>>> {
         if let Some(matcher) = &self.staged.sweep_matcher_cache {
             return Ok(Some(Arc::clone(matcher)));
@@ -5039,5 +5046,53 @@ mod bounded_request_restore_tests {
             .unwrap_err();
         assert_eq!(error, BoundedRestoreError::UnknownToken);
         assert!(!format!("{error:?} {error}").contains(&later));
+    }
+}
+
+#[cfg(test)]
+mod repeat_query_purity_tests {
+    use super::*;
+
+    #[test]
+    fn repeat_query_preserves_entries_evidence_and_matcher_cache() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        session
+            .tokenize(&PiiClass::Name, "Maria Schneider")
+            .unwrap();
+        session.record_evidence(
+            None,
+            &PiiClass::Name,
+            "Maria Schneider",
+            ManifestEvidence::Anchored,
+        );
+        let mut tx = session.begin_transaction();
+        let entries = tx.snapshot_entries();
+        let evidence = tx.staged.evidence_by_value.clone();
+        let pipeline = crate::Pipeline::builder()
+            .rule(crate::DefaultRule::new(crate::Action::Tokenize))
+            .build()
+            .unwrap();
+        assert!(tx.staged.sweep_matcher_cache.is_none());
+        assert!(!pipeline
+            .staged_rule_repeat_candidates(&tx, "maria schneider")
+            .unwrap()
+            .is_empty());
+        assert!(pipeline
+            .verify_staged_rule_coverage(&tx, "maria schneider", 1024)
+            .is_err());
+        assert!(
+            tx.staged.sweep_matcher_cache.is_none(),
+            "query installed a matcher cache"
+        );
+        let cache = tx.sweep_matcher().unwrap().unwrap();
+        pipeline
+            .staged_rule_repeat_candidates(&tx, "maria schneider")
+            .unwrap();
+        assert!(Arc::ptr_eq(
+            tx.staged.sweep_matcher_cache.as_ref().unwrap(),
+            &cache
+        ));
+        assert_eq!(tx.snapshot_entries(), entries);
+        assert_eq!(tx.staged.evidence_by_value, evidence);
     }
 }

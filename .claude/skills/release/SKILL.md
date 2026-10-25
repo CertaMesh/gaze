@@ -20,6 +20,23 @@ release blockers are merged. Read the local-development workflow before
 isolation, service startup or full verification. Do not reset a divergent local
 `main` or change remote refs to satisfy a source check.
 
+Before these gates, run the competitor metadata check and retain its aggregate:
+
+```sh
+uv run --project scripts/bench --locked python scripts/bench/compare/freshness.py \
+  --report docs/reference/benchmarks/comparison.json \
+  --output target/competitor-freshness.json
+```
+
+Review every finding, including unknown freshness after source/network failures.
+Record exact pins, release dates and the UTC check date with the comparison.
+Use `compare/render.py --freshness target/competitor-freshness.json` when
+rendering the comparison page. An incompatible latest driver keeps an explicitly
+old measured row. Qualify new pins in a separate reviewed PR with new subject
+identities; never upgrade a package or model inside a measurement. Untagged
+models remain visibly unversioned. A partial `--source` check does not cover the
+aggregate inventory. See the comparison README for optional scheduled checks.
+
 1. Confirm the working tree is clean and `HEAD` is the intended remote-main merge.
 2. Confirm all open PRs marked as `v0.X.0-final` blockers are merged.
 3. Confirm the workspace version pin matches the about-to-tag version in the
@@ -80,9 +97,15 @@ retained capture with the current source or a fresh replay time.
 
 Reuse evidence only while its measured subject and benchmark inputs remain
 unchanged and their full provenance is verified. A full cache-key match may
-justify reuse; a changed revision alone is not an exact cache hit. Current
-release-history admission rejects `cache_replay: true`; do not flip that flag
-or fabricate a receipt to bypass it. Resolve unsupported admission explicitly.
+justify reuse; a changed revision alone is not an exact cache hit. Past-release
+`--build --release-tag` captures support exact reuse for qualified `policy-file`
+producers. Retain the original scorecard, observation record,
+`release-capture-key.json` and `run-evidence.json` together. Render and history
+admission verify this frozen proof and reconstruct the metrics. Preserve the
+measurement revision and time. Unsupported configurations and legacy records
+remain uncacheable. Never fabricate a receipt or key to bypass admission.
+See [past-release reuse](../../../scripts/bench/README.md#reuse-a-past-release-capture)
+for eligibility and the separately scheduled native qualification command.
 When direct final-source evidence is required, collect only the changed
 candidate sides and retain valid baselines. Benchmark specifications have immutable
 version IDs; never compare across specifications. Integrity checks remain mandatory.
@@ -91,6 +114,22 @@ release, measure the current and previous release on the same specification.
 Main requires full-corpus-equivalent evidence for the exact integrated candidate:
 full evaluation, shadow-validated sound incremental evaluation, or a full-gated
 combined merge train. A targeted subset never certifies main.
+
+Resolve the immutable manifest with `benchmark_spec.py` before measurement.
+Use `benchmark_history.py <plan> --output <spec-directory>` to inspect the
+current/previous selection, then add `--execute` to collect missing subjects.
+Run `--older` separately for optional backfills. Resume verifies frozen subject
+pins, artifact hashes and full record populations. Keep the resulting manifest,
+`history.json` and `history.md` with the release evidence. Unproven legacy rows
+remain unavailable under the current specification; preserve their old ledgers.
+See [benchmark specification and history commands](../../../scripts/bench/README.md#freeze-the-benchmark-specification).
+
+For an integrated detection candidate, run `benchmark_certification.py` with
+`--candidate <exact-head>` and every reviewed `--required-mechanism` before
+accepting its gain evidence. Pin both v1 and v2 scorecards and their shared
+observation record per arm in the certification manifest. Required mechanism
+pairs must use that same candidate binary. A pass does not replace the full
+release benchmark, hosted CI, or publication authority.
 
 Strict identity `not_comparable` stays distinct from an explicitly accepted
 comparison of each release's own setup policy. Such a numeric comparison must

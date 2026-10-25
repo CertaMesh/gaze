@@ -1,0 +1,6426 @@
+{
+  "clean-anchored": [
+    {
+      "counters": {
+        "input_bytes": 0,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "rules_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 0,
+      "phase": "startup",
+      "recognizers": {},
+      "schema": 3
+    },
+    {
+      "counters": {
+        "input_bytes": 9,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 6
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rules_ns": {
+          "candidates": 1,
+          "invocations": 47
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 1,
+      "phase": "request",
+      "recognizers": {
+        "r1": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r10": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r11": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r12": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r13": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r14": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r15": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r16": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r17": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r18": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r19": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r2": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r20": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r21": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r22": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r23": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r24": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r25": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r26": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r27": {
+          "candidates": 1,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r28": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r29": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r3": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r30": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r31": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r32": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r33": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r34": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r35": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r36": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r37": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r38": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r39": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r4": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r40": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r41": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r42": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r43": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r44": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r45": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r46": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r47": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r5": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r6": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r7": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r8": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r9": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        }
+      },
+      "schema": 3
+    }
+  ],
+  "clean-context": [
+    {
+      "counters": {
+        "input_bytes": 0,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "rules_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 0,
+      "phase": "startup",
+      "recognizers": {},
+      "schema": 3
+    },
+    {
+      "counters": {
+        "input_bytes": 21,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 6
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rules_ns": {
+          "candidates": 1,
+          "invocations": 46
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 3
+        }
+      },
+      "ordinal": 1,
+      "phase": "request",
+      "recognizers": {
+        "r1": {
+          "candidates": 1,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r10": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r11": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r12": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r13": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r14": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r15": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r16": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r17": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r18": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r19": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r2": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r20": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r21": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r22": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r23": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r24": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r25": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r26": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r27": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r28": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r29": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r3": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r30": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r31": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r32": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r33": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r34": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r35": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r36": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r37": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r38": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r39": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r4": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r40": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r41": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r42": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r43": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r44": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r45": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r46": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r5": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r6": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r7": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r8": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r9": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        }
+      },
+      "schema": 3
+    }
+  ],
+  "clean-email": [
+    {
+      "counters": {
+        "input_bytes": 0,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "rules_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 0,
+      "phase": "startup",
+      "recognizers": {},
+      "schema": 3
+    },
+    {
+      "counters": {
+        "input_bytes": 21,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 6
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rules_ns": {
+          "candidates": 1,
+          "invocations": 46
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 3
+        }
+      },
+      "ordinal": 1,
+      "phase": "request",
+      "recognizers": {
+        "r1": {
+          "candidates": 1,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r10": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r11": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r12": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r13": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r14": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r15": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r16": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r17": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r18": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r19": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r2": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r20": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r21": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r22": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r23": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r24": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r25": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r26": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r27": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r28": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r29": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r3": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r30": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r31": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r32": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r33": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r34": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r35": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r36": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r37": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r38": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r39": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r4": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r40": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r41": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r42": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r43": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r44": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r45": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r46": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r5": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r6": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r7": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r8": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r9": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        }
+      },
+      "schema": 3
+    }
+  ],
+  "clean-validator": [
+    {
+      "counters": {
+        "input_bytes": 0,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "rules_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 0,
+      "phase": "startup",
+      "recognizers": {},
+      "schema": 3
+    },
+    {
+      "counters": {
+        "input_bytes": 25,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 2
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 6
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rules_ns": {
+          "candidates": 2,
+          "invocations": 46
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 6
+        }
+      },
+      "ordinal": 1,
+      "phase": "request",
+      "recognizers": {
+        "r1": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r10": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r11": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r12": {
+          "candidates": 1,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r13": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r14": {
+          "candidates": 1,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r15": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r16": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r17": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r18": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r19": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r2": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r20": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r21": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r22": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r23": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r24": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r25": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r26": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r27": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r28": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r29": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r3": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r30": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r31": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r32": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r33": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r34": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r35": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r36": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r37": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r38": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r39": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r4": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r40": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r41": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r42": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r43": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r44": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r45": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r46": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r5": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r6": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r7": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r8": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r9": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        }
+      },
+      "schema": 3
+    }
+  ],
+  "daemon": [
+    {
+      "counters": {
+        "input_bytes": 0,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "rules_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 0,
+      "phase": "startup",
+      "recognizers": {},
+      "schema": 3
+    },
+    {
+      "counters": {
+        "input_bytes": 0,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 5
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rules_ns": {
+          "candidates": 0,
+          "invocations": 46
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 1,
+      "phase": "request",
+      "recognizers": {
+        "r1": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r10": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r11": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r12": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r13": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r14": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r15": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r16": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r17": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r18": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r19": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r2": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r20": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r21": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r22": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r23": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r24": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r25": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r26": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r27": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r28": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r29": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r3": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r30": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r31": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r32": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r33": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r34": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r35": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r36": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r37": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r38": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r39": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r4": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r40": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r41": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r42": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r43": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r44": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r45": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r46": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r5": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r6": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r7": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r8": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r9": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        }
+      },
+      "schema": 3
+    },
+    {
+      "counters": {
+        "input_bytes": 21,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 6
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rules_ns": {
+          "candidates": 1,
+          "invocations": 46
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 3
+        }
+      },
+      "ordinal": 2,
+      "phase": "request",
+      "recognizers": {
+        "r1": {
+          "candidates": 1,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r10": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r11": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r12": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r13": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r14": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r15": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r16": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r17": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r18": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r19": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r2": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r20": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r21": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r22": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r23": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r24": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r25": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r26": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r27": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r28": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r29": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r3": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r30": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r31": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r32": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r33": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r34": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r35": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r36": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r37": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r38": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r39": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r4": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r40": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r41": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r42": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r43": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r44": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r45": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r46": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r5": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r6": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r7": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r8": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r9": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        }
+      },
+      "schema": 3
+    },
+    {
+      "counters": {
+        "input_bytes": 21,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 6
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rules_ns": {
+          "candidates": 1,
+          "invocations": 46
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 3
+        }
+      },
+      "ordinal": 3,
+      "phase": "request",
+      "recognizers": {
+        "r1": {
+          "candidates": 1,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r10": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r11": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r12": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r13": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r14": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r15": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r16": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r17": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r18": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r19": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r2": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r20": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r21": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r22": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r23": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r24": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r25": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r26": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r27": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r28": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r29": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r3": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r30": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r31": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r32": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r33": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r34": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r35": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r36": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r37": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r38": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r39": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r4": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r40": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r41": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r42": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r43": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r44": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r45": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r46": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r5": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r6": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r7": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r8": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r9": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        }
+      },
+      "schema": 3
+    },
+    {
+      "counters": {
+        "input_bytes": 11,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 5
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rules_ns": {
+          "candidates": 0,
+          "invocations": 46
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 4,
+      "phase": "request",
+      "recognizers": {
+        "r1": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r10": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r11": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r12": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r13": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r14": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r15": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r16": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r17": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r18": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r19": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r2": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r20": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r21": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r22": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r23": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r24": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r25": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r26": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r27": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r28": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r29": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r3": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r30": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r31": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r32": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r33": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r34": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r35": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r36": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r37": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r38": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r39": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r4": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r40": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r41": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r42": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r43": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r44": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r45": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r46": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r5": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r6": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r7": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r8": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r9": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        }
+      },
+      "schema": 3
+    }
+  ],
+  "daemon-context": [
+    {
+      "counters": {
+        "input_bytes": 0,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "rules_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 0,
+      "phase": "startup",
+      "recognizers": {},
+      "schema": 3
+    },
+    {
+      "counters": {
+        "input_bytes": 21,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 6
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "rules_ns": {
+          "candidates": 1,
+          "invocations": 46
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 3
+        }
+      },
+      "ordinal": 1,
+      "phase": "request",
+      "recognizers": {
+        "r1": {
+          "candidates": 1,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r10": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r11": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r12": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r13": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r14": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r15": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r16": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r17": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r18": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r19": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r2": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r20": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r21": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r22": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r23": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r24": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r25": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r26": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r27": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r28": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r29": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r3": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r30": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r31": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r32": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r33": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r34": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r35": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r36": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r37": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r38": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r39": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r4": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r40": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r41": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r42": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r43": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r44": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r45": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r46": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r5": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r6": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r7": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r8": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r9": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        }
+      },
+      "schema": 3
+    }
+  ],
+  "daemon-empty-error": [
+    {
+      "counters": {
+        "input_bytes": 0,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "rules_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 0,
+      "phase": "startup",
+      "recognizers": {},
+      "schema": 3
+    },
+    {
+      "counters": {
+        "input_bytes": 0,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rules_ns": {
+          "candidates": 1,
+          "invocations": 47
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 1,
+      "phase": "request",
+      "recognizers": {
+        "r1": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r10": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r11": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r12": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r13": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r14": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r15": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r16": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r17": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r18": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r19": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r2": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r20": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r21": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r22": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r23": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r24": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r25": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r26": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r27": {
+          "candidates": 1,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r28": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r29": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r3": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r30": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r31": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r32": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r33": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r34": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r35": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r36": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r37": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r38": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r39": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r4": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r40": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r41": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r42": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r43": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r44": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r45": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r46": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r47": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r5": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r6": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r7": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r8": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r9": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        }
+      },
+      "schema": 3
+    }
+  ],
+  "daemon-sweep": [
+    {
+      "counters": {
+        "input_bytes": 0,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "rules_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 0,
+      "phase": "startup",
+      "recognizers": {},
+      "schema": 3
+    },
+    {
+      "counters": {
+        "input_bytes": 9,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 6
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rules_ns": {
+          "candidates": 1,
+          "invocations": 47
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 1,
+      "phase": "request",
+      "recognizers": {
+        "r1": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r10": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r11": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r12": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r13": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r14": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r15": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r16": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r17": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r18": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r19": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r2": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r20": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r21": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r22": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r23": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r24": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r25": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r26": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r27": {
+          "candidates": 1,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r28": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r29": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r3": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r30": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r31": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r32": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r33": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r34": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r35": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r36": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r37": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r38": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r39": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r4": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r40": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r41": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r42": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r43": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r44": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r45": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r46": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r47": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r5": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r6": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r7": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r8": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r9": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        }
+      },
+      "schema": 3
+    },
+    {
+      "counters": {
+        "input_bytes": 16,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 1
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 6
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "rules_ns": {
+          "candidates": 0,
+          "invocations": 47
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 1
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0
+        }
+      },
+      "ordinal": 2,
+      "phase": "request",
+      "recognizers": {
+        "r1": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r10": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r11": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r12": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r13": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r14": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r15": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r16": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r17": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r18": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r19": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r2": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r20": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r21": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r22": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r23": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r24": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r25": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r26": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r27": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r28": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r29": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r3": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r30": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r31": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r32": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r33": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r34": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r35": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r36": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r37": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r38": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r39": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r4": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r40": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r41": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r42": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r43": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r44": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r45": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r46": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r47": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r5": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r6": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r7": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r8": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        },
+        "r9": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none"
+        }
+      },
+      "schema": 3
+    }
+  ]
+}

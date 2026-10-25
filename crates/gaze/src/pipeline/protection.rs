@@ -122,6 +122,243 @@ const BOUNDARY_DECISION: SafetyNetDecision = SafetyNetDecision::Resolve {
 };
 
 impl Pipeline {
+    /// Discover Rule sources before request protection, without learned detectors or nets.
+    /// Output is discarded; staged Rule mappings remain available to every request field.
+    pub fn discover_staged_rule_sources(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        input: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> std::result::Result<(), BoundaryRefusal> {
+        let mut pipeline = self.clone();
+        pipeline.registry = Arc::new(self.registry.deterministic_only());
+        if pipeline.registry.is_empty() {
+            return Ok(());
+        }
+        pipeline.safety_nets.clear();
+        #[cfg(feature = "bundled-recognizers")]
+        {
+            pipeline.safety_net_registry = None;
+        }
+        pipeline
+            .resolve_boundary_text_transaction(transaction, input, locale_chain, dictionaries)
+            .map(|_| ())
+    }
+
+    /// Find policy-protected repeats of staged Rule values in raw text coordinates.
+    ///
+    /// Boundary adapters can expand owned tokens, intersect these spans with the
+    /// adjacent raw bytes, and preserve the original tokens. Hits may overlap and
+    /// are never selected into a non-overlapping cover. This query runs no detectors
+    /// or safety nets and changes no transaction state. Learned,
+    /// validator-failed, and safety-net-only entries never seed this matcher.
+    pub fn staged_rule_repeat_candidates(
+        &self,
+        transaction: &SessionTransaction<'_>,
+        text: &str,
+    ) -> Result<Vec<Candidate>> {
+        let Some(matcher) = transaction.sweep_matcher_view()? else {
+            return Ok(Vec::new());
+        };
+        let normalized = crate::normalize::normalize(text);
+        let context = build_context(None);
+        let hits = matcher
+            .find(&normalized.text)
+            .into_iter()
+            .filter(|hit| {
+                self.resolve_action(&hit.class, &context)
+                    .action
+                    .is_protective()
+            })
+            .collect::<Vec<_>>();
+        hits.into_iter()
+            .map(|hit| {
+                let mut candidate = hit.candidate();
+                candidate.span = crate::normalize::raw_range(hit.span, &normalized.spans)
+                    .ok_or_else(|| {
+                        clean_to_raw_mapping_error("unmappable boundary repeat geometry")
+                    })?;
+                Ok(candidate)
+            })
+            .collect()
+    }
+
+    /// Prove complete Rule coverage in the expanded original of a protected leaf.
+    ///
+    /// Every eligible occurrence, including overlaps and normalized spellings, must
+    /// have every byte owned by a manifest token. This independently enumerates hits;
+    /// it uses neither candidate selection nor the adapter's projection/union logic.
+    /// No detector, model, mapping, evidence or matcher cache is changed.
+    pub fn verify_staged_rule_coverage(
+        &self,
+        transaction: &SessionTransaction<'_>,
+        protected: &str,
+        max_expanded_bytes: usize,
+    ) -> Result<()> {
+        let original = transaction
+            .restore_strict_text_bounded(protected, max_expanded_bytes)
+            .map_err(|_| ProtectionError::Provenance)?;
+        let mut covered = vec![false; original.len()];
+        let (mut wire_cursor, mut original_cursor) = (0, 0);
+        for range in transaction.restore_token_ranges(protected)? {
+            original_cursor += range.start - wire_cursor;
+            let value = transaction.restore_strict_text(&protected[range.clone()])?;
+            let end = original_cursor + value.len();
+            covered
+                .get_mut(original_cursor..end)
+                .ok_or_else(|| clean_to_raw_mapping_error("invalid owned coverage"))?
+                .fill(true);
+            original_cursor = end;
+            wire_cursor = range.end;
+        }
+        let Some(matcher) = transaction.sweep_matcher_view()? else {
+            return Ok(());
+        };
+        let normalized = crate::normalize::normalize(&original);
+        let context = build_context(None);
+        for hit in matcher.find(&normalized.text) {
+            if !self
+                .resolve_action(&hit.class, &context)
+                .action
+                .is_protective()
+            {
+                continue;
+            }
+            let raw = crate::normalize::raw_range(hit.span, &normalized.spans)
+                .ok_or_else(|| clean_to_raw_mapping_error("unmappable Rule coverage"))?;
+            if !covered[raw].iter().all(|byte| *byte) {
+                return Err(Error::Protection(ProtectionError::Residual));
+            }
+        }
+        Ok(())
+    }
+
+    /// Tokenize the raw intersection of a Rule repeat and an owned-token boundary.
+    ///
+    /// The fragment keeps the matched class and family and emits a metadata-only
+    /// sweep audit event. It does not become an independent Rule source.
+    pub fn tokenize_staged_rule_repeat_fragment(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        candidate: &Candidate,
+        raw: &str,
+    ) -> Result<String> {
+        if candidate.recognizer_id != crate::sweep::SWEEP_ID
+            || candidate.evidence != crate::EvidenceKind::Rule
+            || self
+                .resolve_action(&candidate.class, &build_context(None))
+                .action
+                != Action::Tokenize
+        {
+            return Err(Error::UnsupportedActionVariant);
+        }
+        let mut entry = RedactionEntry::new(
+            crate::sweep::SWEEP_ID,
+            candidate.class.clone(),
+            Action::Tokenize,
+            None,
+            DocumentKind::Text,
+            false,
+            ConflictTier::ManifestSweep,
+            crate::redaction_log::current_epoch_ms(),
+            Some(transaction.audit_session_id().to_string()),
+        )
+        .with_recognizer_metadata(Some(crate::sweep::SWEEP_ID.into()), None);
+        entry.provenance_stage = Some(crate::sweep::SWEEP_ID.into());
+        entry.provenance_merged_from = Some("manifest_sweep:token_boundary".into());
+        for logger in &self.redaction_loggers {
+            logger.log(&entry)?;
+        }
+        transaction.tokenize_with_family(&candidate.token_family, &candidate.class, raw)
+    }
+
+    /// Resolve full-leaf safety-net findings after primary protection, keeping owned tokens.
+    /// This reuses the core's bounded Resolve/Strict path and never promotes net values to Rule.
+    pub fn resolve_staged_owned_text(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        input: &str,
+        context: ProtectionContext<'_>,
+        max_expanded_bytes: usize,
+    ) -> std::result::Result<String, BoundaryRefusal> {
+        if self.safety_nets_len() == 0 {
+            return Ok(input.to_owned());
+        }
+        self.validate_protection_context(context)?;
+        let expected = transaction
+            .restore_strict_text_bounded(input, max_expanded_bytes)
+            .map_err(|_| ProtectionError::Provenance)?;
+        let entries = transaction.snapshot_entries();
+        let ranges = transaction
+            .restore_token_ranges(input)
+            .map_err(|_| ProtectionError::Provenance)?;
+        let mut ledger = Ledger::default();
+        let (mut clean_cursor, mut raw_cursor) = (0, 0);
+        for range in ranges {
+            let entry = entries
+                .iter()
+                .find(|entry| entry.token == input[range.clone()])
+                .ok_or(ProtectionError::Provenance)?;
+            raw_cursor += range.start - clean_cursor;
+            let raw_end = raw_cursor + entry.raw.len();
+            clean_cursor = range.end;
+            ledger.existing_owned(EmittedTokenSpan::new(
+                range,
+                raw_cursor..raw_end,
+                entry.class.clone(),
+            ));
+            raw_cursor = raw_end;
+        }
+        ledger.validate().map_err(|_| ProtectionError::Provenance)?;
+        let mut clean = CleanText {
+            text: input.to_owned(),
+            manifest: ledger,
+        };
+        let mut report = self
+            .run_safety_nets_in_context(
+                &mut ProtectionTarget::Staged(transaction),
+                &clean.text,
+                clean.manifest.projection(),
+                DocumentKind::Text,
+                context.locale_chain,
+                None,
+                BOUNDARY_DECISION,
+                context.dictionaries,
+                SafetyNetExecution::Admission,
+            )
+            .map_err(|error| BoundaryRefusal::from_resolve_error(error, &LeakReport::default()))?
+            .report;
+        if reject_unprotected_suspects(input, clean.manifest.projection(), report.clone()).is_ok() {
+            return Ok(clean.text);
+        }
+        self.apply_safety_net_policy(
+            &mut ProtectionTarget::Staged(transaction),
+            &mut clean,
+            &mut report,
+            DocumentKind::Text,
+            context.locale_chain,
+            None,
+            BOUNDARY_DECISION,
+            None,
+        )
+        .map_err(|error| BoundaryRefusal::from_resolve_error(error, &report))?;
+        if transaction
+            .restore_strict_text_bounded(&clean.text, max_expanded_bytes)
+            .map_err(|_| ProtectionError::Provenance)?
+            != expected
+        {
+            return Err(ProtectionError::Provenance.into());
+        }
+        self.admit_boundary_text_transaction(
+            transaction,
+            &clean.text,
+            context.locale_chain,
+            context.dictionaries,
+        )?;
+        Ok(clean.text)
+    }
+
     /// Protects a text leaf for an outbound boundary such as `gaze-proxy`: the primary pipeline,
     /// then the configured safety nets through the Resolve step
     /// `gaze clean --safety-net-fallback strict` runs, so a net-flagged span becomes a

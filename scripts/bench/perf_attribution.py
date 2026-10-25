@@ -23,39 +23,136 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-SPEC = "gaze-perf-attribution-v1"
-RUNNER_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+from perf_lifecycle_contract import CONTEXT_CHECKS, violates_context, HOOK_RELATIONS, violates_relation, RECORD_CHECKS, violates_record, active_models, OWNERSHIP_CHECKS, violates_ownership, CLOCK_CHECKS, CLOCK_PHASES, REQUEST_ASSEMBLY, STARTUP_CLOCKS, violates_check
+
+SPEC = "gaze-perf-attribution-v2"
+
+
+def runner_sha256() -> str:
+    return hashlib.sha256(Path(__file__).read_bytes() + b"\0"
+                          + Path(__file__).with_name("perf_lifecycle_contract.py").read_bytes()).hexdigest()
+
+
+RUNNER_SHA256 = runner_sha256()
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = "GAZE_PERF "
 TEXT_SUFFIXES = {".txt", ".md", ".json", ".jsonl", ".toml", ".yaml", ".yml", ".rs", ".py", ".csv", ".tsv"}
 
-METRICS = {"rules_ns", "registry_ns", "validators_ns", "ner_tokenize_ns", "ner_ort_ns",
-           "ner_mutex_wait_ns", "resolve1_ns", "sweep_ns", "resolve2_ns", "safety_view_build_ns",
-           "safety_model_ns", "nym_tokenize_ns", "nym_ort_ns", "nym_mutex_wait_ns", "nym_stable_ns",
-           "nym_neutral_ns", "manifest_ns", "audit_ns"}
+LIFECYCLE = set(STARTUP_CLOCKS)
+METRICS = set(CLOCK_PHASES)
 COUNTERS = {"input_bytes", "ner_encodes", "ner_windows", "sweep_candidates", "nym_windows",
             "nym_windows_stable", "nym_windows_neutral"}
 
 
 def validate_trace(trace: dict) -> dict:
-    """Reject diagnostics outside the numeric-only protocol before writing a receipt."""
+    """Reject diagnostics outside the value-free protocol before writing a receipt."""
     def metric(value, *, recognizer=False):
-        return (isinstance(value, dict) and "ns" in value
-                and set(value) <= {"ns", "invocations", "candidates"}
-                and (not recognizer or len(value) == 3)
-                and all(type(number) is int and number >= 0 for number in value.values()))
-    valid = (isinstance(trace, dict) and set(trace) == {"schema", "metrics", "counters", "recognizers"}
-             and type(trace["schema"]) is int and trace["schema"] == 1
-             and isinstance(trace["metrics"], dict) and set(trace["metrics"]) <= METRICS
+        if recognizer:
+            return (isinstance(value, dict)
+                    and set(value) == {"ns", "invocations", "candidates", "evidence", "model"}
+                    and value["evidence"] in ("rule", "learned")
+                    and value["model"] in ("none", "ner", "dob", "other")
+                    and all(type(value[k]) is int and 0 <= value[k] <= 2**64 - 1
+                            for k in ("ns", "invocations", "candidates")))
+        return (isinstance(value, dict)
+                and set(value) == {"ns", "invocations", "candidates"}
+                and all(type(number) is int and 0 <= number <= 2**64 - 1 for number in value.values()))
+    valid = (isinstance(trace, dict) and set(trace) == {"schema", "phase", "ordinal", "metrics", "counters", "recognizers"}
+             and type(trace["schema"]) is int and trace["schema"] == 3
+             and trace["phase"] in ("startup", "request")
+             and type(trace["ordinal"]) is int and 0 <= trace["ordinal"] <= 2**64 - 1
+             and isinstance(trace["metrics"], dict) and set(trace["metrics"]) == METRICS
              and all(metric(value) for value in trace["metrics"].values())
-             and isinstance(trace["counters"], dict) and set(trace["counters"]) <= COUNTERS
-             and all(type(n) is int and n >= 0 for n in trace["counters"].values())
+             and isinstance(trace["counters"], dict) and set(trace["counters"]) == COUNTERS
+             and all(type(n) is int and 0 <= n <= 2**64 - 1 for n in trace["counters"].values())
              and isinstance(trace["recognizers"], dict)
-             and all(re.fullmatch(r"[0-9a-f]{64}", key) and metric(value, recognizer=True)
+             and all(re.fullmatch(r"r[1-9][0-9]*", key) and metric(value, recognizer=True)
                      for key, value in trace["recognizers"].items()))
     if not valid:
         raise ValueError("invalid timer metadata; diagnostic contents suppressed")
     return trace
+
+
+def validate_lifecycle(traces: list[dict], requests: int, *, daemon: bool, policy: Path,
+                       required: bool = False) -> tuple[dict | None, list[dict]]:
+    """No partial protocol fallback: absent instrumentation is unknown, partial is invalid."""
+    if not traces:
+        if required:
+            raise ValueError("required lifecycle trace missing")
+        return None, []
+    for trace in traces:
+        validate_trace(trace)
+    if (len(traces) != requests + 1 or traces[0]["phase"] != "startup"
+            or traces[0]["ordinal"] != 0
+            or any(t["phase"] != "request" or t["ordinal"] != i + 1
+                   for i, t in enumerate(traces[1:]))):
+        raise ValueError("lifecycle trace attribution mismatch")
+    for record in traces:
+        for key, metric in record["metrics"].items():
+            one_shot_assembly = not daemon and record["phase"] == "request" and key in REQUEST_ASSEMBLY
+            if (record["phase"] not in CLOCK_PHASES[key] or one_shot_assembly) and any(metric.values()):
+                raise ValueError("misattributed clock phase")
+            if (metric["ns"] or metric["candidates"]) and not metric.get("invocations", 0):
+                raise ValueError("duration without an invocation")
+        if record["phase"] == "startup" and (any(record["counters"].values()) or record["recognizers"]):
+            raise ValueError("misattributed startup processing")
+        for check in CLOCK_CHECKS:
+            if check.phase != record["phase"] or (check.daemon_only and not daemon):
+                continue
+            if violates_check(record, check):
+                raise ValueError(f"lifecycle duration attribution mismatch: {check.id}")
+        for check in RECORD_CHECKS:
+            if violates_record(record, check):
+                raise ValueError(f"lifecycle record mismatch: {check}")
+        for relation in HOOK_RELATIONS:
+            if violates_relation(record, relation):
+                raise ValueError(f"lifecycle prerequisite mismatch: {relation.id}")
+    startup = traces[0]
+    def inv(trace, key):
+        return trace["metrics"].get(key, {}).get("invocations", 0)
+    for key in ("process_to_ready_ns", "process_to_policy_ns", "policy_load_ns",
+                "pipeline_build_ns", "assembly_ns", "rule_construction_ns", "recognizer_construction_ns"):
+        if inv(startup, key) != 1:
+            raise ValueError("required lifecycle hook missing")
+    if inv(startup, "daemon_startup_ns") != int(daemon) or inv(startup, "request_ns"):
+        raise ValueError("misattributed startup work")
+    config = tomllib.loads(policy.read_text())
+    active = active_models(config)
+    net = active["nym"]
+    constructors = sum(active.values())
+    for key, count in (("model_constructor_ns", constructors - int(net)),
+                       ("nym_model_constructor_ns", int(net)),
+                       ("nym_outer_verify_ns", int(net)),
+                       ("tokenizer_load_ns", constructors), ("model_load_ns", constructors)):
+        if inv(startup, key) != count:
+            raise ValueError("model constructor attribution mismatch")
+    # Assembly and the Nym constructor both verify today. Do not optimize that away here.
+    verifications = constructors + int(net)
+    if inv(startup, "bundle_verify_ns") != verifications or inv(startup, "nym_attach_ns") != int(net):
+        raise ValueError("bundle verification attribution mismatch")
+    roles = {}
+    for trace in traces[1:]:
+        for check in CONTEXT_CHECKS:
+            if violates_context(trace, check, config=config):
+                raise ValueError(f"lifecycle contextual mismatch: {check}")
+        for check in OWNERSHIP_CHECKS:
+            if violates_ownership(trace, check, config=config, roles=roles):
+                raise ValueError(f"lifecycle recognizer ownership mismatch: {check}")
+        roles.update((key, (entry["evidence"], entry["model"]))
+                     for key, entry in trace["recognizers"].items())
+        forbidden = LIFECYCLE - REQUEST_ASSEMBLY
+        if inv(trace, "request_ns") != 1 or any(inv(trace, key) for key in forbidden):
+            raise ValueError("misattributed request work")
+        assembly_counts = {inv(trace, key) for key in REQUEST_ASSEMBLY}
+        if assembly_counts not in ({0}, {1}):
+            raise ValueError("request assembly hook attribution mismatch")
+    return startup, traces[1:]
+
+
+def input_identity(docs: list[Document]) -> str:
+    """Bind identity, exact UTF-8 bytes and order (including duplicate occurrences)."""
+    return sha(json.dumps([[d.id, sha(d.text.encode()), len(d.text.encode())] for d in docs],
+                          separators=(",", ":")).encode())
 
 
 def sha(data: bytes) -> str:
@@ -175,25 +272,22 @@ def model_inventory(paths: list[Path]) -> list[dict]:
 def policy_models(policy: Path) -> list[Path]:
     config = tomllib.loads(policy.read_text())
     found = []
-    net = config.get("safety_net", {})
-    if net.get("backend") == "nym" and not net.get("nym", {}).get("model_dir"):
-        raise ValueError("Nym policies must pin an explicit model_dir")
-    for name in ("ner", "dob_judge"):
-        section = config.get(name, {})
-        if section and section.get("enabled", True) and not section.get("model_dir"):
-            raise ValueError("model policies must pin explicit model_dir values")
+    active = active_models(config)
+    sections = {"ner": config.get("ner", {}), "dob": config.get("dob_judge", {}),
+                "nym": config.get("safety_net", {}).get("nym", {})}
+    for model, enabled in active.items():
+        if not enabled:
+            continue
+        value = sections[model].get("model_dir")
+        if not isinstance(value, str) or not value or not Path(value).is_absolute():
+            raise ValueError("active model policies must pin absolute model_dir values")
+        found.append(Path(value))
     def visit(value):
         if isinstance(value, dict):
             for key, item in value.items():
                 if key == "terms_file" or (key == "paths" and item):
                     raise ValueError("external rulepack and terms files are unsupported; use bundled rules and inline terms")
-                if key == "model_dir":
-                    p = Path(item)
-                    if not p.is_absolute():
-                        raise ValueError("model_dir must be absolute to freeze the effective input")
-                    found.append(p)
-                else:
-                    visit(item)
+                visit(item)
         elif isinstance(value, list):
             for item in value:
                 visit(item)
@@ -242,6 +336,10 @@ class Daemon:
         self.timeout = timeout
         self.rows: queue.Queue = queue.Queue()
         self.perf: queue.Queue = queue.Queue()
+        self.ready = threading.Event()
+        self.startup_e2e_ns = None
+        started = time.perf_counter_ns() if child_env.get("GAZE_PERF_WALL") == "1" else None
+        child_env = {k: v for k, v in child_env.items() if k != "GAZE_PERF_WALL"}
         self.child = subprocess.Popen([str(binary), "daemon", "--policy", str(policy)], cwd=ROOT,
                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                       text=True, encoding="utf-8", env=child_env)
@@ -253,7 +351,11 @@ class Daemon:
             for line in self.child.stderr:
                 if line.startswith(PREFIX):
                     try:
-                        self.perf.put(json.loads(line[len(PREFIX):]))
+                        trace = json.loads(line[len(PREFIX):])
+                        self.perf.put(trace)
+                        if trace.get("phase") == "startup":
+                            self.startup_e2e_ns = time.perf_counter_ns() - started if started is not None else None
+                            self.ready.set()
                     except json.JSONDecodeError:
                         self.perf.put({"invalid": True})
         self.threads = [threading.Thread(target=stdout, daemon=True), threading.Thread(target=stderr, daemon=True)]
@@ -289,6 +391,8 @@ class Daemon:
             thread.join(timeout=self.timeout)
         if self.child.returncode:
             raise RuntimeError("daemon failed; diagnostics suppressed")
+        self.child.stdout.close()
+        self.child.stderr.close()
         return list(self.perf.queue)
 
     def abort(self):
@@ -297,15 +401,18 @@ class Daemon:
         self.child.wait()
         for thread in self.threads:
             thread.join(timeout=self.timeout)
+        self.child.stdin.close()
+        self.child.stdout.close()
+        self.child.stderr.close()
 
 
-def run_pass(binary: Path, policy: Path, docs: list[Document], *, warmups: int, dry: bool, timeout: float, per_file: bool, child_env: dict[str, str] | None = None) -> list[dict]:
+def run_pass(binary: Path, policy: Path, docs: list[Document], *, warmups: int, dry: bool, timeout: float, per_file: bool, child_env: dict[str, str] | None = None, require_timers: bool = False) -> list[dict]:
     if child_env is None:
         child_env = child_environment()
     if per_file:
         if warmups:
             run_pass(binary, policy, [docs[i % len(docs)] for i in range(warmups)],
-                     warmups=0, dry=True, timeout=timeout, per_file=True, child_env=child_env)
+                     warmups=0, dry=True, timeout=timeout, per_file=True, child_env=child_env, require_timers=require_timers)
         rows = []
         # This arm includes process/model startup on EVERY file, like one-shot scanners.
         for doc in docs:
@@ -317,13 +424,15 @@ def run_pass(binary: Path, policy: Path, docs: list[Document], *, warmups: int, 
             if output.returncode or "clean_text" not in json.loads(output.stdout):
                 raise RuntimeError("one-shot document failed; diagnostics suppressed")
             traces = [json.loads(line[len(PREFIX):]) for line in output.stderr.splitlines() if line.startswith(PREFIX)]
-            if len(traces) > 1:
-                raise RuntimeError("multiple per-document timer records")
+            startup, requests = validate_lifecycle(traces, 1, daemon=False, policy=policy, required=require_timers)
             rows.append({"id": doc.id, "input_bytes": len(doc.text.encode()), "e2e_ns": elapsed,
-                         "trace": validate_trace(traces[0]) if traces else None})
+                         "startup_trace": startup, "startup_e2e_ns": None,
+                         "trace": requests[0] if requests else None})
         return rows
-    daemon = Daemon(binary, policy, timeout, child_env)
+    daemon = Daemon(binary, policy, timeout, {**child_env, "GAZE_PERF_WALL": "0" if dry else "1"})
     try:
+        if require_timers and not daemon.ready.wait(timeout):
+            raise ValueError("required lifecycle startup trace missing")
         for i in range(warmups):
             daemon.request(docs[i % len(docs)], i, timed=False)
         rows = [daemon.request(doc, warmups + i, timed=not dry) for i, doc in enumerate(docs)]
@@ -331,10 +440,11 @@ def run_pass(binary: Path, policy: Path, docs: list[Document], *, warmups: int, 
     except BaseException:
         daemon.abort()
         raise
-    if traces and (len(traces) != warmups + len(rows) or any(t.get("schema") != 1 for t in traces)):
-        raise RuntimeError("timer protocol mismatch; refusing misattributed samples")
+    startup, requests = validate_lifecycle(traces, warmups + len(rows), daemon=True, policy=policy, required=require_timers)
     for i, row in enumerate(rows):
-        row["trace"] = validate_trace(traces[warmups + i]) if traces else None
+        row["trace"] = requests[warmups + i] if requests else None
+        row["startup_trace"] = startup if i == 0 else None
+        row["startup_e2e_ns"] = daemon.startup_e2e_ns if i == 0 else None
     return rows
 
 
@@ -347,17 +457,22 @@ def summary(rows: list[dict]) -> dict:
     values = [row["e2e_ns"] for row in rows]
     traced = [r for r in rows if r["trace"] is not None]
     keys = sorted({key for row in traced for key in row["trace"]["metrics"]})
-    recognizers = sorted({key for row in traced for key in row["trace"]["recognizers"]})
     def stages(population):
         return {key: percentiles([r["trace"]["metrics"].get(key, {}).get("ns", 0) for r in population]) for key in keys} if population else None
     ids = sorted({row["id"] for row in rows})
+    startups = [r["startup_trace"] for r in rows if r.get("startup_trace") is not None]
+    cold = [r["startup_e2e_ns"] for r in rows if r.get("startup_e2e_ns") is not None]
     return {"documents": len(rows), "e2e_ns": percentiles(values),
+            "startup_e2e_ns": percentiles(cold) if cold else None,
+            "startup_stages_ns": {key: percentiles([t["metrics"].get(key, {}).get("ns", 0) for t in startups]) for key in sorted(LIFECYCLE)} if startups else None,
+            "startup_invocations": {key: sum(t["metrics"].get(key, {}).get("invocations", 0) for t in startups) for key in sorted(LIFECYCLE)} if startups else None,
+            "startup_total_ns": sum(t["metrics"]["process_to_ready_ns"]["ns"] for t in startups) if startups else None,
+            "processing_total_ns": sum(r["trace"]["metrics"]["request_ns"]["ns"] for r in traced) if traced else None,
             "files_per_minute": len(values) * 60e9 / sum(values),
             "per_document": {id: {"e2e_ns": percentiles([r["e2e_ns"] for r in rows if r["id"] == id]),
                                    "stages_ns": stages([r for r in traced if r["id"] == id])} for id in ids},
             "stages_ns": stages(traced),
-            "recognizers": {id: {field: percentiles([r["trace"]["recognizers"].get(id, {}).get(field, 0) for r in traced])
-                                  for field in ("ns", "invocations", "candidates")} for id in recognizers},
+            "recognizer_scope": "process-local ordinals; inspect individual traces",
             "timer_documents": len(traced)}
 
 
@@ -420,7 +535,8 @@ def main(argv=None) -> int:
         if provided is None:
             command([str(binaries[side]), "setup", "--non-interactive", "--force", "--policy-out", str(shipped[side])], env=child_env)
     arms = {"common": {"a": common, "b": common}, "shipped": shipped,
-            "vernio": {"a": vernio, "b": vernio}, "source-tree": {"a": vernio, "b": vernio}}
+            "vernio": {"a": vernio, "b": vernio}, "source-tree": {"a": vernio, "b": vernio},
+            "source-tree-daemon": {"a": vernio, "b": vernio}}
     corpus_rev, corpus = documents(args.corpus_rev, args.corpus_subdir, args.seed)
     tree_rev, tree = documents(args.tree_rev, ".", args.seed, tree=True)
     model_dirs = sorted({p for policies in arms.values() for path in policies.values() for p in policy_models(path)})
@@ -442,7 +558,7 @@ def main(argv=None) -> int:
     rng = random.Random(args.seed)
     first = rng.choice(["ab", "ba"])
     for name, policies in arms.items():
-        docs = tree if name == "source-tree" else corpus
+        docs = tree if name in ("source-tree", "source-tree-daemon") else corpus
         if args.dry_run:
             docs = docs[:5]
             if len(docs) != 5:
@@ -454,10 +570,11 @@ def main(argv=None) -> int:
             for side in order:
                 receipt["probes"].append(host())
                 rows[side] = run_pass(binaries[side], policies[side], docs, warmups=args.warmups,
-                                      dry=args.dry_run, timeout=args.timeout, per_file=name == "source-tree", child_env=child_env)
+                                      dry=args.dry_run, timeout=args.timeout, per_file=name == "source-tree", child_env=child_env,
+                                      require_timers=args.build_timers or getattr(args, f"binary_kind_{side}") == "local-timer")
                 receipt["probes"].append(host())
             runs.append({"order": order, "sides": rows})
-        arm = {"process_mode": "one-shot-per-file" if name == "source-tree" else "warm-daemon", "runs": runs}
+        arm = {"process_mode": "one-shot-per-file" if name == "source-tree" else "warm-daemon", "input_sha256": input_identity(docs), "input_bytes": sum(len(d.text.encode()) for d in docs), "runs": runs}
         if not args.dry_run:
             arm["summary"] = {side: summary([r for run in runs for r in run["sides"][side]]) for side in ("a", "b")}
             arm["paired_delta_ns_b_minus_a"] = {doc.id: percentiles([
@@ -465,8 +582,11 @@ def main(argv=None) -> int:
                 next(r["e2e_ns"] for r in run["sides"]["a"] if r["id"] == doc.id)
                 for run in runs]) for doc in docs}
         receipt["arms"][name] = arm
+    if (receipt["arms"]["source-tree"]["input_sha256"] != receipt["arms"]["source-tree-daemon"]["input_sha256"]
+            or policy_hashes["source-tree"] != policy_hashes["source-tree-daemon"]):
+        raise ValueError("source-tree arms must have identical ordered inputs and policies")
     receipt["probes"].append(host())
-    if file_sha(Path(__file__)) != RUNNER_SHA256:
+    if runner_sha256() != RUNNER_SHA256:
         raise ValueError("runner changed during capture")
     if hashes != {side: file_sha(path) for side, path in binaries.items()}:
         raise ValueError("binary changed during capture")

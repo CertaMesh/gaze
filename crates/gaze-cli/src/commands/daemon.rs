@@ -1,5 +1,5 @@
 use std::collections::{HashMap, VecDeque};
-use std::io::{self, BufRead, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
@@ -35,6 +35,8 @@ use gaze::{
     Rulepack, Session, SessionSnapshotEntry, TypedContext,
 };
 use gaze_audit::SqliteLogger;
+
+mod input;
 
 const DEFAULT_PROCESS_IDLE_TIMEOUT_SECS: u64 = 1_800;
 const DEFAULT_SESSION_IDLE_TIMEOUT_SECS: u64 = 3_600;
@@ -98,6 +100,7 @@ pub(crate) struct Args {
 }
 
 pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
+    let startup = gaze_types::perf_span!("daemon_startup_ns");
     let shutdown = install_signal_flags()?;
     let deprecated_core_extended = args
         .rulepacks
@@ -111,32 +114,34 @@ pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
     for warning in policy_warnings(&daemon.policy, &daemon.pipeline) {
         eprintln!("{warning}");
     }
-    let (sender, receiver) = mpsc::channel();
+    let frame_limit = daemon_frame_max_bytes();
+    let (sender, receiver) = input::channel(frame_limit);
     std::thread::spawn(move || {
-        for line in io::stdin().lock().lines() {
-            match line {
-                Ok(line) => {
-                    if sender.send(line).is_err() {
-                        break;
-                    }
-                }
-                Err(_) => break,
-            }
-        }
+        input::read_frames(io::stdin().lock(), sender, frame_limit);
     });
 
     let idle_timeout = daemon.process_idle_timeout;
     let mut stdout = io::stdout().lock();
+    drop(startup);
+    #[cfg(feature = "perf-timers")]
+    crate::perf::ready();
     loop {
         if shutdown.load(Ordering::Relaxed) {
             break;
         }
         match receiver.recv_timeout(Duration::from_millis(100)) {
-            Ok(line) => {
+            Ok(frame) => {
                 daemon.last_stdin_activity = Instant::now();
                 daemon.evict_idle_sessions();
-                let response = daemon.handle_line(&line);
+                let terminal = matches!(frame, input::Frame::FrameTooLarge { .. });
+                let response = match frame {
+                    input::Frame::Line(line) => daemon.handle_line(&line),
+                    input::Frame::FrameTooLarge { limit } => DaemonResponse::frame_too_large(limit),
+                };
                 write_json_line(&mut stdout, &response)?;
+                if terminal {
+                    break;
+                }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 daemon.evict_idle_sessions();
@@ -547,12 +552,16 @@ impl Daemon {
 const DAEMON_CLEAN_FORMAT: &str = "json";
 
 /// `CleanOptions::max_bytes` bounds `read_stdin_text`, which only `run_clean` calls.
-/// The daemon reads its own newline-delimited frames from stdin and never goes through
-/// that path, so the field is inert; bounding one daemon request is a protocol concern
-/// needing a typed over-limit response, which is not smuggled in here. It carries
-/// `clean`'s default rather than `u64::MAX` so that if a later change ever does route
-/// the daemon through this field it inherits a bound instead of an unbounded read.
+/// The daemon reads its own bounded frames; this inert CleanOptions field also
+/// supplies the base for its separate wire limit.
 const DAEMON_CLEAN_MAX_BYTES: u64 = DEFAULT_MAX_BYTES;
+
+fn daemon_frame_max_bytes() -> usize {
+    DAEMON_CLEAN_MAX_BYTES
+        .checked_mul(16)
+        .and_then(|limit| usize::try_from(limit).ok())
+        .expect("daemon frame limit must fit usize")
+}
 
 fn clean_options(args: &Args) -> CleanOptions<'_> {
     CleanOptions {
@@ -754,6 +763,13 @@ enum DaemonResponse {
 }
 
 impl DaemonResponse {
+    fn frame_too_large(limit: usize) -> Self {
+        Self::error(
+            "FrameTooLarge",
+            format!("daemon frame exceeds {limit} bytes"),
+        )
+    }
+
     fn error(error: &'static str, detail: impl Into<String>) -> Self {
         Self::error_versioned(None, error, detail)
     }
@@ -855,6 +871,104 @@ pub(crate) fn default_session_cap() -> usize {
 #[cfg(test)]
 mod residual_wire_tests {
     use super::*;
+
+    #[test]
+    fn daemon_frame_default_is_sixteen_times_clean_limit() {
+        assert_eq!(
+            daemon_frame_max_bytes() as u64,
+            DAEMON_CLEAN_MAX_BYTES.checked_mul(16).unwrap()
+        );
+        assert_eq!(daemon_frame_max_bytes(), 160 * 1024 * 1024);
+    }
+
+    #[test]
+    fn daemon_frame_overflow_response_is_fixed_and_value_free() {
+        let mut wire = Vec::new();
+        write_json_line(&mut wire, &DaemonResponse::frame_too_large(8)).unwrap();
+        assert_eq!(wire, b"{\"session_id\":null,\"error\":\"FrameTooLarge\",\"detail\":\"daemon frame exceeds 8 bytes\"}\n");
+    }
+
+    #[test]
+    fn daemon_frame_session_responses_match_legacy_reader_bytes() {
+        use clap::Parser;
+        use std::io::{BufRead, BufReader, Cursor};
+        #[derive(Parser)]
+        struct TestArgs {
+            #[command(flatten)]
+            daemon: Args,
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let policy = dir.path().join("policy.toml");
+        std::fs::write(
+            &policy,
+            r#"
+schema_version = "0.1.0"
+[session]
+scope = "conversation"
+[policy.rulepacks]
+bundled = ["core"]
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "synthetic_email"
+pattern = '[A-Za-z0-9._%+-]+@example[.]invalid'
+class = "email"
+safety_tier = "safe_default"
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+        )
+        .unwrap();
+        // Same synthetic email and session lifecycle as tests/daemon_reversible.rs.
+        let fixture = concat!(
+            "{\"version\":1,\"op\":\"clean\",\"session_id\":\"run-a\",\"text\":\"alice@example.invalid\"}\r\n",
+            "\n",
+            "{\"version\":1,\"op\":\"clean\",\"session_id\":\"run-a\",\"text\":\"alice@example.invalid\"}\n",
+            "{\"version\":1,\"op\":\"close\",\"session_id\":\"run-a\"}",
+        ).as_bytes();
+        let make_daemon = || {
+            Daemon::new(
+                TestArgs::parse_from(["daemon", "--policy", policy.to_str().unwrap()]).daemon,
+            )
+            .unwrap()
+        };
+        let mut legacy = make_daemon();
+        let mut bounded = make_daemon();
+        assert!(legacy.ensure_session("run-a").is_ok());
+        assert!(bounded.ensure_session("run-a").is_ok());
+        // Share the empty session identity so random token prefixes do not
+        // obscure byte-for-byte wire parity.
+        bounded.sessions.get_mut("run-a").unwrap().session =
+            Session::import(legacy.sessions["run-a"].session.export().unwrap()).unwrap();
+        let mut expected = Vec::new();
+        for line in fixture.lines() {
+            write_json_line(&mut expected, &legacy.handle_line(&line.unwrap())).unwrap();
+        }
+        let mut actual = Vec::new();
+        std::thread::scope(|scope| {
+            let (sender, receiver) = input::channel(1024);
+            scope.spawn(move || {
+                input::read_frames(
+                    BufReader::with_capacity(1, Cursor::new(fixture)),
+                    sender,
+                    1024,
+                )
+            });
+            for _ in 0..4 {
+                let frame = receiver.recv_timeout(Duration::from_secs(5)).unwrap();
+                let input::Frame::Line(line) = frame else {
+                    panic!("fixture must fit");
+                };
+                write_json_line(&mut actual, &bounded.handle_line(&line)).unwrap();
+            }
+        });
+        assert_eq!(actual, expected);
+        assert_eq!(actual.iter().filter(|byte| **byte == b'\n').count(), 4);
+    }
 
     #[test]
     fn daemon_session_restores_adjacent_format_preserving_tokens() {

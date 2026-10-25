@@ -1,0 +1,5359 @@
+{
+  "schema_version": 1,
+  "contract": "mcp-operation-order-v5",
+  "test": "scripts/bench/test_mcp_operation_order.py",
+  "cases": [
+    {
+      "id": "declared-maria-schneider-arguments",
+      "layer": "A",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "declared-maria-schneider-response",
+      "layer": "A",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-maria-schneider-last-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-maria-schneider-last-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-maria-schneider-first-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "hello maria schneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "hello maria schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "repeat-maria-schneider-first-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "hello maria schneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "hello maria schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "declared-johanna-fischer-arguments",
+      "layer": "A",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "From: Johanna Fischer <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "From: Johanna Fischer <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "declared-johanna-fischer-response",
+      "layer": "A",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "From: Johanna Fischer <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "From: Johanna Fischer <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-johanna-fischer-last-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello johanna fischer",
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello johanna fischer",
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-johanna-fischer-last-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello johanna fischer",
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello johanna fischer",
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-johanna-fischer-first-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ],
+          "hello johanna fischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ],
+          "hello johanna fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "repeat-johanna-fischer-first-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ],
+          "hello johanna fischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          [
+            "From: Johanna Fischer <alice@example.invalid>"
+          ],
+          "hello johanna fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "declared-m\u00e1ria-brenner-arguments",
+      "layer": "A",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "From: M\u00e1ria Brenner <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "From: M\u00e1ria Brenner <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            22,
+            43
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "declared-m\u00e1ria-brenner-response",
+      "layer": "A",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "From: M\u00e1ria Brenner <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "From: M\u00e1ria Brenner <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            22,
+            43
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-m\u00e1ria-brenner-last-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello m\u00e1ria brenner",
+          [
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello m\u00e1ria brenner",
+          [
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            22,
+            43
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-m\u00e1ria-brenner-last-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello m\u00e1ria brenner",
+          [
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello m\u00e1ria brenner",
+          [
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
+          ]
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            22,
+            43
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "repeat-m\u00e1ria-brenner-first-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          [
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
+          ],
+          "hello m\u00e1ria brenner"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          [
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
+          ],
+          "hello m\u00e1ria brenner"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            22,
+            43
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "repeat-m\u00e1ria-brenner-first-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          [
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
+          ],
+          "hello m\u00e1ria brenner"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          [
+            "From: M\u00e1ria Brenner <alice@example.invalid>"
+          ],
+          "hello m\u00e1ria brenner"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0,
+            0
+          ],
+          "span": [
+            22,
+            43
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            20
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "owned-contained-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria Schneider"
+      ],
+      "payload": {
+        "items": [
+          "hello {{owned_0}} johanna",
+          "From: Schneider Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello Maria Schneider johanna",
+          "From: Schneider Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            12,
+            29
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            23
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            25,
+            46
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-contained-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria Schneider"
+      ],
+      "payload": {
+        "items": [
+          "hello {{owned_0}} johanna",
+          "From: Schneider Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello Maria Schneider johanna",
+          "From: Schneider Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            12,
+            29
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            23
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            25,
+            46
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-prefix-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria Schneider"
+      ],
+      "payload": {
+        "items": [
+          "hello eva {{owned_0}}",
+          "From: Eva Maria <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello eva Maria Schneider",
+          "From: Eva Maria <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            10,
+            25
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            17,
+            38
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-prefix-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria Schneider"
+      ],
+      "payload": {
+        "items": [
+          "hello eva {{owned_0}}",
+          "From: Eva Maria <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello eva Maria Schneider",
+          "From: Eva Maria <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            10,
+            25
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            17,
+            38
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-between-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria Schneider",
+        "Johanna Fischer"
+      ],
+      "payload": {
+        "items": [
+          "hello {{owned_0}} und {{owned_1}}",
+          "From: Schneider Und Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello Maria Schneider und Johanna Fischer",
+          "From: Schneider Und Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            12,
+            33
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            26,
+            41
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            27
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            29,
+            50
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-between-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria Schneider",
+        "Johanna Fischer"
+      ],
+      "payload": {
+        "items": [
+          "hello {{owned_0}} und {{owned_1}}",
+          "From: Schneider Und Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello Maria Schneider und Johanna Fischer",
+          "From: Schneider Und Johanna <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            12,
+            33
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            26,
+            41
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            27
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            29,
+            50
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-chain-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria Schneider",
+        "Julia Weber"
+      ],
+      "payload": {
+        "items": [
+          "hello {{owned_0}} johanna {{owned_1}} paula",
+          "From: Schneider Johanna <alice@example.invalid>",
+          "From: Johanna Julia <alice@example.invalid>",
+          "From: Weber Paula <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello Maria Schneider johanna Julia Weber paula",
+          "From: Schneider Johanna <alice@example.invalid>",
+          "From: Johanna Julia <alice@example.invalid>",
+          "From: Weber Paula <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            12,
+            29
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            22,
+            35
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            36,
+            47
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            30,
+            41
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            23
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            25,
+            46
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            6,
+            19
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            21,
+            42
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            6,
+            17
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            19,
+            40
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "owned-chain-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria Schneider",
+        "Julia Weber"
+      ],
+      "payload": {
+        "items": [
+          "hello {{owned_0}} johanna {{owned_1}} paula",
+          "From: Schneider Johanna <alice@example.invalid>",
+          "From: Johanna Julia <alice@example.invalid>",
+          "From: Weber Paula <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello Maria Schneider johanna Julia Weber paula",
+          "From: Schneider Johanna <alice@example.invalid>",
+          "From: Johanna Julia <alice@example.invalid>",
+          "From: Weber Paula <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            12,
+            29
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            22,
+            35
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            36,
+            47
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            30,
+            41
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            6,
+            23
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            25,
+            46
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            6,
+            19
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            21,
+            42
+          ],
+          "class": "Email"
+        },
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            6,
+            17
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            19,
+            40
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "public-text-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "maria_count is a variable"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "maria_count is a variable"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "public-text-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "maria_count is a variable"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "maria_count is a variable"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "public-code-arguments",
+      "layer": "D",
+      "category": "code",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "let item_count = 17;",
+          "https://packages.example.invalid/maria-schneider",
+          "function tally(items) { return items.length; }"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "let item_count = 17;",
+          "https://packages.example.invalid/maria-schneider",
+          "function tally(items) { return items.length; }"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "public-code-response",
+      "layer": "D",
+      "category": "code",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "let item_count = 17;",
+          "https://packages.example.invalid/maria-schneider",
+          "function tally(items) { return items.length; }"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "let item_count = 17;",
+          "https://packages.example.invalid/maria-schneider",
+          "function tally(items) { return items.length; }"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "public-number-arguments",
+      "layer": "D",
+      "category": "number",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          17,
+          42,
+          256,
+          "batch count 64"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          17,
+          42,
+          256,
+          "batch count 64"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "public-number-response",
+      "layer": "D",
+      "category": "number",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          17,
+          42,
+          256,
+          "batch count 64"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          17,
+          42,
+          256,
+          "batch count 64"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "siblings-text-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "siblings-text-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "public counter",
+          "schneider is a lookup key",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "siblings-code-arguments",
+      "layer": "D",
+      "category": "code",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "let maria_count = 17;",
+          "https://packages.example.invalid/schneider",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "let maria_count = 17;",
+          "https://packages.example.invalid/schneider",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "siblings-code-response",
+      "layer": "D",
+      "category": "code",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "let maria_count = 17;",
+          "https://packages.example.invalid/schneider",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "let maria_count = 17;",
+          "https://packages.example.invalid/schneider",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            2
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "siblings-number-arguments",
+      "layer": "D",
+      "category": "number",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          17,
+          42,
+          "item count 256",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          17,
+          42,
+          "item count 256",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "siblings-number-response",
+      "layer": "D",
+      "category": "number",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          17,
+          42,
+          "item count 256",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          17,
+          42,
+          "item count 256",
+          "From: Maria Schneider <alice@example.invalid>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            3
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "bare-filename-lowercase-arguments",
+      "layer": "D",
+      "category": "code",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "scan_1.png invoice_20250111.pdf"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "scan_1.png invoice_20250111.pdf"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "bare-filename-capital-arguments",
+      "layer": "D",
+      "category": "code",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "Scan_1.png doc_v2.png"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Scan_1.png doc_v2.png"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "repeat-with-bare-filename-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "scan_1.png Scan_1.png"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "scan_1.png Scan_1.png"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "bare-filename-lowercase-response",
+      "layer": "D",
+      "category": "code",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "scan_1.png invoice_20250111.pdf"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "scan_1.png invoice_20250111.pdf"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "bare-filename-capital-response",
+      "layer": "D",
+      "category": "code",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "Scan_1.png doc_v2.png"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Scan_1.png doc_v2.png"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "repeat-with-bare-filename-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "scan_1.png Scan_1.png"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "scan_1.png Scan_1.png"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "opaque-foreign-arguments",
+      "layer": "D",
+      "category": "code",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "opaque-malformed-arguments",
+      "layer": "D",
+      "category": "code",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "<deadbeef:Name_>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "<deadbeef:Name_>"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "repeat-with-other-namespace-arguments",
+      "layer": "R",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "opaque-foreign-response",
+      "layer": "D",
+      "category": "code",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "opaque-malformed-response",
+      "layer": "D",
+      "category": "code",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "<deadbeef:Name_>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "<deadbeef:Name_>"
+        ],
+        "count": 17
+      },
+      "gold": []
+    },
+    {
+      "id": "repeat-with-other-namespace-response",
+      "layer": "R",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [],
+      "payload": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "hello maria schneider",
+          [
+            "From: Maria Schneider <alice@example.invalid>"
+          ],
+          "<deadbeef:Name_999>"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            6,
+            21
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1,
+            0
+          ],
+          "span": [
+            23,
+            44
+          ],
+          "class": "Email"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-space-raw-first-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria {{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-space-owned-first-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}} Schneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-space-raw-ends-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria {{owned_1}} Fischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria Schneider Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            16,
+            23
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-space-raw-middle-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}} Schneider {{owned_2}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria Schneider Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            16,
+            23
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-nbsp-raw-first-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\u00a0{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u00a0Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-nbsp-owned-first-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\u00a0Schneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u00a0Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-nbsp-raw-ends-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\u00a0{{owned_1}}\u00a0Fischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u00a0Schneider\u00a0Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            18,
+            25
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-nbsp-raw-middle-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\u00a0Schneider\u00a0{{owned_2}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u00a0Schneider\u00a0Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            18,
+            25
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-thin-raw-first-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\u2009{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u2009Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            8,
+            17
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-thin-owned-first-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\u2009Schneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u2009Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            8,
+            17
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-thin-raw-ends-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\u2009{{owned_1}}\u2009Fischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u2009Schneider\u2009Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            8,
+            17
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            20,
+            27
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-thin-raw-middle-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\u2009Schneider\u2009{{owned_2}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u2009Schneider\u2009Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            8,
+            17
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            20,
+            27
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-tab-raw-first-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\t{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\tSchneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-tab-owned-first-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\tSchneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\tSchneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-tab-raw-ends-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\t{{owned_1}}\tFischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\tSchneider\tFischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            16,
+            23
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-tab-raw-middle-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\tSchneider\t{{owned_2}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\tSchneider\tFischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            16,
+            23
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-crlf-raw-first-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\r\n{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\r\nSchneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-crlf-owned-first-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\r\nSchneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\r\nSchneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-crlf-raw-ends-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\r\n{{owned_1}}\r\nFischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\r\nSchneider\r\nFischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            18,
+            25
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-crlf-raw-middle-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\r\nSchneider\r\n{{owned_2}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\r\nSchneider\r\nFischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            18,
+            25
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-mixed-raw-first-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria \t\u00a0\r\n\u2009{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria \t\u00a0\r\n\u2009Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            14,
+            23
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-mixed-owned-first-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}} \t\u00a0\r\n\u2009Schneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria \t\u00a0\r\n\u2009Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            14,
+            23
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-mixed-raw-ends-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria \t\u00a0\r\n\u2009{{owned_1}} \t\u00a0\r\n\u2009Fischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria \t\u00a0\r\n\u2009Schneider \t\u00a0\r\n\u2009Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            14,
+            23
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            32,
+            39
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-mixed-raw-middle-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}} \t\u00a0\r\n\u2009Schneider \t\u00a0\r\n\u2009{{owned_2}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria \t\u00a0\r\n\u2009Schneider \t\u00a0\r\n\u2009Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            14,
+            23
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            32,
+            39
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-space-raw-first-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria {{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-space-owned-first-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}} Schneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-space-raw-ends-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria {{owned_1}} Fischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria Schneider Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            16,
+            23
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-space-raw-middle-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}} Schneider {{owned_2}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria Schneider Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            16,
+            23
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-nbsp-raw-first-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\u00a0{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u00a0Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-nbsp-owned-first-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\u00a0Schneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u00a0Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-nbsp-raw-ends-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\u00a0{{owned_1}}\u00a0Fischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u00a0Schneider\u00a0Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            18,
+            25
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-nbsp-raw-middle-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\u00a0Schneider\u00a0{{owned_2}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u00a0Schneider\u00a0Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            18,
+            25
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-thin-raw-first-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\u2009{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u2009Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            8,
+            17
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-thin-owned-first-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\u2009Schneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u2009Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            8,
+            17
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-thin-raw-ends-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\u2009{{owned_1}}\u2009Fischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u2009Schneider\u2009Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            8,
+            17
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            20,
+            27
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-thin-raw-middle-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\u2009Schneider\u2009{{owned_2}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\u2009Schneider\u2009Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            8,
+            17
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            20,
+            27
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-tab-raw-first-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\t{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\tSchneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-tab-owned-first-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\tSchneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\tSchneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-tab-raw-ends-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\t{{owned_1}}\tFischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\tSchneider\tFischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            16,
+            23
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-tab-raw-middle-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\tSchneider\t{{owned_2}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\tSchneider\tFischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            6,
+            15
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            16,
+            23
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-crlf-raw-first-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\r\n{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\r\nSchneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-crlf-owned-first-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\r\nSchneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\r\nSchneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-crlf-raw-ends-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria\r\n{{owned_1}}\r\nFischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\r\nSchneider\r\nFischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            18,
+            25
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-crlf-raw-middle-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}}\r\nSchneider\r\n{{owned_2}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria\r\nSchneider\r\nFischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            7,
+            16
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            18,
+            25
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-mixed-raw-first-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria \t\u00a0\r\n\u2009{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria \t\u00a0\r\n\u2009Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            14,
+            23
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-mixed-owned-first-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}} \t\u00a0\r\n\u2009Schneider"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria \t\u00a0\r\n\u2009Schneider"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            14,
+            23
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-mixed-raw-ends-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "Maria \t\u00a0\r\n\u2009{{owned_1}} \t\u00a0\r\n\u2009Fischer"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria \t\u00a0\r\n\u2009Schneider \t\u00a0\r\n\u2009Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            14,
+            23
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            32,
+            39
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-new-hit-gap-mixed-raw-middle-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        "Schneider",
+        "Fischer",
+        "Maria Schneider",
+        "Schneider Fischer",
+        "Maria Schneider Fischer"
+      ],
+      "payload": {
+        "items": [
+          "{{owned_0}} \t\u00a0\r\n\u2009Schneider \t\u00a0\r\n\u2009{{owned_2}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria \t\u00a0\r\n\u2009Schneider \t\u00a0\r\n\u2009Fischer"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            14,
+            23
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            32,
+            39
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-empty-owned-arguments",
+      "layer": "D",
+      "category": "text",
+      "direction": "arguments",
+      "seed_names": [
+        "Maria",
+        ""
+      ],
+      "payload": {
+        "items": [
+          "{{owned_1}}Maria",
+          "Maria{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria",
+          "Maria"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        }
+      ]
+    },
+    {
+      "id": "public-empty-owned-response",
+      "layer": "D",
+      "category": "text",
+      "direction": "response",
+      "seed_names": [
+        "Maria",
+        ""
+      ],
+      "payload": {
+        "items": [
+          "{{owned_1}}Maria",
+          "Maria{{owned_1}}"
+        ],
+        "count": 17
+      },
+      "expanded": {
+        "items": [
+          "Maria",
+          "Maria"
+        ],
+        "count": 17
+      },
+      "gold": [
+        {
+          "path": [
+            "items",
+            0
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        },
+        {
+          "path": [
+            "items",
+            1
+          ],
+          "span": [
+            0,
+            5
+          ],
+          "class": "Name"
+        }
+      ]
+    }
+  ]
+}

@@ -118,6 +118,7 @@ impl std::fmt::Debug for NymOrtBackend {
 
 impl NymOrtBackend {
     pub(crate) fn new(config: NymConfig) -> Result<Self, SafetyNetError> {
+        let _constructor = gaze_types::perf_span!("nym_model_constructor_ns");
         verify_nym_bundle_with_digest(&config.model_dir, config.expected_bundle_sha256)?;
         let config_json =
             std::fs::read(config.model_dir.join(NYM_SMALL_CONFIG_FILE)).map_err(|_| {
@@ -131,6 +132,7 @@ impl NymOrtBackend {
             |what: &str, err: &dyn std::fmt::Display| SafetyNetError::ModelUnavailable {
                 reason: format!("nym {what}: {}", sanitize_error(&err.to_string())),
             };
+        let tokenizer_load = gaze_types::perf_span!("tokenizer_load_ns");
         let mut tokenizer =
             tokenizers::Tokenizer::from_file(config.model_dir.join(NYM_SMALL_TOKENIZER_FILE))
                 .map_err(|err| unavailable("tokenizer failed to load", &err))?;
@@ -147,6 +149,8 @@ impl NymOrtBackend {
         };
         let (bos, eos) = (special("<bos>")?, special("<eos>")?);
 
+        drop(tokenizer_load);
+        let model_load = gaze_types::perf_span!("model_load_ns");
         let session = ort::session::Session::builder()
             .map_err(|err| unavailable("ort session failed to initialize", &err))?
             .with_intra_threads(config.intra_threads.get())
@@ -159,6 +163,7 @@ impl NymOrtBackend {
             .map_err(|err| unavailable("ort deterministic compute failed", &err))?
             .commit_from_file(config.model_dir.join(NYM_SMALL_MODEL_FILE))
             .map_err(|err| unavailable("ort model failed to load", &err))?;
+        drop(model_load);
         Ok(Self {
             config,
             tokenizer,

@@ -25,6 +25,8 @@ use crate::commands::Cli;
 use crate::error::CliError;
 
 fn main() -> ExitCode {
+    #[cfg(feature = "perf-timers")]
+    perf::start();
     logger::install_panic_hook();
 
     #[cfg(feature = "setup")]

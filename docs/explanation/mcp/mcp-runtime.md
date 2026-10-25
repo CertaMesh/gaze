@@ -21,11 +21,11 @@ Every tool call traverses this sequence in order:
 | 1 | Validate transport-supplied session id via `SessionIdPolicy` | `DispatchError::SessionId`; no manifest row |
 | 2 | Look up tool in `ToolRegistry` | `DispatchError::UnknownTool`; no manifest row |
 | 3 | Authorize via `AuthHook::authorize_agent` or `_operator` (driven by `ToolDescriptor::tier`) | `DispatchError::Auth`; no manifest row |
-| 4 | Preflight argument carriers, then protect raw args via `gaze::Pipeline::protect_text_transaction` (the staged args transaction commits after `begin_call`) | `DispatchError::Carrier` / `DispatchError::Protection` for preflight and protect — no manifest row; `DispatchError::Transaction` for the post-begin commit — fail_call written first |
+| 4 | Preflight argument carriers, then protect raw args via `gaze::Pipeline::protect_text_transaction` (the staged args transaction commits after `begin_call`) | `DispatchError::Carrier` / `DispatchError::Protection` / `DispatchError::ResourceLimit` for preflight and protect — no manifest row; `DispatchError::Transaction` for the post-begin commit — fail_call written first |
 | 5 | `ManifestStore::begin_call(BeginCallContext)` | `DispatchError::Manifest`; no manifest row written |
 | 6 | Build the sealed `ToolCtx` (only construction site in the crate) | — |
 | 7 | `Tool::invoke(&ctx).await` | `DispatchError::ToolError`; fail_call written first |
-| 8 | For `ResponseRedaction::Apply`, preflight response carriers, then stage response protection via `gaze::Pipeline::protect_text_transaction`. Operator-tier `BypassByOperator` uses the raw payload with no preflight, protection, or response transaction; agent-tier bypass is rejected | `DispatchError::Carrier` / `DispatchError::Protection`, or `DispatchError::Redaction` for the agent-bypass rejection; fail_call written first |
+| 8 | For `ResponseRedaction::Apply`, preflight response carriers, then stage response protection via `gaze::Pipeline::protect_text_transaction`. Operator-tier `BypassByOperator` uses the raw payload with no preflight, protection, or response transaction; agent-tier bypass is rejected | `DispatchError::Carrier` / `DispatchError::Protection` / `DispatchError::ResourceLimit`, or `DispatchError::Redaction` for the agent-bypass rejection; fail_call written first |
 | 9 | Compute out-of-row `SnapshotRef` over the response payload (protected for `Apply`, raw for operator bypass) | `DispatchError::ResponseSerialization`; fail_call written first |
 | 10 | Commit the staged response transaction, if present, after snapshot computation | `DispatchError::Transaction`; fail_call written first |
 | 11 | `ManifestStore::finish_call(handle, snapshot)` | `DispatchError::Manifest` |
@@ -34,6 +34,27 @@ Every tool call traverses this sequence in order:
 Validation, lookup, auth, and argument preflight happen before the manifest.
 After `begin_call` succeeds, dispatch runs either `finish_call` or `fail_call`
 before returning. `tests/chokepoint_ordering.rs` pins the order.
+
+## Operation resource budgets
+
+Arguments and protected responses are separate operations. Full expansion of owned
+tokens has an aggregate budget of 16 times the existing 2 MiB sizing constant,
+currently 32 MiB across all string leaves, including literal input bytes. There
+is no separate decoded-input cap.
+The runtime expands the complete text and applies the real Rule matcher before
+commit or release. It does not truncate text or skip coverage to fit the budget.
+
+Exceeding the expansion budget returns the distinct `DispatchError::ResourceLimit`.
+This error contains no input values and discards the operation's staged state.
+An argument limit failure occurs before `begin_call` or tool invocation. A protected
+response limit failure writes `fail_call` before returning and releases no response.
+Token provenance and restore failures retain `DispatchError::Protection`.
+The rmcp adapter maps this budget refusal to the stable `resource_limit` text
+class with `isError: true`. Whitespace-only interior gaps between owned spans
+count as covered in projection and final proof without minting new mappings.
+Empty owned values keep their wire positions and identities. Projection splits
+a replacement at an interior empty marker and leaves boundary markers outside
+the replacement. The independent coverage proof still checks the full expansion.
 
 ## Type-level seal
 

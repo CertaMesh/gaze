@@ -124,6 +124,7 @@ pub(crate) fn resolve_pipeline(
     context: Option<TypedContext>,
     logger: Option<Arc<dyn RedactionLogger>>,
 ) -> std::result::Result<ResolvedPipeline, CliError> {
+    let _construction = gaze_types::perf_span!("pipeline_build_ns");
     let resolved = resolve_pipeline_builder(
         policy_path,
         overrides,
@@ -154,10 +155,14 @@ pub(crate) fn resolve_pipeline_builder(
     cli_ner_threshold: Option<f32>,
     context: Option<&TypedContext>,
 ) -> std::result::Result<ResolvedPipelineBuilder, CliError> {
+    let policy_load = gaze_types::perf_span!("policy_load_ns");
     let policy = match policy_path {
         Some(path) => overrides.apply_to(&Policy::load_for_cli(path).map_err(map_policy_error)?),
         None => policy_less_policy(overrides)?,
     };
+    drop(policy_load);
+    #[cfg(feature = "perf-timers")]
+    crate::perf::policy_loaded();
     if policy.detectors.is_empty()
         && policy.rulepacks.bundled.is_empty()
         && policy.rulepacks.paths.is_empty()

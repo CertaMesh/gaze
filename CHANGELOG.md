@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Update Tokio from 1.52.3 to 1.54.1 to fix RustSec advisory
+  RUSTSEC-2026-0386, an I/O safety defect in the `AsyncFd` constructors.
+  Gaze does not use `AsyncFd`.
+
+- `gaze daemon` bounds each raw JSONL frame at 160 MiB before UTF-8 conversion
+  or JSON parsing. Oversized frames now receive one value-free `FrameTooLarge`
+  error, then input closes without draining the line. A separate 160 MiB
+  queue byte budget preserves write-all-then-read batches within that budget.
+  Only beyond the queue budget does the reader apply backpressure, without
+  dropping, reordering, or refusing frames. Reader and queue buffers retain at
+  most the frame cap plus queue budget, a fixed read buffer, and constant
+  bookkeeping.
+
+- Immutable proxy request leaves share one expansion budget across the request.
+  The proxy checks the combined size before expansion or Rule matching, so
+  splitting a carrier across leaves cannot bypass the resource cap. The default
+  remains 16 times the body cap, or 32 MiB. Embedding applications can override
+  `ProxyConfig::request_residual_expansion_limit_bytes`. An oversized total
+  returns the distinct HTTP 413 `ResidualExpansionLimitExceeded` without PII
+  coverage or benchmark gain credit (#876).
+
 - Gemini URL model identifiers are decoded and validated before forwarding.
   Previously, that URI segment bypassed request scanning and could carry PII
   to the provider. Strict model identifiers retain deterministic checks; values
@@ -51,6 +72,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stdin and stdout contracts are unchanged.
 
 ### Fixed
+
+- MCP owned-token operations retain full expansion and Rule coverage up to
+  16 times the existing 2 MiB sizing constant, currently 32 MiB. Leak-free arguments and
+  responses above the former 2 MiB expansion cap now succeed, including decoded
+  input above 2 MiB. Only expansion budget exhaustion returns the distinct `DispatchError::ResourceLimit` and
+  discards staged changes instead of reporting a token provenance failure. The rmcp
+  adapter returns the stable `resource_limit` error class. Whitespace-only interior
+  gaps between owned spans stay literal and create no PII mapping. Empty owned
+  values preserve their wire positions and identities beside or inside Rule hits.
 
 - Proxy routing model identifiers such as `claude-sonnet-4-5` no longer fail
   because NER or a safety net classifies them as personal data. Strict ASCII

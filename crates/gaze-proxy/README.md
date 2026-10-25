@@ -55,6 +55,14 @@ upstream = "https://generativelanguage.googleapis.com/"
 
 Adapters inspect text, tool calls/results, and function arguments in native JSON without transcoding.
 
+Immutable legacy request leaves share one expansion budget per request. The
+proxy preflights their combined expanded UTF-8 size before expansion or matching.
+The default budget is 16 times the body cap, or 32 MiB with the default 2 MiB cap.
+Embedding applications can set
+`ProxyConfig::request_residual_expansion_limit_bytes = Some(bytes)`.
+An oversized total returns HTTP 413 `ResidualExpansionLimitExceeded`, separately
+from PII coverage refusals. See [proxy runtime](../../docs/explanation/proxy/proxy-runtime.md#immutable-request-coverage-and-expansion-limits).
+
 ## Locale
 
 Recognizers that declare `locales = [...]`, `postal.de`, `postal.us`, the national phone

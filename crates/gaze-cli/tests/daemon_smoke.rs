@@ -490,6 +490,87 @@ fn run_daemon_batch(
     (started.elapsed(), output)
 }
 
+#[test]
+fn daemon_write_all_then_read_batch_below_queue_budget_completes_in_order() {
+    let dir = tempdir().unwrap();
+    let policy = dir.path().join("policy.toml");
+    fs::write(
+        &policy,
+        r#"
+[session]
+scope = "conversation"
+[policy.rulepacks]
+bundled = ["core"]
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+    let mut guard = ChildGuard(
+        Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+            .args([
+                "daemon",
+                "--policy",
+                policy.to_str().unwrap(),
+                "--idle-timeout",
+                "30",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let mut stdin = guard.0.stdin.take().unwrap();
+    let mut stdout = std::io::BufReader::new(guard.0.stdout.take().unwrap());
+    writeln!(stdin, r#"{{"version":1,"op":"open","session_id":"batch"}}"#).unwrap();
+    stdin.flush().unwrap();
+    let mut opened = String::new();
+    stdout.read_line(&mut opened).unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(&opened).unwrap()["op"],
+        "open"
+    );
+    let batch = (0..2000)
+        .map(|index| {
+            format!(
+        "{{\"version\":1,\"op\":\"clean\",\"session_id\":\"batch\",\"text\":\"{index:06}\"}}\n"
+    )
+        })
+        .collect::<String>();
+    assert_eq!(batch.len(), 128_000);
+    let (done, completed) = mpsc::channel();
+    let writer = thread::spawn(move || {
+        let result = stdin
+            .write_all(batch.as_bytes())
+            .and_then(|()| stdin.flush());
+        drop(stdin);
+        done.send(result).unwrap();
+    });
+    // Deliberately leave stdout undrained until the entire write has completed.
+    let written = completed.recv_timeout(Duration::from_secs(10));
+    if written.is_err() {
+        guard.0.kill().unwrap();
+    }
+    writer.join().unwrap();
+    assert!(
+        written.is_ok(),
+        "128,000-byte batch stalled before stdout was drained"
+    );
+    written.unwrap().unwrap();
+    let responses = stdout
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(&line.unwrap()).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(responses.len(), 2000);
+    for (index, response) in responses.iter().enumerate() {
+        assert_eq!(response["clean_text"], format!("{index:06}"));
+        assert_eq!(response["session_id"], "batch");
+    }
+    assert!(guard.0.wait().unwrap().success());
+}
+
 /// Budget for the opt-in throughput test, mirroring the
 /// `GAZE_TEST_SUBPROCESS_TIMEOUT_SECS` helper #430 introduced: generous by
 /// default, tightenable when a run deliberately hunts a perf regression.

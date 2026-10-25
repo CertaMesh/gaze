@@ -17,12 +17,44 @@ flowchart LR
 A full copy beats an enclosed weaker same-class fragment. Without uncovered
 copies, Gaze keeps the first resolution and adds only one linear scan.
 
-Within a text, sources protect copies before or after them. Across texts,
-sources protect only later texts. Daemon turns run in order. Proxy JSON strings
-(message content, tool results, arguments) are separate texts processed in order:
-a copy in an earlier field than its source can leak. A second proxy pass is a
-follow-up. Whole request bodies avoid chunk cuts; future streaming ingress must
-hold back `(longest value − 1)` bytes.
+Within a text, sources protect copies before or after them. Proxy requests stage
+all declared mutable JSON strings (message content, tool results, arguments).
+Discovery expands owned tokens and collects deterministic Rule sources from the
+original fields. It runs no learned detectors or safety nets and discards its
+output. Full protection and net admission start after discovery is complete.
+Each original field is then protected against the complete request evidence, so
+a short name protected during discovery cannot hide part of a longer repeat.
+For caller-supplied owned tokens, the proxy expands their manifest values in a
+bounded view. Ordinary primary protection sees each original raw gap before
+projection, preserving learned-recognizer context even when no token was supplied.
+The proxy then maps every eligible Rule-repeat span back onto remaining raw bytes.
+Hits remain overlapping until their raw intersections are unioned within each
+gap, including contained hits and chains across several known values. A repeat
+may cross either edge of a token or cover raw text between tokens. Caller-supplied
+token identities stay unchanged. Compatible tokens created during the current
+protection pass can merge with a Rule union before output, preventing needless
+fragmentation in owner responses. Foreign classes and token families remain
+separate. New fragments get reversible mappings without
+becoming independent Rule sources. The expanded Rule pass runs no recognizers or nets. Full-leaf net resolution
+then uses the existing core resolver to protect remaining raw gaps with complete
+context, retaining owned tokens and keeping net values out of Rule propagation.
+A final proof enumerates every eligible overlapping Rule occurrence on each
+expanded original leaf and requires every matched byte to belong to an owned or
+new token. It changes no mappings, evidence or matcher cache, and uses neither
+candidate selection nor the protection projection. Any uncovered byte refuses
+the request. Caller-supplied session tokens retain their exact restore spelling. Mappings commit
+only after the whole request passes; a failure discards the staged session state.
+Custom `RequestPseudonymizer` implementations must supply `verify_rule_coverage`.
+Its default refuses rather than accepting an unproved request. The built-in
+protector supplies the independent byte-coverage invariant above.
+This also applies when the response uses SSE: request protection finishes before
+any upstream send.
+
+Across genuinely separate turns, sources protect only later turns. A declaration
+in a later request cannot revoke bytes already sent. Daemon turns still run in
+order. Buffering a complete request does not repair values split across separate
+transport frames or future requests; those need an explicit ingress framing
+contract.
 
 ## What propagates
 
@@ -97,7 +129,7 @@ expands to two scalars but keeps its source span; dotless `ı` does not match `I
 which lowers to `i`.
 
 Known gaps include lowercase/mixed-case lone parts, common-word surnames,
-sub-six-digit runs, earlier proxy fields, model-only sources, honorific names
+sub-six-digit runs, copies in already-sent turns, model-only sources, honorific names
 made solely of common words, and all-caps surnames in mixed-case names.
 `VAN DER BERG` has no distinctive part and relies on NER for changed-case copies.
 
@@ -163,7 +195,12 @@ Copies record `recognizer_id = manifest_sweep`, `provenance_stage = manifest_swe
 `decided_by = manifest_sweep` (`ConflictTier::ManifestSweep`), and
 `provenance_merged_from = manifest_sweep:exact`, `:variant`, `:part` (parts/runs), or `:uncertain_prefix` (conservative typed prefix seeds).
 Conservative prefix copies also carry `uncertain_repeat_prefix` as their typed
-labelled-value reason. Rows never contain source tokens/values. Daemon overwrites the stage with
+labelled-value reason.
+Proxy projections across owned tokens use the matched Rule candidate's class and
+family. Fragment mappings emit metadata-only sweep audit rows with
+`provenance_merged_from = manifest_sweep:token_boundary`. They do not promote the
+fragment to Rule evidence.
+Rows never contain source tokens/values. Daemon overwrites the stage with
 `daemon`; `decided_by` still identifies the sweep.
 
 ## Failure

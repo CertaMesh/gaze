@@ -145,6 +145,27 @@ for example `gaze_assembly::CorePipelineConfig::new().build()`, and pass its
 locale chain to the envelope. An empty primary registry is rejected even for
 calls containing no strings. The CLI MCP host uses this assembly path.
 
+Arguments and protected responses are separate operations. Each operation discovers
+validated deterministic Rule sources across all original text leaves before protecting
+those leaves. An earlier repeat is therefore covered even when its source is later
+in the same operation. Learned and safety-net-only detections do not become Rule
+sources. Existing owned tokens keep their identities; overlapping Rule matches cover
+adjacent raw bytes without rewriting those tokens. An independent final Rule coverage
+proof runs before commit or release. Empty owned values remain wire-position
+markers, including at Rule-hit boundaries and inside matches. Projection never
+consumes these markers. Failed protection discards staged mappings.
+
+Each operation has a 32 MiB full owned-token expansion budget, derived as
+16 times the existing 2 MiB sizing constant. It counts all restored string leaves
+together, including literal input bytes. Decoded input has no separate size cap.
+Exceeding the expansion budget returns `DispatchError::ResourceLimit`, with no
+input bytes in the error. Whitespace-only interior gaps between owned spans count
+as covered without new mappings; other uncovered bytes still require protection.
+Unknown or forged tokens retain their existing protection errors. Full expansion
+and the real Rule matcher still run within the budget. Transports must also bound
+wire input and JSON structure. Separate dispatches remain separate operations,
+and later declarations cannot retract earlier releases.
+
 The compatible `PiiEnvelope::new` constructor uses an empty dictionary bundle.
 Use `.with_dictionaries(&bundle)` to supply tenant terms. Primary recognizers,
 mandatory safety nets, and `ToolResources::protection_context()` receive the
@@ -288,3 +309,10 @@ re-proves that the gate goes red when a gate is removed.
 Transport: `gaze-mcp-rmcp`. User-input protection: `gaze-proxy`.
 
 Full dispatch, audit, and threat contracts: [MCP runtime](../../docs/explanation/mcp/mcp-runtime.md). Correlation fields, manifest lifecycle, failure variants, and authorization audit: [Metrics](../../docs/reference/metrics.md#7-mcp-chokepoint-observability-gaze-mcp-core).
+
+Only current-session token mappings expand for operation discovery and coverage.
+Other namespaces, including token-bridge owner tokens, retain their base behavior
+as literal text. They are not expanded or newly rejected by this operation proof.
+Their adopter-specific validation and error stage remain unchanged. A separate
+opaque-carrier and foreign-namespace contract is a follow-up. Ordinary filenames
+such as `scan_1.png` remain literal text too.

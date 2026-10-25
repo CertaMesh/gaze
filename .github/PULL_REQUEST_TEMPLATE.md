@@ -28,6 +28,9 @@ Detection changes (adds, widens, narrows or removes rules, cues, locale buckets,
 
 Base sha (`main` the branch starts from, captured once or verified exact-key reuse):
 Candidate sha:
+Benchmark specification ID and manifest path:
+Certification manifest and checker result for the exact integrated candidate:
+Required mechanism policy deltas:
 Scorecard paths:
 
 | Layer | Leaked bytes v2 (base → candidate) | Leaked bytes v1 (base → candidate) | False-positive bytes v2 (base → candidate) | False-positive bytes v1 (base → candidate) | Refusals (base → candidate) |
