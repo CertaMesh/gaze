@@ -1,0 +1,39 @@
+[
+  {
+    "text": "{\"Customer ID:\": \"C-88231\"}",
+    "owned": "C-88231"
+  },
+  {
+    "text": "{\"Customer ID: \": \"C-88231\"}",
+    "owned": "C-88231"
+  },
+  {
+    "text": "{\"Employee ID:\":\"E-55102\"}",
+    "owned": "E-55102"
+  },
+  {
+    "text": "{\"Customer ID:\": 88231}",
+    "owned": "88231",
+    "numeric": true
+  },
+  {
+    "text": "[\"Customer ID:\", \"C-88231\"]",
+    "owned": "C-88231"
+  },
+  {
+    "text": "{\"rows\":[[\"Kundennummer:\",\"SYN731284\"]]}",
+    "owned": "SYN731284"
+  },
+  {
+    "text": "{\"Employee_ID=\":\"E-55102\"}",
+    "owned": "E-55102"
+  },
+  {
+    "text": "[\"x\\\"customerId: \", \"SYN731284\"]",
+    "owned": "SYN731284"
+  },
+  {
+    "text": "{\"Customer ID:\":\"SYN\\\\\\\"É731284\"}",
+    "owned": "SYN\\\\\\\"É731284"
+  }
+]

@@ -92,3 +92,54 @@ fn ambiguous_outer_quotes_clean_and_restore_without_refusing_document() {
         assert_eq!(restored["text"].as_str().unwrap(), input);
     }
 }
+
+#[test]
+fn json_label_cells_clean_with_defaults_and_restore_exactly() {
+    let fixtures: Value = serde_json::from_str(include_str!(
+        "../../gaze-recognizers/tests/fixtures/record_id_json_label_cells.json"
+    ))
+    .unwrap();
+    for fixture in fixtures.as_array().unwrap() {
+        let mut input = fixture["text"].as_str().unwrap().to_owned();
+        let mut expected = fixture["owned"].as_str().unwrap().to_owned();
+        for depth in 0..=2 {
+            let out = Command::cargo_bin("gaze")
+                .unwrap()
+                .arg("clean")
+                .write_stdin(input.as_bytes())
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "depth {depth}: {input:?}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            let reply: Value = serde_json::from_slice(&out.stdout).unwrap();
+            let clean = reply["clean_text"].as_str().unwrap();
+            assert!(!clean.contains(&expected), "depth {depth}: {clean}");
+            assert!(reply["stats"]["detections"].as_u64().unwrap() > 0);
+            // Plain-text clean emits the same bare token for numeric IDs as
+            // ordinary JSON number fields. String delimiters remain intact.
+            if fixture["numeric"] != true || depth > 0 {
+                let _: Value =
+                    serde_json::from_str(clean).expect("clean JSON strings remain valid");
+            }
+            let restored = Command::cargo_bin("gaze")
+                .unwrap()
+                .arg("restore")
+                .write_stdin(json!({"session_blob":reply["session_blob"],"text":clean}).to_string())
+                .output()
+                .unwrap();
+            assert!(
+                restored.status.success(),
+                "{}",
+                String::from_utf8_lossy(&restored.stderr)
+            );
+            let restored: Value = serde_json::from_slice(&restored.stdout).unwrap();
+            assert_eq!(restored["text"].as_str().unwrap(), input);
+            input = serde_json::to_string(&input).unwrap();
+            let encoded = serde_json::to_string(&expected).unwrap();
+            expected = encoded[1..encoded.len() - 1].to_owned();
+        }
+    }
+}

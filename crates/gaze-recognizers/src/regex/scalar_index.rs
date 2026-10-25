@@ -7,13 +7,14 @@ use std::ops::Range;
 #[derive(Default)]
 pub(super) struct ScalarBoundaryIndex {
     encoded: Option<EncodedIndex>,
+    json_label_values: Option<HashMap<usize, Range<usize>>>,
     paired: Option<PairedCloseIndex>,
     prefix: PrefixCursor,
     provisional: Option<(usize, PrefixCursor)>,
     json_ancestors: HashMap<(usize, usize), bool>,
     record_breaks: Option<Vec<usize>>,
     strings: HashMap<(usize, Option<usize>), StringEndIndex>,
-    quotes: HashMap<(usize, u8, usize, ScalarQuoteDelimiter), QuoteCloseIndex>,
+    quotes: HashMap<(u8, usize, ScalarQuoteDelimiter), QuoteCloseIndex>,
 }
 
 impl ScalarBoundaryIndex {
@@ -91,6 +92,70 @@ impl ScalarBoundaryIndex {
                 );
                 boundary
             })
+    }
+
+    /// A colon inside a JSON label belongs to the label, not its value.
+    /// Object keys own the following value; array label cells own the next cell.
+    /// Ordinary object value strings never own a sibling field.
+    pub(super) fn scan_json_label_cell(
+        &mut self,
+        input: &str,
+        capture: Range<usize>,
+    ) -> Option<LabelledValueScan> {
+        if self.json_label_values.is_none() {
+            let encoded = self.encoded(input);
+            let valid = *encoded.valid_json.get_or_insert_with(|| {
+                scanner_work(input.len());
+                serde_json::from_str::<serde_json::Value>(input).is_ok()
+            });
+            self.json_label_values = Some(if valid {
+                json_label_values(input, &encoded.json)
+            } else {
+                HashMap::new()
+            });
+        }
+        let values = self
+            .json_label_values
+            .as_ref()
+            .expect("initialized JSON labels");
+        if let Some(span) = values
+            .get(&capture.start)
+            .or_else(|| capture.start.checked_sub(1).and_then(|at| values.get(&at)))
+            .cloned()
+        {
+            return Some(LabelledValueScan {
+                quoted_value: true,
+                capture: span.clone(),
+                extension: span.end..span.end,
+                repeat_seed: (!span.is_empty()).then_some(gaze_types::LabelledValueRepeatSeed {
+                    span: span.clone(),
+                    kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
+                }),
+                reason: labelled_value_over_limit(&input[span.clone()])
+                    .then_some(LabelledValueScanReason::LimitExceeded),
+                rejected: span.is_empty(),
+                span,
+            });
+        }
+        let encoded = self.encoded(input);
+        let frame = encoded.json_frame_at(capture.start)?;
+        let decoded = encoded.decoded(input, frame)?;
+        let start = source_anchor(&decoded.view.source, capture.start)?;
+        let end = decoded
+            .view
+            .source
+            .partition_point(|range| range.end < capture.end)
+            .saturating_add(1)
+            .min(decoded.view.text.len());
+        let scan = decoded
+            .index
+            .scan_json_label_cell(&decoded.view.text, start..end)?;
+        let mut scan = project_scan(scan, &decoded.view.source, &capture);
+        scan.reason = scan.reason.or_else(|| {
+            labelled_value_over_limit(&input[scan.span.clone()])
+                .then_some(LabelledValueScanReason::LimitExceeded)
+        });
+        Some(scan)
     }
 
     pub(super) fn scan_encoded_wrapper(
@@ -187,9 +252,9 @@ impl ScalarBoundaryIndex {
     ) -> Option<usize> {
         let index = self
             .quotes
-            .entry((start, quote, escapes, delimiter))
-            .or_insert_with(|| QuoteCloseIndex::new(input, start, quote, escapes, delimiter));
-        index.close(input, limit, quote, escapes, delimiter)
+            .entry((quote, escapes, delimiter))
+            .or_insert_with(|| QuoteCloseIndex::new(input, quote, escapes, delimiter));
+        index.close(input, start, limit, escapes, delimiter)
     }
 
     fn context_is_json(
@@ -415,10 +480,8 @@ impl ScalarBoundaryIndex {
                             // Before the next quote event, extending the replay
                             // still takes this same newline fallback. Save it
                             // conditionally and rewind once that event is reached.
-                            let index = &self.quotes[&(content, byte, escapes, delimiter)];
-                            let next = index.runs.partition_point(|run| run.end <= limit);
-                            let until =
-                                index.runs.get(next).map_or(index.terminal, |run| run.start);
+                            let index = &self.quotes[&(byte, escapes, delimiter)];
+                            let until = index.next_event_after(limit);
                             valid_until = Some(valid_until.map_or(until, |prior| prior.min(until)));
                             cacheable &= until > prefix_end;
                         } else {
@@ -741,6 +804,76 @@ impl EncodedIndex {
     }
 }
 
+// The input has already passed JSON validation. Walk structural bytes once,
+// skipping complete strings, so commas inside strings cannot imply array cells.
+fn json_label_values(input: &str, frames: &[JsonFrame]) -> HashMap<usize, Range<usize>> {
+    let mut values = HashMap::new();
+    let mut containers = Vec::new();
+    let mut at = 0;
+    let mut strings = frames.iter().peekable();
+    while at < input.len() {
+        scanner_work(1);
+        if let Some(frame) = strings.peek().filter(|frame| frame.range.start == at) {
+            let close = frame.range.end - 1;
+            let mut next = frame.range.end;
+            while input
+                .as_bytes()
+                .get(next)
+                .is_some_and(u8::is_ascii_whitespace)
+            {
+                scanner_work(1);
+                next += 1;
+            }
+            let connector = input.as_bytes().get(next);
+            if connector == Some(&b':')
+                || (connector == Some(&b',') && containers.last() == Some(&b'['))
+            {
+                next += 1;
+                while input
+                    .as_bytes()
+                    .get(next)
+                    .is_some_and(u8::is_ascii_whitespace)
+                {
+                    scanner_work(1);
+                    next += 1;
+                }
+                if input.as_bytes().get(next) == Some(&b'"') {
+                    // All string starts are indexed, including empty values.
+                    let i = frames.partition_point(|frame| frame.range.start < next);
+                    if let Some(value) = frames.get(i) {
+                        values.insert(close, next + 1..value.range.end - 1);
+                    }
+                } else if input
+                    .as_bytes()
+                    .get(next)
+                    .is_some_and(|byte| byte.is_ascii_digit() || *byte == b'-')
+                {
+                    let start = next;
+                    while input.as_bytes().get(next).is_some_and(|byte| {
+                        matches!(byte, b'0'..=b'9' | b'-' | b'+' | b'.' | b'e' | b'E')
+                    }) {
+                        scanner_work(1);
+                        next += 1;
+                    }
+                    values.insert(close, start..next);
+                }
+            }
+            at = frame.range.end;
+            strings.next();
+            continue;
+        }
+        match input.as_bytes()[at] {
+            b'{' | b'[' => containers.push(input.as_bytes()[at]),
+            b'}' | b']' => {
+                containers.pop();
+            }
+            _ => {}
+        }
+        at += 1;
+    }
+    values
+}
+
 fn json_frames(input: &str) -> Vec<JsonFrame> {
     let bytes = input.as_bytes();
     let mut frames = Vec::new();
@@ -1011,106 +1144,158 @@ impl StringEndIndex {
     }
 }
 
-struct QuoteCloseIndex {
-    runs: Vec<Range<usize>>,
-    terminal: usize,
-    close: Option<usize>,
+struct QuoteEvent {
+    span: Range<usize>,
+    valid_run: bool,
+    next_terminal: usize,
 }
+
+struct QuoteCloseIndex {
+    events: Vec<QuoteEvent>,
+    end: usize,
+}
+
 impl QuoteCloseIndex {
-    fn new(
-        input: &str,
-        start: usize,
-        quote: u8,
-        opening_escapes: usize,
-        delimiter: ScalarQuoteDelimiter,
-    ) -> Self {
-        let width = opening_escapes + 1;
-        let Some(stride) = width.checked_mul(2) else {
-            return Self {
-                runs: Vec::new(),
-                terminal: input.len(),
-                close: None,
-            };
-        };
-        let mut runs = Vec::new();
-        let mut escapes = 0usize;
-        let mut at = start;
+    // Every capture shares the same suffix events for this quote grammar.
+    fn new(input: &str, quote: u8, escapes: usize, delimiter: ScalarQuoteDelimiter) -> Self {
+        let width = escapes + 1;
+        let stride = width * 2;
+        let mut events = Vec::new();
+        let mut preceding = 0;
+        let mut at = 0;
         while at < input.len() {
             scanner_work(1);
             let byte = input.as_bytes()[at];
             if byte == b'\\' {
-                escapes += 1;
+                preceding += 1;
             } else {
                 if byte == quote {
-                    let residue = escapes % stride;
-                    if residue == opening_escapes {
-                        let run_start = at - opening_escapes;
-                        let run_end =
-                            quote_run_end(input, run_start, quote, opening_escapes, input.len());
-                        runs.push(run_start..run_end);
-                        let run = (run_end - run_start) / width;
-                        let terminal = match delimiter {
-                            ScalarQuoteDelimiter::Single => run % 2 == 1,
-                            ScalarQuoteDelimiter::DoubledSingle => run % 4 == 2,
-                            ScalarQuoteDelimiter::DoubledTriple => {
-                                !run.is_multiple_of(2) || run >= 6
-                            }
-                            ScalarQuoteDelimiter::Triple => run >= 3,
-                        };
-                        if terminal {
-                            let close = scalar_quote_close(
-                                input,
-                                run_start,
-                                run_end,
-                                quote,
-                                opening_escapes,
-                                delimiter,
-                            );
-                            return Self {
-                                runs,
-                                terminal: run_end,
-                                close,
-                            };
-                        }
-                        at = run_end;
-                        escapes = 0;
+                    let residue = preceding % stride;
+                    if residue == escapes {
+                        let start = at - escapes;
+                        let end = quote_run_end(input, start, quote, escapes, input.len());
+                        events.push(QuoteEvent {
+                            span: start..end,
+                            valid_run: true,
+                            next_terminal: 0,
+                        });
+                        at = end;
+                        preceding = 0;
                         continue;
                     }
                     if residue != stride - 1 {
-                        return Self {
-                            runs,
-                            terminal: at + 1,
-                            close: None,
-                        };
+                        events.push(QuoteEvent {
+                            span: at..at + 1,
+                            valid_run: false,
+                            next_terminal: 0,
+                        });
                     }
                 }
-                escapes = 0;
+                preceding = 0;
             }
             at += 1;
         }
+        let mut next = events.len();
+        for i in (0..events.len()).rev() {
+            scanner_work(1);
+            if !events[i].valid_run
+                || Self::run_result(input, events[i].span.clone(), width, delimiter).0
+            {
+                next = i;
+            }
+            events[i].next_terminal = next;
+        }
         Self {
-            runs,
-            terminal: input.len(),
-            close: None,
+            events,
+            end: input.len(),
         }
     }
+
+    // A terminal run can reject the boundary (odd/oversized doubled triples).
+    fn run_result(
+        input: &str,
+        span: Range<usize>,
+        width: usize,
+        delimiter: ScalarQuoteDelimiter,
+    ) -> (bool, Option<usize>) {
+        let run = span.len() / width;
+        let end = span.start + run * width;
+        let (terminal, close) = match delimiter {
+            ScalarQuoteDelimiter::Single if run % 2 == 1 => (true, Some(end - width)),
+            ScalarQuoteDelimiter::DoubledSingle if run % 4 == 2 => (true, Some(end - 2 * width)),
+            ScalarQuoteDelimiter::DoubledTriple if !run.is_multiple_of(2) || run > 10 => {
+                (true, None)
+            }
+            ScalarQuoteDelimiter::DoubledTriple if run >= 6 => (true, Some(end - 6 * width)),
+            ScalarQuoteDelimiter::Triple if run > 5 => (true, None),
+            ScalarQuoteDelimiter::Triple if run >= 3 => (true, Some(end - 3 * width)),
+            _ => (false, None),
+        };
+        (
+            terminal,
+            close.filter(|_| {
+                !input[end..]
+                    .chars()
+                    .next()
+                    .is_some_and(|ch| ch.is_alphanumeric() || ch == '_')
+            }),
+        )
+    }
+
+    fn next_event_after(&self, limit: usize) -> usize {
+        self.events
+            .get(self.events.partition_point(|event| event.span.end <= limit))
+            .map_or(self.end, |event| event.span.start)
+    }
+
     fn close(
         &self,
         input: &str,
+        start: usize,
         limit: usize,
-        quote: u8,
         escapes: usize,
         delimiter: ScalarQuoteDelimiter,
     ) -> Option<usize> {
-        let at = self.runs.partition_point(|run| run.start < limit);
-        if let Some(run) = at
-            .checked_sub(1)
-            .map(|at| &self.runs[at])
-            .filter(|run| limit < run.end)
-        {
-            return scalar_quote_close(input, run.start, limit, quote, escapes, delimiter);
+        let width = escapes + 1;
+        let first = self.events.partition_point(|event| event.span.end <= start);
+        let event = self
+            .events
+            .get(first)
+            .filter(|event| event.span.start < limit)?;
+        scanner_work(1);
+        if !event.valid_run {
+            return None;
         }
-        (self.terminal <= limit).then_some(self.close).flatten()
+        let end = event.span.end.min(limit);
+        let (terminal, close) =
+            Self::run_result(input, event.span.start.max(start)..end, width, delimiter);
+        if terminal || end == limit {
+            return close;
+        }
+        let next = self
+            .events
+            .get(first + 1)
+            .map_or(self.events.len(), |event| event.next_terminal);
+        if let Some(event) = self
+            .events
+            .get(next)
+            .filter(|event| event.span.end <= limit)
+        {
+            return event
+                .valid_run
+                .then(|| Self::run_result(input, event.span.clone(), width, delimiter).1)
+                .flatten();
+        }
+        // Clipping a nonterminal run can change its parity into a close.
+        let last = self
+            .events
+            .partition_point(|event| event.span.start < limit)
+            .checked_sub(1)?;
+        let event = &self.events[last];
+        if event.valid_run && event.span.end > limit {
+            return Self::run_result(input, event.span.start..limit, width, delimiter).1;
+        }
+        None
     }
 }
 
@@ -1163,6 +1348,46 @@ mod tests {
     }
 
     #[test]
+    fn shared_quote_events_match_frozen_grammar_at_clipped_runs() {
+        for body in [
+            "''SYN''x''\n",
+            "'''SYN''é'",
+            "'a'_'b' 'c'",
+            "\\\"a\\\"b\"c",
+            "''''''x''''''''''' ",
+        ] {
+            let mut input = body.to_owned();
+            for _depth in 0..=3 {
+                for quote in [b'\'', b'"'] {
+                    for escapes in [0, 1, 3, 7] {
+                        for delimiter in [
+                            ScalarQuoteDelimiter::Single,
+                            ScalarQuoteDelimiter::Triple,
+                            ScalarQuoteDelimiter::DoubledSingle,
+                            ScalarQuoteDelimiter::DoubledTriple,
+                        ] {
+                            let index = QuoteCloseIndex::new(&input, quote, escapes, delimiter);
+                            // Real starts follow an opener, never split its escape prefix.
+                            for start in (0..=input.len())
+                                .filter(|&at| at == 0 || input.as_bytes()[at - 1] == quote)
+                            {
+                                for limit in
+                                    (start..=input.len()).filter(|&at| input.is_char_boundary(at))
+                                {
+                                    assert_eq!(index.close(&input, start, limit, escapes, delimiter),
+                                        scalar_quote_close(&input, start, limit, quote, escapes, delimiter),
+                                        "{input:?}, start {start}, limit {limit}, quote {quote}, escapes {escapes}, delimiter {}", delimiter as u8);
+                                }
+                            }
+                        }
+                    }
+                }
+                input = serde_json::to_string(&input).unwrap();
+            }
+        }
+    }
+
+    #[test]
     fn indexed_scanner_matches_frozen_scanner_on_generated_serializations() {
         let mut checked = 0;
         for seed in 0..128 {
@@ -1195,7 +1420,7 @@ mod tests {
                 }
             }
         }
-        assert!(checked >= 5000, "{checked} captures");
+        assert_eq!(checked, 12_288);
         eprintln!("serialization differential: {checked} captures");
     }
 
@@ -1209,7 +1434,7 @@ mod tests {
         for case in fixture["records"].as_array().unwrap() {
             checked += compare(case["text"].as_str().unwrap());
         }
-        assert!(checked > 3000, "{checked} captures");
+        assert_eq!(checked, 3_630);
         eprintln!(
             "fixture differential: {} records, {checked} captures",
             fixture["records"].as_array().unwrap().len()
@@ -1245,7 +1470,7 @@ mod tests {
             checked += compare(&input);
             checked += compare(&serde_json::to_string(&input).unwrap());
         }
-        assert!(checked > 10000, "{checked} captures");
+        assert_eq!(checked, 12_288);
         eprintln!("mixed-prefix differential: {checked} captures");
     }
 
@@ -1360,6 +1585,7 @@ mod tests {
                 previous = steps;
             }
         }
+        assert_eq!(compared, 1_152);
         eprintln!("scaling inputs differential: {compared} captures");
     }
     #[test]
@@ -1458,13 +1684,72 @@ mod regression_tests {
             .collect()
     }
 
+    // Independent oracle: Serde supplies token boundaries and validates values.
+    // This does not use the production frame index or its following-value map.
+    fn json_successor(input: &str, close: usize) -> Option<Range<usize>> {
+        serde_json::from_str::<serde_json::Value>(input).ok()?;
+        let mut containers = Vec::new();
+        let mut at = 0;
+        while at <= close {
+            let byte = *input.as_bytes().get(at)?;
+            if byte == b'"' {
+                let mut stream =
+                    serde_json::Deserializer::from_str(&input[at..]).into_iter::<String>();
+                stream.next()?.ok()?;
+                let end = at + stream.byte_offset();
+                if end - 1 == close {
+                    let rest = input[end..].trim_start();
+                    let marker = rest.as_bytes().first()?;
+                    if *marker != b':' && !(*marker == b',' && containers.last() == Some(&b'[')) {
+                        return None;
+                    }
+                    let value = rest[1..].trim_start();
+                    let start = input.len() - value.len();
+                    let mut stream =
+                        serde_json::Deserializer::from_str(value).into_iter::<serde_json::Value>();
+                    let parsed = stream.next()?.ok()?;
+                    let end = start + stream.byte_offset();
+                    return match parsed {
+                        serde_json::Value::String(_) => Some(start + 1..end - 1),
+                        serde_json::Value::Number(_) => Some(start..end),
+                        _ => None,
+                    };
+                }
+                at = end;
+                continue;
+            }
+            match byte {
+                b'[' | b'{' => containers.push(byte),
+                b']' | b'}' => {
+                    containers.pop();
+                }
+                _ => {}
+            }
+            at += 1;
+        }
+        None
+    }
+
     fn assert_recovered(input: &str, capture: &Range<usize>, scan: &LabelledValueScan) {
-        if scan.rejected {
+        if let Some(expected) = json_successor(input, capture.start).or_else(|| {
+            capture
+                .start
+                .checked_sub(1)
+                .and_then(|at| json_successor(input, at))
+        }) {
+            assert_eq!(scan.span, expected, "following scalar {input:?}");
+            assert!(!scan.rejected);
+            RECOVERED_NEXT.with(|count| count.set(count.get() + 1));
+        } else if scan.rejected {
             RECOVERED_ABSENT.with(|count| count.set(count.get() + 1));
             assert!(scan.span.is_empty());
             assert_eq!(scan.span.start, capture.start);
             assert!(serde_json::from_str::<serde_json::Value>(input).is_ok());
             assert_eq!(input.as_bytes()[scan.span.start], b'"');
+            assert!(
+                json_successor(input, scan.span.start).is_none(),
+                "a real next value is not absent"
+            );
             let mut inside = false;
             let mut escaped = false;
             for byte in input[..scan.span.start].bytes() {
@@ -1513,8 +1798,23 @@ mod regression_tests {
                             assert!(a.rejected);
                             assert_recovered(input, &capture, b);
                             REVERSED.with(|count| count.set(count.get() + 1));
-                        } else {
-                            assert_eq!(b, a, "input {input:?}, capture {capture:?}");
+                        } else if b != a {
+                            let expected = json_successor(input, capture.start).or_else(|| capture.start.checked_sub(1).and_then(|at| json_successor(input, at)))
+                                .unwrap_or_else(|| panic!("unexplained span change {input:?}, capture {capture:?}, predecessor {:?}: {a:?} -> {b:?}", json_successor(input, capture.start.saturating_sub(1))));
+                            assert!(!b.rejected);
+                            assert_eq!(b.span, expected);
+                            if a.rejected {
+                                VALID_NEXT.with(|count| count.set(count.get() + 1));
+                            } else {
+                                // Relocation may drop an empty wrapper or structural
+                                // delimiters, but never previously protected value bytes.
+                                let outside_value =
+                                    a.span.clone().filter(|at| !expected.contains(at));
+                                assert!(outside_value.map(|at| input.as_bytes()[at]).all(|byte|
+                                    byte.is_ascii_whitespace() || b"\\\"',:[]{}()<>`".contains(&byte)),
+                                    "old private bytes must stay owned: {input:?}, {capture:?}: {a:?} -> {b:?}");
+                                WRAPPER_NEXT.with(|count| count.set(count.get() + 1));
+                            }
                         }
                     }
                     _ => {
@@ -1524,12 +1824,28 @@ mod regression_tests {
                         assert_recovered(input, &capture, scan);
                     }
                 }
+                if std::env::var_os("GAZE_SCALAR_DIFFERENTIAL_REPORT").is_some()
+                    && o.as_ref().map_or(true, |old| old != nw.as_ref().unwrap())
+                {
+                    eprintln!(
+                        "SPAN_CHANGE {}",
+                        serde_json::json!({
+                            "input": input, "capture": capture,
+                            "old": o.as_ref().ok().map(|scan| (&scan.span, scan.rejected)),
+                            "new": (&nw.as_ref().unwrap().span, nw.as_ref().unwrap().rejected),
+                        })
+                    );
+                }
                 n += 1;
             }
         }
         n
     }
-    thread_local! { static RECOVERED_ABSENT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; static RECOVERED_OWNED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; static REVERSED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; static PANICS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+    thread_local! {
+    static RECOVERED_NEXT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static WRAPPER_NEXT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static VALID_NEXT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static RECOVERED_ABSENT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; static RECOVERED_OWNED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; static REVERSED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; static PANICS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
 
     #[test]
     fn review_random_differential() {
@@ -1627,7 +1943,23 @@ mod regression_tests {
             RECOVERED_ABSENT.with(|p| p.get()),
             RECOVERED_OWNED.with(|p| p.get())
         );
-        assert!(checked > 20000);
+        eprintln!(
+            "recovered next JSON values: {}; previously valid rejections repaired: {}",
+            RECOVERED_NEXT.with(|p| p.get()),
+            VALID_NEXT.with(|p| p.get())
+        );
+        eprintln!(
+            "syntax-only boundary repaired around following scalar: {}",
+            WRAPPER_NEXT.with(|p| p.get())
+        );
+        assert_eq!(checked, 359_152);
+        assert_eq!(PANICS.with(|p| p.get()), 5_134);
+        assert_eq!(REVERSED.with(|p| p.get()), 3_260);
+        assert_eq!(RECOVERED_ABSENT.with(|p| p.get()), 8_344);
+        assert_eq!(RECOVERED_OWNED.with(|p| p.get()), 50);
+        assert_eq!(RECOVERED_NEXT.with(|p| p.get()), 0);
+        assert_eq!(VALID_NEXT.with(|p| p.get()), 2_696);
+        assert_eq!(WRAPPER_NEXT.with(|p| p.get()), 219);
     }
 }
 
@@ -1669,6 +2001,39 @@ mod panic_fixtures {
 #[cfg(test)]
 mod scaling_regressions {
     use super::*;
+    #[test]
+    fn doubled_apostrophe_prefix_work_is_linear() {
+        let rule = super::regression_tests::rules().remove(0);
+        for depth in 0..=3 {
+            let mut previous = 0;
+            for fields in [128, 512, 2048] {
+                let mut input = "customerId: ''SYN''x''\n".repeat(fields);
+                for _ in 0..depth {
+                    input = serde_json::to_string(&input).unwrap();
+                }
+                SCANNER_WORK.with(|w| w.set(0));
+                let scans = rule.scanned_spans(&input, None);
+                let steps = SCANNER_WORK.with(|w| w.get());
+                // At encoded depths the ambiguous quote owns the entire string.
+                assert_eq!(scans.len(), if depth == 0 { fields } else { 1 });
+                assert!(scans.iter().all(|scan| !scan.rejected));
+                assert!(
+                    steps <= input.len() * 60,
+                    "depth {depth}: {steps}/{}",
+                    input.len()
+                );
+                if previous > 0 {
+                    assert!(
+                        steps <= previous * 5,
+                        "depth {depth}: {previous} -> {steps}"
+                    );
+                }
+                eprintln!("doubled apostrophes depth {depth}, fields {fields}, work {steps}");
+                previous = steps;
+            }
+        }
+    }
+
     #[test]
     fn unclosed_paired_wrapper_work_is_linear() {
         let rules = super::regression_tests::rules();
@@ -1735,5 +2100,60 @@ mod scaling_regressions {
         }
         assert!(checked >= 300, "{checked}");
         eprintln!("odd-opener no-panic generator: {checked} captures");
+    }
+}
+
+#[cfg(test)]
+mod json_label_cells {
+
+    #[test]
+    fn object_value_close_does_not_own_sibling_fields_or_json_keywords() {
+        let rules = super::regression_tests::rules();
+        for body in [
+            r#"{"note":"customerId: ","order_id":"ORD-000123"}"#,
+            r#"{"customerId:":null}"#,
+            r#"{"customerId:":true}"#,
+            r#"{"customerId:":false}"#,
+        ] {
+            let mut input = body.to_owned();
+            for _depth in 0..=3 {
+                let scans: Vec<_> = rules
+                    .iter()
+                    .flat_map(|rule| rule.scanned_spans(&input, None))
+                    .collect();
+                assert!(!scans.is_empty(), "{input}");
+                assert!(scans.iter().all(|scan| scan.rejected), "{input}: {scans:?}");
+                input = serde_json::to_string(&input).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn json_label_close_owns_following_value() {
+        let rules = super::regression_tests::rules();
+        let fixtures: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/record_id_json_label_cells.json"
+        ))
+        .unwrap();
+        for fixture in fixtures.as_array().unwrap() {
+            let mut input = fixture["text"].as_str().unwrap().to_owned();
+            let mut expected = fixture["owned"].as_str().unwrap().to_owned();
+            for depth in 0..=3 {
+                let scans: Vec<_> = rules
+                    .iter()
+                    .flat_map(|rule| rule.scanned_spans(&input, None))
+                    .collect();
+                assert!(!scans.is_empty(), "{input}");
+                assert!(
+                    scans
+                        .iter()
+                        .any(|scan| !scan.rejected && input[scan.span.clone()] == expected),
+                    "depth {depth}: {input:?}: {scans:?}, expected {expected:?}"
+                );
+                input = serde_json::to_string(&input).unwrap();
+                let encoded = serde_json::to_string(&expected).unwrap();
+                expected = encoded[1..encoded.len() - 1].to_owned();
+            }
+        }
     }
 }

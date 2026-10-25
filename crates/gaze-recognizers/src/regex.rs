@@ -1120,6 +1120,9 @@ fn scan_field_owned_value_indexed(
     capture: std::ops::Range<usize>,
     index: &mut ScalarBoundaryIndex,
 ) -> LabelledValueScan {
+    if let Some(scan) = index.scan_json_label_cell(input, capture.clone()) {
+        return scan;
+    }
     if input[..capture.start]
         .chars()
         .next_back()
