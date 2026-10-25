@@ -334,6 +334,13 @@ subject, runtime, input and GLiNER load proofs stay in the private cache.
 A public binding commits to the ordered private observation digests. Variant-pack
 names become ordinal layer names in public output and prediction file paths.
 
+Capture entrypoints support **script-path launch only**: invoke the `.py` paths
+shown below. Module launch with `python -m` is refused. Script launch compiles
+the entrypoint from source before its import checks run; module launch can load
+that entrypoint's cached bytecode before any in-process check. Effective stdlib
+and harness bytecode must match source, including with a pycache prefix. The
+effective prefix is bound into the private runtime identity.
+
 Use a clean checkout and an installed, qualified comparison runtime. The
 measuring specification requires CPython 3.13 and the pinned parquet reader.
 GLiNER additionally requires the source hashes and loader family declared in

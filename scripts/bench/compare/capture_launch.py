@@ -1,10 +1,12 @@
 """Validate source-owned import slots before importing private capture runners."""
+import _imp
 import importlib.util
 import marshal
 import os
 from pathlib import Path
 import struct
 import sys
+import sysconfig
 import types
 
 _initialized = globals().get("_initialized", False)
@@ -102,8 +104,35 @@ def check_harness():
                 raise HarnessImportError("sourceless harness bytecode is unsupported")
 
 
-def initialize():
+def check_stdlib():
+    """Validate lazy stdlib imports at their effective CPython cache locations."""
+    def unreadable(error):
+        raise HarnessImportError("unreadable stdlib import directory") from None
+
+    roots = {Path(sysconfig.get_path(name)).resolve() for name in ("stdlib", "platstdlib")}
+    for root in roots:
+        for directory, children, files in os.walk(root, onerror=unreadable):
+            children[:] = [name for name in children
+                           if name not in {"__pycache__", "site-packages", "dist-packages"}]
+            for name in children:
+                if (Path(directory) / name).is_symlink():
+                    raise HarnessImportError("linked stdlib import directory is unsupported")
+            for name in files:
+                path = Path(directory) / name
+                if path.suffix == ".py":
+                    parts = path.relative_to(root).with_suffix("").parts
+                    module = ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
+                    if not _imp.is_frozen(module) and module not in sys.builtin_module_names:
+                        _check_bytecode(path)
+                elif path.suffix == ".pyc":
+                    raise HarnessImportError("sourceless stdlib bytecode is unsupported")
+
+
+def initialize(*, entrypoint_spec=None):
     global _initialized
+    if entrypoint_spec is not None:
+        raise HarnessImportError("script-path launch only")
+    check_stdlib()
     check_harness()
     if _initialized:
         return

@@ -39,7 +39,7 @@ _launch = Path(__file__).resolve().parent.parent / "capture_launch.py"
 _scope = vars(sys.modules.setdefault("capture_launch", type(sys)("capture_launch")))
 _scope["__file__"] = str(_launch)
 exec(compile(_launch.read_bytes(), str(_launch), "exec"), _scope)
-_scope["initialize"]()
+_scope["initialize"](entrypoint_spec=__spec__ if __name__ == "__main__" else None)
 
 # Both tuned entrypoints initialize the same model-free source modules.
 import tune

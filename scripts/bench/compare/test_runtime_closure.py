@@ -215,3 +215,121 @@ def test_harness_walk_covers_nested_imports_and_refuses_unclosed_roots(tmp_path,
                            + marshal.dumps(compile("synthetic = False\n", str(module), "exec")))
     with pytest.raises(capture_launch.HarnessImportError):
         capture_launch.check_harness()
+
+
+@pytest.mark.parametrize("admission", ["initialize", "inventory"])
+@pytest.mark.parametrize("prefix_source", ["flag", "environment"])
+def test_stdlib_substitution_under_effective_prefix_is_refused(tmp_path, admission, prefix_source):
+    import os
+    import subprocess
+    here = Path(runtime_closure.__file__).resolve().parent
+    selected = Path(runtime_closure.sysconfig.get_path("stdlib")) / "colorsys.py"
+    original = selected.read_bytes()
+    cache, marker = tmp_path / "cache", tmp_path / "executed"
+    substitute_harness_bytecode(cache, selected, marker)
+    script = '''
+import pathlib, sys
+here = pathlib.Path(sys.argv[1])
+sys.path[:0] = [str(here.parent), str(here)]
+import capture_launch
+try:
+    if sys.argv[2] == 'initialize':
+        capture_launch.initialize()
+    else:
+        import runtime_closure
+        runtime_closure.import_inventory({}, set(), path=[str(here)], hooks=[])
+except capture_launch.HarnessImportError as error:
+    print(type(error).__name__ + ': ' + str(error))
+    raise SystemExit(2)
+import colorsys
+'''
+    command = [sys.executable, "-B"]
+    environment = dict(os.environ)
+    environment.pop("PYTHONPATH", None)
+    if prefix_source == "flag":
+        command += ["-I", "-X", f"pycache_prefix={cache}"]
+    else:
+        environment["PYTHONPYCACHEPREFIX"] = str(cache)
+    result = subprocess.run([*command, "-c", script, str(here), admission],
+                            env=environment, capture_output=True, text=True)
+    assert selected.read_bytes() == original
+    assert result.returncode == 2, result.stderr
+    assert result.stdout == "HarnessImportError: unverified import bytecode\n"
+    assert not marker.exists()
+
+
+def test_import_identity_binds_effective_pycache_prefix(installation, tmp_path, monkeypatch):
+    root, _, files = installation
+    first = runtime_closure.import_inventory(files, [root], path=[str(root)], hooks=[])
+    monkeypatch.setattr(sys, "pycache_prefix", str(tmp_path / "cache"))
+    assert runtime_closure.import_inventory(files, [root], path=[str(root)], hooks=[]) != first
+
+
+def test_uv_minor_version_stdlib_alias_is_admitted_without_extra_roots(installation, tmp_path, monkeypatch):
+    root, _, files = installation
+    standard = tmp_path / "cpython-3.13.13" / "lib" / "python3.13"
+    dynamic = standard / "lib-dynload"
+    dynamic.mkdir(parents=True)
+    alias = tmp_path / "cpython-3.13"
+    alias.symlink_to(standard.parents[1], target_is_directory=True)
+    paths = {"stdlib": str(standard), "platstdlib": str(standard)}
+    monkeypatch.setattr(runtime_closure.sysconfig, "get_path", paths.__getitem__)
+    direct = runtime_closure.import_inventory(files, [root], path=[str(root), str(dynamic)], hooks=[])
+    linked = alias / "lib" / "python3.13" / "lib-dynload"
+    assert runtime_closure.import_inventory(files, [root], path=[str(root), str(linked)], hooks=[]) == direct
+    unrelated = tmp_path / "unrelated"
+    unrelated.mkdir()
+    with pytest.raises(ValueError, match="external Python import root"):
+        runtime_closure.import_inventory(files, [root], path=[str(root), str(unrelated)], hooks=[])
+
+
+@pytest.mark.parametrize("entrypoint", ["capture_compare.py", "tuned_presidio/capture_produce.py",
+                                        "tuned_presidio/capture_tune.py"])
+def test_capture_entrypoints_require_script_path_launch(tmp_path, entrypoint):
+    import subprocess
+    here = Path(runtime_closure.__file__).resolve().parent
+    cache = tmp_path / "cache"
+    options = [sys.executable, "-B", "-X", f"pycache_prefix={cache}"]
+    script = subprocess.run([*options, str(here / entrypoint), "--help"], capture_output=True, text=True)
+    assert script.returncode == 0, script.stderr
+    module = entrypoint.removesuffix(".py").replace("/", ".")
+    launched = subprocess.run([*options, "-m", module, "--help"], cwd=here, capture_output=True, text=True)
+    assert launched.returncode != 0
+    assert "HarnessImportError: script-path launch only" in re.sub(r"\x1b\[[0-9;]*m", "", launched.stderr)
+
+
+@pytest.mark.parametrize("damage", ["nested_bytecode", "sourceless", "linked_directory"])
+def test_stdlib_walk_checks_lazy_nested_imports(tmp_path, monkeypatch, damage):
+    import capture_launch
+    standard = tmp_path / "stdlib"
+    nested = standard / "synthetic_package"
+    nested.mkdir(parents=True)
+    monkeypatch.setattr(capture_launch.sysconfig, "get_path", lambda name: str(standard))
+    if damage == "linked_directory":
+        (standard / "linked").symlink_to(nested, target_is_directory=True)
+    elif damage == "sourceless":
+        (nested / "orphan.pyc").write_bytes(b"synthetic")
+    else:
+        source = nested / "lazy_module.py"
+        source.write_text("synthetic = True\n")
+        cached = Path(importlib.util.cache_from_source(str(source)))
+        cached.parent.mkdir()
+        cached.write_bytes(importlib.util.MAGIC_NUMBER + struct.pack("<I", 3)
+                           + importlib.util.source_hash(source.read_bytes())
+                           + marshal.dumps(compile("synthetic = False\n", str(source), "exec")))
+    with pytest.raises(capture_launch.HarnessImportError):
+        capture_launch.check_stdlib()
+
+
+def test_stdlib_frozen_and_builtin_modules_do_not_select_source_caches(tmp_path, monkeypatch):
+    import capture_launch
+    monkeypatch.setattr(capture_launch.sysconfig, "get_path", lambda name: str(tmp_path))
+    monkeypatch.setattr(capture_launch._imp, "is_frozen", lambda name: name == "synthetic_frozen")
+    monkeypatch.setattr(sys, "builtin_module_names", ("synthetic_builtin",))
+    for name in ("synthetic_frozen", "synthetic_builtin"):
+        source = tmp_path / (name + ".py")
+        source.write_text("synthetic = True\n")
+        cached = Path(importlib.util.cache_from_source(str(source)))
+        cached.parent.mkdir(exist_ok=True)
+        cached.write_bytes(b"unused cache")
+    capture_launch.check_stdlib()

@@ -22,8 +22,9 @@ def import_inventory(files, roots, *, path=None, hooks=None):
     standard_library = Path(sysconfig.get_path("stdlib"))
     approved = roots | {standard_library, Path(sysconfig.get_path("platstdlib")), standard_library / "lib-dynload",
                         here, here.parent, here / "tuned_presidio", here / "theirbench"}
+    approved = {root.resolve() for root in approved}
     for entry in sys.path if path is None else path:
-        selected = Path(entry or ".").absolute()
+        selected = Path(entry or ".").resolve()
         if selected.exists() and selected not in approved:
             raise ValueError("external Python import root is unsupported")
     if any(name in sys.modules for name in ("sitecustomize", "usercustomize")):
@@ -46,6 +47,7 @@ def import_inventory(files, roots, *, path=None, hooks=None):
             proof = gliner_identity._bootstrap_context(hook)
             bootstraps[Path(proof["path"]).absolute()] = proof["sha256"]
             bootstrap_pths.add(Path(proof["pth"]).absolute())
+    capture_launch.check_stdlib()
     capture_launch.check_harness()
     modules = set()
     for root in roots:
@@ -88,7 +90,7 @@ def import_inventory(files, roots, *, path=None, hooks=None):
                     or origin not in files):
                 raise ValueError("selected import differs from installed content inventory")
             origins[name] = str(origin)
-    return digest({"origins": origins, "bootstraps": {str(path): sha for path, sha in bootstraps.items()}})
+    return digest({"origins": origins, "pycache_prefix": sys.pycache_prefix, "bootstraps": {str(path): sha for path, sha in bootstraps.items()}})
 
 
 def model_references(root, file):
