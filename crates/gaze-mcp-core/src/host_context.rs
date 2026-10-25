@@ -59,7 +59,7 @@ pub(crate) fn parse(
 ) -> Result<Option<gaze::Context>, HostContextError> {
     match selection {
         HostContextSelection::Absent => Ok(None),
-        HostContextSelection::Present(raw) => gaze::Context::from_json_str(&raw.0 .0)
+        HostContextSelection::Present(raw) => gaze::Context::from_json_str(&raw.0.0)
             .map(Some)
             .map_err(|_| HostContextError::Invalid),
     }
@@ -175,6 +175,34 @@ pub(crate) fn contains_guess(text: &str, terms: &[String]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn host_context_parser_enforces_shared_record_depth_and_field_limits() {
+        for (levels, accepted) in [(3, true), (4, false)] {
+            let mut record = serde_json::json!({"name":"Synthetic Qorvex"});
+            let mut path = "/name".to_owned();
+            for level in 0..levels {
+                let key = format!("level{level}");
+                record = serde_json::json!({key.clone():record});
+                path = format!("/{key}{path}");
+            }
+            let raw = serde_json::json!({"record":record,"field_map":{path:"Name"}}).to_string();
+            assert_eq!(gaze::Context::from_json_str(&raw).is_ok(), accepted);
+            assert_eq!(parse(HostContextSelection::present(raw)).is_ok(), accepted);
+        }
+        for (fields, accepted) in [(32, true), (33, false)] {
+            let mut record = serde_json::Map::new();
+            let mut field_map = serde_json::Map::new();
+            for field in 0..fields {
+                let key = format!("field{field}");
+                field_map.insert(format!("/{key}"), serde_json::json!("Name"));
+                record.insert(key, serde_json::json!(format!("Synthetic Qorvex {field}")));
+            }
+            let raw = serde_json::json!({"record":record,"field_map":field_map}).to_string();
+            assert_eq!(gaze::Context::from_json_str(&raw).is_ok(), accepted);
+            assert_eq!(parse(HostContextSelection::present(raw)).is_ok(), accepted);
+        }
+    }
 
     #[test]
     fn host_context_parser_retains_shared_boundary_and_duplicate_key_contracts() {

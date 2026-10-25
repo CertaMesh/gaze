@@ -3,6 +3,15 @@ use super::*;
 const KNOWN: &str = "Synthetic Qorvex";
 const UNUSED: &str = "Synthetic Zunvel";
 
+fn host_policy() -> gaze::Policy {
+    let mut detector = gaze::DetectorSpec::default();
+    detector.name = "synthetic-email".into();
+    detector.pattern = Some(r"\b[a-z]+@example\.invalid\b".into());
+    let mut policy = gaze::Policy::default();
+    policy.detectors.push(detector);
+    policy
+}
+
 fn raw_context(name: &str) -> HostContextSelection {
     HostContextSelection::present(format!(
         r#"{{"record":{{"name":"{name}","unused_private_key":"{UNUSED}"}},"field_map":{{"/unused_private_key":"Name"}}}}"#,
@@ -18,12 +27,24 @@ async fn call(
     let store = Store::default();
     let registry = registry(
         &store,
-        CarrierDeclaration::text_fields(&["guess"]),
+        CarrierDeclaration::new(
+            vec![
+                vec![CarrierSegment::Member("guess".into())],
+                vec![CarrierSegment::Member("nested".into())],
+            ],
+            vec![
+                vec![],
+                vec![
+                    CarrierSegment::Member("nested".into()),
+                    CarrierSegment::AnyIndex,
+                ],
+            ],
+        ),
         output,
         false,
         false,
     );
-    let mut policy = gaze::Policy::default();
+    let mut policy = host_policy();
     policy.rules = vec![gaze::RuleSpec::Default {
         action: Action::Tokenize,
     }];
@@ -178,15 +199,15 @@ struct PrivateStore(Capture);
 #[async_trait]
 impl ManifestStore for PrivateStore {
     async fn begin_call(&self, ctx: BeginCallContext<'_>) -> Result<CallHandle, ManifestError> {
-        self.0 .0.lock().unwrap().push(format!("{ctx:?}"));
+        self.0.0.lock().unwrap().push(format!("{ctx:?}"));
         Ok(CallHandle::new(ctx.call_id))
     }
     async fn finish_call(&self, _: CallHandle, snapshot: SnapshotRef) -> Result<(), ManifestError> {
-        self.0 .0.lock().unwrap().push(format!("{snapshot:?}"));
+        self.0.0.lock().unwrap().push(format!("{snapshot:?}"));
         Ok(())
     }
     async fn fail_call(&self, _: CallHandle, reason: FailureReason) -> Result<(), ManifestError> {
-        self.0 .0.lock().unwrap().push(format!("{reason:?}"));
+        self.0.0.lock().unwrap().push(format!("{reason:?}"));
         Ok(())
     }
 }
@@ -223,7 +244,7 @@ async fn host_context_private_identifiers_never_reach_output_tools_or_audit() {
             output: json!("private_canary_value"),
         })
         .unwrap();
-    let mut policy = gaze::Policy::default();
+    let mut policy = host_policy();
     policy.rules = vec![
         gaze::RuleSpec::Class {
             class: PiiClass::Custom("private_canary_class".into()),
@@ -352,5 +373,199 @@ async fn host_context_guesses_in_json_escapes_and_new_cues_cannot_create_an_orac
         .unwrap();
         assert_eq!(output.payload, json!("Name: Will"));
         assert!(session.tokens().is_empty());
+    }
+}
+
+#[tokio::test]
+async fn host_context_rejects_operator_bypass_before_begin_or_invoke() {
+    let store = Store::default();
+    let mut registry = ToolRegistry::new();
+    registry
+        .register(Producer {
+            descriptor: ToolDescriptor::operator("raw", json!({}))
+                .with_response_redaction(ResponseRedaction::BypassByOperator),
+            events: store.events.clone(),
+            output: Some(json!(KNOWN)),
+            error: false,
+            mutate: false,
+        })
+        .unwrap();
+    let pipeline = pipeline();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let policy = host_policy();
+    let error = PiiEnvelope::new(
+        &registry,
+        &Auth,
+        &store,
+        &pipeline,
+        &session,
+        &[gaze::LocaleTag::Global],
+        &SessionIdPolicy::default_strict(),
+    )
+    .with_context_policy(&policy, &[])
+    .dispatch(
+        &Principal::new("operator"),
+        "raw",
+        json!({}),
+        None,
+        raw_context(KNOWN),
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        DispatchError::HostContext(HostContextError::Unsupported)
+    ));
+    assert!(store.events.lock().unwrap().is_empty());
+    assert!(session.tokens().is_empty());
+}
+
+#[tokio::test]
+async fn host_context_nonreversible_policy_admission_does_not_depend_on_guesses() {
+    for action in [Action::Preserve, Action::Redact, Action::Generalize] {
+        for args in [json!({}), json!({"guess": KNOWN})] {
+            let store = Store::default();
+            let registry = registry(&store, Default::default(), Some(json!(KNOWN)), false, false);
+            let mut policy = host_policy();
+            policy.rules = vec![gaze::RuleSpec::Default { action }];
+            let context = gaze::Context::from_json_str("{}").unwrap();
+            let locales = gaze::LocaleChain::from(&[gaze::LocaleTag::Global][..]);
+            let pipeline =
+                gaze_assembly::build_pipeline(&policy, &context, &[], &locales, None).unwrap();
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let error = PiiEnvelope::new(
+                &registry,
+                &Auth,
+                &store,
+                &pipeline,
+                &session,
+                locales.as_slice(),
+                &SessionIdPolicy::default_strict(),
+            )
+            .with_context_policy(&policy, &[])
+            .dispatch(
+                &Principal::new("agent"),
+                "test",
+                args,
+                None,
+                raw_context(KNOWN),
+            )
+            .await
+            .unwrap_err();
+            assert!(matches!(
+                error,
+                DispatchError::HostContext(HostContextError::Policy)
+            ));
+            assert!(store.events.lock().unwrap().is_empty());
+            assert!(session.tokens().is_empty());
+        }
+    }
+}
+
+#[tokio::test]
+async fn host_context_numeric_guesses_cannot_create_an_oracle() {
+    for guess in [json!(731946), json!({"nested":[731946]}), json!("731946")] {
+        let mut outcomes = Vec::new();
+        for value in ["731946", "829157"] {
+            let raw = json!({"dictionaries":{"order_ref":{"terms":[value]}}}).to_string();
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let output = call(
+                &session,
+                guess.clone(),
+                Some(json!("order 731946")),
+                HostContextSelection::present(raw),
+            )
+            .await
+            .unwrap();
+            assert!(session.tokens().is_empty());
+            outcomes.push(output.payload);
+        }
+        assert_eq!(outcomes[0], json!("order 731946"));
+        assert_eq!(outcomes[0], outcomes[1]);
+    }
+}
+
+struct UntrustedProducer {
+    descriptor: ToolDescriptor,
+    args: Value,
+    output: Value,
+}
+#[async_trait]
+impl Tool for UntrustedProducer {
+    fn descriptor(&self) -> &ToolDescriptor {
+        &self.descriptor
+    }
+    async fn invoke(&self, ctx: &ToolCtx<'_>) -> Result<ToolResponse, ToolError> {
+        assert_eq!(ctx.invocation_args().unwrap().as_value(), &self.args);
+        Ok(ToolResponse::json(self.output.clone()))
+    }
+}
+
+#[tokio::test]
+async fn host_context_untrusted_invocation_protects_responses_without_a_guess_oracle() {
+    for guessed in [false, true] {
+        let mut outcomes = Vec::new();
+        for name in [KNOWN, UNUSED] {
+            let args = if guessed {
+                json!({"guess":KNOWN})
+            } else {
+                json!({})
+            };
+            let mut registry = ToolRegistry::new();
+            registry
+                .register(UntrustedProducer {
+                    descriptor: ToolDescriptor::operator("test", json!({}))
+                        .with_request_mode(RequestMode::UntrustedInvocation),
+                    args: args.clone(),
+                    output: json!(KNOWN),
+                })
+                .unwrap();
+            let store = PrivateStore(Capture::default());
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let mut policy = host_policy();
+            policy.rules = vec![gaze::RuleSpec::Default {
+                action: Action::Tokenize,
+            }];
+            let context = gaze::Context::from_json_str("{}").unwrap();
+            let locales = gaze::LocaleChain::from(&[gaze::LocaleTag::Global][..]);
+            let pipeline =
+                gaze_assembly::build_pipeline(&policy, &context, &[], &locales, None).unwrap();
+            let output = PiiEnvelope::new(
+                &registry,
+                &Auth,
+                &store,
+                &pipeline,
+                &session,
+                locales.as_slice(),
+                &SessionIdPolicy::default_strict(),
+            )
+            .with_context_policy(&policy, &[])
+            .dispatch_request(
+                &Principal::new("operator"),
+                "test",
+                UntrustedInvocationArgs::new(args),
+                None,
+                raw_context(name),
+            )
+            .await
+            .unwrap();
+            if !guessed && name == KNOWN {
+                assert_ne!(output.payload, json!(KNOWN));
+                assert_eq!(
+                    session
+                        .restore_strict_text(output.payload.as_str().unwrap())
+                        .unwrap(),
+                    KNOWN
+                );
+            } else {
+                assert_eq!(output.payload, json!(KNOWN));
+                assert!(session.tokens().is_empty());
+            }
+            assert!(!store.0.0.lock().unwrap().join("\n").contains(KNOWN));
+            outcomes.push(output.payload);
+        }
+        if guessed {
+            assert_eq!(outcomes[0], outcomes[1]);
+        }
     }
 }
