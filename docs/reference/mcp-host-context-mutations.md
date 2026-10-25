@@ -1,12 +1,18 @@
 # MCP host context mutation evidence
 
-All six probes passed on 2026-10-25 at source commit
-`7dd92cd745598505d6969aef0ff6e44c17fd980b` using Rust 1.96.0,
-two build jobs, and nice level 10. The final run disabled debug information
-and incremental compilation with the environment below.
-Each baseline executed its named test and passed. Each mutant compiled and
+All eleven probes passed on 2026-10-25 at source commit
+`011153f3c2a9fa28b6202e64dc2c8b05a5c1cb54` using Rust 1.96.0,
+two build jobs, nice level 10, no debug information and no incremental compilation.
+Every baseline executed its named test and passed. Every mutant compiled and
 executed the same test, which failed. Compile failures and zero-test runs did
-not count. The runner restored the source after each probe and left a clean tree.
+not count. The runner restored the source and left a clean tree.
+
+The public-hash regression first failed on the old implementation because a
+public SHA-256 guess recovered a private identifier. A second RED test showed
+that allocating an unrelated new key could bypass a key-presence-only legacy
+guard. Session-keyed, authenticated labels close both paths. Trusted snapshot v8
+preserves their namespace; keyless legacy tokens still restore and fail closed
+for dispatch. The stdio test uses transport completion events, with no clock assertion.
 
 To reproduce from a clean signed checkout, run:
 
@@ -15,12 +21,8 @@ anvil run -- env CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
 	CARGO_INCREMENTAL=0 python3 scripts/gate/mcp-host-context-mutation-probe.py --run
 ```
 
-The session-forgery test records the host's received audit ID, returns the tool
-reply, and checks the ID after client cancellation and server completion.
-It has no clock-based assertion.
-
-The following lines come from the completed run. Every mutant also reached
-Cargo's `Finished test profile` stage before its named test failed.
+These are the completed run's named test lines. Every mutant also reached
+Cargo's `Finished test profile` stage before its test failed.
 
 ```text
 drop-present
@@ -46,9 +48,29 @@ model-session-forgery
 ignore-http-context
   baseline: test frontend::tests::embedded_http_reads_host_middleware_request_extensions ... ok
   mutant:   test frontend::tests::embedded_http_reads_host_middleware_request_extensions ... FAILED
+
+public-hash-identifiers
+  baseline: test host_context::host_context_private_labels_are_session_scoped_and_defeat_public_hash_guesses ... ok
+  mutant:   test host_context::host_context_private_labels_are_session_scoped_and_defeat_public_hash_guesses ... FAILED
+
+public-record-identifiers
+  baseline: test host_context::host_context_record_dictionary_identifiers_defeat_public_hash_guesses ... ok
+  mutant:   test host_context::host_context_record_dictionary_identifiers_defeat_public_hash_guesses ... FAILED
+
+omit-snapshot-opaque-key
+  baseline: test host_context::host_context_private_labels_survive_trusted_snapshot_import ... ok
+  mutant:   test host_context::host_context_private_labels_survive_trusted_snapshot_import ... FAILED
+
+ignore-legacy-opaque-key
+  baseline: test host_context::host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed ... ok
+  mutant:   test host_context::host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed ... FAILED
+
+trust-key-presence
+  baseline: test host_context::host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed ... ok
+  mutant:   test host_context::host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed ... FAILED
 ```
 
-The runner writes complete logs and its result record under
+Complete logs and the result record are under
 `target/gate/mcp-host-context-mutations/`. This summary records mutation
-coverage only. Workspace gates, detection benchmark certification, and resident
+coverage. Full workspace gates, detection benchmark certification, and resident
 model latency and memory proof are separate requirements.

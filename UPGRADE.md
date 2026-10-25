@@ -45,7 +45,9 @@ blobs; earlier readers reject them. Sessions that never use the namespace keep
 the existing version 6 or 7 encoding.
 
 Each label authenticates its namespace under the key. Merely allocating a new
-key does not make legacy or foreign labels valid for dispatch.
+key does not make legacy or foreign labels valid for dispatch. Within MCP,
+`host_` followed by 32 or 64 hexadecimal digits is reserved for these labels;
+rename hand-written custom classes that use this form.
 
 Old snapshots without the key still restore their tokens. MCP dispatch refuses
 old opaque `host_` classes before invocation or audit instead of guessing their
