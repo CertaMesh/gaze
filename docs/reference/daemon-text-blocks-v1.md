@@ -60,6 +60,16 @@ source spelling change. It returns only after a complete stable pass. A late
 rule declaration can therefore protect earlier blocks in the same request.
 Eight unsuccessful stabilization passes refuse the whole transaction.
 
+Before publication, the daemon validates and locks the staged session commit.
+With `--audit-db`, it writes the final pass's redaction metadata and safety-net
+reports in one SQLite transaction. Only after that transaction commits does it
+publish the prepared session and block inventory. An audit error rolls back all
+rows and leaves counters, manifest, inventory, and the request sequence unchanged;
+the exact request can be retried. Session publication cannot fail after the audit
+commit. A process crash between the durable audit commit and memory publication
+can leave rows for a lost in-memory session; a restart invalidates that session's
+epoch and requires a new namespace.
+
 A clean reply carries the common identity envelope and counters, plus exactly
 one result per requested block in order. Each result contains `id`, `sha256`,
 `clean_text`, `manifest`, `tokens`, `cache_hit`, and `validated_generation`.
