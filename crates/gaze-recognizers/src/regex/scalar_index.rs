@@ -8,8 +8,16 @@ use std::ops::Range;
 pub(super) struct ScalarBoundaryIndex {
     encoded: Option<EncodedIndex>,
     prefix: PrefixCursor,
+    provisional: Option<(usize, PrefixCursor)>,
+    json_contexts: HashMap<JsonContextKey, bool>,
     strings: HashMap<(usize, Option<usize>), StringEndIndex>,
     quotes: HashMap<(usize, u8, usize, ScalarQuoteDelimiter), QuoteCloseIndex>,
+}
+
+#[derive(Hash, PartialEq, Eq)]
+struct JsonContextKey {
+    enclosing: Vec<(usize, usize)>,
+    escapes: usize,
 }
 
 impl ScalarBoundaryIndex {
@@ -104,28 +112,28 @@ impl ScalarBoundaryIndex {
             .count();
         let opening = anchor + escapes;
         let opener = decoded.view.text[opening..].chars().next()?;
-        if !field_wrapper_opens(opener) {
-            let end = decoded
-                .view
-                .source
-                .partition_point(|range| range.end < capture.end);
-            let scan = decoded.index.scan_encoded_wrapper(
-                &decoded.view.text,
-                anchor..end.saturating_add(1).min(decoded.view.text.len()),
-            )?;
-            return Some(project_scan(scan, &decoded.view.source, &capture));
-        }
-        let start = opening + opener.len_utf8();
         let mut seed_end = decoded
             .view
             .source
             .partition_point(|range| range.end < capture.end)
             .saturating_add(1)
-            .min(decoded.view.text.len())
-            .max(start);
+            .min(decoded.view.text.len());
         while !decoded.view.text.is_char_boundary(seed_end) {
             seed_end += 1;
         }
+        if !field_wrapper_opens(opener) {
+            let scan = decoded
+                .index
+                .scan_encoded_wrapper(&decoded.view.text, anchor..seed_end)?;
+            let mut scan = project_scan(scan, &decoded.view.source, &capture);
+            scan.reason = scan.reason.or_else(|| {
+                labelled_value_over_limit(&input[scan.span.clone()])
+                    .then_some(LabelledValueScanReason::LimitExceeded)
+            });
+            return Some(scan);
+        }
+        let start = opening + opener.len_utf8();
+        let seed_end = seed_end.max(start);
         let mut scan = if matches!(opener, '\'' | '"') {
             scan_quoted_field_value(&decoded.view.text, start..seed_end, &mut decoded.index)
         } else {
@@ -188,6 +196,40 @@ impl ScalarBoundaryIndex {
         index.close(input, limit, quote, escapes, delimiter)
     }
 
+    fn context_is_json(
+        &mut self,
+        input: &str,
+        enclosing: &[(usize, usize)],
+        escapes: usize,
+    ) -> bool {
+        let key = JsonContextKey {
+            enclosing: enclosing
+                .iter()
+                .copied()
+                .filter(|(depth, _)| *depth < escapes)
+                .collect(),
+            escapes,
+        };
+        *self.json_contexts.entry(key).or_insert_with_key(|key| {
+            scanner_work(input.len());
+            serialized_context_is_json(input, &key.enclosing, key.escapes)
+        })
+    }
+
+    fn save_prefix(
+        &mut self,
+        state: &PrefixCursor,
+        stable: bool,
+        until: Option<usize>,
+        prefix_end: usize,
+    ) {
+        if stable {
+            self.prefix = state.clone();
+        } else if let Some(until) = until.filter(|until| *until > prefix_end) {
+            self.provisional = Some((until, state.clone()));
+        }
+    }
+
     fn prefix_boundary(
         &mut self,
         input: &str,
@@ -198,12 +240,30 @@ impl ScalarBoundaryIndex {
         let prefix_end = opening - opening_escapes;
         // Encoded-wrapper fallback queries can revisit an earlier anchor. Keep
         // forward state only when it is a prefix of the requested replay.
-        let mut state = if self.prefix.at <= prefix_end {
-            self.prefix.clone()
-        } else {
-            PrefixCursor::default()
-        };
-        let mut stable = true;
+        if self
+            .provisional
+            .as_ref()
+            .is_some_and(|(until, _)| prefix_end >= *until)
+        {
+            self.provisional = None;
+        }
+        let provisional = self
+            .provisional
+            .as_ref()
+            .filter(|(_, cursor)| cursor.at <= prefix_end && cursor.at >= self.prefix.at);
+        let mut state = provisional.map_or_else(
+            || {
+                if self.prefix.at <= prefix_end {
+                    self.prefix.clone()
+                } else {
+                    PrefixCursor::default()
+                }
+            },
+            |(_, cursor)| cursor.clone(),
+        );
+        let mut stable = provisional.is_none();
+        let mut valid_until = provisional.map(|(until, _)| *until);
+        let mut cacheable = true;
         while state.at < prefix_end {
             scanner_work(1);
             let at = state.at;
@@ -211,8 +271,8 @@ impl ScalarBoundaryIndex {
             if byte == b'\\' {
                 state.escapes += 1;
                 state.at += 1;
-                if stable {
-                    self.prefix = state.clone();
+                if cacheable {
+                    self.save_prefix(&state, stable, valid_until, prefix_end);
                 }
                 continue;
             }
@@ -270,21 +330,44 @@ impl ScalarBoundaryIndex {
                     let full_limit = self.string_end(input, limit_start, input.len(), depth);
                     let full_close =
                         self.quote_close(input, content, full_limit, byte, escapes, delimiter);
-                    stable &= (prior_close.is_some() || limit < prefix_end)
-                        && prior_close == full_close
-                        && quote_run_end(input, opening, byte, escapes, input.len()) == run_end;
-                    state.at = prior_close.map_or_else(
+                    let next_at = prior_close.map_or_else(
                         || uncertain_scalar_end(input, content, limit),
                         |close| close + count * width,
                     );
+                    let complete_run =
+                        quote_run_end(input, opening, byte, escapes, input.len()) == run_end;
+                    let independent = prior_close == full_close
+                        && complete_run
+                        && (prior_close.is_some() || next_at < prefix_end);
+                    if !independent {
+                        stable = false;
+                        if complete_run
+                            && next_at < prefix_end
+                            && prior_close.is_none()
+                            && full_close.is_some()
+                        {
+                            // Before the next quote event, extending the replay
+                            // still takes this same newline fallback. Save it
+                            // conditionally and rewind once that event is reached.
+                            let index = &self.quotes[&(content, byte, escapes, delimiter)];
+                            let next = index.runs.partition_point(|run| run.end <= limit);
+                            let until =
+                                index.runs.get(next).map_or(index.terminal, |run| run.start);
+                            valid_until = Some(valid_until.map_or(until, |prior| prior.min(until)));
+                            cacheable &= until > prefix_end;
+                        } else {
+                            cacheable = false;
+                        }
+                    }
+                    state.at = next_at;
                     state.escapes = 0;
-                    if stable {
-                        self.prefix = state.clone();
+                    if cacheable {
+                        self.save_prefix(&state, stable, valid_until, prefix_end);
                     }
                     continue;
                 }
                 // A query can cut a quote run before its grammar is known.
-                stable &= quote_run_end(input, opening, byte, escapes, input.len()) == run_end;
+                cacheable &= quote_run_end(input, opening, byte, escapes, input.len()) == run_end;
             }
             if byte == b'"' && (state.escapes + 1).is_power_of_two() {
                 state.literal_limit = None;
@@ -307,14 +390,14 @@ impl ScalarBoundaryIndex {
             }
             state.escapes = 0;
             state.at += 1;
-            if stable {
-                self.prefix = state.clone();
+            if cacheable {
+                self.save_prefix(&state, stable, valid_until, prefix_end);
             }
         }
         let depth = state.enclosing.last().map(|(depth, _)| *depth);
         let absent_value = input.as_bytes()[start - 1] == b'"'
             && depth.is_some_and(|depth| opening_escapes <= depth)
-            && serialized_context_is_json(input, &state.enclosing, opening_escapes);
+            && self.context_is_json(input, &state.enclosing, opening_escapes);
         let end = state
             .enclosing
             .last()
@@ -557,7 +640,21 @@ fn sql_frames(input: &str) -> Vec<(usize, Range<usize>)> {
         .find_iter(input)
         .map(|statement| statement.start())
         .collect();
+    if starts.is_empty() {
+        return Vec::new();
+    }
     let bytes = input.as_bytes();
+    scanner_work(bytes.len() * 2);
+    let line_ends: Vec<_> = bytes
+        .iter()
+        .enumerate()
+        .filter_map(|(at, byte)| matches!(byte, b'\r' | b'\n').then_some(at))
+        .collect();
+    let block_ends: Vec<_> = bytes
+        .windows(2)
+        .enumerate()
+        .filter_map(|(at, pair)| (pair == b"*/").then_some(at))
+        .collect();
     let mut frames = Vec::new();
     for (dialect, escapes) in [false, true].into_iter().enumerate() {
         let mut visited = vec![false; bytes.len()];
@@ -568,17 +665,17 @@ fn sql_frames(input: &str) -> Vec<(usize, Range<usize>)> {
                 scanner_work(1);
                 visited[at] = true;
                 if bytes.get(at..at + 2) == Some(b"--") {
-                    while at < bytes.len() && !matches!(bytes[at], b'\r' | b'\n') {
-                        scanner_work(1);
-                        at += 1;
-                    }
+                    at = line_ends
+                        .get(line_ends.partition_point(|end| *end < at))
+                        .copied()
+                        .unwrap_or(bytes.len());
                 } else if bytes.get(at..at + 2) == Some(b"/*") {
                     at += 2;
-                    while at < bytes.len() && bytes.get(at..at + 2) != Some(b"*/") {
-                        scanner_work(1);
-                        at += 1;
-                    }
-                    at += 2;
+                    at = block_ends
+                        .get(block_ends.partition_point(|end| *end < at))
+                        .copied()
+                        .unwrap_or(bytes.len())
+                        + 2;
                 } else if matches!(bytes[at], b'\'' | b'"' | b'`' | b'[') {
                     let opening = at;
                     let quote = if bytes[at] == b'[' { b']' } else { bytes[at] };
@@ -623,6 +720,7 @@ fn sql_quote_end(
     let mut path = Vec::new();
     let mut at = start;
     let end = loop {
+        scanner_work(1);
         if at >= bytes.len() {
             break bytes.len();
         }
@@ -889,6 +987,10 @@ mod tests {
                 ),
                 format!("\"customerId: \"\"{value}\"\"; employeeId: 'E{seed:06}'\",public"),
                 format!("customerId: “{value}”; recordId: «R{seed:06}»; employeeId: `E{seed:06}`"),
+                serde_json::to_string(&format!("customerId: “SYN{seed:06} \\a\\b\\c”"))
+                    .unwrap()
+                    .replace('“', r"\u201c")
+                    .replace('”', r"\u201d"),
             ];
             for mut input in variants {
                 for _depth in 0..=5 {
@@ -1016,7 +1118,7 @@ mod tests {
         detector.capture_groups = capture_groups;
         detector.complete_labelled_value = true;
         detector.labelled_value_mode = LabelledValueMode::FieldOwned;
-        for surface in 0..5 {
+        for surface in 0..7 {
             let mut previous = 0;
             for fields in [128, 512, 2048] {
                 let body = "customerId: \"SYN731284\"; ".repeat(fields);
@@ -1025,7 +1127,9 @@ mod tests {
                     1 => serde_json::to_string(&body).unwrap(),
                     2 => serde_json::to_string(&serde_json::to_string(&body).unwrap()).unwrap(),
                     3 => format!("\"{}\",public", body.replace('"', "\"\"")),
-                    _ => format!("SELECT '{body}', 7;"),
+                    4 => format!("SELECT '{body}', 7;"),
+                    5 => format!("public: 'unclosed\n{body}"),
+                    _ => format!("public: 'later close\n{body}\n'; public=7"),
                 };
                 SCANNER_WORK.with(|work| work.set(0));
                 let scans = detector.scanned_spans(&input, None);
