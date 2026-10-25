@@ -400,6 +400,7 @@ def test_independent_tuned_plan_guards_reject_wrong_computation(tuned_plan, dama
 @pytest.mark.parametrize("damage", ["anchor", "validation"])
 def test_tuned_measurement_refuses_unreproduced_anchor_or_selection(tuned_plan, monkeypatch, tmp_path, damage):
     case, tune = tuned_plan, tuned_plan.tune
+    monkeypatch.setattr(tune, "require_hash_seed", lambda: None)
     if damage == "anchor":
         for choice in case.selection["choices"].values():
             choice["finals"]["synthetic"]["validation"]["leaked_bytes"] = 0
