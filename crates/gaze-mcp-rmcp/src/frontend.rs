@@ -49,10 +49,10 @@ fn host_call_context(extensions: &rmcp::model::Extensions) -> HostCallContext {
         return host.clone();
     }
     #[cfg(feature = "transport-http")]
-    if let Some(parts) = extensions.get::<axum::http::request::Parts>() {
-        if let Some(host) = parts.extensions.get::<HostCallContext>() {
-            return host.clone();
-        }
+    if let Some(parts) = extensions.get::<axum::http::request::Parts>()
+        && let Some(host) = parts.extensions.get::<HostCallContext>()
+    {
+        return host.clone();
     }
     HostCallContext::default()
 }
