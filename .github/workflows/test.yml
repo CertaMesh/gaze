@@ -477,7 +477,8 @@ jobs:
           toolchain: 1.96.0
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
-          version: 0.11.16
+          # GLiNER identity admits the bootstrap source installed by this uv release.
+          version: 0.11.31
           enable-cache: true
           cache-dependency-glob: scripts/bench/uv.lock
       - name: Sync locked benchmark environment

@@ -74,9 +74,13 @@ selected historical reproduction environment.
 
 CI and Anvil preparation use `scripts/bench/pyproject.toml` and `uv.lock`,
 which require `cryptography>=50.0.2,<51` through the documented Presidio
-override. Use that patched environment for routine model-free checks:
+override. Routine model-free checks require uv 0.11.31, matching the CI
+job and the pinned virtualenv bootstrap source checked by GLiNER identity.
+An environment created by another uv release can retain a different bootstrap;
+recreate that environment with uv 0.11.31 before running these checks.
 
 ```sh
+uv --version  # must report 0.11.31
 uv sync --project scripts/bench --python 3.13 --locked --group comparison-test
 ```
 
