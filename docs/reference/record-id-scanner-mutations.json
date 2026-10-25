@@ -1,7 +1,17 @@
 [
   {
     "mutation": "drop-json-label-ownership",
-    "head": "f04603ee05a1ca376a0332bcee754f58c37e2762",
+    "head": "f01798b7398c508bd6d3d52ce38863a3681be46a",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "json_label_close_owns_following_value",
+      "--",
+      "--nocapture"
+    ],
     "test": "json_label_close_owns_following_value",
     "compiled": true,
     "exit": 101,
@@ -12,13 +22,23 @@
   },
   {
     "mutation": "rebuild-quote-events-per-query",
-    "head": "f04603ee05a1ca376a0332bcee754f58c37e2762",
+    "head": "f01798b7398c508bd6d3d52ce38863a3681be46a",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "doubled_apostrophe_prefix_work_is_linear",
+      "--",
+      "--nocapture"
+    ],
     "test": "doubled_apostrophe_prefix_work_is_linear",
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "ff084b01e5fb4cfccbbf243c3ecd5bde73f2c7eda063d07eb1d6f40eecf010f4",
+    "original_sha256": "98afcfff5bcff11851d840735fe6bff2110ec5ab43fb2dbe7ed8f96c79ff3702",
     "log": "rebuild-quote-events-per-query.log",
-    "restored_sha256": "ff084b01e5fb4cfccbbf243c3ecd5bde73f2c7eda063d07eb1d6f40eecf010f4"
+    "restored_sha256": "98afcfff5bcff11851d840735fe6bff2110ec5ab43fb2dbe7ed8f96c79ff3702"
   }
 ]
