@@ -4,9 +4,9 @@
     "base_sha256": "dbe486825474433d6a8ced67c5da149cb5244e1062d895e643bd658e0c5f6df6",
     "candidate_sha256": "e8cdf7549773ac0156d76ec8b35b9b7bb6ec0052554d3e7166fc421fb1b188c2"
   },
-  "full_specification_reference": "gaze-benchmark-v1:a436a22c225242899bc242767803d2b9cd82d43412e8ea855dc99533dccf453d",
+  "full_specification_reference": "gaze-benchmark-v1:5b09cd287f0453aadc605a8136219378b56bacdfe4eb57a49bc01b53d9c785be",
   "implementation_source": "e6d0c4ed6ddff63812978bf297a65093da799e9c",
-  "integrated_candidate_source": "b595f520df771d44d393bf76327c9751cded4523",
+  "integrated_candidate_source": "f2663108f5926fd6645866ab9e8a23da2bb32e23",
   "inventory": {
     "dataset_sha256": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
     "documents": [
@@ -1663,7 +1663,7 @@
         "R": 24
       },
       "policy_sha256": "438c9b3bc9ffe32526d38420d526a7fb8133aeec628c9bc3ae4e60ac0e4e2584",
-      "policy_template_sha256": "438c9b3bc9ffe32526d38420d526a7fb8133aeec628c9bc3ae4e60ac0e4e2584",
+      "policy_template_sha256": "45a402b2fe816daa091d2fbbab063bcbb56e061c1f73e910bff538646608deaa",
       "raw_nym_probability_bits": {
         "documents": 293,
         "verified_windows": 672
