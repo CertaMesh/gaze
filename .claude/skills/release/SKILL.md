@@ -97,9 +97,15 @@ retained capture with the current source or a fresh replay time.
 
 Reuse evidence only while its measured subject and benchmark inputs remain
 unchanged and their full provenance is verified. A full cache-key match may
-justify reuse; a changed revision alone is not an exact cache hit. Current
-release-history admission rejects `cache_replay: true`; do not flip that flag
-or fabricate a receipt to bypass it. Resolve unsupported admission explicitly.
+justify reuse; a changed revision alone is not an exact cache hit. Past-release
+`--build --release-tag` captures support exact reuse for qualified `policy-file`
+producers. Retain the original scorecard, observation record,
+`release-capture-key.json` and `run-evidence.json` together. Render and history
+admission verify this frozen proof and reconstruct the metrics. Preserve the
+measurement revision and time. Unsupported configurations and legacy records
+remain uncacheable. Never fabricate a receipt or key to bypass admission.
+See [past-release reuse](../../../scripts/bench/README.md#reuse-a-past-release-capture)
+for eligibility and the separately scheduled native qualification command.
 When direct final-source evidence is required, collect only the changed
 candidate sides and retain valid baselines. Benchmark specifications have immutable
 version IDs; never compare across specifications. Integrity checks remain mandatory.

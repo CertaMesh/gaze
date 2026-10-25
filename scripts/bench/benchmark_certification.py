@@ -129,6 +129,9 @@ def admit_capture(capture_path: Path, record_path: Path, spec: dict, harness: Pa
         if str(error) == 'unqualified_subject_build':
             raise CertificationError('unqualified_subject_build') from error
         raise
+    if 'release_capture' in captured:
+        import past_capture
+        past_capture.admit(captured, capture_path)
     block = captured['scoring']['scored_label_contract']
     contract = _contract(harness, block['version'], spec)
     # Display paths do not change contract semantics; all other fields are rederived.
