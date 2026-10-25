@@ -158,6 +158,7 @@ def measuring_inputs(root: Path) -> dict:
                        if name.endswith(".py") and not name.startswith("test_"))
     # These are measuring semantics; subject bytes have separate provenance.
     sources += sorted(bench.glob("*.json"))
+    sources += sorted((bench / "mechanisms").glob("*.toml"))
     sources += [bench / "pyproject.toml", bench / "uv.lock"]
     return {
         "harness": {path.relative_to(root).as_posix(): file_digest(path) for path in sources},

@@ -1,0 +1,4 @@
+# Reconstructed from embedded core by labelled_record_ids_arm.py.
+# Both mechanism arms use the candidate binary; main arms use shipped policies.
+[mechanism_delta]
+append_rulepack_paths = ["target/bench-mechanisms/labelled-record-ids.toml"]

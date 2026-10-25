@@ -725,3 +725,18 @@ def test_history_verification_binds_each_contract_to_subject(tmp_path, evidence,
                name: capture_identity.file_digest(folder / name) for name in
                ('capture.json', 'observations-v1.jsonl.gz', 'scorecard-v1.json', 'scorecard-v2.json')}}
     assert not history.verified(row, folder, evidence['benchmark_spec'], job)
+
+
+@pytest.mark.parametrize('mutation', ['added', 'changed', 'removed'])
+def test_mechanism_delta_membership_and_bytes_change_spec(tmp_path, mutation):
+    root = measuring_root(tmp_path)
+    path = root / 'scripts/bench/mechanisms/labelled-record-ids.toml'
+    path.parent.mkdir()
+    if mutation != 'added':
+        path.write_text('[mechanism_delta]\nappend_rulepack_paths=["reserved.toml"]\n')
+    before = specs.resolve(**inputs(root))
+    if mutation == 'removed':
+        path.unlink()
+    else:
+        path.write_text('[mechanism_delta]\nappend_rulepack_paths=["changed.toml"]\n')
+    assert specs.resolve(**inputs(root))['id'] != before['id']
