@@ -242,6 +242,7 @@ class SplitGuardTest(unittest.TestCase):
                 mock.patch.object(tune, "SELECTION", root / "selection.json"),
                 mock.patch.object(tune, "git_state", lambda: {"harness_revision": "x", "harness_dirty": False}),
                 mock.patch.dict(space.SEARCH, {"max_rounds": 2}),
+                mock.patch.object(tune, "require_hash_seed"),
                 mock.patch.dict("os.environ", {"PYTHONHASHSEED": "0"}),
             ]
             try:
@@ -391,7 +392,7 @@ class BudgetLineageTest(unittest.TestCase):
             tune.budget(empty)
 
     def test_measure_rejects_invalid_lineage_before_reading_corpus_or_models(self) -> None:
-        with mock.patch.dict(os.environ, {"PYTHONHASHSEED": "0"}), \
+        with mock.patch.object(tune, "require_hash_seed"), \
                 mock.patch.object(corpus, "read_comparison") as read, \
                 self.assertRaises(ValueError):
             tune.measure(argparse.Namespace(budget_source_revision="HEAD"))
