@@ -30,6 +30,26 @@ def mutations():
         lines = original.splitlines(keepends=True)
         tree = ast.parse(original)
         for node in ast.walk(tree):
+            if (filename == "subject_identity.py" and isinstance(node, ast.Assign)
+                    and any(isinstance(target, ast.Subscript) and isinstance(target.slice, ast.Constant)
+                            and target.slice.value == "model_selectors" for target in node.targets)):
+                start = offset(lines, node.lineno, node.col_offset)
+                end = offset(lines, node.end_lineno, node.end_col_offset)
+                yield f"subject-model-selectors-{node.lineno}", path, original[:start] + b"pass" + original[end:]
+            if (isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+                    and isinstance(node.value.func, ast.Attribute)):
+                call = node.value
+                if (filename == "document_capture.py" and call.func.attr == "append"
+                        and isinstance(call.func.value, ast.Attribute) and call.func.value.attr == "observations"):
+                    argument = call.args[0]
+                    start = offset(lines, argument.lineno, argument.col_offset)
+                    end = offset(lines, argument.end_lineno, argument.end_col_offset)
+                    yield f"document-observation-content-{node.lineno}", path, original[:start] + b"digest(key)" + original[end:]
+                if (filename == "capture_compare.py" and call.func.attr == "validate"
+                        and isinstance(call.func.value, ast.Name) and call.func.value.id == "freshness"):
+                    start = offset(lines, node.lineno, node.col_offset)
+                    end = offset(lines, node.end_lineno, node.end_col_offset)
+                    yield f"freshness-admission-{node.lineno}", path, original[:start] + b"pass" + original[end:]
             if isinstance(node, ast.If) and any(
                     isinstance(statement, ast.Raise) or
                     (isinstance(statement, ast.Call) and isinstance(statement.func, ast.Attribute)

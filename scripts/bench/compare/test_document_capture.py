@@ -50,6 +50,7 @@ def test_complete_fresh_and_reused_report_are_byte_identical(example):
     with patch("document_capture.time.perf_counter", side_effect=[1, 1.003, 2, 2.007, 3, 4, 5, 6]):
         row = capture_compare.measure(first, "synthetic", predictor, layers, {"email": ("EMAIL",)}, None, frozenset({"EMAIL"}))
     row["provenance"] = {"subject": digest(first.subject)}
+    assert row["capture_binding"]["documents"] == len(docs)
     row, contention = first.retain_row(row, {"contended": False})
     fresh = {"tools": {"synthetic": row}, "contention_samples": contention}
     second = session(example)
