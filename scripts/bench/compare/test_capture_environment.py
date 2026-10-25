@@ -135,7 +135,7 @@ def test_randomized_or_environment_ignoring_interpreters_refuse(isolated_capture
 
 
 @pytest.mark.parametrize("flags", [["-X", "utf8"], ["-X", "int_max_str_digits=1000"],
-                                  ["-X", "synthetic_option=enabled"], ["-W", "ignore"], ["-b"]])
+                                  ["-X", "synthetic_option=enabled"], ["-W", "ignore"], ["-b"], ["-q"], ["-OO"]])
 def test_interpreter_options_change_capture_key(isolated_capture, flags):
     run, _ = isolated_capture
     first, second = run(0), run(1, flags=flags)
