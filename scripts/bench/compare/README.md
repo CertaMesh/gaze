@@ -331,12 +331,14 @@ review the row statuses rather than interpreting exit zero as current pins.
 `capture_compare.py` runs one competitor with private, content-addressed document
 captures. Its report contains aggregate metrics and digest/count bindings. Full
 subject, runtime, input and GLiNER load proofs stay in the private cache.
+A public binding commits to the ordered private observation digests. Variant-pack
+names become ordinal layer names in public output and prediction file paths.
 
 Use a clean checkout and an installed, qualified comparison runtime. The
 measuring specification requires CPython 3.13 and the pinned parquet reader.
 GLiNER additionally requires the source hashes and loader family declared in
 `gliner_identity.py`. Unsupported runtimes, import hooks, model families and
-online model resolution are refused. The command does not download models.
+online GLiNER resolution are refused. Use preinstalled models for qualification.
 
 Prepare an immutable specification with `scripts/bench/benchmark_spec.py`. Keep
 the dataset, installed models and cache outside the repository. Set these
@@ -379,9 +381,9 @@ specification. Additional variant-pack documents also have independent unit keys
 Tampered entries cause refusal. The cache never manufactures keys for historical
 predictions.
 
-Pass `--freshness-report` to retain the independently checked freshness sidecar
-from `freshness.py`. Its contents and file hash remain separate from subject
-execution identity. The existing historical publication commands and receipts
+Pass `--freshness-report` to validate and reference the independently checked
+sidecar from `freshness.py`. Its file hash, row count and check date remain
+separate from subject execution identity. The existing historical publication commands and receipts
 retain their original code bindings.
 
 For tuned production, use `tuned_presidio/capture_produce.py` with the original

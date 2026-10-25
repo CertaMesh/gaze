@@ -17,6 +17,24 @@ from capture_launch import initialize
 initialize()
 
 
+def layer_names(layers):
+    return {name: name if name in {"C", "A", "D", "R"} else f"extra-{index:03d}"
+            for index, name in enumerate(layers)}
+
+
+def public_projection(row, corpus, layers):
+    import copy
+    aliases = layer_names(layers)
+    public = copy.deepcopy(row)
+    public["contracts"] = {version: {aliases[layer]: cell for layer, cell in values.items()}
+                           for version, values in public["contracts"].items()}
+    for contract in public["contracts"].values():
+        for cell in contract.values():
+            cell["latency"]["status"] = "withheld"
+    return public, {"binding_sha256": digest(corpus), "documents": sum(map(len, layers.values())),
+                    "layers": {aliases[layer]: {"documents": len(documents)} for layer, documents in layers.items()}}
+
+
 def measure(session, name, predictor, layers, mapping, languages, common, predictions_dir=None, *, receipt=None):
     stored, elapsed = {}, {}
     for layer, documents in layers.items():
@@ -28,8 +46,14 @@ def measure(session, name, predictor, layers, mapping, languages, common, predic
                 spans, milliseconds = session.capture(document, predictor, receipt=receipt)
                 stored[document.uid] = spans
                 elapsed[layer].append(milliseconds)
-    result = compare.measure(name, lambda document: stored[document.uid], layers, mapping,
-                             languages, common, predictions_dir)
+    if predictions_dir is not None:
+        aliases = layer_names(layers)
+        for layer, documents in layers.items():
+            sink = compare.PredictionSink(predictions_dir, aliases[layer], name)
+            for document in documents:
+                sink.add(document, stored[document.uid])
+            sink.finish()
+    result = compare.measure(name, lambda document: stored[document.uid], layers, mapping, languages, common)
     for contract in result["contracts"].values():
         for layer, cell in contract.items():
             timers = elapsed[layer]
@@ -144,12 +168,16 @@ def run(args):
                       languages, compare.common_claimed_labels(mappings), args.predictions_dir, receipt=receipt)
     row["provenance"] = {"config_sha256": digest(config), "subject_sha256": digest(session.subject)}
     row, contention = session.retain_row(row, sampler.result())
-    report = {"schema_version": 1, "benchmark_spec": spec, "corpus": corpus,
-              "tools": {name: row}, "contention_samples": {name: contention}}
+    row, public_corpus = public_projection(row, corpus, layers)
+    report = {"schema_version": 1, "benchmark_spec": spec, "corpus": public_corpus,
+              "tools": {name: row}, "contention_samples": {name: contention},
+              "latency_validity": {"publishable": False, "reason": "retained document measurements"}}
     if args.freshness_report:
-        # Freshness is an independent aggregate sidecar; it never alters subject execution.
-        report["freshness"] = json.loads(args.freshness_report.read_text())
-        report["freshness_sha256"] = file_digest(args.freshness_report)
+        import freshness
+        sidecar = json.loads(args.freshness_report.read_text())
+        freshness.validate(sidecar)
+        report["freshness"] = {"binding_sha256": file_digest(args.freshness_report),
+                               "rows": len(sidecar["rows"]), "checked_on": sidecar["checked_on"]}
     if args.verify_report:
         if digest(json.loads(args.verify_report.read_text())) != digest(report):
             raise ValueError("private captures do not reproduce submitted report")

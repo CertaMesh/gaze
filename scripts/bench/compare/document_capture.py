@@ -53,6 +53,7 @@ class Session:
         self.read_only = read_only
         self.pending = []
         self.keys = []
+        self.observations = []
         self.hits = self.misses = 0
 
     def recheck(self):
@@ -97,6 +98,7 @@ class Session:
                 or not math.isfinite(observation["elapsed_ms"]) or observation["elapsed_ms"] < 0):
             raise ValueError("invalid capture observation")
         validate(observation["predictions"], document, self.mapping)
+        self.observations.append(entry["sha256"])
         return observation["predictions"], observation["elapsed_ms"]
 
     def finish(self):
@@ -104,7 +106,7 @@ class Session:
         for path, entry in self.pending:
             atomic_json(path, entry)
         self.pending.clear()
-        return identity.public_binding(self.keys)
+        return identity.public_binding(self.observations)
 
     def retain_row(self, row, contention):
         """Rescored metrics must reproduce the retained row, including original latency."""
@@ -115,7 +117,7 @@ class Session:
                     or original["sha256"] != digest({k: v for k, v in original.items() if k != "sha256"})
                     or digest(original["row"]["contracts"]) != digest(row["contracts"])
                     or digest(original["row"]["provenance"]) != digest(row["provenance"])
-                    or original["row"].get("capture_binding") != identity.public_binding(self.keys)
+                    or original["row"].get("capture_binding") != identity.public_binding(self.observations)
                     or original["row"]["tool"] != self.subject["name"]):
                 raise ValueError("private aggregate replay mismatch")
             return original["row"], original["contention"]

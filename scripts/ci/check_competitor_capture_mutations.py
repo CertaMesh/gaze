@@ -12,10 +12,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPARE = "scripts/bench/compare/"
-TESTS = [COMPARE + "test_document_capture.py", COMPARE + "test_gliner_identity.py",
-         COMPARE + "tuned_presidio/test_input_binding.py", COMPARE + "test_capture_guards.py"]
+TESTS = [COMPARE + "test_capture_guards.py", COMPARE + "test_runtime_closure.py",
+         COMPARE + "test_document_capture.py", COMPARE + "test_gliner_identity.py",
+         COMPARE + "tuned_presidio/test_input_binding.py"]
 FILES = ["subject_identity.py", "document_capture.py", "gliner_identity.py", "capture_compare.py",
-         "tuned_presidio/input_binding.py", "tuned_presidio/capture_produce.py", "tuned_presidio/capture_tune.py"]
+         "runtime_closure.py", "tuned_presidio/input_binding.py", "tuned_presidio/capture_produce.py", "tuned_presidio/capture_tune.py"]
 
 
 def offset(lines, row, column):
@@ -29,7 +30,11 @@ def mutations():
         lines = original.splitlines(keepends=True)
         tree = ast.parse(original)
         for node in ast.walk(tree):
-            if isinstance(node, ast.If) and any(isinstance(statement, ast.Raise) for statement in node.body):
+            if isinstance(node, ast.If) and any(
+                    isinstance(statement, ast.Raise) or
+                    (isinstance(statement, ast.Call) and isinstance(statement.func, ast.Attribute)
+                     and statement.func.attr in {"_bootstrap_context", "_check_bytecode"})
+                    for child in node.body for statement in ast.walk(child)):
                 if ast.unparse(node.test) == "__name__ == '__main__'":
                     continue  # Script startup is not an input-admission guard.
                 test = node.test
@@ -77,6 +82,13 @@ def main():
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     output = ROOT / "target/competitor-mutations"
     output.mkdir(parents=True, exist_ok=True)
+    baseline = output / "baseline.log"
+    command = ["anvil", "run", "--", "uv", "run", "--project", "scripts/bench", "--python", "3.13",
+               "--group", "comparison-test", "python", "-m", "pytest", "-q", "--color=no", *TESTS]
+    with baseline.open("w") as stream:
+        result = subprocess.run(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT)
+    if result.returncode:
+        raise SystemExit("positive baseline failed; no mutation evidence accepted")
     receipts = []
     for name, path, changed in selected:
         original = path.read_bytes()

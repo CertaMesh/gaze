@@ -112,6 +112,13 @@ class IdentityContract(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        # Every fixture models a fresh collector, regardless of other tests'
+        # installed Presidio/transformers imports in the shared pytest process.
+        roots = {name.partition("/")[0] for name in identity.COMPATIBILITY}
+        roots.update(name.partition(".")[0] for name in identity.DEPENDENCIES)
+        self.stack.enter_context(patch.dict(sys.modules, {
+            name: value for name, value in sys.modules.copy().items()
+            if name.partition(".")[0] not in roots}, clear=True))
         self.temp = self.stack.enter_context(tempfile.TemporaryDirectory(prefix="gliner-synthetic-"))
         self.root = Path(self.temp)
         self.cwd = self.root / "cwd"

@@ -12,14 +12,18 @@ from pathlib import Path
 import benchmark_spec
 import capture_identity as content
 import gliner_identity
+import runtime_closure
 
 GLINER = frozenset(("gliner", "gliner-high-recall", "datafog-gliner", "tuned-presidio-gliner"))
 
 
 def runtime() -> dict:
     """Inventory installed bytes and lazy native dependencies without importing ML."""
+    if os.environ.get("PYTHONHASHSEED") != "0":
+        raise ValueError("competitor capture requires PYTHONHASHSEED=0")
     installed = []
     import_files = {}
+    content_files = {}
     for distribution in importlib.metadata.distributions():
         if distribution.files is None:
             raise ValueError("missing installed content inventory")
@@ -31,6 +35,7 @@ def runtime() -> dict:
             if not path.is_file():
                 raise ValueError("missing installed content")
             sha = content.file_digest(path)
+            content_files[str(path.absolute())] = sha
             files.append((str(item), sha))
             if str(item).startswith(("tokenizers/", "sentencepiece/", "google/protobuf/", "google/_upb/")):
                 import_files[str(path.absolute())] = sha
@@ -38,8 +43,11 @@ def runtime() -> dict:
         if direct and json.loads(direct).get("dir_info", {}).get("editable"):
             raise ValueError("editable runtime is unsupported")
         installed.append((distribution.metadata["Name"], distribution.version, content.digest(files)))
+    imports = runtime_closure.import_inventory(content_files, {
+        Path(sysconfig.get_path("purelib")), Path(sysconfig.get_path("platlib"))})
     return {"interpreter_sha256": content.file_digest(Path(sys.executable)),
             "packages_sha256": content.digest(sorted(installed)), "import_files": import_files,
+            "imports_sha256": imports,
             "native": content.native_runtime({}), "sys_path": list(sys.path),
             "environment_sha256": content.digest(dict(os.environ)),
             "python_optimization": sys.flags.optimize}
@@ -59,6 +67,7 @@ def model_digest(path: Path) -> str:
         if child.is_symlink() and (child.is_dir() or not child.is_file()):
             raise ValueError("unsupported model directory link")
         if child.is_file():
+            runtime_closure.model_references(path, child)
             files[child.relative_to(path).as_posix()] = content.file_digest(child)
     if not files:
         raise ValueError("empty selected model")

@@ -195,6 +195,13 @@ def test_driver_fresh_hit_and_private_admission_execute_no_replayed_subject(exam
     args.output.write_text(json.dumps(damaged))
     with pytest.raises(ValueError, match="submitted report"):
         capture_compare.run(args)
+    args.verify_report = None
+    args.freshness_report = root / "freshness.json"
+    args.freshness_report.write_text(json.dumps({"rows": [], "checked_on": "alice@example.invalid"}))
+    previous = args.output.read_bytes()
+    with pytest.raises(ValueError, match="unsupported freshness inventory"):
+        capture_compare.run(args)
+    assert args.output.read_bytes() == previous
 
 
 def test_spec_endpoint_drift_and_population_are_refused(example, monkeypatch):
@@ -266,7 +273,7 @@ def test_rebound_invalid_timing_is_refused(example, value):
 def test_private_aggregate_tampering_is_refused(example):
     current, _ = capture_all(example)
     row = {"tool": "synthetic", "contracts": {"v1": {}}, "provenance": {},
-           "capture_binding": identity.public_binding(current.keys)}
+           "capture_binding": identity.public_binding(current.observations)}
     current.retain_row(row, {})
     path = example[0] / ("row-" + digest(current.keys) + ".json")
     changed = json.loads(path.read_text())
@@ -310,7 +317,7 @@ def test_gliner_subject_requires_independent_runtime_plan(example):
         identity.verify_gliner({"name": "synthetic"}, {"forged": True}, None)
 
 
-@pytest.mark.parametrize("damage", ["inventory", "missing", "editable", "bytes"])
+@pytest.mark.parametrize("damage", ["inventory", "missing", "editable", "bytes", "hash_seed"])
 def test_runtime_uses_full_installed_content_inventory(example, monkeypatch, damage):
     from types import SimpleNamespace
     root = example[0]
@@ -320,8 +327,10 @@ def test_runtime_uses_full_installed_content_inventory(example, monkeypatch, dam
         locate_file=lambda file: root / file, read_text=lambda file: None)
     monkeypatch.setattr(identity.importlib.metadata, "distributions", lambda: [distribution])
     monkeypatch.setattr(identity.content, "native_runtime", lambda args: {"native": "synthetic"})
+    monkeypatch.setattr(identity.runtime_closure, "import_inventory", lambda *args: "synthetic-imports")
+    monkeypatch.setenv("PYTHONHASHSEED", "0")
     before = identity.runtime()
-    assert set(before) == {"interpreter_sha256", "packages_sha256", "import_files", "native", "sys_path",
+    assert set(before) == {"interpreter_sha256", "packages_sha256", "import_files", "imports_sha256", "native", "sys_path",
                            "environment_sha256", "python_optimization"}
     if damage == "inventory":
         distribution.files = None
@@ -329,6 +338,8 @@ def test_runtime_uses_full_installed_content_inventory(example, monkeypatch, dam
         package.unlink()
     elif damage == "editable":
         distribution.read_text = lambda file: '{"dir_info":{"editable":true}}'
+    elif damage == "hash_seed":
+        monkeypatch.setenv("PYTHONHASHSEED", "random")
     else:
         package.write_text("changed")
         assert identity.runtime() != before
@@ -354,3 +365,38 @@ def test_capture_launch_preserves_external_slots_and_initializes_once(monkeypatc
     assert first[-len(external):] == external
     capture_launch.initialize()
     assert sys.path == first
+
+
+def test_public_projection_and_prediction_paths_hide_private_pack_names(example):
+    root, _, _, docs = example
+    private_layer = "../private-pack-name/sealed"
+    layers = {private_layer: docs}
+    current = session(example)
+    row = capture_compare.measure(current, "synthetic", predictor, layers, {"email": ("EMAIL",)}, None,
+                                   frozenset({"EMAIL"}), root / "predictions")
+    public, corpus = capture_compare.public_projection(row, {"packs": [{"path": "/private/raw-pack.jsonl"}]}, layers)
+    encoded = json.dumps({"row": public, "corpus": corpus})
+    assert "private-pack-name" not in encoded and "raw-pack" not in encoded and "/private" not in encoded
+    assert (root / "predictions/extra-000/pred/synthetic.jsonl").is_file()
+    assert not (root / "private-pack-name").exists()
+
+
+def test_rehashed_wrong_observation_cannot_hide_behind_identical_totals(example):
+    root, _, _, docs = example
+    layers = {"C": docs}
+    predict = lambda doc: [compare.score.Span(0, 3, "email")]
+    first = session(example)
+    row = capture_compare.measure(first, "synthetic", predict, layers, {"email": ("EMAIL",)}, None, frozenset({"EMAIL"}))
+    row["provenance"] = {}
+    first.retain_row(row, {})
+    path = root / (digest(first.keys[0]) + ".json")
+    changed = json.loads(path.read_text())
+    changed["observation"]["predictions"] = [{"start": 5, "end": 8, "label": "email"}]
+    changed["sha256"] = digest({key: value for key, value in changed.items() if key != "sha256"})
+    path.write_text(json.dumps(changed))
+    second = session(example)
+    replayed = capture_compare.measure(second, "synthetic", predict, layers, {"email": ("EMAIL",)}, None, frozenset({"EMAIL"}))
+    replayed["provenance"] = {}
+    assert replayed["contracts"] == row["contracts"]
+    with pytest.raises(ValueError, match="aggregate replay mismatch"):
+        second.retain_row(replayed, {})

@@ -98,6 +98,7 @@ def test_import_origins_and_package_directory_links_are_refused(tmp_path, monkey
         monkeypatch.setattr(identity, "COMPATIBILITY", {"synthetic.py": "synthetic"})
     elif damage == "missing":
         monkeypatch.setattr(identity, "COMPATIBILITY", {"missing.py": "synthetic"})
+        monkeypatch.setattr(importlib.machinery.PathFinder, "_get_spec", lambda *args: None)
     elif damage in {"loader", "extension"}:
         source = root / "synthetic.py"
         source.write_text("synthetic = 1")
