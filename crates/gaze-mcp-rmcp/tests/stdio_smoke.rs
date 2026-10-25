@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use gaze_mcp_core::{DispatchError, DispatchHost, Principal, ToolDescriptor, ToolResponse};
@@ -11,6 +11,7 @@ use tokio::io::duplex;
 
 struct SmokeHost {
     calls: AtomicUsize,
+    audit_session_ids: Mutex<Vec<Option<String>>>,
 }
 
 #[async_trait]
@@ -32,7 +33,10 @@ impl DispatchHost for SmokeHost {
         self.calls.fetch_add(1, Ordering::SeqCst);
         assert_eq!(principal.id, "stdio-test");
         assert_eq!(tool_name, "clean");
-        assert_eq!(external_session_id, None);
+        self.audit_session_ids
+            .lock()
+            .unwrap()
+            .push(external_session_id.map(str::to_owned));
         assert_eq!(raw_args, json!({ "text": "hello" }));
         Ok(ToolResponse::text("redacted: hello"))
     }
@@ -57,6 +61,7 @@ impl DispatchHost for SmokeHost {
 async fn stdio_dispatch_lists_and_calls_tools() {
     let host = Arc::new(SmokeHost {
         calls: AtomicUsize::new(0),
+        audit_session_ids: Mutex::new(Vec::new()),
     });
     let frontend = RmcpFrontend::stdio(Arc::new(FixedPrincipalResolver::agent("stdio-test")));
     let handler = frontend.into_server_handler(host.clone());
@@ -92,13 +97,7 @@ async fn stdio_dispatch_lists_and_calls_tools() {
         }))
         .unwrap(),
     );
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
-        client.call_tool(request),
-    )
-    .await
-    .expect("tool call completes even if its handler fails")
-    .expect("tool call succeeds");
+    let result = client.call_tool(request).await.expect("tool call succeeds");
 
     assert_eq!(result.is_error, Some(false));
     assert_eq!(result.content[0].as_text().unwrap().text, "redacted: hello");
@@ -106,4 +105,5 @@ async fn stdio_dispatch_lists_and_calls_tools() {
 
     client.cancel().await.expect("client cancels");
     server_task.await.expect("server finishes");
+    assert_eq!(*host.audit_session_ids.lock().unwrap(), vec![None]);
 }
