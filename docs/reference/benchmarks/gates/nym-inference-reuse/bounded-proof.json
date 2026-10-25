@@ -1,0 +1,1679 @@
+{
+  "base_source": "46eb1ca2bff8c406f6c3f534a2da2268a1ecd95c",
+  "cli_binaries": {
+    "base_sha256": "dbe486825474433d6a8ced67c5da149cb5244e1062d895e643bd658e0c5f6df6",
+    "candidate_sha256": "e8cdf7549773ac0156d76ec8b35b9b7bb6ec0052554d3e7166fc421fb1b188c2"
+  },
+  "full_specification_reference": "gaze-benchmark-v1:5b09cd287f0453aadc605a8136219378b56bacdfe4eb57a49bc01b53d9c785be",
+  "implementation_source": "e6d0c4ed6ddff63812978bf297a65093da799e9c",
+  "integrated_candidate_source": "f2663108f5926fd6645866ab9e8a23da2bb32e23",
+  "inventory": {
+    "dataset_sha256": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+    "documents": [
+      {
+        "id": "dataiku-test-4642",
+        "layer": "C",
+        "text_sha256": "f03f727e67771e1aa1ca0cd127eb1ec0bde99a410809221ad3c37dcb9836c115"
+      },
+      {
+        "id": "dataiku-test-536",
+        "layer": "C",
+        "text_sha256": "59f367f4b337b179698e15a6c34f1d094e960e6e77f3738bd4f2d244087c3162"
+      },
+      {
+        "id": "dataiku-test-4970",
+        "layer": "C",
+        "text_sha256": "b0abf11eb45e1a20188ae3656f1cca2704688c0a4ad7d7ffc99f1d43a2702a9e"
+      },
+      {
+        "id": "dataiku-test-2135",
+        "layer": "C",
+        "text_sha256": "d62b3f5b7473c94a659759d0ef008e0bcced8837fe148267cb7b86d605a4e637"
+      },
+      {
+        "id": "dataiku-test-2088",
+        "layer": "C",
+        "text_sha256": "daf29b47a197d57a14ccb20176d07dabc3257eae3d971322d868c9e9d37c213d"
+      },
+      {
+        "id": "dataiku-test-462",
+        "layer": "C",
+        "text_sha256": "28140d4b80bdd5aa984966306602494b0e8e712ac70df799596a775c57a1e950"
+      },
+      {
+        "id": "dataiku-test-2861",
+        "layer": "C",
+        "text_sha256": "c1479515b22ebe96b40b80a9522a58b6c81e69cc49ea97b22e829fe3c0300869"
+      },
+      {
+        "id": "dataiku-test-2599",
+        "layer": "C",
+        "text_sha256": "2e3b835d28b731602ae80ae27230b5e995b96e6db5c2d6cc279e3c7118cd4366"
+      },
+      {
+        "id": "dataiku-test-4066",
+        "layer": "C",
+        "text_sha256": "10a8e290ba05a81d5272c7eb389d1af9c65f1c2faf73d4f37e9f0dff75de33b1"
+      },
+      {
+        "id": "dataiku-test-457",
+        "layer": "C",
+        "text_sha256": "16f38f1e7f4a618e3294f8fd80b26d0bd599509950924ebd3d8983add9fc3493"
+      },
+      {
+        "id": "dataiku-test-4524",
+        "layer": "C",
+        "text_sha256": "bb947ffcde5638c1794cf121666f408ccde11bcc74b1e94f95e22156ff33f041"
+      },
+      {
+        "id": "dataiku-test-2657",
+        "layer": "C",
+        "text_sha256": "db572f5fc4122feaea6cbfaaeb213d76650925bd489dd9111ccf3359077257c2"
+      },
+      {
+        "id": "dataiku-test-3313",
+        "layer": "C",
+        "text_sha256": "d04e05665807e37b21465d528d44afb126d8e207c58c985b8bfb6076f284a911"
+      },
+      {
+        "id": "dataiku-test-1825",
+        "layer": "C",
+        "text_sha256": "9540e2c3975661326083a21349281c20074952fe6a189afa71b879ebd3cdce38"
+      },
+      {
+        "id": "dataiku-test-4127",
+        "layer": "C",
+        "text_sha256": "293bf975c5fed217e48bc89b693cd20d693770318b580bbd5636a77502671f07"
+      },
+      {
+        "id": "dataiku-test-4611",
+        "layer": "C",
+        "text_sha256": "d3590b57a5a48c48a5c38ad50aa05583974ec392bab3eb6b42abaeb6cdf9a4f7"
+      },
+      {
+        "id": "dataiku-test-1431",
+        "layer": "C",
+        "text_sha256": "bbed51afa5a3aee241a5beda46b263c11d86a643cfed787ee535e14f61f9db23"
+      },
+      {
+        "id": "dataiku-test-584",
+        "layer": "C",
+        "text_sha256": "9fc18d3ec95b0e916e60aa86b9c747ea3338dff957780533938117d591b164cb"
+      },
+      {
+        "id": "dataiku-test-4061",
+        "layer": "C",
+        "text_sha256": "f4a1e304315ffb3c1dadf8da83a841c17a4106f85ea9a21e45c3152346a5228b"
+      },
+      {
+        "id": "dataiku-test-1234",
+        "layer": "C",
+        "text_sha256": "78e6c48244b823a21e8da0ba424cd7a05b5d477a86b81f12f356eb12d802242a"
+      },
+      {
+        "id": "dataiku-test-4089",
+        "layer": "C",
+        "text_sha256": "2a128d1a6af6de915786703d3658f8bd9c3b268cb3b7335e651ccc20b8f75531"
+      },
+      {
+        "id": "dataiku-test-1710",
+        "layer": "C",
+        "text_sha256": "e8ea7c5003b29605e87e0d35432c42ed2cb6ffb55131616f4c3e57e513058c6c"
+      },
+      {
+        "id": "dataiku-test-674",
+        "layer": "C",
+        "text_sha256": "06ca98d90e3dba15219fdcc8e86151456392ea74b084283bcae93f082460190d"
+      },
+      {
+        "id": "dataiku-test-645",
+        "layer": "C",
+        "text_sha256": "78e7c87d9dcba9ef3b89635c1051529ea61afa4931394fdda347bb1ef5744f78"
+      },
+      {
+        "id": "agentic-test-A-dob-004-log_kv-unchecked",
+        "layer": "A",
+        "text_sha256": "91b709a5c54a34fbff2ef101286d461f1e52a555002c7a0b37801927d30e1a0b"
+      },
+      {
+        "id": "agentic-test-A-header_name-000-csv-unchecked",
+        "layer": "A",
+        "text_sha256": "d5dc16d580a9fff45ff639753dda7ddb538c26544eec7065237aa6a93e211f8f"
+      },
+      {
+        "id": "agentic-test-A-address_us_apartment_prose-005-address_prose",
+        "layer": "A",
+        "text_sha256": "587429312fcddbb090f97a53c7336c3af07ad2ce994f270c953d6b09c846491b"
+      },
+      {
+        "id": "agentic-test-A-address_us_decoy_after-004-address_prose",
+        "layer": "A",
+        "text_sha256": "168d6ad82776f25ada03830d52b468671d2be0495c9cd33703a39dd8f3991ec4"
+      },
+      {
+        "id": "agentic-test-A-zip_label_past_blank-000-lookalike_prose",
+        "layer": "A",
+        "text_sha256": "166f32bddcafc45a2e46b28021bde3bd66fd3adef8c9455140c311d84ea678f3"
+      },
+      {
+        "id": "agentic-test-A-zip_three_prose-005-cue_prose",
+        "layer": "A",
+        "text_sha256": "cdd2015103460f72084d3b854d1649b817dd34eb4f2c481a6a46405d29267440"
+      },
+      {
+        "id": "agentic-test-A-dob-005-prose_nocue-unchecked",
+        "layer": "A",
+        "text_sha256": "1b6a001ba5fdecaa919f8953605a32dba307de4400bf99399b29101fb0cbc41f"
+      },
+      {
+        "id": "agentic-test-A-full-name-fr-0-lower-tool_json-first",
+        "layer": "A",
+        "text_sha256": "1996b45190f3744b0822c0bfc16bb6212e5504bd5164ae15b9006a8ba9d203ab"
+      },
+      {
+        "id": "agentic-test-A-dob-003-tool_json-unchecked",
+        "layer": "A",
+        "text_sha256": "cf81c51452dd684447488143432a781ec9d9ea20dc712bb43771336352215bc5"
+      },
+      {
+        "id": "agentic-test-A-eth_address-002-coverage_prose",
+        "layer": "A",
+        "text_sha256": "fff8edf0a447fd6bc28b810c70841438b314124e25cb201e6747615110e43e43"
+      },
+      {
+        "id": "agentic-test-A-full-name-de-0-upper-chat-first",
+        "layer": "A",
+        "text_sha256": "0941fa4cf0093a2356806f571356b8dbaafb19dfd85de09563e6b57b984d690c"
+      },
+      {
+        "id": "agentic-test-A-header_name-003-csv-unchecked",
+        "layer": "A",
+        "text_sha256": "a4608dbe3af457611beffe2e6a85541811e4834fe89b66dc1866bc495bf25f3b"
+      },
+      {
+        "id": "agentic-test-A-zip_pl_prose_de-004-cue_prose",
+        "layer": "A",
+        "text_sha256": "97c765c12a89c46e1473a704bf0c3f5e8c2abf81b3dab7967ff13bcc6331d712"
+      },
+      {
+        "id": "agentic-test-A-full-name-en-0-lower-tool_json-first",
+        "layer": "A",
+        "text_sha256": "eaec36e00d8dcee6af9c6a61a46db96f15631380265532695d9318a836a4cf2f"
+      },
+      {
+        "id": "agentic-test-A-birth_date_cue-reverse-comma-adjacent_prose",
+        "layer": "A",
+        "text_sha256": "9517c2cc53a36820b2c0938116c43b5f6fa8d442b1fde24d9f1abc8b56e085a4"
+      },
+      {
+        "id": "agentic-test-A-zip_six_json-005-cue_tool_json",
+        "layer": "A",
+        "text_sha256": "5dd399e094477d907f53e25cfd7524f7bb74fd104de27ba0db9be654caf1e507"
+      },
+      {
+        "id": "agentic-test-A-full-name-de-0-upper-greeting-first",
+        "layer": "A",
+        "text_sha256": "c06c91de093e4883898c1e8d7d32827b13cfc03910acae2b9ed1ce91cfdeabbd"
+      },
+      {
+        "id": "agentic-test-A-dob-004-tool_json-unchecked",
+        "layer": "A",
+        "text_sha256": "82193fae05be51ddaf26883fa21b2f8abc292095c332897ab5eedd9a2d82750a"
+      },
+      {
+        "id": "agentic-test-A-dob-006-narrow_nbsp-unchecked",
+        "layer": "A",
+        "text_sha256": "94c284e59d034f45bbae3f8f5228397a14995cbe12ff7fe78efde2e519781c2b"
+      },
+      {
+        "id": "agentic-test-A-header_name-008-narrow_nbsp-unchecked",
+        "layer": "A",
+        "text_sha256": "9bd7db297886793eff2a14bf0f61aa608d9576a45bff1aa0e21b2c434bed5829"
+      },
+      {
+        "id": "agentic-test-A-block_us_crlf-001",
+        "layer": "A",
+        "text_sha256": "9228b4fe536f7f5be4ca0a82c209f749bbd4fd067d6aa700afa9eb5b31fbc29f"
+      },
+      {
+        "id": "agentic-test-A-address_de_postfach_json-003-address_tool_json",
+        "layer": "A",
+        "text_sha256": "2ba9024ae055313a11e0034fcde0b9bca8147d23b5f2b24ccad5ce85ba168519"
+      },
+      {
+        "id": "agentic-test-A-full-name-en-1-upper-tool_json-first",
+        "layer": "A",
+        "text_sha256": "377ec8990adcfb2d91a892c46aa5e661765e9bdad29af63cd34851ee97f2eb77"
+      },
+      {
+        "id": "agentic-test-A-address_military_prose-002-address_prose",
+        "layer": "A",
+        "text_sha256": "f9b818fe7596f10e9e05a904d9ef4a1f51200020fe095a6fbcc235cb85c021c7"
+      },
+      {
+        "id": "agentic-test-D-full-name-en-1-lower-form-ner_seed",
+        "layer": "D",
+        "text_sha256": "5b3aa3b0707ee7461026b155c6511b5ca157ad7ee4f1b176f53c84af77a051b3"
+      },
+      {
+        "id": "agentic-test-D-full-name-de-0-upper-greeting-ner_seed",
+        "layer": "D",
+        "text_sha256": "fb6f84b5baa0d70f4e5b66c76349e7b4136ab189b141df2e192b1d9078fbdddc"
+      },
+      {
+        "id": "agentic-test-D-invoice_date-004-tool_json-benign",
+        "layer": "D",
+        "text_sha256": "9c99fa3f70a9053be8c7582cae074977896899313564764514cd3ca728fe3dbe"
+      },
+      {
+        "id": "agentic-test-D-zip_twin_br_near_csv-001-cue_csv",
+        "layer": "D",
+        "text_sha256": "32a072546f4cb2dea4bf388f9c1735a41a54e94351983c0316581c52b6e93566"
+      },
+      {
+        "id": "agentic-test-D-eth_address-002-coverage_json_invalid",
+        "layer": "D",
+        "text_sha256": "0b06b52c7f73a233273baee223ec4752bb033ff02e6db28aab5b87e79212f84e"
+      },
+      {
+        "id": "agentic-test-D-adjacent_due_dates-reverse-space-adjacent_log_kv",
+        "layer": "D",
+        "text_sha256": "721309c7a237b2401cb4547a44c3be381c5e8bbe56a4a30e6040980c993bb1a7"
+      },
+      {
+        "id": "agentic-test-D-block_twin_military-000",
+        "layer": "D",
+        "text_sha256": "e41bbbf734dcca84a594c2b97610184c93bf5d9129382e0d438751a2e8400818"
+      },
+      {
+        "id": "agentic-test-D-adjacent_due_dates-reverse-space-adjacent_prose",
+        "layer": "D",
+        "text_sha256": "9f83c9b41ceb02595e4d35bd53bbe344e449eb588bb7294c32facd41871a9dc2"
+      },
+      {
+        "id": "agentic-test-D-full-name-fr-11-title-benign_phrase-first",
+        "layer": "D",
+        "text_sha256": "2c81cd35a13d7f46b16c5b02eb4392bdd4a79b92b6b357ff56ec1b80b7564ed5"
+      },
+      {
+        "id": "agentic-test-D-full-name-en-1-title-chat-rule_seed",
+        "layer": "D",
+        "text_sha256": "4d46eaa705d6151e4b0f40ce40dd55558f5eecbfc6a7c3a02d076b8a08e5f3f2"
+      },
+      {
+        "id": "agentic-test-D-block_twin_military_blank-001",
+        "layer": "D",
+        "text_sha256": "d9939e37f8f3418d93b4c3cac456c79839eacdd8d3c2347538af9a9b5036e297"
+      },
+      {
+        "id": "agentic-test-D-name_recipient-004-coverage_name",
+        "layer": "D",
+        "text_sha256": "6171692b372a629289cd7b3aea31cf820381d9b44b6ecf22ffb812101a4bba2e"
+      },
+      {
+        "id": "agentic-test-D-full-name-de-1-title-tool_json-rule_seed",
+        "layer": "D",
+        "text_sha256": "0cd4208f59c446b46575fbf9d5cba1ef72009a5f8895445a2b587b2f3cfba454"
+      },
+      {
+        "id": "agentic-test-D-local_date-007-log_kv-benign",
+        "layer": "D",
+        "text_sha256": "ff53910bddfed781078a92b5b087c5559ec22e2e776d93f314232f5fb4242895"
+      },
+      {
+        "id": "agentic-test-D-full-name-de-0-title-chat-first",
+        "layer": "D",
+        "text_sha256": "fa9369b50d897ed087d7a30cf6a25efdcb210d40beab851bd0eb75af5da0d7ef"
+      },
+      {
+        "id": "agentic-test-D-full-name-fr-1-upper-form-first",
+        "layer": "D",
+        "text_sha256": "7ce3901571c10fe24604db296c89f869807cfbfe5bcb526ef3a3e111514357f0"
+      },
+      {
+        "id": "agentic-test-D-full-name-en-1-upper-form-rule_seed",
+        "layer": "D",
+        "text_sha256": "d44a99c8353a3ea3da77a8cbe7ca54c24b556ed83245b370f01bcec87d626d0b"
+      },
+      {
+        "id": "agentic-test-D-full-name-en-0-upper-tool_json-ner_seed",
+        "layer": "D",
+        "text_sha256": "dd6e27d22b907a0fe688b44acb9836246d53d5fe7961a6c434db11ffa0a2216d"
+      },
+      {
+        "id": "agentic-test-D-full-name-fr-1-lower-form-first",
+        "layer": "D",
+        "text_sha256": "5602d8a33a67d48e6e1c503c1b16c263cd179bb8ce0d9d40e6adec7a3661f0bf"
+      },
+      {
+        "id": "agentic-test-D-full-name-de-1-title-chat-rule_seed",
+        "layer": "D",
+        "text_sha256": "ff9f53455388ac46dd00f5946f8054c3b79ddcf5b654ecfb5719f3582472caf8"
+      },
+      {
+        "id": "agentic-test-D-local_date-009-tool_json-benign",
+        "layer": "D",
+        "text_sha256": "1a44c9ab6a4b8faf08e826a50836a91260500d728d8fa50902472e9fb0db0db0"
+      },
+      {
+        "id": "agentic-test-D-full-name-de-10-upper-benign_phrase-first",
+        "layer": "D",
+        "text_sha256": "46d54f2dd1fce471c933c6421e9bc90f2e956cffdd2c9255f057ead53cdc330c"
+      },
+      {
+        "id": "agentic-test-D-zip_twin_pl_near_de-003-cue_prose",
+        "layer": "D",
+        "text_sha256": "42c9df69b7a83f0b0a1d87be1c6a754d7f3608112e969c89ec000ef5869ab431"
+      },
+      {
+        "id": "agentic-test-D-full-name-en-20-lower-noun_field-first",
+        "layer": "D",
+        "text_sha256": "85ea3e3f1f39a15d49b07dd6d267fc613021bebcd72cb72b9944d197f6c12e87"
+      },
+      {
+        "id": "agentic-test-R-substring_names-007-thread-repeat",
+        "layer": "R",
+        "text_sha256": "58d9208cf00c79f651361f28f57a8eaea390f94fc18a07cea80e78419ec2dc75"
+      },
+      {
+        "id": "agentic-test-R-full-name-de-0-title-chat-ner_seed",
+        "layer": "R",
+        "text_sha256": "680c6ef90a3a28a1591f0c4bb69cb46ce2ad30b27784339e5ea5ffeb70cdd26b"
+      },
+      {
+        "id": "agentic-test-R-full-name-de-0-upper-form-ner_seed",
+        "layer": "R",
+        "text_sha256": "ae8cd9e8086f5cc210214ec1f15f9edddae43ab5ea02e77a02dfcbdd8011ec9f"
+      },
+      {
+        "id": "agentic-test-R-full-name-fr-0-upper-greeting-ner_seed",
+        "layer": "R",
+        "text_sha256": "d8692a32b36088ceaad830af2a29d9ad1d0137600c5359b8bb6ffbea6aa3e31d"
+      },
+      {
+        "id": "agentic-test-R-full-name-de-0-upper-greeting-rule_seed",
+        "layer": "R",
+        "text_sha256": "50f4b022326f5f658460286d96d3634de53894281f637dd514696738560b5679"
+      },
+      {
+        "id": "agentic-test-R-full-name-en-0-title-greeting-rule_seed",
+        "layer": "R",
+        "text_sha256": "937248e09efcd344505ecdbd624cb952f7d90738f2e8dc37932cb40c9ec45c90"
+      },
+      {
+        "id": "agentic-test-R-name_forward-000-coverage_name",
+        "layer": "R",
+        "text_sha256": "19b752a94b704c1c2373dad9815326352792d753c1c6449cfcaf76193ad7ed58"
+      },
+      {
+        "id": "agentic-test-R-full-name-de-1-lower-form-ner_seed",
+        "layer": "R",
+        "text_sha256": "397a08e7dc2a956b9c3b39d9efc989d30789e395b365186253796cd755fc177a"
+      },
+      {
+        "id": "agentic-test-R-full-name-de-0-upper-tool_json-ner_seed",
+        "layer": "R",
+        "text_sha256": "eec9430a92529542e7f4d6966a9bd2a71f46eeca4d63dda2698fe2f33db1bddf"
+      },
+      {
+        "id": "agentic-test-R-full-name-en-1-lower-tool_json-ner_seed",
+        "layer": "R",
+        "text_sha256": "efe17483f9a685f1e0f121760f88667b3ec69e721611c3cf3dffb51ffd14de6d"
+      },
+      {
+        "id": "agentic-test-R-full-name-en-0-upper-form-ner_seed",
+        "layer": "R",
+        "text_sha256": "184b671cb2dc8677bfd90f36b52832dd34f3aba0b9db6fa5798582a23497f248"
+      },
+      {
+        "id": "agentic-test-R-full-name-en-0-lower-greeting-rule_seed",
+        "layer": "R",
+        "text_sha256": "8e1e07c53a72b450a10e718e32c0f55904a8986de1725d48675a02553acfd75f"
+      },
+      {
+        "id": "agentic-test-R-name_header_paren-001-coverage_name",
+        "layer": "R",
+        "text_sha256": "0b8594339a27dd00e06b6b2b51fdc939e35134383c091bf18ba2a27598fbce54"
+      },
+      {
+        "id": "agentic-test-R-full-name-en-1-lower-form-rule_seed",
+        "layer": "R",
+        "text_sha256": "6267bcd137972698ddd90d510f4606f54f5e37d07ea84d1acbeecfa49a123ebb"
+      },
+      {
+        "id": "agentic-test-R-full-name-fr-1-upper-greeting-rule_seed",
+        "layer": "R",
+        "text_sha256": "0f2e6e018deeb6bddc932ee8836fd185fe89770cf71dc4de8ca0823127c1b57d"
+      },
+      {
+        "id": "agentic-test-R-full-name-de-0-lower-tool_json-ner_seed",
+        "layer": "R",
+        "text_sha256": "033b35f77156bef4409e8d07030d4f2422763534bca6f9b64f55e656c469d0c7"
+      },
+      {
+        "id": "agentic-test-R-name_recipient-005-coverage_name",
+        "layer": "R",
+        "text_sha256": "cb6772cfc11daac092a6108753b1d6c1d7aaba284bba503677a7f52bcf58d9f1"
+      },
+      {
+        "id": "agentic-test-R-full-name-en-0-lower-greeting-ner_seed",
+        "layer": "R",
+        "text_sha256": "33cc323c0874f23b2bd29d960f04c01d98a2abac49c9eba702cc6298d680c68d"
+      },
+      {
+        "id": "agentic-test-R-full-name-de-1-title-greeting-ner_seed",
+        "layer": "R",
+        "text_sha256": "2d690a935b9877a7c5dc2500b402c00c6fce494ccafcf01413fbb7d20c7023a9"
+      },
+      {
+        "id": "agentic-test-R-full-name-en-0-lower-tool_json-rule_seed",
+        "layer": "R",
+        "text_sha256": "5a230af5ef0af7b734b740d2f5e529cc5f1cc7431675bf445cd77465ab44a7ae"
+      },
+      {
+        "id": "agentic-test-R-full-name-en-1-upper-greeting-ner_seed",
+        "layer": "R",
+        "text_sha256": "fbf996dc7c39f223a9142a6a166c836a40b2bbf512c1184ad58b16b64715efc3"
+      },
+      {
+        "id": "agentic-test-R-full-name-en-0-upper-chat-rule_seed",
+        "layer": "R",
+        "text_sha256": "3ec1596808be243b130663945c8d0e9d9998f2208b8f9eb09b5986e4de439ad7"
+      },
+      {
+        "id": "agentic-test-R-full-name-fr-0-title-greeting-ner_seed",
+        "layer": "R",
+        "text_sha256": "0eb1be8ca9418b0f83a90ff894f0b92a2d7a00e639f768860652198633da6989"
+      },
+      {
+        "id": "agentic-test-R-full-name-fr-1-title-greeting-ner_seed",
+        "layer": "R",
+        "text_sha256": "fa2f1f48ac47f23b82a4da3ec06a1cb2ab74f5780271094a8fba2f5aaf6e8bd1"
+      }
+    ],
+    "generator_sha256": "7d9ba7976765db539f1f46cd38d95d5ae125fd5aca6447bc2bb04ab09331fea4",
+    "requests_sha256": "e0836cae13fd3313ae50aaa1e77cfcf8169c3d27cb13174aaa58edf4ac93abb3",
+    "seed": 20260710
+  },
+  "models": {
+    "davlan-mbert-ner-hrl": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+    "nym-small-int8": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767"
+  },
+  "mutation_probes": {
+    "results": [
+      {
+        "component": "model",
+        "exit_code": 101,
+        "runtime_test_killed": true
+      },
+      {
+        "component": "thresholds",
+        "exit_code": 101,
+        "runtime_test_killed": true
+      },
+      {
+        "component": "view",
+        "exit_code": 101,
+        "runtime_test_killed": true
+      },
+      {
+        "component": "bytes",
+        "exit_code": 101,
+        "runtime_test_killed": true
+      },
+      {
+        "component": "tensor_ids",
+        "exit_code": 101,
+        "runtime_test_killed": true
+      }
+    ],
+    "source_head": "e6d0c4ed6ddff63812978bf297a65093da799e9c",
+    "source_sha256": "35ca9b38ca6c83584fb758b1368dee00268ab8ede77957a452579447ff46d288",
+    "test": "safety_net::nym::reuse::tests::every_execution_input_separates_reuse"
+  },
+  "ner_proof": {
+    "call_inputs": "Primary raw text, target, locale chain and dictionaries are unchanged.",
+    "observations": "NER candidate events and audit bytes match exactly.",
+    "source_diff_from_base": false
+  },
+  "policies": {
+    "model-free-equivalence": {
+      "base_sha256": "83d24e70f95b393f607edcf49cdc971c0c8a0367444e1aba9b6a06c066cc9b3b",
+      "candidate_sha256": "25c467e3b0550d87b9faabe8716994571c57bd7285ccfde2990457735ce74dab",
+      "compared": "exact fixed-session clean bytes, manifest spans, audit rows, candidate events, protection traces, safety-net statistics and strict restores; only timing excluded",
+      "contracts": {
+        "v1": {
+          "identical": true,
+          "layers": {
+            "A": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 18,
+                "initial_actionable_suspects": 0,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 0,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 18,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 0,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 0,
+                "post_policy_zero_suspect_rate": null,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 1.0e0,
+                "strict_would_reject_documents": 0,
+                "tokenize_actions": 18
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 1,
+                "documents_without_leaks": 11,
+                "entities": {
+                  "exact_boundary": 17,
+                  "exact_boundary_recall": 30909090.90909091e-8,
+                  "full_coverage_recall": 34545454.545454546e-8,
+                  "fully_covered": 19,
+                  "gold": 55,
+                  "overlap_recall": 34545454.545454546e-8,
+                  "overlapped": 19
+                },
+                "prediction_spans": {
+                  "overlap_precision": 1.0e0,
+                  "overlapped_gold": 18,
+                  "total": 18
+                },
+                "utf8_bytes": {
+                  "f1": 55913978.49462366e-8,
+                  "f2": 44411908.24792582e-8,
+                  "false_positive": 3,
+                  "false_positive_rate": 28436018.95734597e-10,
+                  "leak_rate": 60944206.00858369e-8,
+                  "leaked": 284,
+                  "pii": 466,
+                  "precision": 98378378.37837838e-8,
+                  "predicted": 185,
+                  "recall": 39055793.99141631e-8,
+                  "true_positive": 182
+                },
+                "zero_leak_document_rate": 45833333.33333333e-8
+              },
+              "refusals": 0
+            },
+            "C": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 38,
+                "initial_actionable_suspects": 0,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 0,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 38,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 0,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 0,
+                "post_policy_zero_suspect_rate": null,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 1.0e0,
+                "strict_would_reject_documents": 0,
+                "tokenize_actions": 38
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 2,
+                "documents_without_leaks": 0,
+                "entities": {
+                  "exact_boundary": 35,
+                  "exact_boundary_recall": 94339622.64150944e-9,
+                  "full_coverage_recall": 11590296.495956873e-8,
+                  "fully_covered": 43,
+                  "gold": 371,
+                  "overlap_recall": 11859838.274932614e-8,
+                  "overlapped": 44
+                },
+                "prediction_spans": {
+                  "overlap_precision": 97368421.05263158e-8,
+                  "overlapped_gold": 37,
+                  "total": 38
+                },
+                "utf8_bytes": {
+                  "f1": 25077591.558038487e-8,
+                  "f2": 17480096.919349258e-8,
+                  "false_positive": 40,
+                  "false_positive_rate": 31007751.937984496e-10,
+                  "leak_rate": 85457163.42692584e-8,
+                  "leaked": 2374,
+                  "pii": 2778,
+                  "precision": 90990990.99099099e-8,
+                  "predicted": 444,
+                  "recall": 14542836.573074155e-8,
+                  "true_positive": 404
+                },
+                "zero_leak_document_rate": 0.0e-1
+              },
+              "refusals": 0
+            },
+            "D": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 2,
+                "initial_actionable_suspects": 0,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 0,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 2,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 0,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 0,
+                "post_policy_zero_suspect_rate": null,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 1.0e0,
+                "strict_would_reject_documents": 0,
+                "tokenize_actions": 2
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 2,
+                "documents_without_leaks": 24,
+                "entities": {
+                  "exact_boundary": 0,
+                  "exact_boundary_recall": 1.0e0,
+                  "full_coverage_recall": 1.0e0,
+                  "fully_covered": 0,
+                  "gold": 0,
+                  "overlap_recall": 1.0e0,
+                  "overlapped": 0
+                },
+                "prediction_spans": {
+                  "overlap_precision": 0.0e-1,
+                  "overlapped_gold": 0,
+                  "total": 2
+                },
+                "utf8_bytes": {
+                  "f1": 0.0e-1,
+                  "f2": 0.0e-1,
+                  "false_positive": 10,
+                  "false_positive_rate": 70571630.20465773e-10,
+                  "leak_rate": 0.0e-1,
+                  "leaked": 0,
+                  "pii": 0,
+                  "precision": 0.0e-1,
+                  "predicted": 10,
+                  "recall": 1.0e0,
+                  "true_positive": 0
+                },
+                "zero_leak_document_rate": 1.0e0
+              },
+              "refusals": 0
+            },
+            "R": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 6,
+                "initial_actionable_suspects": 0,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 0,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 6,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 0,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 0,
+                "post_policy_zero_suspect_rate": null,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 1.0e0,
+                "strict_would_reject_documents": 0,
+                "tokenize_actions": 6
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 2,
+                "documents_without_leaks": 1,
+                "entities": {
+                  "exact_boundary": 3,
+                  "exact_boundary_recall": 26785714.285714284e-9,
+                  "full_coverage_recall": 80357142.85714286e-9,
+                  "fully_covered": 9,
+                  "gold": 112,
+                  "overlap_recall": 80357142.85714286e-9,
+                  "overlapped": 9
+                },
+                "prediction_spans": {
+                  "overlap_precision": 1.0e0,
+                  "overlapped_gold": 6,
+                  "total": 6
+                },
+                "utf8_bytes": {
+                  "f1": 16835016.835016836e-8,
+                  "f2": 11261261.26126126e-8,
+                  "false_positive": 3,
+                  "false_positive_rate": 24610336.34126333e-10,
+                  "leak_rate": 90774907.74907749e-8,
+                  "leaked": 738,
+                  "pii": 813,
+                  "precision": 96153846.15384616e-8,
+                  "predicted": 78,
+                  "recall": 92250922.50922509e-9,
+                  "true_positive": 75
+                },
+                "zero_leak_document_rate": 41666666.666666664e-9
+              },
+              "refusals": 0
+            }
+          }
+        },
+        "v2": {
+          "identical": true,
+          "layers": {
+            "A": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 18,
+                "initial_actionable_suspects": 0,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 0,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 18,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 0,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 0,
+                "post_policy_zero_suspect_rate": null,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 1.0e0,
+                "strict_would_reject_documents": 0,
+                "tokenize_actions": 18
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 1,
+                "documents_without_leaks": 11,
+                "entities": {
+                  "exact_boundary": 17,
+                  "exact_boundary_recall": 30909090.90909091e-8,
+                  "full_coverage_recall": 34545454.545454546e-8,
+                  "fully_covered": 19,
+                  "gold": 55,
+                  "overlap_recall": 34545454.545454546e-8,
+                  "overlapped": 19
+                },
+                "prediction_spans": {
+                  "overlap_precision": 1.0e0,
+                  "overlapped_gold": 18,
+                  "total": 18
+                },
+                "utf8_bytes": {
+                  "f1": 55913978.49462366e-8,
+                  "f2": 44411908.24792582e-8,
+                  "false_positive": 3,
+                  "false_positive_rate": 28436018.95734597e-10,
+                  "leak_rate": 60944206.00858369e-8,
+                  "leaked": 284,
+                  "pii": 466,
+                  "precision": 98378378.37837838e-8,
+                  "predicted": 185,
+                  "recall": 39055793.99141631e-8,
+                  "true_positive": 182
+                },
+                "zero_leak_document_rate": 45833333.33333333e-8
+              },
+              "refusals": 0
+            },
+            "C": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 38,
+                "initial_actionable_suspects": 0,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 0,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 38,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 0,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 0,
+                "post_policy_zero_suspect_rate": null,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 1.0e0,
+                "strict_would_reject_documents": 0,
+                "tokenize_actions": 38
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 2,
+                "documents_without_leaks": 0,
+                "entities": {
+                  "exact_boundary": 35,
+                  "exact_boundary_recall": 9459459.45945946e-8,
+                  "full_coverage_recall": 11621621.621621622e-8,
+                  "fully_covered": 43,
+                  "gold": 370,
+                  "overlap_recall": 11891891.891891893e-8,
+                  "overlapped": 44
+                },
+                "prediction_spans": {
+                  "overlap_precision": 97368421.05263158e-8,
+                  "overlapped_gold": 37,
+                  "total": 38
+                },
+                "utf8_bytes": {
+                  "f1": 25202744.85339987e-8,
+                  "f2": 17577445.179255136e-8,
+                  "false_positive": 40,
+                  "false_positive_rate": 31007751.937984496e-10,
+                  "leak_rate": 85372918.17523533e-8,
+                  "leaked": 2358,
+                  "pii": 2762,
+                  "precision": 90990990.99099099e-8,
+                  "predicted": 444,
+                  "recall": 14627081.824764662e-8,
+                  "true_positive": 404
+                },
+                "zero_leak_document_rate": 0.0e-1
+              },
+              "refusals": 0
+            },
+            "D": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 2,
+                "initial_actionable_suspects": 0,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 0,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 2,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 0,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 0,
+                "post_policy_zero_suspect_rate": null,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 1.0e0,
+                "strict_would_reject_documents": 0,
+                "tokenize_actions": 2
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 2,
+                "documents_without_leaks": 24,
+                "entities": {
+                  "exact_boundary": 0,
+                  "exact_boundary_recall": 1.0e0,
+                  "full_coverage_recall": 1.0e0,
+                  "fully_covered": 0,
+                  "gold": 0,
+                  "overlap_recall": 1.0e0,
+                  "overlapped": 0
+                },
+                "prediction_spans": {
+                  "overlap_precision": 0.0e-1,
+                  "overlapped_gold": 0,
+                  "total": 2
+                },
+                "utf8_bytes": {
+                  "f1": 0.0e-1,
+                  "f2": 0.0e-1,
+                  "false_positive": 10,
+                  "false_positive_rate": 70571630.20465773e-10,
+                  "leak_rate": 0.0e-1,
+                  "leaked": 0,
+                  "pii": 0,
+                  "precision": 0.0e-1,
+                  "predicted": 10,
+                  "recall": 1.0e0,
+                  "true_positive": 0
+                },
+                "zero_leak_document_rate": 1.0e0
+              },
+              "refusals": 0
+            },
+            "R": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 6,
+                "initial_actionable_suspects": 0,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 0,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 6,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 0,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 0,
+                "post_policy_zero_suspect_rate": null,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 1.0e0,
+                "strict_would_reject_documents": 0,
+                "tokenize_actions": 6
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 2,
+                "documents_without_leaks": 1,
+                "entities": {
+                  "exact_boundary": 3,
+                  "exact_boundary_recall": 26785714.285714284e-9,
+                  "full_coverage_recall": 80357142.85714286e-9,
+                  "fully_covered": 9,
+                  "gold": 112,
+                  "overlap_recall": 80357142.85714286e-9,
+                  "overlapped": 9
+                },
+                "prediction_spans": {
+                  "overlap_precision": 1.0e0,
+                  "overlapped_gold": 6,
+                  "total": 6
+                },
+                "utf8_bytes": {
+                  "f1": 16835016.835016836e-8,
+                  "f2": 11261261.26126126e-8,
+                  "false_positive": 3,
+                  "false_positive_rate": 24610336.34126333e-10,
+                  "leak_rate": 90774907.74907749e-8,
+                  "leaked": 738,
+                  "pii": 813,
+                  "precision": 96153846.15384616e-8,
+                  "predicted": 78,
+                  "recall": 92250922.50922509e-9,
+                  "true_positive": 75
+                },
+                "zero_leak_document_rate": 41666666.666666664e-9
+              },
+              "refusals": 0
+            }
+          }
+        }
+      },
+      "documents": 96,
+      "layers": {
+        "A": 24,
+        "C": 24,
+        "D": 24,
+        "R": 24
+      },
+      "policy_sha256": "8cac3730921a1fe79b04bc905693e0972e6d7730af7795e84225b3b95d279192",
+      "policy_template_sha256": "8cac3730921a1fe79b04bc905693e0972e6d7730af7795e84225b3b95d279192",
+      "raw_nym_probability_bits": null,
+      "requests_sha256": "e0836cae13fd3313ae50aaa1e77cfcf8169c3d27cb13174aaa58edf4ac93abb3",
+      "scope": "bounded slice, not main certification or full-corpus gate",
+      "window_inputs_sha256": "b5bb1cb8644efd6b01fd101236629de0cebb1f2b583bbfee927d896544bb609b"
+    },
+    "nym-equivalence": {
+      "base_sha256": "83d24e70f95b393f607edcf49cdc971c0c8a0367444e1aba9b6a06c066cc9b3b",
+      "candidate_sha256": "25c467e3b0550d87b9faabe8716994571c57bd7285ccfde2990457735ce74dab",
+      "compared": "exact fixed-session clean bytes, manifest spans, audit rows, candidate events, protection traces, safety-net statistics and strict restores; only timing excluded",
+      "contracts": {
+        "v1": {
+          "identical": true,
+          "layers": {
+            "A": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 39,
+                "initial_actionable_suspects": 5,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 5,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 39,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 24,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 24,
+                "post_policy_zero_suspect_rate": 1.0e0,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 83333333.33333334e-8,
+                "strict_would_reject_documents": 4,
+                "tokenize_actions": 39
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 8,
+                "documents_without_leaks": 17,
+                "entities": {
+                  "exact_boundary": 27,
+                  "exact_boundary_recall": 49090909.09090909e-8,
+                  "full_coverage_recall": 72727272.72727273e-8,
+                  "fully_covered": 40,
+                  "gold": 55,
+                  "overlap_recall": 78181818.18181819e-8,
+                  "overlapped": 43
+                },
+                "prediction_spans": {
+                  "overlap_precision": 97435897.43589743e-8,
+                  "overlapped_gold": 38,
+                  "total": 39
+                },
+                "utf8_bytes": {
+                  "f1": 88863375.43053962e-8,
+                  "f2": 85279858.96870868e-8,
+                  "false_positive": 18,
+                  "false_positive_rate": 17061611.374407582e-9,
+                  "leak_rate": 16952789.699570814e-8,
+                  "leaked": 79,
+                  "pii": 466,
+                  "precision": 95555555.55555556e-8,
+                  "predicted": 405,
+                  "recall": 83047210.30042919e-8,
+                  "true_positive": 387
+                },
+                "zero_leak_document_rate": 70833333.33333334e-8
+              },
+              "refusals": 0
+            },
+            "C": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 339,
+                "initial_actionable_suspects": 46,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 46,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 339,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 24,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 24,
+                "post_policy_zero_suspect_rate": 1.0e0,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 1.25e-1,
+                "strict_would_reject_documents": 21,
+                "tokenize_actions": 339
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 24,
+                "documents_without_leaks": 0,
+                "entities": {
+                  "exact_boundary": 217,
+                  "exact_boundary_recall": 58490566.03773585e-8,
+                  "full_coverage_recall": 85175202.15633423e-8,
+                  "fully_covered": 316,
+                  "gold": 371,
+                  "overlap_recall": 85175202.15633423e-8,
+                  "overlapped": 316
+                },
+                "prediction_spans": {
+                  "overlap_precision": 78171091.44542773e-8,
+                  "overlapped_gold": 265,
+                  "total": 339
+                },
+                "utf8_bytes": {
+                  "f1": 86505538.77139979e-8,
+                  "f2": 90155331.65407221e-8,
+                  "false_positive": 603,
+                  "false_positive_rate": 46744186.04651163e-9,
+                  "leak_rate": 72354211.66306699e-9,
+                  "leaked": 201,
+                  "pii": 2778,
+                  "precision": 8103773.58490566e-7,
+                  "predicted": 3180,
+                  "recall": 9276457.88336933e-7,
+                  "true_positive": 2577
+                },
+                "zero_leak_document_rate": 0.0e-1
+              },
+              "refusals": 0
+            },
+            "D": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 11,
+                "initial_actionable_suspects": 6,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 6,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 11,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 24,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 24,
+                "post_policy_zero_suspect_rate": 1.0e0,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 8.75e-1,
+                "strict_would_reject_documents": 3,
+                "tokenize_actions": 11
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 6,
+                "documents_without_leaks": 24,
+                "entities": {
+                  "exact_boundary": 0,
+                  "exact_boundary_recall": 1.0e0,
+                  "full_coverage_recall": 1.0e0,
+                  "fully_covered": 0,
+                  "gold": 0,
+                  "overlap_recall": 1.0e0,
+                  "overlapped": 0
+                },
+                "prediction_spans": {
+                  "overlap_precision": 0.0e-1,
+                  "overlapped_gold": 0,
+                  "total": 11
+                },
+                "utf8_bytes": {
+                  "f1": 0.0e-1,
+                  "f2": 0.0e-1,
+                  "false_positive": 76,
+                  "false_positive_rate": 53634438.955539876e-9,
+                  "leak_rate": 0.0e-1,
+                  "leaked": 0,
+                  "pii": 0,
+                  "precision": 0.0e-1,
+                  "predicted": 76,
+                  "recall": 1.0e0,
+                  "true_positive": 0
+                },
+                "zero_leak_document_rate": 1.0e0
+              },
+              "refusals": 0
+            },
+            "R": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 67,
+                "initial_actionable_suspects": 12,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 12,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 67,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 24,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 24,
+                "post_policy_zero_suspect_rate": 1.0e0,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 70833333.33333333e-8,
+                "strict_would_reject_documents": 7,
+                "tokenize_actions": 67
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 23,
+                "documents_without_leaks": 21,
+                "entities": {
+                  "exact_boundary": 19,
+                  "exact_boundary_recall": 16964285.714285715e-8,
+                  "full_coverage_recall": 93.75e-2,
+                  "fully_covered": 105,
+                  "gold": 112,
+                  "overlap_recall": 93.75e-2,
+                  "overlapped": 105
+                },
+                "prediction_spans": {
+                  "overlap_precision": 1.0e0,
+                  "overlapped_gold": 67,
+                  "total": 67
+                },
+                "utf8_bytes": {
+                  "f1": 94139420.11104256e-8,
+                  "f2": 93965517.24137929e-8,
+                  "false_positive": 45,
+                  "false_positive_rate": 36915504.51189499e-9,
+                  "leak_rate": 61500615.00615012e-9,
+                  "leaked": 50,
+                  "pii": 813,
+                  "precision": 94430693.06930693e-8,
+                  "predicted": 808,
+                  "recall": 93849938.49938499e-8,
+                  "true_positive": 763
+                },
+                "zero_leak_document_rate": 8.75e-1
+              },
+              "refusals": 0
+            }
+          }
+        },
+        "v2": {
+          "identical": true,
+          "layers": {
+            "A": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 39,
+                "initial_actionable_suspects": 5,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 5,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 39,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 24,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 24,
+                "post_policy_zero_suspect_rate": 1.0e0,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 83333333.33333334e-8,
+                "strict_would_reject_documents": 4,
+                "tokenize_actions": 39
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 8,
+                "documents_without_leaks": 17,
+                "entities": {
+                  "exact_boundary": 27,
+                  "exact_boundary_recall": 49090909.09090909e-8,
+                  "full_coverage_recall": 72727272.72727273e-8,
+                  "fully_covered": 40,
+                  "gold": 55,
+                  "overlap_recall": 78181818.18181819e-8,
+                  "overlapped": 43
+                },
+                "prediction_spans": {
+                  "overlap_precision": 97435897.43589743e-8,
+                  "overlapped_gold": 38,
+                  "total": 39
+                },
+                "utf8_bytes": {
+                  "f1": 88863375.43053962e-8,
+                  "f2": 85279858.96870868e-8,
+                  "false_positive": 18,
+                  "false_positive_rate": 17061611.374407582e-9,
+                  "leak_rate": 16952789.699570814e-8,
+                  "leaked": 79,
+                  "pii": 466,
+                  "precision": 95555555.55555556e-8,
+                  "predicted": 405,
+                  "recall": 83047210.30042919e-8,
+                  "true_positive": 387
+                },
+                "zero_leak_document_rate": 70833333.33333334e-8
+              },
+              "refusals": 0
+            },
+            "C": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 339,
+                "initial_actionable_suspects": 46,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 46,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 339,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 24,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 24,
+                "post_policy_zero_suspect_rate": 1.0e0,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 1.25e-1,
+                "strict_would_reject_documents": 21,
+                "tokenize_actions": 339
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 24,
+                "documents_without_leaks": 0,
+                "entities": {
+                  "exact_boundary": 216,
+                  "exact_boundary_recall": 58378378.37837838e-8,
+                  "full_coverage_recall": 85135135.13513513e-8,
+                  "fully_covered": 315,
+                  "gold": 370,
+                  "overlap_recall": 85135135.13513513e-8,
+                  "overlapped": 315
+                },
+                "prediction_spans": {
+                  "overlap_precision": 78106508.87573964e-8,
+                  "overlapped_gold": 264,
+                  "total": 338
+                },
+                "utf8_bytes": {
+                  "f1": 86432669.59163011e-8,
+                  "f2": 90099915.56431184e-8,
+                  "false_positive": 603,
+                  "false_positive_rate": 46744186.04651163e-9,
+                  "leak_rate": 72773352.64301232e-9,
+                  "leaked": 201,
+                  "pii": 2762,
+                  "precision": 80941845.76485461e-8,
+                  "predicted": 3164,
+                  "recall": 92722664.73569877e-8,
+                  "true_positive": 2561
+                },
+                "zero_leak_document_rate": 0.0e-1
+              },
+              "refusals": 0
+            },
+            "D": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 11,
+                "initial_actionable_suspects": 6,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 6,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 11,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 24,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 24,
+                "post_policy_zero_suspect_rate": 1.0e0,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 8.75e-1,
+                "strict_would_reject_documents": 3,
+                "tokenize_actions": 11
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 6,
+                "documents_without_leaks": 24,
+                "entities": {
+                  "exact_boundary": 0,
+                  "exact_boundary_recall": 1.0e0,
+                  "full_coverage_recall": 1.0e0,
+                  "fully_covered": 0,
+                  "gold": 0,
+                  "overlap_recall": 1.0e0,
+                  "overlapped": 0
+                },
+                "prediction_spans": {
+                  "overlap_precision": 0.0e-1,
+                  "overlapped_gold": 0,
+                  "total": 11
+                },
+                "utf8_bytes": {
+                  "f1": 0.0e-1,
+                  "f2": 0.0e-1,
+                  "false_positive": 76,
+                  "false_positive_rate": 53634438.955539876e-9,
+                  "leak_rate": 0.0e-1,
+                  "leaked": 0,
+                  "pii": 0,
+                  "precision": 0.0e-1,
+                  "predicted": 76,
+                  "recall": 1.0e0,
+                  "true_positive": 0
+                },
+                "zero_leak_document_rate": 1.0e0
+              },
+              "refusals": 0
+            },
+            "R": {
+              "contract": {
+                "documents": 24,
+                "documents_with_redact": 0,
+                "final_protection_trace_items": 67,
+                "initial_actionable_suspects": 12,
+                "initial_class_mismatches": 0,
+                "initial_safety_net_suspects": 12,
+                "manifest_integrity_errors": {
+                  "invalid_clean_bounds": 0,
+                  "invalid_raw_bounds": 0,
+                  "non_monotonic_raw_spans": 0,
+                  "overlapping_clean_spans": 0,
+                  "raw_value_mismatches": 0,
+                  "token_restore_failures": 0
+                },
+                "manifest_spans": 67,
+                "manifest_valid_document_rate": 1.0e0,
+                "manifest_valid_documents": 24,
+                "post_policy_scanned_documents": 24,
+                "post_policy_suspects": 0,
+                "post_policy_zero_suspect_documents": 24,
+                "post_policy_zero_suspect_rate": 1.0e0,
+                "redact_actions": 0,
+                "restore_exact_documents": 24,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
+                "restore_success_decisions": 24,
+                "strict_acceptance_rate": 70833333.33333333e-8,
+                "strict_would_reject_documents": 7,
+                "tokenize_actions": 67
+              },
+              "metrics": {
+                "documents": 24,
+                "documents_with_false_positives": 23,
+                "documents_without_leaks": 21,
+                "entities": {
+                  "exact_boundary": 19,
+                  "exact_boundary_recall": 16964285.714285715e-8,
+                  "full_coverage_recall": 93.75e-2,
+                  "fully_covered": 105,
+                  "gold": 112,
+                  "overlap_recall": 93.75e-2,
+                  "overlapped": 105
+                },
+                "prediction_spans": {
+                  "overlap_precision": 1.0e0,
+                  "overlapped_gold": 67,
+                  "total": 67
+                },
+                "utf8_bytes": {
+                  "f1": 94139420.11104256e-8,
+                  "f2": 93965517.24137929e-8,
+                  "false_positive": 45,
+                  "false_positive_rate": 36915504.51189499e-9,
+                  "leak_rate": 61500615.00615012e-9,
+                  "leaked": 50,
+                  "pii": 813,
+                  "precision": 94430693.06930693e-8,
+                  "predicted": 808,
+                  "recall": 93849938.49938499e-8,
+                  "true_positive": 763
+                },
+                "zero_leak_document_rate": 8.75e-1
+              },
+              "refusals": 0
+            }
+          }
+        }
+      },
+      "documents": 96,
+      "layers": {
+        "A": 24,
+        "C": 24,
+        "D": 24,
+        "R": 24
+      },
+      "policy_sha256": "438c9b3bc9ffe32526d38420d526a7fb8133aeec628c9bc3ae4e60ac0e4e2584",
+      "policy_template_sha256": "45a402b2fe816daa091d2fbbab063bcbb56e061c1f73e910bff538646608deaa",
+      "raw_nym_probability_bits": {
+        "documents": 293,
+        "verified_windows": 672
+      },
+      "requests_sha256": "e0836cae13fd3313ae50aaa1e77cfcf8169c3d27cb13174aaa58edf4ac93abb3",
+      "scope": "bounded slice, not main certification or full-corpus gate",
+      "window_inputs_sha256": "fd2867bde8bf82538608842df6d3b6c81b9224b614fb613a05dc0b5c0225fd9b"
+    }
+  },
+  "policy_template_sha256": "45a402b2fe816daa091d2fbbab063bcbb56e061c1f73e910bff538646608deaa",
+  "rust_tree_unchanged_since_implementation": true,
+  "scope": "bounded equivalence, full-corpus certification pending"
+}

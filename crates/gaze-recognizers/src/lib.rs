@@ -14,6 +14,19 @@
 //! no silent regex-only fallback, so phone spans that require parser validation are not
 //! detected.
 
+/// Starts an isolated synchronous request for built-in inference reuse.
+#[doc(hidden)]
+pub fn inference_request() -> impl Drop {
+    #[cfg(feature = "safety-net-nym")]
+    {
+        safety_net::nym::InferenceRequest::enter()
+    }
+    #[cfg(not(feature = "safety-net-nym"))]
+    {
+        gaze_types::perf::Disabled
+    }
+}
+
 mod anchored_match;
 // Pinned model bundle verification, shared by the primary NER bundle and the Nym safety net.
 mod bundle;
