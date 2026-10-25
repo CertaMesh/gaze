@@ -92,7 +92,13 @@ async fn stdio_dispatch_lists_and_calls_tools() {
         }))
         .unwrap(),
     );
-    let result = client.call_tool(request).await.expect("tool call succeeds");
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        client.call_tool(request),
+    )
+    .await
+    .expect("tool call completes even if its handler fails")
+    .expect("tool call succeeds");
 
     assert_eq!(result.is_error, Some(false));
     assert_eq!(result.content[0].as_text().unwrap().text, "redacted: hello");
