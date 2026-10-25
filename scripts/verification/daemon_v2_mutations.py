@@ -19,16 +19,21 @@ ROOT = Path(__file__).resolve().parents[2]
 CLI = "crates/gaze-cli/src/commands/daemon/v2.rs"
 CORE = "crates/gaze/src/session.rs"
 DAEMON = "crates/gaze-cli/src/commands/daemon.rs"
+AUDIT = "crates/gaze-audit/src/sqlite.rs"
 PREFIX = "commands::daemon::v2::tests::"
 
 # Each substitution removes one admission, invalidation, or recovery guard.
 PROBES = [
+    ('audit-publication-order', CLI, 'audit\n            .flush(&reports, audit_session_id)\n            .map_err(|_| Failure::Pipeline)?;\n        prepared.commit();', 'prepared.commit();\n        audit\n            .flush(&reports, audit_session_id)\n            .map_err(|_| Failure::Pipeline)?;', 'audit_insert_failures_roll_back_every_row_and_preserve_exact_retry'),
+    ('audit-batch-atomicity', AUDIT, 'Self::insert_redaction(&transaction, entry)?;', 'Self::insert_redaction(&transaction, entry)?;\n            transaction.execute_batch("COMMIT; BEGIN").map_err(|err| AuditError::Sqlite(err.to_string()))?;', 'audit_insert_failures_roll_back_every_row_and_preserve_exact_retry'),
+    ('audit-report-atomicity', AUDIT, '        for report in reports {', '        transaction.execute_batch("COMMIT; BEGIN").map_err(|err| AuditError::Sqlite(err.to_string()))?;\n        for report in reports {', 'audit_insert_failures_roll_back_every_row_and_preserve_exact_retry'),
+    ('validation-result', CLI, 'validate_result(&transaction, result, raw)?;', 'let _ = (&transaction, result, raw);', 'validation_refusal_discards_audit_rows_and_staged_state'),
     ('audit-reservation', DAEMON, 'requested > self.limit', 'false', 'deferred_logger_refuses_before_collecting_out_of_budget_entries'),
     ('audit-metadata-budget', DAEMON, 'buffer.reserve_entry(entry)?;', '();', 'deferred_audit_metadata_cannot_exceed_the_transaction_state_budget'),
     ('audit-report-budget', CLI, 'report_allocation_bytes(report)?', '0', 'deferred_safety_reports_cannot_exceed_the_transaction_state_budget'),
     ('audit-stable-pass', CLI, 'audit.reset_pass().map_err(|_| Failure::Pipeline)?;', '();', 'audit_counts_only_the_committed_stable_pass_and_no_refused_attempts'),
     ('audit-defer', DAEMON, 'buffer.entries.push(entry.clone());', 'self.log_committed(entry)?;', 'audit_counts_only_the_committed_stable_pass_and_no_refused_attempts'),
-    ('audit-flush', CLI, 'audit.flush().map_err(|_| Failure::Pipeline)?;', 'drop(audit);', 'audit_counts_only_the_committed_stable_pass_and_no_refused_attempts'),
+    ('audit-flush', CLI, 'audit\n            .flush(&reports, audit_session_id)\n            .map_err(|_| Failure::Pipeline)?;', 'drop(audit);', 'audit_counts_only_the_committed_stable_pass_and_no_refused_attempts'),
     ('audit-refused-validation', DAEMON, 'buffer.entries.push(entry.clone());', 'self.log_committed(entry)?;', 'validation_refusal_discards_audit_rows_and_staged_state'),
     ('audit-safety-report', CLI, 'reports.push(report);', 'self.logger.log_safety_net_report(&report, &live.session, DocumentKind::Text).map_err(|_| Failure::Pipeline)?;\n                reports.push(report);', 'safety_net_audit_counts_only_final_pass_and_discards_refused_reports'),
     ('open-admission', CLI, '        if self\n            .v2\n            .bytes_except(&session_id)\n            .0\n            .saturating_add(live.bytes())\n            .saturating_add(response.get().len())\n            > self.v2.limits.global_v2_state_bytes\n        {\n            return Err(Failure::CacheCapacity);\n        }\n        self.make_session_room();\n', '        self.make_session_room();\n        if self\n            .v2\n            .bytes_except(&session_id)\n            .0\n            .saturating_add(live.bytes())\n            .saturating_add(response.get().len())\n            > self.v2.limits.global_v2_state_bytes\n        {\n            return Err(Failure::CacheCapacity);\n        }\n', 'refused_open_keeps_existing_namespaces_and_restore_mappings'),

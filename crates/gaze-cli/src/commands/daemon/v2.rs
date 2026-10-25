@@ -904,20 +904,19 @@ impl Daemon {
             other_manifests,
             response.get().len(),
         )?;
-        transaction.commit().map_err(|error| match error {
+        let audit_session_id = live.session.audit_session_id().to_string();
+        let prepared = transaction.prepare_commit().map_err(|error| match error {
             gaze::SessionTransactionError::CapacityExceeded => Failure::CacheCapacity,
             _ => Failure::CacheConflict,
         })?;
+        audit
+            .flush(&reports, audit_session_id)
+            .map_err(|_| Failure::Pipeline)?;
+        prepared.commit();
         let live = self.v2.sessions.get_mut(id).expect("validated session");
         live.blocks = inventory;
         live.revision += 1;
         live.generation = generation;
-        audit.flush().map_err(|_| Failure::Pipeline)?;
-        for report in reports {
-            self.logger
-                .log_safety_net_report(&report, &live.session, DocumentKind::Text)
-                .map_err(|_| Failure::Pipeline)?;
-        }
         Ok(response)
     }
 

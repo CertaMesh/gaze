@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::ops::Range;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, OnceLock, RwLock, RwLockWriteGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
@@ -342,6 +342,24 @@ pub struct SessionTransaction<'session> {
     staged: SessionState,
     manifest_limit: Option<usize>,
     capacity_exceeded: bool,
+}
+
+/// A validated commit holding the session's exclusive publication lock.
+///
+/// Dropping this value publishes nothing. Keep its lifetime short and do not
+/// access the same session while it is held. External durable writes can finish
+/// before [`Self::commit`] publishes the already allocated snapshot infallibly.
+pub struct PreparedSessionCommit<'session> {
+    boundary: RwLockWriteGuard<'session, Arc<SessionState>>,
+    snapshot: CommittedSessionSnapshot,
+}
+
+impl PreparedSessionCommit<'_> {
+    /// Publish the prepared snapshot without another validation or allocation.
+    pub fn commit(mut self) -> CommittedSessionSnapshot {
+        *self.boundary = Arc::clone(&self.snapshot.state);
+        self.snapshot
+    }
 }
 
 /// Immutable restore-only state returned by a successful transaction commit.
@@ -1421,9 +1439,17 @@ impl<'session> SessionTransaction<'session> {
     }
 
     /// Atomically publish the entire staged state if the captured generation is current.
-    pub fn commit(
+    pub fn commit(self) -> std::result::Result<CommittedSessionSnapshot, SessionTransactionError> {
+        Ok(self.prepare_commit()?.commit())
+    }
+
+    /// Validate and reserve publication before a caller's fallible durable work.
+    ///
+    /// Capacity and generation failures occur here, before anything is published.
+    /// The returned guard excludes concurrent mutation until committed or dropped.
+    pub fn prepare_commit(
         mut self,
-    ) -> std::result::Result<CommittedSessionSnapshot, SessionTransactionError> {
+    ) -> std::result::Result<PreparedSessionCommit<'session>, SessionTransactionError> {
         if self.capacity_exceeded
             || self
                 .manifest_limit
@@ -1431,7 +1457,7 @@ impl<'session> SessionTransaction<'session> {
         {
             return Err(SessionTransactionError::CapacityExceeded);
         }
-        let mut boundary = self
+        let boundary = self
             .session
             .state
             .write()
@@ -1445,10 +1471,12 @@ impl<'session> SessionTransaction<'session> {
             .checked_add(1)
             .expect("session generation exhausted");
         let committed = Arc::new(self.staged);
-        *boundary = Arc::clone(&committed);
-        Ok(CommittedSessionSnapshot {
-            identity: self.identity,
-            state: committed,
+        Ok(PreparedSessionCommit {
+            boundary,
+            snapshot: CommittedSessionSnapshot {
+                identity: self.identity,
+                state: committed,
+            },
         })
     }
 }
@@ -4639,6 +4667,33 @@ mod tests {
         assert_eq!(Arc::as_ptr(&state), before);
         assert_eq!(state.token_by_value.len(), 100);
         assert_eq!(state.generation, 100);
+    }
+
+    #[test]
+    fn prepared_commit_drop_preserves_state_and_retry_publishes_once() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        let token = transaction
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .unwrap();
+        let before = session.snapshot_entries();
+        let stale = session.begin_transaction();
+        drop(transaction.prepare_commit().unwrap());
+        assert_eq!(session.snapshot_entries(), before);
+        let mut retry = session.begin_transaction();
+        assert_eq!(
+            retry
+                .tokenize(&PiiClass::Email, "alice@example.invalid")
+                .unwrap(),
+            token
+        );
+        let snapshot = retry.prepare_commit().unwrap().commit();
+        assert!(snapshot.contains_token(&token));
+        assert_eq!(session.snapshot_entries().len(), before.len() + 1);
+        assert!(matches!(
+            stale.prepare_commit(),
+            Err(SessionTransactionError::GenerationConflict)
+        ));
     }
 
     #[test]

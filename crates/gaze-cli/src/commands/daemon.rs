@@ -850,8 +850,8 @@ impl DeferredRedactions<'_> {
         Ok(())
     }
 
-    fn flush(self) -> Result<(), RedactionLogError> {
-        let entries = self
+    fn flush(self, reports: &[LeakReport], session_id: String) -> Result<(), RedactionLogError> {
+        let mut entries = self
             .0
             .deferred
             .lock()
@@ -859,9 +859,31 @@ impl DeferredRedactions<'_> {
             .take()
             .expect("active audit scope")
             .entries;
-        for entry in entries {
-            self.0.log_committed(&entry)?;
+        for entry in &mut entries {
+            entry.provenance_stage = Some("daemon".to_string());
         }
+        if let Some(audit) = &self.0.audit {
+            audit
+                .log_batch(
+                    &entries,
+                    reports,
+                    DocumentKind::Text,
+                    chrono::Utc::now().timestamp_millis(),
+                    Some(session_id),
+                )
+                .map_err(|err| RedactionLogError::Sqlite(err.to_string()))?;
+        }
+        let detections = entries
+            .iter()
+            .filter(|entry| {
+                !entry.conflict_loser
+                    && entry.document_kind == DocumentKind::Text
+                    && entry.action != Action::Preserve
+            })
+            .count();
+        self.0
+            .detections
+            .fetch_add(detections as u64, Ordering::Relaxed);
         Ok(())
     }
 }

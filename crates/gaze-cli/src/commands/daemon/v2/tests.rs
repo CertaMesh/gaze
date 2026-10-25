@@ -972,6 +972,85 @@ fn audit_rows(path: &Path, table: &str) -> i64 {
 }
 
 #[test]
+fn audit_insert_failures_roll_back_every_row_and_preserve_exact_retry() {
+    for (table, inserted) in [
+        ("redaction_log", 0),
+        ("redaction_log", 1),
+        ("safety_net_log", 0),
+        ("safety_net_log", 1),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.db");
+        let mut d = daemon_with_audit(Some(&path));
+        d.pipeline = d.pipeline.clone().with_safety_net(ObservingNet);
+        d.safety_net_mode = SafetyNetMode::Tolerant;
+        let opened = open(&mut d, "blocks");
+        let first = clean(
+            &mut d,
+            &opened,
+            vec![block("leaf-a", "alice@example.invalid benign")],
+        );
+        let live = &d.v2.sessions["blocks"];
+        let manifest = live.session.snapshot_entries();
+        let inventory = live
+            .blocks
+            .iter()
+            .map(|b| (b.id.clone(), b.sha256.clone(), b.text.clone()))
+            .collect::<Vec<_>>();
+        let counters = (live.revision, live.generation, live.next_seq);
+        let redactions = audit_rows(&path, "redaction_log");
+        let reports = audit_rows(&path, "safety_net_log");
+        let detections = d.logger.detections.load(Ordering::Relaxed);
+        assert!(redactions > 0);
+        assert_eq!(reports, 1);
+        assert_eq!(detections, 1);
+        let frame = clean_request(
+            &first,
+            vec![
+                block("leaf-a", "alice@example.invalid benign"),
+                block("leaf-b", "bob@example.invalid benign"),
+            ],
+        )
+        .to_string();
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        let baseline = audit_rows(&path, table);
+        conn.execute_batch(&format!("CREATE TRIGGER refuse_audit BEFORE INSERT ON {table} WHEN (SELECT count(*) FROM {table}) >= {} BEGIN SELECT RAISE(ABORT, 'synthetic audit refusal'); END;", baseline + inserted)).unwrap();
+        assert_error(&raw(&mut d, &frame), "Pipeline");
+        let live = &d.v2.sessions["blocks"];
+        assert_eq!(
+            (live.revision, live.generation, live.next_seq),
+            counters,
+            "{table}/{inserted}"
+        );
+        assert_eq!(live.session.snapshot_entries(), manifest);
+        assert_eq!(
+            live.blocks
+                .iter()
+                .map(|b| (b.id.clone(), b.sha256.clone(), b.text.clone()))
+                .collect::<Vec<_>>(),
+            inventory
+        );
+        assert_eq!(audit_rows(&path, "redaction_log"), redactions);
+        assert_eq!(audit_rows(&path, "safety_net_log"), reports);
+        assert_eq!(d.logger.detections.load(Ordering::Relaxed), detections);
+        conn.execute_batch("DROP TRIGGER refuse_audit;").unwrap();
+        let retried = raw(&mut d, &frame);
+        assert_eq!(retried["op"], "clean_blocks", "{retried}");
+        assert_eq!(retried["conversation_revision"], counters.0 + 1);
+        assert_eq!(retried["manifest_generation"], counters.1 + 1);
+        assert_eq!(retried["next_request_seq"], counters.2 + 1);
+        assert_eq!(audit_rows(&path, "redaction_log"), redactions * 3);
+        assert_eq!(audit_rows(&path, "safety_net_log"), reports * 3);
+        assert_eq!(d.logger.detections.load(Ordering::Relaxed), detections + 2);
+        // This synthetic safety net has no model-health identity, so committed
+        // clean receipts refuse replay while retaining the sequence high-water mark.
+        assert_error(&raw(&mut d, &frame), "CacheConflict");
+        assert_eq!(audit_rows(&path, "redaction_log"), redactions * 3);
+        assert_eq!(audit_rows(&path, "safety_net_log"), reports * 3);
+    }
+}
+
+#[test]
 fn audit_counts_only_the_committed_stable_pass_and_no_refused_attempts() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("audit.db");
