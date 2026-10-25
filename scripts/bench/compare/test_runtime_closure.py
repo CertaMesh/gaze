@@ -4,6 +4,7 @@ import importlib.util
 import json
 import marshal
 from pathlib import Path
+import re
 import sys
 import struct
 from types import SimpleNamespace
@@ -187,7 +188,7 @@ def test_capture_entrypoint_refuses_real_predictor_or_guard_substitution(tmp_pat
     refused = subprocess.run(command, capture_output=True, text=True)
     assert selected.read_bytes() == original
     assert refused.returncode != 0
-    assert "HarnessImportError: unverified import bytecode" in refused.stderr
+    assert "HarnessImportError: unverified import bytecode" in re.sub(r"\[[0-9;]*m", "", refused.stderr)
     assert not marker.exists(), "substituted harness code executed before refusal"
 
 
