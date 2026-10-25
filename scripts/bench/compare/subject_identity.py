@@ -47,6 +47,7 @@ def runtime() -> dict:
         Path(sysconfig.get_path("purelib")), Path(sysconfig.get_path("platlib"))})
     return {"interpreter_sha256": content.file_digest(Path(sys.executable)),
             "packages_sha256": content.digest(sorted(installed)), "import_files": import_files,
+            "packages": [list(item) for item in sorted(installed)], "cwd": str(Path.cwd()),
             "imports_sha256": imports,
             "native": content.native_runtime({}), "sys_path": list(sys.path),
             "environment_sha256": content.digest(dict(os.environ)),
@@ -78,6 +79,7 @@ def subject(*, name, config, models, runtime_identity, adapter: Path, gliner_pla
     value = {"schema_version": 1, "name": name, "config": copy.deepcopy(config),
              "models": {key: model_digest(path) for key, path in sorted(models.items())},
              "runtime": copy.deepcopy(runtime_identity), "adapter_sha256": content.file_digest(adapter)}
+    value["config"]["model_selectors"] = {name: str(path) for name, path in models.items()}
     if name in GLINER:
         if gliner_plan is None:
             raise ValueError("missing independent GLiNER plan")

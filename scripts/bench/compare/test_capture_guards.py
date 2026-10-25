@@ -342,6 +342,9 @@ def tuned_plan(tmp_path, monkeypatch):
     models = {lang: subject_identity.model_digest(model) for lang in tune.space.LANGUAGES}
     subjects = {name: {"models": {**models, **({name: subject_identity.model_digest(model)} if name != "base" else {})}}
                 for name in tune.POOL_PASSES}
+    for name in tune.POOL_PASSES:
+        subjects[name]["config"] = {"model_selectors": {**{language: str(model) for language in tune.space.LANGUAGES},
+                                                       **({name: str(model)} if name != "base" else {})}}
     subjects["authors"] = {"models": {"openmed": subject_identity.model_digest(model)}}
     descriptor = {"request": identity.Request("tuned", str(model), {
         "map_location": "cpu", "load_onnx_model": False, "onnx_model_file": "model.onnx"}).descriptor()}
@@ -369,7 +372,7 @@ def tuned_plan(tmp_path, monkeypatch):
                            production=production, subjects=subjects, metas=metas, spec=spec)
 
 
-@pytest.mark.parametrize("damage", ["plans", "routing", "spec", "models", "search_space", "selection"])
+@pytest.mark.parametrize("damage", ["plans", "routing", "spec", "models", "selectors", "search_space", "selection"])
 def test_independent_tuned_plan_guards_reject_wrong_computation(tuned_plan, damage):
     case = tuned_plan
     if damage == "plans":
@@ -383,6 +386,8 @@ def test_independent_tuned_plan_guards_reject_wrong_computation(tuned_plan, dama
         case.production["authors"].benchmark_spec = other
     elif damage == "models":
         case.subjects["base"]["models"] = {}
+    elif damage == "selectors":
+        case.subjects["base"]["config"]["model_selectors"]["en"] = "different selector"
     elif damage == "search_space":
         case.selection["code_sha256"]["space.py"] = "wrong"
         case.selected.write_text(json.dumps(case.selection))

@@ -330,7 +330,7 @@ def test_runtime_uses_full_installed_content_inventory(example, monkeypatch, dam
     monkeypatch.setattr(identity.runtime_closure, "import_inventory", lambda *args: "synthetic-imports")
     monkeypatch.setenv("PYTHONHASHSEED", "0")
     before = identity.runtime()
-    assert set(before) == {"interpreter_sha256", "packages_sha256", "import_files", "imports_sha256", "native", "sys_path",
+    assert set(before) == {"interpreter_sha256", "packages_sha256", "packages", "cwd", "import_files", "imports_sha256", "native", "sys_path",
                            "environment_sha256", "python_optimization"}
     if damage == "inventory":
         distribution.files = None
@@ -400,3 +400,18 @@ def test_rehashed_wrong_observation_cannot_hide_behind_identical_totals(example)
     assert replayed["contracts"] == row["contracts"]
     with pytest.raises(ValueError, match="aggregate replay mismatch"):
         second.retain_row(replayed, {})
+
+
+def test_model_selectors_remain_bound_when_file_bytes_match(example):
+    root = example[0]
+    first, second = root / "model-first", root / "model-second"
+    for model in (first, second):
+        model.mkdir()
+        (model / "weights").write_text("same synthetic weights")
+    adapter = root / "adapter.py"
+    adapter.write_text("synthetic")
+    read = lambda path: identity.subject(name="synthetic", config={}, models={"model": path},
+        runtime_identity={"python": "synthetic"}, adapter=adapter)
+    a, b = read(first), read(second)
+    assert a["models"] == b["models"]
+    assert digest(a) != digest(b)

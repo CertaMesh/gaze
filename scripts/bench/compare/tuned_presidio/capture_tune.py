@@ -66,10 +66,14 @@ def prepare(args):
     base = {name: subject_identity.model_digest(path) for name, path in paths.spacy.items()}
     for name in POOL_PASSES:
         expected = dict(base)
+        selectors = {language: str(path) for language, path in paths.spacy.items()}
         if name != "base":
             expected[name] = subject_identity.model_digest(getattr(paths, name))
+            selectors[name] = str(getattr(paths, name))
         if subjects[name]["models"] != expected:
             raise ValueError("live models differ from independent production plan")
+        if subjects[name]["config"]["model_selectors"] != selectors:
+            raise ValueError("live selectors differ from independent production plan")
     selection = json.loads(SELECTION.read_text())
     if selection["code_sha256"]["space.py"] != sha256(HERE / "space.py"):
         raise ValueError("selection uses a different search space")
