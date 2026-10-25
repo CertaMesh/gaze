@@ -127,6 +127,7 @@ class BoundTests(unittest.TestCase):
     def test_nonempty_input_work(self):
         rows = records()
         rows[1]['counters']['input_bytes'] = 0
+        rows[1]['counters']['sweep_candidates'] = 1
         with self.assertRaisesRegex(ValueError, 'nonempty-input-work'):
             self.admit(rows)
 

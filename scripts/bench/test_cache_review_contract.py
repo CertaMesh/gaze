@@ -147,8 +147,8 @@ class CacheReviewTests(unittest.TestCase):
                 cache.copy_verified(hit,root/'copy',{'synthetic':True})
             self.assertFalse((root/'copy').exists())
 
-    def test_release_history_refuses_replay(self):
-        with self.assertRaisesRegex(render.RenderError,'must be fresh'):
+    def test_unverified_release_replay_requires_execution_evidence(self):
+        with self.assertRaisesRegex(render.RenderError,'verified run evidence'):
             render.history_entry_from_scorecard({'cache_replay':True},version='v0.17.0',
                 machine='synthetic',scorecard_filename='scorecard-v0.17.0.json',scorecard_sha256='0'*64)
 

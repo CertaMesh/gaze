@@ -13,8 +13,9 @@ release the request's cache. Another thread starts with an empty cache.
 
 The committed driver selects 24 Nym-heavy documents from each canonical layer:
 C, A, D, and R. It fixes session prefixes and compares clean bytes, manifest spans,
-audit rows, candidate events, protection traces, safety-net statistics, and restore
-outcomes. Timing fields are excluded. Each binary runs once per selected document.
+canonical audit rows, candidate events, protection traces, safety-net statistics,
+and restore outcomes. The existing producer clears audit timestamps and audit
+session IDs. Response timing is excluded. Each binary runs once per selected document.
 Both scored-label contracts replay those observations. Generated layers use their
 committed agentic contract, as in the full benchmark runner.
 

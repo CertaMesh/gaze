@@ -86,10 +86,34 @@ class HookDeletionTests(unittest.TestCase):
             self.assertEqual(row['metrics']['manifest_ns']['invocations'], 0)
             self.admit(case, case['records'])
 
-    def test_nonempty_input_condition_covers_both_source_paths(self):
+    def test_real_empty_input_with_ner_and_nym_remains_admitted(self):
+        case = json.loads((FIXTURE.parent / 'perf-empty-input-models.json').read_text())
+        rows = copy.deepcopy(case['records'])
+        self.assertEqual(rows[1]['ordinal'], 148)
+        rows[1]['ordinal'] = 1
+        counters = rows[1]['counters']
+        self.assertEqual(counters['input_bytes'], 0)
+        self.assertEqual(counters['ner_encodes'], 1)
+        self.assertEqual(counters['ner_windows'], 1)
+        self.assertEqual(counters['nym_windows'], 0)
+        self.assertEqual(counters['sweep_candidates'], 0)
+        self.assertEqual(rows[1]['metrics']['nym_tokenize_ns']['invocations'], 2)
+        self.assertGreater(rows[1]['metrics']['manifest_ns']['invocations'], 0)
+        self.assertEqual(rows[1]['metrics']['audit_ns']['invocations'], 0)
+        self.assertEqual(rows[1]['metrics']['resolve2_ns']['invocations'], 0)
+        try:
+            self.admit(case, rows)
+        except ValueError as error:
+            self.fail(f'empty model-backed input refused: {error}')
+        # The empty-input exception does not permit missing pipeline hooks.
+        rows[1]['metrics']['sweep_ns'].update(ns=0, invocations=0, candidates=0)
+        with self.assertRaisesRegex(ValueError, 'manifest-sweep'):
+            self.admit(case, rows)
+
+    def test_nonempty_input_condition_keeps_sweep_protection(self):
         for case in self.fixture['cases']:
             counters = case['records'][1]['counters']
-            if counters['ner_windows'] or counters['sweep_candidates']:
+            if counters['sweep_candidates']:
                 rows = copy.deepcopy(case['records'])
                 rows[1]['counters']['input_bytes'] = 0
                 with self.assertRaisesRegex(ValueError, 'nonempty-input-work'):
