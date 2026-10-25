@@ -633,7 +633,7 @@ struct SessionEntry {
 struct DaemonLogger {
     detections: AtomicU64,
     audit: Option<SqliteLogger>,
-    deferred: Mutex<Option<Vec<RedactionEntry>>>,
+    deferred: Mutex<Option<AuditBuffer>>,
 }
 
 impl DaemonLogger {
@@ -650,14 +650,19 @@ impl DaemonLogger {
 
     // Requests execute serially through &mut Daemon. The loaded and context
     // pipelines share this sink, so a scope covers every synchronous detector.
-    fn defer_redactions(&self) -> Result<DeferredRedactions<'_>, RedactionLogError> {
+    fn defer_redactions(&self, limit: usize) -> Result<DeferredRedactions<'_>, RedactionLogError> {
         let mut buffer = self.deferred.lock().map_err(|_| audit_buffer_error())?;
         if buffer.is_some() {
             return Err(RedactionLogError::Backend(
                 "audit scope already active".into(),
             ));
         }
-        *buffer = Some(Vec::new());
+        *buffer = Some(AuditBuffer {
+            entries: Vec::new(),
+            heap_bytes: 0,
+            limit,
+            exceeded: false,
+        });
         Ok(DeferredRedactions(self))
     }
 
@@ -735,7 +740,8 @@ impl RedactionLogger for DaemonLogger {
             .map_err(|_| audit_buffer_error())?
             .as_mut()
         {
-            buffer.push(entry.clone());
+            buffer.reserve_entry(entry)?;
+            buffer.entries.push(entry.clone());
             return Ok(());
         }
         self.log_committed(entry)
@@ -746,17 +752,101 @@ fn audit_buffer_error() -> RedactionLogError {
     RedactionLogError::Backend("audit scope unavailable".into())
 }
 
+struct AuditBuffer {
+    entries: Vec<RedactionEntry>,
+    heap_bytes: usize,
+    limit: usize,
+    exceeded: bool,
+}
+
+impl AuditBuffer {
+    fn bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            .saturating_add(
+                self.entries
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<RedactionEntry>()),
+            )
+            .saturating_add(self.heap_bytes)
+    }
+
+    fn reserve_entry(&mut self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+        // The serialized metadata includes every nested field. Charge sixteen
+        // times its size for cloned heap members, container and allocator overhead,
+        // in addition to the allocated entry slots. Counting never retains JSON.
+        let mut size = AuditSize(0);
+        if serde_json::to_writer(&mut size, entry).is_err() {
+            self.exceeded = true;
+            return Err(audit_capacity_error());
+        }
+        let heap = size.0.saturating_mul(16);
+        let capacity = if self.entries.len() == self.entries.capacity() {
+            self.entries.capacity().saturating_mul(2).max(4)
+        } else {
+            self.entries.capacity()
+        };
+        let requested = std::mem::size_of::<Self>()
+            .saturating_add(capacity.saturating_mul(std::mem::size_of::<RedactionEntry>()))
+            .saturating_add(self.heap_bytes)
+            .saturating_add(heap);
+        if requested > self.limit {
+            self.exceeded = true;
+            return Err(audit_capacity_error());
+        }
+        if self
+            .entries
+            .try_reserve_exact(capacity - self.entries.len())
+            .is_err()
+        {
+            self.exceeded = true;
+            return Err(audit_capacity_error());
+        }
+        self.heap_bytes = self.heap_bytes.saturating_add(heap);
+        Ok(())
+    }
+}
+
+struct AuditSize(usize);
+impl Write for AuditSize {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0 = self.0.saturating_add(bytes.len());
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+fn audit_capacity_error() -> RedactionLogError {
+    RedactionLogError::Backend("audit capacity".into())
+}
+
 struct DeferredRedactions<'a>(&'a DaemonLogger);
 
 impl DeferredRedactions<'_> {
-    fn reset_pass(&self) -> Result<(), RedactionLogError> {
-        self.0
+    fn bytes(&self) -> Result<usize, RedactionLogError> {
+        Ok(self
+            .0
             .deferred
             .lock()
             .map_err(|_| audit_buffer_error())?
-            .as_mut()
+            .as_ref()
             .expect("active audit scope")
-            .clear();
+            .bytes())
+    }
+
+    fn capacity_exceeded(&self) -> bool {
+        self.0.deferred.lock().map_or(true, |slot| {
+            slot.as_ref().is_some_and(|buffer| buffer.exceeded)
+        })
+    }
+
+    fn reset_pass(&self) -> Result<(), RedactionLogError> {
+        let mut slot = self.0.deferred.lock().map_err(|_| audit_buffer_error())?;
+        let buffer = slot.as_mut().expect("active audit scope");
+        buffer.entries.clear();
+        buffer.heap_bytes = 0;
+        buffer.exceeded = false;
         Ok(())
     }
 
@@ -767,7 +857,8 @@ impl DeferredRedactions<'_> {
             .lock()
             .map_err(|_| audit_buffer_error())?
             .take()
-            .expect("active audit scope");
+            .expect("active audit scope")
+            .entries;
         for entry in entries {
             self.0.log_committed(&entry)?;
         }

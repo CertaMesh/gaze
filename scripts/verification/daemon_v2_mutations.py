@@ -23,10 +23,13 @@ PREFIX = "commands::daemon::v2::tests::"
 
 # Each substitution removes one admission, invalidation, or recovery guard.
 PROBES = [
+    ('audit-reservation', DAEMON, 'requested > self.limit', 'false', 'deferred_logger_refuses_before_collecting_out_of_budget_entries'),
+    ('audit-metadata-budget', DAEMON, 'buffer.reserve_entry(entry)?;', '();', 'deferred_audit_metadata_cannot_exceed_the_transaction_state_budget'),
+    ('audit-report-budget', CLI, 'report_allocation_bytes(report)?', '0', 'deferred_safety_reports_cannot_exceed_the_transaction_state_budget'),
     ('audit-stable-pass', CLI, 'audit.reset_pass().map_err(|_| Failure::Pipeline)?;', '();', 'audit_counts_only_the_committed_stable_pass_and_no_refused_attempts'),
-    ('audit-defer', DAEMON, 'buffer.push(entry.clone());', 'self.log_committed(entry)?;', 'audit_counts_only_the_committed_stable_pass_and_no_refused_attempts'),
+    ('audit-defer', DAEMON, 'buffer.entries.push(entry.clone());', 'self.log_committed(entry)?;', 'audit_counts_only_the_committed_stable_pass_and_no_refused_attempts'),
     ('audit-flush', CLI, 'audit.flush().map_err(|_| Failure::Pipeline)?;', 'drop(audit);', 'audit_counts_only_the_committed_stable_pass_and_no_refused_attempts'),
-    ('audit-refused-validation', DAEMON, 'buffer.push(entry.clone());', 'self.log_committed(entry)?;', 'validation_refusal_discards_audit_rows_and_staged_state'),
+    ('audit-refused-validation', DAEMON, 'buffer.entries.push(entry.clone());', 'self.log_committed(entry)?;', 'validation_refusal_discards_audit_rows_and_staged_state'),
     ('audit-safety-report', CLI, 'reports.push(report);', 'self.logger.log_safety_net_report(&report, &live.session, DocumentKind::Text).map_err(|_| Failure::Pipeline)?;\n                reports.push(report);', 'safety_net_audit_counts_only_final_pass_and_discards_refused_reports'),
     ('open-admission', CLI, '        if self\n            .v2\n            .bytes_except(&session_id)\n            .0\n            .saturating_add(live.bytes())\n            .saturating_add(response.get().len())\n            > self.v2.limits.global_v2_state_bytes\n        {\n            return Err(Failure::CacheCapacity);\n        }\n        self.make_session_room();\n', '        self.make_session_room();\n        if self\n            .v2\n            .bytes_except(&session_id)\n            .0\n            .saturating_add(live.bytes())\n            .saturating_add(response.get().len())\n            > self.v2.limits.global_v2_state_bytes\n        {\n            return Err(Failure::CacheCapacity);\n        }\n', 'refused_open_keeps_existing_namespaces_and_restore_mappings'),
     ('idle-eviction-audit', DAEMON, 'self.log_eviction(&session, "idle_timeout");', 'let _ = session;', 'v2_idle_and_lru_evictions_publish_the_v1_audit_metadata'),
@@ -101,6 +104,11 @@ def main():
     (evidence / "provenance.json").write_text(json.dumps({
         "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "probes": [p[0] for p in probes],
+        "rustc": subprocess.check_output(["rustc", "-Vv"], text=True).strip(),
+        "cargo": subprocess.check_output(["cargo", "-V"], text=True).strip(),
+        "profile_dev_debug": os.environ.get("CARGO_PROFILE_DEV_DEBUG", "default"),
+        "profile_test_debug": os.environ.get("CARGO_PROFILE_TEST_DEBUG", "default"),
+        "incremental": os.environ.get("CARGO_INCREMENTAL", "default"),
         "started_at": datetime.now().isoformat(),
     }, indent=2) + "\n")
     results = []

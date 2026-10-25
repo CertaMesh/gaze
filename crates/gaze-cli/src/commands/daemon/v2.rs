@@ -771,7 +771,7 @@ impl Daemon {
             .unwrap_or((&self.pipeline, &self.dictionaries));
         let policy = safety_net_policy(self.safety_net_mode, self.safety_net_fallback);
         let (other_bytes, other_manifests) = self.v2.bytes_except(id);
-        check_stage(
+        let base_bytes = check_stage(
             limits,
             live,
             &inventory,
@@ -789,7 +789,7 @@ impl Daemon {
         let initial = transaction.semantic_revision();
         let audit = self
             .logger
-            .defer_redactions()
+            .defer_redactions(limits.global_v2_state_bytes.saturating_sub(base_bytes))
             .map_err(|_| Failure::Pipeline)?;
         let mut results = None;
         for _ in 0..limits.stabilization_passes {
@@ -806,7 +806,13 @@ impl Daemon {
                         dictionaries,
                         policy,
                     )
-                    .map_err(|error| protection_failure(pipeline, error))?;
+                    .map_err(|error| {
+                        if audit.capacity_exceeded() {
+                            Failure::CacheCapacity
+                        } else {
+                            protection_failure(pipeline, error)
+                        }
+                    })?;
                 enforce_safety_net_mode(&report, policy)
                     .map_err(|error| Failure::Protection(DaemonError::Cli(error).variant()))?;
                 let gaze::CleanDocument::Text(clean_text) = clean else {
@@ -834,7 +840,7 @@ impl Daemon {
                     &inventory,
                     &pass,
                     transaction.manifest_allocation_bytes(),
-                    other_bytes,
+                    other_bytes.saturating_add(buffered_audit_bytes(&audit, &reports)?),
                     other_manifests,
                     0,
                 )?;
@@ -863,7 +869,7 @@ impl Daemon {
             &inventory,
             &results,
             manifest_bytes,
-            other_bytes,
+            other_bytes.saturating_add(buffered_audit_bytes(&audit, &reports)?),
             other_manifests,
             0,
         )?;
@@ -894,7 +900,7 @@ impl Daemon {
             &inventory,
             &results,
             manifest_bytes,
-            other_bytes,
+            other_bytes.saturating_add(buffered_audit_bytes(&audit, &reports)?),
             other_manifests,
             response.get().len(),
         )?;
@@ -1088,6 +1094,86 @@ impl Daemon {
             }
         }
     }
+}
+
+fn buffered_audit_bytes(audit: &DeferredRedactions<'_>, reports: &[LeakReport]) -> Result<usize> {
+    let bytes = audit.bytes().map_err(|_| Failure::Pipeline)?;
+    reports.iter().try_fold(bytes, |bytes, report| {
+        Ok(bytes.saturating_add(report_allocation_bytes(report)?))
+    })
+}
+
+fn class_allocation_bytes(class: &PiiClass) -> usize {
+    match class {
+        PiiClass::Custom(value) => value.capacity(),
+        PiiClass::Email | PiiClass::Name | PiiClass::Location | PiiClass::Organization => 0,
+    }
+}
+
+fn report_allocation_bytes(report: &LeakReport) -> Result<usize> {
+    // Vec growth can retain up to four slots for one report. Charge four
+    // headers per element to cover the outer pass Vec conservatively too.
+    let mut bytes = std::mem::size_of::<LeakReport>()
+        .saturating_mul(4)
+        .saturating_add(
+            report
+                .suspects
+                .capacity()
+                .saturating_mul(std::mem::size_of::<gaze::LeakSuspect>()),
+        )
+        .saturating_add(
+            report
+                .telemetry
+                .capacity()
+                .saturating_mul(std::mem::size_of::<gaze_types::LeakReportTelemetry>()),
+        )
+        .saturating_add(report.replay_hash.as_ref().map_or(0, String::capacity));
+    for suspect in &report.suspects {
+        bytes = bytes
+            .saturating_add(suspect.safety_net_id.capacity())
+            .saturating_add(suspect.raw_label.capacity())
+            .saturating_add(suspect.field_path.as_ref().map_or(0, String::capacity))
+            .saturating_add(class_allocation_bytes(&suspect.class));
+        match &suspect.kind {
+            gaze::LeakKind::ClassMismatch {
+                pipeline_class,
+                safety_net_class,
+            } => {
+                bytes = bytes
+                    .saturating_add(class_allocation_bytes(pipeline_class))
+                    .saturating_add(class_allocation_bytes(safety_net_class));
+            }
+            gaze::LeakKind::Uncovered | gaze::LeakKind::PartialBleed { .. } => {}
+            _ => return Err(Failure::CacheCapacity),
+        }
+    }
+    for event in &report.telemetry {
+        use gaze_types::LeakReportTelemetry;
+        let (id, path, class) = match event {
+            LeakReportTelemetry::LocaleSkipped {
+                safety_net_id,
+                field_path,
+                ..
+            }
+            | LeakReportTelemetry::ModelSpanRefused {
+                safety_net_id,
+                field_path,
+                ..
+            } => (safety_net_id, field_path, 0),
+            LeakReportTelemetry::UnactionableSubword {
+                safety_net_id,
+                field_path,
+                class,
+                ..
+            } => (safety_net_id, field_path, class_allocation_bytes(class)),
+            _ => return Err(Failure::CacheCapacity),
+        };
+        bytes = bytes
+            .saturating_add(id.capacity())
+            .saturating_add(path.as_ref().map_or(0, String::capacity))
+            .saturating_add(class);
+    }
+    Ok(bytes)
 }
 
 fn protection_failure(pipeline: &gaze::Pipeline, error: gaze::Error) -> Failure {

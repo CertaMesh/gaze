@@ -983,6 +983,31 @@ fn audit_counts_only_the_committed_stable_pass_and_no_refused_attempts() {
         vec![block("leaf-a", "alice@example.invalid")],
     );
     let first_rows = audit_rows(&path, "redaction_log");
+    let reference_path = dir.path().join("reference.db");
+    let mut reference = daemon_with_audit(Some(&reference_path));
+    let live = d.v2.sessions.remove("blocks").unwrap();
+    reference.sessions.insert(
+        "blocks".into(),
+        SessionEntry {
+            session: live.session,
+            last_seen: live.last_seen,
+        },
+    );
+    let v1 = send(
+        &mut reference,
+        json!({"version":1,"op":"clean","session_id":"blocks","text":"alice@example.invalid"}),
+    );
+    assert_eq!(v1["clean_text"], first["blocks"][0]["clean_text"]);
+    assert_eq!(first_rows, audit_rows(&reference_path, "redaction_log"));
+    assert_eq!(reference.logger.detections.load(Ordering::Relaxed), 1);
+    let entry = reference.sessions.remove("blocks").unwrap();
+    d.v2.sessions.insert(
+        "blocks".into(),
+        Live {
+            session: entry.session,
+            ..live
+        },
+    );
     assert_eq!(
         d.logger.detections.load(Ordering::Relaxed),
         1,
@@ -1267,4 +1292,134 @@ fn committed_v1_oracle_recleans_late_learned_blocks() {
             .collect(),
     );
     assert_committed_v1_identity(&mut d, "blocks", &texts, &result);
+}
+
+struct LargeMetadataRecognizer(String);
+impl gaze::Recognizer for LargeMetadataRecognizer {
+    fn id(&self) -> &str {
+        &self.0
+    }
+    fn supported_class(&self) -> &PiiClass {
+        &PiiClass::Email
+    }
+    fn token_family(&self) -> &str {
+        "counter"
+    }
+    fn detect(
+        &self,
+        text: &str,
+        _: &gaze::DetectContext<'_>,
+    ) -> std::result::Result<Vec<gaze::Candidate>, gaze_types::DetectError> {
+        Ok(vec![gaze::Candidate::new(
+            0..text.len(),
+            PiiClass::Email,
+            self.id(),
+            1.0,
+            100,
+            None,
+            "counter",
+            self.id(),
+            ConflictTier::None,
+            vec![],
+        )])
+    }
+}
+
+#[test]
+fn deferred_audit_metadata_cannot_exceed_the_transaction_state_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("audit.db");
+    let mut d = daemon_with_audit(Some(&path));
+    d.pipeline = gaze::Pipeline::builder()
+        .recognizer(LargeMetadataRecognizer(
+            "synthetic-recognizer-".repeat(8192),
+        ))
+        .rule(gaze::ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .build()
+        .unwrap()
+        .with_redaction_logger(TestLogger(Arc::clone(&d.logger)));
+    let opened = open(&mut d, "blocks");
+    d.v2.limits.global_v2_state_bytes = 64 * 1024;
+    let response = send(
+        &mut d,
+        clean_request(&opened, vec![block("leaf-a", "alice@example.invalid")]),
+    );
+    assert_eq!(response["error"], "CacheCapacity");
+    assert_eq!(audit_rows(&path, "redaction_log"), 0);
+    assert_eq!(d.logger.detections.load(Ordering::Relaxed), 0);
+    let live = &d.v2.sessions["blocks"];
+    assert_eq!(live.next_seq, 1);
+    assert!(live.blocks.is_empty());
+    assert!(live.session.snapshot_entries().is_empty());
+}
+
+struct LargeMetadataNet(String);
+impl gaze::SafetyNet for LargeMetadataNet {
+    fn id(&self) -> &str {
+        &self.0
+    }
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &[gaze::LocaleTag::Global]
+    }
+    fn check(
+        &self,
+        text: &str,
+        context: gaze::SafetyNetContext<'_>,
+    ) -> std::result::Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
+        let mut suspects = ObservingNet.check(text, context)?;
+        for suspect in &mut suspects {
+            suspect.safety_net_id = self.0.clone();
+        }
+        Ok(suspects)
+    }
+}
+
+#[test]
+fn deferred_safety_reports_cannot_exceed_the_transaction_state_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("audit.db");
+    let mut d = daemon_with_audit(Some(&path));
+    d.pipeline = d
+        .pipeline
+        .clone()
+        .with_safety_net(LargeMetadataNet("synthetic-observer-".repeat(8192)));
+    d.safety_net_mode = SafetyNetMode::Tolerant;
+    let opened = open(&mut d, "blocks");
+    d.v2.limits.global_v2_state_bytes = 64 * 1024;
+    let response = send(
+        &mut d,
+        clean_request(
+            &opened,
+            vec![block("leaf-a", "alice@example.invalid benign")],
+        ),
+    );
+    assert_eq!(response["error"], "CacheCapacity");
+    assert_eq!(audit_rows(&path, "redaction_log"), 0);
+    assert_eq!(audit_rows(&path, "safety_net_log"), 0);
+    let live = &d.v2.sessions["blocks"];
+    assert_eq!(live.next_seq, 1);
+    assert!(live.session.snapshot_entries().is_empty());
+}
+
+#[test]
+fn deferred_logger_refuses_before_collecting_out_of_budget_entries() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("audit.db");
+    let d = daemon_with_audit(Some(&path));
+    let audit = d.logger.defer_redactions(64).unwrap();
+    let entry = RedactionEntry::new(
+        "synthetic",
+        PiiClass::Email,
+        Action::Tokenize,
+        None,
+        DocumentKind::Text,
+        false,
+        ConflictTier::None,
+        0,
+        None,
+    );
+    assert!(d.logger.log(&entry).is_err());
+    assert!(audit.capacity_exceeded());
+    assert_eq!(audit_rows(&path, "redaction_log"), 0);
+    assert_eq!(d.logger.detections.load(Ordering::Relaxed), 0);
 }
