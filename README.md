@@ -51,16 +51,16 @@ Gaze v0.17.0 leaks 9,717 PII bytes on our holdout under contract v4 (byte-micro 
 
 ## How does it work
 
-![Steps 1 to 4, normalize, recognize, resolve and swap, are the deterministic floor. Step 5, the safety net on by default, and step 6, the output check, give a second opinion. The AI model sees placeholders only, and step 7 restores the reply.](docs/assets/gaze-seven-steps.svg)
+![Steps 1 to 4, normalize, recognize, resolve and swap, are the deterministic floor. Step 5, the safety net enabled by the gaze setup policy, and step 6, the output check, give a second opinion. The AI model sees placeholders only, and step 7 restores the reply.](docs/assets/gaze-seven-steps.svg)
 
-1. Forty bundled rules find structured details using formats, checksums and cues.
+1. Bundled rules find structured details using formats, checksums and cues.
 2. NER finds names and places.
 3. The resolver picks one candidate per span; Gaze emits a placeholder and manifest entry.
-   The same input gives the same output; each placeholder traces to a versioned rule.
+   Each session has its own placeholder namespace. Placeholders trace to rules or recognizers.
 4. The `gaze setup` policy runs local Nym to find missed PII and tokenize it.
 5. Restore replaces issued placeholders with originals. Unknown placeholders are refused.
 
-Gaze fails closed on missing models and unknown rules. Unresolvable safety-net
+Gaze fails closed on missing configured models and unknown rules. Unresolvable safety-net
 suspects become one-way `[REDACTED:<class>]` markers or cause refusal. Only
 `tolerant` development mode lets them through.
 
@@ -69,11 +69,12 @@ a support ticket and safety-net modes.
 
 ## Quickstart
 
-Install the CLI, write the default policy, then clean and restore a synthetic contact:
+With Rust and `jq` installed, clean and restore a synthetic contact. Setup needs
+network access to download the pinned models:
 
 ```sh
 cargo install gaze-cli --version 0.17.0
-gaze setup
+gaze setup --non-interactive
 printf 'From: %s %s <%s@%s>' Ada Example ada example.invalid | gaze clean --policy gaze.toml > clean.json
 jq -r .clean_text clean.json
 jq '{session_blob, text: .clean_text}' clean.json | gaze restore | jq -r .text
@@ -92,7 +93,7 @@ From: Ada Example <ada [at] example.invalid>
 `gaze setup` verifies pinned NER and Nym bundles, writes `gaze.toml` with Nym on,
 and checks both detectors. It prints Nym's MIT model licence and the open
 [training-data licence review](docs/explanation/safety-net/safety-nets.md#licence-review-open).
-Use `gaze setup --safety-net none` for NER only.
+Use `gaze setup --safety-net none` for NER only. OPF stays opt-in.
 
 `gaze setup --dob-judge` installs a SHA-pinned local GLiNER bundle and enables
 cue-less birth-date judgments. It stays opt-in while its bundle is 352 MB:
@@ -143,11 +144,10 @@ Pre-built binaries are attached to each [GitHub release](https://github.com/Cert
 Use the arm64 Linux binary in arm64 containers, including containers on Apple
 Silicon. Other targets: `cargo build --release -p gaze-cli`.
 
-For the LLM API proxy:
+For the LLM API proxy, after the quickstart:
 
 ```sh
-cargo install --path crates/gaze-cli
-gaze proxy start
+gaze proxy start --policy gaze.toml
 export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
 export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
 ```
@@ -156,8 +156,7 @@ Claude Code also needs an explicit beta allowlist. See
 [proxy setup](docs/how-to/proxy/set-up-proxy.md#point-your-sdk-at-the-proxy)
 for the flags, supported request shapes, and documented refusals.
 
-
-For MCP hosts (Claude Code, Claude Desktop, Cursor):
+From a source checkout, for MCP hosts (Claude Code, Claude Desktop, Cursor):
 
 ```sh
 cargo install --path crates/gaze-cli --features mcp
@@ -165,7 +164,10 @@ gaze mcp install --client=claude-code
 gaze mcp doctor
 ```
 
-The MCP server exposes `gaze_read_file` and `gaze_read_text`, returning tokenized content plus a `manifest_id` for authorized restore flows. Client config paths: [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#mcp-installation).
+The MCP server exposes `gaze_read_file` and `gaze_read_text`, returning tokenized
+content plus a `manifest_id` for authorized restore flows. It uses bundled rules,
+without the NER or Nym models from `gaze setup`. Client config paths:
+[`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#mcp-installation).
 
 For library use, see [Use the `gaze setup` policy from Rust](docs/how-to/rust-library.md).
 
