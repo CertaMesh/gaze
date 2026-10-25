@@ -299,10 +299,11 @@ def test_capture_entrypoints_require_script_path_launch(tmp_path, entrypoint):
 
 
 @pytest.mark.parametrize("damage", ["nested_bytecode", "sourceless", "linked_directory"])
-def test_stdlib_walk_checks_lazy_nested_imports(tmp_path, monkeypatch, damage):
+@pytest.mark.parametrize("parent", ["synthetic_package", "__pycache__"])
+def test_stdlib_walk_checks_lazy_nested_imports(tmp_path, monkeypatch, damage, parent):
     import capture_launch
     standard = tmp_path / "stdlib"
-    nested = standard / "synthetic_package"
+    nested = standard / parent
     nested.mkdir(parents=True)
     monkeypatch.setattr(capture_launch.sysconfig, "get_path", lambda name: str(standard))
     if damage == "linked_directory":

@@ -117,7 +117,7 @@ def check_stdlib():
     for root in roots:
         for directory, children, files in os.walk(root, onerror=unreadable):
             children[:] = [name for name in children
-                           if name not in {"__pycache__", "site-packages", "dist-packages"}]
+                           if name not in {"site-packages", "dist-packages"}]
             for name in children:
                 if (Path(directory) / name).is_symlink():
                     raise HarnessImportError("linked stdlib import directory is unsupported")
@@ -128,7 +128,10 @@ def check_stdlib():
                     module = ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
                     if not _imp.is_frozen(module) and module not in sys.builtin_module_names:
                         _check_bytecode(path)
-                elif path.suffix == ".pyc":
+                elif path.suffix == ".pyc" and not (
+                        path.parent.name == "__pycache__" and "." in path.stem):
+                    # Tagged cache names contain dots and cannot be selected as
+                    # direct module files. Their source owners are checked above.
                     raise HarnessImportError("sourceless stdlib bytecode is unsupported")
 
 
