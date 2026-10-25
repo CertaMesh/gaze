@@ -13,7 +13,8 @@ _launch = Path(__file__).resolve().parent / "capture_launch.py"
 _scope = vars(sys.modules.setdefault("capture_launch", type(sys)("capture_launch")))
 _scope["__file__"] = str(_launch)
 exec(compile(_launch.read_bytes(), str(_launch), "exec"), _scope)
-_scope["initialize"](entrypoint_spec=__spec__ if __name__ == "__main__" else None)
+_scope["initialize"](entrypoint_spec=__spec__ if __name__ == "__main__" else None,
+                     script=__name__ == "__main__")
 
 import compare
 import document_capture as captures
@@ -192,4 +193,4 @@ def run(args):
 
 
 if __name__ == "__main__":
-    run(parse_args())
+    run(_scope["fixed_arguments"](parse_args()))

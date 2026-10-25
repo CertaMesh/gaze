@@ -351,6 +351,28 @@ Use a private pycache prefix to avoid stale caches in a newly installed runtime.
 Capture admission refuses stale caches even when Python could recompile them.
 Keep the prefix unchanged when replaying a capture.
 
+Each script restarts under the same interpreter and flags with an empty
+environment populated only from this allowlist: `PATH`, `HOME`, `LANG`,
+`LANGUAGE`, all `LC_*` and `PYTHON*` settings (including the private pycache
+prefix), `TMPDIR`, `TMP`, `TEMP`, `TZ`, `XDG_CACHE_HOME`, `HF_HOME`,
+`HF_HUB_CACHE`, `TRANSFORMERS_CACHE`, `HF_HUB_OFFLINE`, `HF_DATASETS_OFFLINE`,
+`TRANSFORMERS_OFFLINE`, `TOKENIZERS_PARALLELISM`, `OMP_NUM_THREADS`,
+`OMP_THREAD_LIMIT`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
+`VECLIB_MAXIMUM_THREADS`, `NUMEXPR_NUM_THREADS`, `BLIS_NUM_THREADS`,
+`RAYON_NUM_THREADS`, `LD_LIBRARY_PATH`, `DYLD_LIBRARY_PATH`, and
+`DYLD_FALLBACK_LIBRARY_PATH`, and macOS `__CF_USER_TEXT_ENCODING`. Missing
+variables stay absent. The full resulting
+environment remains bound in the key. Shell metadata such as `TERM_SESSION_ID`
+and `SSH_AUTH_SOCK` never reaches the capture process. A later shell can reuse
+captures when its allowed inputs are identical; changing an allowed input
+invalidates reuse.
+
+Execution uses the source checkout root as its fixed working directory. CLI
+path arguments become absolute in the caller's directory before execution.
+Use absolute paths inside tuned production-plan argument vectors; relative
+paths in those vectors are interpreted from the fixed checkout root. Installed
+model loading, inference, scoring and retained timing semantics are unchanged.
+
 Prepare an immutable specification with `scripts/bench/benchmark_spec.py`. Keep
 the dataset, installed models and cache outside the repository. Set these
 variables to the scheduled qualification inputs before running the commands:

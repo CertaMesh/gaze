@@ -39,7 +39,8 @@ _launch = Path(__file__).resolve().parent.parent / "capture_launch.py"
 _scope = vars(sys.modules.setdefault("capture_launch", type(sys)("capture_launch")))
 _scope["__file__"] = str(_launch)
 exec(compile(_launch.read_bytes(), str(_launch), "exec"), _scope)
-_scope["initialize"](entrypoint_spec=__spec__ if __name__ == "__main__" else None)
+_scope["initialize"](entrypoint_spec=__spec__ if __name__ == "__main__" else None,
+                     script=__name__ == "__main__")
 
 # Both tuned entrypoints initialize the same model-free source modules.
 import tune
@@ -349,7 +350,7 @@ def verify_output(args, layers):
 
 
 def main():
-    args = parse_args()
+    args = _scope["fixed_arguments"](parse_args())
     layers = corpus.load_measured(args.dataset, corpus.read_comparison())
     session = prepare(args, layers)
     (pool_pass if args.mode == "pool" else authors_pass)(args, layers, session)

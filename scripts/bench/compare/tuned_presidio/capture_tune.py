@@ -11,7 +11,8 @@ _launch = Path(__file__).resolve().parent.parent / "capture_launch.py"
 _scope = vars(sys.modules.setdefault("capture_launch", type(sys)("capture_launch")))
 _scope["__file__"] = str(_launch)
 exec(compile(_launch.read_bytes(), str(_launch), "exec"), _scope)
-_scope["initialize"](entrypoint_spec=__spec__ if __name__ == "__main__" else None)
+_scope["initialize"](entrypoint_spec=__spec__ if __name__ == "__main__" else None,
+                     script=__name__ == "__main__")
 
 import tune
 from tune import *
@@ -171,7 +172,7 @@ def main():
     parser.add_argument("--budget-source-revision", required=True)
     parser.add_argument("--verify-report", type=Path)
     parser.add_argument("--render", type=Path, help="render admitted aggregate bytes as Markdown")
-    args = parser.parse_args()
+    args = _scope["fixed_arguments"](parser.parse_args())
     args.skip_live, args.allow_anchor_mismatch = False, False
     require_hash_seed()
     root = document_capture.private_root(args.private_dir, compare.REPO)

@@ -135,10 +135,43 @@ def check_stdlib():
                     raise HarnessImportError("sourceless stdlib bytecode is unsupported")
 
 
-def initialize(*, entrypoint_spec=None):
+# Only these caller inputs reach a capture process. Identity still binds all of
+# os.environ in that process; excluded shell metadata cannot affect predictions.
+ENVIRONMENT_NAMES = frozenset({
+    "PATH", "HOME", "LANG", "LANGUAGE", "TMPDIR", "TMP", "TEMP", "TZ",
+    "XDG_CACHE_HOME", "HF_HOME", "HF_HUB_CACHE", "TRANSFORMERS_CACHE",
+    "HF_HUB_OFFLINE", "HF_DATASETS_OFFLINE", "TRANSFORMERS_OFFLINE",
+    "TOKENIZERS_PARALLELISM", "OMP_NUM_THREADS", "OMP_THREAD_LIMIT",
+    "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS", "BLIS_NUM_THREADS", "RAYON_NUM_THREADS",
+    "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH",
+    "__CF_USER_TEXT_ENCODING",
+})
+
+
+def isolate_environment():
+    """Restart before harness imports, retaining interpreter flags and argv."""
+    environment = {name: value for name, value in os.environ.items()
+                   if name in ENVIRONMENT_NAMES or name.startswith(("LC_", "PYTHON"))}
+    if dict(os.environ) != environment:
+        os.execve(sys.executable, [sys.executable, *sys.orig_argv[1:]], environment)
+
+
+def fixed_arguments(args):
+    """Resolve CLI paths in the caller's directory before fixing execution cwd."""
+    for name, value in vars(args).items():
+        if isinstance(value, Path):
+            setattr(args, name, value.resolve())
+    os.chdir(Path(__file__).resolve().parents[3])
+    return args
+
+
+def initialize(*, entrypoint_spec=None, script=False):
     global _initialized
     if entrypoint_spec is not None:
         raise HarnessImportError("script-path launch only")
+    if script:
+        isolate_environment()
     check_stdlib()
     check_harness()
     if _initialized:
