@@ -1,8 +1,9 @@
 # MCP host context mutation evidence
 
 All six probes passed on 2026-10-25 at source commit
-`c3fa04f79bf959ec3d444e5b3408363b06fa3e0d` using Rust 1.96.0,
-two build jobs, and nice level 10.
+`7dd92cd745598505d6969aef0ff6e44c17fd980b` using Rust 1.96.0,
+two build jobs, and nice level 10. The final run disabled debug information
+and incremental compilation with the environment below.
 Each baseline executed its named test and passed. Each mutant compiled and
 executed the same test, which failed. Compile failures and zero-test runs did
 not count. The runner restored the source after each probe and left a clean tree.
@@ -10,7 +11,8 @@ not count. The runner restored the source after each probe and left a clean tree
 To reproduce from a clean signed checkout, run:
 
 ```sh
-anvil run -- python3 scripts/gate/mcp-host-context-mutation-probe.py --run
+anvil run -- env CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
+	CARGO_INCREMENTAL=0 python3 scripts/gate/mcp-host-context-mutation-probe.py --run
 ```
 
 The session-forgery test records the host's received audit ID, returns the tool
