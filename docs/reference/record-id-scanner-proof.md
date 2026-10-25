@@ -77,6 +77,11 @@ test. The script restores each source byte-for-byte, checks the clean checkout,
 and writes logs and hash receipts under `target/scanner-mutations/`. It never
 creates commits or uses a stash.
 
+The committed [mutation receipt](record-id-scanner-mutations.json) records both
+compiled mutants, their named test failures, and matching source hashes before
+and after restoration. The receipt pins the implementation commit; subsequent
+proof-only commits do not change those source hashes.
+
 These tests do not replace full-corpus benchmark certification. Detection
 changes still require both scored-label contracts and mechanism evidence for
 the exact integrated candidate before merge.

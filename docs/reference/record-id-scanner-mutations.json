@@ -1,0 +1,24 @@
+[
+  {
+    "mutation": "drop-json-label-ownership",
+    "head": "f04603ee05a1ca376a0332bcee754f58c37e2762",
+    "test": "json_label_close_owns_following_value",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "cd64426e45b110764063ebd67464528794de6f45cda1e130b012eedd6e2435ce",
+    "log": "drop-json-label-ownership.log",
+    "restored_sha256": "cd64426e45b110764063ebd67464528794de6f45cda1e130b012eedd6e2435ce"
+  },
+  {
+    "mutation": "rebuild-quote-events-per-query",
+    "head": "f04603ee05a1ca376a0332bcee754f58c37e2762",
+    "test": "doubled_apostrophe_prefix_work_is_linear",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "ff084b01e5fb4cfccbbf243c3ecd5bde73f2c7eda063d07eb1d6f40eecf010f4",
+    "log": "rebuild-quote-events-per-query.log",
+    "restored_sha256": "ff084b01e5fb4cfccbbf243c3ecd5bde73f2c7eda063d07eb1d6f40eecf010f4"
+  }
+]
