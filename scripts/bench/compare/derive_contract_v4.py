@@ -290,7 +290,7 @@ def check(report_path: Path, tuned_path: Path) -> None:
         require(tuned[key] == report[key], f"tuned {key} differ from comparison")
     render.validate_current(report, report_path)
     render.render(report, report_path.name)
-    render.validate_tuned(tuned, report_path)
+    render.validate_tuned(tuned, report_path, tuned_path=tuned_path)
     print("Directly scored v1-v4 comparison and tuned evidence validated; no predictions replayed.")
 
 
