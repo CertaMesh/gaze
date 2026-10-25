@@ -118,3 +118,99 @@ def test_saved_model_config_rejects_external_and_escaped_paths(tmp_path, selecto
     (tmp_path / "config.cfg").write_text("source = " + selector + "\n")
     with pytest.raises(ValueError):
         subject_identity.model_digest(tmp_path)
+
+
+# The cache prefix keeps attack bytecode out of the checkout, while CPython still
+# selects it for the real source paths (including with bytecode writes disabled).
+def harness_child(cache, script, *arguments):
+    import subprocess
+    return subprocess.run([sys.executable, "-I", "-B", "-X", f"pycache_prefix={cache}",
+                           "-c", script, *map(str, arguments)], capture_output=True, text=True)
+
+
+def substitute_harness_bytecode(cache, module, marker):
+    result = harness_child(cache, '''
+import importlib.util, marshal, pathlib, struct, sys
+source = pathlib.Path(sys.argv[1])
+original = source.read_bytes()
+replacement = original + ("\\nfrom pathlib import Path as _AttackPath\\n"
+    + "_AttackPath(" + repr(sys.argv[2]) + ").write_text('executed')\\n"
+    + ("Presidio.predict = lambda self, document: []\\n" if source.name == "compare.py" else "")).encode()
+cached = pathlib.Path(importlib.util.cache_from_source(str(source)))
+cached.parent.mkdir(parents=True, exist_ok=True)
+cached.write_bytes(importlib.util.MAGIC_NUMBER + struct.pack('<I', 3)
+                   + importlib.util.source_hash(original)
+                   + marshal.dumps(compile(replacement, str(source), 'exec', dont_inherit=True)))
+''', module, marker)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("module", ["compare.py", "tuned_presidio/pool.py",
+                                    "theirbench/presidio_research_repro.py", "../scorecard_record.py"])
+def test_inventory_refuses_substituted_harness_bytecode_before_import(tmp_path, module):
+    here = Path(runtime_closure.__file__).resolve().parent
+    selected = (here / module).resolve()
+    original = selected.read_bytes()
+    cache, marker = tmp_path / "cache", tmp_path / "executed"
+    substitute_harness_bytecode(cache, selected, marker)
+    result = harness_child(cache, '''
+import pathlib, sys
+here = pathlib.Path(sys.argv[1])
+sys.path[:0] = [str(here.parent), str(here)]
+import runtime_closure
+try:
+    runtime_closure.import_inventory({}, set(), path=[str(here.parent), str(here)], hooks=[])
+except ValueError as error:
+    print(type(error).__name__ + ': ' + str(error))
+    raise SystemExit(2)
+''', here)
+    assert selected.read_bytes() == original
+    assert result.returncode == 2, result.stderr
+    assert result.stdout == "HarnessImportError: unverified import bytecode\n"
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize("entrypoint", ["capture_compare.py", "tuned_presidio/capture_produce.py",
+                                        "tuned_presidio/capture_tune.py"])
+@pytest.mark.parametrize("module", ["compare.py", "capture_launch.py", "gliner_identity.py"])
+def test_capture_entrypoint_refuses_real_predictor_or_guard_substitution(tmp_path, entrypoint, module):
+    import subprocess
+    here = Path(runtime_closure.__file__).resolve().parent
+    selected = here / module
+    original = selected.read_bytes()
+    cache, marker = tmp_path / "cache", tmp_path / "executed"
+    command = [sys.executable, "-I", "-B", "-X", f"pycache_prefix={cache}",
+               str(here / entrypoint), "--help"]
+    clean = subprocess.run(command, capture_output=True, text=True)
+    assert clean.returncode == 0, clean.stderr
+    substitute_harness_bytecode(cache, selected, marker)
+    refused = subprocess.run(command, capture_output=True, text=True)
+    assert selected.read_bytes() == original
+    assert refused.returncode != 0
+    assert "HarnessImportError: unverified import bytecode" in refused.stderr
+    assert not marker.exists(), "substituted harness code executed before refusal"
+
+
+@pytest.mark.parametrize("damage", ["nested_bytecode", "sourceless", "linked_directory"])
+def test_harness_walk_covers_nested_imports_and_refuses_unclosed_roots(tmp_path, monkeypatch, damage):
+    import capture_launch
+    bench = tmp_path / "bench"
+    here = bench / "compare"
+    here.mkdir(parents=True)
+    monkeypatch.setattr(capture_launch, "__file__", str(here / "capture_launch.py"))
+    if damage == "linked_directory":
+        (bench / "nested").symlink_to(here, target_is_directory=True)
+    elif damage == "sourceless":
+        (here / "orphan.pyc").write_bytes(b"synthetic")
+    else:
+        nested = here / "nested_package"
+        nested.mkdir()
+        module = nested / "predictor.py"
+        module.write_text("synthetic = True\n")
+        cached = Path(importlib.util.cache_from_source(str(module)))
+        cached.parent.mkdir()
+        cached.write_bytes(importlib.util.MAGIC_NUMBER + struct.pack("<I", 3)
+                           + importlib.util.source_hash(module.read_bytes())
+                           + marshal.dumps(compile("synthetic = False\n", str(module), "exec")))
+    with pytest.raises(capture_launch.HarnessImportError):
+        capture_launch.check_harness()

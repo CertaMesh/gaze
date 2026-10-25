@@ -34,6 +34,13 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+# Read the bootstrap as source: importing it could consume unchecked bytecode.
+_launch = Path(__file__).resolve().parent.parent / "capture_launch.py"
+_scope = vars(sys.modules.setdefault("capture_launch", type(sys)("capture_launch")))
+_scope["__file__"] = str(_launch)
+exec(compile(_launch.read_bytes(), str(_launch), "exec"), _scope)
+_scope["initialize"]()
+
 # Both tuned entrypoints initialize the same model-free source modules.
 import tune
 import corpus  # noqa: E402
@@ -41,9 +48,6 @@ import document_capture
 import subject_identity
 from capture_identity import digest, file_digest
 import space  # noqa: E402
-from capture_launch import initialize
-
-initialize()
 
 PASSES = ("base", "dslim", "davlan", "openmed", "gliner")
 SPLITS = ("validation", "test")

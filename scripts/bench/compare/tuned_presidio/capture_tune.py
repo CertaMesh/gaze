@@ -6,6 +6,13 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
+# Read the bootstrap as source: importing it could consume unchecked bytecode.
+_launch = Path(__file__).resolve().parent.parent / "capture_launch.py"
+_scope = vars(sys.modules.setdefault("capture_launch", type(sys)("capture_launch")))
+_scope["__file__"] = str(_launch)
+exec(compile(_launch.read_bytes(), str(_launch), "exec"), _scope)
+_scope["initialize"]()
+
 import tune
 from tune import *
 import capture_produce
@@ -14,9 +21,6 @@ import input_binding
 import document_capture
 import subject_identity
 from capture_identity import digest
-from capture_launch import initialize
-
-initialize()
 
 
 def authors_coverage(mapping: dict[str, tuple[str, ...]], gold_labels: set[str]) -> dict[str, object]:

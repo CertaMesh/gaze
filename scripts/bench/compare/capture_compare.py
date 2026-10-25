@@ -8,13 +8,17 @@ import sys
 from contextlib import nullcontext
 from pathlib import Path
 
+# Read the bootstrap as source: importing it could consume unchecked bytecode.
+_launch = Path(__file__).resolve().parent / "capture_launch.py"
+_scope = vars(sys.modules.setdefault("capture_launch", type(sys)("capture_launch")))
+_scope["__file__"] = str(_launch)
+exec(compile(_launch.read_bytes(), str(_launch), "exec"), _scope)
+_scope["initialize"]()
+
 import compare
 import document_capture as captures
 import subject_identity as identity
 from capture_identity import digest, file_digest
-from capture_launch import initialize
-
-initialize()
 
 
 def layer_names(layers):

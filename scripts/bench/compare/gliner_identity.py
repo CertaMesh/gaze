@@ -15,11 +15,9 @@ import importlib.machinery
 import importlib.util
 import inspect
 import json
-import marshal
 import os
 import re
 import stat
-import struct
 import sys
 import types
 import zipimport
@@ -27,6 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
+import capture_launch
+from capture_launch import _same_code
 from capture_identity import digest, file_digest
 
 SCHEMA = 1
@@ -117,73 +117,11 @@ def _absolute(value, cwd):
     return Path(os.path.abspath(path if path.is_absolute() else cwd / path))
 
 
-def _same_code(actual, expected):
-    """Compare typed constants and metadata; importlib fixes cached filenames."""
-    if type(actual) is not type(expected):
-        return False
-    if type(actual) is types.CodeType:
-        fields = ("co_argcount", "co_posonlyargcount", "co_kwonlyargcount", "co_nlocals",
-                  "co_stacksize", "co_flags", "co_code", "co_names", "co_varnames",
-                  "co_freevars", "co_cellvars", "co_firstlineno", "co_linetable",
-                  "co_exceptiontable", "co_name", "co_qualname")
-        return (all(getattr(actual, key) == getattr(expected, key) for key in fields)
-                and _same_code(actual.co_consts, expected.co_consts))
-    if type(actual) is tuple:
-        return len(actual) == len(expected) and all(_same_code(a, b) for a, b in zip(actual, expected))
-    if type(actual) is frozenset:
-        if len(actual) != len(expected):
-            return False
-        unmatched = list(expected)
-        for item in actual:
-            for index, other in enumerate(unmatched):
-                if _same_code(item, other):
-                    unmatched.pop(index)
-                    break
-            else:
-                return False
-        return True
-    # Python equality loses signed zero and numeric types within containers.
-    if type(actual) is float:
-        return struct.pack("!d", actual) == struct.pack("!d", expected)
-    if type(actual) is complex:
-        return (struct.pack("!dd", actual.real, actual.imag)
-                == struct.pack("!dd", expected.real, expected.imag))
-    if type(actual) in (type(None), type(Ellipsis), bool, int, str, bytes):
-        return actual == expected
-    return False
-
-
 def _check_bytecode(path):
-    """Accept an effective CPython cache only when it executes the source.
-
-    Cache absence and source-equivalent cache creation have the same identity.
-    No import, execution, write, deletion or cache repair occurs here. Invalid
-    or stale caches conservatively refuse even if CPython could recompile them.
-    """
-    cached = Path(importlib.util.cache_from_source(str(path)))
-    if not cached.exists():
-        return
     try:
-        data = cached.read_bytes()
-        if len(data) < 16 or data[:4] != importlib.util.MAGIC_NUMBER:
-            raise ValueError("invalid header")
-        flags, = struct.unpack("<I", data[4:8])
-        if flags not in (0, 1, 3):
-            raise ValueError("unsupported cache flags")
-        source = path.read_bytes()
-        if flags & 1:
-            if data[8:16] != importlib.util.source_hash(source):
-                raise ValueError("stale source hash")
-        else:
-            stamp, size = struct.unpack("<II", data[8:16])
-            if stamp != int(path.stat().st_mtime) & 0xffffffff or size != len(source) & 0xffffffff:
-                raise ValueError("stale source timestamp/size")
-        actual = marshal.loads(data[16:])
-        expected = compile(source, str(path), "exec", dont_inherit=True)
-        if not _same_code(actual, expected):
-            raise ValueError("effective bytecode differs from source")
-    except (ValueError, EOFError, TypeError, SyntaxError) as error:
-        raise Uncacheable("unverified import bytecode") from error
+        capture_launch._check_bytecode(path)
+    except capture_launch.HarnessImportError as error:
+        raise Uncacheable(str(error)) from None
 
 
 def _bootstrap_context(hook):

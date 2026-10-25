@@ -9,6 +9,7 @@ import sys
 import sysconfig
 import zipimport
 
+import capture_launch
 import gliner_identity
 from capture_identity import digest
 
@@ -45,6 +46,7 @@ def import_inventory(files, roots, *, path=None, hooks=None):
             proof = gliner_identity._bootstrap_context(hook)
             bootstraps[Path(proof["path"]).absolute()] = proof["sha256"]
             bootstrap_pths.add(Path(proof["pth"]).absolute())
+    capture_launch.check_harness()
     modules = set()
     for root in roots:
         for file in root.rglob("*"):
