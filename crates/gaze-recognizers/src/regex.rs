@@ -1353,11 +1353,21 @@ fn quoted_csv_cell_encloses(input: &str, opening: usize, close: usize) -> bool {
             .is_none_or(|ch| matches!(ch, ',' | '\r' | '\n'))
 }
 
+#[cfg(test)]
 fn serialized_context_is_json(input: &str, enclosing: &[(usize, usize)], escapes: usize) -> bool {
+    scanner_work(input.len());
     if !(escapes + 1).is_power_of_two() || serde_json::from_str::<serde_json::Value>(input).is_err()
     {
         return false;
     }
+    serialized_context_contents_are_json(input, enclosing, escapes)
+}
+
+fn serialized_context_contents_are_json(
+    input: &str,
+    enclosing: &[(usize, usize)],
+    escapes: usize,
+) -> bool {
     let mut levels = 0;
     for &(depth, opening) in enclosing.iter().filter(|(depth, _)| *depth < escapes) {
         if (depth + 1).trailing_zeros() != levels {

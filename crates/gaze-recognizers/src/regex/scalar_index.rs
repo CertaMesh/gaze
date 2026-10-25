@@ -55,14 +55,14 @@ impl ScalarBoundaryIndex {
             encoded.decoded(input, frame).map(|_| (frame, close))
         });
         let closed_json_frame = json.is_some_and(|(_, close)| {
-            *encoded
-                .valid_json
-                .get_or_insert_with(|| serde_json::from_str::<serde_json::Value>(input).is_ok())
-                || input[close + 1..]
-                    .trim_start_matches([' ', '\t'])
-                    .chars()
-                    .next()
-                    .is_none_or(|ch| matches!(ch, '\r' | '\n'))
+            *encoded.valid_json.get_or_insert_with(|| {
+                scanner_work(input.len());
+                serde_json::from_str::<serde_json::Value>(input).is_ok()
+            }) || input[close + 1..]
+                .trim_start_matches([' ', '\t'])
+                .chars()
+                .next()
+                .is_none_or(|ch| matches!(ch, '\r' | '\n'))
         });
         if let Some(cell) = encoded.csv_at(opening).filter(|cell| {
             !(cell.end == input.len() && closed_json_frame)
@@ -202,6 +202,16 @@ impl ScalarBoundaryIndex {
         enclosing: &[(usize, usize)],
         escapes: usize,
     ) -> bool {
+        if !(escapes + 1).is_power_of_two() {
+            return false;
+        }
+        let valid = *self.encoded(input).valid_json.get_or_insert_with(|| {
+            scanner_work(input.len());
+            serde_json::from_str::<serde_json::Value>(input).is_ok()
+        });
+        if !valid {
+            return false;
+        }
         let key = JsonContextKey {
             enclosing: enclosing
                 .iter()
@@ -211,8 +221,7 @@ impl ScalarBoundaryIndex {
             escapes,
         };
         *self.json_contexts.entry(key).or_insert_with_key(|key| {
-            scanner_work(input.len());
-            serialized_context_is_json(input, &key.enclosing, key.escapes)
+            serialized_context_contents_are_json(input, &key.enclosing, key.escapes)
         })
     }
 
@@ -1155,6 +1164,58 @@ mod tests {
                 );
                 previous = steps;
             }
+        }
+    }
+    #[test]
+    fn sibling_encoded_absent_values_share_whole_input_validation() {
+        let core = gaze::Rulepack::load(gaze::RulepackSource::Embedded(
+            crate::embedded("core").unwrap(),
+        ))
+        .unwrap();
+        let rule = core
+            .recognizers
+            .into_iter()
+            .find(|rule| rule.id == "customer_id.labelled")
+            .unwrap();
+        let gaze::RawMatch::Regex {
+            pattern: Some(pattern),
+            capture_groups,
+            ..
+        } = rule.matcher
+        else {
+            panic!("record regex");
+        };
+        let mut detector = RegexDetector::new(&pattern, rule.class).unwrap();
+        detector.capture_groups = capture_groups;
+        detector.complete_labelled_value = true;
+        detector.labelled_value_mode = LabelledValueMode::FieldOwned;
+        let oracle_input =
+            serde_json::to_string(&vec![r#"{"message":"customerId: "}"#; 8]).unwrap();
+        assert_eq!(compare(&oracle_input), 8);
+        let mut previous = 0;
+        for fields in [128, 512, 2048] {
+            let input =
+                serde_json::to_string(&vec![r#"{"message":"customerId: "}"#; fields]).unwrap();
+            SCANNER_WORK.with(|work| work.set(0));
+            let scans = detector.scanned_spans(&input, None);
+            let steps = SCANNER_WORK.with(|work| work.get());
+            assert_eq!(scans.len(), fields);
+            assert!(scans
+                .iter()
+                .all(|scan| scan.rejected && scan.span.is_empty()));
+            assert!(
+                steps <= input.len() * 60,
+                "{steps} steps for {} bytes",
+                input.len()
+            );
+            if previous > 0 {
+                assert!(steps <= previous * 5, "{previous} -> {steps}");
+            }
+            eprintln!(
+                "absent siblings {fields}, bytes {}, scanner work {steps}",
+                input.len()
+            );
+            previous = steps;
         }
     }
 }
