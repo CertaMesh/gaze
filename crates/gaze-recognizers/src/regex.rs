@@ -1529,6 +1529,7 @@ fn scalar_quote_close(
 fn uncertain_scalar_end(input: &str, start: usize, limit: usize) -> usize {
     let mut escapes = 0usize;
     for (offset, byte) in input[start..limit].bytes().enumerate() {
+        scanner_work(1);
         if matches!(byte, b'\n' | b'\r') && escapes.is_multiple_of(2) {
             return start + offset;
         }
