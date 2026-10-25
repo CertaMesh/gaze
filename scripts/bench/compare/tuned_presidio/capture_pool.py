@@ -91,4 +91,3 @@ def live_analyzers(config: Mapping[str, object], paths: ModelPaths, *, gliner_pl
             context_aware_enhancer=enhancer(config["context"]), default_score_threshold=0.0,
         )
     return analyzers
-
