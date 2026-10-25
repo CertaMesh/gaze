@@ -31,7 +31,7 @@ PROBES = [
     ("revision", CLI, 'r.counter("expected_conversation_revision")? != live.revision', "false", "invalid_protocol_objects_never_fall_back_to_v1"),
     ("generation", CLI, 'r.counter("expected_manifest_generation")? != live.generation', "false", "invalid_protocol_objects_never_fall_back_to_v1"),
     ("hash", CLI, 'hash(&text) != sha256', "false", "invalid_protocol_objects_never_fall_back_to_v1"),
-    ("duplicate-block", CLI, '!ids.insert(id.clone())', "false", "invalid_protocol_objects_never_fall_back_to_v1"),
+    ("duplicate-block", CLI, '!ids.insert(id.clone())', "ids.insert(id.clone()) && false", "invalid_protocol_objects_never_fall_back_to_v1"),
     ("resync-body", CLI, 'if resync {', 'if false {', "resync_requires_every_body_and_forbids_revision_preconditions"),
     ("block-count", CLI, 'requested.len() > limits.active_blocks', "false", "capacity_failures_are_atomic_and_do_not_consume_sequences"),
     ("block-bytes", CLI, 'text.len() > limits.block_raw_bytes', "false", "capacity_failures_are_atomic_and_do_not_consume_sequences"),
