@@ -151,6 +151,7 @@
     "crates/gaze-recognizers/tests/fixtures/opf_cli_emulator.py",
     "crates/gaze-recognizers/tests/fixtures/password_hash_producers.json",
     "crates/gaze-recognizers/tests/fixtures/password_hash_source_escapes.json",
+    "crates/gaze-recognizers/tests/fixtures/record_id_ambiguous_quotes.json",
     "crates/gaze-recognizers/tests/fixtures/record_id_boundaries_v27.json",
     "crates/gaze-recognizers/tests/fixtures/recovery7835/base-core.toml",
     "crates/gaze-recognizers/tests/fixtures/recovery7835/collision-regression.rs",

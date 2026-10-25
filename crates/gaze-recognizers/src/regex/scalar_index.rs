@@ -7,6 +7,7 @@ use std::ops::Range;
 #[derive(Default)]
 pub(super) struct ScalarBoundaryIndex {
     encoded: Option<EncodedIndex>,
+    paired: Option<PairedCloseIndex>,
     prefix: PrefixCursor,
     provisional: Option<(usize, PrefixCursor)>,
     json_ancestors: HashMap<(usize, usize), bool>,
@@ -230,7 +231,38 @@ impl ScalarBoundaryIndex {
         levels == (escapes + 1).trailing_zeros()
     }
 
-    fn uncertain_end(&mut self, input: &str, start: usize, limit: usize) -> usize {
+    pub(super) fn is_json_scalar_close(&mut self, input: &str, opening: usize) -> bool {
+        let encoded = self.encoded(input);
+        let at = encoded
+            .json
+            .partition_point(|frame| frame.range.end <= opening);
+        if !encoded
+            .json
+            .get(at)
+            .is_some_and(|frame| frame.closed && frame.range.end == opening + 1)
+        {
+            return false;
+        }
+        *encoded.valid_json.get_or_insert_with(|| {
+            scanner_work(input.len());
+            serde_json::from_str::<serde_json::Value>(input).is_ok()
+        })
+    }
+
+    pub(super) fn paired_close(
+        &mut self,
+        input: &str,
+        start: usize,
+        limit: usize,
+        opener: char,
+        escapes: usize,
+    ) -> Option<usize> {
+        self.paired
+            .get_or_insert_with(|| PairedCloseIndex::new(input))
+            .close(input, start, limit, opener, escapes)
+    }
+
+    pub(super) fn uncertain_end(&mut self, input: &str, start: usize, limit: usize) -> usize {
         let breaks = self.record_breaks.get_or_insert_with(|| {
             scanner_work(input.len());
             let mut escapes = 0usize;
@@ -459,6 +491,136 @@ impl ScalarBoundaryIndex {
                 (depth == Some(opening_escapes) && !absent_value).then_some(b'"')
             },
         }
+    }
+}
+
+struct PairedRun {
+    span: Range<usize>,
+    escapes: usize,
+    next_valid: usize,
+}
+
+#[derive(Default)]
+struct PairedCloseIndex {
+    runs: HashMap<char, Vec<PairedRun>>,
+}
+
+impl PairedCloseIndex {
+    fn new(input: &str) -> Self {
+        let mut index = Self::default();
+        let mut chars = input.char_indices().peekable();
+        let mut escapes = 0;
+        while let Some((start, ch)) = chars.next() {
+            scanner_work(1);
+            let preceding_escapes = escapes;
+            let mut end = start + ch.len_utf8();
+            while chars.peek().is_some_and(|(_, next)| *next == ch) {
+                scanner_work(1);
+                end = chars.next().expect("peeked character").0 + ch.len_utf8();
+            }
+            if !ch.is_alphanumeric() && !ch.is_whitespace() {
+                index.runs.entry(ch).or_default().push(PairedRun {
+                    span: start..end,
+                    escapes: preceding_escapes,
+                    next_valid: 0,
+                });
+            }
+            escapes = if ch == '\\' { end - start } else { 0 };
+        }
+        for (&ch, runs) in &mut index.runs {
+            let mut next = runs.len();
+            for i in (0..runs.len()).rev() {
+                scanner_work(1);
+                if Self::delimiter(input, &runs[i], runs[i].span.start, runs[i].span.end, ch, 0)
+                    .is_some()
+                {
+                    next = i;
+                }
+                runs[i].next_valid = next;
+            }
+        }
+        index
+    }
+
+    fn delimiter(
+        input: &str,
+        run: &PairedRun,
+        start: usize,
+        end: usize,
+        ch: char,
+        escapes: usize,
+    ) -> Option<usize> {
+        let width = ch.len_utf8();
+        if !((end - start) / width).is_multiple_of(2)
+            && !input[end..]
+                .chars()
+                .next()
+                .is_some_and(|next| next.is_alphanumeric() || next == '_')
+        {
+            let delimiter = end - width;
+            let preceding = if delimiter == run.span.start {
+                run.escapes
+            } else {
+                0
+            };
+            Some(if preceding == escapes {
+                delimiter - escapes
+            } else {
+                delimiter
+            })
+        } else {
+            None
+        }
+    }
+
+    fn close_char(
+        &self,
+        input: &str,
+        start: usize,
+        limit: usize,
+        ch: char,
+        escapes: usize,
+    ) -> Option<usize> {
+        let runs = self.runs.get(&ch)?;
+        let first = runs.partition_point(|run| run.span.end <= start);
+        let run = runs.get(first).filter(|run| run.span.start < limit)?;
+        scanner_work(1);
+        let end = run.span.end.min(limit);
+        if let Some(close) =
+            Self::delimiter(input, run, run.span.start.max(start), end, ch, escapes)
+        {
+            return Some(close);
+        }
+        if end == limit {
+            return None;
+        }
+        // After the potentially truncated first run, jump over every invalid
+        // full run. A limit inside a later run can change its parity too.
+        let next = runs.get(first + 1).map_or(runs.len(), |run| run.next_valid);
+        if let Some(run) = runs.get(next).filter(|run| run.span.end <= limit) {
+            return Self::delimiter(input, run, run.span.start, run.span.end, ch, escapes);
+        }
+        let last = runs
+            .partition_point(|run| run.span.start < limit)
+            .checked_sub(1)?;
+        let run = &runs[last];
+        (run.span.end > limit)
+            .then(|| Self::delimiter(input, run, run.span.start, limit, ch, escapes))
+            .flatten()
+    }
+
+    fn close(
+        &self,
+        input: &str,
+        start: usize,
+        limit: usize,
+        opener: char,
+        escapes: usize,
+    ) -> Option<usize> {
+        let (first, second) = field_wrapper_closing_chars(opener);
+        let a = self.close_char(input, start, limit, first, escapes);
+        let b = second.and_then(|ch| self.close_char(input, start, limit, ch, escapes));
+        a.into_iter().chain(b).min()
     }
 }
 
@@ -1259,5 +1421,303 @@ mod tests {
                 previous = steps;
             }
         }
+    }
+}
+#[cfg(test)]
+mod regression_tests {
+    use super::*;
+
+    pub(super) fn rules() -> Vec<RegexDetector> {
+        let core = gaze::Rulepack::load(gaze::RulepackSource::Embedded(
+            crate::embedded("core").unwrap(),
+        ))
+        .unwrap();
+        core.recognizers
+            .into_iter()
+            .filter(|rule| {
+                matches!(
+                    rule.id.as_str(),
+                    "customer_id.labelled" | "employee_id.labelled" | "record_id.labelled"
+                )
+            })
+            .map(|rule| {
+                let gaze::RawMatch::Regex {
+                    pattern: Some(pattern),
+                    capture_groups,
+                    ..
+                } = rule.matcher
+                else {
+                    panic!()
+                };
+                let mut d = RegexDetector::new(&pattern, rule.class).unwrap();
+                d.capture_groups = capture_groups;
+                d.complete_labelled_value = true;
+                d.labelled_value_mode = LabelledValueMode::FieldOwned;
+                d
+            })
+            .collect()
+    }
+
+    fn assert_recovered(input: &str, capture: &Range<usize>, scan: &LabelledValueScan) {
+        if scan.rejected {
+            RECOVERED_ABSENT.with(|count| count.set(count.get() + 1));
+            assert!(scan.span.is_empty());
+            assert_eq!(scan.span.start, capture.start);
+            assert!(ScalarBoundaryIndex::default().is_json_scalar_close(input, scan.span.start));
+        } else {
+            RECOVERED_OWNED.with(|count| count.set(count.get() + 1));
+            assert!(scan.span.start <= capture.start && scan.span.end >= capture.end);
+        }
+    }
+
+    fn compare_all(rules: &[RegexDetector], input: &str) -> usize {
+        let mut n = 0;
+        for rule in rules {
+            let mut index = ScalarBoundaryIndex::default();
+            for caps in rule.regex.captures_iter(input) {
+                let capture = rule.span_from_captures(&caps).unwrap();
+                let o = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    scalar_reference::scan_field_owned_value(input, capture.clone())
+                }));
+                let mut fresh = ScalarBoundaryIndex::default();
+                let nw = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    scan_field_owned_value_indexed(input, capture.clone(), &mut fresh)
+                }));
+                let shared = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    scan_field_owned_value_indexed(input, capture.clone(), &mut index)
+                }));
+                assert!(
+                    nw.is_ok() && shared.is_ok(),
+                    "candidate panicked: {input:?}, {capture:?}"
+                );
+                match (&o, &nw, &shared) {
+                    (Ok(a), Ok(b), Ok(c)) => {
+                        assert_eq!(b, c, "fresh/shared input {input:?}");
+                        if a.span.start > a.span.end {
+                            assert!(a.rejected);
+                            assert_recovered(input, &capture, b);
+                            REVERSED.with(|count| count.set(count.get() + 1));
+                        } else {
+                            assert_eq!(b, a, "input {input:?}, capture {capture:?}");
+                        }
+                    }
+                    _ => {
+                        PANICS.with(|p| p.set(p.get() + 1));
+                        assert_eq!(nw.as_ref().unwrap(), shared.as_ref().unwrap());
+                        let scan = nw.as_ref().unwrap();
+                        assert_recovered(input, &capture, scan);
+                    }
+                }
+                n += 1;
+            }
+        }
+        n
+    }
+    thread_local! { static RECOVERED_ABSENT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; static RECOVERED_OWNED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; static REVERSED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; static PANICS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+
+    #[test]
+    fn review_random_differential() {
+        let rules = rules();
+        let atoms = [
+            "customerId: ",
+            "employee_id=",
+            "recordId ",
+            "Kundennummer: ",
+            "customer no. ",
+            "\"",
+            "'",
+            "`",
+            "“",
+            "”",
+            "«",
+            "»",
+            "‘",
+            "’",
+            "\\",
+            "\\\"",
+            "\\\\\"",
+            "\\u201c",
+            "\\u201d",
+            "\\n",
+            "\n",
+            "\r\n",
+            ",",
+            ";",
+            " ",
+            "\t",
+            "\u{00A0}",
+            "\u{202F}",
+            "SYN123",
+            "É9",
+            "x",
+            "_",
+            "\"\"",
+            "''",
+            "\"\"\"",
+            "'''",
+            "SELECT ",
+            "VALUES (",
+            "--",
+            "/*",
+            "*/",
+            "[",
+            "]",
+            "{",
+            "}",
+            ":",
+            "is ",
+            "0",
+            "-",
+        ];
+        let mut state: u64 = 0x9E3779B97F4A7C15;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let mut checked = 0;
+        for _ in 0..40000 {
+            let len = 3 + (next() % 24) as usize;
+            let mut s = String::new();
+            for _ in 0..len {
+                let r = next();
+                if r % 4 == 0 {
+                    s.push_str(atoms[(r as usize / 4) % 5]);
+                } else {
+                    s.push_str(atoms[(r as usize / 4) % atoms.len()]);
+                }
+            }
+            checked += compare_all(&rules, &s);
+            let j = serde_json::to_string(&s).unwrap();
+            checked += compare_all(&rules, &j);
+            if next() % 3 == 0 {
+                checked += compare_all(&rules, &serde_json::to_string(&j).unwrap());
+            }
+            if next() % 3 == 0 {
+                checked += compare_all(&rules, &serde_json::to_string(&serde_json::json!({"a": s, "b": [s.clone(), "customerId: \"Z1\"".to_string()]})).unwrap());
+            }
+        }
+        eprintln!(
+            "review random differential: {checked} captures, panics {}",
+            PANICS.with(|p| p.get())
+        );
+        eprintln!(
+            "reversed rejected spans repaired: {}",
+            REVERSED.with(|p| p.get())
+        );
+        eprintln!(
+            "recovered missing JSON values: {}; recovered ambiguous owned values: {}",
+            RECOVERED_ABSENT.with(|p| p.get()),
+            RECOVERED_OWNED.with(|p| p.get())
+        );
+        assert!(checked > 20000);
+    }
+}
+
+#[cfg(test)]
+mod panic_fixtures {
+    use super::*;
+    #[test]
+    fn unterminated_escaped_quote_preserves_owned_span() {
+        let inputs: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/record_id_ambiguous_quotes.json"
+        ))
+        .unwrap();
+        let rules = super::regression_tests::rules();
+        let mut checked = 0;
+        for fixture in inputs.as_array().unwrap() {
+            let input = fixture["text"].as_str().unwrap();
+            for rule in &rules {
+                for caps in rule.regex.captures_iter(input) {
+                    let capture = rule.span_from_captures(&caps).unwrap();
+                    let scan = scan_field_owned_value_indexed(
+                        input,
+                        capture,
+                        &mut ScalarBoundaryIndex::default(),
+                    );
+                    assert!(scan.rejected);
+                    assert_eq!(
+                        &input[scan.span.clone()],
+                        fixture["owned"].as_str().unwrap()
+                    );
+                    assert_eq!(scan.span.start, input.len() - 1);
+                    checked += 1;
+                }
+            }
+        }
+        assert_eq!(checked, 4);
+    }
+}
+
+#[cfg(test)]
+mod scaling_regressions {
+    use super::*;
+    #[test]
+    fn unclosed_paired_wrapper_work_is_linear() {
+        let rules = super::regression_tests::rules();
+        for quote in ["`", "“", "«"] {
+            for surface in 0..3 {
+                let mut previous = 0;
+                for fields in [128, 512, 2048] {
+                    let mut input = format!("customerId: {quote}SYN731284\n").repeat(fields);
+                    for _ in 0..surface {
+                        input = serde_json::to_string(&input).unwrap();
+                    }
+                    SCANNER_WORK.with(|w| w.set(0));
+                    let mut index = ScalarBoundaryIndex::default();
+                    let scans: Vec<_> = rules[0]
+                        .regex
+                        .captures_iter(&input)
+                        .map(|caps| {
+                            scan_field_owned_value_indexed(
+                                &input,
+                                rules[0].span_from_captures(&caps).unwrap(),
+                                &mut index,
+                            )
+                        })
+                        .collect();
+                    let steps = SCANNER_WORK.with(|w| w.get());
+                    assert_eq!(scans.len(), fields);
+                    assert!(
+                        steps <= input.len() * 60,
+                        "{quote}, surface {surface}: {steps}/{}",
+                        input.len()
+                    );
+                    if previous > 0 {
+                        assert!(
+                            steps <= previous * 5,
+                            "{quote}, surface {surface}: {previous} -> {steps}"
+                        );
+                    }
+                    eprintln!("unclosed {quote}, surface {surface}, fields {fields}, bytes {}, work {steps}", input.len());
+                    previous = steps;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn odd_openers_before_unterminated_escaped_quotes_never_panic() {
+        let rules = super::regression_tests::rules();
+        let mut checked = 0;
+        for prefix in ["''", "x", "»", "[[]", "'''", "\"\"\""] {
+            for label in ["customerId: ", "employee_id=", "member_id: "] {
+                for tail in ["", " ", "SYN731284", "\nSYN842395", "\\", "\""] {
+                    let mut input = format!("{prefix}\"{label}{tail}");
+                    for _depth in 0..=2 {
+                        for rule in &rules {
+                            for scan in rule.scanned_spans(&input, None) {
+                                assert!(input.get(scan.span).is_some(), "{input:?}");
+                                checked += 1;
+                            }
+                        }
+                        input = serde_json::to_string(&input).unwrap();
+                    }
+                }
+            }
+        }
+        assert!(checked >= 300, "{checked}");
+        eprintln!("odd-opener no-panic generator: {checked} captures");
     }
 }

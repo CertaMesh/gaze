@@ -994,102 +994,102 @@ fn field_wrapper_opens(ch: char) -> bool {
     !field_value_char(ch) && !ch.is_whitespace() && !matches!(ch, ';' | ',' | '|')
 }
 
-fn field_wrapper_closes(open: char, close: char) -> bool {
+fn field_wrapper_closing_chars(open: char) -> (char, Option<char>) {
     match open {
-        '\u{28}' => matches!(close, '\u{29}'),
-        '\u{5b}' => matches!(close, '\u{5d}'),
-        '\u{7b}' => matches!(close, '\u{7d}'),
-        '\u{ab}' => matches!(close, '\u{bb}'),
-        '\u{f3a}' => matches!(close, '\u{f3b}'),
-        '\u{f3c}' => matches!(close, '\u{f3d}'),
-        '\u{169b}' => matches!(close, '\u{169c}'),
-        '\u{2018}' => matches!(close, '\u{2019}'),
-        '\u{201a}' => matches!(close, '\u{2019}' | '\u{2018}'),
-        '\u{201b}' => matches!(close, '\u{2019}'),
-        '\u{201c}' => matches!(close, '\u{201d}'),
-        '\u{201e}' => matches!(close, '\u{201d}' | '\u{201c}'),
-        '\u{201f}' => matches!(close, '\u{201d}'),
-        '\u{2039}' => matches!(close, '\u{203a}'),
-        '\u{2045}' => matches!(close, '\u{2046}'),
-        '\u{207d}' => matches!(close, '\u{207e}'),
-        '\u{208d}' => matches!(close, '\u{208e}'),
-        '\u{2308}' => matches!(close, '\u{2309}'),
-        '\u{230a}' => matches!(close, '\u{230b}'),
-        '\u{2329}' => matches!(close, '\u{232a}'),
-        '\u{2768}' => matches!(close, '\u{2769}'),
-        '\u{276a}' => matches!(close, '\u{276b}'),
-        '\u{276c}' => matches!(close, '\u{276d}'),
-        '\u{276e}' => matches!(close, '\u{276f}'),
-        '\u{2770}' => matches!(close, '\u{2771}'),
-        '\u{2772}' => matches!(close, '\u{2773}'),
-        '\u{2774}' => matches!(close, '\u{2775}'),
-        '\u{27c5}' => matches!(close, '\u{27c6}'),
-        '\u{27e6}' => matches!(close, '\u{27e7}'),
-        '\u{27e8}' => matches!(close, '\u{27e9}'),
-        '\u{27ea}' => matches!(close, '\u{27eb}'),
-        '\u{27ec}' => matches!(close, '\u{27ed}'),
-        '\u{27ee}' => matches!(close, '\u{27ef}'),
-        '\u{2983}' => matches!(close, '\u{2984}'),
-        '\u{2985}' => matches!(close, '\u{2986}'),
-        '\u{2987}' => matches!(close, '\u{2988}'),
-        '\u{2989}' => matches!(close, '\u{298a}'),
-        '\u{298b}' => matches!(close, '\u{298c}'),
-        '\u{298d}' => matches!(close, '\u{2990}'),
-        '\u{298f}' => matches!(close, '\u{298e}'),
-        '\u{2991}' => matches!(close, '\u{2992}'),
-        '\u{2993}' => matches!(close, '\u{2994}'),
-        '\u{2995}' => matches!(close, '\u{2996}'),
-        '\u{2997}' => matches!(close, '\u{2998}'),
-        '\u{29d8}' => matches!(close, '\u{29d9}'),
-        '\u{29da}' => matches!(close, '\u{29db}'),
-        '\u{29fc}' => matches!(close, '\u{29fd}'),
-        '\u{2e02}' => matches!(close, '\u{2e03}'),
-        '\u{2e04}' => matches!(close, '\u{2e05}'),
-        '\u{2e09}' => matches!(close, '\u{2e0a}'),
-        '\u{2e0c}' => matches!(close, '\u{2e0d}'),
-        '\u{2e1c}' => matches!(close, '\u{2e1d}'),
-        '\u{2e20}' => matches!(close, '\u{2e21}'),
-        '\u{2e22}' => matches!(close, '\u{2e23}'),
-        '\u{2e24}' => matches!(close, '\u{2e25}'),
-        '\u{2e26}' => matches!(close, '\u{2e27}'),
-        '\u{2e28}' => matches!(close, '\u{2e29}'),
-        '\u{2e42}' => matches!(close, '\u{201d}'),
-        '\u{3008}' => matches!(close, '\u{3009}'),
-        '\u{300a}' => matches!(close, '\u{300b}'),
-        '\u{300c}' => matches!(close, '\u{300d}'),
-        '\u{300e}' => matches!(close, '\u{300f}'),
-        '\u{3010}' => matches!(close, '\u{3011}'),
-        '\u{3014}' => matches!(close, '\u{3015}'),
-        '\u{3016}' => matches!(close, '\u{3017}'),
-        '\u{3018}' => matches!(close, '\u{3019}'),
-        '\u{301a}' => matches!(close, '\u{301b}'),
-        '\u{301d}' => matches!(close, '\u{301e}' | '\u{301f}'),
-        '\u{fd3f}' => matches!(close, '\u{fd3e}'),
-        '\u{fe17}' => matches!(close, '\u{fe18}'),
-        '\u{fe35}' => matches!(close, '\u{fe36}'),
-        '\u{fe37}' => matches!(close, '\u{fe38}'),
-        '\u{fe39}' => matches!(close, '\u{fe3a}'),
-        '\u{fe3b}' => matches!(close, '\u{fe3c}'),
-        '\u{fe3d}' => matches!(close, '\u{fe3e}'),
-        '\u{fe3f}' => matches!(close, '\u{fe40}'),
-        '\u{fe41}' => matches!(close, '\u{fe42}'),
-        '\u{fe43}' => matches!(close, '\u{fe44}'),
-        '\u{fe47}' => matches!(close, '\u{fe48}'),
-        '\u{fe59}' => matches!(close, '\u{fe5a}'),
-        '\u{fe5b}' => matches!(close, '\u{fe5c}'),
-        '\u{fe5d}' => matches!(close, '\u{fe5e}'),
-        '\u{ff08}' => matches!(close, '\u{ff09}'),
-        '\u{ff3b}' => matches!(close, '\u{ff3d}'),
-        '\u{ff5b}' => matches!(close, '\u{ff5d}'),
-        '\u{ff5f}' => matches!(close, '\u{ff60}'),
-        '\u{ff62}' => matches!(close, '\u{ff63}'),
-        '\u{60}' => matches!(close, '\u{60}'),
-        '\u{3c}' => matches!(close, '\u{3e}'),
-        '\u{2e55}' => close == '\u{2e56}',
-        '\u{2e57}' => close == '\u{2e58}',
-        '\u{2e59}' => close == '\u{2e5a}',
-        '\u{2e5b}' => close == '\u{2e5c}',
-        _ => close == open,
+        '\u{28}' => ('\u{29}', None),
+        '\u{5b}' => ('\u{5d}', None),
+        '\u{7b}' => ('\u{7d}', None),
+        '\u{ab}' => ('\u{bb}', None),
+        '\u{f3a}' => ('\u{f3b}', None),
+        '\u{f3c}' => ('\u{f3d}', None),
+        '\u{169b}' => ('\u{169c}', None),
+        '\u{2018}' => ('\u{2019}', None),
+        '\u{201a}' => ('\u{2019}', Some('\u{2018}')),
+        '\u{201b}' => ('\u{2019}', None),
+        '\u{201c}' => ('\u{201d}', None),
+        '\u{201e}' => ('\u{201d}', Some('\u{201c}')),
+        '\u{201f}' => ('\u{201d}', None),
+        '\u{2039}' => ('\u{203a}', None),
+        '\u{2045}' => ('\u{2046}', None),
+        '\u{207d}' => ('\u{207e}', None),
+        '\u{208d}' => ('\u{208e}', None),
+        '\u{2308}' => ('\u{2309}', None),
+        '\u{230a}' => ('\u{230b}', None),
+        '\u{2329}' => ('\u{232a}', None),
+        '\u{2768}' => ('\u{2769}', None),
+        '\u{276a}' => ('\u{276b}', None),
+        '\u{276c}' => ('\u{276d}', None),
+        '\u{276e}' => ('\u{276f}', None),
+        '\u{2770}' => ('\u{2771}', None),
+        '\u{2772}' => ('\u{2773}', None),
+        '\u{2774}' => ('\u{2775}', None),
+        '\u{27c5}' => ('\u{27c6}', None),
+        '\u{27e6}' => ('\u{27e7}', None),
+        '\u{27e8}' => ('\u{27e9}', None),
+        '\u{27ea}' => ('\u{27eb}', None),
+        '\u{27ec}' => ('\u{27ed}', None),
+        '\u{27ee}' => ('\u{27ef}', None),
+        '\u{2983}' => ('\u{2984}', None),
+        '\u{2985}' => ('\u{2986}', None),
+        '\u{2987}' => ('\u{2988}', None),
+        '\u{2989}' => ('\u{298a}', None),
+        '\u{298b}' => ('\u{298c}', None),
+        '\u{298d}' => ('\u{2990}', None),
+        '\u{298f}' => ('\u{298e}', None),
+        '\u{2991}' => ('\u{2992}', None),
+        '\u{2993}' => ('\u{2994}', None),
+        '\u{2995}' => ('\u{2996}', None),
+        '\u{2997}' => ('\u{2998}', None),
+        '\u{29d8}' => ('\u{29d9}', None),
+        '\u{29da}' => ('\u{29db}', None),
+        '\u{29fc}' => ('\u{29fd}', None),
+        '\u{2e02}' => ('\u{2e03}', None),
+        '\u{2e04}' => ('\u{2e05}', None),
+        '\u{2e09}' => ('\u{2e0a}', None),
+        '\u{2e0c}' => ('\u{2e0d}', None),
+        '\u{2e1c}' => ('\u{2e1d}', None),
+        '\u{2e20}' => ('\u{2e21}', None),
+        '\u{2e22}' => ('\u{2e23}', None),
+        '\u{2e24}' => ('\u{2e25}', None),
+        '\u{2e26}' => ('\u{2e27}', None),
+        '\u{2e28}' => ('\u{2e29}', None),
+        '\u{2e42}' => ('\u{201d}', None),
+        '\u{3008}' => ('\u{3009}', None),
+        '\u{300a}' => ('\u{300b}', None),
+        '\u{300c}' => ('\u{300d}', None),
+        '\u{300e}' => ('\u{300f}', None),
+        '\u{3010}' => ('\u{3011}', None),
+        '\u{3014}' => ('\u{3015}', None),
+        '\u{3016}' => ('\u{3017}', None),
+        '\u{3018}' => ('\u{3019}', None),
+        '\u{301a}' => ('\u{301b}', None),
+        '\u{301d}' => ('\u{301e}', Some('\u{301f}')),
+        '\u{fd3f}' => ('\u{fd3e}', None),
+        '\u{fe17}' => ('\u{fe18}', None),
+        '\u{fe35}' => ('\u{fe36}', None),
+        '\u{fe37}' => ('\u{fe38}', None),
+        '\u{fe39}' => ('\u{fe3a}', None),
+        '\u{fe3b}' => ('\u{fe3c}', None),
+        '\u{fe3d}' => ('\u{fe3e}', None),
+        '\u{fe3f}' => ('\u{fe40}', None),
+        '\u{fe41}' => ('\u{fe42}', None),
+        '\u{fe43}' => ('\u{fe44}', None),
+        '\u{fe47}' => ('\u{fe48}', None),
+        '\u{fe59}' => ('\u{fe5a}', None),
+        '\u{fe5b}' => ('\u{fe5c}', None),
+        '\u{fe5d}' => ('\u{fe5e}', None),
+        '\u{ff08}' => ('\u{ff09}', None),
+        '\u{ff3b}' => ('\u{ff3d}', None),
+        '\u{ff5b}' => ('\u{ff5d}', None),
+        '\u{ff5f}' => ('\u{ff60}', None),
+        '\u{ff62}' => ('\u{ff63}', None),
+        '\u{60}' => ('\u{60}', None),
+        '\u{3c}' => ('\u{3e}', None),
+        '\u{2e55}' => ('\u{2e56}', None),
+        '\u{2e57}' => ('\u{2e58}', None),
+        '\u{2e59}' => ('\u{2e5a}', None),
+        '\u{2e5b}' => ('\u{2e5c}', None),
+        _ => (open, None),
     }
 }
 
@@ -1447,12 +1447,18 @@ enum ScalarQuoteDelimiter {
 fn quote_run_end(input: &str, start: usize, quote: u8, escapes: usize, limit: usize) -> usize {
     let width = escapes + 1;
     let mut end = start;
-    while end.checked_add(width).is_some_and(|next| next <= limit)
-        && input.as_bytes()[end..end + escapes]
-            .iter()
-            .all(|byte| *byte == b'\\')
-        && input.as_bytes()[end + escapes] == quote
-    {
+    while end.checked_add(width).is_some_and(|next| next <= limit) {
+        let escaped = input.as_bytes()[end..end + escapes].iter().all(|byte| {
+            scanner_work(1);
+            *byte == b'\\'
+        });
+        if !escaped {
+            break;
+        }
+        scanner_work(1);
+        if input.as_bytes()[end + escapes] != quote {
+            break;
+        }
         end += width;
     }
     end
@@ -1546,6 +1552,44 @@ fn uncertain_field_end(input: &str, start: usize, enclosing: &EnclosingScalarBou
     }
 }
 
+// An enclosure can end at the apparent opener (for example the outer JSON
+// close after an unterminated escaped quote). It cannot own content after that
+// close. Keep the complete ambiguous wrapper/seed owned instead of constructing
+// a reversed span or dropping captured bytes.
+fn uncertain_wrapper_scan(
+    input: &str,
+    opening: usize,
+    capture: std::ops::Range<usize>,
+    index: &mut ScalarBoundaryIndex,
+) -> LabelledValueScan {
+    // A validated outer JSON close is syntax, not a value opener. The field
+    // has no remaining content inside that scalar. Leave the delimiter intact.
+    if index.is_json_scalar_close(input, opening) {
+        return LabelledValueScan {
+            quoted_value: true,
+            capture: opening..opening,
+            extension: opening..opening,
+            span: opening..opening,
+            reason: None,
+            repeat_seed: None,
+            rejected: true,
+        };
+    }
+    let span = opening..capture.end.max(capture.start);
+    LabelledValueScan {
+        quoted_value: true,
+        capture: span.clone(),
+        extension: span.end..span.end,
+        repeat_seed: Some(gaze_types::LabelledValueRepeatSeed {
+            span: span.clone(),
+            kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
+        }),
+        span,
+        reason: Some(LabelledValueScanReason::UncertainQuoteBoundary),
+        rejected: false,
+    }
+}
+
 fn scan_quoted_field_value(
     input: &str,
     capture: std::ops::Range<usize>,
@@ -1608,6 +1652,9 @@ fn scan_quoted_field_value(
         _ => capture.start,
     };
     let known_empty = known_empty || (enclosing.record_lines_are_content && start == limit);
+    if !known_empty && start > limit {
+        return uncertain_wrapper_scan(input, opening_start, capture, index);
+    }
     let mut end = limit;
     let mut reason = Some(LabelledValueScanReason::UncertainQuoteBoundary);
     if known_empty {
@@ -1656,42 +1703,17 @@ fn scan_paired_field_value(
 ) -> LabelledValueScan {
     let opening = capture.start - opener.len_utf8();
     let enclosing = index.boundary(input, opening, capture.start, wrapper_escapes);
-    let mut close = None;
-    let mut at = capture.start;
-    while at < enclosing.end {
-        scanner_work(1);
-        let ch = input[at..].chars().next().expect("scalar character");
-        if field_wrapper_closes(opener, ch) {
-            let run = input[at..enclosing.end]
-                .chars()
-                .take_while(|next| *next == ch)
-                .count();
-            let run_end = at + run * ch.len_utf8();
-            if run % 2 == 1
-                && !input[run_end..]
-                    .chars()
-                    .next()
-                    .is_some_and(|next| next.is_alphanumeric() || next == '_')
-            {
-                let delimiter = run_end - ch.len_utf8();
-                let closing_escapes = input[..delimiter]
-                    .bytes()
-                    .rev()
-                    .take_while(|byte| *byte == b'\\')
-                    .count();
-                close = Some(if closing_escapes == wrapper_escapes {
-                    delimiter - wrapper_escapes
-                } else {
-                    delimiter
-                });
-                break;
-            }
-            at = run_end;
-        } else {
-            at += ch.len_utf8();
-        }
+    if enclosing.end < capture.start {
+        return uncertain_wrapper_scan(input, opening - wrapper_escapes, capture, index);
     }
-    let end = close.unwrap_or_else(|| uncertain_field_end(input, capture.start, &enclosing));
+    let close = index.paired_close(input, capture.start, enclosing.end, opener, wrapper_escapes);
+    let end = close.unwrap_or_else(|| {
+        if enclosing.record_lines_are_content {
+            enclosing.end
+        } else {
+            index.uncertain_end(input, capture.start, enclosing.end)
+        }
+    });
     let span = capture.start..end;
     let capture_end = capture.end.min(end);
     LabelledValueScan {

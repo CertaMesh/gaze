@@ -51,3 +51,44 @@ fn labelled_record_ids_cli_round_trip_and_public_counterweights() {
     let restored: Value = serde_json::from_slice(&restored.stdout).unwrap();
     assert_eq!(restored["text"].as_str().unwrap(), input);
 }
+
+#[test]
+fn ambiguous_outer_quotes_clean_and_restore_without_refusing_document() {
+    let dir = tempdir().unwrap();
+    let policy = dir.path().join("policy.toml");
+    fs::write(&policy, "[session]\nscope = \"persistent\"\nttl_secs = 86400\n[policy.rulepacks]\nbundled = [\"core\"]\n[[rule]]\nkind = \"default\"\naction = \"tokenize\"\n").unwrap();
+    let fixtures: Value = serde_json::from_str(include_str!(
+        "../../gaze-recognizers/tests/fixtures/record_id_ambiguous_quotes.json"
+    ))
+    .unwrap();
+    for fixture in fixtures.as_array().unwrap() {
+        let input = fixture["text"].as_str().unwrap();
+        let out = Command::cargo_bin("gaze")
+            .unwrap()
+            .args(["clean", "--policy", policy.to_str().unwrap()])
+            .write_stdin(input)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{input:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let reply: Value = serde_json::from_slice(&out.stdout).unwrap();
+        let clean = reply["clean_text"].as_str().unwrap();
+        assert_eq!(
+            clean, input,
+            "the outer JSON delimiter is syntax, with no field value"
+        );
+        let _: Value = serde_json::from_str(clean).unwrap();
+        let out = Command::cargo_bin("gaze")
+            .unwrap()
+            .arg("restore")
+            .write_stdin(json!({"session_blob":reply["session_blob"],"text":clean}).to_string())
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        let restored: Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(restored["text"].as_str().unwrap(), input);
+    }
+}
