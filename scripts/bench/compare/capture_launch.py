@@ -109,7 +109,11 @@ def check_stdlib():
     def unreadable(error):
         raise HarnessImportError("unreadable stdlib import directory") from None
 
-    roots = {Path(sysconfig.get_path(name)).resolve() for name in ("stdlib", "platstdlib")}
+    roots = {Path(sysconfig.get_path(name)).absolute() for name in ("stdlib", "platstdlib")}
+    approved = {path.resolve() for root in roots for path in (root, root / "lib-dynload")}
+    # Prefix caches include the lexical import path, even for aliases of one tree.
+    roots |= {Path(entry or ".").absolute() for entry in sys.path
+              if Path(entry or ".").resolve() in approved}
     for root in roots:
         for directory, children, files in os.walk(root, onerror=unreadable):
             children[:] = [name for name in children

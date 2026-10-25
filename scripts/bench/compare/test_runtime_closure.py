@@ -333,3 +333,26 @@ def test_stdlib_frozen_and_builtin_modules_do_not_select_source_caches(tmp_path,
         cached.parent.mkdir(exist_ok=True)
         cached.write_bytes(b"unused cache")
     capture_launch.check_stdlib()
+
+
+@pytest.mark.parametrize("import_root", ["stdlib", "lib-dynload"])
+def test_stdlib_prefix_validation_uses_each_admitted_alias(tmp_path, monkeypatch, import_root):
+    import capture_launch
+    standard = tmp_path / "stdlib"
+    standard.mkdir()
+    selected = standard if import_root == "stdlib" else standard / "lib-dynload"
+    selected.mkdir(exist_ok=True)
+    (selected / "lazy_module.py").write_text("synthetic = True\n")
+    alias = tmp_path / "stdlib_alias"
+    alias.symlink_to(selected, target_is_directory=True)
+    monkeypatch.setattr(capture_launch.sysconfig, "get_path", lambda name: str(standard))
+    monkeypatch.setattr(sys, "path", [str(alias)])
+    monkeypatch.setattr(sys, "pycache_prefix", str(tmp_path / "cache"))
+    source = alias / "lazy_module.py"
+    cached = Path(importlib.util.cache_from_source(str(source)))
+    cached.parent.mkdir(parents=True)
+    cached.write_bytes(importlib.util.MAGIC_NUMBER + struct.pack("<I", 3)
+                       + importlib.util.source_hash(source.read_bytes())
+                       + marshal.dumps(compile("synthetic = False\n", str(source), "exec")))
+    with pytest.raises(capture_launch.HarnessImportError, match="unverified import bytecode"):
+        capture_launch.check_stdlib()
