@@ -184,3 +184,37 @@ def test_hash_seed_guard_checks_effective_flags(monkeypatch, seed, randomization
     with pytest.raises(identity.HashSeedError, match="^ineffective_python_hash_seed$") as caught:
         guard()
     assert caught.value.code == "ineffective_python_hash_seed"
+
+
+@pytest.mark.parametrize("count", [None, 4])
+def test_missing_process_cpu_count_emits_distinct_document_key(monkeypatch, count):
+    from types import SimpleNamespace
+    import benchmark_spec
+    import subject_identity as identity
+    from capture_identity import digest
+    monkeypatch.setattr(identity, "require_hash_seed", lambda: None)
+    monkeypatch.setattr(identity.importlib.metadata, "distributions", lambda: [])
+    monkeypatch.setattr(identity.runtime_closure, "import_inventory", lambda *a: "a" * 64)
+    monkeypatch.setattr(identity.content, "native_runtime", lambda *a: {})
+    monkeypatch.setattr(identity.os, "cpu_count", lambda: count)
+    monkeypatch.delattr(identity.os, "process_cpu_count", raising=False)
+    spec = benchmark_spec.manifest({"corpus_sha256": "a" * 64, "generator": None, "seed": 1,
+        "contracts": {"v1": "all"}, "harness": {"driver": "b" * 64}, "record_schema": [1],
+        "protocol": {"mode": "synthetic"}, "population": {"C": {"documents": 1}}})
+    document = SimpleNamespace(uid="synthetic", text="synthetic", language="en", region="")
+
+    def key():
+        subject = identity.subject(name="synthetic", config={}, models={},
+            runtime_identity=identity.runtime(), adapter=Path(__file__))
+        return identity.document_key(spec, subject, document)
+
+    fallback = key()
+    state = fallback["subject"]["runtime"]["interpreter_state"]
+    assert state["process_cpu_count"] == count
+    assert state["process_cpu_count_source"] == "os.cpu_count"
+    monkeypatch.setattr(identity.os, "process_cpu_count", lambda: count, raising=False)
+    native = key()
+    state = native["subject"]["runtime"]["interpreter_state"]
+    assert state["process_cpu_count"] == count
+    assert state["process_cpu_count_source"] == "os.process_cpu_count"
+    assert digest(fallback) != digest(native)

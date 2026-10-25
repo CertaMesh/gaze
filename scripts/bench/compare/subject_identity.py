@@ -34,6 +34,7 @@ def require_hash_seed() -> None:
 
 def interpreter_state() -> dict:
     """Bind startup switches and mutable interpreter semantics at both endpoints."""
+    process_cpu_count = getattr(os, "process_cpu_count", None)
     return {
         "flags": {name: getattr(sys.flags, name) for name in dir(sys.flags)
                   if not name.startswith("_") and isinstance(getattr(sys.flags, name), int)},
@@ -45,7 +46,8 @@ def interpreter_state() -> dict:
         "filesystem_errors": sys.getfilesystemencodeerrors(),
         "pycache_prefix": sys.pycache_prefix, "dont_write_bytecode": sys.dont_write_bytecode,
         "dlopen_flags": sys.getdlopenflags() if hasattr(sys, "getdlopenflags") else None,
-        "cpu_count": os.cpu_count(), "process_cpu_count": os.process_cpu_count(),
+        "cpu_count": os.cpu_count(), "process_cpu_count": process_cpu_count() if process_cpu_count is not None else os.cpu_count(),
+        "process_cpu_count_source": "os.process_cpu_count" if process_cpu_count is not None else "os.cpu_count",
         "cpu_affinity": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
     }
 
