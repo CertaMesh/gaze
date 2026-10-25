@@ -62,6 +62,7 @@ def main():
     }, indent=2) + "\n")
     if args.workspace:
         commands = [
+            ["uv", "run", "--project", "scripts/bench", "python", "scripts/bench/test_producer_build_binding.py", "--mutation-proof"],
             ["cargo", "test", "-p", "gaze-token-bridge", "--features", "os-keychain"],
             ["cargo", "test", "-p", "gaze-cli", "--all-features", "--features", "gaze-token-bridge/os-keychain", "--test", "index_cli", "--test", "audit_cross_version", "--test", "cli_pipe"],
             ["cargo", "clippy", "-p", "gaze-token-bridge", "-p", "gaze-cli", "--all-features", "--all-targets", "--", "-D", "warnings"],

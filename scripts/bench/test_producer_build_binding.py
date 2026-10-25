@@ -252,11 +252,45 @@ class SnapshotTests(unittest.TestCase):
             self.assertEqual((dest/'Cargo.lock').stat().st_mode & 0o777, 0o644)
         return len(stream.getvalue())
 
+    def test_only_forced_os_keystore_disable_is_allowed_in_snapshot_config(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)/"snapshot"
+            (root/'.cargo').mkdir(parents=True)
+            path = root/'.cargo/config.toml'
+            path.write_text('[env]\nGAZE_DISABLE_OS_KEYSTORE = { value = "1", force = true }\n')
+            binding.no_configs(root)
+            for content in (
+                '',
+                '[env]\nGAZE_DISABLE_OS_KEYSTORE = "1"\n',
+                '[env]\nGAZE_DISABLE_OS_KEYSTORE = { value = "1", force = false }\n',
+                '[env]\nGAZE_DISABLE_OS_KEYSTORE = { value = "1", force = 1 }\n',
+                '[env]\nGAZE_DISABLE_OS_KEYSTORE = { value = "0", force = true }\n',
+                '[env]\nGAZE_DISABLE_OS_KEYSTORE = { value = "1", force = true }\nOTHER = "1"\n',
+                '[build]\nrustflags = ["--cfg", "changed"]\n',
+                'invalid toml',
+                '#' * 4097,
+            ):
+                with self.subTest(content=content):
+                    path.write_text(content)
+                    with self.assertRaises(ProducerFailure):
+                        binding.no_configs(root)
+            path.write_text('[env]\nGAZE_DISABLE_OS_KEYSTORE = { value = "1", force = true }\n')
+            (Path(temp)/'.cargo').mkdir()
+            (Path(temp)/'.cargo/config.toml').write_text(path.read_text())
+            with self.assertRaises(ProducerFailure):
+                binding.no_configs(root)
+
     def test_config_presence_without_reading_contents(self):
         with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
+            root = Path(temp)/"snapshot"
+            root.mkdir()
             (root/'.cargo').mkdir()
             (root/'.cargo/config.toml').touch()
+            with self.assertRaises(ProducerFailure):
+                binding.no_configs(root)
+            (root/'.cargo/config.toml').unlink()
+            (Path(temp)/'.cargo').mkdir()
+            (Path(temp)/'.cargo/config.toml').touch()
             with self.assertRaises(ProducerFailure):
                 binding.no_configs(root)
 
@@ -1164,6 +1198,8 @@ def integration(inputs, *, suite_seconds=7200):
             checks['alternate_source_before_and_after_capture'] = 'refused'
             checks['alternate_numeric_oracle'] = 'behavior_only'
         config = control.source/'.cargo/config.toml'
+        original_config = config.read_bytes() if config.exists() else None
+        original_parent = config.parent.exists()
         config.parent.mkdir(exist_ok=True)
         try:
             config.write_bytes(b'# synthetic unexpected configuration\n')
@@ -1171,8 +1207,12 @@ def integration(inputs, *, suite_seconds=7200):
                 refused(control.run_bridge, 'dirty-config-before-launch', code='io')
                 launch.assert_not_called()
         finally:
-            config.unlink()
-            config.parent.rmdir()
+            if original_config is None:
+                config.unlink()
+                if not original_parent:
+                    config.parent.rmdir()
+            else:
+                config.write_bytes(original_config)
         checks['dirty_config_before_launch'] = 'refused'
         assert control.run_bridge().numeric_verified, 'restored-control-still-valid'
     binding.check_time(end)
@@ -1224,6 +1264,8 @@ def mutation_proof():
         ('skip_download', "'ORT_SKIP_DOWNLOAD': 'true'", "'ORT_SKIP_DOWNLOAD': 'false'", 'InputContextTests.test_private_cache_and_minimal_native_environment'),
         ('config_absence', "require(not (directory/'.cargo'/name).exists(), 'invalid_state')", 'pass',
          'SnapshotTests.test_config_presence_without_reading_contents'),
+        ('root_config_setting', "require(value == expected\n                        and value['env']['GAZE_DISABLE_OS_KEYSTORE']['force'] is True,\n                        'invalid_state')", "require(True, 'invalid_state')",
+         'SnapshotTests.test_only_forced_os_keystore_disable_is_allowed_in_snapshot_config'),
         ('cleanup', 'remove_owned(self.root, self.deadline)', 'pass', 'SessionOwnershipTests.test_cleanup_failure_invalidates_success'),
         ('selected_command', '[str(self.executable)], cwd=self.source',
          "[str(self.target/'debug/examples/evidence_bridge')], cwd=self.source",

@@ -307,7 +307,26 @@ def inventory(root, deadline):
 def no_configs(root):
     for directory in (root, *root.parents):
         for name in ('config', 'config.toml'):
-            require(not (directory/'.cargo'/name).exists(), 'invalid_state')
+            path = directory/'.cargo'/name
+            # The source inventory hashes this one audited runtime-only setting.
+            # No ancestor config, alternate filename or build setting is admitted.
+            if directory == root and name == 'config.toml' and path.exists():
+                fd = open_regular(path, time.monotonic()+30)
+                try:
+                    raw = os.read(fd, 4097)
+                finally:
+                    os.close(fd)
+                require(len(raw) <= 4096, 'invalid_state')
+                try:
+                    value = tomllib.loads(raw.decode('utf-8'))
+                except (UnicodeError, tomllib.TOMLDecodeError):
+                    raise ProducerFailure('invalid_state') from None
+                expected = {'env': {'GAZE_DISABLE_OS_KEYSTORE': {'value': '1', 'force': True}}}
+                require(value == expected
+                        and value['env']['GAZE_DISABLE_OS_KEYSTORE']['force'] is True,
+                        'invalid_state')
+            else:
+                require(not (directory/'.cargo'/name).exists(), 'invalid_state')
 
 
 def verify_native_archive(path, host, deadline):

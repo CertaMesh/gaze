@@ -778,8 +778,11 @@ This larger allowance applies only to archive stdout; archive stderr, Cargo outp
 and bridge output retain their 64 MiB ceilings. Only ordinary USTAR files and expected ancestor
 directories are supported. Links, devices, escapes, duplicates, unexpected entries
 and extension metadata fail closed. Source, native inputs, tool bytes, original
-and private cache copies, and configuration absence are rechecked at the build,
-capture, launch and success boundaries. Persistent changes are refused; a
+and private cache copies, and Cargo configuration restrictions are rechecked at
+the build, capture, launch and success boundaries. The snapshot root may contain
+only `.cargo/config.toml` with the forced `GAZE_DISABLE_OS_KEYSTORE=1` environment
+setting. Its bytes remain in the verified source inventory. All other settings,
+ancestor configuration, alternate filenames and credentials remain rejected. Persistent changes are refused; a
 mutate-and-restore interval between checks remains outside the proof.
 
 The parent supplies actual Rust 1.96.0 `cargo`, `rustc` and `rustdoc` executables,

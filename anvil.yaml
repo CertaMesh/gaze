@@ -99,7 +99,7 @@ checks:
     description: Fake-backed guard mutations, index/audit tests, and full feature matrix
     expensive: true
     locks: [workspace-build]
-    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/anvil, scripts/gate/os-keystore-mutation-probe.py, scripts/ci/test-shards.json, .github/workflows, anvil.yaml]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/anvil, scripts/gate/os-keystore-mutation-probe.py, scripts/ci/test-shards.json, scripts/bench/producer_build_binding.py, scripts/bench/test_producer_build_binding.py, docs/reference/benchmarks/evidence-protocol-v1.md, .github/workflows, anvil.yaml]
     toolchain: *rust-tools
     commands:
       - env CARGO_BUILD_JOBS=2 nice -n 10 python3 scripts/gate/os-keystore-mutation-probe.py --workspace
