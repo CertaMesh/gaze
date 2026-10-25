@@ -664,7 +664,7 @@ fn bounded_request_and_response_edges_and_nonterminal_real_v2_frame_ceiling() {
     d.v2.limits = Limits::default();
     let frame = format!(
         "{}{}",
-        opening("too-large").to_string(),
+        opening("too-large"),
         " ".repeat(64 * 1024 * 1024)
     );
     assert_error(&raw(&mut d, &frame), "CacheCapacity");
@@ -789,8 +789,10 @@ fn individual_state_budgets_refuse_before_commit() {
     let r: Object =
         serde_json::from_str(&clean_request(&opened, vec![block("leaf-a", "benign")]).to_string())
             .unwrap();
-    let mut limits = Limits::default();
-    limits.session_cache_bytes = 1;
+    let limits = Limits {
+        session_cache_bytes: 1,
+        ..Limits::default()
+    };
     assert_eq!(
         super::inventory(&r, live, false, limits).err(),
         Some(Failure::CacheCapacity)
