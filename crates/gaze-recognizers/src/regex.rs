@@ -1363,6 +1363,7 @@ fn serialized_context_is_json(input: &str, enclosing: &[(usize, usize)], escapes
     serialized_context_contents_are_json(input, enclosing, escapes)
 }
 
+#[cfg(test)]
 fn serialized_context_contents_are_json(
     input: &str,
     enclosing: &[(usize, usize)],
@@ -1377,22 +1378,27 @@ fn serialized_context_contents_are_json(
         let Some(raw) = input.get(opening..close + depth + 1) else {
             return false;
         };
-        let mut raw = raw.to_owned();
-        for _ in 0..levels {
-            let Ok(decoded) = serde_json::from_str::<String>(&format!("\"{raw}\"")) else {
-                return false;
-            };
-            raw = decoded;
-        }
-        let Ok(content) = serde_json::from_str::<String>(&raw) else {
-            return false;
-        };
-        if serde_json::from_str::<serde_json::Value>(&content).is_err() {
+        if !serialized_ancestor_contains_json(raw, levels) {
             return false;
         }
         levels += 1;
     }
     levels == (escapes + 1).trailing_zeros()
+}
+
+fn serialized_ancestor_contains_json(raw: &str, levels: u32) -> bool {
+    scanner_work(raw.len());
+    let mut raw = raw.to_owned();
+    for _ in 0..levels {
+        let Ok(decoded) = serde_json::from_str::<String>(&format!("\"{raw}\"")) else {
+            return false;
+        };
+        raw = decoded;
+    }
+    let Ok(content) = serde_json::from_str::<String>(&raw) else {
+        return false;
+    };
+    serde_json::from_str::<serde_json::Value>(&content).is_ok()
 }
 
 fn serialized_string_end(input: &str, start: usize, limit: usize, depth: Option<usize>) -> usize {

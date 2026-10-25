@@ -9,15 +9,10 @@ pub(super) struct ScalarBoundaryIndex {
     encoded: Option<EncodedIndex>,
     prefix: PrefixCursor,
     provisional: Option<(usize, PrefixCursor)>,
-    json_contexts: HashMap<JsonContextKey, bool>,
+    json_ancestors: HashMap<(usize, usize), bool>,
+    record_breaks: Option<Vec<usize>>,
     strings: HashMap<(usize, Option<usize>), StringEndIndex>,
     quotes: HashMap<(usize, u8, usize, ScalarQuoteDelimiter), QuoteCloseIndex>,
-}
-
-#[derive(Hash, PartialEq, Eq)]
-struct JsonContextKey {
-    enclosing: Vec<(usize, usize)>,
-    escapes: usize,
 }
 
 impl ScalarBoundaryIndex {
@@ -212,17 +207,47 @@ impl ScalarBoundaryIndex {
         if !valid {
             return false;
         }
-        let key = JsonContextKey {
-            enclosing: enclosing
-                .iter()
-                .copied()
-                .filter(|(depth, _)| *depth < escapes)
-                .collect(),
-            escapes,
-        };
-        *self.json_contexts.entry(key).or_insert_with_key(|key| {
-            serialized_context_contents_are_json(input, &key.enclosing, key.escapes)
-        })
+        let mut levels = 0;
+        for &(depth, opening) in enclosing.iter().filter(|(depth, _)| *depth < escapes) {
+            if (depth + 1).trailing_zeros() != levels {
+                return false;
+            }
+            let valid = if let Some(valid) = self.json_ancestors.get(&(depth, opening)) {
+                *valid
+            } else {
+                let close = self.string_end(input, opening + depth + 1, input.len(), Some(depth));
+                let valid = input
+                    .get(opening..close + depth + 1)
+                    .is_some_and(|raw| serialized_ancestor_contains_json(raw, levels));
+                self.json_ancestors.insert((depth, opening), valid);
+                valid
+            };
+            if !valid {
+                return false;
+            }
+            levels += 1;
+        }
+        levels == (escapes + 1).trailing_zeros()
+    }
+
+    fn uncertain_end(&mut self, input: &str, start: usize, limit: usize) -> usize {
+        let breaks = self.record_breaks.get_or_insert_with(|| {
+            scanner_work(input.len());
+            let mut escapes = 0usize;
+            let mut breaks = Vec::new();
+            for (at, byte) in input.bytes().enumerate() {
+                if matches!(byte, b'\n' | b'\r') && escapes.is_multiple_of(2) {
+                    breaks.push(at);
+                }
+                escapes = if byte == b'\\' { escapes + 1 } else { 0 };
+            }
+            breaks
+        });
+        breaks
+            .get(breaks.partition_point(|at| *at < start))
+            .copied()
+            .unwrap_or(limit)
+            .min(limit)
     }
 
     fn save_prefix(
@@ -340,7 +365,7 @@ impl ScalarBoundaryIndex {
                     let full_close =
                         self.quote_close(input, content, full_limit, byte, escapes, delimiter);
                     let next_at = prior_close.map_or_else(
-                        || uncertain_scalar_end(input, content, limit),
+                        || self.uncertain_end(input, content, limit),
                         |close| close + count * width,
                     );
                     let complete_run =
@@ -1127,7 +1152,8 @@ mod tests {
         detector.capture_groups = capture_groups;
         detector.complete_labelled_value = true;
         detector.labelled_value_mode = LabelledValueMode::FieldOwned;
-        for surface in 0..7 {
+        let mut compared = 0;
+        for surface in 0..9 {
             let mut previous = 0;
             for fields in [128, 512, 2048] {
                 let body = "customerId: \"SYN731284\"; ".repeat(fields);
@@ -1138,7 +1164,9 @@ mod tests {
                     3 => format!("\"{}\",public", body.replace('"', "\"\"")),
                     4 => format!("SELECT '{body}', 7;"),
                     5 => format!("public: 'unclosed\n{body}"),
-                    _ => format!("public: 'later close\n{body}\n'; public=7"),
+                    6 => format!("public: 'later close\n{body}\n'; public=7"),
+                    7 => format!("public: 'unclosed {body}"),
+                    _ => format!("public: 'later close {body}'; public=7"),
                 };
                 SCANNER_WORK.with(|work| work.set(0));
                 let scans = detector.scanned_spans(&input, None);
@@ -1162,9 +1190,15 @@ mod tests {
                     "surface {surface}, fields {fields}, bytes {}, scanner work {steps}",
                     input.len()
                 );
+                if fields == 128 {
+                    let checked = compare(&input);
+                    assert_eq!(checked, fields);
+                    compared += checked;
+                }
                 previous = steps;
             }
         }
+        eprintln!("scaling inputs differential: {compared} captures");
     }
     #[test]
     fn sibling_encoded_absent_values_share_whole_input_validation() {
@@ -1189,33 +1223,41 @@ mod tests {
         detector.capture_groups = capture_groups;
         detector.complete_labelled_value = true;
         detector.labelled_value_mode = LabelledValueMode::FieldOwned;
-        let oracle_input =
-            serde_json::to_string(&vec![r#"{"message":"customerId: "}"#; 8]).unwrap();
-        assert_eq!(compare(&oracle_input), 8);
-        let mut previous = 0;
-        for fields in [128, 512, 2048] {
-            let input =
-                serde_json::to_string(&vec![r#"{"message":"customerId: "}"#; fields]).unwrap();
-            SCANNER_WORK.with(|work| work.set(0));
-            let scans = detector.scanned_spans(&input, None);
-            let steps = SCANNER_WORK.with(|work| work.get());
-            assert_eq!(scans.len(), fields);
-            assert!(scans
-                .iter()
-                .all(|scan| scan.rejected && scan.span.is_empty()));
-            assert!(
-                steps <= input.len() * 60,
-                "{steps} steps for {} bytes",
-                input.len()
-            );
-            if previous > 0 {
-                assert!(steps <= previous * 5, "{previous} -> {steps}");
+        for depth in 0..=3 {
+            let mut oracle_input =
+                serde_json::to_string(&vec![r#"{"message":"customerId: "}"#; 8]).unwrap();
+            for _ in 0..depth {
+                oracle_input = serde_json::to_string(&oracle_input).unwrap();
             }
-            eprintln!(
-                "absent siblings {fields}, bytes {}, scanner work {steps}",
-                input.len()
-            );
-            previous = steps;
+            assert_eq!(compare(&oracle_input), 8);
+            let mut previous = 0;
+            for fields in [128, 512, 2048] {
+                let mut input =
+                    serde_json::to_string(&vec![r#"{"message":"customerId: "}"#; fields]).unwrap();
+                for _ in 0..depth {
+                    input = serde_json::to_string(&input).unwrap();
+                }
+                SCANNER_WORK.with(|work| work.set(0));
+                let scans = detector.scanned_spans(&input, None);
+                let steps = SCANNER_WORK.with(|work| work.get());
+                assert_eq!(scans.len(), fields);
+                assert!(scans
+                    .iter()
+                    .all(|scan| scan.rejected && scan.span.is_empty()));
+                assert!(
+                    steps <= input.len() * 60,
+                    "depth {depth}: {steps} steps for {} bytes",
+                    input.len()
+                );
+                if previous > 0 {
+                    assert!(
+                        steps <= previous * 5,
+                        "depth {depth}: {previous} -> {steps}"
+                    );
+                }
+                eprintln!("absent siblings depth {depth}, fields {fields}, bytes {}, scanner work {steps}", input.len());
+                previous = steps;
+            }
         }
     }
 }
