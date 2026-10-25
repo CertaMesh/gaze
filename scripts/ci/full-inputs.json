@@ -140,6 +140,8 @@
     "crates/gaze-recognizers/embedded/locale-uk.toml",
     "crates/gaze-recognizers/embedded/secrets.toml",
     "crates/gaze-recognizers/src/regex.rs",
+    "crates/gaze-recognizers/src/regex/scalar_index.rs",
+    "crates/gaze-recognizers/src/regex/scalar_reference.rs",
     "crates/gaze-recognizers/src/safety_net/openai_filter/class_map.rs",
     "crates/gaze-recognizers/testdata/coverage-loop/README.md",
     "crates/gaze-recognizers/testdata/coverage-loop/build-manifest.json",
