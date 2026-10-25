@@ -55,10 +55,11 @@ RECORD_CHECKS = ("metric-candidates", "ner-encodes", "ner-windows", "nym-windows
 def violates_record(record: dict, check: str) -> bool:
     metrics, counters = record["metrics"], record["counters"]
     if check == "nonempty-input-work":
-        # prepare_windows emits only nonempty input ranges; sweep rejects empty
-        # matches before selecting additions. Raw recognizer candidate counts
-        # instead precede geometry/score/veto admission, so may describe errors.
-        return (counters["ner_windows"] > 0 or counters["sweep_candidates"] > 0) and counters["input_bytes"] == 0
+        # Sweep rejects empty matches before selecting additions. NER instead
+        # plans 0..0 for empty text and encodes with special tokens enabled;
+        # nonempty token IDs can reach ORT without any input bytes.
+        # Raw candidates precede geometry/score/veto admission and may be errors.
+        return counters["sweep_candidates"] > 0 and counters["input_bytes"] == 0
     if check == "sweep-counter-owner":
         return counters["sweep_candidates"] > 0 and metrics["sweep_ns"]["invocations"] == 0
     if check == "parent-invocations":
@@ -399,9 +400,14 @@ def documentation() -> str:
                  "primary/veto/residual audit (pipeline.rs:1326-1523). With neither NER",
                  "nor address_blocks enabled, resolve2 requires positive sweep_candidates;",
                  "the street/address recovery alternatives cannot run in that policy.",
-                 "Positive NER windows or sweep additions require positive input_bytes:",
-                 "NER windows use nonempty ranges (ner/backend/preparation.rs:60-84), and",
-                 "sweep matches reject empty spans (gaze/src/sweep.rs:379). Raw candidate",
+                 "Only positive sweep additions require positive input_bytes: sweep matches",
+                 "reject empty spans (gaze/src/sweep.rs:379). NER plans a 0..0 range for",
+                 "empty text and encodes with special tokens enabled; nonempty token IDs",
+                 "can reach ORT with zero input bytes (ner/backend/preparation.rs:13-18,60-79;",
+                 "ner/backend/ort.rs:95-149). Nym tokenizes without special tokens and plans",
+                 "no windows for zero pieces (safety_net/nym/ort.rs:193-207; nym/decode.rs:33-44).",
+                 "Neither model changes the manifest, no-net audit or resolve2 prerequisites.",
+                 "Raw candidate",
                  "counts precede geometry, score and veto admission (registry.rs:1264-1278);",
                  "an empty-input custom regex can emit a candidate before failing resolution.",
                  "Skip-class and capitals gating apply",

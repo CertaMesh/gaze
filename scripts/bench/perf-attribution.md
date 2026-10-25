@@ -281,9 +281,14 @@ and an invoked manifest hook: admitted geometry and Ledger::new precede
 primary/veto/residual audit (pipeline.rs:1326-1523). With neither NER
 nor address_blocks enabled, resolve2 requires positive sweep_candidates;
 the street/address recovery alternatives cannot run in that policy.
-Positive NER windows or sweep additions require positive input_bytes:
-NER windows use nonempty ranges (ner/backend/preparation.rs:60-84), and
-sweep matches reject empty spans (gaze/src/sweep.rs:379). Raw candidate
+Only positive sweep additions require positive input_bytes: sweep matches
+reject empty spans (gaze/src/sweep.rs:379). NER plans a 0..0 range for
+empty text and encodes with special tokens enabled; nonempty token IDs
+can reach ORT with zero input bytes (ner/backend/preparation.rs:13-18,60-79;
+ner/backend/ort.rs:95-149). Nym tokenizes without special tokens and plans
+no windows for zero pieces (safety_net/nym/ort.rs:193-207; nym/decode.rs:33-44).
+Neither model changes the manifest, no-net audit or resolve2 prerequisites.
+Raw candidate
 counts precede geometry, score and veto admission (registry.rs:1264-1278);
 an empty-input custom regex can emit a candidate before failing resolution.
 Skip-class and capitals gating apply
