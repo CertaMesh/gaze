@@ -522,7 +522,8 @@ def prepare_inputs(root, *, registry, native, toolchain, deadline):
             dest.chmod(0o444)
             require(file_digest(dest, cache_end)[1:] == (size, digest), 'io')
             cache_size += size
-    env = {'HOME': str(home), 'CARGO_HOME': str(cargo_home), 'TMPDIR': str(tmp),
+    env = {'GAZE_DISABLE_OS_KEYSTORE': '1', 'HOME': str(home),
+           'CARGO_HOME': str(cargo_home), 'TMPDIR': str(tmp),
            'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'LC_ALL': 'C',
            'RUSTC': str(tools['rustc']), 'RUSTDOC': str(tools['rustdoc']),
            'CARGO_BUILD_JOBS': '2', 'CARGO_NET_OFFLINE': 'true',

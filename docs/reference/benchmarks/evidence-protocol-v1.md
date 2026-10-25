@@ -794,8 +794,8 @@ of approved registry index/cache files; `registry/src` is extracted privately.
 No user Cargo configuration or credentials are imported or read. Cache input
 copies are read-only files, and no compiled target is copied or reused for a build.
 
-The child environment is constructed explicitly, with isolated `HOME`, mandatory
-`RUSTC`/`RUSTDOC`, controlled SDK `PATH`, `CARGO_NET_OFFLINE=true`,
+The child environment is constructed explicitly, with `GAZE_DISABLE_OS_KEYSTORE=1`,
+isolated `HOME`, mandatory `RUSTC`/`RUSTDOC`, controlled SDK `PATH`, `CARGO_NET_OFFLINE=true`,
 `ORT_SKIP_DOWNLOAD=true`, and `ORT_LIB_LOCATION`. Conflicting ORT aliases,
 wrappers, flags, loader and proxy settings are absent. The explicit native branch
 avoids the known ORT download path. Arbitrary trusted build scripts are not

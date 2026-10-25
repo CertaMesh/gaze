@@ -533,6 +533,7 @@ class InputContextTests(unittest.TestCase):
                 result = binding.prepare_inputs(root, registry=registry, native=native,
                                                 toolchain=tools, deadline=time.monotonic()+30)
             env = result[2]
+            self.assertEqual(env.get('GAZE_DISABLE_OS_KEYSTORE'), '1', 'runtime-keystore-disabled')
             self.assertEqual(env['CARGO_NET_OFFLINE'], 'true', 'offline-environment')
             self.assertEqual(env['ORT_SKIP_DOWNLOAD'], 'true', 'skip-native-download')
             self.assertEqual(env['ORT_LIB_LOCATION'], str(native), 'explicit-native')
@@ -1261,6 +1262,8 @@ def mutation_proof():
         ('source_recheck', "require(inventory(self.source, self.work_end) == self.source_before, 'io')", 'pass',
          'InputRecheckTests.test_source_and_private_cache_rechecked'),
         ('offline', "'CARGO_NET_OFFLINE': 'true'", "'CARGO_NET_OFFLINE': 'false'", 'InputContextTests.test_private_cache_and_minimal_native_environment'),
+        ('runtime_keystore_marker', "'GAZE_DISABLE_OS_KEYSTORE': '1', ", '',
+         'InputContextTests.test_private_cache_and_minimal_native_environment'),
         ('skip_download', "'ORT_SKIP_DOWNLOAD': 'true'", "'ORT_SKIP_DOWNLOAD': 'false'", 'InputContextTests.test_private_cache_and_minimal_native_environment'),
         ('config_absence', "require(not (directory/'.cargo'/name).exists(), 'invalid_state')", 'pass',
          'SnapshotTests.test_config_presence_without_reading_contents'),
