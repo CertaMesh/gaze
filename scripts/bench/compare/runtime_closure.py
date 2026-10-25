@@ -50,7 +50,10 @@ def import_inventory(files, roots, *, path=None, hooks=None):
     capture_launch.check_stdlib()
     capture_launch.check_harness()
     modules = set()
-    for root in roots:
+    resolved_roots = {root.resolve() for root in roots}
+    walk_roots = roots | {Path(entry or ".").absolute() for entry in (sys.path if path is None else path)
+                          if Path(entry or ".").resolve() in resolved_roots}
+    for root in walk_roots:
         for file in root.rglob("*"):
             if file.is_symlink() and file.is_dir():
                 raise ValueError("linked import directory is unsupported")

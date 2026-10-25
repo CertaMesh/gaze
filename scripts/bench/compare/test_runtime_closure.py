@@ -357,3 +357,21 @@ def test_stdlib_prefix_validation_uses_each_admitted_alias(tmp_path, monkeypatch
                        + marshal.dumps(compile("synthetic = False\n", str(source), "exec")))
     with pytest.raises(capture_launch.HarnessImportError, match="unverified import bytecode"):
         capture_launch.check_stdlib()
+
+
+@pytest.mark.parametrize("root_name", ["purelib", "platlib"])
+def test_installed_prefix_validation_uses_each_admitted_alias(installation, tmp_path, monkeypatch, root_name):
+    import capture_launch
+    root, module, files = installation
+    alias = tmp_path / root_name
+    alias.symlink_to(root, target_is_directory=True)
+    source = alias / module.name
+    files[str(source)] = file_digest(source)
+    monkeypatch.setattr(sys, "pycache_prefix", str(tmp_path / "cache"))
+    cached = Path(importlib.util.cache_from_source(str(source)))
+    cached.parent.mkdir(parents=True)
+    cached.write_bytes(importlib.util.MAGIC_NUMBER + struct.pack("<I", 3)
+                       + importlib.util.source_hash(source.read_bytes())
+                       + marshal.dumps(compile("synthetic = False\n", str(source), "exec")))
+    with pytest.raises(capture_launch.HarnessImportError, match="unverified import bytecode"):
+        runtime_closure.import_inventory(files, [root], path=[str(alias), str(root)], hooks=[])
