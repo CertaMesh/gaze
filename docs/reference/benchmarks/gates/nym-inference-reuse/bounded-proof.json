@@ -562,7 +562,7 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 18,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 0,
                 "post_policy_suspects": 0,
@@ -570,10 +570,10 @@
                 "post_policy_zero_suspect_rate": null,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 1.0,
+                "strict_acceptance_rate": 1.0e0,
                 "strict_would_reject_documents": 0,
                 "tokenize_actions": 18
               },
@@ -583,32 +583,32 @@
                 "documents_without_leaks": 11,
                 "entities": {
                   "exact_boundary": 17,
-                  "exact_boundary_recall": 0.3090909090909091,
-                  "full_coverage_recall": 0.34545454545454546,
+                  "exact_boundary_recall": 30909090.90909091e-8,
+                  "full_coverage_recall": 34545454.545454546e-8,
                   "fully_covered": 19,
                   "gold": 55,
-                  "overlap_recall": 0.34545454545454546,
+                  "overlap_recall": 34545454.545454546e-8,
                   "overlapped": 19
                 },
                 "prediction_spans": {
-                  "overlap_precision": 1.0,
+                  "overlap_precision": 1.0e0,
                   "overlapped_gold": 18,
                   "total": 18
                 },
                 "utf8_bytes": {
-                  "f1": 0.5591397849462366,
-                  "f2": 0.4441190824792582,
+                  "f1": 55913978.49462366e-8,
+                  "f2": 44411908.24792582e-8,
                   "false_positive": 3,
-                  "false_positive_rate": 0.002843601895734597,
-                  "leak_rate": 0.6094420600858369,
+                  "false_positive_rate": 28436018.95734597e-10,
+                  "leak_rate": 60944206.00858369e-8,
                   "leaked": 284,
                   "pii": 466,
-                  "precision": 0.9837837837837838,
+                  "precision": 98378378.37837838e-8,
                   "predicted": 185,
-                  "recall": 0.3905579399141631,
+                  "recall": 39055793.99141631e-8,
                   "true_positive": 182
                 },
-                "zero_leak_document_rate": 0.4583333333333333
+                "zero_leak_document_rate": 45833333.33333333e-8
               },
               "refusals": 0
             },
@@ -629,7 +629,7 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 38,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 0,
                 "post_policy_suspects": 0,
@@ -637,10 +637,10 @@
                 "post_policy_zero_suspect_rate": null,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 1.0,
+                "strict_acceptance_rate": 1.0e0,
                 "strict_would_reject_documents": 0,
                 "tokenize_actions": 38
               },
@@ -650,32 +650,32 @@
                 "documents_without_leaks": 0,
                 "entities": {
                   "exact_boundary": 35,
-                  "exact_boundary_recall": 0.09433962264150944,
-                  "full_coverage_recall": 0.11590296495956873,
+                  "exact_boundary_recall": 94339622.64150944e-9,
+                  "full_coverage_recall": 11590296.495956873e-8,
                   "fully_covered": 43,
                   "gold": 371,
-                  "overlap_recall": 0.11859838274932614,
+                  "overlap_recall": 11859838.274932614e-8,
                   "overlapped": 44
                 },
                 "prediction_spans": {
-                  "overlap_precision": 0.9736842105263158,
+                  "overlap_precision": 97368421.05263158e-8,
                   "overlapped_gold": 37,
                   "total": 38
                 },
                 "utf8_bytes": {
-                  "f1": 0.25077591558038487,
-                  "f2": 0.17480096919349258,
+                  "f1": 25077591.558038487e-8,
+                  "f2": 17480096.919349258e-8,
                   "false_positive": 40,
-                  "false_positive_rate": 0.0031007751937984496,
-                  "leak_rate": 0.8545716342692584,
+                  "false_positive_rate": 31007751.937984496e-10,
+                  "leak_rate": 85457163.42692584e-8,
                   "leaked": 2374,
                   "pii": 2778,
-                  "precision": 0.9099099099099099,
+                  "precision": 90990990.99099099e-8,
                   "predicted": 444,
-                  "recall": 0.14542836573074155,
+                  "recall": 14542836.573074155e-8,
                   "true_positive": 404
                 },
-                "zero_leak_document_rate": 0.0
+                "zero_leak_document_rate": 0.0e-1
               },
               "refusals": 0
             },
@@ -696,7 +696,7 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 2,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 0,
                 "post_policy_suspects": 0,
@@ -704,10 +704,10 @@
                 "post_policy_zero_suspect_rate": null,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 1.0,
+                "strict_acceptance_rate": 1.0e0,
                 "strict_would_reject_documents": 0,
                 "tokenize_actions": 2
               },
@@ -717,32 +717,32 @@
                 "documents_without_leaks": 24,
                 "entities": {
                   "exact_boundary": 0,
-                  "exact_boundary_recall": 1.0,
-                  "full_coverage_recall": 1.0,
+                  "exact_boundary_recall": 1.0e0,
+                  "full_coverage_recall": 1.0e0,
                   "fully_covered": 0,
                   "gold": 0,
-                  "overlap_recall": 1.0,
+                  "overlap_recall": 1.0e0,
                   "overlapped": 0
                 },
                 "prediction_spans": {
-                  "overlap_precision": 0.0,
+                  "overlap_precision": 0.0e-1,
                   "overlapped_gold": 0,
                   "total": 2
                 },
                 "utf8_bytes": {
-                  "f1": 0.0,
-                  "f2": 0.0,
+                  "f1": 0.0e-1,
+                  "f2": 0.0e-1,
                   "false_positive": 10,
-                  "false_positive_rate": 0.007057163020465773,
-                  "leak_rate": 0.0,
+                  "false_positive_rate": 70571630.20465773e-10,
+                  "leak_rate": 0.0e-1,
                   "leaked": 0,
                   "pii": 0,
-                  "precision": 0.0,
+                  "precision": 0.0e-1,
                   "predicted": 10,
-                  "recall": 1.0,
+                  "recall": 1.0e0,
                   "true_positive": 0
                 },
-                "zero_leak_document_rate": 1.0
+                "zero_leak_document_rate": 1.0e0
               },
               "refusals": 0
             },
@@ -763,7 +763,7 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 6,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 0,
                 "post_policy_suspects": 0,
@@ -771,10 +771,10 @@
                 "post_policy_zero_suspect_rate": null,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 1.0,
+                "strict_acceptance_rate": 1.0e0,
                 "strict_would_reject_documents": 0,
                 "tokenize_actions": 6
               },
@@ -784,32 +784,32 @@
                 "documents_without_leaks": 1,
                 "entities": {
                   "exact_boundary": 3,
-                  "exact_boundary_recall": 0.026785714285714284,
-                  "full_coverage_recall": 0.08035714285714286,
+                  "exact_boundary_recall": 26785714.285714284e-9,
+                  "full_coverage_recall": 80357142.85714286e-9,
                   "fully_covered": 9,
                   "gold": 112,
-                  "overlap_recall": 0.08035714285714286,
+                  "overlap_recall": 80357142.85714286e-9,
                   "overlapped": 9
                 },
                 "prediction_spans": {
-                  "overlap_precision": 1.0,
+                  "overlap_precision": 1.0e0,
                   "overlapped_gold": 6,
                   "total": 6
                 },
                 "utf8_bytes": {
-                  "f1": 0.16835016835016836,
-                  "f2": 0.1126126126126126,
+                  "f1": 16835016.835016836e-8,
+                  "f2": 11261261.26126126e-8,
                   "false_positive": 3,
-                  "false_positive_rate": 0.002461033634126333,
-                  "leak_rate": 0.9077490774907749,
+                  "false_positive_rate": 24610336.34126333e-10,
+                  "leak_rate": 90774907.74907749e-8,
                   "leaked": 738,
                   "pii": 813,
-                  "precision": 0.9615384615384616,
+                  "precision": 96153846.15384616e-8,
                   "predicted": 78,
-                  "recall": 0.09225092250922509,
+                  "recall": 92250922.50922509e-9,
                   "true_positive": 75
                 },
-                "zero_leak_document_rate": 0.041666666666666664
+                "zero_leak_document_rate": 41666666.666666664e-9
               },
               "refusals": 0
             }
@@ -835,7 +835,7 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 18,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 0,
                 "post_policy_suspects": 0,
@@ -843,10 +843,10 @@
                 "post_policy_zero_suspect_rate": null,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 1.0,
+                "strict_acceptance_rate": 1.0e0,
                 "strict_would_reject_documents": 0,
                 "tokenize_actions": 18
               },
@@ -856,32 +856,32 @@
                 "documents_without_leaks": 11,
                 "entities": {
                   "exact_boundary": 17,
-                  "exact_boundary_recall": 0.3090909090909091,
-                  "full_coverage_recall": 0.34545454545454546,
+                  "exact_boundary_recall": 30909090.90909091e-8,
+                  "full_coverage_recall": 34545454.545454546e-8,
                   "fully_covered": 19,
                   "gold": 55,
-                  "overlap_recall": 0.34545454545454546,
+                  "overlap_recall": 34545454.545454546e-8,
                   "overlapped": 19
                 },
                 "prediction_spans": {
-                  "overlap_precision": 1.0,
+                  "overlap_precision": 1.0e0,
                   "overlapped_gold": 18,
                   "total": 18
                 },
                 "utf8_bytes": {
-                  "f1": 0.5591397849462366,
-                  "f2": 0.4441190824792582,
+                  "f1": 55913978.49462366e-8,
+                  "f2": 44411908.24792582e-8,
                   "false_positive": 3,
-                  "false_positive_rate": 0.002843601895734597,
-                  "leak_rate": 0.6094420600858369,
+                  "false_positive_rate": 28436018.95734597e-10,
+                  "leak_rate": 60944206.00858369e-8,
                   "leaked": 284,
                   "pii": 466,
-                  "precision": 0.9837837837837838,
+                  "precision": 98378378.37837838e-8,
                   "predicted": 185,
-                  "recall": 0.3905579399141631,
+                  "recall": 39055793.99141631e-8,
                   "true_positive": 182
                 },
-                "zero_leak_document_rate": 0.4583333333333333
+                "zero_leak_document_rate": 45833333.33333333e-8
               },
               "refusals": 0
             },
@@ -902,7 +902,7 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 38,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 0,
                 "post_policy_suspects": 0,
@@ -910,10 +910,10 @@
                 "post_policy_zero_suspect_rate": null,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 1.0,
+                "strict_acceptance_rate": 1.0e0,
                 "strict_would_reject_documents": 0,
                 "tokenize_actions": 38
               },
@@ -923,32 +923,32 @@
                 "documents_without_leaks": 0,
                 "entities": {
                   "exact_boundary": 35,
-                  "exact_boundary_recall": 0.0945945945945946,
-                  "full_coverage_recall": 0.11621621621621622,
+                  "exact_boundary_recall": 9459459.45945946e-8,
+                  "full_coverage_recall": 11621621.621621622e-8,
                   "fully_covered": 43,
                   "gold": 370,
-                  "overlap_recall": 0.11891891891891893,
+                  "overlap_recall": 11891891.891891893e-8,
                   "overlapped": 44
                 },
                 "prediction_spans": {
-                  "overlap_precision": 0.9736842105263158,
+                  "overlap_precision": 97368421.05263158e-8,
                   "overlapped_gold": 37,
                   "total": 38
                 },
                 "utf8_bytes": {
-                  "f1": 0.2520274485339987,
-                  "f2": 0.17577445179255136,
+                  "f1": 25202744.85339987e-8,
+                  "f2": 17577445.179255136e-8,
                   "false_positive": 40,
-                  "false_positive_rate": 0.0031007751937984496,
-                  "leak_rate": 0.8537291817523533,
+                  "false_positive_rate": 31007751.937984496e-10,
+                  "leak_rate": 85372918.17523533e-8,
                   "leaked": 2358,
                   "pii": 2762,
-                  "precision": 0.9099099099099099,
+                  "precision": 90990990.99099099e-8,
                   "predicted": 444,
-                  "recall": 0.14627081824764662,
+                  "recall": 14627081.824764662e-8,
                   "true_positive": 404
                 },
-                "zero_leak_document_rate": 0.0
+                "zero_leak_document_rate": 0.0e-1
               },
               "refusals": 0
             },
@@ -969,7 +969,7 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 2,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 0,
                 "post_policy_suspects": 0,
@@ -977,10 +977,10 @@
                 "post_policy_zero_suspect_rate": null,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 1.0,
+                "strict_acceptance_rate": 1.0e0,
                 "strict_would_reject_documents": 0,
                 "tokenize_actions": 2
               },
@@ -990,32 +990,32 @@
                 "documents_without_leaks": 24,
                 "entities": {
                   "exact_boundary": 0,
-                  "exact_boundary_recall": 1.0,
-                  "full_coverage_recall": 1.0,
+                  "exact_boundary_recall": 1.0e0,
+                  "full_coverage_recall": 1.0e0,
                   "fully_covered": 0,
                   "gold": 0,
-                  "overlap_recall": 1.0,
+                  "overlap_recall": 1.0e0,
                   "overlapped": 0
                 },
                 "prediction_spans": {
-                  "overlap_precision": 0.0,
+                  "overlap_precision": 0.0e-1,
                   "overlapped_gold": 0,
                   "total": 2
                 },
                 "utf8_bytes": {
-                  "f1": 0.0,
-                  "f2": 0.0,
+                  "f1": 0.0e-1,
+                  "f2": 0.0e-1,
                   "false_positive": 10,
-                  "false_positive_rate": 0.007057163020465773,
-                  "leak_rate": 0.0,
+                  "false_positive_rate": 70571630.20465773e-10,
+                  "leak_rate": 0.0e-1,
                   "leaked": 0,
                   "pii": 0,
-                  "precision": 0.0,
+                  "precision": 0.0e-1,
                   "predicted": 10,
-                  "recall": 1.0,
+                  "recall": 1.0e0,
                   "true_positive": 0
                 },
-                "zero_leak_document_rate": 1.0
+                "zero_leak_document_rate": 1.0e0
               },
               "refusals": 0
             },
@@ -1036,7 +1036,7 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 6,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 0,
                 "post_policy_suspects": 0,
@@ -1044,10 +1044,10 @@
                 "post_policy_zero_suspect_rate": null,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 1.0,
+                "strict_acceptance_rate": 1.0e0,
                 "strict_would_reject_documents": 0,
                 "tokenize_actions": 6
               },
@@ -1057,32 +1057,32 @@
                 "documents_without_leaks": 1,
                 "entities": {
                   "exact_boundary": 3,
-                  "exact_boundary_recall": 0.026785714285714284,
-                  "full_coverage_recall": 0.08035714285714286,
+                  "exact_boundary_recall": 26785714.285714284e-9,
+                  "full_coverage_recall": 80357142.85714286e-9,
                   "fully_covered": 9,
                   "gold": 112,
-                  "overlap_recall": 0.08035714285714286,
+                  "overlap_recall": 80357142.85714286e-9,
                   "overlapped": 9
                 },
                 "prediction_spans": {
-                  "overlap_precision": 1.0,
+                  "overlap_precision": 1.0e0,
                   "overlapped_gold": 6,
                   "total": 6
                 },
                 "utf8_bytes": {
-                  "f1": 0.16835016835016836,
-                  "f2": 0.1126126126126126,
+                  "f1": 16835016.835016836e-8,
+                  "f2": 11261261.26126126e-8,
                   "false_positive": 3,
-                  "false_positive_rate": 0.002461033634126333,
-                  "leak_rate": 0.9077490774907749,
+                  "false_positive_rate": 24610336.34126333e-10,
+                  "leak_rate": 90774907.74907749e-8,
                   "leaked": 738,
                   "pii": 813,
-                  "precision": 0.9615384615384616,
+                  "precision": 96153846.15384616e-8,
                   "predicted": 78,
-                  "recall": 0.09225092250922509,
+                  "recall": 92250922.50922509e-9,
                   "true_positive": 75
                 },
-                "zero_leak_document_rate": 0.041666666666666664
+                "zero_leak_document_rate": 41666666.666666664e-9
               },
               "refusals": 0
             }
@@ -1128,18 +1128,18 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 39,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 24,
                 "post_policy_suspects": 0,
                 "post_policy_zero_suspect_documents": 24,
-                "post_policy_zero_suspect_rate": 1.0,
+                "post_policy_zero_suspect_rate": 1.0e0,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 0.8333333333333334,
+                "strict_acceptance_rate": 83333333.33333334e-8,
                 "strict_would_reject_documents": 4,
                 "tokenize_actions": 39
               },
@@ -1149,32 +1149,32 @@
                 "documents_without_leaks": 17,
                 "entities": {
                   "exact_boundary": 27,
-                  "exact_boundary_recall": 0.4909090909090909,
-                  "full_coverage_recall": 0.7272727272727273,
+                  "exact_boundary_recall": 49090909.09090909e-8,
+                  "full_coverage_recall": 72727272.72727273e-8,
                   "fully_covered": 40,
                   "gold": 55,
-                  "overlap_recall": 0.7818181818181819,
+                  "overlap_recall": 78181818.18181819e-8,
                   "overlapped": 43
                 },
                 "prediction_spans": {
-                  "overlap_precision": 0.9743589743589743,
+                  "overlap_precision": 97435897.43589743e-8,
                   "overlapped_gold": 38,
                   "total": 39
                 },
                 "utf8_bytes": {
-                  "f1": 0.8886337543053962,
-                  "f2": 0.8527985896870868,
+                  "f1": 88863375.43053962e-8,
+                  "f2": 85279858.96870868e-8,
                   "false_positive": 18,
-                  "false_positive_rate": 0.017061611374407582,
-                  "leak_rate": 0.16952789699570814,
+                  "false_positive_rate": 17061611.374407582e-9,
+                  "leak_rate": 16952789.699570814e-8,
                   "leaked": 79,
                   "pii": 466,
-                  "precision": 0.9555555555555556,
+                  "precision": 95555555.55555556e-8,
                   "predicted": 405,
-                  "recall": 0.8304721030042919,
+                  "recall": 83047210.30042919e-8,
                   "true_positive": 387
                 },
-                "zero_leak_document_rate": 0.7083333333333334
+                "zero_leak_document_rate": 70833333.33333334e-8
               },
               "refusals": 0
             },
@@ -1195,18 +1195,18 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 339,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 24,
                 "post_policy_suspects": 0,
                 "post_policy_zero_suspect_documents": 24,
-                "post_policy_zero_suspect_rate": 1.0,
+                "post_policy_zero_suspect_rate": 1.0e0,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 0.125,
+                "strict_acceptance_rate": 1.25e-1,
                 "strict_would_reject_documents": 21,
                 "tokenize_actions": 339
               },
@@ -1216,32 +1216,32 @@
                 "documents_without_leaks": 0,
                 "entities": {
                   "exact_boundary": 217,
-                  "exact_boundary_recall": 0.5849056603773585,
-                  "full_coverage_recall": 0.8517520215633423,
+                  "exact_boundary_recall": 58490566.03773585e-8,
+                  "full_coverage_recall": 85175202.15633423e-8,
                   "fully_covered": 316,
                   "gold": 371,
-                  "overlap_recall": 0.8517520215633423,
+                  "overlap_recall": 85175202.15633423e-8,
                   "overlapped": 316
                 },
                 "prediction_spans": {
-                  "overlap_precision": 0.7817109144542773,
+                  "overlap_precision": 78171091.44542773e-8,
                   "overlapped_gold": 265,
                   "total": 339
                 },
                 "utf8_bytes": {
-                  "f1": 0.8650553877139979,
-                  "f2": 0.9015533165407221,
+                  "f1": 86505538.77139979e-8,
+                  "f2": 90155331.65407221e-8,
                   "false_positive": 603,
-                  "false_positive_rate": 0.04674418604651163,
-                  "leak_rate": 0.07235421166306699,
+                  "false_positive_rate": 46744186.04651163e-9,
+                  "leak_rate": 72354211.66306699e-9,
                   "leaked": 201,
                   "pii": 2778,
-                  "precision": 0.810377358490566,
+                  "precision": 8103773.58490566e-7,
                   "predicted": 3180,
-                  "recall": 0.927645788336933,
+                  "recall": 9276457.88336933e-7,
                   "true_positive": 2577
                 },
-                "zero_leak_document_rate": 0.0
+                "zero_leak_document_rate": 0.0e-1
               },
               "refusals": 0
             },
@@ -1262,18 +1262,18 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 11,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 24,
                 "post_policy_suspects": 0,
                 "post_policy_zero_suspect_documents": 24,
-                "post_policy_zero_suspect_rate": 1.0,
+                "post_policy_zero_suspect_rate": 1.0e0,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 0.875,
+                "strict_acceptance_rate": 8.75e-1,
                 "strict_would_reject_documents": 3,
                 "tokenize_actions": 11
               },
@@ -1283,32 +1283,32 @@
                 "documents_without_leaks": 24,
                 "entities": {
                   "exact_boundary": 0,
-                  "exact_boundary_recall": 1.0,
-                  "full_coverage_recall": 1.0,
+                  "exact_boundary_recall": 1.0e0,
+                  "full_coverage_recall": 1.0e0,
                   "fully_covered": 0,
                   "gold": 0,
-                  "overlap_recall": 1.0,
+                  "overlap_recall": 1.0e0,
                   "overlapped": 0
                 },
                 "prediction_spans": {
-                  "overlap_precision": 0.0,
+                  "overlap_precision": 0.0e-1,
                   "overlapped_gold": 0,
                   "total": 11
                 },
                 "utf8_bytes": {
-                  "f1": 0.0,
-                  "f2": 0.0,
+                  "f1": 0.0e-1,
+                  "f2": 0.0e-1,
                   "false_positive": 76,
-                  "false_positive_rate": 0.053634438955539876,
-                  "leak_rate": 0.0,
+                  "false_positive_rate": 53634438.955539876e-9,
+                  "leak_rate": 0.0e-1,
                   "leaked": 0,
                   "pii": 0,
-                  "precision": 0.0,
+                  "precision": 0.0e-1,
                   "predicted": 76,
-                  "recall": 1.0,
+                  "recall": 1.0e0,
                   "true_positive": 0
                 },
-                "zero_leak_document_rate": 1.0
+                "zero_leak_document_rate": 1.0e0
               },
               "refusals": 0
             },
@@ -1329,18 +1329,18 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 67,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 24,
                 "post_policy_suspects": 0,
                 "post_policy_zero_suspect_documents": 24,
-                "post_policy_zero_suspect_rate": 1.0,
+                "post_policy_zero_suspect_rate": 1.0e0,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 0.7083333333333333,
+                "strict_acceptance_rate": 70833333.33333333e-8,
                 "strict_would_reject_documents": 7,
                 "tokenize_actions": 67
               },
@@ -1350,32 +1350,32 @@
                 "documents_without_leaks": 21,
                 "entities": {
                   "exact_boundary": 19,
-                  "exact_boundary_recall": 0.16964285714285715,
-                  "full_coverage_recall": 0.9375,
+                  "exact_boundary_recall": 16964285.714285715e-8,
+                  "full_coverage_recall": 93.75e-2,
                   "fully_covered": 105,
                   "gold": 112,
-                  "overlap_recall": 0.9375,
+                  "overlap_recall": 93.75e-2,
                   "overlapped": 105
                 },
                 "prediction_spans": {
-                  "overlap_precision": 1.0,
+                  "overlap_precision": 1.0e0,
                   "overlapped_gold": 67,
                   "total": 67
                 },
                 "utf8_bytes": {
-                  "f1": 0.9413942011104256,
-                  "f2": 0.9396551724137929,
+                  "f1": 94139420.11104256e-8,
+                  "f2": 93965517.24137929e-8,
                   "false_positive": 45,
-                  "false_positive_rate": 0.03691550451189499,
-                  "leak_rate": 0.06150061500615012,
+                  "false_positive_rate": 36915504.51189499e-9,
+                  "leak_rate": 61500615.00615012e-9,
                   "leaked": 50,
                   "pii": 813,
-                  "precision": 0.9443069306930693,
+                  "precision": 94430693.06930693e-8,
                   "predicted": 808,
-                  "recall": 0.9384993849938499,
+                  "recall": 93849938.49938499e-8,
                   "true_positive": 763
                 },
-                "zero_leak_document_rate": 0.875
+                "zero_leak_document_rate": 8.75e-1
               },
               "refusals": 0
             }
@@ -1401,18 +1401,18 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 39,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 24,
                 "post_policy_suspects": 0,
                 "post_policy_zero_suspect_documents": 24,
-                "post_policy_zero_suspect_rate": 1.0,
+                "post_policy_zero_suspect_rate": 1.0e0,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 0.8333333333333334,
+                "strict_acceptance_rate": 83333333.33333334e-8,
                 "strict_would_reject_documents": 4,
                 "tokenize_actions": 39
               },
@@ -1422,32 +1422,32 @@
                 "documents_without_leaks": 17,
                 "entities": {
                   "exact_boundary": 27,
-                  "exact_boundary_recall": 0.4909090909090909,
-                  "full_coverage_recall": 0.7272727272727273,
+                  "exact_boundary_recall": 49090909.09090909e-8,
+                  "full_coverage_recall": 72727272.72727273e-8,
                   "fully_covered": 40,
                   "gold": 55,
-                  "overlap_recall": 0.7818181818181819,
+                  "overlap_recall": 78181818.18181819e-8,
                   "overlapped": 43
                 },
                 "prediction_spans": {
-                  "overlap_precision": 0.9743589743589743,
+                  "overlap_precision": 97435897.43589743e-8,
                   "overlapped_gold": 38,
                   "total": 39
                 },
                 "utf8_bytes": {
-                  "f1": 0.8886337543053962,
-                  "f2": 0.8527985896870868,
+                  "f1": 88863375.43053962e-8,
+                  "f2": 85279858.96870868e-8,
                   "false_positive": 18,
-                  "false_positive_rate": 0.017061611374407582,
-                  "leak_rate": 0.16952789699570814,
+                  "false_positive_rate": 17061611.374407582e-9,
+                  "leak_rate": 16952789.699570814e-8,
                   "leaked": 79,
                   "pii": 466,
-                  "precision": 0.9555555555555556,
+                  "precision": 95555555.55555556e-8,
                   "predicted": 405,
-                  "recall": 0.8304721030042919,
+                  "recall": 83047210.30042919e-8,
                   "true_positive": 387
                 },
-                "zero_leak_document_rate": 0.7083333333333334
+                "zero_leak_document_rate": 70833333.33333334e-8
               },
               "refusals": 0
             },
@@ -1468,18 +1468,18 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 339,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 24,
                 "post_policy_suspects": 0,
                 "post_policy_zero_suspect_documents": 24,
-                "post_policy_zero_suspect_rate": 1.0,
+                "post_policy_zero_suspect_rate": 1.0e0,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 0.125,
+                "strict_acceptance_rate": 1.25e-1,
                 "strict_would_reject_documents": 21,
                 "tokenize_actions": 339
               },
@@ -1489,32 +1489,32 @@
                 "documents_without_leaks": 0,
                 "entities": {
                   "exact_boundary": 216,
-                  "exact_boundary_recall": 0.5837837837837838,
-                  "full_coverage_recall": 0.8513513513513513,
+                  "exact_boundary_recall": 58378378.37837838e-8,
+                  "full_coverage_recall": 85135135.13513513e-8,
                   "fully_covered": 315,
                   "gold": 370,
-                  "overlap_recall": 0.8513513513513513,
+                  "overlap_recall": 85135135.13513513e-8,
                   "overlapped": 315
                 },
                 "prediction_spans": {
-                  "overlap_precision": 0.7810650887573964,
+                  "overlap_precision": 78106508.87573964e-8,
                   "overlapped_gold": 264,
                   "total": 338
                 },
                 "utf8_bytes": {
-                  "f1": 0.8643266959163011,
-                  "f2": 0.9009991556431184,
+                  "f1": 86432669.59163011e-8,
+                  "f2": 90099915.56431184e-8,
                   "false_positive": 603,
-                  "false_positive_rate": 0.04674418604651163,
-                  "leak_rate": 0.07277335264301232,
+                  "false_positive_rate": 46744186.04651163e-9,
+                  "leak_rate": 72773352.64301232e-9,
                   "leaked": 201,
                   "pii": 2762,
-                  "precision": 0.8094184576485461,
+                  "precision": 80941845.76485461e-8,
                   "predicted": 3164,
-                  "recall": 0.9272266473569877,
+                  "recall": 92722664.73569877e-8,
                   "true_positive": 2561
                 },
-                "zero_leak_document_rate": 0.0
+                "zero_leak_document_rate": 0.0e-1
               },
               "refusals": 0
             },
@@ -1535,18 +1535,18 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 11,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 24,
                 "post_policy_suspects": 0,
                 "post_policy_zero_suspect_documents": 24,
-                "post_policy_zero_suspect_rate": 1.0,
+                "post_policy_zero_suspect_rate": 1.0e0,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 0.875,
+                "strict_acceptance_rate": 8.75e-1,
                 "strict_would_reject_documents": 3,
                 "tokenize_actions": 11
               },
@@ -1556,32 +1556,32 @@
                 "documents_without_leaks": 24,
                 "entities": {
                   "exact_boundary": 0,
-                  "exact_boundary_recall": 1.0,
-                  "full_coverage_recall": 1.0,
+                  "exact_boundary_recall": 1.0e0,
+                  "full_coverage_recall": 1.0e0,
                   "fully_covered": 0,
                   "gold": 0,
-                  "overlap_recall": 1.0,
+                  "overlap_recall": 1.0e0,
                   "overlapped": 0
                 },
                 "prediction_spans": {
-                  "overlap_precision": 0.0,
+                  "overlap_precision": 0.0e-1,
                   "overlapped_gold": 0,
                   "total": 11
                 },
                 "utf8_bytes": {
-                  "f1": 0.0,
-                  "f2": 0.0,
+                  "f1": 0.0e-1,
+                  "f2": 0.0e-1,
                   "false_positive": 76,
-                  "false_positive_rate": 0.053634438955539876,
-                  "leak_rate": 0.0,
+                  "false_positive_rate": 53634438.955539876e-9,
+                  "leak_rate": 0.0e-1,
                   "leaked": 0,
                   "pii": 0,
-                  "precision": 0.0,
+                  "precision": 0.0e-1,
                   "predicted": 76,
-                  "recall": 1.0,
+                  "recall": 1.0e0,
                   "true_positive": 0
                 },
-                "zero_leak_document_rate": 1.0
+                "zero_leak_document_rate": 1.0e0
               },
               "refusals": 0
             },
@@ -1602,18 +1602,18 @@
                   "token_restore_failures": 0
                 },
                 "manifest_spans": 67,
-                "manifest_valid_document_rate": 1.0,
+                "manifest_valid_document_rate": 1.0e0,
                 "manifest_valid_documents": 24,
                 "post_policy_scanned_documents": 24,
                 "post_policy_suspects": 0,
                 "post_policy_zero_suspect_documents": 24,
-                "post_policy_zero_suspect_rate": 1.0,
+                "post_policy_zero_suspect_rate": 1.0e0,
                 "redact_actions": 0,
                 "restore_exact_documents": 24,
-                "restore_exact_rate": 1.0,
-                "restore_success_decision_rate": 1.0,
+                "restore_exact_rate": 1.0e0,
+                "restore_success_decision_rate": 1.0e0,
                 "restore_success_decisions": 24,
-                "strict_acceptance_rate": 0.7083333333333333,
+                "strict_acceptance_rate": 70833333.33333333e-8,
                 "strict_would_reject_documents": 7,
                 "tokenize_actions": 67
               },
@@ -1623,32 +1623,32 @@
                 "documents_without_leaks": 21,
                 "entities": {
                   "exact_boundary": 19,
-                  "exact_boundary_recall": 0.16964285714285715,
-                  "full_coverage_recall": 0.9375,
+                  "exact_boundary_recall": 16964285.714285715e-8,
+                  "full_coverage_recall": 93.75e-2,
                   "fully_covered": 105,
                   "gold": 112,
-                  "overlap_recall": 0.9375,
+                  "overlap_recall": 93.75e-2,
                   "overlapped": 105
                 },
                 "prediction_spans": {
-                  "overlap_precision": 1.0,
+                  "overlap_precision": 1.0e0,
                   "overlapped_gold": 67,
                   "total": 67
                 },
                 "utf8_bytes": {
-                  "f1": 0.9413942011104256,
-                  "f2": 0.9396551724137929,
+                  "f1": 94139420.11104256e-8,
+                  "f2": 93965517.24137929e-8,
                   "false_positive": 45,
-                  "false_positive_rate": 0.03691550451189499,
-                  "leak_rate": 0.06150061500615012,
+                  "false_positive_rate": 36915504.51189499e-9,
+                  "leak_rate": 61500615.00615012e-9,
                   "leaked": 50,
                   "pii": 813,
-                  "precision": 0.9443069306930693,
+                  "precision": 94430693.06930693e-8,
                   "predicted": 808,
-                  "recall": 0.9384993849938499,
+                  "recall": 93849938.49938499e-8,
                   "true_positive": 763
                 },
-                "zero_leak_document_rate": 0.875
+                "zero_leak_document_rate": 8.75e-1
               },
               "refusals": 0
             }

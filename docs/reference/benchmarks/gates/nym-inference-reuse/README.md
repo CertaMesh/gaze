@@ -59,3 +59,6 @@ This bounded proof does not certify main. The full-corpus gate remains required
 before merge. The diagnostic timing driver alternates binary order, records load,
 and requires at least five runs per side. It holds no `bench-machine` lease and
 supports no publishable speedup claim.
+
+The evidence JSON writes rates in exponent notation. Parsed numeric values,
+integer counts, hashes, and comparison results retain their full precision.
