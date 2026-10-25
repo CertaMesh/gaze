@@ -731,10 +731,12 @@ impl Session {
 
     /// Unique manifest classes, without copying the original values.
     pub fn classes(&self) -> BTreeSet<PiiClass> {
-        self.state_snapshot()
+        let state = self.state_snapshot();
+        state
             .token_by_value
             .keys()
             .map(|key| key.class.clone())
+            .chain(state.next_by_class.keys().cloned())
             .collect()
     }
 
@@ -761,13 +763,37 @@ impl Session {
             *slot = Some(SessionKey::generate()?);
         }
         let key = slot.as_ref().expect("identifier key initialized");
-        let mut mac = Hmac::<Sha256>::new_from_slice(key.secret.expose_secret())
-            .expect("HMAC accepts a 32-byte key");
-        mac.update(b"gaze/opaque-identifier/v1\0");
-        mac.update(&(namespace.len() as u64).to_be_bytes());
-        mac.update(namespace.as_bytes());
-        mac.update(value.as_bytes());
-        Ok(hex::encode(&mac.finalize().into_bytes()[..16]))
+        let id = key
+            .opaque_mac(namespace, 0, value.as_bytes())
+            .finalize()
+            .into_bytes();
+        let tag = key
+            .opaque_mac(namespace, 1, &id[..16])
+            .finalize()
+            .into_bytes();
+        let mut identifier = [0; 32];
+        identifier[..16].copy_from_slice(&id[..16]);
+        identifier[16..].copy_from_slice(&tag[..16]);
+        Ok(hex::encode(identifier))
+    }
+
+    /// Authenticate a private label without knowing or retaining its original name.
+    /// Does not create a key. A keyless or unrelated namespace fails closed.
+    pub fn owns_opaque_identifier(&self, namespace: &str, identifier: &str) -> bool {
+        let mut bytes = [0; 32];
+        if identifier.len() != 64 || hex::decode_to_slice(identifier, &mut bytes).is_err() {
+            return false;
+        }
+        let slot = self
+            .identity
+            .opaque_identifier_key
+            .read()
+            .expect("session identifier key lock poisoned");
+        slot.as_ref().is_some_and(|key| {
+            key.opaque_mac(namespace, 1, &bytes[..16])
+                .verify_truncated_left(&bytes[16..])
+                .is_ok()
+        })
     }
 
     pub fn audit_session_id(&self) -> &str {
@@ -1937,6 +1963,16 @@ struct SessionKey {
 }
 
 impl SessionKey {
+    fn opaque_mac(&self, namespace: &str, purpose: u8, value: &[u8]) -> Hmac<Sha256> {
+        let mut mac = Hmac::<Sha256>::new_from_slice(self.secret.expose_secret())
+            .expect("HMAC accepts a 32-byte key");
+        mac.update(b"gaze/opaque-identifier/v1\0");
+        mac.update(&(namespace.len() as u64).to_be_bytes());
+        mac.update(namespace.as_bytes());
+        mac.update(&[purpose]);
+        mac.update(value);
+        mac
+    }
     fn from_bytes(bytes: &[u8; 32]) -> Self {
         let secret =
             SecretBox::init_with_mut(|target: &mut [u8; 32]| target.copy_from_slice(bytes));
@@ -2657,6 +2693,11 @@ mod tests {
         let first = session
             .opaque_identifier("class", "private_canary_name")
             .unwrap();
+        assert!(session.owns_opaque_identifier("class", &first));
+        assert!(!session.owns_opaque_identifier("dictionary", &first));
+        let mut altered = first.clone().into_bytes();
+        altered[63] = if altered[63] == b'0' { b'1' } else { b'0' };
+        assert!(!session.owns_opaque_identifier("class", std::str::from_utf8(&altered).unwrap()));
         assert_eq!(
             first,
             session
@@ -2670,6 +2711,7 @@ mod tests {
                 .unwrap()
         );
         let independent = Session::new(Scope::Ephemeral).unwrap();
+        assert!(!independent.owns_opaque_identifier("class", &first));
         assert_ne!(
             first,
             independent
@@ -2680,6 +2722,7 @@ mod tests {
         let snapshot = session.export().unwrap();
         assert_eq!(snapshot.0[0], SNAPSHOT_VERSION_V8);
         let imported = Session::import(snapshot).unwrap();
+        assert!(imported.owns_opaque_identifier("class", &first));
         assert_eq!(
             first,
             imported

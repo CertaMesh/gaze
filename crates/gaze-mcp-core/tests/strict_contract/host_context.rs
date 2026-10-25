@@ -763,4 +763,19 @@ async fn host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed(
         assert!(!restored.has_opaque_identifier_key());
         assert_eq!(restored.tokens(), vec![token.clone()]);
     }
+    restored
+        .opaque_identifier("unrelated-host-use", "synthetic-label")
+        .unwrap();
+    let error = private_identifier_call(
+        &restored,
+        "private_canary_dictionary",
+        Some("private_canary_class"),
+        false,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        DispatchError::HostContext(HostContextError::Policy)
+    ));
 }

@@ -69,10 +69,10 @@ const CLASS_NAMESPACE: &str = "gaze-mcp/host-context/class/v1";
 const DICTIONARY_NAMESPACE: &str = "gaze-mcp/host-context/dictionary/v1";
 
 pub(crate) fn validate_session(session: &gaze::Session) -> Result<(), HostContextError> {
-    if !session.has_opaque_identifier_key()
-        && session.classes().iter().any(|class| {
+    if session.classes().iter().any(|class| {
             matches!(class, gaze::PiiClass::Custom(name) if name.strip_prefix("host_")
-            .is_some_and(|id| id.len() == 32 && id.bytes().all(|byte| byte.is_ascii_hexdigit())))
+            .is_some_and(|id| matches!(id.len(), 32 | 64) && id.bytes().all(|byte| byte.is_ascii_hexdigit())
+                && !session.owns_opaque_identifier(CLASS_NAMESPACE, id)))
         })
     {
         return Err(HostContextError::Policy);

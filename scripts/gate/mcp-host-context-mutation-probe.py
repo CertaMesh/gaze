@@ -60,6 +60,12 @@ def public_record_names(source):
     return source[:body] + '\n            name.clone()\n' + source[end:]
 
 
+def trust_key_presence(source):
+    start = source.index('pub(crate) fn validate_session(')
+    body = source.index('{', start) + 1
+    return source[:body] + '\n    if session.has_opaque_identifier_key() { return Ok(()); }\n' + source[body:]
+
+
 def ignore_http(source):
     start = source.index('if let Some(parts) = extensions.get::<axum::http::request::Parts>()')
     tail = source[start:]
@@ -107,6 +113,9 @@ PROBES = [
     ("ignore-legacy-opaque-key", CORE,
      lambda source: replace(source, "crate::host_context::validate_session(self.session)?;",
                             "let _ = crate::host_context::validate_session(self.session);"),
+     CONTRACT + ["host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed"],
+     "host_context::host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed"),
+    ("trust-key-presence", PRIVATE, trust_key_presence,
      CONTRACT + ["host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed"],
      "host_context::host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed"),
 ]
