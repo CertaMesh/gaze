@@ -50,7 +50,13 @@ SPLITS = ("validation", "test")
 
 
 def tree_sha256(path: Path) -> str:
-    return corpus.compare.digest_tree(path)
+    if not path.is_dir():
+        raise ValueError("selected model directory is missing")
+    digest = hashlib.sha256()
+    for file in sorted(item for item in path.rglob("*") if item.is_file()):
+        digest.update(file.relative_to(path).as_posix().encode())
+        digest.update(bytes.fromhex(file_digest(file)))
+    return digest.hexdigest()
 
 
 def check_pin(name: str, path: Path, pins: dict[str, str]) -> str:
@@ -61,8 +67,11 @@ def check_pin(name: str, path: Path, pins: dict[str, str]) -> str:
 
 
 def split_sinks(out: Path, name: str) -> dict[str, object]:
-    out.mkdir(parents=True, exist_ok=True)
-    return {split: (out / f"{name}.{split}.jsonl.partial").open("w", encoding="utf-8") for split in SPLITS}
+    document_capture.private_root(out, corpus.compare.REPO)
+    sinks = {split: (out / f"{name}.{split}.jsonl.partial").open("w", encoding="utf-8") for split in SPLITS}
+    for split in SPLITS:
+        (out / f"{name}.{split}.jsonl.partial").chmod(0o600)
+    return sinks
 
 
 def finish(out: Path, name: str, sinks: dict[str, object], meta: dict[str, object]) -> None:
@@ -74,6 +83,7 @@ def finish(out: Path, name: str, sinks: dict[str, object], meta: dict[str, objec
         digests[split] = hashlib.sha256(final.read_bytes()).hexdigest()
     meta["sha256"] = digests
     (out / f"{name}.meta.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (out / f"{name}.meta.json").chmod(0o600)
 
 
 def git_state() -> dict[str, object]:
@@ -126,7 +136,8 @@ def pool_pass(args: argparse.Namespace, layers: dict[str, list], session) -> Non
     paths = pool.ModelPaths(spacy=spacy_paths, dslim=args.dslim, davlan=args.davlan,
                             openmed=args.openmed, gliner=args.gliner)
     pins = json.loads((HERE / "model-pins.json").read_text(encoding="utf-8"))
-    models = {language: corpus.compare.model_info(path, language) for language, path in spacy_paths.items()}
+    models = {language: {**corpus.compare.model_info(path, language), "sha256": tree_sha256(path)}
+              for language, path in spacy_paths.items()}
     if args.pass_name in ("dslim", "davlan", "openmed", "gliner"):
         models[args.pass_name] = check_pin(args.pass_name, getattr(args, args.pass_name), pins)
     if args.pass_name == "gliner":

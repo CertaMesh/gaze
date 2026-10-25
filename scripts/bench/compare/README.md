@@ -326,3 +326,84 @@ published aggregate. For an optional scheduled check, run the full command from
 a weekly scheduler in a prepared checkout and retain its JSON and stdout. The
 command exits successfully when source checks fail so findings remain reportable;
 review the row statuses rather than interpreting exit zero as current pins.
+## Reuse competitor document captures
+
+`capture_compare.py` runs one competitor with private, content-addressed document
+captures. Its report contains aggregate metrics and digest/count bindings. Full
+subject, runtime, input and GLiNER load proofs stay in the private cache.
+
+Use a clean checkout and an installed, qualified comparison runtime. The
+measuring specification requires CPython 3.13 and the pinned parquet reader.
+GLiNER additionally requires the source hashes and loader family declared in
+`gliner_identity.py`. Unsupported runtimes, import hooks, model families and
+online model resolution are refused. The command does not download models.
+
+Prepare an immutable specification with `scripts/bench/benchmark_spec.py`. Keep
+the dataset, installed models and cache outside the repository. Set these
+variables to the scheduled qualification inputs before running the commands:
+
+```sh
+export PYTHONHASHSEED=0 PYTHONDONTWRITEBYTECODE=1
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+"$QUALIFIED_PYTHON" scripts/bench/benchmark_spec.py \
+	--dataset "$DATASET" --output "$PRIVATE/spec.json"
+"$QUALIFIED_PYTHON" scripts/bench/compare/capture_compare.py \
+	--tool gliner --dataset "$DATASET" --benchmark-spec "$PRIVATE/spec.json" \
+	--gliner-model "$GLINER_MODEL" \
+	--cache-dir "$PRIVATE/captures" --output "$PRIVATE/fresh.json"
+"$QUALIFIED_PYTHON" scripts/bench/compare/capture_compare.py \
+	--tool gliner --dataset "$DATASET" --benchmark-spec "$PRIVATE/spec.json" \
+	--gliner-model "$GLINER_MODEL" \
+	--cache-dir "$PRIVATE/captures" --output "$PRIVATE/reused.json"
+cmp "$PRIVATE/fresh.json" "$PRIVATE/reused.json"
+"$QUALIFIED_PYTHON" scripts/bench/compare/capture_compare.py \
+	--tool gliner --dataset "$DATASET" --benchmark-spec "$PRIVATE/spec.json" \
+	--gliner-model "$GLINER_MODEL" \
+	--cache-dir "$PRIVATE/captures" --output "$PRIVATE/reused.json" \
+	--verify-report "$PRIVATE/reused.json"
+```
+
+These are the installed-model qualification commands. Run them only in the
+scheduled benchmark-machine window. Source tests do not establish installed-model
+qualification. A full hit constructs no backend and performs no inference.
+Latency and contention remain the original measurements. Cache replay does not
+qualify new performance evidence.
+
+Each unit key binds the exact text hash, document ID, language and region, the
+immutable benchmark specification ID, and the actual subject/config/model/runtime
+identity. Changes to current Gaze detector bytes do not change a competitor key while the
+measuring specification remains unchanged.
+An input change under the same specification invalidates that unit. A new
+specification invalidates all units. The canonical population must match the
+specification. Additional variant-pack documents also have independent unit keys.
+Tampered entries cause refusal. The cache never manufactures keys for historical
+predictions.
+
+Pass `--freshness-report` to retain the independently checked freshness sidecar
+from `freshness.py`. Its contents and file hash remain separate from subject
+execution identity. The existing historical publication commands and receipts
+retain their original code bindings.
+
+For tuned production, use `tuned_presidio/capture_produce.py` with the original
+`pool` or `authors` arguments plus `--benchmark-spec` and `--cache-dir`.
+`tuned_presidio/capture_tune.py` takes `--production-plans`, a private JSON object
+mapping each pool pass and `authors` to its full production argument vector. It
+reconstructs each plan, checks its private captures, and binds the selected live
+run to the same configuration, models, findings, documents and sample used in
+scoring. `--private-dir` holds the complete binding. Public output contains
+digests and counts for those private inputs and live differences.
+`--verify-report` replays private evidence without running models; `--render`
+writes an admitted aggregate Markdown table.
+
+The retained tuned comparison uses generator v20. It cannot be assigned the
+current generator v25 specification. Rebuild matching comparison, production and
+selection inputs before installed-model tuned qualification. Historical aggregate
+rows remain historical and receive no reuse eligibility.
+
+Run the model-free checks with:
+
+```sh
+anvil run -- uv run --project scripts/bench --python 3.13 --group comparison-test \
+	python -m pytest -q scripts/bench --durations=30
+python3 scripts/ci/check_competitor_capture_mutations.py
+```

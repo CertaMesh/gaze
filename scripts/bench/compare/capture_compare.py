@@ -52,7 +52,7 @@ def configuration(args, name, mappings):
         if name.startswith("presidio-strong"):
             models["transformer"] = args.transformer_model
     elif name in {"gliner", "gliner-high-recall"}:
-        models = {"model": args.gliner_model, "tokenizer": args.gliner_tokenizer}
+        models = {"model": args.gliner_model}
         config.update(labels=list(mappings["gliner"]), flat_ner=True,
                       threshold=0.3 if name.endswith("high-recall") else 0.5)
     elif name.startswith("datafog-"):
@@ -93,7 +93,7 @@ def parse_args(argv=None):
     parser.add_argument("--freshness-report", type=Path)
     parser.add_argument("--verify-report", type=Path, help="admit a public report against private captures; no inference")
     for name in ("en-model", "de-model", "nl-model", "fr-model", "pt-model", "transformer-model",
-                 "gliner-model", "gliner-tokenizer"):
+                 "gliner-model"):
         parser.add_argument("--" + name, type=Path)
     return parser.parse_args(argv)
 

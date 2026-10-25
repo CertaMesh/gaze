@@ -13,7 +13,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 COMPARE = "scripts/bench/compare/"
 TESTS = [COMPARE + "test_document_capture.py", COMPARE + "test_gliner_identity.py",
-         COMPARE + "tuned_presidio/test_input_binding.py"]
+         COMPARE + "tuned_presidio/test_input_binding.py", COMPARE + "test_capture_guards.py"]
 FILES = ["subject_identity.py", "document_capture.py", "gliner_identity.py", "capture_compare.py",
          "tuned_presidio/input_binding.py", "tuned_presidio/capture_produce.py", "tuned_presidio/capture_tune.py"]
 
@@ -30,6 +30,8 @@ def mutations():
         tree = ast.parse(original)
         for node in ast.walk(tree):
             if isinstance(node, ast.If) and any(isinstance(statement, ast.Raise) for statement in node.body):
+                if ast.unparse(node.test) == "__name__ == '__main__'":
+                    continue  # Script startup is not an input-admission guard.
                 test = node.test
                 start = offset(lines, test.lineno, test.col_offset)
                 end = offset(lines, test.end_lineno, test.end_col_offset)

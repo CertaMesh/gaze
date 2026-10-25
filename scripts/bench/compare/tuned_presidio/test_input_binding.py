@@ -189,6 +189,14 @@ def test_raw_production_fresh_replay_and_private_file_admission(tmp_path, monkey
     path.write_text(json.dumps(metadata))
     with pytest.raises(ValueError, match="raw findings differ"):
         capture_produce.verify_output(args, layers)
+    for name, data in original.items():
+        (args.out / name).write_bytes(data)
+    private = next((tmp_path / "cache").glob("production-*.json"))
+    metadata = json.loads(private.read_text())
+    metadata["unbound_metadata"] = True
+    private.write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match="metadata replay mismatch"):
+        capture_produce.main()
 
 
 def test_tuned_entrypoints_share_import_context_and_do_not_import_models():
