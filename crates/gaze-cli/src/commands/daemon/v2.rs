@@ -1035,7 +1035,7 @@ impl Daemon {
         Ok(response)
     }
 
-    fn make_session_room(&mut self) {
+    pub(super) fn make_session_room(&mut self) {
         while self.sessions.len() + self.v2.sessions.len() >= self.session_cap {
             let v1 = self.lru.front().and_then(|id| {
                 self.sessions
