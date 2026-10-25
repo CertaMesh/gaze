@@ -1,8 +1,11 @@
 """Installed membership and model file selectors come from independent inputs."""
 import importlib.machinery
+import importlib.util
 import json
+import marshal
 from pathlib import Path
 import sys
+import struct
 from types import SimpleNamespace
 
 import pytest
@@ -28,6 +31,18 @@ def test_installed_sources_and_their_origins_are_bound(installation):
     first = runtime_closure.import_inventory(files, [root], path=[str(root)], hooks=[])
     assert len(first) == 64
     assert runtime_closure.import_inventory(files, [root], path=[str(root)], hooks=[]) == first
+
+
+def test_installed_source_inventory_checks_effective_bytecode(installation):
+    root, module, files = installation
+    source = module.read_bytes()
+    cached = Path(importlib.util.cache_from_source(str(module)))
+    cached.parent.mkdir()
+    different = compile("synthetic = False\n", str(module), "exec", dont_inherit=True)
+    cached.write_bytes(importlib.util.MAGIC_NUMBER + struct.pack("<I", 3)
+                       + importlib.util.source_hash(source) + marshal.dumps(different))
+    with pytest.raises(ValueError, match="unverified import bytecode"):
+        runtime_closure.import_inventory(files, [root], path=[str(root)], hooks=[])
 
 
 @pytest.mark.parametrize("damage", ["source", "sourceless", "startup", "linked_directory", "external_root", "sitecustomize"])
