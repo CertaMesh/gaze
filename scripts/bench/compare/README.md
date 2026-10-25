@@ -347,12 +347,17 @@ GLiNER additionally requires the source hashes and loader family declared in
 `gliner_identity.py`. Unsupported runtimes, import hooks, model families and
 online GLiNER resolution are refused. Use preinstalled models for qualification.
 
+Use a private pycache prefix to avoid stale caches in a newly installed runtime.
+Capture admission refuses stale caches even when Python could recompile them.
+Keep the prefix unchanged when replaying a capture.
+
 Prepare an immutable specification with `scripts/bench/benchmark_spec.py`. Keep
 the dataset, installed models and cache outside the repository. Set these
 variables to the scheduled qualification inputs before running the commands:
 
 ```sh
 export PYTHONHASHSEED=0 PYTHONDONTWRITEBYTECODE=1
+export PYTHONPYCACHEPREFIX="$PRIVATE/pycache"
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 "$QUALIFIED_PYTHON" scripts/bench/benchmark_spec.py \
 	--dataset "$DATASET" --output "$PRIVATE/spec.json"

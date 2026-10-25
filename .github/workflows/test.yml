@@ -482,6 +482,9 @@ jobs:
           cache-dependency-glob: scripts/bench/uv.lock
       - name: Sync locked benchmark environment
         run: uv sync --project scripts/bench --python 3.13 --locked --group comparison-test
+      - name: Initialize private Python startup caches
+        # Fresh uv installs can contain stale encodings caches; capture admission refuses them.
+        run: env -u PYTHONDONTWRITEBYTECODE uv run --project scripts/bench --python 3.13 --group comparison-test python -c pass
       - name: Run benchmark scorer and comparator tests
         run: uv run --project scripts/bench --python 3.13 --group comparison-test python -m pytest -q scripts/bench --durations=30
       - name: Build model-free equivalence binaries
