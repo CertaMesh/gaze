@@ -31,13 +31,19 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
 
+# Both tuned entrypoints initialize the same model-free source modules.
+import tune
 import corpus  # noqa: E402
 import document_capture
 import subject_identity
 from capture_identity import digest, file_digest
 import space  # noqa: E402
+from capture_launch import initialize
+
+initialize()
 
 PASSES = ("base", "dslim", "davlan", "openmed", "gliner")
 SPLITS = ("validation", "test")
@@ -181,9 +187,7 @@ def pool_pass(args: argparse.Namespace, layers: dict[str, list], session) -> Non
 def authors_pass(args: argparse.Namespace, layers: dict[str, list], session) -> None:
     """Presidio Research's tuned analyzer, unchanged. It supports English only, so every
     document is analyzed with language="en", as its evaluator calls it."""
-    if str(HERE.parent / "theirbench") not in sys.path:
-        sys.path.insert(0, str(HERE.parent / "theirbench"))
-    import presidio_research_repro as repro
+    from theirbench import presidio_research_repro as repro
     import tagged_gaze
     from presidio_evaluator.models import PresidioAnalyzerWrapper
 
@@ -230,8 +234,7 @@ def authors_pass(args: argparse.Namespace, layers: dict[str, list], session) -> 
 
 def tuned_presidio_tree(path: Path) -> str:
     """The tree digest `theirbench/tuned_presidio.py` pins OpenMed with."""
-    sys.path.insert(0, str(HERE.parent / "theirbench"))
-    import tuned_presidio
+    from theirbench import tuned_presidio
 
     return tuned_presidio.model_sha256(path)
 
@@ -289,10 +292,6 @@ def prepare(args, layers):
               if args.mode == "pool" else {"openmed": args.openmed})
     if args.mode == "pool" and name != "base":
         models[name] = getattr(args, name)
-    if args.mode == "authors":
-        # Resolve vendor imports before the independently observed runtime.
-        if str(HERE.parent / "theirbench") not in sys.path:
-            sys.path.insert(0, str(HERE.parent / "theirbench"))
     config = {"pass": name, "record": "tuned-raw-findings-v1", "contexts": list(space.CONTEXT_MODES)}
     if args.mode == "authors":
         config["checkout"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=args.checkout, text=True).strip()

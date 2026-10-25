@@ -12,6 +12,9 @@ import compare
 import document_capture as captures
 import subject_identity as identity
 from capture_identity import digest, file_digest
+from capture_launch import initialize
+
+initialize()
 
 
 def measure(session, name, predictor, layers, mapping, languages, common, predictions_dir=None, *, receipt=None):

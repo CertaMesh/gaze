@@ -2,6 +2,7 @@
 import copy
 import dataclasses
 import json
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -320,6 +321,8 @@ def test_runtime_uses_full_installed_content_inventory(example, monkeypatch, dam
     monkeypatch.setattr(identity.importlib.metadata, "distributions", lambda: [distribution])
     monkeypatch.setattr(identity.content, "native_runtime", lambda args: {"native": "synthetic"})
     before = identity.runtime()
+    assert set(before) == {"interpreter_sha256", "packages_sha256", "import_files", "native", "sys_path",
+                           "environment_sha256", "python_optimization"}
     if damage == "inventory":
         distribution.files = None
     elif damage == "missing":
@@ -332,3 +335,22 @@ def test_runtime_uses_full_installed_content_inventory(example, monkeypatch, dam
         return
     with pytest.raises(ValueError):
         identity.runtime()
+
+
+def test_subject_schema_is_complete(example):
+    adapter = example[0] / "adapter.py"
+    adapter.write_text("synthetic")
+    subject = identity.subject(name="synthetic", config={}, models={}, runtime_identity={}, adapter=adapter)
+    assert set(subject) == {"schema_version", "name", "config", "models", "runtime", "adapter_sha256"}
+
+
+def test_capture_launch_preserves_external_slots_and_initializes_once(monkeypatch):
+    import capture_launch
+    monkeypatch.setattr(capture_launch, "_initialized", False)
+    external = ["synthetic-external", "synthetic-external", ""]
+    monkeypatch.setattr(sys, "path", list(external))
+    capture_launch.initialize()
+    first = list(sys.path)
+    assert first[-len(external):] == external
+    capture_launch.initialize()
+    assert sys.path == first

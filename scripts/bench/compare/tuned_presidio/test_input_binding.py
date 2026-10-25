@@ -55,6 +55,8 @@ def test_sealed_private_capture_replays_exact_selected_computation(prepared):
     assert calls[0][0] == inputs.config("f2")
     assert calls[0][1] is inputs.paths and calls[0][2] is inputs.replayer
     assert path.stat().st_mode & 0o777 == 0o600
+    assert set(inputs.original) == {"schema_version", "selection", "configs", "models", "replay", "mapping",
+                                   "typed_mapping", "gliner", "runtime", "sample", "files"}
 
 
 @pytest.mark.parametrize("change", ["config", "text", "gold", "findings", "mapping", "typed_mapping", "models", "files", "sample"])
@@ -187,3 +189,22 @@ def test_raw_production_fresh_replay_and_private_file_admission(tmp_path, monkey
     path.write_text(json.dumps(metadata))
     with pytest.raises(ValueError, match="raw findings differ"):
         capture_produce.verify_output(args, layers)
+
+
+def test_tuned_entrypoints_share_import_context_and_do_not_import_models():
+    import subprocess
+    script = ('import sys,json,importlib;sys.path.insert(0,sys.argv[1]);'
+              'importlib.import_module(sys.argv[2]);import compare,corpus;'
+              'print(json.dumps({"paths":sys.path,"same_span":compare.score.Span is corpus.compare.score.Span,'
+              '"model_imported":any(name in sys.modules for name in ("torch","gliner","transformers"))}))')
+    results = [json.loads(subprocess.check_output([sys.executable, "-c", script, str(HERE), module], text=True))
+               for module in ("capture_produce", "capture_tune")]
+    assert results[0] == results[1]
+    assert results[0]["same_span"] and not results[0]["model_imported"]
+
+
+def test_gliner_live_selector_cannot_differ_from_planned_request(prepared):
+    inputs = prepared[0]
+    inputs.gliner_plan = SimpleNamespace(recheck=lambda: None, descriptor={"request": {"wrong": True}})
+    with pytest.raises(ValueError, match="live model selector differs"):
+        inputs.binding()

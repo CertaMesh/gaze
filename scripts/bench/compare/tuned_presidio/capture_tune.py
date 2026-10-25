@@ -14,6 +14,29 @@ import input_binding
 import document_capture
 import subject_identity
 from capture_identity import digest
+from capture_launch import initialize
+
+initialize()
+
+
+def authors_coverage(mapping: dict[str, tuple[str, ...]], gold_labels: set[str]) -> dict[str, object]:
+    """Where Presidio Research's tuned setup and this corpus's labels do not meet."""
+    from theirbench import presidio_research_repro as repro
+    from presidio_analyzer import RecognizerRegistry
+
+    registry = RecognizerRegistry()
+    registry.load_predefined_recognizers()
+    removed = set(repro.NOTEBOOK5_REMOVED)
+    entities = set(repro.OPENMED_MAPPING.values()) | {"TITLE", "DATE_TIME", "AGE"} | set(MODEL_PASSTHROUGH_LABELS)
+    for recognizer in registry.recognizers:
+        if type(recognizer).__name__ not in removed and recognizer.supported_language == "en":
+            entities.update(recognizer.supported_entities)
+    covered = {label for entity in entities for label in mapping[entity]}
+    return {
+        "entities": sorted(entities),
+        "entities_without_a_corpus_label": sorted(e for e in entities if not mapping[e]),
+        "corpus_labels_without_an_entity": sorted(gold_labels - covered),
+    }
 
 
 def prepare(args):
