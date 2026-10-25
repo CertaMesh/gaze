@@ -73,3 +73,24 @@ For bring-your-own-data redaction, use the core folder scan example:
 ```bash
 cargo run -p gaze-pii --example scan_folder -- --path ./my-data
 ```
+
+## OS keystore isolation during development
+
+Installed binaries retain the opt-in `os-keychain` behavior: `GAZE_INDEX_KEY`
+first, then the native OS keystore. No test or development key is supplied by
+Gaze. Missing or invalid key material always fails closed.
+
+The workspace Cargo configuration forces `GAZE_DISABLE_OS_KEYSTORE=1` into
+Cargo commands and their children, including integration tests, doctests,
+spawned CLI binaries, nested Cargo commands and `cargo run`. Any presence of
+this variable disables native keystore access before credential construction;
+values such as `0` do not enable it. Unit-test builds also disable it
+unconditionally. Index fixtures supply explicit synthetic `GAZE_INDEX_KEY`
+values. The switch never selects plaintext storage, an ephemeral production
+key, or an insecure backend. Do not remove it from test child environments.
+
+The integration test `cargo_tests_and_children_never_enter_the_os_keystore`
+installs a forbidden fake backend before exercising encrypted save/load and
+asserts zero backend calls. A guard regression therefore fails without opening
+the real keystore. To use a native keystore with a development build, run the
+built executable directly outside Cargo without the disable variable.

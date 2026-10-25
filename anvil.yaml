@@ -94,3 +94,12 @@ checks:
     toolchain: [rustc -Vv, cargo -V, uv --version, uv run --project scripts/bench --python 3.13 --group comparison-test python --version]
     commands:
       - uv run --project scripts/bench --python 3.13 --group comparison-test python -m pytest -q scripts/bench --durations=30
+
+  keystore-isolation:
+    description: Fake-backed guard mutations, index/audit tests, and full feature matrix
+    expensive: true
+    locks: [workspace-build]
+    inputs: *rust-inputs
+    toolchain: *rust-tools
+    commands:
+      - env CARGO_BUILD_JOBS=2 nice -n 10 python3 scripts/gate/os-keystore-mutation-probe.py --workspace
