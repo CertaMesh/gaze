@@ -82,7 +82,16 @@ def resources():
         raise RuntimeError("free disk below 100 GiB")
     target = ROOT / "target"
     if target.exists():
-        kib = int(subprocess.check_output(["du", "-sk", str(target)], text=True).split()[0])
+        usage = subprocess.run(["du", "-sk", str(target)], text=True, capture_output=True)
+        # Cargo removes temporary files during a live scan. Other scan failures
+        # still reject the measurement; a vanished file has no remaining bytes.
+        vanished = usage.stderr.splitlines()
+        if usage.returncode and not (vanished and all(
+            line.startswith(f"du: {target}/") and line.endswith(": No such file or directory")
+            for line in vanished
+        )):
+            raise RuntimeError(f"target size scan failed: {usage.stderr.strip()}")
+        kib = int(usage.stdout.split()[0])
         if kib > 15 * 1024**2:
             raise RuntimeError("target exceeds 15 GiB")
     pressure = subprocess.check_output(["memory_pressure"], text=True, timeout=10)
