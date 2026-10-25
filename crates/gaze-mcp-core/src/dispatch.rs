@@ -38,6 +38,9 @@ use crate::tool::{ResponseRedaction, ToolError, ToolResponse, ToolTier};
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum DispatchError {
+    /// Host-only context admission failed before invoking or mutating the session.
+    #[error("{0}")]
+    HostContext(#[from] crate::HostContextError),
     /// The entry point does not match the registered request contract.
     #[error("request mode rejected")]
     RequestMode,
@@ -106,6 +109,7 @@ pub struct PiiEnvelope<'a> {
     pub dictionaries: &'a gaze::DictionaryBundle,
     /// Transport-supplied session id validation policy.
     pub session_id_policy: &'a SessionIdPolicy,
+    context_policy: Option<(&'a gaze::Policy, &'a [gaze::Rulepack])>,
 }
 
 enum RequestState {
@@ -136,6 +140,7 @@ impl<'a> PiiEnvelope<'a> {
         session_id_policy: &'a SessionIdPolicy,
     ) -> Self {
         Self {
+            context_policy: None,
             dictionaries: default_dictionaries(),
             registry,
             auth,
@@ -153,6 +158,17 @@ impl<'a> PiiEnvelope<'a> {
         self
     }
 
+    /// Supply the exact policy and rulepacks used to assemble the resident pipeline.
+    /// Present context is rejected when these inputs are absent.
+    pub fn with_context_policy(
+        mut self,
+        policy: &'a gaze::Policy,
+        rulepacks: &'a [gaze::Rulepack],
+    ) -> Self {
+        self.context_policy = Some((policy, rulepacks));
+        self
+    }
+
     /// Protect one declared JSON argument operation, invoke with live resources,
     /// then protect a fresh response operation. Egress requires response commit
     /// and successful manifest finish. A failed terminal attempt is never retried;
@@ -163,12 +179,14 @@ impl<'a> PiiEnvelope<'a> {
         tool_name: &str,
         raw_args: serde_json::Value,
         external_session_id: Option<&str>,
+        host_context: crate::HostContextSelection,
     ) -> Result<ToolResponse, DispatchError> {
         self.dispatch_with(
             principal,
             tool_name,
             RequestState::Protected(raw_args),
             external_session_id,
+            host_context,
         )
         .await
     }
@@ -182,12 +200,14 @@ impl<'a> PiiEnvelope<'a> {
         tool_name: &str,
         args: crate::UntrustedInvocationArgs,
         external_session_id: Option<&str>,
+        host_context: crate::HostContextSelection,
     ) -> Result<ToolResponse, DispatchError> {
         self.dispatch_with(
             principal,
             tool_name,
             RequestState::Untrusted(args),
             external_session_id,
+            host_context,
         )
         .await
     }
@@ -198,6 +218,7 @@ impl<'a> PiiEnvelope<'a> {
         tool_name: &str,
         request: RequestState,
         external_session_id: Option<&str>,
+        host_context: crate::HostContextSelection,
     ) -> Result<ToolResponse, DispatchError> {
         // 1. Validate the session id (cheapest fail-closed check; do this
         //    before any auth call to avoid leaking which session ids exist).
@@ -228,6 +249,72 @@ impl<'a> PiiEnvelope<'a> {
             ToolTier::Operator => self.auth.authorize_operator(principal, tool_name).await?,
         };
 
+        // Static policy aliases let matched private custom classes remain protected
+        // on later calls without retaining a record or context class map.
+        let aliased_pipeline = self.context_policy.map(|(policy, _)| {
+            self.pipeline
+                .clone()
+                .with_class_aliases(&crate::host_context::policy_aliases(policy))
+        });
+        let resident_pipeline = aliased_pipeline.as_ref().unwrap_or(self.pipeline);
+        let mut host_context = crate::host_context::parse(host_context)?;
+        if host_context.is_some() && descriptor.response_redaction() != ResponseRedaction::Apply {
+            return Err(crate::HostContextError::Unsupported.into());
+        }
+        let response_inputs = if let Some(context) = host_context.as_mut() {
+            let (policy, rulepacks) = self
+                .context_policy
+                .ok_or(crate::HostContextError::Unsupported)?;
+            let policy = crate::host_context::opaque_context(context, policy);
+            let args = match &request {
+                RequestState::Protected(args) => args,
+                RequestState::Untrusted(args) => args.as_value(),
+            };
+            if context
+                .class_map
+                .values()
+                .any(|class| !gaze_assembly::class_has_reversible_action(&policy.rules, class))
+                || context
+                    .dictionaries
+                    .keys()
+                    .any(|name| self.dictionaries.get(name).is_some())
+            {
+                return Err(crate::HostContextError::Policy.into());
+            }
+            // Validate the complete record before argument-dependent exclusions, so
+            // a guessed term cannot change whether the policy admits the call.
+            let pipeline = gaze_assembly::pipeline_with_private_context(
+                resident_pipeline,
+                &policy,
+                context,
+                rulepacks,
+                &gaze::LocaleChain::from(self.locale_chain),
+            )
+            .map_err(|_| crate::HostContextError::Policy)?;
+            let mut argument_text = Vec::new();
+            visit_argument_text(args, &mut |text| {
+                argument_text.push(text.to_owned());
+                Ok(())
+            })?;
+            for dictionary in context.dictionaries.values_mut() {
+                dictionary.terms.retain(|term| {
+                    !argument_text.iter().any(|text| {
+                        crate::host_context::contains_guess(text, std::slice::from_ref(term))
+                    })
+                });
+            }
+            context
+                .dictionaries
+                .retain(|_, dictionary| !dictionary.terms.is_empty());
+            let dictionaries = gaze::DictionaryBundle::merge(
+                self.dictionaries.clone(),
+                gaze::dictionary_bundle_from_context(context),
+            );
+            Some((pipeline, dictionaries))
+        } else {
+            None
+        };
+
         // 4. Prepare the registered request contract before opening audit.
         let context = gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries);
         let (redacted_args, args_transaction, invocation_args, args_audit) = match request {
@@ -235,7 +322,8 @@ impl<'a> PiiEnvelope<'a> {
                 descriptor.argument_carriers().preflight(&raw_args)?;
                 let mut transaction = self.session.begin_transaction();
                 let pre_commit_token_count = transaction.tokens().len();
-                let protected = protect_json(self.pipeline, &mut transaction, context, &raw_args)?;
+                let protected =
+                    protect_json(resident_pipeline, &mut transaction, context, &raw_args)?;
                 (
                     protected,
                     Some((transaction, pre_commit_token_count)),
@@ -297,7 +385,7 @@ impl<'a> PiiEnvelope<'a> {
         };
         let session_handle = SessionHandle::new(&audit_session_id_owned);
         let resources = ToolResources::new_with_dictionaries(
-            self.pipeline,
+            resident_pipeline,
             self.session,
             self.manifest,
             self.locale_chain,
@@ -345,9 +433,18 @@ impl<'a> PiiEnvelope<'a> {
                         Ok(()) => {
                             let mut transaction = self.session.begin_transaction();
                             let result = protect_json(
-                                self.pipeline,
+                                response_inputs
+                                    .as_ref()
+                                    .map_or(resident_pipeline, |(pipeline, _)| pipeline),
                                 &mut transaction,
-                                context,
+                                gaze::ProtectionContext::strict(
+                                    self.locale_chain,
+                                    response_inputs
+                                        .as_ref()
+                                        .map_or(self.dictionaries, |(_, dictionaries)| {
+                                            dictionaries
+                                        }),
+                                ),
                                 &raw_response.payload,
                             );
                             response_transaction = Some(transaction);
@@ -414,6 +511,59 @@ impl<'a> PiiEnvelope<'a> {
 
         Ok(ToolResponse::json(response_payload))
     }
+}
+
+fn visit_argument_text(
+    value: &serde_json::Value,
+    visit: &mut impl FnMut(&str) -> Result<(), crate::HostContextError>,
+) -> Result<(), crate::HostContextError> {
+    fn text(
+        value: &str,
+        remaining: &mut usize,
+        visit: &mut impl FnMut(&str) -> Result<(), crate::HostContextError>,
+    ) -> Result<(), crate::HostContextError> {
+        *remaining = remaining
+            .checked_sub(value.len())
+            .ok_or(crate::HostContextError::Invalid)?;
+        visit(value)
+    }
+    fn walk(
+        value: &serde_json::Value,
+        depth: usize,
+        remaining: &mut usize,
+        visit: &mut impl FnMut(&str) -> Result<(), crate::HostContextError>,
+    ) -> Result<(), crate::HostContextError> {
+        if depth > 128 {
+            return Err(crate::HostContextError::Invalid);
+        }
+        match value {
+            serde_json::Value::String(value) => {
+                text(value, remaining, visit)?;
+                if let Ok(nested) = serde_json::from_str::<serde_json::Value>(value) {
+                    walk(&nested, depth + 1, remaining, visit)?;
+                }
+            }
+            serde_json::Value::Array(values) => {
+                for value in values {
+                    walk(value, depth + 1, remaining, visit)?;
+                }
+            }
+            serde_json::Value::Object(values) => {
+                for (key, value) in values {
+                    text(key, remaining, visit)?;
+                    walk(value, depth + 1, remaining, visit)?;
+                }
+            }
+            serde_json::Value::Number(value) => text(&value.to_string(), remaining, visit)?,
+            serde_json::Value::Bool(value) => {
+                text(if *value { "true" } else { "false" }, remaining, visit)?
+            }
+            serde_json::Value::Null => text("null", remaining, visit)?,
+        }
+        Ok(())
+    }
+    let mut remaining = rule_coverage::MAX_OPERATION_EXPANDED_BYTES;
+    walk(value, 0, &mut remaining, visit)
 }
 
 pub(crate) fn default_dictionaries() -> &'static gaze::DictionaryBundle {

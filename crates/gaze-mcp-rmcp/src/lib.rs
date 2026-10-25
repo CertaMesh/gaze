@@ -31,6 +31,6 @@ pub mod frontend;
 
 pub use crate::error::RmcpFrontendError;
 pub use crate::frontend::{
-    FixedPrincipalResolver, PrincipalResolver, RmcpFrontend, RmcpFrontendConfig,
+    FixedPrincipalResolver, HostCallContext, PrincipalResolver, RmcpFrontend, RmcpFrontendConfig,
     RmcpPrincipalError, RmcpTransport,
 };

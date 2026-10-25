@@ -65,18 +65,38 @@ failure takes precedence over the tool error.
 
 `RmcpFrontend` treats the `operator` role specially for `tools/list`: operator-tier descriptors are only advertised to principals with `principal.has_role("operator")`. Invocation authorization still happens inside `PiiEnvelope::dispatch` through `AuthHook`; transport-side filtering is only a catalog convenience.
 
-## Session ids
+## Host context and session ids
 
-rmcp 2.x's `tools/call` payload has no native Gaze session-id field. This adapter reserves a top-level `_session_id` argument key:
+`HostContextSelection` is an explicit input to `DispatchHost::dispatch` and
+`PiiEnvelope::dispatch`. A trusted embedder selects one owner record after the
+model plans a call. `HostContextSelection::present` accepts the original context
+JSON. Dispatch uses `gaze::Context::from_json_str`, with the same schema and limits
+as `gaze clean --context-json`. The host supplies the resident assembly inputs
+through `PiiEnvelope::with_context_policy`. A host without that configuration
+rejects `Present`.
 
-```json
-{
-  "text": "hello",
-  "_session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-}
-```
+For embedded HTTP, host middleware inserts `HostCallContext` into
+`axum::http::request::Parts::extensions`. rmcp carries these server-local request
+parts into the handler. Build your `StreamableHttpService` with
+`RmcpFrontend::into_server_handler` to install the middleware on your own router.
+`HostCallContext::selection` supplies the context for that call;
+`audit_session_id` supplies optional host-owned audit correlation.
 
-The adapter removes `_session_id` before dispatching tool args and passes it as `external_session_id`. `gaze-mcp-core` validates it with `SessionIdPolicy` before any manifest row opens.
+Context protects tool responses. A context value already present in model-authored
+arguments is excluded for that call, including case and whitespace variants.
+An echo therefore cannot reveal record membership. Only values first matched in
+a response become Rule-evidence session entries for later turns. Unmatched values
+are dropped. Restoration still uses the owner's manifest.
+
+Context never enters `ToolCtx`, tool schemas, arguments, `_meta`, or manifest call
+metadata. `Present` is rejected for an operator tool that bypasses response
+protection. Stock stdio hosts have no private context channel. The CLI stdio server
+uses `Absent`; an out-of-process adapter is not supported in this release.
+
+The adapter removes the legacy `_session_id` argument and ignores its value.
+It cannot change audit correlation or select a Session. Use host-owned
+`HostCallContext::audit_session_id` for correlation. `SessionIdPolicy` validates
+that id before dispatch; the id never grants access or selects a Session.
 
 ## rmcp version policy
 

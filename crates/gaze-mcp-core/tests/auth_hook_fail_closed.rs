@@ -98,6 +98,7 @@ async fn operator_tool_dispatch_with_default_hook_returns_missing_hook() {
             "restore",
             json!({"token": "<X:EMAIL_0>"}),
             None,
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect_err("operator dispatch must fail closed without auth");

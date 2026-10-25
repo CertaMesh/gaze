@@ -173,7 +173,13 @@ async fn noop_args_dispatch_succeeds_when_sibling_advances_generation() {
     let principal = Principal::new("operator");
 
     let result = env
-        .dispatch(&principal, "export_session_tokens", json!({}), None)
+        .dispatch(
+            &principal,
+            "export_session_tokens",
+            json!({}),
+            None,
+            gaze_mcp_core::HostContextSelection::Absent,
+        )
         .await;
 
     assert!(
@@ -238,7 +244,15 @@ async fn real_args_dispatch_still_fails_closed_when_sibling_advances_generation(
     let env = envelope(&registry, &store, &pipeline, &session);
     let principal = Principal::new("agent");
 
-    let result = env.dispatch(&principal, "echo", json!(EMAIL), None).await;
+    let result = env
+        .dispatch(
+            &principal,
+            "echo",
+            json!(EMAIL),
+            None,
+            gaze_mcp_core::HostContextSelection::Absent,
+        )
+        .await;
 
     assert!(
         matches!(result, Err(DispatchError::Transaction(_))),
@@ -274,8 +288,20 @@ async fn concurrent_noop_args_dispatches_both_succeed() {
     let principal = Principal::new("operator");
 
     let (r1, r2) = tokio::join!(
-        env.dispatch(&principal, "export_session_tokens", json!({}), None),
-        env.dispatch(&principal, "export_session_tokens", json!({}), None),
+        env.dispatch(
+            &principal,
+            "export_session_tokens",
+            json!({}),
+            None,
+            gaze_mcp_core::HostContextSelection::Absent
+        ),
+        env.dispatch(
+            &principal,
+            "export_session_tokens",
+            json!({}),
+            None,
+            gaze_mcp_core::HostContextSelection::Absent
+        ),
     );
 
     assert!(

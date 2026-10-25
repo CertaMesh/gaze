@@ -21,11 +21,18 @@ impl DispatchHost for SmokeHost {
         tool_name: &str,
         raw_args: serde_json::Value,
         external_session_id: Option<&str>,
+        host_context: gaze_mcp_core::HostContextSelection,
     ) -> Result<ToolResponse, DispatchError> {
+        if matches!(
+            host_context,
+            gaze_mcp_core::HostContextSelection::Present(_)
+        ) {
+            return Err(gaze_mcp_core::HostContextError::Unsupported.into());
+        }
         self.calls.fetch_add(1, Ordering::SeqCst);
         assert_eq!(principal.id, "stdio-test");
         assert_eq!(tool_name, "clean");
-        assert_eq!(external_session_id, Some("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        assert_eq!(external_session_id, None);
         assert_eq!(raw_args, json!({ "text": "hello" }));
         Ok(ToolResponse::text("redacted: hello"))
     }
@@ -77,10 +84,15 @@ async fn stdio_dispatch_lists_and_calls_tools() {
     .as_object()
     .cloned()
     .expect("arguments are object");
-    let result = client
-        .call_tool(CallToolRequestParams::new("clean").with_arguments(args))
-        .await
-        .expect("tool call succeeds");
+    let mut request = CallToolRequestParams::new("clean").with_arguments(args);
+    request.meta = Some(
+        serde_json::from_value(json!({
+            "context": {"record": {"name":"Synthetic Qorvex"}},
+            "audit_session_id": "forged-session"
+        }))
+        .unwrap(),
+    );
+    let result = client.call_tool(request).await.expect("tool call succeeds");
 
     assert_eq!(result.is_error, Some(false));
     assert_eq!(result.content[0].as_text().unwrap().text, "redacted: hello");

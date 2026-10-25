@@ -29,6 +29,20 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Action required: pass an explicit MCP host context selection
+
+`DispatchHost::dispatch`, `PiiEnvelope::dispatch`, and `dispatch_request` now take
+`HostContextSelection` as the final argument. Pass `HostContextSelection::Absent`
+for existing behavior. A host that supports private records forwards `Present`
+to an envelope configured with the exact resident policy and rulepacks through
+`with_context_policy`. Other hosts must return `HostContextError::Unsupported`.
+
+The rmcp adapter ignores the legacy `_session_id` tool argument. For optional audit
+correlation, embedded middleware supplies `HostCallContext::audit_session_id` in
+request extensions. The host selects the Session independently of that id.
+`DispatchArgs::session_id` is removed. `rmcp_args_to_dispatch_args` now returns
+`DispatchArgs` directly because translation no longer validates an argument id.
+
 ### Action required: replace positional context arrays
 
 Context JSON now requires a top-level object. `gaze clean --context-json`

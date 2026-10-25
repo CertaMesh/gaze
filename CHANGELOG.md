@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- MCP hosts can supply private per-call record context through an explicit typed
+  dispatch input and embedded HTTP request extensions. The shared Context parser
+  validates original JSON. Private context protects responses, excludes guesses
+  already present in model arguments, and retains only actual response matches for
+  later turns. The rmcp adapter ignores model-supplied `_session_id` values.
+  Dispatch APIs require an explicit `HostContextSelection`; see UPGRADE.md.
+
+
 - Update Tokio from 1.52.3 to 1.54.1 to fix RustSec advisory
   RUSTSEC-2026-0386, an I/O safety defect in the `AsyncFd` constructors.
   Gaze does not use `AsyncFd`.

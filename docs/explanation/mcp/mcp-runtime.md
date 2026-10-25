@@ -84,7 +84,7 @@ The [Dylint protected paths](../../../lint/dylint) also reject forbidden
 ## rmcp transport sink
 
 `gaze-mcp-rmcp::RmcpFrontend` maps descriptors to rmcp tools, call requests to
-`(tool_name, raw_args, external_session_id)`, and responses to rmcp results.
+`(tool_name, raw_args, external_session_id, HostContextSelection)`, and responses to rmcp results.
 It sees only `Arc<dyn DispatchHost>`; with the core wrapper every call traverses
 `PiiEnvelope::dispatch`. A failed `ManifestStore::finish_call` returns an error,
 never the tool payload.
@@ -98,10 +98,35 @@ Adopters supply `PrincipalResolver`; `FixedPrincipalResolver` serves local
 stdio/tests. Listing hides operator tools from non-operator principals, but
 authorization still happens in dispatch.
 
-rmcp 0.2 reserves top-level `_session_id`; the adapter removes it before
-calling dispatch, which validates it through `SessionIdPolicy` before opening
-the manifest. Isolation tests cover stdio, stdio+HTTP, and no-default-feature
-graphs to keep operator surfaces out of default transport builds.
+rmcp 2.x removes the legacy `_session_id` argument without using it. Host middleware
+can supply `HostCallContext` through server-local request extensions. Its optional
+session id labels the audit trail; only the host selects the actual Session.
+Isolation tests cover stdio, stdio+HTTP, and no-default-feature graphs.
+
+### Private record context
+
+An embedder passes `HostContextSelection::Absent` or `Present` directly into
+dispatch. The envelope parses the preserved JSON with `gaze::Context::from_json_str`
+and assembles a request-local response pipeline against the resident policy.
+NER and safety-net handles remain resident. No default implementation discards
+`Present`; unsupported hosts reject it before invoking a tool.
+
+The resident pipeline protects model-authored arguments. Private context applies
+only to responses, with any value guessed in the original arguments excluded.
+The exclusion uses conservative Unicode and whitespace matching without requiring
+cues. A tool that adds a cue to an echoed guess must not reveal record membership.
+This trades context recall for resistance to guessing attacks. Ordinary recognizers
+and existing session mappings continue to protect those values.
+
+Only matched response values persist as Rule evidence. Later turns protect those
+values without retaining the record. Unused values and raw context do not enter the
+session, `ToolCtx`, manifest metadata, or protocol output. Custom context identifiers
+use opaque names in detection metadata. The host retains restore authority.
+
+Embedded HTTP middleware sets `HostCallContext` in request extensions. Raw context
+in `_meta`, arguments, headers, or provider bodies is never trusted input. Stock
+stdio hosts need an in-process integration to use private context. No sidecar or
+stdio file-descriptor protocol is supported in this release.
 
 ## Manifest contract
 

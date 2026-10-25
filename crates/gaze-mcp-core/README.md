@@ -316,3 +316,25 @@ as literal text. They are not expanded or newly rejected by this operation proof
 Their adopter-specific validation and error stage remain unchanged. A separate
 opaque-carrier and foreign-namespace contract is a follow-up. Ordinary filenames
 such as `scan_1.png` remain literal text too.
+
+## Per-call host record context
+
+`PiiEnvelope::dispatch`, `dispatch_request`, and `DispatchHost::dispatch` take an
+explicit final `HostContextSelection` argument. Pass `Absent` for ordinary calls.
+For a private owner record, pass `HostContextSelection::present(raw_json)` and
+configure the envelope with `with_context_policy(policy, rulepacks)`, using the
+exact resident assembly inputs. `CorePipeline::policy` and `rulepacks` expose
+those inputs for the bundled configuration. Unsupported hosts reject `Present`.
+
+The shared Context parser preserves CLI and daemon limits. Context affects only
+tool responses. Any private term present in model-authored arguments is excluded
+for the call, including Unicode case and whitespace variants, so an echo cannot
+confirm a guess. Ordinary detection still protects arguments and responses.
+Only actual response matches enter the session as Rule evidence. Unused record
+values do not persist; matched values restore exactly and remain protected on
+later turns. `Present` cannot accompany an operator response bypass.
+
+Keep context out of tool args, schemas, `_meta`, `ToolCtx`, audit payloads, and
+logs. The raw wrapper has redacting Debug and clears its owned buffer on final
+drop. This does not guarantee erasure of allocator or parser copies. The HTTP
+adapter accepts host middleware extensions; ordinary stdio has no private channel.

@@ -349,6 +349,24 @@ fn record_name_is_common(name: &str) -> bool {
 
 // Full Unicode folds can expand one character (for example, ß -> ss).
 // Only complete original-character boundaries may become token spans.
+/// Whether untrusted input contains a possible record guess. This deliberately ignores
+/// corroboration, boundaries and allowed-kind restrictions; it is an exclusion filter,
+/// never evidence for detection or token creation.
+pub fn contains_record_guess(input: &str, term: &str) -> bool {
+    fn normalize(value: &str) -> String {
+        let mut normalized = String::with_capacity(value.len());
+        for part in value.split_whitespace() {
+            if !normalized.is_empty() {
+                normalized.push(' ');
+            }
+            normalized.extend(part.case_fold());
+        }
+        normalized
+    }
+    let term = normalize(term);
+    !term.is_empty() && normalize(input).contains(&term)
+}
+
 fn fold_with_original_offsets(
     input: &str,
     case_fold: bool,

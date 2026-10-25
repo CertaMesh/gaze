@@ -221,6 +221,7 @@ impl DispatchHost for Host {
         n: &str,
         a: Value,
         s: Option<&str>,
+        host_context: gaze_mcp_core::HostContextSelection,
     ) -> Result<ToolResponse, DispatchError> {
         PiiEnvelope::new(
             &self.registry,
@@ -231,7 +232,7 @@ impl DispatchHost for Host {
             &[gaze::LocaleTag::Global],
             &SessionIdPolicy::default_strict(),
         )
-        .dispatch(p, n, a, s)
+        .dispatch(p, n, a, s, host_context)
         .await
     }
     fn list_tools(&self) -> Vec<ToolDescriptor> {

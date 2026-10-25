@@ -148,7 +148,13 @@ async fn dispatch(
         &[gaze::LocaleTag::Global],
         &SessionIdPolicy::default_strict(),
     )
-    .dispatch(&Principal::new("agent"), "test", args, None)
+    .dispatch(
+        &Principal::new("agent"),
+        "test",
+        args,
+        None,
+        gaze_mcp_core::HostContextSelection::Absent,
+    )
     .await
 }
 #[tokio::test]
@@ -328,6 +334,7 @@ async fn exact_typed_paths_and_numbers_preserve_json_without_schema_authority() 
         "schema",
         json!({"text":EMAIL}),
         None,
+        gaze_mcp_core::HostContextSelection::Absent,
     )
     .await;
     assert!(matches!(result, Err(DispatchError::Carrier(_))));
@@ -400,7 +407,13 @@ async fn real_primary_builtins_succeed_and_operator_bypass_requires_authorizatio
         ("tokenize_field", json!({"value":FRESH}), "token"),
     ] {
         let result = env
-            .dispatch(&Principal::new("agent"), name, args, None)
+            .dispatch(
+                &Principal::new("agent"),
+                name,
+                args,
+                None,
+                gaze_mcp_core::HostContextSelection::Absent,
+            )
             .await
             .unwrap();
         let text = result.payload[field].as_str().unwrap();
@@ -413,6 +426,7 @@ async fn real_primary_builtins_succeed_and_operator_bypass_requires_authorizatio
             "safety_net_check",
             json!({"text":"benign"}),
             None,
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .unwrap();
@@ -442,13 +456,25 @@ async fn real_primary_builtins_succeed_and_operator_bypass_requires_authorizatio
     );
     let before = store.events.lock().unwrap().len();
     assert!(matches!(
-        env.dispatch(&Principal::new("agent"), "raw", json!({}), None)
-            .await,
+        env.dispatch(
+            &Principal::new("agent"),
+            "raw",
+            json!({}),
+            None,
+            gaze_mcp_core::HostContextSelection::Absent
+        )
+        .await,
         Err(DispatchError::Auth(_))
     ));
     assert_eq!(store.events.lock().unwrap().len(), before);
     let result = env
-        .dispatch(&Principal::new("operator"), "raw", json!({}), None)
+        .dispatch(
+            &Principal::new("operator"),
+            "raw",
+            json!({}),
+            None,
+            gaze_mcp_core::HostContextSelection::Absent,
+        )
         .await
         .unwrap();
     assert_eq!(result.payload, raw);
@@ -627,6 +653,7 @@ async fn supplied_locale_and_dictionary_reach_both_boundaries_and_tool_observers
             "observe",
             json!("Synthetic Alpha"),
             None,
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .unwrap();
@@ -827,6 +854,7 @@ async fn structured_observer_requires_explicit_producer_document_shape() {
             "safety_net_check",
             json!({"document":{"text":EMAIL}}),
             None,
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .unwrap();
@@ -837,7 +865,8 @@ async fn structured_observer_requires_explicit_producer_document_shape() {
             &Principal::new("agent"),
             "safety_net_check",
             json!({"document":{"other":EMAIL}}),
-            None
+            None,
+            gaze_mcp_core::HostContextSelection::Absent
         )
         .await,
         Err(DispatchError::Carrier(_))
@@ -968,4 +997,5 @@ async fn configured_token_reflags_preserve_dispatch_roundtrip_and_manifest_order
 #[path = "strict_contract/operation_repeats.rs"]
 mod operation_repeats;
 
+#[path = "strict_contract/host_context.rs"]
 mod host_context;
