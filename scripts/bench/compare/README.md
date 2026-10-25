@@ -74,9 +74,13 @@ selected historical reproduction environment.
 
 CI and Anvil preparation use `scripts/bench/pyproject.toml` and `uv.lock`,
 which require `cryptography>=50.0.2,<51` through the documented Presidio
-override. Use that patched environment for routine model-free checks:
+override. Routine model-free checks require uv 0.11.31, matching the CI
+job and the pinned virtualenv bootstrap source checked by GLiNER identity.
+An environment created by another uv release can retain a different bootstrap;
+recreate that environment with uv 0.11.31 before running these checks.
 
 ```sh
+uv --version  # must report 0.11.31
 uv sync --project scripts/bench --python 3.13 --locked --group comparison-test
 ```
 
@@ -326,3 +330,129 @@ published aggregate. For an optional scheduled check, run the full command from
 a weekly scheduler in a prepared checkout and retain its JSON and stdout. The
 command exits successfully when source checks fail so findings remain reportable;
 review the row statuses rather than interpreting exit zero as current pins.
+## Reuse competitor document captures
+
+`capture_compare.py` runs one competitor with private, content-addressed document
+captures. Its report contains aggregate metrics and digest/count bindings. Full
+subject, runtime, input and GLiNER load proofs stay in the private cache.
+A public binding commits to the ordered private observation digests. Variant-pack
+names become ordinal layer names in public output and prediction file paths.
+
+Capture entrypoints support **script-path launch only**: invoke the `.py` paths
+shown below. Module launch with `python -m` is refused. Script launch compiles
+the entrypoint from source before its import checks run; module launch can load
+that entrypoint's cached bytecode before any in-process check. Effective stdlib
+and harness bytecode must match source, including with a pycache prefix. The
+effective prefix is bound into the private runtime identity.
+
+Use a clean checkout and an installed, qualified comparison runtime. The
+measuring specification requires CPython 3.13 and the pinned parquet reader.
+GLiNER additionally requires the source hashes and loader family declared in
+`gliner_identity.py`. Unsupported runtimes, import hooks, model families and
+online GLiNER resolution are refused. Use preinstalled models for qualification.
+
+Use a private pycache prefix to avoid stale caches in a newly installed runtime.
+Capture admission refuses stale caches even when Python could recompile them.
+Keep the prefix unchanged when replaying a capture.
+
+Each script restarts under the same interpreter and flags with an empty
+environment populated only from this allowlist: `PATH`, `HOME`, `LANG`,
+`LANGUAGE`, all `LC_*` and `PYTHON*` settings (including the private pycache
+prefix), `TMPDIR`, `TMP`, `TEMP`, `TZ`, `XDG_CACHE_HOME`, `HF_HOME`,
+`HF_HUB_CACHE`, `TRANSFORMERS_CACHE`, `HF_HUB_OFFLINE`, `HF_DATASETS_OFFLINE`,
+`TRANSFORMERS_OFFLINE`, `TOKENIZERS_PARALLELISM`, `OMP_NUM_THREADS`,
+`OMP_THREAD_LIMIT`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
+`VECLIB_MAXIMUM_THREADS`, `NUMEXPR_NUM_THREADS`, `BLIS_NUM_THREADS`,
+`RAYON_NUM_THREADS`, `LD_LIBRARY_PATH`, `DYLD_LIBRARY_PATH`, and
+`DYLD_FALLBACK_LIBRARY_PATH`, and macOS `__CF_USER_TEXT_ENCODING`. Missing
+variables stay absent. The full resulting
+environment remains bound in the key. Shell metadata such as `TERM_SESSION_ID`
+and `SSH_AUTH_SOCK` never reaches the capture process. A later shell can reuse
+captures when its allowed inputs are identical; changing an allowed input
+invalidates reuse.
+
+Execution uses the source checkout root as its fixed working directory. CLI
+path arguments become absolute in the caller's directory before execution.
+Use absolute paths inside tuned production-plan argument vectors; relative
+paths in those vectors are interpreted from the fixed checkout root. Installed
+model loading, inference, scoring and retained timing semantics are unchanged.
+
+Prepare an immutable specification with `scripts/bench/benchmark_spec.py`. Keep
+the dataset, installed models and cache outside the repository. Set these
+variables to the scheduled qualification inputs before running the commands:
+
+```sh
+export PYTHONHASHSEED=0 PYTHONDONTWRITEBYTECODE=1
+export PYTHONPYCACHEPREFIX="$PRIVATE/pycache"
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+"$QUALIFIED_PYTHON" scripts/bench/benchmark_spec.py \
+	--dataset "$DATASET" --output "$PRIVATE/spec.json"
+"$QUALIFIED_PYTHON" scripts/bench/compare/capture_compare.py \
+	--tool gliner --dataset "$DATASET" --benchmark-spec "$PRIVATE/spec.json" \
+	--gliner-model "$GLINER_MODEL" \
+	--cache-dir "$PRIVATE/captures" --output "$PRIVATE/fresh.json"
+"$QUALIFIED_PYTHON" scripts/bench/compare/capture_compare.py \
+	--tool gliner --dataset "$DATASET" --benchmark-spec "$PRIVATE/spec.json" \
+	--gliner-model "$GLINER_MODEL" \
+	--cache-dir "$PRIVATE/captures" --output "$PRIVATE/reused.json"
+cmp "$PRIVATE/fresh.json" "$PRIVATE/reused.json"
+"$QUALIFIED_PYTHON" scripts/bench/compare/capture_compare.py \
+	--tool gliner --dataset "$DATASET" --benchmark-spec "$PRIVATE/spec.json" \
+	--gliner-model "$GLINER_MODEL" \
+	--cache-dir "$PRIVATE/captures" --output "$PRIVATE/reused.json" \
+	--verify-report "$PRIVATE/reused.json"
+```
+
+These are the installed-model qualification commands. Run them only in the
+scheduled benchmark-machine window. Source tests do not establish installed-model
+qualification. A full hit constructs no backend and performs no inference.
+Latency and contention remain the original measurements. Cache replay does not
+qualify new performance evidence.
+
+Each unit key binds the exact text hash, document ID, language and region, the
+immutable benchmark specification ID, and the actual subject/config/model/runtime
+identity. Changes to current Gaze detector bytes do not change a competitor key while the
+measuring specification remains unchanged.
+Published historical tuned evidence verifies against a committed, content-addressed
+closure of its recorded revision and source hashes, bound to the exact aggregate
+bytes. Rendering needs no historical Git objects. Fresh capture admission still
+requires current source bytes; historical evidence is never relabeled as current.
+
+Runtime identity includes every Python flag, `-X` option and warning option,
+effective integer/encoding limits, and CPU count and affinity used by native
+thread defaults. Capture and tuning refuse randomized hashing or interpreters
+that ignore `PYTHONHASHSEED=0` (`-R`, `-E`, `-I`).
+An input change under the same specification invalidates that unit. A new
+specification invalidates all units. The canonical population must match the
+specification. Additional variant-pack documents also have independent unit keys.
+Tampered entries cause refusal. The cache never manufactures keys for historical
+predictions.
+
+Pass `--freshness-report` to validate and reference the independently checked
+sidecar from `freshness.py`. Its file hash, row count and check date remain
+separate from subject execution identity. The existing historical publication commands and receipts
+retain their original code bindings.
+
+For tuned production, use `tuned_presidio/capture_produce.py` with the original
+`pool` or `authors` arguments plus `--benchmark-spec` and `--cache-dir`.
+`tuned_presidio/capture_tune.py` takes `--production-plans`, a private JSON object
+mapping each pool pass and `authors` to its full production argument vector. It
+reconstructs each plan, checks its private captures, and binds the selected live
+run to the same configuration, models, findings, documents and sample used in
+scoring. `--private-dir` holds the complete binding. Public output contains
+digests and counts for those private inputs and live differences.
+`--verify-report` replays private evidence without running models; `--render`
+writes an admitted aggregate Markdown table.
+
+The retained tuned comparison uses generator v20. It cannot be assigned the
+current generator v25 specification. Rebuild matching comparison, production and
+selection inputs before installed-model tuned qualification. Historical aggregate
+rows remain historical and receive no reuse eligibility.
+
+Run the model-free checks with:
+
+```sh
+anvil run -- uv run --project scripts/bench --python 3.13 --group comparison-test \
+	python -m pytest -q scripts/bench --durations=30
+python3 scripts/ci/check_competitor_capture_mutations.py
+```
