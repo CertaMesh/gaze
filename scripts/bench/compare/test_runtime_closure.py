@@ -361,7 +361,6 @@ def test_stdlib_prefix_validation_uses_each_admitted_alias(tmp_path, monkeypatch
 
 @pytest.mark.parametrize("root_name", ["purelib", "platlib"])
 def test_installed_prefix_validation_uses_each_admitted_alias(installation, tmp_path, monkeypatch, root_name):
-    import capture_launch
     root, module, files = installation
     alias = tmp_path / root_name
     alias.symlink_to(root, target_is_directory=True)
@@ -373,5 +372,5 @@ def test_installed_prefix_validation_uses_each_admitted_alias(installation, tmp_
     cached.write_bytes(importlib.util.MAGIC_NUMBER + struct.pack("<I", 3)
                        + importlib.util.source_hash(source.read_bytes())
                        + marshal.dumps(compile("synthetic = False\n", str(source), "exec")))
-    with pytest.raises(capture_launch.HarnessImportError, match="unverified import bytecode"):
+    with pytest.raises(ValueError, match="unverified import bytecode"):
         runtime_closure.import_inventory(files, [root], path=[str(alias), str(root)], hooks=[])
