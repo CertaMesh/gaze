@@ -59,7 +59,7 @@ pub(crate) fn parse(
 ) -> Result<Option<gaze::Context>, HostContextError> {
     match selection {
         HostContextSelection::Absent => Ok(None),
-        HostContextSelection::Present(raw) => gaze::Context::from_json_str(&raw.0.0)
+        HostContextSelection::Present(raw) => gaze::Context::from_json_str(&raw.0 .0)
             .map(Some)
             .map_err(|_| HostContextError::Invalid),
     }

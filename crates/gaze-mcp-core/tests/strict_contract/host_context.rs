@@ -199,15 +199,15 @@ struct PrivateStore(Capture);
 #[async_trait]
 impl ManifestStore for PrivateStore {
     async fn begin_call(&self, ctx: BeginCallContext<'_>) -> Result<CallHandle, ManifestError> {
-        self.0.0.lock().unwrap().push(format!("{ctx:?}"));
+        self.0 .0.lock().unwrap().push(format!("{ctx:?}"));
         Ok(CallHandle::new(ctx.call_id))
     }
     async fn finish_call(&self, _: CallHandle, snapshot: SnapshotRef) -> Result<(), ManifestError> {
-        self.0.0.lock().unwrap().push(format!("{snapshot:?}"));
+        self.0 .0.lock().unwrap().push(format!("{snapshot:?}"));
         Ok(())
     }
     async fn fail_call(&self, _: CallHandle, reason: FailureReason) -> Result<(), ManifestError> {
-        self.0.0.lock().unwrap().push(format!("{reason:?}"));
+        self.0 .0.lock().unwrap().push(format!("{reason:?}"));
         Ok(())
     }
 }
@@ -561,7 +561,7 @@ async fn host_context_untrusted_invocation_protects_responses_without_a_guess_or
                 assert_eq!(output.payload, json!(KNOWN));
                 assert!(session.tokens().is_empty());
             }
-            assert!(!store.0.0.lock().unwrap().join("\n").contains(KNOWN));
+            assert!(!store.0 .0.lock().unwrap().join("\n").contains(KNOWN));
             outcomes.push(output.payload);
         }
         if guessed {
