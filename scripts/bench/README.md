@@ -633,7 +633,7 @@ schemas, canonical document descriptors, measuring runtime, and execution protoc
 is preserved under its content hash. The
 [previous admission specification](../../docs/reference/benchmarks/specifications/d0010b6f71ecd9481700895eb439448fc166a76f9a6c31168f2b746125fdb2f0.json)
 binds the effective validation vocabulary and executing-source admission checks.
-The [current admission specification](../../docs/reference/benchmarks/specifications/d19a7b56c45899d1d91fe470db0f1e0de8b31540c7ede989ed53105d61a9bdf1.json)
+The [current admission specification](../../docs/reference/benchmarks/specifications/0635170f7142114d6b666e65945a194c0041cfa61e685dfee6f6c3c9bc56900b.json)
 also binds the qualified runtime and canonical document descriptors.
 Both previous manifests remain archived under their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
@@ -921,3 +921,64 @@ separately created minimal environments are outside this guard. Synthetic Cargo
 fixtures outside registered proxy/toolchain locations are intentionally allowed.
 The legacy standalone dataset helpers produce no qualified build receipt and
 cannot certify through current capture admission.
+
+
+## Reuse a past-release capture
+
+`rescore_past_release.py --build --release-tag v0.17.0 --configs policy-file
+--policy <policy> --binary-profile release` can reuse an exact native capture.
+The tag must resolve to the measured checkout. The producer rebuilds or checks
+its binary through Cargo and verifies its receipt before looking up observations.
+A hit runs neither the subject nor the detached validator. Every model file,
+policy dependency, corpus, runtime closure, binary, feature set, specification,
+and execution parameter must match. Use `--cache-dir` to choose the private
+cache, or `--no-cache` to require execution.
+
+Source inspection finds the supported producer on v0.15.0, v0.15.1, v0.16.0,
+and v0.17.0. This is source eligibility, not native qualification of those releases.
+v0.14.0 has no `policy-file` producer. Config-specific model defaults, external
+binaries, missing tags, dirty inputs, unsupported runtime closures, and legacy
+records without a complete key remain uncacheable. Other configurations can
+still execute fresh through the existing driver.
+
+Keep `release-capture-key.json`, `run-evidence.json`, the original capture
+scorecard, and its observation record together. These private files bind the
+original measurement revision and time. Renderers admit replay only after
+checking those bindings and reconstructing the metrics. Release admission requires
+a full C/A/D/R population from a canonical capture. Derived contract
+scorecards use the original capture's execution evidence. Publication does not
+re-inventory the publication checkout or restamp a measurement. Freeze the
+measurement checkout before generating publication changes in another checkout.
+Never manufacture a key for a legacy record.
+
+Run source-only admission mutation probes after committing:
+
+```bash
+uv run --project scripts/bench --python 3.13 --group comparison-test \
+  python scripts/ci/check_past_capture_mutations.py
+```
+
+Native qualification is scheduled separately on the benchmark machine. From a
+clean measuring checkout, with a prepared tagged release checkout and that
+release's own setup policy, run the same arguments twice with separate outputs:
+
+```bash
+uv run --project scripts/bench --python 3.13 python scripts/bench/rescore_past_release.py \
+  --release-root "$RELEASE_ROOT" --release-tag v0.17.0 --build \
+  --binary-profile release --configs policy-file --policy "$RELEASE_POLICY" \
+  --agentic-layers --dataset "$BENCH_DATASET" --warmups 1 \
+  --cache-dir target/release-reuse-cache --output target/release-fresh/capture.json
+uv run --project scripts/bench --python 3.13 python scripts/bench/rescore_past_release.py \
+  --release-root "$RELEASE_ROOT" --release-tag v0.17.0 --build \
+  --binary-profile release --configs policy-file --policy "$RELEASE_POLICY" \
+  --agentic-layers --dataset "$BENCH_DATASET" --warmups 1 \
+  --cache-dir target/release-reuse-cache --output target/release-hit/capture.json
+cmp target/release-fresh/capture.json target/release-hit/capture.json
+cmp target/release-fresh/observations-v1.jsonl.gz target/release-hit/observations-v1.jsonl.gz
+```
+
+Require `run-evidence.json` to show `miss` then `hit`. A disabled inventory is
+an unqualified result. Trace native process launches during the second invocation
+to confirm it executes neither `clean_for_bench` nor the validator probe.
+Repeat with the previous release's tag and policy under the same specification.
+This source change does not claim those native qualifications have run.

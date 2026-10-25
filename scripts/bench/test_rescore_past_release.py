@@ -125,6 +125,7 @@ class ReleaseCheckoutTest(unittest.TestCase):
                     stack.enter_context(mock.patch.object(target, name, return_value=value))
                 stack.enter_context(mock.patch.object(rescore.records, "RecordWriter", return_value=writer))
                 stack.enter_context(mock.patch.object(rescore.runner, "write_json", write_json))
+                stack.enter_context(mock.patch.object(rescore.stages.Evidence, "bind"))
                 rescore.run(args)
             card = write_json.call_args.args[1]
             self.assertEqual(card["runner_provenance"]["policy_dependencies"],
