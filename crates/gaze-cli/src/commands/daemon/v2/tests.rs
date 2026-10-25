@@ -2,6 +2,10 @@ use super::*;
 use serde_json::{json, Value};
 
 fn daemon() -> Daemon {
+    daemon_with_audit(None)
+}
+
+fn daemon_with_audit(audit: Option<&Path>) -> Daemon {
     use clap::Parser;
     #[derive(Parser)]
     struct TestArgs {
@@ -36,8 +40,11 @@ action = "preserve"
 "#,
     )
     .unwrap();
-    Daemon::new(TestArgs::parse_from(["daemon", "--policy", policy.to_str().unwrap()]).daemon)
-        .unwrap()
+    let mut args = vec!["daemon", "--policy", policy.to_str().unwrap()];
+    if let Some(path) = audit {
+        args.extend(["--audit-db", path.to_str().unwrap()]);
+    }
+    Daemon::new(TestArgs::parse_from(args).daemon).unwrap()
 }
 
 fn raw(d: &mut Daemon, frame: &str) -> Value {
@@ -155,6 +162,8 @@ fn strict_restore_deletion_compaction_and_close_tombstone() {
     assert_eq!(closed["op"], "close");
     assert!(!d.v2.contains("conversation-a"));
     assert_eq!(send(&mut d, close.clone()), closed);
+    let close_frame = close.to_string();
+    assert_error(&raw(&mut d, &format!(" {close_frame}")), "RequestConflict");
     let mut conflicting = close.clone();
     conflicting["request_id"] = json!("different");
     assert_error(&send(&mut d, conflicting), "RequestConflict");
@@ -535,6 +544,7 @@ fn twenty_turn_same_namespace_oracle_covers_late_values_reorder_edit_and_old_res
             }
             assert_eq!(actual["cache_hit"], false);
         }
+        assert_committed_v1_identity(&mut d, "conversation-a", &texts, &state);
         let session = &d.v2.sessions["conversation-a"].session;
         assert_eq!(session.snapshot_entries(), entries);
         for (entry, spelling) in entries.iter().zip(spellings) {
@@ -852,4 +862,409 @@ fn mutable_recognizer_cannot_publish_an_unsettled_inventory() {
     assert_eq!(live.revision, 0);
     assert_eq!(live.generation, 0);
     assert_eq!(live.next_seq, 1);
+}
+
+fn assert_committed_v1_identity(d: &mut Daemon, id: &str, texts: &[String], result: &Value) {
+    let entries = d.v2.sessions[id].session.snapshot_entries();
+    let live = d.v2.sessions.remove(id).unwrap();
+    d.sessions.insert(
+        id.into(),
+        SessionEntry {
+            session: live.session,
+            last_seen: live.last_seen,
+        },
+    );
+    for (text, actual) in texts.iter().zip(result["blocks"].as_array().unwrap()) {
+        let expected = send(
+            d,
+            json!({"version":1,"op":"clean","session_id":id,"text":text}),
+        );
+        assert_eq!(expected["op"], "clean", "{expected}");
+        for key in ["clean_text", "manifest"] {
+            assert_eq!(actual[key], expected[key], "committed v1: {key}");
+        }
+    }
+    let entry = d.sessions.remove(id).unwrap();
+    assert_eq!(
+        entry.session.snapshot_entries(),
+        entries,
+        "v1 oracle must learn nothing"
+    );
+    d.lru.retain(|entry| entry != id);
+    d.v2.sessions.insert(
+        id.into(),
+        Live {
+            session: entry.session,
+            ..live
+        },
+    );
+}
+
+#[test]
+fn refused_open_keeps_existing_namespaces_and_restore_mappings() {
+    for legacy in [false, true] {
+        let mut d = daemon();
+        d.session_cap = 1;
+        let state = if legacy {
+            send(
+                &mut d,
+                json!({"version":1,"op":"open","session_id":"existing"}),
+            );
+            send(
+                &mut d,
+                json!({"version":1,"op":"clean","session_id":"existing","text":"alice@example.invalid"}),
+            )
+        } else {
+            let opened = open(&mut d, "existing");
+            clean(
+                &mut d,
+                &opened,
+                vec![block("leaf-a", "alice@example.invalid")],
+            )
+        };
+        d.v2.limits.global_v2_state_bytes = 1;
+        assert_error(&send(&mut d, opening("refused")), "CacheCapacity");
+        assert!(!d.v2.contains("refused"));
+        d.v2.limits = Limits::default();
+        let restored = if legacy {
+            send(
+                &mut d,
+                json!({"version":1,"op":"restore","session_id":"existing","text":state["clean_text"]}),
+            )
+        } else {
+            let mut request = operation(&state, "restore");
+            request["minimum_manifest_generation"] = json!(1);
+            request["text"] = state["blocks"][0]["clean_text"].clone();
+            send(&mut d, request)
+        };
+        assert_eq!(restored["text"], "alice@example.invalid", "{restored}");
+    }
+}
+
+#[test]
+fn shared_cap_selects_the_oldest_namespace_in_both_protocol_orders() {
+    for older_v2 in [true, false] {
+        let mut d = daemon();
+        d.session_cap = 2;
+        open(&mut d, "blocks");
+        send(
+            &mut d,
+            json!({"version":1,"op":"open","session_id":"legacy"}),
+        );
+        let now = Instant::now();
+        d.v2.sessions.get_mut("blocks").unwrap().last_seen =
+            now - Duration::from_secs(if older_v2 { 2 } else { 1 });
+        d.sessions.get_mut("legacy").unwrap().last_seen =
+            now - Duration::from_secs(if older_v2 { 1 } else { 2 });
+        open(&mut d, "new");
+        assert_eq!(d.v2.contains("blocks"), !older_v2);
+        assert_eq!(d.sessions.contains_key("legacy"), older_v2);
+    }
+}
+
+fn audit_rows(path: &Path, table: &str) -> i64 {
+    rusqlite::Connection::open(path)
+        .unwrap()
+        .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
+        .unwrap()
+}
+
+#[test]
+fn audit_counts_only_the_committed_stable_pass_and_no_refused_attempts() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("audit.db");
+    let mut d = daemon_with_audit(Some(&path));
+    let opened = open(&mut d, "blocks");
+    let first = clean(
+        &mut d,
+        &opened,
+        vec![block("leaf-a", "alice@example.invalid")],
+    );
+    let first_rows = audit_rows(&path, "redaction_log");
+    assert_eq!(
+        d.logger.detections.load(Ordering::Relaxed),
+        1,
+        "two passes publish once"
+    );
+    let second = clean(
+        &mut d,
+        &first,
+        vec![block("leaf-a", "alice@example.invalid")],
+    );
+    assert_eq!(
+        audit_rows(&path, "redaction_log"),
+        first_rows * 2,
+        "one-pass repeat publishes once"
+    );
+    assert_eq!(d.logger.detections.load(Ordering::Relaxed), 2);
+    let before = audit_rows(&path, "redaction_log");
+    d.v2.limits.v2_response_frame_bytes = 1;
+    assert_error(
+        &send(
+            &mut d,
+            clean_request(&second, vec![block("leaf-a", "bob@example.invalid")]),
+        ),
+        "CacheCapacity",
+    );
+    assert_eq!(audit_rows(&path, "redaction_log"), before);
+    assert_eq!(d.logger.detections.load(Ordering::Relaxed), 2);
+    d.v2.limits = Limits::default();
+    d.pipeline = gaze::Pipeline::builder()
+        .recognizer(ChangingRecognizer(std::sync::atomic::AtomicUsize::new(0)))
+        .rule(gaze::ClassRule::new(PiiClass::Name, Action::Tokenize))
+        .rule(gaze::DefaultRule::new(Action::Preserve))
+        .build()
+        .unwrap()
+        .with_redaction_logger(TestLogger(Arc::clone(&d.logger)));
+    assert_error(
+        &send(
+            &mut d,
+            clean_request(&second, vec![block("leaf-a", "abcdefghijklmnopqrstuvwxyz")]),
+        ),
+        "CacheConvergence",
+    );
+    assert_eq!(audit_rows(&path, "redaction_log"), before);
+    assert_eq!(d.logger.detections.load(Ordering::Relaxed), 2);
+}
+
+#[test]
+fn v2_idle_and_lru_evictions_publish_the_v1_audit_metadata() {
+    for (reason, mixed) in [("idle_timeout", false), ("lru", false), ("lru", true)] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.db");
+        let mut d = daemon_with_audit(Some(&path));
+        d.session_cap = if mixed { 2 } else { 1 };
+        open(&mut d, "blocks");
+        if mixed {
+            send(
+                &mut d,
+                json!({"version":1,"op":"open","session_id":"legacy"}),
+            );
+            d.v2.sessions.get_mut("blocks").unwrap().last_seen =
+                Instant::now() - Duration::from_secs(2);
+        }
+        let audit_id = d.v2.sessions["blocks"]
+            .session
+            .audit_session_id()
+            .to_string();
+        if reason == "idle_timeout" {
+            d.v2.sessions.get_mut("blocks").unwrap().last_seen =
+                Instant::now() - Duration::from_secs(4000);
+        }
+        let warnings = Arc::new(std::sync::Mutex::new(Vec::new()));
+        tracing::subscriber::with_default(EvictionWarnings(Arc::clone(&warnings)), || {
+            open(&mut d, "replacement");
+        });
+        let warnings = warnings.lock().unwrap();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains(&audit_id));
+        assert!(warnings[0].contains(reason));
+        assert!(warnings[0].contains("gaze daemon evicted session"));
+        assert!(!d.v2.contains("blocks"));
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        let rows: i64 = conn.query_row("SELECT count(*) FROM redaction_log WHERE source = 'daemon.session_eviction' AND session_id = ?1 AND field_name = ?2 AND provenance_stage = 'daemon'", [&audit_id, reason], |row| row.get(0)).unwrap();
+        assert_eq!(rows, 1, "{reason}");
+        assert_eq!(d.logger.detections.load(Ordering::Relaxed), 0);
+    }
+}
+
+struct TestLogger(Arc<DaemonLogger>);
+impl RedactionLogger for TestLogger {
+    fn log(&self, entry: &RedactionEntry) -> std::result::Result<(), RedactionLogError> {
+        self.0.log(entry)
+    }
+}
+
+struct ObservingNet;
+impl gaze::SafetyNet for ObservingNet {
+    fn id(&self) -> &str {
+        "synthetic-observer"
+    }
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &[gaze::LocaleTag::Global]
+    }
+    fn check(
+        &self,
+        text: &str,
+        _: gaze::SafetyNetContext<'_>,
+    ) -> std::result::Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
+        let Some(start) = text.find("benign") else {
+            return Ok(vec![]);
+        };
+        Ok(vec![gaze::LeakSuspect::new(
+            start..start + "benign".len(),
+            PiiClass::Name,
+            self.id(),
+            Some(1.0),
+            gaze::LeakKind::Uncovered,
+            "name",
+            None,
+        )])
+    }
+}
+
+#[test]
+fn safety_net_audit_counts_only_final_pass_and_discards_refused_reports() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("audit.db");
+    let mut d = daemon_with_audit(Some(&path));
+    d.pipeline = d.pipeline.clone().with_safety_net(ObservingNet);
+    d.safety_net_mode = SafetyNetMode::Tolerant;
+    let opened = open(&mut d, "blocks");
+    let first = clean(
+        &mut d,
+        &opened,
+        vec![block("leaf-a", "alice@example.invalid benign")],
+    );
+    let first_rows = audit_rows(&path, "safety_net_log");
+    assert_eq!(first_rows, 1, "one final block report");
+    let second = clean(
+        &mut d,
+        &first,
+        vec![block("leaf-a", "alice@example.invalid benign")],
+    );
+    assert_eq!(audit_rows(&path, "safety_net_log"), first_rows * 2);
+    d.v2.limits.v2_response_frame_bytes = 1;
+    assert_error(
+        &send(
+            &mut d,
+            clean_request(&second, vec![block("leaf-a", "bob@example.invalid benign")]),
+        ),
+        "CacheCapacity",
+    );
+    assert_eq!(audit_rows(&path, "safety_net_log"), first_rows * 2);
+}
+
+struct EvictionWarnings(Arc<std::sync::Mutex<Vec<String>>>);
+impl tracing::Subscriber for EvictionWarnings {
+    fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
+        *metadata.level() == tracing::Level::WARN
+    }
+    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+    fn event(&self, event: &tracing::Event<'_>) {
+        struct Fields(String);
+        impl tracing::field::Visit for Fields {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                use std::fmt::Write;
+                write!(&mut self.0, " {}={value:?}", field.name()).unwrap();
+            }
+        }
+        let mut fields = Fields(String::new());
+        event.record(&mut fields);
+        self.0.lock().unwrap().push(fields.0);
+    }
+    fn enter(&self, _: &tracing::span::Id) {}
+    fn exit(&self, _: &tracing::span::Id) {}
+}
+
+struct GeneralizedRecord(PiiClass);
+impl gaze::Recognizer for GeneralizedRecord {
+    fn id(&self) -> &str {
+        "synthetic-generalized-record"
+    }
+    fn supported_class(&self) -> &PiiClass {
+        &self.0
+    }
+    fn token_family(&self) -> &str {
+        "counter"
+    }
+    fn detect(
+        &self,
+        text: &str,
+        _: &gaze::DetectContext<'_>,
+    ) -> std::result::Result<Vec<gaze::Candidate>, gaze_types::DetectError> {
+        Ok(vec![gaze::Candidate::new(
+            0..text.len(),
+            self.0.clone(),
+            self.id(),
+            1.0,
+            100,
+            None,
+            "counter",
+            self.id(),
+            ConflictTier::None,
+            vec![],
+        )])
+    }
+}
+
+#[test]
+fn validation_refusal_discards_audit_rows_and_staged_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("audit.db");
+    let mut d = daemon_with_audit(Some(&path));
+    let class = PiiClass::custom("record_1").unwrap();
+    d.pipeline = gaze::Pipeline::builder()
+        .recognizer(GeneralizedRecord(class.clone()))
+        .rule(gaze::ClassRule::new(class, Action::Generalize))
+        .build()
+        .unwrap()
+        .with_redaction_logger(TestLogger(Arc::clone(&d.logger)));
+    let opened = open(&mut d, "blocks");
+    // Generalization produces a token-shaped marker with no restore mapping.
+    // The pipeline permits it; v2's result validator must refuse publication.
+    let transaction = d.v2.sessions["blocks"].session.begin_transaction();
+    let invalid = BlockResult {
+        id: "leaf-a".into(),
+        sha256: hash("synthetic-record"),
+        clean_text: "[RECORD_1]".into(),
+        manifest: vec![EmittedTokenSpan::new(
+            0..10,
+            0..16,
+            PiiClass::custom("record_1").unwrap(),
+        )],
+        tokens: vec![],
+        cache_hit: false,
+        validated_generation: 0,
+    };
+    let input = RawBlock {
+        id: "leaf-a".into(),
+        sha256: hash("synthetic-record"),
+        text: "synthetic-record".into(),
+    };
+    assert_eq!(
+        validate_result(&transaction, &invalid, &input),
+        Err(Failure::Pipeline)
+    );
+    drop(transaction);
+    assert_error(
+        &send(
+            &mut d,
+            clean_request(&opened, vec![block("leaf-a", "synthetic-record")]),
+        ),
+        "Pipeline",
+    );
+    assert_eq!(audit_rows(&path, "redaction_log"), 0);
+    assert_eq!(d.logger.detections.load(Ordering::Relaxed), 0);
+    let live = &d.v2.sessions["blocks"];
+    assert!(live.session.snapshot_entries().is_empty());
+    assert_eq!(live.next_seq, 1);
+    assert!(live.blocks.is_empty());
+}
+
+#[test]
+fn committed_v1_oracle_recleans_late_learned_blocks() {
+    let mut d = daemon();
+    d.pipeline = late_pipeline();
+    let opened = open(&mut d, "blocks");
+    let texts: Vec<String> = vec![
+        "Earlier Selene Exampleton.".into(),
+        "Record name: Selene Exampleton.".into(),
+    ];
+    let result = clean(
+        &mut d,
+        &opened,
+        texts
+            .iter()
+            .enumerate()
+            .map(|(i, text)| block(&format!("leaf-{i}"), text))
+            .collect(),
+    );
+    assert_committed_v1_identity(&mut d, "blocks", &texts, &result);
 }

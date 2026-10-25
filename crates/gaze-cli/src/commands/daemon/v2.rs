@@ -80,11 +80,20 @@ impl Registry {
         self.sessions.contains_key(id)
     }
 
-    pub(super) fn evict_idle(&mut self, timeout: Duration) {
-        self.sessions
-            .retain(|_, entry| entry.last_seen.elapsed() < timeout);
+    pub(super) fn evict_idle(&mut self, timeout: Duration) -> Vec<Session> {
+        let expired: Vec<_> = self
+            .sessions
+            .iter()
+            .filter(|(_, entry)| entry.last_seen.elapsed() >= timeout)
+            .map(|(id, _)| id.clone())
+            .collect();
+        let sessions = expired
+            .into_iter()
+            .map(|id| self.sessions.remove(&id).expect("expired session").session)
+            .collect();
         self.tombstones
             .retain(|entry| entry.created.elapsed() < TOMBSTONE_TTL);
+        sessions
     }
 
     fn digest(&self, frame: &str) -> [u8; 32] {
@@ -619,7 +628,6 @@ impl Daemon {
                 .last_seen = Instant::now();
             return Ok(response);
         }
-        self.make_session_room();
         let session = Session::from_policy(&self.policy).map_err(|_| Failure::Pipeline)?;
         let epoch = nonce().map_err(|_| Failure::Pipeline)?;
         #[derive(Serialize)]
@@ -677,6 +685,7 @@ impl Daemon {
         {
             return Err(Failure::CacheCapacity);
         }
+        self.make_session_room();
         self.v2.sessions.insert(session_id, live);
         Ok(response)
     }
@@ -778,10 +787,16 @@ impl Daemon {
             .map_err(|_| Failure::CacheCapacity)?;
         transaction.enable_deterministic_sweep();
         let initial = transaction.semantic_revision();
+        let audit = self
+            .logger
+            .defer_redactions()
+            .map_err(|_| Failure::Pipeline)?;
         let mut results = None;
         for _ in 0..limits.stabilization_passes {
+            audit.reset_pass().map_err(|_| Failure::Pipeline)?;
             let before = transaction.semantic_revision();
             let mut pass = Vec::new();
+            let mut reports = Vec::new();
             for block in &inventory {
                 let (clean, manifest, report) = pipeline
                     .clean_transaction_with_safety_net_policy_detect_context(
@@ -792,9 +807,6 @@ impl Daemon {
                         policy,
                     )
                     .map_err(|error| protection_failure(pipeline, error))?;
-                self.logger
-                    .log_safety_net_report(&report, &live.session, DocumentKind::Text)
-                    .map_err(|_| Failure::Pipeline)?;
                 enforce_safety_net_mode(&report, policy)
                     .map_err(|error| Failure::Protection(DaemonError::Cli(error).variant()))?;
                 let gaze::CleanDocument::Text(clean_text) = clean else {
@@ -806,6 +818,7 @@ impl Daemon {
                         .filter(|entry| clean_text.contains(&entry.token))
                         .map(TokenJson::from)
                         .collect();
+                reports.push(report);
                 pass.push(BlockResult {
                     id: block.id.clone(),
                     sha256: block.sha256.clone(),
@@ -827,11 +840,11 @@ impl Daemon {
                 )?;
             }
             if before == transaction.semantic_revision() {
-                results = Some(pass);
+                results = Some((pass, reports));
                 break;
             }
         }
-        let mut results = results.ok_or(Failure::CacheConvergence)?;
+        let (mut results, reports) = results.ok_or(Failure::CacheConvergence)?;
         let generation = live.generation + u64::from(initial != transaction.semantic_revision());
         for (result, raw) in results.iter_mut().zip(&inventory) {
             result.validated_generation = generation;
@@ -893,6 +906,12 @@ impl Daemon {
         live.blocks = inventory;
         live.revision += 1;
         live.generation = generation;
+        audit.flush().map_err(|_| Failure::Pipeline)?;
+        for report in reports {
+            self.logger
+                .log_safety_net_report(&report, &live.session, DocumentKind::Text)
+                .map_err(|_| Failure::Pipeline)?;
+        }
         Ok(response)
     }
 
@@ -1050,16 +1069,20 @@ impl Daemon {
                 .map(|(id, e)| (id.clone(), e.last_seen));
             match (v1, v2) {
                 (Some((_, time)), Some((other, other_time))) if other_time < time => {
-                    self.v2.sessions.remove(&other);
+                    if let Some(entry) = self.v2.sessions.remove(&other) {
+                        self.log_eviction(&entry.session, "lru");
+                    }
                 }
                 (Some((id, _)), _) => {
                     if let Some(entry) = self.sessions.remove(&id) {
-                        self.log_eviction(&entry, "lru");
+                        self.log_eviction(&entry.session, "lru");
                     }
                     self.lru.retain(|entry| entry != &id);
                 }
                 (None, Some((id, _))) => {
-                    self.v2.sessions.remove(&id);
+                    if let Some(entry) = self.v2.sessions.remove(&id) {
+                        self.log_eviction(&entry.session, "lru");
+                    }
                 }
                 (None, None) => break,
             }

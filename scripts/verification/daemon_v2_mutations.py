@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+from datetime import datetime
 
 ROOT = Path(__file__).resolve().parents[2]
 CLI = "crates/gaze-cli/src/commands/daemon/v2.rs"
@@ -22,6 +23,19 @@ PREFIX = "commands::daemon::v2::tests::"
 
 # Each substitution removes one admission, invalidation, or recovery guard.
 PROBES = [
+    ('audit-stable-pass', CLI, 'audit.reset_pass().map_err(|_| Failure::Pipeline)?;', '();', 'audit_counts_only_the_committed_stable_pass_and_no_refused_attempts'),
+    ('audit-defer', DAEMON, 'buffer.push(entry.clone());', 'self.log_committed(entry)?;', 'audit_counts_only_the_committed_stable_pass_and_no_refused_attempts'),
+    ('audit-flush', CLI, 'audit.flush().map_err(|_| Failure::Pipeline)?;', 'drop(audit);', 'audit_counts_only_the_committed_stable_pass_and_no_refused_attempts'),
+    ('audit-refused-validation', DAEMON, 'buffer.push(entry.clone());', 'self.log_committed(entry)?;', 'validation_refusal_discards_audit_rows_and_staged_state'),
+    ('audit-safety-report', CLI, 'reports.push(report);', 'self.logger.log_safety_net_report(&report, &live.session, DocumentKind::Text).map_err(|_| Failure::Pipeline)?;\n                reports.push(report);', 'safety_net_audit_counts_only_final_pass_and_discards_refused_reports'),
+    ('open-admission', CLI, '        if self\n            .v2\n            .bytes_except(&session_id)\n            .0\n            .saturating_add(live.bytes())\n            .saturating_add(response.get().len())\n            > self.v2.limits.global_v2_state_bytes\n        {\n            return Err(Failure::CacheCapacity);\n        }\n        self.make_session_room();\n', '        self.make_session_room();\n        if self\n            .v2\n            .bytes_except(&session_id)\n            .0\n            .saturating_add(live.bytes())\n            .saturating_add(response.get().len())\n            > self.v2.limits.global_v2_state_bytes\n        {\n            return Err(Failure::CacheCapacity);\n        }\n', 'refused_open_keeps_existing_namespaces_and_restore_mappings'),
+    ('idle-eviction-audit', DAEMON, 'self.log_eviction(&session, "idle_timeout");', 'let _ = session;', 'v2_idle_and_lru_evictions_publish_the_v1_audit_metadata'),
+    ('lru-eviction-audit', CLI, 'if let Some(entry) = self.v2.sessions.remove(&id) {\n                        self.log_eviction(&entry.session, "lru");\n                    }', 'self.v2.sessions.remove(&id);', 'v2_idle_and_lru_evictions_publish_the_v1_audit_metadata'),
+    ('mixed-eviction-audit', CLI, 'if let Some(entry) = self.v2.sessions.remove(&other) {\n                        self.log_eviction(&entry.session, "lru");\n                    }', 'self.v2.sessions.remove(&other);', 'v2_idle_and_lru_evictions_publish_the_v1_audit_metadata'),
+    ('eviction-warning', DAEMON, 'tracing::warn!(audit_session_id = %audit_session_id, reason = %reason, "gaze daemon evicted session");', '', 'v2_idle_and_lru_evictions_publish_the_v1_audit_metadata'),
+    ('independent-oracle', CLI, 'before == transaction.semantic_revision()', 'true', 'committed_v1_oracle_recleans_late_learned_blocks'),
+    ("tombstone-digest", CLI, '&& t.receipt.digest == digest', '', "strict_restore_deletion_compaction_and_close_tombstone"),
+    ("cross-protocol-lru", CLI, 'other_time < time', 'false', "shared_cap_selects_the_oldest_namespace_in_both_protocol_orders"),
     ("profile", CLI, 'r.string("framing_profile")? != PROFILE', "false", "invalid_protocol_objects_never_fall_back_to_v1"),
     ("projection", CLI, 'projection_id != live.projection_id', "false", "invalid_protocol_objects_never_fall_back_to_v1"),
     ("pipeline", CLI, 'r.string("pipeline_id")? != self.v2.pipeline_id', "false", "invalid_protocol_objects_never_fall_back_to_v1"),
@@ -60,8 +74,13 @@ PROBES = [
 def command(args, logfile):
     pressure = subprocess.run(["memory_pressure"], capture_output=True, text=True, check=True).stdout
     free = re.search(r"System-wide memory free percentage:\s*(\d+)%", pressure)
-    if not free or int(free[1]) < 30:
-        raise RuntimeError("memory headroom below the required 30 percent")
+    if not free or int(free[1]) < 50:
+        raise RuntimeError("memory headroom below the required 50 percent")
+    if os.getloadavg()[0] > 25:
+        raise RuntimeError("load1 exceeds the required ceiling of 25")
+    now = datetime.now().time()
+    if datetime.strptime("15:25", "%H:%M").time() <= now < datetime.strptime("15:45", "%H:%M").time():
+        raise RuntimeError("Cargo is paused during the 15:25-15:45 quiet window")
     env = os.environ.copy()
     env["CARGO_BUILD_JOBS"] = "2"
     with logfile.open("w") as log:
@@ -70,14 +89,20 @@ def command(args, logfile):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--only", help="one probe name")
+    parser.add_argument("--only", action="append", help="probe name; repeat to select several")
+    parser.add_argument("--output-dir", default="target/daemon-v2-mutations", help="evidence directory")
     options = parser.parse_args()
-    subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", CLI, CORE, DAEMON], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
-    evidence = ROOT / "target/daemon-v2-mutations"
+    subprocess.run(["git", "diff", "--exit-code", "HEAD"], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
+    evidence = ROOT / options.output_dir
     evidence.mkdir(parents=True, exist_ok=True)
-    probes = [p for p in PROBES if options.only is None or p[0] == options.only]
+    probes = [p for p in PROBES if options.only is None or p[0] in options.only]
     if not probes:
         parser.error("unknown probe")
+    (evidence / "provenance.json").write_text(json.dumps({
+        "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+        "probes": [p[0] for p in probes],
+        "started_at": datetime.now().isoformat(),
+    }, indent=2) + "\n")
     results = []
     try:
         for name, file, before, after, test in probes:
@@ -108,7 +133,7 @@ def main():
                 path.write_text(original)
     finally:
         (evidence / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", CLI, CORE, DAEMON], cwd=ROOT, check=True)
+    subprocess.run(["git", "diff", "--exit-code", "HEAD"], cwd=ROOT, check=True)
 
 
 if __name__ == "__main__":

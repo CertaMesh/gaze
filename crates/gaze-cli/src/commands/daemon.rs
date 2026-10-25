@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
-    mpsc, Arc,
+    mpsc, Arc, Mutex,
 };
 use std::time::{Duration, Instant};
 
@@ -508,7 +508,9 @@ impl Daemon {
     }
 
     fn evict_idle_sessions(&mut self) {
-        self.v2.evict_idle(self.session_idle_timeout);
+        for session in self.v2.evict_idle(self.session_idle_timeout) {
+            self.log_eviction(&session, "idle_timeout");
+        }
         let now = Instant::now();
         let mut expired = self
             .sessions
@@ -522,15 +524,15 @@ impl Daemon {
         for evicted in expired {
             if let Some(entry) = self.sessions.remove(&evicted) {
                 self.lru.retain(|existing| existing != &evicted);
-                self.log_eviction(&entry, "idle_timeout");
+                self.log_eviction(&entry.session, "idle_timeout");
             }
         }
     }
 
-    fn log_eviction(&self, entry: &SessionEntry, reason: &str) {
-        let audit_session_id = entry.session.audit_session_id();
+    fn log_eviction(&self, session: &Session, reason: &str) {
+        let audit_session_id = session.audit_session_id();
         tracing::warn!(audit_session_id = %audit_session_id, reason = %reason, "gaze daemon evicted session");
-        if let Err(err) = self.logger.log_eviction(&entry.session, reason) {
+        if let Err(err) = self.logger.log_eviction(session, reason) {
             let audit_session_id = serde_json::to_string(audit_session_id)
                 .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
             let reason = serde_json::to_string(reason)
@@ -631,17 +633,32 @@ struct SessionEntry {
 struct DaemonLogger {
     detections: AtomicU64,
     audit: Option<SqliteLogger>,
+    deferred: Mutex<Option<Vec<RedactionEntry>>>,
 }
 
 impl DaemonLogger {
     fn new(audit_db: Option<&Path>) -> GazeResult<Self> {
         Ok(Self {
             detections: AtomicU64::new(0),
+            deferred: Mutex::new(None),
             audit: audit_db
                 .map(SqliteLogger::new)
                 .transpose()
                 .map_err(|err| gaze::Error::Sqlite(err.to_string()))?,
         })
+    }
+
+    // Requests execute serially through &mut Daemon. The loaded and context
+    // pipelines share this sink, so a scope covers every synchronous detector.
+    fn defer_redactions(&self) -> Result<DeferredRedactions<'_>, RedactionLogError> {
+        let mut buffer = self.deferred.lock().map_err(|_| audit_buffer_error())?;
+        if buffer.is_some() {
+            return Err(RedactionLogError::Backend(
+                "audit scope already active".into(),
+            ));
+        }
+        *buffer = Some(Vec::new());
+        Ok(DeferredRedactions(self))
     }
 
     fn log_safety_net_report(
@@ -691,8 +708,8 @@ impl DaemonLogger {
     }
 }
 
-impl RedactionLogger for DaemonLogger {
-    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+impl DaemonLogger {
+    fn log_committed(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
         let mut entry = entry.clone();
         entry.provenance_stage = Some("daemon".to_string());
         if let Some(audit) = &self.audit {
@@ -707,6 +724,64 @@ impl RedactionLogger for DaemonLogger {
             self.detections.fetch_add(1, Ordering::Relaxed);
         }
         Ok(())
+    }
+}
+
+impl RedactionLogger for DaemonLogger {
+    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+        if let Some(buffer) = self
+            .deferred
+            .lock()
+            .map_err(|_| audit_buffer_error())?
+            .as_mut()
+        {
+            buffer.push(entry.clone());
+            return Ok(());
+        }
+        self.log_committed(entry)
+    }
+}
+
+fn audit_buffer_error() -> RedactionLogError {
+    RedactionLogError::Backend("audit scope unavailable".into())
+}
+
+struct DeferredRedactions<'a>(&'a DaemonLogger);
+
+impl DeferredRedactions<'_> {
+    fn reset_pass(&self) -> Result<(), RedactionLogError> {
+        self.0
+            .deferred
+            .lock()
+            .map_err(|_| audit_buffer_error())?
+            .as_mut()
+            .expect("active audit scope")
+            .clear();
+        Ok(())
+    }
+
+    fn flush(self) -> Result<(), RedactionLogError> {
+        let entries = self
+            .0
+            .deferred
+            .lock()
+            .map_err(|_| audit_buffer_error())?
+            .take()
+            .expect("active audit scope");
+        for entry in entries {
+            self.0.log_committed(&entry)?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for DeferredRedactions<'_> {
+    fn drop(&mut self) {
+        self.0
+            .deferred
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
     }
 }
 
