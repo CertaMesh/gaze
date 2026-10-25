@@ -59,12 +59,13 @@ From a prepared Anvil checkout, run the focused proof:
 
 ```sh
 anvil run <worktree> -- nice -n 10 env CARGO_BUILD_JOBS=2 \
-  cargo test -p gaze-recognizers --all-features --lib regex::scalar_index -- --nocapture
+  cargo test -p gaze-recognizers --lib regex::scalar_index -- --nocapture
 anvil run <worktree> -- nice -n 10 env CARGO_BUILD_JOBS=2 \
-  cargo test -p gaze-cli --all-features --test record_ids
+  cargo test -p gaze-cli --no-default-features --test record_ids
 ```
 
-The mutation script requires a clean checkout with a signed HEAD:
+The mutation script runs targeted default-feature recognizer tests, without
+`os-keychain`. It requires a clean checkout with a signed HEAD:
 
 ```sh
 anvil run <worktree> -- nice -n 10 env CARGO_BUILD_JOBS=2 \
@@ -79,8 +80,7 @@ creates commits or uses a stash.
 
 The committed [mutation receipt](record-id-scanner-mutations.json) records both
 compiled mutants, their named test failures, and matching source hashes before
-and after restoration. The receipt pins the implementation commit; subsequent
-proof-only commits do not change those source hashes.
+and after restoration. The receipt pins the tested commit and records its exact source hashes.
 
 These tests do not replace full-corpus benchmark certification. Detection
 changes still require both scored-label contracts and mechanism evidence for

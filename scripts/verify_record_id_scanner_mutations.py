@@ -51,13 +51,13 @@ def main():
         log = out / f"{name}.log"
         try:
             path.write_text(source.replace(old, new))
-            command = ["cargo", "test", "-p", "gaze-recognizers", "--all-features", "--lib", test, "--", "--nocapture"]
+            command = ["cargo", "test", "-p", "gaze-recognizers", "--lib", test, "--", "--nocapture"]
             with log.open("w") as stream:
                 result = subprocess.run(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT, check=False)
             output = log.read_text()
             compiled = "Finished `test` profile" in output and "Running unittests" in output
             killed = result.returncode == 101 and compiled and f"{test} ... FAILED" in output and "test result: FAILED. 0 passed; 1 failed" in output
-            receipt = dict(mutation=name, head=head, test=test, compiled=compiled, exit=result.returncode, killed=killed, original_sha256=hashlib.sha256(original).hexdigest(), log=str(log))
+            receipt = dict(mutation=name, head=head, command=command, test=test, compiled=compiled, exit=result.returncode, killed=killed, original_sha256=hashlib.sha256(original).hexdigest(), log=str(log))
         finally:
             path.write_bytes(original)
             if path.read_bytes() != original:

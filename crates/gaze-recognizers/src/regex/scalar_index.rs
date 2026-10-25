@@ -2110,7 +2110,7 @@ mod json_label_cells {
     fn object_value_close_does_not_own_sibling_fields_or_json_keywords() {
         let rules = super::regression_tests::rules();
         for body in [
-            r#"{"note":"customerId: ","order_id":"ORD-000123"}"#,
+            r#"{"note":"customerId: ","unrelated":"PUBLIC-000123"}"#,
             r#"{"customerId:":null}"#,
             r#"{"customerId:":true}"#,
             r#"{"customerId:":false}"#,
