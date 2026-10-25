@@ -662,11 +662,7 @@ fn bounded_request_and_response_edges_and_nonterminal_real_v2_frame_ceiling() {
     assert_eq!(opened["op"], "open");
     assert_error(&raw(&mut d, &format!("{frame} ")), "CacheCapacity");
     d.v2.limits = Limits::default();
-    let frame = format!(
-        "{}{}",
-        opening("too-large"),
-        " ".repeat(64 * 1024 * 1024)
-    );
+    let frame = format!("{}{}", opening("too-large"), " ".repeat(64 * 1024 * 1024));
     assert_error(&raw(&mut d, &frame), "CacheCapacity");
     open(&mut d, "still-live");
     let small = json!({"value":"\u{0001}"});
