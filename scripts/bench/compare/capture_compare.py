@@ -103,6 +103,7 @@ def run(args):
     if args.predictions_dir:
         captures.private_root(args.predictions_dir, compare.REPO)
     layers, corpus = compare.load_corpus(args.dataset, args.pack_dir)
+    identity.require_population(spec, layers)
     compare.preflight_contracts(layers)
     mappings = compare.load_mapping()
     name = args.tool
@@ -115,24 +116,26 @@ def run(args):
         plan = identity.plan_gliner(request, runtime)
     read = lambda: identity.subject(name=name, config=config, models=models,
         runtime_identity=identity.runtime(), adapter=Path(__file__), gliner_plan=plan)
-    session = captures.Session(root, spec, read, compare.mapping_for_tool(name, mappings), gliner_plan=plan)
-    if args.verify_report:
-        def predictor(document):
+    read = identity.freeze_spec(args.benchmark_spec, compare.REPO, args.dataset, read)
+    session = captures.Session(root, spec, read, compare.mapping_for_tool(name, mappings),
+                               gliner_plan=plan, read_only=bool(args.verify_report))
+    loaded = {}
+    def predictor(document):
+        if args.verify_report:
             raise ValueError("private admission requires a complete capture")
-        receipt = None
-        languages = (config["languages"] if name.startswith("presidio") else
-                     ("en", "de", "nl", "fr", "pt", "es") if name.startswith("scrubadub") else None)
-    else:
-        instance, receipt = backend(name, config, models, plan)
-        warmup = compare.score.Document("warmup", "alice@example.invalid", "en", "", "synthetic", ())
-        with identity.gliner_identity.observe(plan) if name == "datafog-gliner" else nullcontext() as observed:
-            instance.predict(warmup)
-        if observed is not None:
-            import datafog.engine as engine
-            receipt = observed.receipt(engine._get_gliner_annotator().model)
-        languages = (instance.languages if isinstance(instance, compare.Presidio) else
-                     tuple(instance.scrubbers) if isinstance(instance, compare.Scrubadub) else None)
-        predictor = instance.predict
+        if not loaded:
+            instance, receipt = backend(name, config, models, plan)
+            warmup = compare.score.Document("warmup", "alice@example.invalid", "en", "", "synthetic", ())
+            with identity.gliner_identity.observe(plan) if name == "datafog-gliner" else nullcontext() as observed:
+                instance.predict(warmup)
+            if observed is not None:
+                import datafog.engine as engine
+                receipt = observed.receipt(engine._get_gliner_annotator().model)
+            loaded.update(instance=instance, receipt=receipt)
+        return loaded["instance"].predict(document)
+    receipt = lambda: loaded.get("receipt")
+    languages = (config["languages"] if name.startswith("presidio") else
+                 ("en", "de", "nl", "fr", "pt", "es") if name.startswith("scrubadub") else None)
     with compare.ForeignCpuSampler() as sampler:
         row = measure(session, name, predictor, layers, compare.mapping_for_tool(name, mappings),
                       languages, compare.common_claimed_labels(mappings), args.predictions_dir, receipt=receipt)

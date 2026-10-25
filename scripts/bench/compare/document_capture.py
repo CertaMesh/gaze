@@ -46,10 +46,11 @@ def validate_predictions(value, document, mapping):
 
 class Session:
     """One independently planned subject. Publish only after endpoint rechecks."""
-    def __init__(self, root, spec, read_subject, mapping, *, gliner_plan=None):
+    def __init__(self, root, spec, read_subject, mapping, *, gliner_plan=None, read_only=False):
         self.root, self.spec, self.read_subject, self.mapping = root, spec, read_subject, mapping
         self.subject = read_subject()
         self.gliner_plan = gliner_plan
+        self.read_only = read_only
         self.pending = []
         self.keys = []
         self.hits = self.misses = 0
@@ -79,10 +80,13 @@ class Session:
             observation = entry["observation"]
             self.hits += 1
         else:
+            if self.read_only:
+                raise ValueError("private admission requires a complete capture")
             started = time.perf_counter()
             predictions = predict(document)
             observation = {"predictions": predictions,
                            "elapsed_ms": (time.perf_counter() - started) * 1000}
+            receipt = receipt() if callable(receipt) else receipt
             identity.verify_gliner(self.subject, receipt, self.gliner_plan)
             entry = {"key": key, "observation": observation, "gliner_receipt": receipt}
             entry["sha256"] = digest(entry)
@@ -115,20 +119,9 @@ class Session:
                     or original["row"]["tool"] != self.subject["name"]):
                 raise ValueError("private aggregate replay mismatch")
             return original["row"], original["contention"]
+        if self.read_only:
+            raise ValueError("private admission requires original aggregate evidence")
         original = {"row": row, "contention": contention}
         original["sha256"] = digest(original)
         atomic_json(path, original)
         return row, contention
-
-
-def retain_report(root, report):
-    """Retain the original report time only when its complete content reproduces."""
-    binding = {key: value for key, value in report.items() if key != "generated_at"}
-    path = root / ("report-" + digest(binding) + ".json")
-    if path.exists():
-        original = json.loads(path.read_text())
-        if digest({k: v for k, v in original.items() if k != "generated_at"}) != digest(binding):
-            raise ValueError("private report replay mismatch")
-        return original
-    atomic_json(path, report)
-    return report

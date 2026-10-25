@@ -102,3 +102,21 @@ def document_key(spec, subject, document) -> dict:
 
 def public_binding(keys) -> dict:
     return {"schema_version": 1, "binding_sha256": content.digest(keys), "documents": len(keys)}
+
+
+def require_population(spec, layers):
+    for layer in ("C", "A", "D", "R"):
+        if benchmark_spec.population(layers[layer], layer) != spec["inputs"]["population"].get(layer):
+            raise ValueError("comparison population differs from benchmark specification")
+
+
+def freeze_spec(path, root, dataset, read):
+    """Re-read the independent measuring closure at both capture endpoints."""
+    expected = json.loads(path.read_text())
+    def checked():
+        current = json.loads(path.read_text())
+        if content.digest(current) != content.digest(expected):
+            raise ValueError("benchmark specification changed during capture")
+        benchmark_spec.require_current(current, root, dataset=dataset)
+        return read()
+    return checked

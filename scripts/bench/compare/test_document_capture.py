@@ -157,3 +157,178 @@ def test_named_gliner_cannot_remove_private_plan_or_receipt(example):
     example[2]["name"] = "gliner"
     with pytest.raises(ValueError, match="independent GLiNER"):
         session(example).capture(example[-1][0], predictor)
+
+
+def test_driver_fresh_hit_and_private_admission_execute_no_replayed_subject(example, monkeypatch):
+    from types import SimpleNamespace
+    root, spec, _, docs = example
+    layers = {"C": docs, "A": [], "D": [], "R": []}
+    for layer, documents in layers.items():
+        spec["inputs"]["population"][layer] = benchmark_spec.population(documents, layer)
+    spec = benchmark_spec.manifest(spec["inputs"])
+    spec_path = root / "spec.json"
+    spec_path.write_text(json.dumps(spec))
+    monkeypatch.setattr(benchmark_spec, "require_current", lambda *args, **kwargs: None)
+    monkeypatch.setattr(compare, "load_corpus", lambda *args: (layers, {"synthetic": True}))
+    monkeypatch.setattr(compare, "preflight_contracts", lambda *args: None)
+    monkeypatch.setattr(identity, "runtime", lambda: {"python": "synthetic"})
+    calls = []
+    class Backend:
+        def predict(self, doc):
+            calls.append(doc.uid)
+            return [compare.score.Span(0, len(doc.text), "EMAIL")]
+    monkeypatch.setattr(capture_compare, "backend", lambda *args: (Backend(), None))
+    args = SimpleNamespace(tool="datafog-core", benchmark_spec=spec_path, dataset=root / "dataset",
+        pack_dir=None, cache_dir=root / "cache", predictions_dir=None, freshness_report=None,
+        verify_report=None, output=root / "report.json")
+    first = capture_compare.run(args)
+    original = args.output.read_bytes()
+    assert calls == ["warmup", *[doc.uid for doc in docs]]
+    monkeypatch.setattr(capture_compare, "backend", lambda *args: pytest.fail("replay constructed a backend"))
+    assert capture_compare.run(args) == first
+    assert args.output.read_bytes() == original
+    args.verify_report = args.output
+    assert capture_compare.run(args) == first
+    damaged = copy.deepcopy(first)
+    damaged["tools"]["datafog-core"]["contracts"]["v1"]["C"]["leaked_bytes"] += 1
+    args.output.write_text(json.dumps(damaged))
+    with pytest.raises(ValueError, match="submitted report"):
+        capture_compare.run(args)
+
+
+def test_spec_endpoint_drift_and_population_are_refused(example, monkeypatch):
+    path = example[0] / "spec.json"
+    path.write_text(json.dumps(example[1]))
+    monkeypatch.setattr(benchmark_spec, "require_current", lambda *args, **kwargs: None)
+    read = identity.freeze_spec(path, example[0], path, lambda: example[2])
+    assert read() == example[2]
+    path.write_text("{}")
+    with pytest.raises(ValueError, match="specification changed"):
+        read()
+    with pytest.raises(ValueError, match="population differs"):
+        identity.require_population(example[1], {"C": example[-1]})
+
+
+def test_read_only_admission_refuses_missing_capture_and_original_row(example):
+    current = captures.Session(example[0], example[1], lambda: example[2], {}, read_only=True)
+    with pytest.raises(ValueError, match="complete capture"):
+        current.capture(example[-1][0], predictor)
+    with pytest.raises(ValueError, match="original aggregate"):
+        current.retain_row({}, {})
+
+
+@pytest.mark.parametrize("field", ["name", "config", "models", "runtime", "adapter"])
+def test_actual_subject_inputs_change_document_identity(example, field):
+    root, spec, _, docs = example
+    model = root / "model"
+    model.mkdir()
+    (model / "weights").write_bytes(b"synthetic")
+    adapter = root / "adapter.py"
+    adapter.write_text("synthetic")
+    args = dict(name="synthetic", config={"threshold": .3}, models={"model": model},
+        runtime_identity={"python": "synthetic"}, adapter=adapter)
+    before = identity.document_key(spec, identity.subject(**args), docs[0])
+    if field == "models":
+        (model / "weights").write_bytes(b"changed")
+    elif field == "adapter":
+        adapter.write_text("changed")
+    else:
+        args["runtime_identity" if field == "runtime" else field] = {"changed": True} if field != "name" else "changed"
+    assert identity.document_key(spec, identity.subject(**args), docs[0]) != before
+
+
+def test_document_key_contract_has_complete_typed_inputs(example):
+    _, spec, subject, docs = example
+    key = identity.document_key(spec, subject, docs[0])
+    assert key == {"schema_version": 1, "benchmark_spec_id": spec["id"], "subject": subject,
+        "input": {"text_sha256": digest(docs[0].text), "utf8_bytes": len(docs[0].text.encode()),
+                  "uid": docs[0].uid, "language": docs[0].language, "region": docs[0].region}}
+
+
+@pytest.mark.parametrize("value", [-1, True, "invalid", float("inf")])
+def test_rebound_invalid_timing_is_refused(example, value):
+    current, _ = capture_all(example)
+    path = example[0] / (digest(current.keys[0]) + ".json")
+    entry = json.loads(path.read_text())
+    entry["observation"]["elapsed_ms"] = value
+    if value == float("inf"):
+        # Non-finite JSON cannot be rebound under the canonical digest contract.
+        with pytest.raises(ValueError):
+            entry["sha256"] = digest({k: v for k, v in entry.items() if k != "sha256"})
+        return
+    entry["sha256"] = digest({k: v for k, v in entry.items() if k != "sha256"})
+    path.write_text(json.dumps(entry))
+    with pytest.raises(ValueError, match="invalid capture observation"):
+        session(example).capture(example[-1][0], predictor)
+
+
+def test_private_aggregate_tampering_is_refused(example):
+    current, _ = capture_all(example)
+    row = {"tool": "synthetic", "contracts": {"v1": {}}, "provenance": {},
+           "capture_binding": identity.public_binding(current.keys)}
+    current.retain_row(row, {})
+    path = example[0] / ("row-" + digest(current.keys) + ".json")
+    changed = json.loads(path.read_text())
+    changed["row"]["contracts"] = {}
+    path.write_text(json.dumps(changed))
+    with pytest.raises(ValueError, match="aggregate replay mismatch"):
+        current.retain_row(row, {})
+
+
+def test_private_roots_and_model_link_boundaries(tmp_path):
+    repo = tmp_path / "repository"
+    repo.mkdir()
+    with pytest.raises(ValueError, match="outside"):
+        captures.private_root(repo / "cache", repo)
+    with pytest.raises(ValueError, match="missing selected"):
+        identity.model_digest(tmp_path / "missing")
+    model = tmp_path / "model"
+    model.mkdir()
+    with pytest.raises(ValueError, match="empty selected"):
+        identity.model_digest(model)
+    (model / "linked-directory").symlink_to(repo)
+    with pytest.raises(ValueError, match="directory link"):
+        identity.model_digest(model)
+
+
+def test_gliner_subject_requires_independent_runtime_plan(example):
+    from types import SimpleNamespace
+    root = example[0]
+    adapter = root / "adapter.py"
+    adapter.write_text("synthetic")
+    args = dict(name="gliner", config={}, models={}, runtime_identity={"python": "actual"}, adapter=adapter)
+    with pytest.raises(ValueError, match="missing independent"):
+        identity.subject(**args)
+    plan = SimpleNamespace(recheck=lambda: None, descriptor={"runtime": {"python": "wrong"}})
+    with pytest.raises(ValueError, match="runtime differs"):
+        identity.subject(**args, gliner_plan=plan)
+    args["name"] = "synthetic"
+    with pytest.raises(ValueError, match="unexpected GLiNER plan"):
+        identity.subject(**args, gliner_plan=plan)
+    with pytest.raises(ValueError, match="unexpected GLiNER computation"):
+        identity.verify_gliner({"name": "synthetic"}, {"forged": True}, None)
+
+
+@pytest.mark.parametrize("damage", ["inventory", "missing", "editable", "bytes"])
+def test_runtime_uses_full_installed_content_inventory(example, monkeypatch, damage):
+    from types import SimpleNamespace
+    root = example[0]
+    package = root / "synthetic.py"
+    package.write_text("synthetic bytes")
+    distribution = SimpleNamespace(files=[Path("synthetic.py")], version="1", metadata={"Name": "synthetic"},
+        locate_file=lambda file: root / file, read_text=lambda file: None)
+    monkeypatch.setattr(identity.importlib.metadata, "distributions", lambda: [distribution])
+    monkeypatch.setattr(identity.content, "native_runtime", lambda args: {"native": "synthetic"})
+    before = identity.runtime()
+    if damage == "inventory":
+        distribution.files = None
+    elif damage == "missing":
+        package.unlink()
+    elif damage == "editable":
+        distribution.read_text = lambda file: '{"dir_info":{"editable":true}}'
+    else:
+        package.write_text("changed")
+        assert identity.runtime() != before
+        return
+    with pytest.raises(ValueError):
+        identity.runtime()
