@@ -1463,7 +1463,23 @@ mod regression_tests {
             RECOVERED_ABSENT.with(|count| count.set(count.get() + 1));
             assert!(scan.span.is_empty());
             assert_eq!(scan.span.start, capture.start);
-            assert!(ScalarBoundaryIndex::default().is_json_scalar_close(input, scan.span.start));
+            assert!(serde_json::from_str::<serde_json::Value>(input).is_ok());
+            assert_eq!(input.as_bytes()[scan.span.start], b'"');
+            let mut inside = false;
+            let mut escaped = false;
+            for byte in input[..scan.span.start].bytes() {
+                if escaped {
+                    escaped = false;
+                } else if byte == b'\\' {
+                    escaped = true;
+                } else if byte == b'"' {
+                    inside = !inside;
+                }
+            }
+            assert!(
+                inside && !escaped,
+                "absent value must be at a real JSON scalar close"
+            );
         } else {
             RECOVERED_OWNED.with(|count| count.set(count.get() + 1));
             assert!(scan.span.start <= capture.start && scan.span.end >= capture.end);
