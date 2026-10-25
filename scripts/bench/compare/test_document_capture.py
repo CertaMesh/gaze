@@ -330,9 +330,13 @@ def test_runtime_uses_full_installed_content_inventory(example, monkeypatch, dam
     monkeypatch.setattr(identity.content, "native_runtime", lambda args: {"native": "synthetic"})
     monkeypatch.setattr(identity.runtime_closure, "import_inventory", lambda *args: "synthetic-imports")
     monkeypatch.setenv("PYTHONHASHSEED", "0")
+    flags = {name: getattr(identity.sys.flags, name) for name in dir(identity.sys.flags)
+             if not name.startswith("_")}
+    monkeypatch.setattr(identity.sys, "flags", SimpleNamespace(
+        **{**flags, "hash_randomization": 0, "ignore_environment": 0}))
     before = identity.runtime()
     assert set(before) == {"interpreter_sha256", "packages_sha256", "packages", "cwd", "import_files", "imports_sha256", "native", "sys_path",
-                           "environment_sha256", "python_optimization"}
+                           "environment_sha256", "interpreter_state"}
     if damage == "inventory":
         distribution.files = None
     elif damage == "missing":

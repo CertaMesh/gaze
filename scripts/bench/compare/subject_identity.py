@@ -17,10 +17,42 @@ import runtime_closure
 GLINER = frozenset(("gliner", "gliner-high-recall", "datafog-gliner", "tuned-presidio-gliner"))
 
 
+class HashSeedError(ValueError):
+    """A value-free refusal when deterministic hashing is not effective."""
+
+    code = "ineffective_python_hash_seed"
+
+    def __init__(self):
+        super().__init__(self.code)
+
+
+def require_hash_seed() -> None:
+    if (os.environ.get("PYTHONHASHSEED") != "0"
+            or sys.flags.hash_randomization != 0 or sys.flags.ignore_environment):
+        raise HashSeedError()
+
+
+def interpreter_state() -> dict:
+    """Bind startup switches and mutable interpreter semantics at both endpoints."""
+    return {
+        "flags": {name: getattr(sys.flags, name) for name in dir(sys.flags)
+                  if not name.startswith("_") and isinstance(getattr(sys.flags, name), int)},
+        "xoptions": dict(sys._xoptions), "warnoptions": list(sys.warnoptions),
+        "int_max_str_digits": sys.get_int_max_str_digits(),
+        "recursion_limit": sys.getrecursionlimit(), "switch_interval": sys.getswitchinterval(),
+        "default_encoding": sys.getdefaultencoding(),
+        "filesystem_encoding": sys.getfilesystemencoding(),
+        "filesystem_errors": sys.getfilesystemencodeerrors(),
+        "pycache_prefix": sys.pycache_prefix, "dont_write_bytecode": sys.dont_write_bytecode,
+        "dlopen_flags": sys.getdlopenflags() if hasattr(sys, "getdlopenflags") else None,
+        "cpu_count": os.cpu_count(), "process_cpu_count": os.process_cpu_count(),
+        "cpu_affinity": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
+    }
+
+
 def runtime() -> dict:
     """Inventory installed bytes and lazy native dependencies without importing ML."""
-    if os.environ.get("PYTHONHASHSEED") != "0":
-        raise ValueError("competitor capture requires PYTHONHASHSEED=0")
+    require_hash_seed()
     installed = []
     import_files = {}
     content_files = {}
@@ -51,7 +83,7 @@ def runtime() -> dict:
             "imports_sha256": imports,
             "native": content.native_runtime({}), "sys_path": list(sys.path),
             "environment_sha256": content.digest(dict(os.environ)),
-            "python_optimization": sys.flags.optimize}
+            "interpreter_state": interpreter_state()}
 
 
 def plan_gliner(request, runtime_identity):

@@ -409,6 +409,10 @@ Each unit key binds the exact text hash, document ID, language and region, the
 immutable benchmark specification ID, and the actual subject/config/model/runtime
 identity. Changes to current Gaze detector bytes do not change a competitor key while the
 measuring specification remains unchanged.
+Runtime identity includes every Python flag, `-X` option and warning option,
+effective integer/encoding limits, and CPU count and affinity used by native
+thread defaults. Capture and tuning refuse randomized hashing or interpreters
+that ignore `PYTHONHASHSEED=0` (`-R`, `-E`, `-I`).
 An input change under the same specification invalidates that unit. A new
 specification invalidates all units. The canonical population must match the
 specification. Additional variant-pack documents also have independent unit keys.
