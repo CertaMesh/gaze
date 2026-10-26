@@ -2288,18 +2288,23 @@ fn sql_quoted_identifiers_cannot_fabricate_an_absent_private_value() {
 #[test]
 fn record_ids_keep_label_suffixes_and_quotes_inside_wrappers() {
     let pipeline = record_pipeline();
-    for (label, value) in [
-        ("Customer ID number", "2024 10 15"),
-        ("Employee ID number", "2024 10 15"),
-        ("Member ID number", "2024 10 15"),
-        ("customerId", "(ZX-48\"2619)"),
-        ("employeeId", "§ZX-48'2619§"),
+    for (label, value, raw) in [
+        ("Customer ID number", "2024 10 15", "2024 10 15"),
+        ("Employee ID number", "2024 10 15", "2024 10 15"),
+        ("Member ID number", "2024 10 15", "2024 10 15"),
+        ("customerId", "(ZX-48\"2619)", "ZX-48\"2619"),
+        ("employeeId", "§ZX-48'2619§", "ZX-48'2619"),
     ] {
         let input = format!("{label} {value}\npublic_version=FRAME");
         let session = Session::new(Scope::Ephemeral).unwrap();
         let clean = public_clean(&pipeline, &session, &input);
-        assert!(!session.snapshot_entries().is_empty(), "{input:?}");
-        assert!(clean.ends_with("\npublic_version=FRAME"), "{clean:?}");
-        assert_eq!(pipeline.restore_strict_text(&session, &clean).unwrap(), input);
+        let entries = session.snapshot_entries();
+        assert_eq!(entries.len(), 1, "{input:?}");
+        assert_eq!(entries[0].raw, raw);
+        assert_eq!(clean, input.replacen(raw, &entries[0].token, 1));
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &clean).unwrap(),
+            input
+        );
     }
 }

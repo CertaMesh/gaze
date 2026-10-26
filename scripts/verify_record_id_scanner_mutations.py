@@ -143,7 +143,10 @@ def main():
     receipts = []
     baselines = {}
     for name, relative, old, new, test, package in probes:
-        command = ["cargo", "test", "-p", package, *(["--test", "record_id_boundaries"] if test == "record_ids_keep_label_suffixes_and_quotes_inside_wrappers" else ["--lib"]), test, "--", "--nocapture"]
+        target = (["--test", "record_id_boundaries"]
+                  if test == "record_ids_keep_label_suffixes_and_quotes_inside_wrappers"
+                  else ["--lib"])
+        command = ["cargo", "test", "-p", package, *target, test, "--", "--nocapture"]
         baseline = out / f"{package}-{test}.baseline.log"
         if (package, test) not in baselines:
             with baseline.open("w") as stream:
@@ -160,11 +163,10 @@ def main():
         log = out / f"{name}.log"
         try:
             path.write_text(source.replace(old, new))
-            command = ["cargo", "test", "-p", package, *(["--test", "record_id_boundaries"] if test == "record_ids_keep_label_suffixes_and_quotes_inside_wrappers" else ["--lib"]), test, "--", "--nocapture"]
             with log.open("w") as stream:
                 result = subprocess.run(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT, check=False)
             output = log.read_text()
-            compiled = "Finished `test` profile" in output and "Running unittests" in output
+            compiled = "Finished `test` profile" in output and ("Running unittests" in output or "Running tests/" in output)
             killed = result.returncode == 101 and compiled and f"{test} ... FAILED" in output and "test result: FAILED. 0 passed; 1 failed" in output
             receipt = dict(mutation=name, head=head, baseline=baselines[package, test], command=command, test=test, compiled=compiled, exit=result.returncode, killed=killed, original_sha256=hashlib.sha256(original).hexdigest(), log=str(log))
         finally:
