@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::ops::Range;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, OnceLock, RwLock, RwLockWriteGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
@@ -150,11 +150,28 @@ impl From<Vec<u8>> for SensitiveSnapshot {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(test), derive(Hash))]
 struct TokenKey {
     family: String,
     class: PiiClass,
     raw: String,
+}
+
+#[cfg(test)]
+thread_local! {
+    static MANIFEST_FULL_RECOMPUTES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static TOKEN_KEY_HASHES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+impl std::hash::Hash for TokenKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        TOKEN_KEY_HASHES.with(|count| count.set(count.get() + 1));
+        self.family.hash(state);
+        self.class.hash(state);
+        self.raw.hash(state);
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -206,12 +223,31 @@ struct SnapshotPayload {
 /// and committed proxy snapshots. A new mapping replaces the entire cache.
 #[derive(Default)]
 struct RestoreMatcherCache {
-    matcher: OnceLock<std::result::Result<Option<aho_corasick::AhoCorasick>, ()>>,
+    matcher: OnceLock<std::result::Result<Option<RestoreMatcher>, ()>>,
+}
+
+struct RestoreMatcher {
+    matcher: aho_corasick::AhoCorasick,
+    allocation_bytes: usize,
+}
+
+impl RestoreMatcher {
+    fn compute_allocation_bytes(&self) -> usize {
+        #[cfg(test)]
+        RESTORE_ALLOCATION_RECOMPUTES.with(|count| count.set(count.get() + 1));
+        self.matcher.memory_usage()
+    }
+
+    fn allocation_bytes(&self) -> usize {
+        self.allocation_bytes
+    }
 }
 
 #[derive(Clone)]
 struct SessionState {
     generation: u64,
+    semantic_revision: u64,
+    deterministic_sweep: bool,
     next_by_class: HashMap<PiiClass, usize>,
     token_by_value: HashMap<TokenKey, String>,
     value_by_token: HashMap<String, String>,
@@ -229,6 +265,8 @@ impl SessionState {
     fn empty() -> Self {
         Self {
             generation: 0,
+            semantic_revision: 0,
+            deterministic_sweep: false,
             next_by_class: HashMap::new(),
             token_by_value: HashMap::new(),
             value_by_token: HashMap::new(),
@@ -313,12 +351,14 @@ impl RestoreAssessment {
 #[non_exhaustive]
 pub enum SessionTransactionError {
     GenerationConflict,
+    CapacityExceeded,
 }
 
 impl fmt::Display for SessionTransactionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::GenerationConflict => "session_generation_conflict",
+            Self::CapacityExceeded => "session_capacity_exceeded",
         })
     }
 }
@@ -334,6 +374,27 @@ pub struct SessionTransaction<'session> {
     identity: Arc<SessionIdentity>,
     captured_generation: u64,
     staged: SessionState,
+    manifest_limit: Option<usize>,
+    manifest_charge: Option<(usize, [usize; 5])>,
+    capacity_exceeded: bool,
+}
+
+/// A validated commit holding the session's exclusive publication lock.
+///
+/// Dropping this value publishes nothing. Keep its lifetime short and do not
+/// access the same session while it is held. External durable writes can finish
+/// before [`Self::commit`] publishes the already allocated snapshot infallibly.
+pub struct PreparedSessionCommit<'session> {
+    boundary: RwLockWriteGuard<'session, Arc<SessionState>>,
+    snapshot: CommittedSessionSnapshot,
+}
+
+impl PreparedSessionCommit<'_> {
+    /// Publish the prepared snapshot without another validation or allocation.
+    pub fn commit(mut self) -> CommittedSessionSnapshot {
+        *self.boundary = Arc::clone(&self.snapshot.state);
+        self.snapshot
+    }
 }
 
 /// Immutable restore-only state returned by a successful transaction commit.
@@ -510,6 +571,11 @@ impl Session {
         Self::new(scope)
     }
 
+    /// Conservative allocation charge of the current manifest.
+    pub fn manifest_allocation_bytes(&self) -> usize {
+        manifest_allocation_bytes(&self.state_snapshot())
+    }
+
     /// Capture the current complete immutable state for isolated mutation.
     pub fn begin_transaction(&self) -> SessionTransaction<'_> {
         let state = self.state_snapshot();
@@ -518,6 +584,9 @@ impl Session {
             identity: Arc::clone(&self.identity),
             captured_generation: state.generation,
             staged: (*state).clone(),
+            manifest_limit: None,
+            manifest_charge: None,
+            capacity_exceeded: false,
         }
     }
 
@@ -1036,12 +1105,127 @@ impl Session {
 }
 
 impl<'session> SessionTransaction<'session> {
+    /// Monotonic change stamp covering mappings, counters, spelling and evidence.
+    /// Unlike the commit generation this does not advance on a semantic no-op.
+    pub fn semantic_revision(&self) -> u64 {
+        self.staged.semantic_revision
+    }
+
+    /// Use canonical source ordering for request-complete, staged protection.
+    /// Legacy sessions retain their original sweep ordering.
+    pub fn enable_deterministic_sweep(&mut self) {
+        if !self.staged.deterministic_sweep {
+            self.staged.deterministic_sweep = true;
+            self.staged.sweep_matcher_cache = None;
+        }
+    }
+
+    /// Conservative manifest allocation charge, excluding shared identity and
+    /// pipeline work buffers. Hosts separately reserve staging and matcher space.
+    pub fn manifest_allocation_bytes(&self) -> usize {
+        self.manifest_charge.map_or_else(
+            || manifest_allocation_bytes(&self.staged),
+            |(bytes, _)| bytes.saturating_add(manifest_matcher_bytes(&self.staged)),
+        )
+    }
+
+    /// Bound staged manifest growth before allocating new mapping payloads.
+    /// The host must also budget the original state and pipeline work buffers.
+    pub fn set_manifest_byte_limit(&mut self, limit: usize) -> Result<()> {
+        self.manifest_limit = Some(limit);
+        self.recompute_manifest_charge();
+        self.ensure_manifest_room(0)
+    }
+
+    fn recompute_manifest_charge(&mut self) {
+        self.manifest_charge = Some((
+            manifest_storage_bytes(&self.staged),
+            manifest_capacities(&self.staged),
+        ));
+    }
+
+    fn charge_manifest_growth(&mut self, payload: usize) {
+        if let Some((bytes, capacities)) = self.manifest_charge {
+            if capacities == manifest_capacities(&self.staged) {
+                self.manifest_charge = Some((bytes.saturating_add(payload), capacities));
+            } else {
+                self.recompute_manifest_charge();
+            }
+        }
+    }
+
+    fn charge_mapping(
+        &mut self,
+        family: &str,
+        class: &PiiClass,
+        raw: &str,
+        token: &str,
+        added: bool,
+    ) {
+        if added && self.manifest_charge.is_some() {
+            self.charge_manifest_growth(
+                raw.len()
+                    .saturating_mul(2)
+                    .saturating_add(family.len())
+                    .saturating_add(class.class_name().len())
+                    .saturating_add(token.len().saturating_mul(2))
+                    .saturating_add(if self.staged.json_spelled.contains(token) {
+                        token.len()
+                    } else {
+                        0
+                    }),
+            );
+        }
+    }
+
+    fn ensure_manifest_room(&mut self, addition: usize) -> Result<()> {
+        if let Some(limit) = self.manifest_limit {
+            let current = self.manifest_allocation_bytes();
+            // A hash-table growth can coexist with its old allocation. Reserve
+            // twice the current charge plus all new payload copies and buckets.
+            let projected = if addition == 0 {
+                current
+            } else {
+                current.saturating_mul(2).saturating_add(addition)
+            };
+            if projected > limit {
+                self.capacity_exceeded = true;
+                return Err(Error::SessionCapacity);
+            }
+        }
+        Ok(())
+    }
+
+    fn reserve_mapping(&mut self, family: &str, class: &PiiClass, raw: &str) -> Result<()> {
+        if self.manifest_limit.is_none() {
+            return Ok(());
+        }
+        let key = TokenKey {
+            family: family.to_owned(),
+            class: class.clone(),
+            raw: raw.to_owned(),
+        };
+        if self.staged.token_by_value.contains_key(&key) {
+            return Ok(());
+        }
+        self.ensure_manifest_room(
+            raw.len()
+                .saturating_mul(6)
+                .saturating_add(family.len().saturating_mul(4))
+                .saturating_add(class.class_name().len().saturating_mul(8))
+                .saturating_add(8192),
+        )
+    }
+
     pub(crate) fn fork_for_probe(&self) -> Self {
         Self {
             session: self.session,
             identity: Arc::clone(&self.identity),
             captured_generation: self.captured_generation,
             staged: self.staged.clone(),
+            manifest_limit: self.manifest_limit,
+            manifest_charge: self.manifest_charge,
+            capacity_exceeded: self.capacity_exceeded,
         }
     }
 
@@ -1078,13 +1262,14 @@ impl<'session> SessionTransaction<'session> {
         spelling: SourceSpelling,
     ) -> Result<String> {
         class.validate_custom_name()?;
+        self.reserve_mapping(family, class, raw)?;
         let prefix = hex::encode(self.identity.session_hex);
-        Ok(
+        let (token, added) =
             intern_mapping_in_state(&mut self.staged, family, class, raw, spelling, |index| {
                 format!("<{prefix}:{}_{}>", class.class_name(), index)
-            })
-            .0,
-        )
+            });
+        self.charge_mapping(family, class, raw, &token, added);
+        Ok(token)
     }
 
     pub(crate) fn record_evidence(
@@ -1094,7 +1279,36 @@ impl<'session> SessionTransaction<'session> {
         raw: &str,
         evidence: ManifestEvidence,
     ) {
+        let family_name = family.unwrap_or(DEFAULT_COUNTER_FAMILY);
+        let payload = if self.manifest_limit.is_some() {
+            let key = TokenKey {
+                family: family_name.to_owned(),
+                class: class.clone(),
+                raw: raw.to_owned(),
+            };
+            if !self.staged.token_by_value.contains_key(&key) {
+                return;
+            }
+            if self.staged.evidence_by_value.contains_key(&key) {
+                0
+            } else {
+                let payload = raw
+                    .len()
+                    .saturating_add(family_name.len())
+                    .saturating_add(class.class_name().len());
+                if self
+                    .ensure_manifest_room(payload.saturating_mul(2).saturating_add(8192))
+                    .is_err()
+                {
+                    return;
+                }
+                payload
+            }
+        } else {
+            0
+        };
         record_evidence_in_state(&mut self.staged, family, class, raw, evidence);
+        self.charge_manifest_growth(payload);
     }
 
     pub(crate) fn sweep_matcher_view(&self) -> Result<Option<Arc<SweepMatcher>>> {
@@ -1124,8 +1338,9 @@ impl<'session> SessionTransaction<'session> {
         spelling: SourceSpelling,
     ) -> Result<String> {
         class.validate_custom_name()?;
+        self.reserve_mapping(DEFAULT_COUNTER_FAMILY, class, raw)?;
         let prefix = hex::encode(self.identity.session_hex);
-        Ok(intern_mapping_in_state(
+        let (token, added) = intern_mapping_in_state(
             &mut self.staged,
             DEFAULT_COUNTER_FAMILY,
             class,
@@ -1142,8 +1357,9 @@ impl<'session> SessionTransaction<'session> {
                 }
                 PiiClass::Custom(name) => format!("{prefix}:custom:{name}_{index}"),
             },
-        )
-        .0)
+        );
+        self.charge_mapping(DEFAULT_COUNTER_FAMILY, class, raw, &token, added);
+        Ok(token)
     }
 
     pub fn tokens(&self) -> Vec<String> {
@@ -1201,6 +1417,33 @@ impl<'session> SessionTransaction<'session> {
         text: &str,
         max_bytes: usize,
     ) -> std::result::Result<String, BoundedRestoreError> {
+        self.restore_bounded(text, max_bytes, false)
+            .map(|(text, _)| text)
+    }
+
+    /// Bounded owner-side restoration with the same classification as
+    /// [`Session::assess_restore_text`], without constructing the output twice.
+    pub fn assess_restore_text_bounded(
+        &self,
+        text: &str,
+        max_bytes: usize,
+    ) -> std::result::Result<RestoreAssessment, BoundedRestoreError> {
+        let (text, authorized_output_ranges) = self.restore_bounded(text, max_bytes, true)?;
+        Ok(classify_restore_output(
+            &self.staged,
+            RestoredTextWithProvenance {
+                text,
+                authorized_output_ranges,
+            },
+        ))
+    }
+
+    fn restore_bounded(
+        &self,
+        text: &str,
+        max_bytes: usize,
+        provenance: bool,
+    ) -> std::result::Result<(String, Vec<Range<usize>>), BoundedRestoreError> {
         // Preserve the bounded API's distinct malformed-syntax error before
         // membership and ambiguity validation through the shared locator.
         strict_restore_tokens(text).map_err(|_| BoundedRestoreError::MalformedToken)?;
@@ -1235,6 +1478,12 @@ impl<'session> SessionTransaction<'session> {
         output
             .try_reserve_exact(size)
             .map_err(|_| BoundedRestoreError::CapExceeded)?;
+        let mut authorized = Vec::<Range<usize>>::new();
+        if provenance {
+            authorized
+                .try_reserve_exact(tokens.len())
+                .map_err(|_| BoundedRestoreError::CapExceeded)?;
+        }
         let mut cursor = 0;
         for token in tokens {
             let raw = self
@@ -1243,11 +1492,22 @@ impl<'session> SessionTransaction<'session> {
                 .get(&token.parsed.raw)
                 .ok_or(BoundedRestoreError::UnknownToken)?;
             output.push_str(&text[cursor..token.start]);
+            let start = output.len();
             output.push_str(raw);
+            if provenance && start < output.len() {
+                if let Some(previous) = authorized
+                    .last_mut()
+                    .filter(|previous| previous.end >= start)
+                {
+                    previous.end = output.len();
+                } else {
+                    authorized.push(start..output.len());
+                }
+            }
             cursor = token.end;
         }
         output.push_str(&text[cursor..]);
-        Ok(output)
+        Ok((output, authorized))
     }
 
     pub fn restore_strict_text_with_provenance(
@@ -1271,10 +1531,28 @@ impl<'session> SessionTransaction<'session> {
     }
 
     /// Atomically publish the entire staged state if the captured generation is current.
-    pub fn commit(
+    pub fn commit(self) -> std::result::Result<CommittedSessionSnapshot, SessionTransactionError> {
+        Ok(self.prepare_commit()?.commit())
+    }
+
+    /// Validate and reserve publication before a caller's fallible durable work.
+    ///
+    /// Capacity and generation failures occur here, before anything is published.
+    /// The returned guard excludes concurrent mutation until committed or dropped.
+    pub fn prepare_commit(
         mut self,
-    ) -> std::result::Result<CommittedSessionSnapshot, SessionTransactionError> {
-        let mut boundary = self
+    ) -> std::result::Result<PreparedSessionCommit<'session>, SessionTransactionError> {
+        if self.manifest_limit.is_some() {
+            self.recompute_manifest_charge();
+        }
+        if self.capacity_exceeded
+            || self
+                .manifest_limit
+                .is_some_and(|limit| self.manifest_allocation_bytes() > limit)
+        {
+            return Err(SessionTransactionError::CapacityExceeded);
+        }
+        let boundary = self
             .session
             .state
             .write()
@@ -1288,10 +1566,12 @@ impl<'session> SessionTransaction<'session> {
             .checked_add(1)
             .expect("session generation exhausted");
         let committed = Arc::new(self.staged);
-        *boundary = Arc::clone(&committed);
-        Ok(CommittedSessionSnapshot {
-            identity: self.identity,
-            state: committed,
+        Ok(PreparedSessionCommit {
+            boundary,
+            snapshot: CommittedSessionSnapshot {
+                identity: self.identity,
+                state: committed,
+            },
         })
     }
 }
@@ -1395,6 +1675,10 @@ where
         .checked_add(1)
         .expect("session token counter exhausted");
     let token = build(next);
+    state.semantic_revision = state
+        .semantic_revision
+        .checked_add(1)
+        .expect("semantic revision exhausted");
     state.next_by_class.insert(class.clone(), next);
     state.token_by_value.insert(key, token.clone());
     state.value_by_token.insert(token.clone(), raw.to_string());
@@ -1464,10 +1748,11 @@ fn known_restore_matches<'a>(
 
 #[cfg(test)]
 thread_local! {
+    static RESTORE_ALLOCATION_RECOMPUTES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static RESTORE_MATCHER_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-fn build_restore_matcher(state: &SessionState) -> Result<Option<aho_corasick::AhoCorasick>> {
+fn build_restore_matcher(state: &SessionState) -> Result<Option<RestoreMatcher>> {
     if state.value_by_token.is_empty() {
         return Ok(None);
     }
@@ -1475,9 +1760,12 @@ fn build_restore_matcher(state: &SessionState) -> Result<Option<aho_corasick::Ah
     RESTORE_MATCHER_BUILDS.with(|builds| builds.set(builds.get() + 1));
     let mut tokens = state.value_by_token.keys().collect::<Vec<_>>();
     tokens.sort_unstable();
-    aho_corasick::AhoCorasick::new(tokens)
-        .map(Some)
-        .map_err(|_| Error::RestoreMatcherBuild)
+    let mut matcher = RestoreMatcher {
+        matcher: aho_corasick::AhoCorasick::new(tokens).map_err(|_| Error::RestoreMatcherBuild)?,
+        allocation_bytes: 0,
+    };
+    matcher.allocation_bytes = matcher.compute_allocation_bytes();
+    Ok(Some(matcher))
 }
 
 /// Locate complete manifest-owned runs. A join may replace a word boundary only when
@@ -1494,6 +1782,7 @@ fn locate_restore_tokens(state: &SessionState, text: &str) -> Result<Vec<StrictR
         return Ok(Vec::new());
     };
     let mut spans = matcher
+        .matcher
         .find_overlapping_iter(text)
         .map(|matched| matched.start()..matched.end())
         .collect::<Vec<_>>();
@@ -1584,12 +1873,16 @@ fn record_evidence_in_state(
     if previous.is_some_and(ManifestEvidence::propagates) != next.propagates() {
         state.sweep_matcher_cache = None;
     }
+    state.semantic_revision = state
+        .semantic_revision
+        .checked_add(1)
+        .expect("semantic revision exhausted");
     state.evidence_by_value.insert(key, next);
     true
 }
 
 fn build_sweep_matcher(state: &SessionState) -> Result<Option<Arc<SweepMatcher>>> {
-    let sources = state
+    let mut sources = state
         .evidence_by_value
         .iter()
         .filter(|(_, evidence)| evidence.propagates())
@@ -1597,8 +1890,82 @@ fn build_sweep_matcher(state: &SessionState) -> Result<Option<Arc<SweepMatcher>>
             family: key.family.clone(),
             class: key.class.clone(),
             raw: key.raw.clone(),
-        });
+        })
+        .collect::<Vec<_>>();
+    if state.deterministic_sweep {
+        sources.sort_by(|a, b| (&a.family, &a.class, &a.raw).cmp(&(&b.family, &b.class, &b.raw)));
+    }
     Ok(SweepMatcher::build(sources)?.map(Arc::new))
+}
+
+fn manifest_capacities(state: &SessionState) -> [usize; 5] {
+    [
+        state.token_by_value.capacity(),
+        state.value_by_token.capacity(),
+        state.evidence_by_value.capacity(),
+        state.next_by_class.capacity(),
+        state.json_spelled.capacity(),
+    ]
+}
+
+fn manifest_allocation_bytes(state: &SessionState) -> usize {
+    manifest_storage_bytes(state).saturating_add(manifest_matcher_bytes(state))
+}
+
+fn manifest_storage_bytes(state: &SessionState) -> usize {
+    #[cfg(test)]
+    MANIFEST_FULL_RECOMPUTES.with(|count| count.set(count.get() + 1));
+    // Charge hash buckets above their payload size, plus allocator alignment.
+    let tables = state
+        .token_by_value
+        .capacity()
+        .saturating_mul(256)
+        .saturating_add(state.value_by_token.capacity().saturating_mul(128))
+        .saturating_add(state.evidence_by_value.capacity().saturating_mul(256))
+        .saturating_add(state.next_by_class.capacity().saturating_mul(128))
+        .saturating_add(state.json_spelled.capacity().saturating_mul(64));
+    let keys = state
+        .token_by_value
+        .iter()
+        .map(|(key, token)| {
+            key.raw
+                .capacity()
+                .saturating_add(key.family.capacity())
+                .saturating_add(key.class.class_name().len())
+                .saturating_add(token.capacity())
+        })
+        .chain(state.evidence_by_value.keys().map(|key| {
+            key.raw
+                .capacity()
+                .saturating_add(key.family.capacity())
+                .saturating_add(key.class.class_name().len())
+        }))
+        .chain(
+            state
+                .value_by_token
+                .iter()
+                .map(|(token, raw)| token.capacity().saturating_add(raw.capacity())),
+        )
+        .chain(state.json_spelled.iter().map(String::capacity))
+        .fold(0usize, usize::saturating_add);
+    std::mem::size_of::<SessionState>()
+        .saturating_add(tables)
+        .saturating_add(keys)
+}
+
+fn manifest_matcher_bytes(state: &SessionState) -> usize {
+    let restore = state
+        .restore_matcher_cache
+        .matcher
+        .get()
+        .and_then(|matcher| matcher.as_ref().ok())
+        .and_then(Option::as_ref)
+        .map_or(0, RestoreMatcher::allocation_bytes);
+    let sweep = state
+        .sweep_matcher_cache
+        .as_ref()
+        .map_or(0, |matcher| matcher.allocation_bytes());
+    restore.saturating_add(sweep)
 }
 
 fn snapshot_entries_from_state(state: &SessionState) -> Vec<SessionSnapshotEntry> {
@@ -4385,7 +4752,7 @@ mod tests {
             .expect("valid matcher")
             .as_ref()
             .expect("non-empty matcher");
-        assert!(matcher.is_match(&token));
+        assert!(matcher.matcher.is_match(&token));
         let state = session.state_snapshot();
         assert_eq!(state.token_by_value.len(), state.value_by_token.len());
         for (key, mapped_token) in &state.token_by_value {
@@ -4418,6 +4785,33 @@ mod tests {
         assert_eq!(Arc::as_ptr(&state), before);
         assert_eq!(state.token_by_value.len(), 100);
         assert_eq!(state.generation, 100);
+    }
+
+    #[test]
+    fn prepared_commit_drop_preserves_state_and_retry_publishes_once() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        let token = transaction
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .unwrap();
+        let before = session.snapshot_entries();
+        let stale = session.begin_transaction();
+        drop(transaction.prepare_commit().unwrap());
+        assert_eq!(session.snapshot_entries(), before);
+        let mut retry = session.begin_transaction();
+        assert_eq!(
+            retry
+                .tokenize(&PiiClass::Email, "alice@example.invalid")
+                .unwrap(),
+            token
+        );
+        let snapshot = retry.prepare_commit().unwrap().commit();
+        assert!(snapshot.contains_token(&token));
+        assert_eq!(session.snapshot_entries().len(), before.len() + 1);
+        assert!(matches!(
+            stale.prepare_commit(),
+            Err(SessionTransactionError::GenerationConflict)
+        ));
     }
 
     #[test]
@@ -4545,6 +4939,9 @@ mod tests {
                 }
                 Err(SessionTransactionError::GenerationConflict) => {
                     assert!(!session.contains_token(&staged));
+                }
+                Err(SessionTransactionError::CapacityExceeded) => {
+                    panic!("unbounded transaction refused capacity")
                 }
             }
             assert!(session.contains_token(&mutation));
@@ -4849,5 +5246,262 @@ mod repeat_query_purity_tests {
         ));
         assert_eq!(tx.snapshot_entries(), entries);
         assert_eq!(tx.staged.evidence_by_value, evidence);
+    }
+    #[test]
+    fn staged_manifest_budget_refuses_before_mapping_growth_and_commit() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        transaction.set_manifest_byte_limit(1024).unwrap();
+        assert!(matches!(
+            transaction.tokenize(&PiiClass::Name, "Synthetic Exampleton"),
+            Err(Error::SessionCapacity)
+        ));
+        assert!(transaction.snapshot_entries().is_empty());
+        assert!(matches!(
+            transaction.commit(),
+            Err(SessionTransactionError::CapacityExceeded)
+        ));
+        assert!(session.snapshot_entries().is_empty());
+    }
+
+    #[test]
+    fn cached_matcher_charges_do_not_revisit_allocations_on_queries_or_mints() {
+        use crate::sweep::SWEEP_ALLOCATION_RECOMPUTES;
+
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        transaction
+            .set_manifest_byte_limit(32 * 1024 * 1024)
+            .unwrap();
+        let class = PiiClass::Custom("synthetic_identifier".into());
+        for index in 0..1024 {
+            let raw = format!("synthetic-record-{index}");
+            transaction.tokenize(&class, &raw).unwrap();
+            transaction.record_evidence(None, &class, &raw, ManifestEvidence::Pattern);
+        }
+        SWEEP_ALLOCATION_RECOMPUTES.with(|count| count.set(0));
+        RESTORE_ALLOCATION_RECOMPUTES.with(|count| count.set(0));
+        transaction.sweep_matcher().unwrap().unwrap();
+        let entry = transaction.snapshot_entries().remove(0);
+        locate_restore_tokens(&transaction.staged, &entry.token).unwrap();
+        assert_eq!(SWEEP_ALLOCATION_RECOMPUTES.with(|count| count.get()), 1);
+        assert_eq!(RESTORE_ALLOCATION_RECOMPUTES.with(|count| count.get()), 1);
+        let charge = transaction.manifest_allocation_bytes();
+        for _ in 0..128 {
+            assert_eq!(transaction.manifest_allocation_bytes(), charge);
+            locate_restore_tokens(&transaction.staged, &entry.token).unwrap();
+        }
+        for index in 1024..1152 {
+            transaction
+                .tokenize(&class, &format!("synthetic-record-{index}"))
+                .unwrap();
+        }
+        assert_eq!(SWEEP_ALLOCATION_RECOMPUTES.with(|count| count.get()), 1);
+        assert_eq!(RESTORE_ALLOCATION_RECOMPUTES.with(|count| count.get()), 1);
+        assert_eq!(
+            transaction.manifest_allocation_bytes(),
+            manifest_allocation_bytes(&transaction.staged)
+        );
+    }
+
+    #[test]
+    fn bounded_manifest_charges_grow_incrementally_and_repeats_use_hash_lookups() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        MANIFEST_FULL_RECOMPUTES.with(|count| count.set(0));
+        transaction
+            .set_manifest_byte_limit(32 * 1024 * 1024)
+            .unwrap();
+        let class = PiiClass::Custom("synthetic_identifier".into());
+        for index in 0..1024 {
+            let raw = format!(r"synthetic-record-\u0030-{index}");
+            let spelling = if index % 4 < 2 {
+                SourceSpelling::JsonEscaped
+            } else {
+                SourceSpelling::Plain
+            };
+            let token = if index % 2 == 0 {
+                transaction
+                    .tokenize_spelled("synthetic", &class, &raw, spelling)
+                    .unwrap()
+            } else {
+                transaction
+                    .format_preserving_fake_spelled(&class, &raw, spelling)
+                    .unwrap()
+            };
+            assert_eq!(transaction.source_spelling(&token), Some(spelling));
+            let recomputes = MANIFEST_FULL_RECOMPUTES.with(|count| count.get());
+            assert_eq!(
+                transaction.manifest_allocation_bytes(),
+                manifest_allocation_bytes(&transaction.staged),
+                "mapping {index}"
+            );
+            MANIFEST_FULL_RECOMPUTES.with(|count| count.set(recomputes));
+            transaction.record_evidence(
+                Some(if index % 2 == 0 {
+                    "synthetic"
+                } else {
+                    DEFAULT_COUNTER_FAMILY
+                }),
+                &class,
+                &raw,
+                ManifestEvidence::Pattern,
+            );
+        }
+        assert!(MANIFEST_FULL_RECOMPUTES.with(|count| count.get()) < 40);
+        assert_eq!(
+            transaction.manifest_allocation_bytes(),
+            manifest_allocation_bytes(&transaction.staged)
+        );
+        transaction.sweep_matcher().unwrap();
+        assert_eq!(
+            transaction.manifest_allocation_bytes(),
+            manifest_allocation_bytes(&transaction.staged)
+        );
+        let recomputes = MANIFEST_FULL_RECOMPUTES.with(|count| count.get());
+        TOKEN_KEY_HASHES.with(|count| count.set(0));
+        for index in 0..1024 {
+            let family = if index % 2 == 0 {
+                "synthetic"
+            } else {
+                DEFAULT_COUNTER_FAMILY
+            };
+            transaction
+                .reserve_mapping(family, &class, &format!(r"synthetic-record-\u0030-{index}"))
+                .unwrap();
+        }
+        assert_eq!(TOKEN_KEY_HASHES.with(|count| count.get()), 1024);
+        TOKEN_KEY_HASHES.with(|count| count.set(0));
+        for index in 0..1024 {
+            let family = if index % 2 == 0 {
+                "synthetic"
+            } else {
+                DEFAULT_COUNTER_FAMILY
+            };
+            transaction.record_evidence(
+                Some(family),
+                &class,
+                &format!(r"synthetic-record-\u0030-{index}"),
+                ManifestEvidence::Pattern,
+            );
+        }
+        assert_eq!(TOKEN_KEY_HASHES.with(|count| count.get()), 4096);
+        for index in 0..1024 {
+            let family = if index % 2 == 0 {
+                "synthetic"
+            } else {
+                DEFAULT_COUNTER_FAMILY
+            };
+            let raw = format!(r"synthetic-record-\u0030-{index}");
+            transaction
+                .tokenize_with_family(family, &class, &raw)
+                .unwrap();
+            transaction.record_evidence(Some(family), &class, &raw, ManifestEvidence::Pattern);
+        }
+        assert_eq!(
+            MANIFEST_FULL_RECOMPUTES.with(|count| count.get()),
+            recomputes
+        );
+        transaction.commit().unwrap();
+        assert_eq!(
+            MANIFEST_FULL_RECOMPUTES.with(|count| count.get()),
+            recomputes + 1
+        );
+        assert_eq!(session.snapshot_entries().len(), 1024);
+    }
+
+    #[test]
+    fn bounded_manifest_existing_mapping_needs_no_growth_reservation() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let token = session
+            .tokenize(&PiiClass::Name, "Synthetic Exampleton")
+            .unwrap();
+        let mut transaction = session.begin_transaction();
+        transaction
+            .set_manifest_byte_limit(transaction.manifest_allocation_bytes())
+            .unwrap();
+        assert_eq!(
+            transaction
+                .tokenize(&PiiClass::Name, "Synthetic Exampleton")
+                .unwrap(),
+            token
+        );
+        transaction.commit().unwrap();
+    }
+
+    #[test]
+    fn semantic_stamp_tracks_evidence_promotions_without_minting_and_ignores_noops() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        let initial = transaction.semantic_revision();
+        let token = transaction
+            .tokenize(&PiiClass::Name, "Synthetic Exampleton")
+            .unwrap();
+        assert!(transaction.semantic_revision() > initial);
+        transaction.record_evidence(
+            None,
+            &PiiClass::Name,
+            "Synthetic Exampleton",
+            ManifestEvidence::Learned,
+        );
+        let learned = transaction.semantic_revision();
+        transaction.record_evidence(
+            None,
+            &PiiClass::Name,
+            "Synthetic Exampleton",
+            ManifestEvidence::Pattern,
+        );
+        assert!(transaction.semantic_revision() > learned);
+        assert_eq!(
+            transaction
+                .tokenize(&PiiClass::Name, "Synthetic Exampleton")
+                .unwrap(),
+            token
+        );
+        let stable = transaction.semantic_revision();
+        transaction.record_evidence(
+            None,
+            &PiiClass::Name,
+            "Synthetic Exampleton",
+            ManifestEvidence::Pattern,
+        );
+        transaction.record_evidence(
+            None,
+            &PiiClass::Name,
+            "Synthetic Exampleton",
+            ManifestEvidence::Learned,
+        );
+        assert_eq!(transaction.semantic_revision(), stable);
+        transaction.commit().unwrap();
+        assert_eq!(session.begin_transaction().semantic_revision(), stable);
+    }
+    #[test]
+    fn deterministic_transaction_sweep_has_stable_equal_span_family_order() {
+        for _ in 0..64 {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let class = PiiClass::Custom("class_alpha".into());
+            let mut transaction = session.begin_transaction();
+            for family in ["omega", "alpha"] {
+                transaction
+                    .tokenize_with_family(family, &class, "ZXQ7-4832")
+                    .unwrap();
+                transaction.record_evidence(
+                    Some(family),
+                    &class,
+                    "ZXQ7-4832",
+                    ManifestEvidence::Pattern,
+                );
+            }
+            transaction.enable_deterministic_sweep();
+            let hits = crate::sweep::select(
+                transaction
+                    .sweep_matcher()
+                    .unwrap()
+                    .unwrap()
+                    .find("ZXQ7-4832"),
+            );
+            assert_eq!(hits.len(), 1);
+            assert_eq!(hits[0].family, "alpha");
+        }
     }
 }

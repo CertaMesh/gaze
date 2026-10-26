@@ -275,6 +275,7 @@ struct Pattern {
 /// document's own rule-found values.
 pub(crate) struct SweepMatcher {
     sources: Vec<SweepSource>,
+    allocation_bytes: usize,
     folded: Option<(AhoCorasick, Vec<(usize, SweepLink)>)>,
     exact: Option<(AhoCorasick, Vec<(usize, SweepLink)>)>,
 }
@@ -298,7 +299,33 @@ pub enum ManifestSweepError {
     MatcherBuild,
 }
 
+#[cfg(test)]
+thread_local! {
+    pub(crate) static SWEEP_ALLOCATION_RECOMPUTES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 impl SweepMatcher {
+    pub(crate) fn allocation_bytes(&self) -> usize {
+        self.allocation_bytes
+    }
+
+    fn compute_allocation_bytes(&self) -> usize {
+        #[cfg(test)]
+        SWEEP_ALLOCATION_RECOMPUTES.with(|count| count.set(count.get() + 1));
+        let sources = self.sources.capacity() * std::mem::size_of::<SweepSource>()
+            + self
+                .sources
+                .iter()
+                .map(|s| s.family.capacity() + s.raw.capacity() + s.class.class_name().len())
+                .sum::<usize>();
+        let matcher = |value: &Option<(AhoCorasick, Vec<(usize, SweepLink)>)>| {
+            value.as_ref().map_or(0, |(ac, meta)| {
+                ac.memory_usage() + meta.capacity() * std::mem::size_of::<(usize, SweepLink)>()
+            })
+        };
+        std::mem::size_of::<Self>() + sources + matcher(&self.folded) + matcher(&self.exact)
+    }
+
     /// Returns `None` when no source yields a pattern.
     pub(crate) fn build(
         sources: impl IntoIterator<Item = SweepSource>,
@@ -336,11 +363,14 @@ impl SweepMatcher {
                 .map(|matcher| Some((matcher, meta)))
                 .map_err(|_| ManifestSweepError::MatcherBuild)
         };
-        Ok(Some(Self {
+        let mut matcher = Self {
             folded: build(|kind| matches!(kind, PatternKind::Folded))?,
             exact: build(|kind| matches!(kind, PatternKind::Exact))?,
             sources,
-        }))
+            allocation_bytes: 0,
+        };
+        matcher.allocation_bytes = matcher.compute_allocation_bytes();
+        Ok(Some(matcher))
     }
 
     /// Every candidate copy in `text` (normalized input), word-bounded and

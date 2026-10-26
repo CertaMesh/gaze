@@ -54,6 +54,9 @@ pub enum Error {
     InvalidRegex(#[source] regex::Error),
     #[error("restore manifest matcher build failed")]
     RestoreMatcherBuild,
+    /// Staged manifest allocation would exceed the host's reserved budget.
+    #[error("session manifest capacity exceeded")]
+    SessionCapacity,
     /// An exact manifest-owned run has multiple valid token splits.
     /// Carries no token spelling or mapped owner value.
     #[error("ambiguous token run: [REDACTED]")]

@@ -56,6 +56,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `gaze daemon` protocol v2 adds the `text-blocks-v1` framing profile with
+  `open`, `clean_blocks`, `resync`, `restore`, and `close` operations. Block
+  inventory, manifest generations, and exact request retries fail closed with
+  `BlockMissing`, `HashMismatch`, `CacheConflict`, `RequestConflict`,
+  `CacheCapacity`, and `CacheConvergence` errors.
+
 - GitHub releases include `gaze-aarch64-linux-gnu` and its `.sha256` checksum
   for native Linux arm64 use, including arm64 containers on Apple Silicon.
   The binary requires glibc 2.39 or later.
@@ -66,6 +72,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   files are refused unless `--overwrite-session-out` is passed. A missing or
   non-session file fails with the new `SessionFile` error (exit 4). The JSON
   stdin and stdout contracts are unchanged.
+
+### Changed
+
+- Daemon frames with `version: 2` now route to protocol v2 instead of returning
+  `ProtocolVersion`.
 
 ### Fixed
 
